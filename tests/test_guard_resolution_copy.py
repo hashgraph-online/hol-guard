@@ -7,7 +7,7 @@ import urllib.request
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -137,8 +137,9 @@ class TestApprovalResolutionCopyPerHarness:
         [
             (
                 "codex",
-                "Decision saved. HOL Guard could not find the original Codex chat to message. "
-                "Return to Codex and retry the same request; this approval is now saved.",
+                "Decision recorded for the original request. "
+                "HOL Guard could not find the original Codex chat to resume. "
+                "Return to that chat and retry; a new tool call may require fresh approval.",
             ),
             ("claude-code", "Return to Claude and retry"),
             ("opencode", "Return to OpenCode and retry"),

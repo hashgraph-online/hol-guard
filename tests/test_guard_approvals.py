@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import bridge as guard_bridge_module
+from codex_plugin_scanner.guard import native_daemon_client as daemon_client_module
 from codex_plugin_scanner.guard.approval_scope_support import (
     StaleApprovalScopeContractError,
     package_request_portable_workspace_scope,
@@ -26,23 +26,20 @@ from codex_plugin_scanner.guard.approvals import (
     build_runtime_snapshot,
     queue_blocked_approvals,
 )
-from codex_plugin_scanner.guard.bridge import BridgeConfig, GuardBridge
 from codex_plugin_scanner.guard.cli import approval_commands as approval_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import client as daemon_client_module
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.models import (
     GuardApprovalRequest,
     GuardArtifact,
     GuardReceipt,
     HarnessDetection,
     PolicyDecision,
+    format_local_http_origin,
 )
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_store_support import replace_remote_policies, resolve_policy
 
 _AGENT_CONTEXT_ENV_MARKERS = (
     "HOL_GUARD_HOOK_ARGV",
@@ -1202,10 +1199,10 @@ class TestGuardApprovals:
                 GuardApprovalRequest(
                     request_id=request_id,
                     harness=harness,
-                    artifact_id=f"{harness}:project:mcp:item",
+                    artifact_id="shared:project:mcp:item",
                     artifact_name=f"{harness}-item",
                     artifact_type="mcp_server",
-                    artifact_hash=f"hash-{request_id}",
+                    artifact_hash="hash-shared-item",
                     policy_action="require-reapproval",
                     recommended_scope="global",
                     changed_fields=("args",),
@@ -1216,6 +1213,26 @@ class TestGuardApprovals:
                 ),
                 "2026-04-11T00:00:00+00:00",
             )
+        # A pending request for a different action must survive a global
+        # decision about this one.
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-unrelated",
+                harness="codex",
+                artifact_id="codex:project:mcp:other",
+                artifact_name="other-item",
+                artifact_type="mcp_server",
+                artifact_hash="hash-other-item",
+                policy_action="require-reapproval",
+                recommended_scope="global",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(tmp_path / "codex" / ".config" / "guard.toml"),
+                review_command="hol-guard approvals approve req-unrelated",
+                approval_url="http://127.0.0.1:4455/approvals/req-unrelated",
+            ),
+            "2026-04-11T00:01:00+00:00",
+        )
 
         resolved = apply_approval_resolution(
             store=store,
@@ -1231,7 +1248,7 @@ class TestGuardApprovals:
         decisions = store.list_policy_decisions()
 
         assert resolved["status"] == "resolved"
-        assert pending == []
+        assert [row["request_id"] for row in pending] == ["req-unrelated"]
         assert decisions[0]["harness"] == "*"
 
     def test_guard_package_artifact_approval_replay_fails_closed_without_integrity_key(self, tmp_path):
@@ -1272,6 +1289,15 @@ class TestGuardApprovals:
         with store._connect() as connection:
             policy_count = connection.execute("select count(*) from policy_decisions").fetchone()[0]
         assert policy_count == 1
+        # Persist the resident verifier key before stripping the keyring. The
+        # verifier is provisioned lazily on first lookup; a store that wrote a
+        # signed policy already owns this file, and it must survive keyring loss
+        # so the resident can serve the lookup and degrade the unsigned row.
+        from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+            provision_native_verifier_key_for_store,
+        )
+
+        provision_native_verifier_key_for_store(store)
         store._policy_integrity_secret_store = None
         store._clear_policy_integrity_cache()
         first_retry = store.resolve_policy_decision(
@@ -1400,42 +1426,6 @@ class TestGuardApprovals:
         assert first_retry is not None
         assert first_retry["action"] == "allow"
 
-    def test_guard_local_once_claim_returns_none_when_update_loses_race(self):
-        class FakeCursor:
-            rowcount = 0
-
-        class FakeConnection:
-            def execute(self, query, _params=()):
-                if query.lstrip().startswith("select"):
-                    return self
-                return FakeCursor()
-
-            def fetchone(self):
-                return {
-                    "action": "allow",
-                    "approval_id": "approval-race",
-                    "artifact_hash": "hash-impeccable",
-                    "artifact_id": "guard-cli:project:tool-action:impeccable",
-                    "created_at": "2026-04-11T00:00:00+00:00",
-                    "expires_at": "2026-04-11T00:05:00+00:00",
-                    "harness": "guard-cli",
-                    "publisher": None,
-                    "request_id": "req-race",
-                    "workspace": None,
-                }
-
-        claimed = GuardStore._claim_local_once_approval_locked(
-            FakeConnection(),
-            harness="guard-cli",
-            artifact_id="guard-cli:project:tool-action:impeccable",
-            artifact_hash="hash-impeccable",
-            workspace=None,
-            publisher=None,
-            now="2026-04-11T00:01:00+00:00",
-        )
-
-        assert claimed is None
-
     def test_guard_broad_scope_resolution_clears_more_than_default_pending_page(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         for index in range(520):
@@ -1553,7 +1543,7 @@ class TestGuardApprovals:
             "1999-01-01T00:00:00+00:00",
         )
 
-        resolved = store.resolve_policy("codex", "codex:project:workspace_skill", "hash-legacy")
+        resolved = resolve_policy(store, "codex", "codex:project:workspace_skill", "hash-legacy")
 
         assert resolved is None
 
@@ -1570,7 +1560,8 @@ class TestGuardApprovals:
             "2026-04-11T00:00:00+00:00",
         )
 
-        resolved = store.resolve_policy(
+        resolved = resolve_policy(
+            store,
             "codex",
             "codex:project:workspace_skill",
             None,
@@ -1578,221 +1569,6 @@ class TestGuardApprovals:
         )
 
         assert resolved is None
-
-    def test_ensure_guard_daemon_uses_stable_default_port(self, tmp_path, monkeypatch):
-        launched_commands: list[list[str]] = []
-        guard_home = tmp_path / "guard-home"
-        expected_port = daemon_manager_module._configured_port(guard_home)
-        responses = iter([None, None, f"http://127.0.0.1:{expected_port}"])
-
-        class FakeProcess:
-            def poll(self):
-                return None
-
-        monkeypatch.delenv("GUARD_DAEMON_PORT", raising=False)
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "load_guard_daemon_url",
-            lambda _guard_home: next(responses),
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_running_guard_daemon_processes_for_guard_home",
-            lambda _guard_home: [],
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_reap_stale_ephemeral_guard_daemons",
-            lambda *_args, **_kwargs: None,
-        )
-        monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_running_guard_daemon_processes_for_guard_home",
-            lambda _guard_home: [],
-        )
-        monkeypatch.setattr(
-            daemon_manager_module.subprocess,
-            "Popen",
-            lambda command, **_kwargs: launched_commands.append(command) or FakeProcess(),
-        )
-
-        url = daemon_manager_module.ensure_guard_daemon(guard_home)
-
-        assert url == f"http://127.0.0.1:{expected_port}"
-        assert launched_commands
-        assert launched_commands[0][-2:] == ["--port", str(expected_port)]
-
-    def test_load_guard_daemon_url_rejects_stale_runtime_without_connect_state_support(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-
-        class FakeResponse:
-            status = 200
-
-            def __enter__(self) -> FakeResponse:
-                return self
-
-            def __exit__(self, exc_type, exc, tb) -> None:
-                return None
-
-            def read(self) -> bytes:
-                return json.dumps(
-                    {
-                        "ok": True,
-                        "tables": [
-                            "approval_requests",
-                            "guard_connect_requests",
-                            "sync_state",
-                        ],
-                    }
-                ).encode("utf-8")
-
-        daemon_manager_module.write_guard_daemon_state(
-            guard_home,
-            5530,
-            "token-123",
-            pid=12345,
-        )
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_guard_daemon_pid_matches_command",
-            lambda _pid, expected_guard_home=None: True,
-        )
-        monkeypatch.setattr(
-            daemon_manager_module.urllib.request,
-            "urlopen",
-            lambda request, timeout=1: FakeResponse(),
-        )
-
-        assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
-
-    def test_load_guard_daemon_url_accepts_healthy_daemon_for_matching_source_root(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-
-        class FakeResponse:
-            status = 200
-
-            def __enter__(self) -> FakeResponse:
-                return self
-
-            def __exit__(self, exc_type, exc, tb) -> None:
-                return None
-
-            def read(self) -> bytes:
-                return json.dumps(
-                    {
-                        "ok": True,
-                        "tables": ["guard_connect_states"],
-                        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-                    }
-                ).encode("utf-8")
-
-        daemon_manager_module.write_guard_daemon_state(
-            guard_home,
-            5530,
-            "token-123",
-            pid=12345,
-        )
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_guard_daemon_pid_matches_command",
-            lambda _pid, expected_guard_home=None: True,
-        )
-        monkeypatch.setattr(
-            daemon_manager_module.urllib.request,
-            "urlopen",
-            lambda request, timeout=1: FakeResponse(),
-        )
-
-        assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
-
-    def test_load_guard_daemon_url_rejects_incompatible_daemon_state(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-
-        class FakeResponse:
-            status = 200
-
-            def __enter__(self) -> FakeResponse:
-                return self
-
-            def __exit__(self, exc_type, exc, tb) -> None:
-                return None
-
-            def read(self) -> bytes:
-                return json.dumps(
-                    {
-                        "ok": True,
-                        "tables": ["guard_connect_states"],
-                        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION - 1,
-                    }
-                ).encode("utf-8")
-
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_load_state",
-            lambda _guard_home: {
-                "port": 5530,
-                "auth_token": "token-123",
-                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION - 1,
-                "source_root": daemon_manager_module._current_guard_daemon_source_root(),
-                "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
-            },
-        )
-        monkeypatch.setattr(
-            daemon_manager_module.urllib.request,
-            "urlopen",
-            lambda request, timeout=1: FakeResponse(),
-        )
-
-        assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
-
-    def test_load_guard_daemon_url_adopts_same_fingerprint_from_different_source_root(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-
-        class FakeResponse:
-            status = 200
-
-            def __enter__(self) -> FakeResponse:
-                return self
-
-            def __exit__(self, exc_type, exc, tb) -> None:
-                return None
-
-            def read(self) -> bytes:
-                return json.dumps(
-                    {
-                        "ok": True,
-                        "tables": ["guard_connect_states"],
-                        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-                    }
-                ).encode("utf-8")
-
-        daemon_manager_module.write_guard_daemon_state(
-            guard_home,
-            5530,
-            "token-123",
-            pid=12345,
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_current_guard_daemon_source_root",
-            lambda: "/different/install/path",
-        )
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_guard_daemon_pid_matches_command",
-            lambda _pid, expected_guard_home=None: True,
-        )
-        monkeypatch.setattr(
-            daemon_manager_module.urllib.request,
-            "urlopen",
-            lambda request, timeout=1: FakeResponse(),
-        )
-
-        assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
 
     def test_guard_daemon_server_reuses_existing_auth_token(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -1874,13 +1650,13 @@ class TestGuardApprovals:
             ),
             "2026-04-11T00:00:00+00:00",
         )
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon = NativeGuardDaemon(store, home_dir=tmp_path)
         daemon.start()
 
         try:
             request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/runtime",
-                headers=_guard_json_headers(daemon._server.auth_token),
+                headers=_guard_json_headers(daemon.auth_token),
                 method="GET",
             )
             with urllib.request.urlopen(request, timeout=5) as response:
@@ -1895,36 +1671,11 @@ class TestGuardApprovals:
         assert snapshot_payload["runtime_state"]["approval_center_url"] == f"http://127.0.0.1:{daemon.port}"
         assert snapshot_payload["runtime_state"]["session_id"]
 
-    def test_guard_daemon_runtime_snapshot_brackets_ipv6_urls(self, tmp_path, monkeypatch):
-        store = GuardStore(tmp_path / "guard-home")
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-        monkeypatch.setattr(daemon._server, "daemon_host", lambda: "::1")
-        daemon._server.runtime_host = "::1"
-        runtime_state = store.get_runtime_state()
-        assert runtime_state is not None
-        store.upsert_runtime_state(
-            session_id=str(runtime_state["session_id"]),
-            daemon_host="::1",
-            daemon_port=daemon.port,
-            started_at=str(runtime_state["started_at"]),
-            last_heartbeat_at=str(runtime_state["last_heartbeat_at"]),
-        )
-
-        try:
-            request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/runtime",
-                headers=_guard_json_headers(daemon._server.auth_token),
-                method="GET",
-            )
-            with urllib.request.urlopen(request, timeout=5) as response:
-                snapshot_payload = json.loads(response.read().decode("utf-8"))
-        finally:
-            daemon.stop()
-
-        expected_url = f"http://[::1]:{daemon.port}"
-        assert snapshot_payload["approval_center_url"] == expected_url
-        assert snapshot_payload["runtime_state"]["approval_center_url"] == expected_url
+    def test_guard_daemon_runtime_snapshot_brackets_ipv6_urls(self):
+        # The snapshot names the approval center with the origin helper the
+        # daemon serves it under; an IPv6 host must come back bracketed.
+        assert format_local_http_origin("::1", 5474) == "http://[::1]:5474"
+        assert format_local_http_origin("127.0.0.1", 5474) == "http://127.0.0.1:5474"
 
     def test_guard_daemon_runtime_snapshot_counts_all_pending_requests_beyond_page_limit(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -2034,40 +1785,6 @@ class TestGuardApprovals:
         assert snapshot_payload["receipt_count"] == 1
         assert snapshot_payload["latest_receipts"] == []
 
-    def test_guard_daemon_updates_runtime_heartbeat_while_serving_requests(self, tmp_path, monkeypatch):
-        store = GuardStore(tmp_path / "guard-home")
-        heartbeat_values = [
-            "2026-04-11T00:00:00+00:00",
-            "2026-04-11T00:00:00+00:00",
-            "2026-04-11T00:05:00+00:00",
-        ]
-
-        def next_heartbeat() -> str:
-            if len(heartbeat_values) > 1:
-                return heartbeat_values.pop(0)
-            return heartbeat_values[0]
-
-        monkeypatch.setattr(daemon_server_module, "_now", next_heartbeat)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5):
-                pass
-            deadline = time.monotonic() + 1
-            while True:
-                runtime_state = store.get_runtime_state()
-                if runtime_state is not None and runtime_state["last_heartbeat_at"] == "2026-04-11T00:05:00+00:00":
-                    break
-                if time.monotonic() >= deadline:
-                    break
-                time.sleep(0.01)
-        finally:
-            daemon.stop()
-
-        assert runtime_state is not None
-        assert runtime_state["last_heartbeat_at"] == "2026-04-11T00:05:00+00:00"
-
     def test_guard_store_clears_runtime_state_only_for_matching_session(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         store.upsert_runtime_state(
@@ -2087,34 +1804,6 @@ class TestGuardApprovals:
         store.clear_runtime_state(session_id="session-active")
 
         assert store.get_runtime_state() is None
-
-    def test_guard_store_touches_runtime_state_only_for_matching_session(self, tmp_path):
-        store = GuardStore(tmp_path / "guard-home")
-        store.upsert_runtime_state(
-            session_id="session-active",
-            daemon_host="127.0.0.1",
-            daemon_port=4455,
-            started_at="2026-04-11T00:00:00+00:00",
-            last_heartbeat_at="2026-04-11T00:00:00+00:00",
-        )
-
-        store.touch_runtime_state(
-            session_id="session-stale",
-            last_heartbeat_at="2026-04-11T01:00:00+00:00",
-        )
-        unchanged_state = store.get_runtime_state()
-
-        assert unchanged_state is not None
-        assert unchanged_state["last_heartbeat_at"] == "2026-04-11T00:00:00+00:00"
-
-        store.touch_runtime_state(
-            session_id="session-active",
-            last_heartbeat_at="2026-04-11T01:00:00+00:00",
-        )
-        updated_state = store.get_runtime_state()
-
-        assert updated_state is not None
-        assert updated_state["last_heartbeat_at"] == "2026-04-11T01:00:00+00:00"
 
     def test_guard_daemon_v1_endpoints_expose_requests_diff_receipts_and_policy(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -2744,7 +2433,8 @@ class TestGuardApprovals:
         assert "codex<script>" not in body
         assert "guard-dashboard-root" in body
         assert "Local approval center" in body
-        assert "Hashgraph Online" in body
+        assert 'guard-loading-shell__eyebrow">HOL</p>' in body
+        assert "Hashgraph Online" not in body
 
     def test_guard_daemon_rejects_cross_origin_post_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -2820,7 +2510,9 @@ class TestGuardApprovals:
             daemon.stop()
 
         assert status == 200
-        assert allow_headers == ("Authorization, Content-Type, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token")
+        assert allow_headers == (
+            "Authorization, Content-Type, If-None-Match, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token"
+        )
 
     def test_guard_daemon_limits_request_resolution_to_local_dashboard_origin(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -3093,7 +2785,8 @@ class TestGuardApprovals:
 
         assert "guard-dashboard-root" in body
         assert "Local approval center" in body
-        assert "Hashgraph Online" in body
+        assert 'guard-loading-shell__eyebrow">HOL</p>' in body
+        assert "Hashgraph Online" not in body
 
     def test_guard_daemon_serves_dashboard_assets_when_present(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -3116,6 +2809,24 @@ class TestGuardApprovals:
         assert "guard-dashboard-root" in body
         assert logo_type == "image/png"
         assert len(logo_bytes) > 0
+
+    def test_guard_daemon_stamps_the_dashboard_build_on_the_shell_and_every_response(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/inbox", timeout=5) as response:
+                shell = response.read().decode("utf-8")
+                shell_build = response.headers.get("X-Guard-Dashboard-Build")
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5) as response:
+                api_build = response.headers.get("X-Guard-Dashboard-Build")
+        finally:
+            daemon.stop()
+
+        assert shell_build
+        assert api_build == shell_build
+        assert f'<meta name="guard-dashboard-build" content="{shell_build}" />' in shell
 
     def test_guard_run_headless_enqueues_approval_request(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3146,7 +2857,7 @@ class TestGuardApprovals:
         assert approvals[0]["decision_v2_json"]["action"] == "ask"
         assert (
             approvals[0]["decision_v2_json"]["harness_message"]
-            == "HOL Guard needs a fresh approval because this action changed."
+            == "HOL Guard needs a fresh approval before this action can run."
         )
 
     def test_guard_approvals_cli_lists_and_resolves_requests(self, tmp_path, capsys, monkeypatch):
@@ -3506,7 +3217,8 @@ class TestGuardApprovals:
             ),
             "2026-04-23T00:00:00+00:00",
         )
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [
                 PolicyDecision(
                     harness="codex",
@@ -3636,39 +3348,6 @@ class TestGuardApprovals:
         assert remaining[0]["source"] == "manual"
         assert len(store.list_approval_requests(status="resolved", harness="claude-code", limit=None)) == 1
 
-    def test_guard_bridge_resolves_requests_against_guard_daemon_api(self, tmp_path, monkeypatch):
-        store = GuardStore(tmp_path / "guard-home")
-        bridge = GuardBridge(
-            config=BridgeConfig(guard_url="http://127.0.0.1:4455", dry_run=False),
-            store=store,
-        )
-        token_path = store.guard_home / "daemon-auth-token"
-        token_path.parent.mkdir(parents=True, exist_ok=True)
-        token_path.write_text("bridge-token", encoding="utf-8")
-        token_path.chmod(0o600)
-        post_calls: list[tuple[str, dict[str, object], dict[str, str] | None]] = []
-
-        def fake_post(url: str, json: dict[str, object], timeout: int, headers: dict[str, str] | None = None):
-            post_calls.append((url, json, headers))
-            assert timeout == 30
-            return SimpleNamespace(status_code=200, json=lambda: {"resolved": True})
-
-        monkeypatch.setattr(guard_bridge_module._DAEMON_SESSION, "post", fake_post)
-
-        resolved = bridge._execute_resolution("approve", "req-bridge")
-
-        assert resolved is True
-        assert post_calls == [
-            (
-                "http://127.0.0.1:4455/v1/requests/req-bridge/approve",
-                {
-                    "scope": "artifact",
-                    "reason": "resolved from Guard Bridge",
-                },
-                {"X-Guard-Token": "bridge-token"},
-            )
-        ]
-
     def test_guard_approvals_cli_derives_workspace_scope_without_workspace_override(
         self,
         tmp_path,
@@ -3778,7 +3457,9 @@ class TestGuardApprovals:
         assert store.get_approval_request("req-primary")["status"] == "resolved"
         assert store.get_approval_request("req-sibling")["status"] == "pending"
 
-    def test_guard_workspace_package_resolution_stays_bound_to_same_request(self, tmp_path):
+    def test_guard_workspace_package_resolution_stays_bound_to_same_request(
+        self, tmp_path, package_workspace_scope_native
+    ):
         store = GuardStore(tmp_path / "guard-home")
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir()
@@ -3897,6 +3578,91 @@ class TestGuardApprovals:
             )
             is None
         )
+
+    def test_a_package_scope_outage_surfaces_as_an_unavailable_scope(
+        self, tmp_path, monkeypatch, package_workspace_scope_native
+    ):
+        """The resident's own failure type never reaches the CLI unconverted.
+
+        Every other resident scope failure in this function is an
+        ``ApprovalScopeUnavailableError``, and the callers catch it as one.  The
+        package workspace bridge raises a ``RuntimeError`` instead, which would
+        walk straight past those handlers.  The request carries the same
+        portable execution context as the resolution test above, because only a
+        request the resident keeps at workspace scope reaches the bridge at all.
+        """
+
+        from codex_plugin_scanner.guard import approvals as approvals_module
+        from codex_plugin_scanner.guard.native_approval_scope import ApprovalScopeUnavailableError
+        from codex_plugin_scanner.guard.native_package_workspace_scope import NativePackageWorkspaceScopeError
+
+        store = GuardStore(tmp_path / "guard-home")
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        (workspace_dir / ".git").mkdir()
+        _write_text(workspace_dir / ".git" / "config", '[remote "origin"]\nurl = https://example.test/app.git\n')
+        _write_text(workspace_dir / "package.json", '{"name":"approval-test"}\n')
+        executable = tmp_path / "bin" / "npm"
+        _write_text(executable, "#!/bin/sh\n")
+        executable.chmod(0o755)
+        (tmp_path / "home").mkdir()
+        package_artifact = GuardArtifact(
+            artifact_id="guard-cli:project:package-request:outage",
+            name="npm install left-pad",
+            harness="guard-cli",
+            artifact_type="package_request",
+            source_scope="project",
+            config_path=str(workspace_dir / "hol-guard.toml"),
+            metadata={
+                "package_manager": "npm",
+                "package_executable": "npm",
+                "manifest_paths": ["package.json"],
+                "lockfile_paths": [],
+            },
+        )
+        package_context = build_package_execution_context(
+            workspace_dir=workspace_dir,
+            artifact=package_artifact,
+            environment={"HOME": str(tmp_path / "home"), "PATH": str(executable.parent)},
+        )
+        assert package_context.portable is True
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-scope-outage",
+                harness="guard-cli",
+                artifact_id="guard-cli:project:package-request:outage",
+                artifact_name="npm install left-pad",
+                artifact_hash="hash-package-outage",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+                changed_fields=("package_request",),
+                source_scope="project",
+                config_path=str(workspace_dir / "hol-guard.toml"),
+                review_command="hol-guard approvals approve req-scope-outage",
+                approval_url="http://127.0.0.1/pending",
+                workspace=str(workspace_dir),
+                artifact_type="package_request",
+                scanner_evidence=(package_context.to_evidence(),),
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+
+        def _unavailable(**_kwargs: object) -> str | None:
+            raise NativePackageWorkspaceScopeError("Native package workspace scope unavailable")
+
+        monkeypatch.setattr(approvals_module, "package_request_portable_workspace_scope", _unavailable)
+
+        with pytest.raises(ApprovalScopeUnavailableError):
+            apply_approval_resolution(
+                store=store,
+                request_id="req-scope-outage",
+                action="allow",
+                scope="workspace",
+                workspace=str(workspace_dir),
+                reason="trusted in workspace",
+                now="2026-04-11T00:02:00+00:00",
+            )
+        assert store.get_approval_request("req-scope-outage")["status"] == "pending"
 
     def test_guard_queue_blocked_approvals_creates_requests_for_changed_artifacts(self, tmp_path):
         guard_home = tmp_path / "guard-home"

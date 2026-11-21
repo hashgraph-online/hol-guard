@@ -1,5 +1,5 @@
 import { HiMiniExclamationTriangle, HiMiniInformationCircle } from "react-icons/hi2";
-import { resolveSecondaryRiskSummary } from "./approval-center-utils";
+import { isWatchOnlyObservation, resolveSecondaryRiskSummary } from "./approval-center-utils";
 import {
   deriveDataFlowEvidence,
   deriveEncodedLayerSignals,
@@ -8,16 +8,26 @@ import {
 } from "./approval-center-utils";
 import { type EvidenceItem } from "./consolidated-evidence-alert";
 import { DataFlowEvidenceCard } from "./data-flow-evidence-card";
-import { whyPaused } from "./evidence/plain-english";
+import { UNREVIEWED_MCP_TOOL, whyPaused } from "./evidence/plain-english";
 import type { GuardApprovalRequest } from "./guard-types";
 import { DecodedLayerCard, SkillRiskCard, SupplyChainRiskCard } from "./risk-signal-cards";
+import { explainMcpCall, plainMcpReason } from "./mcp-call/explain-mcp-call";
+import { RuleMatchExplanation, ruleMatchLines } from "./rule-match-explanation";
 import { ScannerEvidenceSection } from "./scanner-evidence-badge";
 
 export function buildTopAlertItems(item: GuardApprovalRequest): EvidenceItem[] {
   const items: EvidenceItem[] = [];
-  const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
-  const pauseReason = whyPaused(item);
-  if (secondaryRiskSummary) {
+  const mcpCall = explainMcpCall(item);
+  const secondaryRiskSummary = plainMcpReason(item, resolveSecondaryRiskSummary(item));
+  const watchOnly = isWatchOnlyObservation(item);
+  // The rules Core matched, in the catalog's words, replace the category guess
+  // whenever there are any; the guess stays for everything else.
+  const ruleLines = watchOnly ? [] : ruleMatchLines(item.extension_coverage);
+  const guessedReason = watchOnly || ruleLines.length > 0 ? null : whyPaused(item);
+  // The MCP card already says once that the tool is unreviewed. Saying it again
+  // here, as "Additional risk" and as "Why paused", only adds things to read.
+  const pauseReason = mcpCall !== null && guessedReason === UNREVIEWED_MCP_TOOL ? null : guessedReason;
+  if (secondaryRiskSummary && !(mcpCall !== null && secondaryRiskSummary === mcpCall.whyAsked)) {
     items.push({
       id: "secondary-risk",
       title: "Additional risk",
@@ -26,7 +36,15 @@ export function buildTopAlertItems(item: GuardApprovalRequest): EvidenceItem[] {
       content: <p className="text-sm text-brand-dark">{secondaryRiskSummary}</p>,
     });
   }
-  if (pauseReason) {
+  if (ruleLines.length > 0) {
+    items.push({
+      id: "why-paused",
+      title: "Why paused",
+      tone: "blue",
+      icon: HiMiniInformationCircle,
+      content: <RuleMatchExplanation lines={ruleLines} />,
+    });
+  } else if (pauseReason) {
     items.push({
       id: "why-paused",
       title: "Why paused",

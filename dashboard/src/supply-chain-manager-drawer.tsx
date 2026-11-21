@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   HiMiniArrowPath,
   HiMiniBeaker,
@@ -10,8 +11,10 @@ import {
 } from "react-icons/hi2";
 import { ActionButton, IconActionButton, Tag } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
+import { closeOnEscape } from "./dialog-escape";
 import type { PackageFirewallStatusResponse, PackageShimEntry } from "./guard-types";
 import { resolveShimStatus } from "./supply-chain-firewall-manager-row";
+import { useFocusTrap } from "./use-focus-trap";
 
 type ManagerDrawerActions = {
   install?: (manager: string) => void;
@@ -25,6 +28,7 @@ type SupplyChainManagerDrawerProps = {
   shim: PackageShimEntry | undefined;
   actions: PackageFirewallStatusResponse["actions"];
   anyPending: boolean;
+  repairAwaitingRefresh: boolean;
   isMine: boolean;
   actionHandlers: ManagerDrawerActions;
   onClose: () => void;
@@ -53,10 +57,13 @@ export function SupplyChainManagerDrawer({
   shim,
   actions,
   anyPending,
+  repairAwaitingRefresh,
   isMine,
   actionHandlers,
   onClose,
 }: SupplyChainManagerDrawerProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(true, dialogRef);
   const status = resolveShimStatus(shim);
   const installAvailable = actionIsAvailable(actions.install);
   const repairAvailable = actionIsAvailable(actions.repair);
@@ -73,11 +80,14 @@ export function SupplyChainManagerDrawer({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-label={`${manager} manager details`}
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end"
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-end focus:outline-none sm:items-stretch sm:justify-end"
       data-testid="supply-chain-manager-drawer"
+      onKeyDown={closeOnEscape(onClose)}
     >
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div className="relative flex h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:h-full sm:rounded-none">
@@ -171,7 +181,7 @@ export function SupplyChainManagerDrawer({
                 label="Fix PATH"
                 icon={<HiMiniWrenchScrewdriver className="h-4 w-4" />}
                 onClick={() => actionHandlers.repair?.(manager)}
-                disabled={anyPending}
+                disabled={anyPending || repairAwaitingRefresh}
               />
             ) : null}
             {showTest && actionHandlers.test !== undefined ? (

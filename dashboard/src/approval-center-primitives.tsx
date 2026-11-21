@@ -26,6 +26,7 @@ import {
   HiMiniCog6Tooth,
   HiMiniSquares2X2,
   HiMiniPuzzlePiece,
+  HiMiniCircleStack,
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
@@ -33,7 +34,7 @@ import { EMPTY_QUEUE_TITLE } from "./approval-center-utils";
 import { GuardUpdatePanel } from "./guard-update-panel";
 import { CloudUserMenu } from "./cloud-user-menu";
 import type { GuardApprovalGatePublicConfig, GuardCloudUserProfile } from "./guard-types";
-import type { GuardUpdateChannelProof } from "./guard-api";
+import type { GuardUpdateChannelProof, GuardUpdateMode } from "./guard-api";
 import { GITHUB_ISSUE_BUTTON_LABEL, GITHUB_ISSUE_LINK } from "./github-issue-link";
 import { OpenGuardCloudAction } from "./open-guard-cloud-action";
 import type { GuardUpdatePhase, GuardUpdateStatus } from "./guard-types";
@@ -44,13 +45,18 @@ export type AppView =
   | "fleet"
   | "evidence"
   | "settings"
+  | "cigar"
+  | "swarm"
   | "extensions"
   | "app-detail"
   | "supply-chain"
   | "audit"
   | "policy"
   | "feed-health"
-  | "about";
+  | "workspaces"
+  | "about"
+  | "releases"
+  | "protection-repair";
 
 export function ShellHeader(props: {
   queuedCount: number;
@@ -158,17 +164,19 @@ export function ShellHeader(props: {
   );
 }
 
-const hubViews = new Set(["audit", "feed-health"]);
+const hubViews = new Set(["audit", "feed-health", "workspaces"]);
 
 const sidebarLinks = [
   { href: "/", label: "Home", view: "home", icon: HiMiniHome },
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/protect", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
-  { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
+  { href: "/cigar", label: "CIGAR", view: "cigar", icon: HiMiniCircleStack },
+  { href: "/swarm", label: "Swarm", view: "swarm", icon: HiMiniSquares2X2 },
+  { href: "/extensions", label: "Extensions", view: "extensions", icon: HiMiniPuzzlePiece },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },
-  { href: "/extensions", label: "Extensions", view: "extensions", icon: HiMiniPuzzlePiece },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal },
+  { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
   { href: "/about", label: "About", view: "about", icon: HiMiniInformationCircle }
 ] as const;
 
@@ -183,6 +191,7 @@ export function ShellSidebar(props: {
   onReinstallGuard?: () => void;
   approvalGate?: GuardApprovalGatePublicConfig | null;
   onSetUpdateChannel?: (channel: "stable" | "alpha", proof?: GuardUpdateChannelProof) => void | Promise<void>;
+  onSetUpdateMode?: (mode: GuardUpdateMode, proof?: GuardUpdateChannelProof) => void | Promise<void>;
   updatePhase?: GuardUpdatePhase;
   cloudUserProfile?: GuardCloudUserProfile | null;
   workspaceId?: string | null;
@@ -304,6 +313,7 @@ export function ShellSidebar(props: {
                   onUpdateGuard={props.onUpdateGuard}
                   onReinstallGuard={props.onReinstallGuard}
                   onSetUpdateChannel={props.onSetUpdateChannel}
+                  onSetUpdateMode={props.onSetUpdateMode}
                   approvalGate={props.approvalGate}
                 />
               </div>
@@ -370,7 +380,7 @@ export function Badge(props: {
   );
 }
 
-type TagTone =
+export type TagTone =
   | "blue"
   | "green"
   | "purple"
@@ -494,9 +504,11 @@ type IconActionButtonProps = {
   disabled?: boolean;
   spinning?: boolean;
   "aria-label"?: string;
+  /** Keep the label on phones too, where it is otherwise icon-only. */
+  showLabel?: boolean;
 };
 
-export function IconActionButton({ label, icon, variant = "outline", onClick, disabled, spinning, "aria-label": ariaLabel }: IconActionButtonProps) {
+export function IconActionButton({ label, icon, variant = "outline", onClick, disabled, spinning, "aria-label": ariaLabel, showLabel = false }: IconActionButtonProps) {
   const base = "inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-9 h-9 px-2.5 sm:px-3";
   const tone =
     variant === "primary"
@@ -509,7 +521,7 @@ export function IconActionButton({ label, icon, variant = "outline", onClick, di
   return (
     <button type="button" onClick={onClick} disabled={disabled} aria-label={ariaLabel ?? label} className={`${base} ${tone}`}>
       <span className={`h-4 w-4 ${spinning ? "animate-spin" : ""}`} aria-hidden="true">{icon}</span>
-      <span className="hidden sm:inline">{spinning ? "Running..." : label}</span>
+      <span className={showLabel ? "inline" : "hidden sm:inline"}>{spinning ? "Running..." : label}</span>
     </button>
   );
 }
@@ -680,7 +692,7 @@ function tagToneClass(tone: TagTone | undefined): string {
   if (tone === "info") return "border-transparent bg-blue-500/10 text-blue-700";
   if (tone === "default") return "border-gray-200 bg-gray-100 text-gray-500";
   if (tone === "slate") return "border-gray-200 bg-gray-100 text-gray-500";
-  if (tone === "attention") return "border-transparent bg-brand-attention-bg text-brand-attention";
+  if (tone === "attention") return "border-transparent bg-brand-attention-bg text-brand-attention-text";
   return "border-transparent bg-blue-500/10 text-blue-700";
 }
 

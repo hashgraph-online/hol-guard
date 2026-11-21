@@ -1,6 +1,79 @@
-use super::{normalized_harness, MAX_SELECTOR_VALUE_BYTES, VALID_ACTIONS, VALID_RISK_KEYS};
+use super::{normalized_harness, MAX_SELECTOR_VALUE_BYTES};
 use guard_policy_snapshot::EffectiveNativePolicyV3;
 use std::collections::BTreeMap;
+
+const VALID_ACTIONS: &[&str] = &[
+    "allow",
+    "warn",
+    "review",
+    "require-reapproval",
+    "sandbox-required",
+    "block",
+];
+
+const VALID_RISK_KEYS: &[&str] = &[
+    "local_secret_read",
+    "credential_exfiltration",
+    "data_flow_exfiltration",
+    "destructive_shell",
+    "encoded_execution",
+    "network_egress",
+    "prompt_injection",
+    "mcp_dangerous_tool",
+    "malicious_skill",
+    "package_script",
+    "persistence",
+    "guard_bypass",
+    "cloud_advisory",
+    "encoded_exfiltration",
+    "package_unknown",
+    "package_lockfile_drift",
+    "package_direct_source",
+    "package_custom_registry",
+    "package_install",
+    "low_trust_artifact",
+    "runtime_known_vulnerable",
+    "git_hook_bypass",
+    "git_stage_all",
+    "execution",
+    "supply_chain",
+    "policy_bypass",
+];
+
+/// Generation-owned indexes. The signed policy is retained unchanged; only
+/// derived selector keys are canonicalized here, before snapshot publication.
+#[derive(Debug)]
+pub(crate) struct CompiledEffectivePolicy {
+    pub(super) harness_actions: BTreeMap<String, String>,
+    pub(super) harness_risk_actions: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+impl CompiledEffectivePolicy {
+    pub(crate) fn new(policy: &EffectiveNativePolicyV3) -> Result<Self, String> {
+        validate_effective_policy(policy)?;
+        Ok(Self {
+            harness_actions: canonical_map(&policy.harness_actions)?,
+            harness_risk_actions: canonical_map(&policy.harness_risk_actions)?,
+        })
+    }
+}
+
+fn canonical_map<T: Clone + PartialEq>(
+    map: &BTreeMap<String, T>,
+) -> Result<BTreeMap<String, T>, String> {
+    let mut canonical = BTreeMap::new();
+    for (configured, action) in map {
+        let normalized = normalized_harness(configured);
+        if let Some(previous) = canonical.get(&normalized) {
+            if previous != action {
+                return Err("native_policy_harness_selector_conflict".to_owned());
+            }
+        } else {
+            canonical.insert(normalized, action.clone());
+        }
+    }
+    Ok(canonical)
+}
 
 pub(super) fn policy_map_action(
     map: &std::collections::BTreeMap<String, String>,
@@ -82,48 +155,4 @@ pub(super) fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Res
         validate_action_map(actions, true, false)?;
     }
     Ok(())
-}
-
-pub(super) fn canonical_harness_action(
-    map: &std::collections::BTreeMap<String, String>,
-    harness: &str,
-) -> Result<Option<String>, String> {
-    let mut selected: Option<(&str, &str)> = None;
-    for (configured, action) in map {
-        if !VALID_ACTIONS.contains(&action.as_str()) {
-            return Err("native_policy_action_invalid".to_owned());
-        }
-        let normalized = normalized_harness(configured);
-        if normalized != harness {
-            continue;
-        }
-        if let Some((_, previous_action)) = selected {
-            if previous_action != action {
-                return Err("native_policy_harness_selector_conflict".to_owned());
-            }
-        } else {
-            selected = Some((configured.as_str(), action.as_str()));
-        }
-    }
-    Ok(selected.map(|(_, action)| action.to_owned()))
-}
-
-pub(super) fn canonical_harness_risk_actions<'a>(
-    map: &'a BTreeMap<String, BTreeMap<String, String>>,
-    harness: &str,
-) -> Result<Option<&'a BTreeMap<String, String>>, String> {
-    let mut selected: Option<&'a BTreeMap<String, String>> = None;
-    for (configured, actions) in map {
-        if normalized_harness(configured) != harness {
-            continue;
-        }
-        if let Some(previous) = selected {
-            if previous != actions {
-                return Err("native_policy_harness_selector_conflict".to_owned());
-            }
-        } else {
-            selected = Some(actions);
-        }
-    }
-    Ok(selected)
 }

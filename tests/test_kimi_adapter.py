@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import argparse
 import json
-
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.adapters.kimi import KimiHarnessAdapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
@@ -38,13 +34,13 @@ def _write_json(path: Path, payload: object) -> None:
 
 class TestKimiAdapterIdentity:
     def test_harness_identifier_is_kimi(self) -> None:
-        assert KimiHarnessAdapter.harness == "kimi"
+        assert harness_ops.canonical_harness("kimi") == "kimi"
 
     def test_executable_is_kimi(self) -> None:
-        assert KimiHarnessAdapter.executable == "kimi"
+        assert harness_ops.executable_of("kimi") == "kimi"
 
     def test_approval_tier_is_approval_center(self) -> None:
-        assert KimiHarnessAdapter.approval_tier == "approval-center"
+        assert harness_ops.approval_flow("kimi")["tier"] == "approval-center"
 
 
 class TestKimiPolicyPath:
@@ -52,18 +48,18 @@ class TestKimiPolicyPath:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
         expected = ctx.workspace_dir / ".kimi-code" / "config.toml"
-        assert KimiHarnessAdapter().policy_path(ctx) == expected
+        assert harness_ops.policy_path("kimi", ctx) == expected
 
     def test_policy_path_falls_back_to_home_without_workspace(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         expected = (tmp_path / "home") / ".kimi-code" / "config.toml"
-        assert KimiHarnessAdapter().policy_path(ctx) == expected
+        assert harness_ops.policy_path("kimi", ctx) == expected
 
 
 class TestKimiDetectEmptyConfig:
     def test_empty_dir_returns_no_artifacts(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        result = KimiHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         assert result.harness == "kimi"
         assert result.artifacts == ()
         assert result.config_paths == ()
@@ -71,7 +67,7 @@ class TestKimiDetectEmptyConfig:
     def test_empty_config_toml_yields_no_artifacts(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write_toml(ctx.home_dir / ".kimi-code" / "config.toml", "")
-        result = KimiHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         assert result.artifacts == ()
         assert str(ctx.home_dir / ".kimi-code" / "config.toml") in result.config_paths
 
@@ -88,7 +84,7 @@ command = "bash hook.sh"
 timeout = 10
 """,
         )
-        result = KimiHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         hook_artifacts = [a for a in result.artifacts if a.artifact_type == "hook"]
         assert len(hook_artifacts) == 1
         assert hook_artifacts[0].artifact_id == "kimi:global:hook:pretooluse:0"
@@ -105,7 +101,7 @@ event = "UserPromptSubmit"
 command = "bash prompt-hook.sh"
 """,
         )
-        result = KimiHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         hook_artifacts = [a for a in result.artifacts if a.artifact_type == "hook"]
         assert hook_artifacts[0].artifact_id == "kimi:global:hook:userpromptsubmit:0"
 
@@ -122,7 +118,7 @@ event = "PostToolUse"
 command = "b.sh"
 """,
         )
-        result = KimiHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         hook_ids = {a.artifact_id for a in result.artifacts if a.artifact_type == "hook"}
         assert "kimi:global:hook:pretooluse:0" in hook_ids
         assert "kimi:global:hook:posttooluse:1" in hook_ids
@@ -137,13 +133,13 @@ event = "PreToolUse"
 command = "ws.sh"
 """,
         )
-        result = KimiHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         assert any(a.source_scope == "project" for a in result.artifacts)
 
     def test_invalid_toml_is_skipped_gracefully(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write_toml(ctx.home_dir / ".kimi-code" / "config.toml", "not valid toml [[")
-        result = KimiHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         assert result.artifacts == ()
 
 
@@ -154,7 +150,7 @@ class TestKimiDetectMCP:
             ctx.home_dir / ".kimi-code" / "mcp.json",
             {"mcpServers": {"my-server": {"command": "node", "args": ["server.js"]}}},
         )
-        result = KimiHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         ids = [a.artifact_id for a in result.artifacts]
         assert "kimi:global:mcp:my-server" in ids
 
@@ -164,7 +160,7 @@ class TestKimiDetectMCP:
             ctx.home_dir / ".kimi-code" / "mcp.json",
             {"mcpServers": {"remote": {"url": "http://localhost:8080/mcp"}}},
         )
-        result = KimiHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         art = result.artifacts[0]
         assert art.transport == "http"
         assert art.url == "http://localhost:8080/mcp"
@@ -173,7 +169,7 @@ class TestKimiDetectMCP:
 class TestKimiInstallUninstall:
     def test_install_writes_managed_hooks(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        manifest = KimiHarnessAdapter().install(ctx)
+        manifest = harness_support.install("kimi", ctx)
         assert manifest["harness"] == "kimi"
         assert manifest["active"] is True
         config_path = Path(str(manifest["config_path"]))
@@ -187,9 +183,8 @@ class TestKimiInstallUninstall:
 
     def test_uninstall_removes_managed_hooks(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        adapter = KimiHarnessAdapter()
-        adapter.install(ctx)
-        manifest = adapter.uninstall(ctx)
+        harness_support.install("kimi", ctx)
+        manifest = harness_support.uninstall("kimi", ctx)
         assert manifest["active"] is False
         config_path = Path(str(manifest["config_path"]))
         text = config_path.read_text(encoding="utf-8")
@@ -206,32 +201,18 @@ event = "PostToolUse"
 command = "user-format.sh"
 """,
         )
-        KimiHarnessAdapter().install(ctx)
+        harness_support.install("kimi", ctx)
         text = config_path.read_text(encoding="utf-8")
         assert "user-format.sh" in text
         assert "BEGIN HOL GUARD MANAGED HOOKS" in text
 
     def test_install_idempotent(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        adapter = KimiHarnessAdapter()
-        adapter.install(ctx)
-        adapter.install(ctx)
+        harness_support.install("kimi", ctx)
+        harness_support.install("kimi", ctx)
         config_path = ctx.home_dir / ".kimi-code" / "config.toml"
         text = config_path.read_text(encoding="utf-8")
         assert text.count("BEGIN HOL GUARD MANAGED HOOKS") == 1
-
-
-class TestKimiManagedBlock:
-    def test_managed_block_escapes_quotes_and_backslashes(self) -> None:
-        from codex_plugin_scanner.guard.adapters.kimi import _toml_escape
-
-        command = 'python -c "print(\\"hello\\")"'
-        block = KimiHarnessAdapter._build_managed_block(command)
-        parsed = tomllib.loads(block)
-        hooks = parsed.get("hooks", [])
-        assert len(hooks) == 5
-        assert hooks[0]["command"] == command
-        assert _toml_escape('a"b\\c') == 'a\\"b\\\\c'
 
 
 class TestKimiHookQuoting:
@@ -253,110 +234,69 @@ class TestKimiHookQuoting:
             workspace_dir=workspace_dir,
             guard_home=tmp_path / "guard-home",
         )
-        parts = KimiHarnessAdapter._hook_command_parts(ctx)
+        parts = tuple(harness_ops.hook_argv("kimi", ctx))  # pyright: ignore[reportAttributeAccessIssue]
         windows_cmd = _shell_command(parts, windows=True)
-        # The workspace path with '&' must live inside the quoted -c argument,
-        # not be exposed as a cmd.exe metacharacter. list2cmdline quotes the
-        # entire -c argument because it contains spaces.
-        assert ' -c "' in windows_cmd
+        # The workspace path with '&' must live inside the quoted config
+        # argument, not be exposed as a cmd.exe metacharacter. list2cmdline
+        # quotes the whole config because it contains spaces.
+        assert ' bounded-hook-bridge "' in windows_cmd
         assert windows_cmd.endswith('"')
         assert "workspace & tools" in windows_cmd
-
-
-class TestKimiHookChatUx:
-    def test_kimi_block_emits_reason_to_stderr(self, tmp_path: Path) -> None:
-        import io
-        from contextlib import redirect_stderr
-
-        from codex_plugin_scanner.guard.cli.commands_hook_generic import (
-            _run_hook_generic_payload,
+        assert windows_cmd.count("workspace & tools") == windows_cmd.split('bounded-hook-bridge "', 1)[1].count(
+            "workspace & tools"
         )
-        from codex_plugin_scanner.guard.config import GuardConfig
-        from codex_plugin_scanner.guard.store import GuardStore
-
-        guard_home = tmp_path / ".hol-guard"
-        store = GuardStore(guard_home)
-        config = GuardConfig(guard_home=guard_home, workspace=tmp_path)
-        args = argparse.Namespace(
-            harness="kimi",
-            json=False,
-            policy_action="block",
-            artifact_id=None,
-            artifact_name=None,
-        )
-        payload = {"hookEventName": "UserPromptSubmit", "prompt": "delete all files"}
-        stderr_capture = io.StringIO()
-        stdout_capture = io.StringIO()
-        with redirect_stderr(stderr_capture):
-            rc = _run_hook_generic_payload(
-                args,
-                action_envelope=None,
-                config=config,
-                output_stream=stdout_capture,
-                payload=payload,
-                home_dir=tmp_path,
-                runtime_workspace=tmp_path,
-                store=store,
-            )
-        assert rc == 2
-        assert "HOL Guard flagged" in stderr_capture.getvalue()
-        assert '"decision":"block"' in stdout_capture.getvalue()
 
 
 class TestKimiLaunchCommand:
     def test_launch_command_passes_workspace(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
-        command = KimiHarnessAdapter().launch_command(ctx, ["--version"])
+        command = harness_ops.launch_command("kimi", ctx, ["--version"])
         assert "kimi" in command[0]
         assert "--version" in command
 
 
+def _recorded_artifact_directive(harness: str, *, json_mode: bool, event: str, action: str) -> dict[str, object]:
+    """The artifact hook's routing the resident must reproduce for these facts."""
+
+    import gzip
+
+    fixture = Path(__file__).resolve().parents[1] / (
+        "rust/crates/guard-runtime/tests/fixtures/artifact_directive_vectors.json.gz"
+    )
+    wanted = {
+        "harness": harness,
+        "json": json_mode,
+        "event": event,
+        "policy_action": action,
+        "output_stream_present": False,
+        "replayed": False,
+        "approval_context_present": False,
+    }
+    return next(
+        vector["directive"]
+        for vector in json.loads(gzip.decompress(fixture.read_bytes()))
+        if all(vector["facts"][key] == value for key, value in wanted.items()) and not any(vector["extra"].values())
+    )
+
+
 class TestKimiNativeHookBlocking:
     def test_kimi_emits_native_hook_response(self) -> None:
-        from codex_plugin_scanner.guard.cli.commands_support_interaction import (
-            _should_emit_native_hook_response,
-        )
-
-        args = argparse.Namespace(harness="kimi", json=False)
-        assert _should_emit_native_hook_response(args) is True
+        directive = _recorded_artifact_directive("kimi", json_mode=False, event="PreToolUse", action="allow")
+        assert directive["route"] == "render"
+        assert directive["try_json_document"] is False
+        assert directive["after_json"] == "native_response"
 
     def test_kimi_exit_block_on_blocking_actions(self) -> None:
-        from codex_plugin_scanner.guard.cli.commands_support_interaction import (
-            _should_emit_native_hook_exit_block,
-        )
+        def route(event: str, action: str) -> object:
+            return _recorded_artifact_directive("kimi", json_mode=False, event=event, action=action)["route"]
 
-        args = argparse.Namespace(harness="kimi", json=False)
-        assert _should_emit_native_hook_exit_block(args, event_name="PreToolUse", policy_action="block") is True
-        assert (
-            _should_emit_native_hook_exit_block(args, event_name="UserPromptSubmit", policy_action="sandbox-required")
-            is True
-        )
-        assert _should_emit_native_hook_exit_block(args, event_name="PreToolUse", policy_action="allow") is False
-        assert _should_emit_native_hook_exit_block(args, event_name="SessionStart", policy_action="block") is False
-
-    def test_kimi_permission_decision_is_deny_for_blocking(self) -> None:
-        from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
-            _native_hook_permission_decision,
-        )
-
-        assert _native_hook_permission_decision("block", harness="kimi") == "deny"
-        assert _native_hook_permission_decision("sandbox-required", harness="kimi") == "deny"
-        assert _native_hook_permission_decision("require-reapproval", harness="kimi") == "deny"
-        assert _native_hook_permission_decision("allow", harness="kimi") == "allow"
-
-    def test_normalize_hook_payload_flattens_kimi_content_parts(self) -> None:
-        from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
-            _normalize_hook_payload,
-        )
-
-        payload = {
-            "prompt": [
-                {"role": "user", "text": "Hello"},
-                {"role": "user", "text": "World"},
-            ],
-        }
-        normalized = _normalize_hook_payload(payload, harness="kimi")
-        assert normalized["prompt"] == "Hello\nWorld"
+        assert route("PreToolUse", "block") == "exit_block"
+        assert route("UserPromptSubmit", "sandbox-required") == "exit_block"
+        assert route("PreToolUse", "allow") == "render"
+        assert route("SessionStart", "block") == "render"
+        blocked = _recorded_artifact_directive("kimi", json_mode=False, event="PreToolUse", action="block")
+        assert blocked["exit_code"] == 2
+        assert blocked["exit_block_stderr"] is True  # kimi shows stderr as the blocking explanation
 
     def test_kimi_hook_payload_creates_action_envelope(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _hook_action_envelope
@@ -371,20 +311,3 @@ class TestKimiNativeHookBlocking:
         assert envelope is not None
         assert envelope.harness == "kimi"
         assert envelope.action_type == "shell_command"
-
-    def test_normalize_hook_payload_leaves_other_harnesses_untouched(self) -> None:
-        from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
-            _normalize_hook_payload,
-        )
-
-        payload = {"prompt": [{"text": "Hello"}]}
-        normalized = _normalize_hook_payload(payload, harness="codex")
-        assert normalized["prompt"] == [{"text": "Hello"}]
-
-    def test_normalize_kimi_prompt_preserves_non_text_payloads(self) -> None:
-        from codex_plugin_scanner.guard.adapters.kimi_hooks import normalize_kimi_prompt
-
-        image_only = [{"image_url": "https://example.com/img.png"}]
-        assert normalize_kimi_prompt(image_only) is image_only
-        assert normalize_kimi_prompt("plain text") == "plain text"
-        assert normalize_kimi_prompt(None) is None

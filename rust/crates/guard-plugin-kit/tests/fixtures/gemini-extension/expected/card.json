@@ -1,0 +1,47 @@
+{
+  "capabilities": {
+    "agents": 0,
+    "commands": 0,
+    "hooks": false,
+    "mcpServers": [
+      {
+        "name": "weather",
+        "transport": "http"
+      }
+    ],
+    "skills": []
+  },
+  "description": "Forecasts and alerts for Gemini CLI.",
+  "homepage": null,
+  "identity": {
+    "repository": "acme/weather-tools",
+    "verified": false
+  },
+  "license": null,
+  "links": {
+    "holCard": "https://hol.org/registry/plugins/acme%2Fweather-tools/.well-known/card.json",
+    "listing": "https://hol.org/registry/plugins/acme%2Fweather-tools",
+    "repository": "https://github.com/acme/weather-tools"
+  },
+  "name": "weather-tools",
+  "permissions": {
+    "environment": [],
+    "networkHosts": [
+      "weather.example"
+    ],
+    "runsHooks": false,
+    "startsPrograms": []
+  },
+  "runtimes": [
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "cursor",
+    "vscode",
+    "opencode",
+    "mcp-registry",
+    "agent-plugins"
+  ],
+  "schema": "hol.plugin-card.v0-draft",
+  "version": "0.3.0"
+}

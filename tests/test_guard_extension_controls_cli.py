@@ -8,9 +8,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.cli import _build_parser, main
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
 from codex_plugin_scanner.guard.cli import extension_controls_commands
 from codex_plugin_scanner.guard.cli.extension_controls_commands import (
+    GuardDaemonRequestError,
     _mutation_payload,
     run_extension_controls_command,
 )
@@ -74,6 +76,7 @@ def test_status_without_daemon_is_read_only(tmp_path: Path) -> None:
     assert result == 2
     assert not guard_home.exists()
 
+
 @pytest.mark.parametrize("program_name", ["hol-guard", "plugin-scanner", "plugin-guard", "plugin-ecosystem-scanner"])
 def test_controls_help_is_available_from_every_installed_alias(
     program_name: str,
@@ -96,15 +99,15 @@ def test_controls_help_is_available_from_every_installed_alias(
 
     assert exit_info.value.code == 0
     assert (
-        "{status,patterns,set,list,show,preview,apply,global-preview,global-apply,enroll,recover-authority,acknowledge-degraded}"
+        "{status,prefetch,export-offline,import-offline,cleanup-cache,patterns,set,list,show,preview,apply,global-preview,global-apply,enroll,recover-authority,acknowledge-degraded}"
     ) in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
     ("command", "expected_calls"),
     (
-        ("recover-authority", ("prompt", "require", "consume", "recover", "refresh")),
-        ("acknowledge-degraded", ("prompt", "acknowledge")),
+        ("recover-authority", ("prompt", "require", "consume", "recover", "daemon-recover")),
+        ("acknowledge-degraded", ("prompt", "ensure", "acknowledge")),
     ),
 )
 def test_authority_recovery_requires_and_consumes_fresh_local_approval(
@@ -124,7 +127,7 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
         def __init__(self, guard_home: Path) -> None:
             assert guard_home == tmp_path
 
-        def read_extension_control_authority_for_registry(self, registry: object) -> object:
+        def read_extension_control_authority_for_registry(self, registry: object, **_kwargs) -> object:
             assert registry
             return view
 
@@ -144,6 +147,11 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
             calls.append("refresh")
             return {"health": "protected", "revision": 7}
 
+        def recover_extension_control_authority(self, payload: dict[str, object]) -> dict[str, object]:
+            assert payload == {}
+            calls.append("daemon-recover")
+            return {"health": "protected", "revision": 0}
+
         def acknowledge_degraded_extension_controls(
             self,
             payload: dict[str, object],
@@ -156,6 +164,11 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
 
     monkeypatch.setattr(extension_controls_commands, "GuardStore", FakeStore)
     monkeypatch.setattr(extension_controls_commands, "_client", lambda _guard_home: FakeClient())
+    monkeypatch.setattr(
+        daemon_manager,
+        "ensure_guard_daemon",
+        lambda *_args, **_kwargs: calls.append("ensure"),
+    )
     monkeypatch.setattr(
         extension_controls_commands,
         "prompt_for_approval_gate",
@@ -181,6 +194,47 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
 
     assert exit_code == 0
     assert calls == list(expected_calls)
+
+
+def test_degraded_acknowledgement_reports_daemon_startup_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    view = SimpleNamespace(health=SimpleNamespace(value="degraded"), revision=0)
+
+    class FakeStore:
+        def read_extension_control_authority_for_registry(self, registry: object, **_kwargs) -> object:
+            assert registry
+            return view
+
+    monkeypatch.setattr(extension_controls_commands, "GuardStore", lambda _guard_home: FakeStore())
+    monkeypatch.setattr(
+        extension_controls_commands,
+        "prompt_for_approval_gate",
+        lambda *_args, **_kwargs: SimpleNamespace(password="password", totp_code="123456"),
+    )
+
+    def fail_startup(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("daemon failed")
+
+    monkeypatch.setattr(daemon_manager, "ensure_guard_daemon", fail_startup)
+
+    with pytest.raises(GuardDaemonRequestError, match="daemon failed"):
+        extension_controls_commands._recover_authority(
+            tmp_path,
+            command="acknowledge-degraded",
+            output_stream=io.StringIO(),
+        )
+
+    exit_code = run_extension_controls_command(
+        argparse.Namespace(controls_command="patterns"),
+        guard_home=tmp_path,
+        output_stream=io.StringIO(),
+    )
+
+    assert exit_code == 2
+    assert "daemon failed" in capsys.readouterr().err
 
 
 def test_recommended_state_removes_explicit_local_control() -> None:
@@ -274,3 +328,30 @@ def test_patterns_filters_by_query_and_tool_and_reports_local_state(capsys: pyte
     assert "gh pr merge 123 --merge" in out
     assert "block" in out
     assert "gh pr view 123" not in out
+
+
+def test_recover_authority_accepts_the_home_the_block_names(tmp_path: Path) -> None:
+    """The home goes on `command`, which is the parser that carries it.
+
+    `command_policy_repair.rs` prints this line to a person whose every
+    command is blocked, and the recovery verb takes no options of its own, so
+    a `--guard-home` after it would be handed to the leaf and rejected. That
+    failure would only show up on an install whose Guard home is not the
+    default one, which is the install the line exists for.
+
+    It is `--guard-home` rather than `--home`, matching the argv
+    `_recovery_command` prints for the same recovery. `--home` names the
+    directory the person lives in; the router only falls back to it for the
+    Guard home, and it resolves every other home-dependent value against it,
+    so a Guard home passed that way reaches the right store under a home
+    nobody lives in.
+    """
+
+    guard_home = tmp_path / "elsewhere" / ".hol-guard"
+    parser = _build_parser("hol-guard", program_mode="hol-guard")
+
+    parsed = parser.parse_args(["command", "--guard-home", str(guard_home), "controls", "recover-authority"])
+
+    assert parsed.guard_home == str(guard_home)
+    assert parsed.home is None
+    assert parsed.controls_command == "recover-authority"

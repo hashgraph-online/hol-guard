@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
 )
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from tests.command_extension_contracts import (
     assert_safe_command_cases,
 )
+from tests.native_command_test_support import real_native_command_evaluation
 
 REPO2NB_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     (
@@ -101,9 +100,15 @@ def test_repo2nb_module_and_wrapper_invocations_reach_review(tmp_path: Path) -> 
     """Indirect module and wrapper invocations reach review and attribute to repo2nb rules."""
 
     for command, expected_rule in REPO2NB_WRAPPER_REVIEW_COMMANDS:
-        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
-            parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
-        )
+        evaluation = real_native_command_evaluation(
+            command,
+            cwd=tmp_path,
+            controls=(("extension", "command.repo2nb", "enabled"),),
+        ).evaluation
+        if evaluation.command.confidence != "exact":
+            assert evaluation.command.uncertainty_reason is not None
+            continue
+        observations = evaluation.extension_observations
         matched = {item.rule.rule_id for item in observations if item.extension.extension_id == "command.repo2nb"}
         assert expected_rule in matched, command
 
@@ -131,7 +136,7 @@ REPO2NB_WRAPPER_REVIEW_COMMANDS: tuple[tuple[str, str], ...] = (
 
 def test_repo2nb_rules_stay_inert_until_enabled(tmp_path: Path) -> None:
     for command, _action_class, rule_id in REPO2NB_REVIEW_CASES:
-        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
         assert evaluation.controlling_rule_id != rule_id
         assert all(item.extension.extension_id != "command.repo2nb" for item in evaluation.extension_observations)
 

@@ -16,8 +16,8 @@ def test_normalize_guard_handler_result_treats_none_as_success() -> None:
     assert commands_router._normalize_guard_handler_result({"status": "unexpected"}) == 1
 
 
-def test_only_daemon_server_eagerly_primes_policy_integrity() -> None:
-    assert commands_router._should_prime_policy_integrity(Namespace(guard_command="daemon", serve=True))
+def test_daemon_store_construction_does_not_prime_policy_integrity() -> None:
+    assert not commands_router._should_prime_policy_integrity(Namespace(guard_command="daemon", serve=True))
     assert not commands_router._should_prime_policy_integrity(Namespace(guard_command="daemon", serve=False))
     assert not commands_router._should_prime_policy_integrity(Namespace(guard_command="trust"))
     assert not commands_router._should_prime_policy_integrity(Namespace(guard_command="codex-mcp-proxy"))
@@ -38,7 +38,6 @@ def test_auto_hook_router_dispatches_before_request_config_load(
     guard_home = tmp_path / "guard-home"
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(commands_router, "native_mode", lambda: "auto")
     monkeypatch.setattr(commands_router, "resolve_guard_home", lambda _override: guard_home)
     monkeypatch.setattr(commands_router, "_resolve_guard_workspace", lambda _args, **_kwargs: None)
     monkeypatch.setattr(commands_router, "enforce_lifecycle_gate", lambda *_args, **_kwargs: None)

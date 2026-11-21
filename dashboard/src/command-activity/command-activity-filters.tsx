@@ -131,11 +131,11 @@ export function CommandActivityFiltersPanel(props: {
             <option key={rule.value} value={rule.value}>{rule.label}</option>
           ))}
         </SelectField>
-        <SelectField label="Execution proof" value={props.filters.execution_status ?? ""} onChange={handleExecution}>
-          <option value="">All execution states</option>
+        <SelectField label="Run result" value={props.filters.execution_status ?? ""} onChange={handleExecution}>
+          <option value="">All run results</option>
           <option value="attempted">Attempt recorded</option>
           <option value="prevented">Prevented</option>
-          <option value="allowed_unconfirmed">Allowed, unconfirmed</option>
+          <option value="allowed_unconfirmed">Result not recorded</option>
           <option value="confirmed_success">Confirmed success</option>
           <option value="confirmed_failure">Confirmed failure</option>
           <option value="unpaired_post">Unpaired post proof</option>

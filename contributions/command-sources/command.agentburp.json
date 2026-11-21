@@ -1,0 +1,168 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.agentburp",
+    "version": "1.0.0",
+    "name": "AgentBurp project protection",
+    "description": "Reviews project creation, active project changes, and project deletion after local opt-in.",
+    "action_classes": [
+      "AgentBurp project modification"
+    ],
+    "risk_classes": [
+      "data_modification"
+    ],
+    "safer_alternatives": [
+      "List projects with agentburp project list before changing the active project.",
+      "Confirm the project name before deleting it."
+    ],
+    "reference_urls": [
+      "https://github.com/msdbg/AgentBurp/blob/69da946fc13f2dbff6d37ab30fd26a403c054051/cmd/project.go",
+      "https://github.com/msdbg/AgentBurp/blob/69da946fc13f2dbff6d37ab30fd26a403c054051/cmd/root.go"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [
+      "agentburp"
+    ],
+    "executables": [
+      "agentburp"
+    ],
+    "project_markers": [],
+    "publisher": {
+      "id": "community.agentburp",
+      "display_name": "AgentBurp community",
+      "url": "https://github.com/msdbg/AgentBurp"
+    },
+    "homepage": "https://github.com/msdbg/AgentBurp",
+    "license": "MIT",
+    "icon": {
+      "kind": "none"
+    },
+    "permissions": [
+      {
+        "permission_id": "command.agentburp.permission.project-modify",
+        "implementation_version": "1.0.0",
+        "label": "AgentBurp project changes",
+        "description": "Reviews project creation, selection, and deletion.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "AgentBurp project modification"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "List projects with agentburp project list before changing the active project.",
+          "Confirm the project name before deleting it."
+        ],
+        "example_command": "agentburp project delete example-project"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.agentburp.project-modify",
+        "rule_version": "1.0.0",
+        "title": "AgentBurp project changes",
+        "description": "Matches commands that create a project, write the active project setting, or delete a project.",
+        "severity": "medium",
+        "risk_classes": [
+          "data_modification"
+        ],
+        "action_classes": [
+          "AgentBurp project modification"
+        ],
+        "safer_alternatives": [
+          "List projects with agentburp project list before changing the active project.",
+          "Confirm the project name before deleting it."
+        ],
+        "default_mode": "review",
+        "permission_id": "command.agentburp.permission.project-modify",
+        "safe_variants": [],
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "agentburp",
+                  "agentburp.cmd",
+                  "agentburp.exe"
+                ],
+                "subcommands": [
+                  "project",
+                  "create"
+                ],
+                "options_with_values": [
+                  "-p",
+                  "--project"
+                ],
+                "interleaved_options_with_values": [
+                  "-p",
+                  "--project"
+                ]
+              },
+              "matchers": []
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "agentburp",
+                  "agentburp.cmd",
+                  "agentburp.exe"
+                ],
+                "subcommands": [
+                  "project",
+                  "open"
+                ],
+                "options_with_values": [
+                  "-p",
+                  "--project"
+                ],
+                "interleaved_options_with_values": [
+                  "-p",
+                  "--project"
+                ]
+              },
+              "matchers": []
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "agentburp",
+                  "agentburp.cmd",
+                  "agentburp.exe"
+                ],
+                "subcommands": [
+                  "project",
+                  "delete"
+                ],
+                "options_with_values": [
+                  "-p",
+                  "--project"
+                ],
+                "interleaved_options_with_values": [
+                  "-p",
+                  "--project"
+                ]
+              },
+              "matchers": []
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

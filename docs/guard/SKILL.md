@@ -1,3 +1,8 @@
+---
+name: hol-guard-protection
+description: Use HOL Guard to preview and protect AI-agent package installs, Cursor surfaces, CI, and automation workflows.
+---
+
 # HOL Guard Skill Guidance
 
 Use this guidance when an AI agent is about to add or update dependencies.

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass, replace
+import json
 from pathlib import Path
 
 import pytest
@@ -13,14 +13,12 @@ from codex_plugin_scanner.guard.extension_builder.io import canonical_json
 from codex_plugin_scanner.guard.extension_builder.kit import build_kit
 from codex_plugin_scanner.guard.extension_builder.models import Discovery
 from codex_plugin_scanner.guard.extension_builder.review import default_review, load_review
-from codex_plugin_scanner.guard.runtime.command_extension_observations import observe_command_extensions
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
-from codex_plugin_scanner.guard.runtime.command_reviewed_literal_matcher import (
-    ReviewedLiteralCommandMatcher,
-    validate_reviewed_literal_argv,
-)
-from codex_plugin_scanner.guard.runtime.command_rules import CommandSafetyRule, CommandSafeVariant, ExecutableMatcher
-from tests.extension_builder_support import make_discovery, make_kit
+from tests.extension_builder_support import make_discovery, make_kit, use_built_native_source_compiler
+
+
+@pytest.fixture(autouse=True)
+def _native_source_compiler(monkeypatch: pytest.MonkeyPatch) -> None:
+    use_built_native_source_compiler(monkeypatch)
 
 
 def reviewed_entry(discovery: Discovery, path: tuple[str, ...]) -> tuple[dict[str, object], dict[str, object]]:
@@ -129,6 +127,37 @@ def test_exact_reviewed_cli_and_mcp_decisions_compile(tmp_path: Path) -> None:
     assert cli.summary()["activeProtectionChanged"] is False
 
 
+@pytest.mark.parametrize("reviewed", [False, True])
+def test_mcp_review_requires_evidence_and_compiles_without_allowing_other_tools(tmp_path: Path, reviewed: bool) -> None:
+    discovery = make_discovery(tmp_path, "mcp")
+    payload = default_review(discovery).to_dict()
+    operation = next(row for row in discovery.operations if row.name == "delete_item")
+    entries = payload["entries"]
+    assert isinstance(entries, dict)
+    entry = entries[operation.operation_id]
+    assert isinstance(entry, dict)
+    entry["state"] = "review"
+    if not reviewed:
+        with pytest.raises(BuilderError, match="explicit completed review"):
+            load_review(payload, discovery)
+        return
+    entry.update(
+        reviewed=True,
+        rationale="The fixture delete tool needs approval before it runs.",
+        evidenceUrl=discovery.metadata.homepage,
+    )
+    kit = build_kit(discovery, load_review(payload, discovery))
+    contribution = json.loads(next(content for path, content in kit.files if "/mcp-servers/" in path))
+    assert {row["name"]: row["state"] for row in contribution["tools"]} == {
+        "delete_item": "review",
+        "read_item": "inherit",
+        "other": "inherit",
+    }
+    assert contribution["trustClass"] == "external"
+    assert contribution["activation"] == "opt-in"
+    assert kit.summary()["activeProtectionChanged"] is False
+
+
 @pytest.mark.parametrize(
     "argv",
     [
@@ -153,10 +182,17 @@ def test_safe_vectors_reject_shell_syntax_and_expansions(tmp_path: Path, argv: l
 
 @pytest.mark.parametrize("argv", [["items", "delete"], ["status"], ["--help"]])
 def test_safe_vectors_are_bound_to_their_exact_operation(tmp_path: Path, argv: list[str]) -> None:
+    """The matchers place the vector, so a vector they place elsewhere is refused.
+
+    `items delete` is another operation's, and neither `status` nor a bare
+    `--help` is an invocation of `items list` at all, so no matcher an installed
+    extension would carry claims any of them for the operation under review.
+    """
+
     discovery = make_discovery(tmp_path)
     payload, entry = reviewed_entry(discovery, ("items", "list"))
     entry["safeArgv"] = [argv]
-    with pytest.raises(BuilderError, match="operation path"):
+    with pytest.raises(BuilderError, match="another or ambiguous operation"):
         load_review(payload, discovery)
 
 
@@ -180,10 +216,17 @@ def test_blocked_operation_cannot_gain_a_safe_variant(tmp_path: Path) -> None:
 
 
 def test_root_safe_variants_cannot_preapprove_unknown_commands(tmp_path: Path) -> None:
+    """A root row owns the executable's flags, not an operation nobody discovered.
+
+    A root matcher claims every invocation of the executable, so a bare word
+    under it would preapprove a subcommand review was never shown. The grammar
+    refuses an operand there rather than reading one.
+    """
+
     discovery = make_discovery(tmp_path)
     payload, entry = reviewed_entry(discovery, ())
     entry["safeArgv"] = [["undiscovered"]]
-    with pytest.raises(BuilderError, match="Root safe variants"):
+    with pytest.raises(BuilderError, match="another or ambiguous operation"):
         load_review(payload, discovery)
     entry["safeArgv"] = [["--undiscovered"]]
     with pytest.raises(BuilderError, match="option"):
@@ -200,96 +243,47 @@ def test_rule_revision_changes_with_review_not_only_source(tmp_path: Path) -> No
     after = build_kit(discovery, load_review(payload, discovery))
     assert before.revision != after.revision
     assert before.discovery.binding == after.discovery.binding
-    before_detector = next(content for path, content in before.files if path.endswith("extensions.py"))
-    after_detector = next(content for path, content in after.files if path.endswith("extensions.py"))
-    before_revision = next(line for line in before_detector.splitlines() if line.startswith("_RULE_REVISION"))
-    after_revision = next(line for line in after_detector.splitlines() if line.startswith("_RULE_REVISION"))
+    before_source = json.loads(next(content for path, content in before.files if "/command-sources/" in path))
+    after_source = json.loads(next(content for path, content in after.files if "/command-sources/" in path))
+    before_revision = before_source["extension"]["rules"][0]["rule_version"]
+    after_revision = after_source["extension"]["rules"][0]["rule_version"]
     assert before_revision != after_revision
     assert '"state": "allow"' not in canonical_json(after.review.to_dict())
 
 
 @pytest.mark.parametrize(
-    "command",
+    "argv",
     [
-        "builder-demo items list --json --force",
-        "builder-demo items list --json extra",
-        "builder-demo items list --json; builder-demo items delete",
-        "builder-demo items list --json && echo done",
-        "builder-demo items list --json | tee out",
-        "builder-demo items list --json >out",
-        "builder-demo items list --json 2>/dev/null",
-        "builder-demo items list --json $(echo extra)",
-        "env builder-demo items list --json",
-        "sudo builder-demo items list --json",
-        "command builder-demo items list --json",
-        "PATH=/tmp builder-demo items list --json",
-        "FOO=bar builder-demo items list --json",
-        "/usr/bin/builder-demo items list --json",
-        "Builder-Demo items list --json",
-        "builder-demo ITEMS list --json",
-        'builder-demo "items" list --json',
-        "builder-demo items\tlist --json",
-        "builder-demo items list --json\necho next",
+        ["items", "list", "long-value" * 5, "long-value" * 5, "long-value" * 5],
+        ["items", "list; rm", "-rf", "/tmp/x"],
     ],
 )
-def test_literal_matcher_rejects_changed_context(command: str) -> None:
-    matcher = ReviewedLiteralCommandMatcher("builder-demo", ("items", "list", "--json"))
-    assert not matcher.match(parse_shell_command(command))
+def test_reviewed_literal_grammar_enforces_its_own_bounds(tmp_path: Path, argv: list[str]) -> None:
+    """The grammar the compiler applies is the one review reports against.
+
+    The second vector would also fail its scope check, since `rm` names no
+    operation this discovery carries. An author who wrote a second command is
+    told that, rather than told to file it under a different operation.
+    """
+
+    discovery = make_discovery(tmp_path)
+    payload, entry = reviewed_entry(discovery, ("items", "list"))
+    entry["safeArgv"] = [argv]
+    with pytest.raises(BuilderError, match="bounded exact literal invocation"):
+        load_review(payload, discovery)
 
 
-def test_literal_matcher_requires_exact_canonical_boundary() -> None:
-    matcher = ReviewedLiteralCommandMatcher("builder-demo", ("items", "list", "--json"))
-    command = parse_shell_command("builder-demo items list --json")
-    assert matcher.match(command)
-    for changed in (
-        replace(command, dialect="powershell"),
-        replace(command, transport="argv"),
-        replace(command, confidence="uncertain"),
-        replace(command, wrapper_chain=("env",)),
-    ):
-        assert not matcher.match(changed)
-    segment = replace(command.segments[0], environment_names=("CUSTOM_CONFIG",))
-    assert not matcher.match(replace(command, segments=(segment,)))
+@pytest.mark.parametrize("argv", [[], ["items", "list", "x" * 65]])
+def test_a_vector_the_authoring_contract_rejects_never_reaches_the_grammar(tmp_path: Path, argv: list[str]) -> None:
+    """An empty vector and an over-long token are refused by the document schema.
 
+    Both bounds are also the grammar's, which `reviewed_invocation_bindings`
+    pins in Rust. Review reads the document first, so the author hears about the
+    shape of the file they wrote rather than about the matcher it would compile.
+    """
 
-@pytest.mark.parametrize(
-    "executable,argv",
-    [("../demo", ("status",)), ("demo", ()), ("demo", ("x" * 65,)), ("demo", ("long-value" * 5,) * 3)],
-)
-def test_literal_matcher_constructor_enforces_its_own_bounds(executable: str, argv: tuple[str, ...]) -> None:
-    with pytest.raises(ValueError):
-        validate_reviewed_literal_argv(executable, argv)
-
-
-def test_owned_safe_evidence_does_not_suppress_an_independent_floor() -> None:
-    base = ExecutableMatcher(executables=frozenset({"builder-demo"}))
-    safe = CommandSafeVariant("literal", "Reviewed literal", ReviewedLiteralCommandMatcher("builder-demo", ("status",)))
-    own = CommandSafetyRule(
-        "command.builder-demo.review",
-        "Review",
-        "Review invocation",
-        "medium",
-        ("execution",),
-        ("builder-demo invocation",),
-        ("Inspect target",),
-        matcher=base,
-        safe_variants=(safe,),
-    )
-    floor = replace(own, rule_id="command.independent.floor", safe_variants=(), default_mode="enforce")
-
-    @dataclass(frozen=True)
-    class Extension:
-        extension_id: str
-        version: str
-        rules: tuple[CommandSafetyRule, ...]
-
-    extensions = (
-        Extension("command.builder-demo", "1.0.0", (own,)),
-        Extension("command.independent", "1.0.0", (floor,)),
-    )
-    observations = observe_command_extensions(
-        parse_shell_command("builder-demo status"), extensions, (own.rule_id, floor.rule_id)
-    )
-    assert not observations[0].effective_evidence
-    assert observations[1].effective_evidence
-    assert observations[1].rule.default_mode == "enforce"
+    discovery = make_discovery(tmp_path)
+    payload, entry = reviewed_entry(discovery, ("items", "list"))
+    entry["safeArgv"] = [argv]
+    with pytest.raises(BuilderError, match="versioned extension authoring contract"):
+        load_review(payload, discovery)

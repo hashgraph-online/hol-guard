@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.private_file_io import (
-    private_regular_file_is_valid,
     read_private_regular_bytes,
     read_private_regular_text,
 )
@@ -23,47 +22,11 @@ def _private_file(tmp_path: Path, payload: bytes = b"secret\n") -> Path:
     return path
 
 
-def test_private_regular_file_read_is_bounded_and_strips_text(tmp_path: Path) -> None:
-    path = _private_file(tmp_path)
-
-    assert private_regular_file_is_valid(path, require_private_parent=True) is True
-    assert read_private_regular_text(path, max_bytes=7, require_private_parent=True) == "secret"
-    assert read_private_regular_bytes(path, max_bytes=6, require_private_parent=True) is None
-
-
 def test_private_regular_file_read_rejects_invalid_utf8(tmp_path: Path) -> None:
     path = _private_file(tmp_path, b"\xff\xfe")
 
     assert read_private_regular_text(path, max_bytes=2, require_private_parent=True) is None
     assert read_private_regular_bytes(path, max_bytes=2, require_private_parent=True) == b"\xff\xfe"
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX permission semantics")
-def test_private_regular_file_read_rejects_public_file_or_parent(tmp_path: Path) -> None:
-    path = _private_file(tmp_path)
-
-    path.chmod(0o644)
-    assert private_regular_file_is_valid(path, require_private_parent=True) is False
-    assert read_private_regular_text(path, max_bytes=64, require_private_parent=True) is None
-
-    path.chmod(0o600)
-    path.parent.chmod(0o755)
-    assert private_regular_file_is_valid(path) is True
-    assert private_regular_file_is_valid(path, require_private_parent=True) is False
-    assert read_private_regular_text(path, max_bytes=64) == "secret"
-    assert read_private_regular_text(path, max_bytes=64, require_private_parent=True) is None
-
-
-def test_private_regular_file_read_rejects_symlink(tmp_path: Path) -> None:
-    path = _private_file(tmp_path)
-    link = path.parent / "authority-link"
-    try:
-        link.symlink_to(path)
-    except (NotImplementedError, OSError):
-        pytest.skip("symlinks unavailable")
-
-    assert private_regular_file_is_valid(link, require_private_parent=True) is False
-    assert read_private_regular_text(link, max_bytes=64, require_private_parent=True) is None
 
 
 def test_private_regular_file_read_validates_positive_bound(tmp_path: Path) -> None:

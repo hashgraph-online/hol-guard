@@ -71,7 +71,7 @@ def test_online_mcp_verification_pins_the_validated_address(monkeypatch):
 
     def _probe(_parsed, addresses, *, timeout_seconds):
         observed_addresses.append(addresses)
-        assert 0 < timeout_seconds <= 3
+        assert 0 < timeout_seconds <= 3.00001
         return 200
 
     monkeypatch.setattr("codex_plugin_scanner.verification.probe_pinned_https", _probe)

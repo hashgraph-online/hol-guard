@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import re
 import stat
@@ -10,14 +11,22 @@ import sys
 from pathlib import Path
 
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
-CORE_TARGET = "aarch64-apple-darwin"
+CORE_TARGETS = ("aarch64-apple-darwin", "x86_64-unknown-linux-gnu")
 
 
 def _regular_file_names(directory: Path) -> set[str]:
     return {entry.name for entry in directory.iterdir() if stat.S_ISREG(entry.lstat().st_mode)}
 
 
-def verify_release_assets(release_dir: Path, dist_dir: Path, version: str, channel: str) -> None:
+def verify_release_assets(
+    release_dir: Path,
+    dist_dir: Path,
+    version: str,
+    channel: str,
+    *,
+    allow_core_in_progress: bool = False,
+    asset_names: set[str] | None = None,
+) -> None:
     """Reject unowned assets and verify optional co-owned asset sets."""
     if channel not in {"alpha", "stable"}:
         raise ValueError(f"Unsupported release channel: {channel}")
@@ -25,11 +34,22 @@ def verify_release_assets(release_dir: Path, dist_dir: Path, version: str, chann
     mcpb_name = f"hol-guard-{version}.mcpb"
     checksum_name = f"{mcpb_name}.sha256"
     mcpb_names = {mcpb_name, checksum_name}
-    core_base = f"hol-guard-core-{version}-{CORE_TARGET}"
-    core_names = {core_base, f"{core_base}.json", f"{core_base}.attested.json"}
-    co_owned_names = mcpb_names | (core_names if channel == "alpha" else set())
+    core_names_by_target = {
+        target: {
+            f"hol-guard-core-{version}-{target}",
+            f"hol-guard-core-{version}-{target}.json",
+            f"hol-guard-core-{version}-{target}.attested.json",
+        }
+        for target in CORE_TARGETS
+    }
+    all_core_names = set().union(*core_names_by_target.values())
+    onedir_names = {
+        f"hol-guard-core-{version}-aarch64-apple-darwin.onedir.{suffix}" for suffix in ("zip", "json", "attested.json")
+    }
+    all_core_names |= onedir_names
+    co_owned_names = mcpb_names | all_core_names
     allowed_names = owned_names | co_owned_names
-    release_names = _regular_file_names(release_dir)
+    release_names = _regular_file_names(release_dir) | (asset_names or set())
     unexpected_names = sorted(release_names - allowed_names)
     if unexpected_names:
         names = ", ".join(unexpected_names)
@@ -38,9 +58,10 @@ def verify_release_assets(release_dir: Path, dist_dir: Path, version: str, chann
     present_mcpb_names = release_names & mcpb_names
     if present_mcpb_names and present_mcpb_names != mcpb_names:
         raise ValueError("MCPB release asset and checksum must both be present")
-    present_core_names = release_names & core_names
-    if present_core_names and present_core_names != core_names:
-        raise ValueError("Desktop Core release assets must be a complete set")
+    for core_names in [*core_names_by_target.values(), onedir_names]:
+        present_core_names = release_names & core_names
+        if not allow_core_in_progress and present_core_names and present_core_names != core_names:
+            raise ValueError("Desktop Core release assets must be a complete set")
     if not present_mcpb_names:
         return
 
@@ -56,11 +77,23 @@ def verify_release_assets(release_dir: Path, dist_dir: Path, version: str, chann
 
 
 def main() -> int:
-    if len(sys.argv) != 5:
-        print(f"Usage: {Path(sys.argv[0]).name} RELEASE_DIR DIST_DIR VERSION CHANNEL", file=sys.stderr)
-        return 2
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("release_dir", type=Path)
+    parser.add_argument("dist_dir", type=Path)
+    parser.add_argument("version")
+    parser.add_argument("channel")
+    parser.add_argument("--allow-core-in-progress", action="store_true")
+    parser.add_argument("--asset-names-file", type=Path)
+    args = parser.parse_args()
     try:
-        verify_release_assets(Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], sys.argv[4])
+        verify_release_assets(
+            args.release_dir,
+            args.dist_dir,
+            args.version,
+            args.channel,
+            allow_core_in_progress=args.allow_core_in_progress,
+            asset_names=set(args.asset_names_file.read_text().splitlines()) if args.asset_names_file else None,
+        )
     except (OSError, ValueError) as error:
         print(error, file=sys.stderr)
         return 1

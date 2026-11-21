@@ -1,0 +1,73 @@
+{
+  "activation": "opt-in",
+  "description": "Conservative operation knowledge compiled from a contributor inventory.",
+  "homepage": "https://github.com/alxspiker/mcp-server-ftp",
+  "icon": {
+    "kind": "none"
+  },
+  "id": "mcp.ftp",
+  "launch": {
+    "command": "npx",
+    "kind": "package-launcher",
+    "package": "mcp-server-ftp"
+  },
+  "name": "FTP MCP",
+  "publisher": {
+    "displayName": "alxspiker",
+    "id": "community.alxspiker"
+  },
+  "referenceUrls": [
+    "https://github.com/alxspiker/mcp-server-ftp"
+  ],
+  "riskClasses": [
+    "execution"
+  ],
+  "saferAlternatives": [
+    "Inspect the exact target and required permissions before running this operation."
+  ],
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "tools": [
+    {
+      "name": "append-file",
+      "state": "inherit"
+    },
+    {
+      "name": "create-directory",
+      "state": "inherit"
+    },
+    {
+      "name": "delete-directory",
+      "state": "review"
+    },
+    {
+      "name": "delete-file",
+      "state": "inherit"
+    },
+    {
+      "name": "download-file",
+      "state": "inherit"
+    },
+    {
+      "name": "edit-file",
+      "state": "inherit"
+    },
+    {
+      "name": "list-directory",
+      "state": "inherit"
+    },
+    {
+      "name": "rename-file",
+      "state": "inherit"
+    },
+    {
+      "name": "upload-file",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "trustClass": "external",
+  "version": "1.0.0"
+}

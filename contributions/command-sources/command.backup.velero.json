@@ -1,0 +1,436 @@
+{
+  "extension": {
+    "action_classes": [
+      "Velero destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Velero operations that delete backup data or recovery records.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.backup.velero",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Velero command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Velero destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies deletion of backups, schedules, and restore records through Velero CLI.",
+        "example_command": "velero backup delete",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Velero backup deletion",
+        "permission_id": "command.backup.velero.permission.deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "List retained backups and run the documented preview before changing backup data."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://velero.io/docs/main/backup-reference/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Velero destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies deletion of backups, schedules, and restore records through Velero CLI.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "velero",
+                  "velero.cmd",
+                  "velero.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--add-dir-header",
+                  "--add_dir_header",
+                  "--alsologtostderr",
+                  "--colorized",
+                  "--logtostderr",
+                  "--one_output",
+                  "--skip-headers",
+                  "--skip-log-headers",
+                  "--skip_headers",
+                  "--skip_log_headers"
+                ],
+                "interspersed_options_with_values": [
+                  "--features",
+                  "--kubeconfig",
+                  "--kubecontext",
+                  "--log-backtrace-at",
+                  "--log-dir",
+                  "--log-file",
+                  "--log-file-max-size",
+                  "--log_backtrace_at",
+                  "--log_dir",
+                  "--log_file",
+                  "--log_file_max_size",
+                  "--namespace",
+                  "--stderrthreshold",
+                  "--v",
+                  "--vmodule",
+                  "-n",
+                  "-v"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "backup",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "velero",
+                  "velero.cmd",
+                  "velero.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--add-dir-header",
+                  "--add_dir_header",
+                  "--alsologtostderr",
+                  "--colorized",
+                  "--logtostderr",
+                  "--one_output",
+                  "--skip-headers",
+                  "--skip-log-headers",
+                  "--skip_headers",
+                  "--skip_log_headers"
+                ],
+                "interspersed_options_with_values": [
+                  "--features",
+                  "--kubeconfig",
+                  "--kubecontext",
+                  "--log-backtrace-at",
+                  "--log-dir",
+                  "--log-file",
+                  "--log-file-max-size",
+                  "--log_backtrace_at",
+                  "--log_dir",
+                  "--log_file",
+                  "--log_file_max_size",
+                  "--namespace",
+                  "--stderrthreshold",
+                  "--v",
+                  "--vmodule",
+                  "-n",
+                  "-v"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "schedule",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "velero",
+                  "velero.cmd",
+                  "velero.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--add-dir-header",
+                  "--add_dir_header",
+                  "--alsologtostderr",
+                  "--colorized",
+                  "--logtostderr",
+                  "--one_output",
+                  "--skip-headers",
+                  "--skip-log-headers",
+                  "--skip_headers",
+                  "--skip_log_headers"
+                ],
+                "interspersed_options_with_values": [
+                  "--features",
+                  "--kubeconfig",
+                  "--kubecontext",
+                  "--log-backtrace-at",
+                  "--log-dir",
+                  "--log-file",
+                  "--log-file-max-size",
+                  "--log_backtrace_at",
+                  "--log_dir",
+                  "--log_file",
+                  "--log_file_max_size",
+                  "--namespace",
+                  "--stderrthreshold",
+                  "--v",
+                  "--vmodule",
+                  "-n",
+                  "-v"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "restore",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.backup.velero.permission.deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.backup.velero.deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "velero",
+                      "velero.cmd",
+                      "velero.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--add-dir-header",
+                      "--add_dir_header",
+                      "--alsologtostderr",
+                      "--colorized",
+                      "--logtostderr",
+                      "--one_output",
+                      "--skip-headers",
+                      "--skip-log-headers",
+                      "--skip_headers",
+                      "--skip_log_headers"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--features",
+                      "--kubeconfig",
+                      "--kubecontext",
+                      "--log-backtrace-at",
+                      "--log-dir",
+                      "--log-file",
+                      "--log-file-max-size",
+                      "--log_backtrace_at",
+                      "--log_dir",
+                      "--log_file",
+                      "--log_file_max_size",
+                      "--namespace",
+                      "--stderrthreshold",
+                      "--v",
+                      "--vmodule",
+                      "-n",
+                      "-v"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "backup",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "velero",
+                      "velero.cmd",
+                      "velero.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--add-dir-header",
+                      "--add_dir_header",
+                      "--alsologtostderr",
+                      "--colorized",
+                      "--logtostderr",
+                      "--one_output",
+                      "--skip-headers",
+                      "--skip-log-headers",
+                      "--skip_headers",
+                      "--skip_log_headers"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--features",
+                      "--kubeconfig",
+                      "--kubecontext",
+                      "--log-backtrace-at",
+                      "--log-dir",
+                      "--log-file",
+                      "--log-file-max-size",
+                      "--log_backtrace_at",
+                      "--log_dir",
+                      "--log_file",
+                      "--log_file_max_size",
+                      "--namespace",
+                      "--stderrthreshold",
+                      "--v",
+                      "--vmodule",
+                      "-n",
+                      "-v"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "schedule",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "velero",
+                      "velero.cmd",
+                      "velero.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--add-dir-header",
+                      "--add_dir_header",
+                      "--alsologtostderr",
+                      "--colorized",
+                      "--logtostderr",
+                      "--one_output",
+                      "--skip-headers",
+                      "--skip-log-headers",
+                      "--skip_headers",
+                      "--skip_log_headers"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--features",
+                      "--kubeconfig",
+                      "--kubecontext",
+                      "--log-backtrace-at",
+                      "--log-dir",
+                      "--log-file",
+                      "--log-file-max-size",
+                      "--log_backtrace_at",
+                      "--log_dir",
+                      "--log_file",
+                      "--log_file_max_size",
+                      "--namespace",
+                      "--stderrthreshold",
+                      "--v",
+                      "--vmodule",
+                      "-n",
+                      "-v"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "restore",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Velero command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "List retained backups and run the documented preview before changing backup data."
+        ],
+        "severity": "critical",
+        "title": "Velero backup deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "Describe the backup and confirm object-storage and snapshot retention first."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

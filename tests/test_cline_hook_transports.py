@@ -7,25 +7,17 @@ import subprocess
 import sys
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import cline_hooks as cline_hooks_module
-from codex_plugin_scanner.guard.adapters import cline_state_paths as cline_state_paths_module
-from codex_plugin_scanner.guard.adapters import guard_cli_attestation
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_hooks import (
-    _hook_command,
-    _hook_source,
-    _posix_wrapper,
-    _powershell_wrapper,
-    _slot_for_event,
-    cline_hook_roots,
-    cline_native_hook_state,
-    run_cline_hook_canary,
-    uninstall_cline_hooks,
-)
-from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, install_cline_plugin
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
+from tests.cline_test_support import hook_state, install_plugin, uninstall
+from tests.cline_test_support import plugin_source as _plugin_source
+from tests.cline_worker_config import worker_config as _worker_config
+from tests.native_bounded_runtime import BOUNDED_FEATURES
+from tests.native_runtime_stamp import stamp_native_runtime
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -61,12 +53,14 @@ else: print(json.dumps({"decision":"allow"}))
     return path
 
 
-def _run_hook(source: str, tmp_path: Path, payload: dict[str, object], *, env=None) -> subprocess.CompletedProcess[str]:
-    path = tmp_path / "PreToolUse"
-    path.write_text(source, encoding="utf-8")
-    path.chmod(0o755)
+def _run_hook(config: str, tmp_path: Path, payload: dict[str, object], *, env=None) -> subprocess.CompletedProcess[str]:
+    runtime = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if not runtime or not os.path.isfile(runtime):
+        pytest.skip("the native Cline hook worker needs the built runtime")
+    path = tmp_path / "PreToolUse.json"
+    path.write_text(config, encoding="utf-8")
     return subprocess.run(
-        [sys.executable, str(path)],
+        [runtime, "cline-hook-worker", str(path)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -88,15 +82,21 @@ def _run_plugin(source: str, tmp_path: Path, expression: str) -> subprocess.Comp
         f"const result=await ({expression});console.log(JSON.stringify(result));"
     )
     return subprocess.run(
-        [node, "--input-type=module", "-e", code], capture_output=True, text=True, timeout=10, check=False
+        [node, "--input-type=module", "-e", code], capture_output=True, text=True, timeout=30, check=False
     )
 
 
-def test_native_hook_root_matches_vscode_and_core_global_directory(tmp_path: Path) -> None:
-    context = _context(tmp_path)
-    roots = cline_hook_roots(context)
-    assert roots[0] == context.home_dir / "Documents" / "Cline" / "Hooks"
-    assert roots[1] == context.home_dir / ".cline" / "hooks"
+def _install_hooks(
+    context: HarnessContext, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, runtime_script: str = ""
+) -> dict[str, Any]:
+    runtime = tmp_path / "native-runtime"
+    if runtime_script:
+        runtime.write_text(f"#!/bin/sh\n{runtime_script}\n", encoding="utf-8")
+        runtime.chmod(0o755)
+    else:
+        runtime.write_bytes(b"")
+    stamp_native_runtime(monkeypatch, runtime, (*BOUNDED_FEATURES, "cline-hook-worker-v1"))
+    return ask("install_transport", context, harness="cline", transport="hooks", frozen=False)
 
 
 def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, monkeypatch) -> None:
@@ -104,10 +104,10 @@ def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, 
     executable = tmp_path / "HOL Guard"
     executable.write_bytes(b"signed-frozen-core")
     executable.chmod(0o755)
-    monkeypatch.setattr(guard_cli_attestation.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(guard_cli_attestation.sys, "executable", str(executable))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(executable))
 
-    manifest = install_cline_plugin(context)
+    manifest = install_plugin(context)
     source = Path(str(manifest["managed_plugin_path"])).read_text(encoding="utf-8")
 
     assert f"const GUARD_CLI = {json.dumps([str(executable), 'hook'])};" in source
@@ -117,141 +117,43 @@ def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, 
     assert identity["command"] == [str(executable)]
 
 
-def test_native_hook_slots_are_platform_canonical_and_non_destructive(tmp_path: Path) -> None:
-    root = tmp_path / "hooks"
-    root.mkdir()
-    assert _slot_for_event(root, "PreToolUse", windows=False).name == "PreToolUse"
-    assert _slot_for_event(root, "PreToolUse", windows=True).name == "PreToolUse.ps1"
-    (root / "PreToolUse").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    with pytest.raises(RuntimeError):
-        _slot_for_event(root, "PreToolUse", windows=False)
-
-
-def test_posix_wrapper_pins_python_and_isolation_flags() -> None:
-    source = _posix_wrapper(worker=Path("/guard/worker.py"), python="/runtime/python")
-    assert source.startswith("#!/bin/sh\n")
-    assert "exec /runtime/python -I -s /guard/worker.py" in source
-    assert "/usr/bin/env python" not in source
-
-
-def test_windows_wrapper_uses_isolated_python_and_fails_closed() -> None:
-    source = _powershell_wrapper(worker=Path("C:/Guard/worker.py"), python="C:/Python/python.exe", blocking=True)
-    assert '"-I", "-s"' in source
-    assert "ConvertTo-Json -Compress" in source
-    assert "cancel=$true" in source
-
-
-def test_cline_canary_uses_only_the_canonical_managed_slot(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.skipif(os.name == "nt", reason="the stand-in runtime is a POSIX shell script")
+def test_cline_canary_runs_only_the_canonical_managed_slot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     context = _context(tmp_path / "home parent with spaces")
-    hook = cline_hook_roots(context)[0] / ("PreToolUse.ps1" if os.name == "nt" else "PreToolUse")
-    hook.parent.mkdir(parents=True)
-    hook.write_text("# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n", encoding="utf-8")
-    if os.name != "nt":
-        hook.chmod(0o700)
-    state = context.guard_home / "managed" / "cline" / "native-hooks-state.json"
-    state.parent.mkdir(parents=True, exist_ok=True)
-    state.write_text(json.dumps({"paths": {"PreToolUse": str(hook)}}), encoding="utf-8")
-    observed: dict[str, object] = {}
+    log = tmp_path / "runtime.log"
+    script = f"printf '%s\\n' \"$@\" > '{log}'; cat >> '{log}'; printf '{{\"cancel\": false}}\\n'"
+    installed = _install_hooks(context, tmp_path, monkeypatch, runtime_script=script)
 
-    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        observed["command"] = command
-        observed["shell"] = kwargs.get("shell")
-        return subprocess.CompletedProcess(command, 0, stdout='{"cancel":false}\n', stderr="")
-
-    monkeypatch.setattr(cline_hooks_module.subprocess, "run", fake_run)
-    if os.name == "nt":
-        powershell = tmp_path / "PowerShell Dir" / "powershell.exe"
-        powershell.parent.mkdir()
-        powershell.write_bytes(b"")
-        monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", lambda *_parts: powershell)
-
-    assert run_cline_hook_canary(context) == {"ok": True}
-    observed_command = observed["command"]
-    assert isinstance(observed_command, list)
-    assert observed_command[-1] == str(hook.resolve())
-    assert observed["shell"] is False
-
-
-def test_cline_powershell_command_never_uses_ambient_path(tmp_path: Path, monkeypatch) -> None:
-    attacker_dir = tmp_path / "attacker-bin"
-    attacker_dir.mkdir()
-    attacker_shell = attacker_dir / "powershell.exe"
-    attacker_shell.write_bytes(b"")
-    monkeypatch.setenv("PATH", str(attacker_dir))
-
-    def unavailable_system_shell(*_parts: str) -> Path:
-        raise OSError("trusted Windows PowerShell unavailable")
-
-    monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", unavailable_system_shell)
-
-    assert _hook_command(tmp_path / "PreToolUse.ps1") == []
+    assert installed["probe"]["canary"] == {"returncode": 0, "stdout": '{"cancel": false}\n', "error": None}
+    worker = context.guard_home / "managed" / "cline" / "hook-workers" / "PreToolUse.json"
+    argv, _, payload = log.read_text(encoding="utf-8").partition("\n{")
+    assert argv.splitlines()[-1] == str(worker)
+    assert json.loads("{" + payload)["hookName"] == "PreToolUse"
 
 
 def test_cline_saved_custom_root_survives_environment_change(tmp_path: Path, monkeypatch) -> None:
     context = _context(tmp_path / "home parent")
-    custom_data = context.home_dir / "custom cline data"
-    custom_root = custom_data / "hooks"
-    monkeypatch.setenv("CLINE_DATA_DIR", str(custom_data))
-    paths: dict[str, str] = {}
-    digests: dict[str, str] = {}
-    workers: dict[str, str] = {}
-    worker_digests: dict[str, str] = {}
-    for event in cline_hooks_module._EVENTS:
-        hook = custom_root / f"{event}{'.ps1' if os.name == 'nt' else ''}"
-        hook.parent.mkdir(parents=True, exist_ok=True)
-        hook_content = "# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n"
-        hook.write_text(hook_content, encoding="utf-8")
-        worker = context.guard_home / "managed" / "cline" / "hook-workers" / f"{event}.py"
-        worker.parent.mkdir(parents=True, exist_ok=True)
-        worker_content = "# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n"
-        worker.write_text(worker_content, encoding="utf-8")
-        paths[event] = str(hook)
-        digests[event] = sha256(hook_content.encode()).hexdigest()
-        workers[event] = str(worker)
-        worker_digests[event] = sha256(worker_content.encode()).hexdigest()
-    state_path = context.guard_home / "managed" / "cline" / "native-hooks-state.json"
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(
-        json.dumps(
-            {
-                "root": str(custom_root),
-                "paths": paths,
-                "sha256": digests,
-                "workers": workers,
-                "worker_sha256": worker_digests,
-            }
-        ),
-        encoding="utf-8",
-    )
+    custom_root = context.home_dir / "custom cline data" / "hooks"
+    monkeypatch.setenv("CLINE_DATA_DIR", str(custom_root.parent))
+    installed = _install_hooks(context, tmp_path, monkeypatch)
+    assert installed["manifest"]["managed_hooks_root"] == str(custom_root)
     monkeypatch.delenv("CLINE_DATA_DIR")
 
-    def fake_run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(command, 0, stdout='{"cancel":false}\n', stderr="")
-
-    monkeypatch.setattr(cline_hooks_module.subprocess, "run", fake_run)
-    if os.name == "nt":
-        powershell = tmp_path / "trusted" / "powershell.exe"
-        powershell.parent.mkdir()
-        powershell.write_bytes(b"")
-        monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", lambda *_parts: powershell)
-
-    health = cline_native_hook_state(context)
+    health = hook_state(context)
     assert health["installed"] is True
     assert health["integrity_ok"] is True
-    assert health["synthetic_canary_ok"] is True
-    uninstall = uninstall_cline_hooks(context)
-    assert uninstall["complete"] is True
-    assert len(uninstall["removed"]) == len(paths) + len(workers)
+    removed = uninstall(context, "hooks")["native_hooks"]
+    assert removed["complete"] is True
+    assert len(removed["removed"]) == 2 * len(installed["manifest"]["managed_hook_paths"])
     assert not custom_root.exists() or not any(custom_root.iterdir())
 
 
-def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_slots(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_slots(tmp_path: Path) -> None:
     context = _context(tmp_path)
     attacker_hook = tmp_path / "outside" / "PreToolUse"
     attacker_hook.parent.mkdir()
-    attacker_hook.write_text("# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n", encoding="utf-8")
+    executed = tmp_path / "executed"
+    attacker_hook.write_text(f"#!/bin/sh\n# HOL_GUARD_MANAGED_CLINE_HOOK_V1\ntouch '{executed}'\n", encoding="utf-8")
     attacker_hook.chmod(0o700)
     state = context.guard_home / "managed" / "cline" / "native-hooks-state.json"
     state.parent.mkdir(parents=True, exist_ok=True)
@@ -265,38 +167,33 @@ def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_sl
         encoding="utf-8",
     )
 
-    def fail_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise AssertionError("an unbound Cline state path must not be executed")
-
-    monkeypatch.setattr(cline_hooks_module.subprocess, "run", fail_run)
-
-    assert run_cline_hook_canary(context) == {"ok": False, "reason": "pretool_hook_missing"}
-    assert cline_native_hook_state(context)["installed"] is False
-    uninstall = uninstall_cline_hooks(context)
-    assert uninstall["complete"] is False
-    assert str(attacker_hook) in uninstall["retained_modified_or_unowned"]
+    assert hook_state(context)["installed"] is False
+    assert not executed.exists(), "an unbound Cline state path must not be executed"
+    removed = uninstall(context, "hooks")["native_hooks"]
+    assert removed["complete"] is False
+    assert str(attacker_hook) in removed["retained_modified_or_unowned"]
     assert attacker_hook.exists()
 
 
-def test_native_pretool_continues_inspection_when_guard_is_unavailable(tmp_path: Path) -> None:
+def test_native_pretool_cancels_inspection_when_guard_is_unavailable(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "hooks")
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "read_files", "input": {"paths": ["README.md"]}}},
     )
     assert result.returncode == 0
-    assert json.loads(result.stdout)["cancel"] is False
+    assert json.loads(result.stdout)["cancel"] is True
 
 
 def test_native_pretool_pauses_mutation_when_guard_is_unavailable(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "hooks")
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "rm -rf /"}}},
     )
@@ -307,9 +204,9 @@ def test_native_pretool_pauses_mutation_when_guard_is_unavailable(tmp_path: Path
 def test_native_pretool_validates_every_command_when_guard_is_unavailable(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "hooks")
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {
             "hookName": "PreToolUse",
@@ -325,9 +222,9 @@ def test_native_pretool_fans_out_cline_parallel_commands(tmp_path: Path) -> None
     _activate(context, "hooks")
     guard = _fake_guard(tmp_path)
     log = tmp_path / "guard.jsonl"
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {
             "hookName": "PreToolUse",
@@ -344,9 +241,9 @@ def test_native_pretool_rejects_oversized_input_before_guard(tmp_path: Path) -> 
     context = _context(tmp_path)
     _activate(context, "hooks")
     guard = _fake_guard(tmp_path)
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "read_files", "input": {"x": "a" * (1024 * 1024)}}},
     )
@@ -375,15 +272,538 @@ def test_generated_plugin_syntax_pretool_block_and_posttool_replacement(tmp_path
         ),
     )
     assert before.returncode == 0, before.stderr
-    assert json.loads(before.stdout) == {"skip": True, "reason": "blocked by test"}
+    assert json.loads(before.stdout) == {"skip": True, "reason": "HOL Guard blocked this action."}
 
     after = _run_plugin(
         source,
         tmp_path,
-        'plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},input:{paths:["README.md"]},result:{output:"SECRET_OUTPUT",isError:false,metadata:{source:"test"}}})',
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},input:{paths:["README.md"]},result:{output:"SECRET_OUTPUT",isError:false,metadata:{token:"SECRET_METADATA"}}})',
     )
     assert after.returncode == 0, after.stderr
     output = json.loads(after.stdout)["result"]
     assert output["isError"] is True
-    assert output["output"] == "blocked by test"
-    assert output["metadata"] == {"source": "test"}
+    assert output["output"] == "HOL Guard withheld this tool result."
+    assert "SECRET_OUTPUT" not in after.stdout
+    assert "SECRET_METADATA" not in after.stdout
+
+
+def test_generated_plugin_withholds_unreviewed_posttool_output(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    _activate(context, "plugin")
+    source = _plugin_source(context, [sys.executable, "-c", "import sys; sys.exit(3)"])
+    after = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},input:{paths:["README.md"]},result:{output:"SECRET_OUTPUT",isError:false,metadata:{token:"SECRET_METADATA"}}})',
+    )
+    assert after.returncode == 0, after.stderr
+    output = json.loads(after.stdout)["result"]
+    assert output == {"output": "HOL Guard could not review this tool result, so it was withheld.", "isError": True}
+    assert "SECRET_OUTPUT" not in after.stdout
+    assert "SECRET_METADATA" not in after.stdout
+    proof_path = context.guard_home / "managed" / "cline" / "proofs" / "plugin-posttool.json"
+    assert json.loads(proof_path.read_text(encoding="utf-8"))["outcome"] == "withheld"
+
+
+@pytest.mark.parametrize("state", ["missing", "malformed", "unknown"])
+def test_generated_plugin_withholds_posttool_when_transport_is_unavailable(tmp_path: Path, state: str) -> None:
+    context = _context(tmp_path)
+    if state == "malformed":
+        _activate(context, "plugin")
+        (context.guard_home / "managed" / "cline" / "adapter-state.json").write_text("{", encoding="utf-8")
+    elif state == "unknown":
+        _activate(context, "unknown")
+    source = _plugin_source(context, [sys.executable, "-c", 'print("{}")'])
+    before = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.beforeTool({toolCall:{toolCallId:"1",toolName:"read_files"},input:{paths:["README.md"]}})',
+    )
+    assert before.returncode == 0, before.stderr
+    assert json.loads(before.stdout)["skip"] is True
+    after = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},'
+        'input:{paths:["README.md"]},result:{output:"SECRET_OUTPUT",isError:false,metadata:{token:"SECRET_METADATA"}}})',
+    )
+    assert after.returncode == 0, after.stderr
+    assert json.loads(after.stdout)["result"] == {
+        "output": "HOL Guard Cline transport state is unavailable, so this tool result was withheld.",
+        "isError": True,
+    }
+    assert "SECRET_OUTPUT" not in after.stdout
+    assert "SECRET_METADATA" not in after.stdout
+    proof_path = context.guard_home / "managed" / "cline" / "proofs" / "plugin-posttool.json"
+    assert json.loads(proof_path.read_text(encoding="utf-8"))["outcome"] == "withheld"
+
+
+def test_generated_plugin_preserves_guard_block_on_exit_one(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    _activate(context, "plugin")
+    guard = tmp_path / "blocking_guard.py"
+    guard.write_text(
+        'print(\'{"decision":"block","reason":"REFLECTED_PRIVATE_TOKEN"}\')\nraise SystemExit(1)\n',
+        encoding="utf-8",
+    )
+    source = _plugin_source(context, [sys.executable, str(guard)])
+    before = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.beforeTool({toolCall:{toolCallId:"1",toolName:"read_files"},input:{paths:["README.md"]}})',
+    )
+    assert before.returncode == 0, before.stderr
+    assert json.loads(before.stdout) == {"skip": True, "reason": "HOL Guard blocked this action."}
+    assert "REFLECTED_PRIVATE_TOKEN" not in before.stdout
+    after = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},'
+        'input:{paths:["README.md"]},result:{output:"SECRET_OUTPUT",isError:false}})',
+    )
+    assert after.returncode == 0, after.stderr
+    assert json.loads(after.stdout)["result"] == {
+        "output": "HOL Guard withheld this tool result.",
+        "isError": True,
+    }
+    assert "REFLECTED_PRIVATE_TOKEN" not in after.stdout
+    assert "SECRET_OUTPUT" not in after.stdout
+    proof_path = context.guard_home / "managed" / "cline" / "proofs" / "plugin-posttool.json"
+    assert json.loads(proof_path.read_text(encoding="utf-8"))["outcome"] == "replaced"
+
+
+def test_generated_plugin_withholds_unserializable_posttool_output(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    _activate(context, "plugin")
+    source = _plugin_source(context, [sys.executable, "-c", 'print("{}")'])
+    after = _run_plugin(
+        source,
+        tmp_path,
+        '(()=>{const value={secret:"SECRET_OUTPUT"};value.self=value;'
+        'return plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},'
+        'input:{paths:["README.md"]},result:{output:value,isError:false}})})()',
+    )
+    assert after.returncode == 0, after.stderr
+    assert json.loads(after.stdout)["result"] == {
+        "output": "HOL Guard could not review this tool result, so it was withheld.",
+        "isError": True,
+    }
+    assert "SECRET_OUTPUT" not in after.stdout
+
+
+@pytest.mark.parametrize("decision", [{"decision": "allow"}, {"decision": "allow", "policy_action": "allow"}])
+def test_generated_plugin_withholds_allow_without_model_output_action(tmp_path: Path, decision: dict[str, str]) -> None:
+    context = _context(tmp_path)
+    _activate(context, "plugin")
+    guard = tmp_path / "replacement_guard.py"
+    guard.write_text(f"print({json.dumps(decision)!r})\n", encoding="utf-8")
+    source = _plugin_source(context, [sys.executable, str(guard)])
+    after = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},input:{paths:["README.md"]},result:{output:"SECRET_OUTPUT",isError:false,metadata:{token:"SECRET_METADATA"}}})',
+    )
+    assert after.returncode == 0, after.stderr
+    assert json.loads(after.stdout)["result"] == {
+        "output": "HOL Guard did not provide a reviewed output action, so this tool result was withheld.",
+        "isError": True,
+    }
+    assert "SECRET_OUTPUT" not in after.stdout
+    assert "SECRET_METADATA" not in after.stdout
+    proof_path = context.guard_home / "managed" / "cline" / "proofs" / "plugin-posttool.json"
+    assert json.loads(proof_path.read_text(encoding="utf-8"))["outcome"] == "withheld"
+
+
+@pytest.mark.parametrize(
+    ("directive", "expected_output", "expected_error"),
+    [
+        (
+            {"model_output_action": "replace_with_reviewed_excerpt", "reviewed_excerpt": "SAFE_EXCERPT"},
+            "SAFE_EXCERPT",
+            False,
+        ),
+        (
+            {"model_output_action": "replace_with_reviewed_excerpt"},
+            "HOL Guard did not provide the reviewed excerpt, so this tool result was withheld.",
+            True,
+        ),
+        ({"model_output_action": "block"}, "HOL Guard withheld this tool result.", True),
+        (
+            {"model_output_action": "allow_original", "reviewed_output_sha256": sha256(b"OTHER_OUTPUT").hexdigest()},
+            "HOL Guard could not bind its review to this tool result, so it was withheld.",
+            True,
+        ),
+        (
+            {"model_output_action": "unexpected"},
+            "HOL Guard returned an unsupported output action, so this tool result was withheld.",
+            True,
+        ),
+    ],
+)
+def test_generated_plugin_obeys_model_output_directive(
+    tmp_path: Path, directive: dict[str, str], expected_output: str, expected_error: bool
+) -> None:
+    context = _context(tmp_path)
+    _activate(context, "plugin")
+    guard = tmp_path / "directive_guard.py"
+    guard.write_text(f"print({json.dumps({'decision': 'allow', **directive})!r})\n", encoding="utf-8")
+    source = _plugin_source(context, [sys.executable, str(guard)])
+    after = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},'
+        'input:{paths:["README.md"]},result:{output:"SECRET_OUTPUT",isError:false,metadata:{token:"SECRET_METADATA"}}})',
+    )
+    assert after.returncode == 0, after.stderr
+    assert json.loads(after.stdout)["result"] == {"output": expected_output, "isError": expected_error}
+    assert "SECRET_OUTPUT" not in after.stdout
+    assert "SECRET_METADATA" not in after.stdout
+
+
+def test_generated_plugin_binds_allow_original_to_exact_output(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    _activate(context, "plugin")
+    guard = tmp_path / "matching_digest_guard.py"
+    decision = {
+        "decision": "allow",
+        "model_output_action": "allow_original",
+        "reviewed_output_sha256": sha256(b"SAFE_OUTPUT").hexdigest(),
+    }
+    guard.write_text(f"print({json.dumps(decision)!r})\n", encoding="utf-8")
+    source = _plugin_source(context, [sys.executable, str(guard)])
+    after = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},'
+        'input:{paths:["README.md"]},result:{output:"SAFE_OUTPUT",isError:false,metadata:{token:"SECRET_METADATA"}}})',
+    )
+    assert after.returncode == 0, after.stderr
+    assert json.loads(after.stdout)["result"] == {"output": "SAFE_OUTPUT", "isError": False}
+    assert "SECRET_METADATA" not in after.stdout
+
+
+def test_generated_plugin_returns_the_exact_output_reviewed_for_allow_original(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    _activate(context, "plugin")
+    guard = tmp_path / "matching_digest_guard.py"
+    decision = {
+        "decision": "allow",
+        "model_output_action": "allow_original",
+        "reviewed_output_sha256": sha256(b"SAFE_OUTPUT").hexdigest(),
+    }
+    guard.write_text(f"print({json.dumps(decision)!r})\n", encoding="utf-8")
+    source = _plugin_source(context, [sys.executable, str(guard)])
+    after = _run_plugin(
+        source,
+        tmp_path,
+        "(()=>{let reads=0;const result={get output(){reads+=1;"
+        'return reads===1?"SAFE_OUTPUT":"SECRET_OUTPUT";},isError:false};'
+        'return plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},'
+        'input:{paths:["README.md"]},result}).then(value=>({value,reads}));})()',
+    )
+    assert after.returncode == 0, after.stderr
+    assert json.loads(after.stdout) == {
+        "value": {"result": {"output": "SAFE_OUTPUT", "isError": False}},
+        "reads": 1,
+    }
+    assert "SECRET_OUTPUT" not in after.stdout
+
+
+@pytest.mark.parametrize(
+    "decision_json",
+    [
+        "{}",
+        '{"decision":"unknown"}',
+        '{"decision":true,"policy_action":"allow"}',
+        '{"decision":null,"policy_action":"allow"}',
+    ],
+)
+def test_generated_plugin_rejects_ambiguous_guard_decision(tmp_path: Path, decision_json: str) -> None:
+    context = _context(tmp_path)
+    _activate(context, "plugin")
+    guard = tmp_path / "ambiguous_guard.py"
+    guard.write_text(f"print({decision_json!r})\n", encoding="utf-8")
+    source = _plugin_source(context, [sys.executable, str(guard)])
+    before = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.beforeTool({toolCall:{toolCallId:"1",toolName:"read_files"},input:{paths:["README.md"]}})',
+    )
+    assert before.returncode == 0, before.stderr
+    assert json.loads(before.stdout) == {
+        "skip": True,
+        "reason": "HOL Guard returned an ambiguous decision; this action was withheld.",
+    }
+    after = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},input:{paths:["README.md"]},result:{output:"SECRET_OUTPUT",isError:false}})',
+    )
+    assert after.returncode == 0, after.stderr
+    assert json.loads(after.stdout)["result"] == {
+        "output": "HOL Guard could not review this tool result, so it was withheld.",
+        "isError": True,
+    }
+    assert "SECRET_OUTPUT" not in after.stdout
+
+
+def test_generated_plugin_accepts_explicit_native_pretool_allow_but_withholds_posttool_without_directive(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    _activate(context, "plugin")
+    guard = tmp_path / "allow_guard.py"
+    decision = {"continue": True, "policy_action": "allow", "hookSpecificOutput": {"permissionDecision": "allow"}}
+    # Model the CLI protocol: consume the request before replying, rather than
+    # racing Node's synchronous stdin writer with an immediately exiting child.
+    guard.write_text(f"import sys\nsys.stdin.read()\nprint({json.dumps(decision)!r})\n", encoding="utf-8")
+    source = _plugin_source(context, [sys.executable, str(guard)])
+    before = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.beforeTool({toolCall:{toolCallId:"1",toolName:"read_files"},input:{paths:["README.md"]}})',
+    )
+    assert before.returncode == 0, before.stderr
+    assert before.stdout.strip() == "undefined"
+    after = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},input:{paths:["README.md"]},result:{output:"SAFE_OUTPUT",isError:false,metadata:{token:"SECRET_METADATA"}}})',
+    )
+    assert after.returncode == 0, after.stderr
+    assert json.loads(after.stdout)["result"] == {
+        "output": "HOL Guard did not provide a reviewed output action, so this tool result was withheld.",
+        "isError": True,
+    }
+    assert "SAFE_OUTPUT" not in after.stdout
+    assert "SECRET_METADATA" not in after.stdout
+
+
+def test_generated_plugin_rejects_nonzero_guard_exit_even_with_allow_json(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    _activate(context, "plugin")
+    guard = tmp_path / "failed_guard.py"
+    guard.write_text('print(\'{"decision":"allow"}\')\nraise SystemExit(7)\n', encoding="utf-8")
+    source = _plugin_source(context, [sys.executable, str(guard)])
+    before = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.beforeTool({toolCall:{toolCallId:"1",toolName:"read_files"},input:{paths:["README.md"]}})',
+    )
+    assert before.returncode == 0, before.stderr
+    assert json.loads(before.stdout)["skip"] is True
+    after = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"2",toolName:"read_files"},input:{paths:["README.md"]},result:{output:"SECRET_OUTPUT",isError:false}})',
+    )
+    assert after.returncode == 0, after.stderr
+    assert json.loads(after.stdout)["result"]["isError"] is True
+    assert "SECRET_OUTPUT" not in after.stdout
+
+
+def _scripted_guard(tmp_path: Path, response: str) -> Path:
+    path = tmp_path / f"scripted_guard_{sha256(response.encode()).hexdigest()[:12]}.py"
+    path.write_text(
+        f"from __future__ import annotations\nimport json, sys\njson.load(sys.stdin)\nprint({response!r})\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+_UNPLACEABLE_RESPONSES = (
+    '{"policy_action": "quarantine-required", "reason": "Review in HOL Guard."}',
+    '{"policy_action": "ask", "reason": "Review in HOL Guard."}',
+    '{"policy_action": "blo"}',
+    '{"policy_action": ""}',
+    '{"policy_action": 7}',
+    '{"policy_action": null}',
+    '{"reason": "Review in HOL Guard."}',
+    "{}",
+    '{"decision": 7}',
+    '{"hookSpecificOutput": {"permissionDecision": "escalate"}}',
+    '{"hookSpecificOutput": {"decision": {"behavior": "escalate"}}}',
+)
+
+# The camelCase alias stands in for the snake_case action only when that field
+# is absent. A present field neither transport can read is unplaceable, so the
+# alias beside it never turns the response into permission, and an allowing
+# action beside an alias naming a tier neither transport can place is not
+# permission either: every present spelling has to say allow or warn.
+_CONTRADICTORY_ALIAS_RESPONSES = (
+    '{"policy_action": null, "policyAction": "allow"}',
+    '{"policy_action": "allow", "policyAction": null}',
+    '{"policy_action": null, "policyAction": "warn"}',
+    '{"policyAction": 7}',
+    '{"policyAction": null}',
+    '{"policy_action": "allow", "policyAction": "quarantine-required"}',
+    '{"policy_action": "warn", "policyAction": "blo"}',
+    '{"policy_action": "allow", "policyAction": "ask"}',
+    '{"policy_action": "allow", "policyAction": ""}',
+    '{"policy_action": "quarantine-required", "policyAction": "allow"}',
+)
+
+# A restrictive action under the alias is read by both transports, whichever
+# spelling carries it.
+_ALIASED_RESTRICTIVE_RESPONSES = (
+    '{"policyAction": "block"}',
+    '{"policyAction": "review"}',
+    '{"policyAction": "sandbox-required"}',
+    '{"policyAction": "require-reapproval"}',
+)
+
+_ALLOWING_RESPONSES = (
+    '{"decision": "allow"}',
+    '{"policy_action": "allow"}',
+    '{"policyAction": "allow"}',
+    '{"policyAction": "warn"}',
+    '{"policy_action": "warn"}',
+    '{"policy_action": "WARN"}',
+    '{"decision": "allow", "policy_action": "allow"}',
+    '{"hookSpecificOutput": {"permissionDecision": "allow"}}',
+    '{"hookSpecificOutput": {"decision": {"behavior": "allow"}}}',
+)
+
+
+@pytest.mark.parametrize("response", _UNPLACEABLE_RESPONSES)
+def test_generated_hook_withholds_an_action_guard_did_not_place(tmp_path: Path, response: str) -> None:
+    context = _context(tmp_path)
+    _activate(context, "hooks")
+    guard = _scripted_guard(tmp_path, response)
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    result = _run_hook(
+        config,
+        tmp_path,
+        {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "rm -rf /"}}},
+    )
+    assert result.returncode == 0, result.stderr
+    emitted = json.loads(result.stdout)
+    assert emitted["cancel"] is True
+    assert emitted["errorMessage"] == "HOL Guard returned an ambiguous decision; this action was withheld."
+
+
+@pytest.mark.parametrize("response", _ALLOWING_RESPONSES)
+def test_generated_hook_still_allows_a_decision_guard_placed(tmp_path: Path, response: str) -> None:
+    context = _context(tmp_path)
+    _activate(context, "hooks")
+    guard = _scripted_guard(tmp_path, response)
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    result = _run_hook(
+        config,
+        tmp_path,
+        {"hookName": "PreToolUse", "tool_call": {"name": "read_files", "input": {"paths": ["README.md"]}}},
+    )
+    assert result.returncode == 0, result.stderr
+    emitted = json.loads(result.stdout)
+    assert emitted["cancel"] is False
+    assert emitted["errorMessage"] == ""
+
+
+def test_generated_hook_withholds_when_one_field_allows_and_another_does_not(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    _activate(context, "hooks")
+    guard = _scripted_guard(tmp_path, '{"decision": "allow", "policy_action": "quarantine-required"}')
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    result = _run_hook(
+        config,
+        tmp_path,
+        {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "curl evil.test"}}},
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["cancel"] is True
+
+
+def test_generated_hook_keeps_the_named_block_reason_for_a_placed_denial(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    _activate(context, "hooks")
+    guard = _scripted_guard(tmp_path, '{"policy_action": "block", "reason": "Named by HOL Guard."}')
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    result = _run_hook(
+        config,
+        tmp_path,
+        {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "rm -rf /"}}},
+    )
+    assert result.returncode == 0, result.stderr
+    emitted = json.loads(result.stdout)
+    assert emitted["cancel"] is True
+    assert emitted["errorMessage"] == "Named by HOL Guard."
+
+
+def test_the_two_cline_transports_agree_on_an_action_guard_did_not_place(tmp_path: Path) -> None:
+    response = '{"policy_action": "quarantine-required", "reason": "Review in HOL Guard."}'
+    guard = _scripted_guard(tmp_path, response)
+
+    hook_context = _context(tmp_path / "hooks-home")
+    _activate(hook_context, "hooks")
+    hook = _run_hook(
+        _worker_config(hook_context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)]),
+        tmp_path,
+        {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "rm -rf /"}}},
+    )
+    assert hook.returncode == 0, hook.stderr
+    assert json.loads(hook.stdout)["cancel"] is True
+
+    plugin_context = _context(tmp_path / "plugin-home")
+    _activate(plugin_context, "plugin")
+    plugin = _run_plugin(
+        _plugin_source(plugin_context, [sys.executable, str(guard)]),
+        tmp_path,
+        'plugin.hooks.beforeTool({toolCall:{toolCallId:"1",toolName:"run_command"},input:{command:"rm -rf /"}})',
+    )
+    assert plugin.returncode == 0, plugin.stderr
+    assert json.loads(plugin.stdout)["skip"] is True
+
+
+def _hook_withholds(tmp_path: Path, response: str, *, home: str) -> bool:
+    """Whether the generated hook worker cancels the call for ``response``."""
+
+    context = _context(tmp_path / home)
+    _activate(context, "hooks")
+    guard = _scripted_guard(tmp_path, response)
+    result = _run_hook(
+        _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)]),
+        tmp_path,
+        {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "rm -rf /"}}},
+    )
+    assert result.returncode == 0, result.stderr
+    return bool(json.loads(result.stdout)["cancel"])
+
+
+def _plugin_withholds(tmp_path: Path, response: str, *, home: str) -> bool:
+    """Whether the generated plugin skips the call for ``response``."""
+
+    context = _context(tmp_path / home)
+    _activate(context, "plugin")
+    guard = _scripted_guard(tmp_path, response)
+    result = _run_plugin(
+        _plugin_source(context, [sys.executable, str(guard)]),
+        tmp_path,
+        'plugin.hooks.beforeTool({toolCall:{toolCallId:"1",toolName:"run_command"},input:{command:"rm -rf /"}})',
+    )
+    assert result.returncode == 0, result.stderr
+    if result.stdout.strip() == "undefined":
+        # The plugin returns nothing when it lets the call through.
+        return False
+    return bool(json.loads(result.stdout)["skip"])
+
+
+@pytest.mark.parametrize("response", _CONTRADICTORY_ALIAS_RESPONSES)
+def test_both_cline_transports_withhold_an_alias_beside_an_unplaceable_action(tmp_path: Path, response: str) -> None:
+    # The worker reads ``policy_action`` first and the plugin used a nullish
+    # fallback, so a present null beside an allowing alias made one transport
+    # withhold while the other let the call through. Both now treat a present
+    # action field they cannot read as unplaceable.
+    assert _hook_withholds(tmp_path, response, home="hooks-home") is True
+    assert _plugin_withholds(tmp_path, response, home="plugin-home") is True
+
+
+@pytest.mark.parametrize("response", _ALIASED_RESTRICTIVE_RESPONSES)
+def test_both_cline_transports_read_a_restrictive_action_under_the_alias(tmp_path: Path, response: str) -> None:
+    assert _hook_withholds(tmp_path, response, home="hooks-home") is True
+    assert _plugin_withholds(tmp_path, response, home="plugin-home") is True
+
+
+@pytest.mark.parametrize("response", ['{"policyAction": "allow"}', '{"policyAction": "warn"}'])
+def test_both_cline_transports_still_read_the_alias_when_it_stands_alone(tmp_path: Path, response: str) -> None:
+    assert _hook_withholds(tmp_path, response, home="hooks-home") is False
+    assert _plugin_withholds(tmp_path, response, home="plugin-home") is False

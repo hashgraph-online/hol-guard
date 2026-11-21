@@ -15,15 +15,21 @@ def _commands_module():
     return importlib.import_module(".commands", __package__)
 
 
+def _parser_module():
+    # Parser construction only needs argparse wiring; the command hub loads the
+    # whole Guard runtime surface and is imported only when a command runs.
+    return importlib.import_module(".commands_parser", __package__)
+
+
 def add_guard_parser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     | argparse._SubParsersAction[FriendlyArgumentParser],
 ) -> None:
-    _commands_module().add_guard_parser(subparsers)
+    _parser_module().add_guard_parser(subparsers)
 
 
 def add_guard_root_parser(parser: argparse.ArgumentParser) -> None:
-    _commands_module().add_guard_root_parser(parser)
+    _parser_module().add_guard_root_parser(parser)
 
 
 def run_guard_command(

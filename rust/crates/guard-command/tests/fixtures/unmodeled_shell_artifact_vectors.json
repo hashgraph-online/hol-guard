@@ -1,0 +1,2301 @@
+{
+ "recorded_from": "_unmodeled_shell_runtime_artifact (Python, before the port)",
+ "vectors": [
+  {
+   "command_text": "ls",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "ls",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "git status",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "git status",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "ls | wc -l",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "ls | wc -l",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "ls 'unterminated",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: malformed_shell_quoting"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:70aac54d450598ab3b6fa3622add7253bd4fc6c8d328d4fea56352f0d68da5bc"
+     ],
+     [
+      "command_parse_confidence",
+      "fallback"
+     ],
+     [
+      "command_uncertainty_reason",
+      "malformed_shell_quoting"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      true
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      null
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "ls 'unterminated",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: malformed_shell_quoting"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:70aac54d450598ab3b6fa3622add7253bd4fc6c8d328d4fea56352f0d68da5bc"
+     ],
+     [
+      "command_parse_confidence",
+      "fallback"
+     ],
+     [
+      "command_uncertainty_reason",
+      "malformed_shell_quoting"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      true
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      null
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "echo $(",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "echo $(",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "eval \"$X\"",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_parent_shell_effect"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:2261ee3cacaf2494f6cecb3047b655b4e1dc28c48319769714308374fec18892"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_parent_shell_effect"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_parent_shell_effect"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "eval \"$X\"",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_parent_shell_effect"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:2261ee3cacaf2494f6cecb3047b655b4e1dc28c48319769714308374fec18892"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_parent_shell_effect"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_parent_shell_effect"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "ls $(pwd)",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "ls $(pwd)",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "bash -c 'ls'",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "bash -c 'ls'",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "sudo ls",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "sudo ls",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "cd src && ls",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "cd src && ls",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "cd src; cd ..; ls",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "cd src; cd ..; ls",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "cd /nonexistent-guard-dir && ls",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_missing_directory"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:20e8cbd90c8201ad3518944d00d7dc738f456eaa2d3b9ea69b40011aaa674017"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_missing_directory"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_missing_directory"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd /nonexistent-guard-dir && ls",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_missing_directory"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:20e8cbd90c8201ad3518944d00d7dc738f456eaa2d3b9ea69b40011aaa674017"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_missing_directory"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_missing_directory"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd ~ && ls",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:0d72aa01dd1960d477f5aad48b8e4169045fa465cfead6e4da4f6d446593159b"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd ~ && ls",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:0d72aa01dd1960d477f5aad48b8e4169045fa465cfead6e4da4f6d446593159b"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd ~/proj && ls",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "cd ~/proj && ls",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "cd ~/proj && git status && git diff",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:9e29378e088c087c7586ac7f15042248388d58bd4dbe3e78bc98aefc156b836b"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd ~/proj && git status && git diff",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:9e29378e088c087c7586ac7f15042248388d58bd4dbe3e78bc98aefc156b836b"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd ~/proj && rg foo",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "cd ~/proj && rg foo",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "cd \"$DIR\" && ls",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:559812e332925a9ae90f20b6f0c84f73d69486f3126306f9acd03205de67a819"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd \"$DIR\" && ls",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:559812e332925a9ae90f20b6f0c84f73d69486f3126306f9acd03205de67a819"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd .. && ls",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_workspace_escape"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:426f358cf9a264012d48aaa25222838d8ac02ed7f22715105c95e8befbe1d347"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_workspace_escape"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_workspace_escape"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd .. && ls",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_workspace_escape"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:426f358cf9a264012d48aaa25222838d8ac02ed7f22715105c95e8befbe1d347"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_workspace_escape"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_workspace_escape"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "pushd src && ls && popd",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_control_flow"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:25153b068801ec5944e7d99fa21e633f2e0cb3565155168b8bed47c240631857"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "effective_cwd",
+      "{workspace}/src"
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      [
+       "{workspace}/src"
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "pushd src && ls && popd",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_control_flow"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:25153b068801ec5944e7d99fa21e633f2e0cb3565155168b8bed47c240631857"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "effective_cwd",
+      "{workspace}/src"
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      [
+       "{workspace}/src"
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "if true; then cd src; fi; ls",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_control_flow"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:b1b9739b5718e8147707a991d2dd5b279cd6eb770685dd3f387c5ff26dbce481"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "effective_cwd",
+      "{workspace}"
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      [
+       "{workspace}"
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "if true; then cd src; fi; ls",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_control_flow"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:b1b9739b5718e8147707a991d2dd5b279cd6eb770685dd3f387c5ff26dbce481"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "effective_cwd",
+      "{workspace}"
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      [
+       "{workspace}"
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd src && npx vitest run",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "cd src && npx vitest run",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "cd src && tsc --noEmit",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "cd src && tsc --noEmit",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "cd ~/proj && gh pr view 1",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "cd ~/proj && gh pr view 1",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "cd ~/proj && gh pr list --state open",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "cd ~/proj && gh pr list --state open",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "cd ~/proj && gh pr merge 1",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:3e4ea9481cdeb47f5ac18545fac04c713615102872bc6ba33a67f58f4c574647"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd ~/proj && gh pr merge 1",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:3e4ea9481cdeb47f5ac18545fac04c713615102872bc6ba33a67f58f4c574647"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "gh run view 123 --log && cd /tmp",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_control_flow"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:fb6186ae887525bd1884bbbbba23ca236f3c3551742320f294b50559598f779e"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "effective_cwd",
+      "{workspace}"
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      [
+       "{workspace}"
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "gh run view 123 --log && cd /tmp",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_control_flow"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:fb6186ae887525bd1884bbbbba23ca236f3c3551742320f294b50559598f779e"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "effective_cwd",
+      "{workspace}"
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_control_flow"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      [
+       "{workspace}"
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "gh run list; cd src",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "gh run list; cd src",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "cd ~/proj && cat <<'DOC'\nx\nDOC",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:f2b9be1a5d19155c44253e4b8058a5f28314d44de2bc39a2de0101cb4f1dde72"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd ~/proj && cat <<'DOC'\nx\nDOC",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:f2b9be1a5d19155c44253e4b8058a5f28314d44de2bc39a2de0101cb4f1dde72"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "time ls -la",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "time ls -la",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "cd café && ls",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_missing_directory"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:7610bedd2716696521fb1ac5ca0cf52a9747fb9a84bb01ecd71a141d6ce1a875"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_missing_directory"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_missing_directory"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd café && ls",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_missing_directory"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:7610bedd2716696521fb1ac5ca0cf52a9747fb9a84bb01ecd71a141d6ce1a875"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_missing_directory"
+     ],
+     [
+      "effective_cwd",
+      null
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_missing_directory"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "cd src && echo hi > out.txt",
+   "workspace": true,
+   "expected": null
+  },
+  {
+   "command_text": "cd src && echo hi > out.txt",
+   "workspace": false,
+   "expected": null
+  },
+  {
+   "command_text": "x=1; cd \"$x\"",
+   "workspace": true,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:c9968280837d5187e591ee02ca4c96fda33a4a386a046e0b5b46517103f5fc5a"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      "{workspace}"
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      [
+       "{workspace}"
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "command_text": "x=1; cd \"$x\"",
+   "workspace": false,
+   "expected": {
+    "artifact_id": "<inode-bound>",
+    "name": "unmodeled compound shell command",
+    "artifact_type": "tool_action_request",
+    "metadata": [
+     [
+      "action_class",
+      "unmodeled shell command"
+     ],
+     [
+      "guard_default_action",
+      "require-reapproval"
+     ],
+     [
+      "risk_classes",
+      [
+       "execution"
+      ]
+     ],
+     [
+      "request_summary",
+      "Requested a shell command that Guard could not model completely."
+     ],
+     [
+      "runtime_request_signals",
+      [
+       "cannot completely model the shell command: shell_cwd_unresolved_expression"
+      ]
+     ],
+     [
+      "runtime_request_summary",
+      "Guard requires one review because part of this shell command is unresolved."
+     ],
+     [
+      "runtime_request_reason",
+      "Guard could not prove the complete compound command structure, so it kept the whole command in one fail-closed review."
+     ],
+     [
+      "command_security_identity",
+      "command-security-v2:c9968280837d5187e591ee02ca4c96fda33a4a386a046e0b5b46517103f5fc5a"
+     ],
+     [
+      "command_parse_confidence",
+      "exact"
+     ],
+     [
+      "command_uncertainty_reason",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "effective_cwd",
+      "{workspace}"
+     ],
+     [
+      "shell_execution_context_complete",
+      false
+     ],
+     [
+      "shell_execution_context_hash",
+      "<inode-bound>"
+     ],
+     [
+      "shell_execution_context_reason_code",
+      "shell_cwd_unresolved_expression"
+     ],
+     [
+      "shell_execution_effective_cwds",
+      [
+       "{workspace}"
+      ]
+     ]
+    ]
+   }
+  }
+ ]
+}

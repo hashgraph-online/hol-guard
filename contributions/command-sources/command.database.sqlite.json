@@ -1,0 +1,100 @@
+{
+  "extension": {
+    "action_classes": [
+      "SQLite destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews SQLite restore operations that replace database content.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.database.sqlite",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "SQLite command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "SQLite destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies SQLite .restore operations that replace database content from a backup.",
+        "example_command": "sqlite3 app.db '.restore backup.sql'",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "SQLite database restore",
+        "permission_id": "command.database.sqlite.permission.restore",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Restore into a new database file and compare its contents before replacement."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://www.sqlite.org/cli.html"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "SQLite destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies SQLite .restore operations that replace database content from a backup.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "command": ".restore",
+            "executables": [
+              "sqlite3",
+              "sqlite3.cmd",
+              "sqlite3.exe"
+            ],
+            "minimum_abbreviation_length": 5,
+            "minimum_position": 1
+          },
+          "op": "argument-command.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.database.sqlite.permission.restore",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.database.sqlite.restore",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Restore into a new database file and compare its contents before replacement."
+        ],
+        "severity": "critical",
+        "title": "SQLite database restore"
+      }
+    ],
+    "safer_alternatives": [
+      "Restore into a new database file and compare it before replacement."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

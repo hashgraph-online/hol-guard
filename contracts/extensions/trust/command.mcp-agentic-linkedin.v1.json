@@ -1,0 +1,5 @@
+{
+  "extension": "command.mcp-agentic-linkedin",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "external"
+}

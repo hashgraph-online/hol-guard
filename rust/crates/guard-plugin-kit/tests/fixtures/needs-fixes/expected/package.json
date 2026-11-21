@@ -1,0 +1,85 @@
+{
+  "agent-skills/skills/helper/SKILL.md": "sha256:59927902f0673c1e198183ecca7bd641a12293ed22c995adf7bbadbd9a244c85",
+  "cursor/.cursor/mcp.json": {
+    "mcpServers": {
+      "api": {
+        "args": [
+          "server.js"
+        ],
+        "command": "node",
+        "env": {
+          "LOG_LEVEL": "${env:LOG_LEVEL}",
+          "SERVICE_API_KEY": "${env:SERVICE_API_KEY}"
+        }
+      }
+    }
+  },
+  "hol.provenance.json": {
+    "files": [
+      {
+        "path": "agent-skills/skills/helper/SKILL.md",
+        "sha256": "59927902f0673c1e198183ecca7bd641a12293ed22c995adf7bbadbd9a244c85"
+      },
+      {
+        "path": "cursor/.cursor/mcp.json",
+        "sha256": "8f432f0dd666f89f32929900741bcecaa100e4708fefa65384d20d2533a46572"
+      },
+      {
+        "path": "opencode/opencode.json",
+        "sha256": "651b4af0d3e455ceffeb4a35ba45c9dab6f2f6dfd47d90b5e1db324a1f540b1d"
+      },
+      {
+        "path": "vscode/.vscode/mcp.json",
+        "sha256": "61bb0c4fa852845745c2a53b397e20f0f397a064a4f1bacbfaedc59cc388a4dd"
+      }
+    ],
+    "generator": {
+      "name": "hol-guard plugin-kit",
+      "version": "<version>"
+    },
+    "plugin": {
+      "name": "My Plugin",
+      "version": null
+    },
+    "repository": null,
+    "runtimes": [
+      "cursor",
+      "vscode",
+      "opencode",
+      "agent-skills"
+    ],
+    "schema": "hol.plugin-kit.provenance.v1",
+    "source_digest": "sha256:9916c8956e05f52c8b5af767b165ac8487b500aac2821a4a67d8aeb165d923da"
+  },
+  "opencode/opencode.json": {
+    "$schema": "https://opencode.ai/config.json",
+    "mcp": {
+      "api": {
+        "command": [
+          "node",
+          "server.js"
+        ],
+        "environment": {
+          "LOG_LEVEL": "{env:LOG_LEVEL}",
+          "SERVICE_API_KEY": "{env:SERVICE_API_KEY}"
+        },
+        "type": "local"
+      }
+    }
+  },
+  "vscode/.vscode/mcp.json": {
+    "servers": {
+      "api": {
+        "args": [
+          "server.js"
+        ],
+        "command": "node",
+        "env": {
+          "LOG_LEVEL": "${env:LOG_LEVEL}",
+          "SERVICE_API_KEY": "${env:SERVICE_API_KEY}"
+        },
+        "type": "stdio"
+      }
+    }
+  }
+}

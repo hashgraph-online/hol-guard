@@ -1,0 +1,311 @@
+use super::{
+    ensure_argv, gate_line, hands_off, kickable, startup, DaemonKick, Gate, Kick, LaneKick,
+    DAEMON_REFUSED, DAEMON_UNREACHABLE, KICK_INTERVAL,
+};
+use crate::mcp_relay_args::parse;
+use std::cell::Cell;
+use std::time::{Duration, Instant};
+
+/// Answers each kick with `answer` and counts them.
+struct FakeKick {
+    answer: Kick,
+    kicks: usize,
+}
+
+impl LaneKick for FakeKick {
+    fn kick(&mut self, _deadline: Instant) -> Kick {
+        self.kicks += 1;
+        self.answer
+    }
+}
+
+fn kick(answer: Kick) -> FakeKick {
+    FakeKick { answer, kicks: 0 }
+}
+
+/// Not ready (with `code`) for the first `misses` probes, then ready.
+fn probes(
+    misses: usize,
+    code: &'static str,
+) -> (Cell<usize>, impl Fn(&Cell<usize>) -> Result<(), String>) {
+    let probe = move |count: &Cell<usize>| {
+        count.set(count.get() + 1);
+        if count.get() > misses {
+            Ok(())
+        } else {
+            Err(code.to_owned())
+        }
+    };
+    (Cell::new(0), probe)
+}
+
+const BUDGET: Duration = Duration::from_millis(400);
+
+#[test]
+fn a_ready_lane_relays_without_asking_the_daemon() {
+    let (count, probe) = probes(0, "direct_lane_unbound");
+    let mut fake = kick(Kick::Requested);
+    let gate = startup(&mut |_| probe(&count), &mut fake, BUDGET);
+    assert!(matches!(gate, Gate::Relay { kicked: false, .. }));
+    assert_eq!((count.get(), fake.kicks), (1, 0));
+}
+
+#[test]
+fn an_unbound_lane_relays_once_the_daemon_binds_it() {
+    let (count, probe) = probes(3, "direct_lane_unbound");
+    let mut fake = kick(Kick::Requested);
+    let gate = startup(&mut |_| probe(&count), &mut fake, BUDGET);
+    assert!(matches!(gate, Gate::Relay { kicked: true, .. }));
+    assert_eq!((count.get(), fake.kicks), (4, 1));
+}
+
+#[test]
+fn a_lane_still_unbound_at_the_deadline_is_not_ready_with_its_code() {
+    let (count, probe) = probes(usize::MAX, "direct_lane_ack_missing");
+    let mut fake = kick(Kick::Requested);
+    let started = Instant::now();
+    let gate = startup(
+        &mut |_| probe(&count),
+        &mut fake,
+        Duration::from_millis(150),
+    );
+    assert_eq!(gate, Gate::NotReady("direct_lane_ack_missing".to_owned()));
+    assert!(started.elapsed() >= Duration::from_millis(150));
+    assert_eq!(fake.kicks, 1);
+}
+
+#[test]
+fn a_down_or_refusing_daemon_is_not_ready_at_once() {
+    for (answer, code) in [
+        (Kick::DaemonUnreachable, DAEMON_UNREACHABLE),
+        (Kick::Refused, DAEMON_REFUSED),
+    ] {
+        let (count, probe) = probes(usize::MAX, "direct_lane_unbound");
+        let mut fake = kick(answer);
+        let gate = startup(&mut |_| probe(&count), &mut fake, BUDGET);
+        assert_eq!(gate, Gate::NotReady(code.to_owned()));
+        assert_eq!((count.get(), fake.kicks), (1, 1));
+    }
+}
+
+#[test]
+fn a_skipped_kick_keeps_probing_until_the_deadline() {
+    let (count, probe) = probes(3, "direct_lane_unbound");
+    let mut fake = kick(Kick::Skipped);
+    let gate = startup(&mut |_| probe(&count), &mut fake, BUDGET);
+    assert!(matches!(gate, Gate::Relay { kicked: false, .. }));
+    assert_eq!((count.get(), fake.kicks), (4, 1));
+    let (count, probe) = probes(usize::MAX, "direct_lane_unbound");
+    let mut fake = kick(Kick::Skipped);
+    let gate = startup(
+        &mut |_| probe(&count),
+        &mut fake,
+        Duration::from_millis(150),
+    );
+    assert_eq!(gate, Gate::NotReady("direct_lane_unbound".to_owned()));
+    assert!(!hands_off("direct_lane_unbound"));
+}
+
+#[test]
+fn a_reason_the_daemon_cannot_clear_is_not_ready_without_a_kick() {
+    for code in [
+        "mcp_relay_facts_unavailable",
+        "mcp_relay_reply_invalid",
+        "mcp_relay_runtime_superseded",
+        "mcp_relay_evidence_undrained",
+        "direct_lane_unsupported",
+    ] {
+        let (count, probe) = probes(usize::MAX, code);
+        let mut fake = kick(Kick::Requested);
+        let gate = startup(&mut |_| probe(&count), &mut fake, BUDGET);
+        assert_eq!(gate, Gate::NotReady(code.to_owned()));
+        assert_eq!(fake.kicks, 0);
+    }
+}
+
+#[test]
+fn only_lane_defers_the_daemon_can_clear_are_kickable() {
+    for code in [
+        "direct_lane_unbound",
+        "direct_lane_ack_missing",
+        "direct_lane_ack_mismatch",
+        "direct_lane_ack_expired",
+        "direct_lane_workspace_unknown",
+        "direct_lane_snapshot_unavailable",
+        "direct_lane_input_changed",
+        "mcp_relay_harness_unbound",
+        "mcp_relay_view_missing",
+        "mcp_relay_resident_unreachable",
+    ] {
+        assert!(kickable(code), "{code}");
+    }
+    for code in [
+        "direct_lane_unsupported",
+        "mcp_relay_policy_need",
+        "mcp_relay_reply_invalid",
+        "mcp_relay_binding_incomplete",
+    ] {
+        assert!(!kickable(code), "{code}");
+    }
+}
+
+#[test]
+fn the_gate_line_has_a_fixed_shape() {
+    let ready = Gate::Relay {
+        kicked: true,
+        elapsed: Duration::from_millis(42),
+    };
+    assert_eq!(
+        gate_line(&ready),
+        "hol-guard mcp-relay: lane ready: kicked 42 ms\n"
+    );
+    assert_eq!(
+        gate_line(&Gate::NotReady("direct_lane_unbound".to_owned())),
+        "hol-guard mcp-relay: lane not ready: direct_lane_unbound\n"
+    );
+    assert_eq!(
+        gate_line(&Gate::NotReady(
+            "mcp_relay_session_server_proxy_tools".to_owned()
+        )),
+        "hol-guard mcp-relay: python proxy: mcp_relay_session_server_proxy_tools\n"
+    );
+}
+
+#[test]
+fn only_an_unported_feature_or_a_newer_runtime_hands_the_session_to_the_proxy() {
+    for code in [
+        "mcp_relay_runtime_superseded",
+        "mcp_relay_store_newer",
+        "mcp_relay_saved_remote_policy",
+        "mcp_relay_saved_policy_unverifiable",
+        "mcp_relay_session_server_proxy_tools",
+    ] {
+        assert!(hands_off(code), "{code}");
+    }
+    // A lane the daemon has not prepared yet keeps the session native and
+    // its first call waits for it.
+    for code in [
+        DAEMON_UNREACHABLE,
+        "direct_lane_unbound",
+        "direct_lane_snapshot_unavailable",
+        "direct_lane_ack_missing",
+        "direct_lane_ack_mismatch",
+        "direct_lane_ack_expired",
+        "direct_lane_workspace_unknown",
+        "direct_lane_input_changed",
+        "mcp_relay_harness_unbound",
+        "mcp_relay_view_missing",
+        "mcp_relay_resident_unreachable",
+        "mcp_relay_session_server_unknown",
+    ] {
+        assert!(!hands_off(code), "{code}");
+    }
+    // A binding, store or daemon the resident cannot use keeps the session
+    // native too, and so does a review mode or redaction level the bound
+    // configs do not agree on: each call the lane cannot decide is refused,
+    // never decided by the proxy.
+    for code in [
+        DAEMON_REFUSED,
+        "mcp_relay_store_unreadable",
+        "mcp_relay_session_review_mode",
+        "mcp_relay_session_redaction_unbound",
+        "direct_lane_unsupported",
+        "mcp_relay_workspace_invalid",
+        "mcp_relay_evidence_undrained",
+        "mcp_relay_binding_incomplete",
+        "mcp_relay_view_invalid",
+        "mcp_relay_facts_unavailable",
+        "mcp_relay_request_unsendable",
+        "mcp_relay_reply_invalid",
+    ] {
+        assert!(!hands_off(code), "{code}");
+    }
+    assert!(
+        !hands_off("mcp_relay_a_code_added_later"),
+        "an unknown code keeps the session native"
+    );
+}
+
+#[test]
+fn the_ensure_command_reuses_the_proxy_interpreter_and_guard_home() {
+    let argv: Vec<String> = [
+        "/opt/py/bin/python3",
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard",
+        "codex-mcp-proxy",
+        "--guard-home",
+        "/g",
+        "--home",
+        "/h",
+        "--server-name",
+        "demo",
+        "--config-path",
+        "/c/config.toml",
+        "--command",
+        "/bin/cat",
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    let args = parse(&argv).unwrap();
+    assert_eq!(
+        ensure_argv(&args, &argv).unwrap(),
+        [
+            "/opt/py/bin/python3",
+            "-m",
+            "codex_plugin_scanner.cli",
+            "guard",
+            "daemon",
+            "ensure",
+            "--guard-home",
+            "/g",
+            "--home",
+            "/h",
+        ]
+    );
+}
+
+/// A daemon kick with no daemon to reach, last asked at `last`.
+fn daemon_kick(last: Option<(Instant, Kick)>) -> DaemonKick {
+    DaemonKick {
+        guard_home: std::env::temp_dir()
+            .join(format!("hol-guard-no-daemon-{}", std::process::id())),
+        workspace: String::new(),
+        readiness_path: "/v1/hooks/codex/readiness".to_owned(),
+        ensure: None,
+        last,
+    }
+}
+
+/// Within the kick interval the daemon is not asked again, and the kick says
+/// whether its last answer is still worth waiting on: only a daemon that took
+/// the request may still be preparing the lane.
+#[test]
+fn a_kick_within_the_interval_is_pending_only_after_the_daemon_took_it() {
+    let deadline = Instant::now() + Duration::from_secs(1);
+    let mut kick = daemon_kick(Some((Instant::now(), Kick::Requested)));
+    assert_eq!(kick.kick(deadline), Kick::Pending);
+    assert_eq!(kick.kick(deadline), Kick::Pending);
+    for answer in [Kick::Refused, Kick::DaemonUnreachable] {
+        let mut kick = daemon_kick(Some((Instant::now(), answer)));
+        assert_eq!(kick.kick(deadline), Kick::Skipped);
+    }
+}
+
+/// The answer is recorded with the time the daemon was asked, so a daemon
+/// that could not be reached is not waited on for the rest of the interval.
+#[test]
+fn a_kick_records_the_daemon_answer_for_the_interval() {
+    let deadline = Instant::now() + Duration::from_secs(1);
+    let Some(expired) = Instant::now().checked_sub(KICK_INTERVAL + Duration::from_millis(10))
+    else {
+        return;
+    };
+    let mut kick = daemon_kick(Some((expired, Kick::Requested)));
+    assert_eq!(kick.kick(deadline), Kick::DaemonUnreachable);
+    assert!(matches!(kick.last, Some((_, Kick::DaemonUnreachable))));
+    assert_eq!(kick.kick(deadline), Kick::Skipped);
+    let mut kick = daemon_kick(None);
+    assert_eq!(kick.kick(Instant::now()), Kick::Skipped);
+    assert!(kick.last.is_none(), "a kick with no time left asks nothing");
+}

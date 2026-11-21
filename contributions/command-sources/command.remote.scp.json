@@ -1,0 +1,113 @@
+{
+  "extension": {
+    "action_classes": [
+      "SCP overwrite command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews SCP transfers that can overwrite local or remote destination files.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.remote.scp",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "SCP transfer protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "SCP overwrite command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies SCP transfers that can overwrite files at a local or remote destination.",
+        "example_command": "scp secrets.tar.gz backup-host:/srv/backup/",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "SCP file transfer",
+        "permission_id": "command.remote.scp.permission.transfer",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect both endpoints and copy to a new destination path before replacing existing data."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://man.openbsd.org/scp"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "SCP overwrite command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies SCP transfers that can overwrite files at a local or remote destination.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "executables": [
+              "scp",
+              "scp.cmd",
+              "scp.exe"
+            ],
+            "forbidden_flags": [],
+            "minimum_operands": 2,
+            "options_with_values": [
+              "-D",
+              "-F",
+              "-J",
+              "-P",
+              "-S",
+              "-X",
+              "-c",
+              "-i",
+              "-l",
+              "-o"
+            ]
+          },
+          "op": "leading-operand-count.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.remote.scp.permission.transfer",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.remote.scp.transfer",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect both endpoints and copy to a new destination path before replacing existing data."
+        ],
+        "severity": "high",
+        "title": "SCP file transfer"
+      }
+    ],
+    "safer_alternatives": [
+      "Transfer to a new path and verify both endpoints before replacing data."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

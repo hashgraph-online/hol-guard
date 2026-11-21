@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from itertools import count
+
 import pytest
 
 import scripts.native_slo_adapter as native_slo_adapter
 from scripts import native_slo_baseline
 from scripts.bench_guard_native_installed_slo import _steady_state_rss_baseline
 from scripts.native_slo_contract import assert_privacy_safe
+from scripts.native_slo_process_tree import observe_rss_reads
 
 
 def test_linux_rss_measurement_does_not_fallback_to_root_process(
@@ -38,6 +41,14 @@ def test_non_linux_rss_measurement_retains_root_fallback(
         threads=2,
         file_descriptors=3,
     )
+
+
+def test_explicit_rss_diagnostic_cannot_silently_use_the_macos_root_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(native_slo_adapter.sys, "platform", "darwin")
+    monkeypatch.setattr(native_slo_adapter, "process_tree_rss_bytes", lambda _process_ids: None)
+    monkeypatch.setattr(native_slo_adapter, "_single_process_rss_bytes", lambda _pid: pytest.fail("host fallback"))
+    with observe_rss_reads(lambda _sample: None):
+        assert native_slo_adapter.process_resources(123) is None
 
 
 def test_rss_evidence_remains_aggregate_only() -> None:
@@ -128,7 +139,7 @@ def test_rss_baseline_fails_closed_when_worker_capacity_changes() -> None:
 
 
 def test_rss_baseline_fails_closed_when_plateau_deadline_expires(monkeypatch: pytest.MonkeyPatch) -> None:
-    clock = iter((0.0, 0.2, 0.4, 0.6, 0.8))
+    clock = count(0.0, 0.2)
     monkeypatch.setattr(native_slo_baseline.time, "monotonic", lambda: next(clock))
 
     with pytest.raises(RuntimeError, match="RSS did not reach a bounded plateau"):

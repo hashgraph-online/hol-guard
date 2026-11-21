@@ -1,0 +1,189 @@
+apiVersion: guard.hashgraphonline.com/v1alpha1
+kind: GuardPolicy
+metadata:
+  id: policy.enforceable-scopes
+  name: Enforceable scopes and precedence
+  revision: 1
+spec:
+  defaults:
+    mode: enforce
+  rules:
+    - id: block-shell-in-ci
+      enabled: true
+      effect: block
+      description: Shell commands are not allowed in the CI workspace.
+      match:
+        tools:
+          - shell
+        workspaces:
+          - ci-workspace
+      lifetime:
+        mode: permanent
+      provenance:
+        source: builder
+        createdAt: 2026-10-14T00:00:00Z
+        createdBy: policy-owner
+    - id: allow-mcp
+      enabled: true
+      effect: allow
+      match:
+        tools:
+          - mcp
+      lifetime:
+        mode: permanent
+      provenance:
+        source: builder
+        createdAt: 2026-10-14T00:00:00Z
+    - id: allow-mcp-in-codex
+      enabled: true
+      effect: allow
+      match:
+        tools:
+          - mcp
+        harnesses:
+          - codex
+      lifetime:
+        mode: permanent
+      provenance:
+        source: builder
+        createdAt: 2026-10-14T00:00:00Z
+    - id: block-acme-publisher
+      enabled: true
+      effect: block
+      match:
+        publishers:
+          - acme
+        harnesses:
+          - codex
+          - cursor
+      lifetime:
+        mode: permanent
+      provenance:
+        source: builder
+        createdAt: 2026-10-14T00:00:00Z
+    - id: allow-acme-reviewed
+      enabled: true
+      effect: allow
+      match:
+        artifacts:
+          - pkg:npm/acme-reviewed
+        harnesses:
+          - codex
+      lifetime:
+        mode: permanent
+      provenance:
+        source: builder
+        createdAt: 2026-10-14T00:00:00Z
+    - id: allow-legacy-tool
+      enabled: true
+      effect: allow
+      match:
+        artifacts:
+          - pkg:npm/legacy-tool
+      lifetime:
+        mode: until
+        expiresAt: 2026-06-30T00:00:00Z
+      provenance:
+        source: builder
+        createdAt: 2026-01-01T00:00:00Z
+    - id: block-everything
+      enabled: false
+      effect: block
+      match: {}
+      lifetime:
+        mode: permanent
+      provenance:
+        source: builder
+        createdAt: 2026-10-14T00:00:00Z
+  x-hol.tests:
+    - id: shell-blocked-in-ci
+      event:
+        harness: codex
+        tool: shell
+        workspace: ci-workspace
+      expect:
+        effect: block
+        ruleId: block-shell-in-ci
+    - id: shell-family-alias
+      name: shell and tool-action name the same family
+      event:
+        harness: claude-code
+        tool: tool-action
+        workspace: ci-workspace
+      expect:
+        effect: block
+        ruleId: block-shell-in-ci
+    - id: shell-outside-ci-falls-through
+      event:
+        harness: codex
+        tool: shell
+      expect:
+        effect: default
+    - id: mcp-agent-rule-is-more-specific
+      name: A rule for one agent beats a rule for every agent
+      event:
+        harness: codex
+        tool: mcp
+      expect:
+        effect: allow
+        ruleId: allow-mcp-in-codex
+    - id: mcp-allowed-for-other-agents
+      event:
+        harness: claude-code
+        tool: mcp
+      expect:
+        effect: allow
+        ruleId: allow-mcp
+    - id: acme-blocked-in-cursor
+      event:
+        harness: cursor
+        artifact: pkg:npm/acme-tool
+        publisher: acme
+      expect:
+        effect: block
+        ruleId: block-acme-publisher
+    - id: acme-ignored-in-other-agents
+      event:
+        harness: claude-code
+        artifact: pkg:npm/acme-tool
+        publisher: acme
+      expect:
+        effect: default
+    - id: block-beats-more-specific-allow
+      name: A matching block wins over a more specific allow
+      event:
+        harness: codex
+        artifact: pkg:npm/acme-reviewed
+        publisher: acme
+      expect:
+        effect: block
+        ruleId: block-acme-publisher
+    - id: reviewed-artifact-allowed
+      event:
+        harness: codex
+        artifact: pkg:npm/acme-reviewed
+      expect:
+        effect: allow
+        ruleId: allow-acme-reviewed
+    - id: legacy-tool-before-expiry
+      event:
+        harness: codex
+        artifact: pkg:npm/legacy-tool
+        at: 2026-06-01T00:00:00Z
+      expect:
+        effect: allow
+        ruleId: allow-legacy-tool
+    - id: legacy-tool-after-expiry
+      name: Expired rules do not apply
+      event:
+        harness: codex
+        artifact: pkg:npm/legacy-tool
+        at: 2026-07-01T00:00:00Z
+      expect:
+        effect: default
+    - id: disabled-rule-is-skipped
+      event:
+        harness: codex
+        artifact: pkg:npm/anything-else
+      expect:
+        effect: default

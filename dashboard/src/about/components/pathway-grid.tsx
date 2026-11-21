@@ -1,6 +1,6 @@
-import { Surface, SectionLabel, ActionButton, Badge } from "../../approval-center-primitives";
 import { ABOUT_PATH_CARDS } from "../about-content";
 import { AboutExternalLink } from "./about-external-link";
+import { AboutSectionHeading } from "./about-section-heading";
 import type { AboutPathCard, AboutLinkId } from "../about-types";
 
 const CARD_LINK_MAP: Record<AboutPathCard["id"], AboutLinkId> = {
@@ -11,78 +11,57 @@ const CARD_LINK_MAP: Record<AboutPathCard["id"], AboutLinkId> = {
   affiliate_starter_kit: "hol_affiliates",
 };
 
-function priorityLabel(priority: AboutPathCard["priority"]): string {
-  if (priority === "primary") return "Primary";
-  if (priority === "secondary") return "Secondary";
-  return "Ecosystem";
-}
-
 function PathCard({ card }: { card: AboutPathCard }) {
-  const isPrimary = card.priority === "primary";
-  const isTertiary = card.priority === "tertiary";
-
   return (
-    <Surface
-      className={`flex flex-col h-full ${isPrimary ? "sm:col-span-2 lg:col-span-2" : ""}`}
-      tone={isPrimary ? "accent" : "default"}
-    >
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <Badge tone={isPrimary ? "info" : isTertiary ? "default" : "warning"}>
-          {priorityLabel(card.priority)}
-        </Badge>
-        {card.disclosureRequired && (
-          <span className="text-[10px] text-slate-400">Disclosure required</span>
-        )}
-      </div>
-      <h3 className="text-base font-bold text-brand-dark">{card.title}</h3>
-      <p className="mt-1.5 text-sm leading-relaxed text-brand-dark/70 flex-1">
-        {card.description}
-      </p>
+    <li className="flex flex-col border-t border-brand-dark/10 py-5 lg:border-l lg:border-t-0 lg:px-6 lg:py-1 lg:first:border-l-0 lg:first:pl-0">
+      {/* The paths were labelled Primary / Secondary / Ecosystem, which ranks
+          them for whoever built the page rather than for the reader. The
+          order already says which comes first. */}
+      {card.disclosureRequired ? (
+        <p className="mb-2 text-[11px] font-medium text-brand-dark/75">Disclosure required</p>
+      ) : null}
+      <h3 className="text-base font-semibold text-brand-dark">
+        {card.title}
+      </h3>
+      <p className="mt-1.5 flex-1 text-sm leading-6 text-brand-dark/75">{card.description}</p>
       <div className="mt-4">
         <AboutExternalLink
           linkId={CARD_LINK_MAP[card.id]}
           href={card.ctaHref}
-          className="text-sm font-semibold text-brand-blue hover:underline"
+          className="text-sm font-semibold text-brand-blue underline decoration-brand-blue/30 underline-offset-[3px] transition-colors duration-150 hover:decoration-brand-blue motion-reduce:transition-none"
         >
           {card.ctaLabel}
         </AboutExternalLink>
       </div>
-    </Surface>
+    </li>
   );
 }
 
 export function PathwayGrid() {
   const primary = ABOUT_PATH_CARDS.filter((c) => c.priority === "primary");
   const secondary = ABOUT_PATH_CARDS.filter((c) => c.priority === "secondary");
-  const tertiary = ABOUT_PATH_CARDS.filter((c) => c.priority === "tertiary");
 
   return (
     <div>
-      <SectionLabel>Choose your path</SectionLabel>
-      <p className="mt-2 max-w-2xl text-base leading-relaxed text-brand-dark/75">
-        There are many ways to participate in the Guard ecosystem. Local protection comes first.
-      </p>
+      <AboutSectionHeading
+        id="about-pathways-heading"
+        title="Choose your path"
+        lead="There are many ways to participate in the Guard ecosystem. Local protection comes first."
+      />
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* The tertiary cards used to sit here and repeat, word for word, the
+          partner and affiliate sections immediately below. Those sections say
+          it in full, so this one keeps the paths a reader can take today —
+          three, which is why the first card no longer spans two of three
+          columns and strands an empty row beside the third. */}
+      <ul className="mt-6 grid lg:grid-cols-3">
         {primary.map((card) => (
           <PathCard key={card.id} card={card} />
         ))}
-      </div>
-
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {secondary.map((card) => (
           <PathCard key={card.id} card={card} />
         ))}
-      </div>
-
-      <div className="mt-8">
-        <h3 className="text-sm font-bold text-brand-dark mb-3">Ecosystem programs</h3>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {tertiary.map((card) => (
-            <PathCard key={card.id} card={card} />
-          ))}
-        </div>
-      </div>
+      </ul>
     </div>
   );
 }

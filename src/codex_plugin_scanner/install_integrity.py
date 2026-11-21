@@ -18,6 +18,7 @@ Version files are read via AST parsing only — never executed — so a rogue
 from __future__ import annotations
 
 import ast
+import os
 import re
 import sys
 from pathlib import Path
@@ -88,6 +89,10 @@ def detect_shadowed_install() -> str | None:
 
 def warn_if_shadowed() -> None:
     """Print a shadowing warning to stderr if one is detected. Never raises."""
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        # Test runs intentionally load the worktree copy alongside installed
+        # copies; the warning is operational guidance, not a test contract.
+        return
     try:
         warning = detect_shadowed_install()
     except Exception:

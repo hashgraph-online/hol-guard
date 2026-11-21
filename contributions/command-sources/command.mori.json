@@ -1,0 +1,1798 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.mori",
+    "version": "1.0.0",
+    "name": "Mori cognition VCS command protection",
+    "description": "Reviews Mori (cognition VCS) mutations \u2014 init, stage, checkout, merge, rebase, commit, reset, stash park/pop/drop, and branch \u2014 plus `show --raw` / `recall --raw` STTP dumps. `mori stash list` and `--help`/`-h` are safe variants of those rules. Other read subcommands are not matched by this source; base Guard policy still applies to the `mori` binary. Community coverage does not certify the upstream tool.",
+    "action_classes": [
+      "Mori cognition workspace mutation",
+      "Mori stored-context dump"
+    ],
+    "risk_classes": [
+      "destructive_shell",
+      "local_secret_read"
+    ],
+    "safer_alternatives": [
+      "Prefer mori status, log, show, recall, find, and compile to inspect cognition state before mutating it.",
+      "Stash or clear staged context before checkout, and list branches before creating one."
+    ],
+    "reference_urls": [
+      "https://github.com/EntasisLabs/mori",
+      "https://crates.io/crates/mori-cli",
+      "https://entasislabs.com"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [
+      "mori"
+    ],
+    "executables": [
+      "mori"
+    ],
+    "project_markers": [],
+    "delegated_protection": null,
+    "homepage": "https://github.com/EntasisLabs/mori",
+    "license": "MIT",
+    "icon": {
+      "kind": "react-icon",
+      "name": "HiMiniFolder",
+      "background": "#0F766E"
+    },
+    "publisher": {
+      "id": "community.entasislabs",
+      "display_name": "Entasis Labs",
+      "url": "https://entasislabs.com"
+    },
+    "permissions": [
+      {
+        "permission_id": "command.mori.permission.init",
+        "implementation_version": "1.0.0",
+        "label": "Mori repo init",
+        "description": "Identifies `mori init`, which creates a cognition repo and SurrealKV store in a directory.",
+        "example_command": "mori init",
+        "family": null,
+        "fixed_reason": null,
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Confirm the target directory and session label before initializing a new cognition store."
+        ]
+      },
+      {
+        "permission_id": "command.mori.permission.add",
+        "implementation_version": "1.0.0",
+        "label": "Mori stage context",
+        "description": "Identifies `mori add`, which stages documents, chats, notes, or STTP into the index.",
+        "example_command": "mori add notes.md",
+        "family": null,
+        "fixed_reason": null,
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Review which files or stdin content will be staged before adding them to the index."
+        ]
+      },
+      {
+        "permission_id": "command.mori.permission.checkout",
+        "implementation_version": "1.0.0",
+        "label": "Mori branch checkout",
+        "description": "Identifies `mori checkout`, which switches the active cognition branch.",
+        "example_command": "mori checkout feature",
+        "family": null,
+        "fixed_reason": null,
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Run mori status first and confirm staged context is clear or stashed before checkout."
+        ]
+      },
+      {
+        "permission_id": "command.mori.permission.merge",
+        "implementation_version": "1.0.0",
+        "label": "Mori branch merge",
+        "description": "Identifies `mori merge`, which brings another branch into the current tip.",
+        "example_command": "mori merge feature",
+        "family": null,
+        "fixed_reason": null,
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Inspect both branches with mori log and mori show before merging."
+        ]
+      },
+      {
+        "permission_id": "command.mori.permission.rebase",
+        "implementation_version": "1.0.0",
+        "label": "Mori branch rebase",
+        "description": "Identifies `mori rebase`, which replays the current branch onto another tip.",
+        "example_command": "mori rebase main",
+        "family": null,
+        "fixed_reason": null,
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Confirm the onto branch and that the current tip is the intended replay source."
+        ]
+      },
+      {
+        "permission_id": "command.mori.permission.commit",
+        "implementation_version": "1.0.0",
+        "label": "Mori commit",
+        "description": "Identifies `mori commit`, which compiles staged context into the SurrealKV store.",
+        "example_command": "mori commit -m 'capture session'",
+        "family": null,
+        "fixed_reason": null,
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Run mori status and mori compile first to preview what will be stored."
+        ]
+      },
+      {
+        "permission_id": "command.mori.permission.reset",
+        "implementation_version": "1.0.0",
+        "label": "Mori unstage",
+        "description": "Identifies `mori reset`, which unstages context from the index.",
+        "example_command": "mori reset",
+        "family": null,
+        "fixed_reason": null,
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Confirm whether you intend to clear specific staged paths or the entire index."
+        ]
+      },
+      {
+        "permission_id": "command.mori.permission.stash",
+        "implementation_version": "1.0.0",
+        "label": "Mori stash mutation",
+        "description": "Identifies `mori stash` parking, pop, and drop (not `stash list`).",
+        "example_command": "mori stash -m 'wip'",
+        "family": null,
+        "fixed_reason": null,
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Run mori stash list before pop or drop, and prefer an empty index before popping."
+        ]
+      },
+      {
+        "permission_id": "command.mori.permission.branch-create",
+        "implementation_version": "1.0.0",
+        "label": "Mori branch",
+        "description": "Identifies `mori branch` invocations, including create (`mori branch <name>`) and list (`mori branch`). Declarative matchers cannot separate list-only from create without operand-count semantics tied to this subcommand, so both review in v1.",
+        "example_command": "mori branch experiment",
+        "family": null,
+        "fixed_reason": null,
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Use mori branch to inspect names, then create only after confirming the new branch name."
+        ]
+      },
+      {
+        "permission_id": "command.mori.permission.show-raw",
+        "implementation_version": "1.0.0",
+        "label": "Mori show raw STTP",
+        "description": "Identifies `mori show --raw`, which dumps stored STTP for a revision.",
+        "example_command": "mori show HEAD --raw",
+        "family": null,
+        "fixed_reason": null,
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Mori stored-context dump"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Prefer mori show REV without --raw unless you need the full STTP payload."
+        ]
+      },
+      {
+        "permission_id": "command.mori.permission.recall-raw",
+        "implementation_version": "1.0.0",
+        "label": "Mori recall raw STTP",
+        "description": "Identifies `mori recall --raw`, which dumps ranked stored STTP payloads.",
+        "example_command": "mori recall 'what shipped?' --raw",
+        "family": null,
+        "fixed_reason": null,
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Mori stored-context dump"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Prefer mori recall without --raw unless you need full stored STTP payloads."
+        ]
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.mori.init",
+        "rule_version": "1.0.0",
+        "permission_id": "command.mori.permission.init",
+        "title": "Mori repo init",
+        "description": "Identifies `mori init`, which creates a cognition repo and local SurrealKV store.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "safer_alternatives": [
+          "Confirm the target directory and session label before initializing a new cognition store."
+        ],
+        "default_mode": "review",
+        "family": "mori-mutate",
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mori",
+                  "mori.cmd",
+                  "mori.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--session"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "init"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Mori init command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--session"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "init"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Mori init command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--session"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "init"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.mori.add",
+        "rule_version": "1.0.0",
+        "permission_id": "command.mori.permission.add",
+        "title": "Mori stage context",
+        "description": "Identifies `mori add`, which stages documents, chats, notes, or STTP into the index.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "safer_alternatives": [
+          "Review which files or stdin content will be staged before adding them to the index."
+        ],
+        "default_mode": "review",
+        "family": "mori-mutate",
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mori",
+                  "mori.cmd",
+                  "mori.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--kind",
+                  "--session"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "add"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Mori add command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--kind",
+                      "--session"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "add"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Mori add command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--kind",
+                      "--session"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "add"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.mori.checkout",
+        "rule_version": "1.0.0",
+        "permission_id": "command.mori.permission.checkout",
+        "title": "Mori branch checkout",
+        "description": "Identifies `mori checkout`, which switches the active cognition branch (optional -b create).",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "safer_alternatives": [
+          "Run mori status first and confirm staged context is clear or stashed before checkout."
+        ],
+        "default_mode": "review",
+        "family": "mori-mutate",
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mori",
+                  "mori.cmd",
+                  "mori.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "checkout"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Mori checkout command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "checkout"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Mori checkout command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "checkout"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.mori.merge",
+        "rule_version": "1.0.0",
+        "permission_id": "command.mori.permission.merge",
+        "title": "Mori branch merge",
+        "description": "Identifies `mori merge`, which brings another branch into the current tip.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "safer_alternatives": [
+          "Inspect both branches with mori log and mori show before merging."
+        ],
+        "default_mode": "review",
+        "family": "mori-mutate",
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mori",
+                  "mori.cmd",
+                  "mori.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "-m",
+                  "--message"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "merge"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Mori merge command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "-m",
+                      "--message"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "merge"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Mori merge command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "-m",
+                      "--message"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "merge"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.mori.rebase",
+        "rule_version": "1.0.0",
+        "permission_id": "command.mori.permission.rebase",
+        "title": "Mori branch rebase",
+        "description": "Identifies `mori rebase`, which replays the current branch onto another tip.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "safer_alternatives": [
+          "Confirm the onto branch and that the current tip is the intended replay source."
+        ],
+        "default_mode": "review",
+        "family": "mori-mutate",
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mori",
+                  "mori.cmd",
+                  "mori.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rebase"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Mori rebase command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rebase"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Mori rebase command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rebase"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.mori.commit",
+        "rule_version": "1.0.0",
+        "permission_id": "command.mori.permission.commit",
+        "title": "Mori commit",
+        "description": "Identifies `mori commit`, which compiles staged context into the SurrealKV store.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "safer_alternatives": [
+          "Run mori status and mori compile first to preview what will be stored."
+        ],
+        "default_mode": "review",
+        "family": "mori-mutate",
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mori",
+                  "mori.cmd",
+                  "mori.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "-m",
+                  "--message"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "commit"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Mori commit command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "-m",
+                      "--message"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "commit"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Mori commit command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "-m",
+                      "--message"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "commit"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.mori.reset",
+        "rule_version": "1.0.0",
+        "permission_id": "command.mori.permission.reset",
+        "title": "Mori unstage",
+        "description": "Identifies `mori reset`, which unstages context from the index.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "safer_alternatives": [
+          "Confirm whether you intend to clear specific staged paths or the entire index."
+        ],
+        "default_mode": "review",
+        "family": "mori-mutate",
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mori",
+                  "mori.cmd",
+                  "mori.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "reset"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Mori reset command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reset"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Mori reset command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reset"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.mori.stash",
+        "rule_version": "1.0.0",
+        "permission_id": "command.mori.permission.stash",
+        "title": "Mori stash mutation",
+        "description": "Identifies `mori stash` parking, pop, and drop. `mori stash list` is a safe variant.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "safer_alternatives": [
+          "Run mori stash list before pop or drop, and prefer an empty index before popping."
+        ],
+        "default_mode": "review",
+        "family": "mori-mutate",
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mori",
+                  "mori.cmd",
+                  "mori.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "-m",
+                  "--message"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "stash"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Mori stash command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "-m",
+                      "--message"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "stash"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Mori stash command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "-m",
+                      "--message"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "stash"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "list",
+            "title": "Mori stash list",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "-m",
+                      "--message"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "stash",
+                      "list"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.mori.branch-create",
+        "rule_version": "1.0.0",
+        "permission_id": "command.mori.permission.branch-create",
+        "title": "Mori branch",
+        "description": "Identifies `mori branch` (list or create). Create mutates refs; list is included because v1 matchers cannot require a branch-name operand after the subcommand alone.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Mori cognition workspace mutation"
+        ],
+        "safer_alternatives": [
+          "Use mori branch to inspect names, then create only after confirming the new branch name."
+        ],
+        "default_mode": "review",
+        "family": "mori-mutate",
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mori",
+                  "mori.cmd",
+                  "mori.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "branch"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Mori branch command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "branch"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Mori branch command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "branch"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.mori.show-raw",
+        "rule_version": "1.0.0",
+        "permission_id": "command.mori.permission.show-raw",
+        "title": "Mori show raw STTP",
+        "description": "Identifies `mori show --raw`, which dumps stored STTP for a revision.",
+        "severity": "medium",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "action_classes": [
+          "Mori stored-context dump"
+        ],
+        "safer_alternatives": [
+          "Prefer mori show REV without --raw unless you need the full STTP payload."
+        ],
+        "default_mode": "review",
+        "family": "mori-read-sensitive",
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mori",
+                  "mori.cmd",
+                  "mori.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--raw"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "show"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Mori show command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "show"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Mori show command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "show"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.mori.recall-raw",
+        "rule_version": "1.0.0",
+        "permission_id": "command.mori.permission.recall-raw",
+        "title": "Mori recall raw STTP",
+        "description": "Identifies `mori recall --raw`, which dumps ranked stored STTP payloads.",
+        "severity": "medium",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "action_classes": [
+          "Mori stored-context dump"
+        ],
+        "safer_alternatives": [
+          "Prefer mori recall without --raw unless you need full stored STTP payloads."
+        ],
+        "default_mode": "review",
+        "family": "mori-read-sensitive",
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mori",
+                  "mori.cmd",
+                  "mori.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--session",
+                  "--limit"
+                ],
+                "required_flags": [
+                  "--raw"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "recall"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Mori recall command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--session",
+                      "--limit"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "recall"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Mori recall command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mori",
+                      "mori.cmd",
+                      "mori.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--session",
+                      "--limit"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "recall"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,31 +1,25 @@
+"""What the runtime reports about each protection fact.
+
+What each fact proves, and whether the signals add up to a protected machine,
+belong to the native runtime (`guard_command::protection_health_facts` and
+`guard_command::protection_health`), pinned in `rust/crates/guard-command/`.
+What this module owes is the facts themselves, so these tests stand in for the
+transport and read the request the runtime built.
+"""
+
 from __future__ import annotations
 
-import hashlib
-import itertools
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import cast
 
 import pytest
 
 from codex_plugin_scanner.guard import approvals as approvals_module
 from codex_plugin_scanner.guard.models import GuardRuntimeState
-from codex_plugin_scanner.guard.runtime.containment_contract import ContainmentBackend
-from codex_plugin_scanner.guard.runtime.containment_health import (
-    CONTAINMENT_POLICY_CONTRACT_DIGEST,
-    ContainmentHealthEvidence,
-)
-from codex_plugin_scanner.guard.runtime.protection_health import (
-    PROTECTION_CHECK_IDS,
-    PROTECTION_HEALTH_SCHEMA_VERSION,
-    ProtectionCheckStatus,
-    ProtectionSignal,
-    evaluate_protection_health,
-)
-from codex_plugin_scanner.guard.runtime.protection_health_runtime import (
-    build_runtime_protection_health,
-)
+from codex_plugin_scanner.guard.native_protection_health import NativeProtectionHealthError
+from codex_plugin_scanner.guard.runtime import protection_health_runtime
 from codex_plugin_scanner.guard.store import GuardStore
 
 _NOW = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)
@@ -50,9 +44,9 @@ class _ActivityHealth:
 
 
 class _Store:
-    def __init__(self, *, count: int, dropped: int, errors: int, active_errors: int) -> None:
+    def __init__(self, *, count: int = 1, active_errors: int = 0) -> None:
         self._count: int = count
-        self._health: _ActivityHealth = _ActivityHealth(dropped, errors, active_errors)
+        self._health: _ActivityHealth = _ActivityHealth(0, 0, active_errors)
 
     def count_command_activities(self) -> int:
         return self._count
@@ -61,297 +55,214 @@ class _Store:
         return self._health
 
 
-def _containment_evidence() -> dict[str, object]:
-    fingerprint = hashlib.sha256(b"stable").hexdigest()
-    return ContainmentHealthEvidence(
-        backend=ContainmentBackend.MACOS_SANDBOX,
-        backend_digest=hashlib.sha256(b"backend").hexdigest(),
-        policy_contract_digest=CONTAINMENT_POLICY_CONTRACT_DIGEST,
-        daemon_fingerprint=fingerprint,
-        runtime_fingerprint=fingerprint,
-        probe_at=_NOW.isoformat(),
-        probe_enforced=True,
-    ).to_dict()
+class _BrokenStore:
+    def count_command_activities(self) -> int:
+        raise RuntimeError("store unavailable")
+
+    def get_command_activity_persistence_health(self) -> _ActivityHealth:
+        raise RuntimeError("store unavailable")
 
 
-def _payload(
-    *,
-    installs: list[dict[str, object]] | None = None,
-    trust: dict[str, object] | None = None,
-    dropped: int = 0,
-    errors: int = 0,
-    active_errors: int | None = None,
-    activity_count: int = 1,
-    runtime_state: dict[str, object] | None = None,
-    hook_verification: dict[str, bool] | None = None,
-) -> dict[str, object]:
-    if runtime_state is None:
-        runtime_state = {
+@pytest.fixture
+def collect(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Callable[..., dict[str, object]]:
+    """Collect the facts the runtime sent, without reaching a resident."""
+
+    def _collect(
+        *,
+        store: protection_health_runtime.ProtectionHealthStore | None = None,
+        installs: Sequence[Mapping[str, object]] = (),
+        trust: Mapping[str, object] | None = None,
+        runtime_state: Mapping[str, object] | None = None,
+        hook_verification: Mapping[str, bool] | None = None,
+    ) -> dict[str, object]:
+        recorded: dict[str, object] = {}
+
+        def _record(facts: Mapping[str, object], *, guard_home: Path) -> dict[str, object]:
+            recorded.update(facts)
+            recorded["guard_home"] = guard_home
+            return {}
+
+        monkeypatch.setattr(protection_health_runtime, "protection_health_report", _record)
+        protection_health_runtime.build_runtime_protection_health(
+            store=store or _Store(),
+            guard_home=tmp_path / "guard-home",
+            runtime_state=runtime_state,
+            managed_installs=list(installs),
+            hook_verification=hook_verification,
+            trust_status=trust or {},
+            now=_NOW,
+        )
+        return recorded
+
+    return _collect
+
+
+def test_every_fact_the_resident_reads_is_sent(collect: Callable[..., dict[str, object]], tmp_path: Path) -> None:
+    containment = {"schema_version": "guard.containment-health.v1"}
+    facts = collect(
+        store=_Store(count=38_102, active_errors=0),
+        installs=[{"harness": "codex", "active": True}],
+        trust={"runtime_protection": "protected", "remembered_rules": "enforced", "other": "x"},
+        runtime_state={
+            "registration_status": "registered",
             "last_heartbeat_at": _NOW.isoformat(),
-            "containment_health": _containment_evidence(),
-        }
-    return build_runtime_protection_health(
-        store=_Store(
-            count=activity_count,
-            dropped=dropped,
-            errors=errors,
-            active_errors=(1 if dropped > 0 or errors > 0 else 0) if active_errors is None else active_errors,
-        ),
-        runtime_state=runtime_state,
-        managed_installs=installs or [],
-        hook_verification=hook_verification,
-        trust_status=trust or {},
-        now=_NOW,
-    )
-
-
-def test_missing_positive_proofs_never_claim_protected_or_partial() -> None:
-    for active, runtime_protection, remembered_rules, dropped, errors in itertools.product(
-        (False, True),
-        ("protected", "degraded", "unknown"),
-        ("enforced", "disabled_degraded", "unknown"),
-        (0, 1),
-        (0, 1),
-    ):
-        payload = _payload(
-            installs=[{"harness": "codex", "active": active}],
-            trust={"runtime_protection": runtime_protection, "remembered_rules": remembered_rules},
-            dropped=dropped,
-            errors=errors,
-        )
-        assert payload["state"] == "degraded"
-        assert payload["label"] == "Degraded"
-        assert payload["state"] not in {"protected", "partial"}
-
-
-def test_repaired_live_state_ignores_historical_evidence_errors() -> None:
-    payload = _payload(
-        installs=[{"harness": "codex", "active": True}],
-        trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
-        dropped=12_338,
-        errors=12_338,
-        active_errors=0,
-        activity_count=38_102,
+            "containment_health": containment,
+            "session_id": "session",
+        },
         hook_verification={"codex": True},
     )
-    checks = cast(list[dict[str, str]], payload["checks"])
-    by_id = {check["check_id"]: check for check in checks}
-    assert by_id["rule_packs"]["status"] == "pass"
-    assert by_id["decision_stream"] == {
-        "check_id": "decision_stream",
-        "status": "pass",
-        "reason_code": "decision_stream_healthy",
-    }
-    assert by_id["tamper_checks"]["status"] == "pass"
-    assert payload["state"] == "protected"
-
-
-def test_fresh_evidence_store_is_ready_before_first_command() -> None:
-    payload = _payload(
-        installs=[{"harness": "codex", "active": True}],
-        trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
-        active_errors=0,
-        activity_count=0,
-        hook_verification={"codex": True},
-    )
-    checks = cast(list[dict[str, str]], payload["checks"])
-    decision_stream = next(check for check in checks if check["check_id"] == "decision_stream")
-    assert decision_stream == {
-        "check_id": "decision_stream",
-        "status": "pass",
-        "reason_code": "decision_stream_ready",
-    }
-    assert payload["state"] == "protected"
-
-
-def test_canonical_managed_install_supersedes_legacy_alias() -> None:
-    installs = [
-        {"harness": "claude", "active": True, "manifest": {}},
-        {"harness": "claude-code", "active": True, "manifest": {"canonical": True}},
-    ]
-
-    assert approvals_module._canonical_managed_installs_for_health(installs) == [
-        {"harness": "claude-code", "active": True, "manifest": {"canonical": True}}
-    ]
-
-    active_alias = [
-        {"harness": "claude", "active": True, "manifest": {"alias": True}},
-        {"harness": "claude-code", "active": False, "manifest": {"canonical": True}},
-    ]
-    assert approvals_module._canonical_managed_installs_for_health(active_alias) == [
-        {"harness": "claude-code", "active": True, "manifest": {"alias": True}}
-    ]
-
-
-def test_cursor_attestation_unavailable_is_unproven_not_inactive(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    installs = [{"harness": "cursor", "active": True, "manifest": {}}]
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cursor_hook_health.cursor_runtime_hooks_verified",
-        lambda _context: None,
-    )
-    assert approvals_module._live_hook_verification(installs, store) == {}
-
-
-def test_report_distinguishes_failed_and_unproven_facts() -> None:
-    active = _payload(
-        installs=[{"harness": "codex", "active": True}],
-        trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
-    )
-    raw_checks = active["checks"]
-    assert isinstance(raw_checks, list)
-    checks = cast(list[dict[str, str]], raw_checks)
-    by_id = {check["check_id"]: check for check in checks}
-    assert by_id["daemon"]["status"] == "pass"
-    assert by_id["harness_hooks"]["status"] == "unknown"
-    assert by_id["harness_hooks"]["reason_code"] == "hook_attestation_unavailable"
-    assert by_id["decision_plane_compatibility"]["status"] == "pass"
-    assert by_id["sandbox"]["status"] == "pass"
-
-    degraded = _payload(
-        installs=[{"harness": "codex", "active": False}],
-        trust={"runtime_protection": "degraded", "remembered_rules": "disabled_degraded"},
-        dropped=1,
-    )
-    raw_degraded_checks = degraded["checks"]
-    assert isinstance(raw_degraded_checks, list)
-    degraded_checks = cast(list[dict[str, str]], raw_degraded_checks)
-    degraded_by_id = {check["check_id"]: check for check in degraded_checks}
-    assert degraded_by_id["harness_hooks"] == {
-        "check_id": "harness_hooks",
-        "status": "fail",
-        "reason_code": "no_managed_harness",
-    }
-    assert degraded_by_id["tamper_checks"]["status"] == "fail"
-    assert degraded_by_id["decision_stream"]["status"] == "fail"
-
-
-def test_inactive_duplicate_rows_do_not_override_an_active_install() -> None:
-    for installs in (
-        [{"harness": "codex", "active": False}, {"harness": "codex", "active": True}],
-        [{"harness": "codex", "active": True}, {"harness": "codex", "active": False}],
-    ):
-        payload = _payload(installs=cast(list[dict[str, object]], installs))
-        apps = cast(list[dict[str, object]], payload["apps"])
-        assert len(apps) == 1
-        assert apps[0]["state"] == "degraded"
-        checks = cast(list[dict[str, str]], apps[0]["checks"])
-        assert checks[0] == {
-            "check_id": "harness_hooks",
-            "status": "unknown",
-            "reason_code": "hook_attestation_unavailable",
-        }
-
-
-def test_inactive_historical_rows_do_not_degrade_verified_active_hooks() -> None:
-    payload = _payload(
-        installs=[
-            {"harness": "pi", "active": False},
-            {"harness": "cursor", "active": True},
-        ],
-        trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
-        hook_verification={"cursor": True},
-    )
-
-    assert payload["state"] == "protected"
-    apps = cast(list[dict[str, object]], payload["apps"])
-    assert [app["harness"] for app in apps] == ["cursor"]
-    assert apps[0]["state"] == "protected"
-    checks = cast(list[dict[str, str]], apps[0]["checks"])
-    assert checks[0] == {
-        "check_id": "harness_hooks",
-        "status": "pass",
-        "reason_code": "hooks_verified",
+    assert facts == {
+        "now": "2026-07-19T15:00:00+00:00",
+        "managed_installs": [{"harness": "codex", "active": True}],
+        "hook_verification": {"codex": True},
+        "daemon": {
+            "registration_status": "registered",
+            "last_heartbeat_at": "2026-07-19T15:00:00+00:00",
+            "containment_health": containment,
+        },
+        "remembered_rules": "enforced",
+        "runtime_protection": "protected",
+        "decision_stream": {"active_error_count": 0, "activity_count": 38_102},
+        "guard_home": tmp_path / "guard-home",
     }
 
 
-def test_stale_or_invalid_runtime_rows_never_prove_daemon_health() -> None:
-    stale = _payload(runtime_state={"last_heartbeat_at": (_NOW - timedelta(seconds=31)).isoformat()})
-    invalid = _payload(runtime_state={"last_heartbeat_at": "not-a-time"})
-    for payload, expected_status, expected_reason in (
-        (stale, "fail", "daemon_heartbeat_stale"),
-        (invalid, "unknown", "daemon_heartbeat_invalid"),
-    ):
-        checks = cast(list[dict[str, str]], payload["checks"])
-        daemon = next(check for check in checks if check["check_id"] == "daemon")
-        assert daemon["status"] == expected_status
-        assert daemon["reason_code"] == expected_reason
-        assert payload["state"] == "degraded"
+def test_absent_facts_are_sent_as_absent(collect: Callable[..., dict[str, object]]) -> None:
+    facts = collect(store=_BrokenStore())
+    assert facts["daemon"] is None
+    assert facts["hook_verification"] is None
+    assert facts["managed_installs"] == []
+    assert facts["remembered_rules"] is None
+    assert facts["runtime_protection"] is None
+    # A store that cannot report its counters is unavailable, never healthy.
+    assert facts["decision_stream"] is None
 
 
-def test_partial_is_reserved_for_evidence_gap_after_core_proof() -> None:
-    passing = {
-        check_id: ProtectionSignal(ProtectionCheckStatus.PASS, f"{check_id}_verified")
-        for check_id in PROTECTION_CHECK_IDS
-    }
-    protected = evaluate_protection_health(passing)
-    assert protected["state"] == "protected"
-    evidence_gap = {
-        **passing,
-        "decision_stream": ProtectionSignal(ProtectionCheckStatus.UNKNOWN, "decision_stream_gap"),
-    }
-    assert evaluate_protection_health(evidence_gap)["state"] == "partial"
-    assert (
-        evaluate_protection_health(evidence_gap)["detail"]
-        == "Core protection passes, but decision-stream evidence is incomplete."
-    )
-    for core_check in set(PROTECTION_CHECK_IDS).difference({"decision_stream"}):
-        core_gap = {
-            **passing,
-            core_check: ProtectionSignal(ProtectionCheckStatus.UNKNOWN, f"{core_check}_gap"),
-        }
-        assert evaluate_protection_health(core_gap)["state"] == "degraded"
-
-
-def test_exhaustive_check_truth_table_is_monotonic() -> None:
-    statuses = tuple(ProtectionCheckStatus)
-    for combination in itertools.product(statuses, repeat=len(PROTECTION_CHECK_IDS)):
-        signals = {
-            check_id: ProtectionSignal(status, f"{check_id}_{status.value}")
-            for check_id, status in zip(PROTECTION_CHECK_IDS, combination, strict=True)
-        }
-        actual = evaluate_protection_health(signals)["state"]
-        evidence_status = combination[PROTECTION_CHECK_IDS.index("decision_stream")]
-        core_statuses = tuple(
-            status
-            for check_id, status in zip(PROTECTION_CHECK_IDS, combination, strict=True)
-            if check_id != "decision_stream"
-        )
-        if all(status is ProtectionCheckStatus.PASS for status in core_statuses):
-            expected = (
-                "protected"
-                if evidence_status is ProtectionCheckStatus.PASS
-                else ("partial" if evidence_status is ProtectionCheckStatus.UNKNOWN else "degraded")
-            )
-        else:
-            expected = "degraded"
-        assert actual == expected
-
-
-def test_app_reports_are_bounded_and_privacy_safe() -> None:
+def test_installs_send_only_their_identity_and_activity(collect: Callable[..., dict[str, object]]) -> None:
     installs: list[dict[str, object]] = [
         {
             "harness": f"app-{index}",
             "active": True,
             "workspace": f"/private/workspace/{index}",
             "raw_command": f"secret-command-{index}",
+            "manifest": {"path": "/secret"},
         }
-        for index in range(120)
+        for index in range(3)
     ]
-    installs.append({"harness": "../../private", "active": True, "workspace": "/secret"})
-    payload = _payload(installs=installs)
-    assert payload["schema_version"] == PROTECTION_HEALTH_SCHEMA_VERSION
-    raw_apps = payload["apps"]
-    assert isinstance(raw_apps, list)
-    apps = cast(list[dict[str, object]], raw_apps)
-    assert len(apps) == 100
-    serialized = repr(payload)
-    assert "/private/" not in serialized
+    installs.append({"harness": "../../private", "active": "yes"})
+
+    facts = collect(installs=list(reversed(installs)))
+
+    serialized = repr(facts["managed_installs"])
+    assert "/private/workspace" not in serialized
     assert "secret-command" not in serialized
-    assert "../../private" not in serialized
-    assert all(
-        set(app) == {"harness", "state", "label", "detail", "evidence_gap", "checks", "reason_codes"} for app in apps
+    assert "/secret" not in serialized
+    # An install the resident would not count is not sent.
+    assert facts["managed_installs"] == [
+        {"harness": "app-0", "active": True},
+        {"harness": "app-1", "active": True},
+        {"harness": "app-2", "active": True},
+    ]
+
+
+def test_stale_and_repeated_installs_stay_within_the_request_limit(
+    collect: Callable[..., dict[str, object]],
+) -> None:
+    installs: list[dict[str, object]] = []
+    installs.extend({"harness": "codex", "active": True} for _ in range(20_000))
+    installs.extend({"harness": f"old-{index}", "active": False} for index in range(20_000))
+    installs.extend(({"harness": "x" * 65, "active": True}, {"harness": "x" * 64, "active": True}))
+    installs.append({"harness": 7, "active": True})
+
+    facts = collect(installs=installs)
+
+    assert facts["managed_installs"] == [
+        {"harness": "codex", "active": True},
+        {"harness": "x" * 64, "active": True},
+    ]
+
+
+def test_unproven_live_hooks_are_left_out_not_reported_inactive(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    installs = [{"harness": "cursor", "active": True, "manifest": {}}]
+    asked: list[dict[str, object]] = []
+
+    def fake_ask(op: str, _context: object, **fields: object) -> dict[str, object]:
+        asked.append({"op": op, **fields})
+        return {"verified": {"cursor": None, "grok": True, "codex": "yes"}}
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_harness_client.ask", fake_ask)
+    assert approvals_module._live_hook_verification(installs, store) == {"grok": True}
+    assert asked[0]["op"] == "live_hook_verification"
+    assert asked[0]["managed_installs"] == [{"harness": "cursor", "active": True, "manifest": {}}]
+    assert "codex" not in asked[0]
+
+    def refusing_ask(*_args: object, **_fields: object) -> dict[str, object]:
+        raise RuntimeError("runtime unavailable")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_harness_client.ask", refusing_ask)
+    assert approvals_module._live_hook_verification(installs, store) == {}
+
+
+def test_an_unreachable_runtime_leaves_the_snapshot_without_a_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def unreachable(**_kwargs: object) -> dict[str, object]:
+        raise NativeProtectionHealthError("native_protection_health_report_unavailable")
+
+    monkeypatch.setattr(approvals_module, "build_runtime_protection_health", unreachable)
+    snapshot = approvals_module.build_runtime_snapshot(
+        store=GuardStore(tmp_path / "guard-home"),
+        approval_center_url=None,
     )
+
+    assert snapshot["protection_health"] is None
+    # A machine with no runtime row reads as "setup" before the report is even
+    # asked for. The state an unreachable runtime leaves behind is the one a
+    # registered machine falls to, and that is the headline resolver's own
+    # branch: an empty protection state is never rendered as protection.
+    headline = approvals_module._runtime_headline(
+        GuardStore(tmp_path / "guard-home"),
+        pending_count=0,
+        runtime_state_present=True,
+        protection_state="",
+    )
+    assert headline == {
+        "headline_state": "degraded",
+        "headline_label": "Degraded",
+        "headline_detail": "One or more required protection checks failed or remain unproven.",
+    }
+
+
+@pytest.mark.parametrize(
+    ("runtime_state_present", "pending_count", "expected_state"),
+    [(False, 2, "setup"), (True, 2, "needs_decision"), (True, 0, "degraded")],
+)
+def test_an_unavailable_headline_keeps_setup_and_waiting_decisions(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runtime_state_present: bool,
+    pending_count: int,
+    expected_state: str,
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority_module
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise authority_module.NativeRunnerAuthorityError("native_runtime_unavailable")
+
+    monkeypatch.setattr(authority_module, "native_runner_authority", unavailable)
+
+    headline = approvals_module._runtime_headline(
+        GuardStore(tmp_path / "guard-home"),
+        pending_count=pending_count,
+        runtime_state_present=runtime_state_present,
+        protection_state="protected",
+    )
+
+    assert headline["headline_state"] == expected_state
+    if expected_state == "degraded":
+        assert headline == approvals_module._HEADLINE_UNAVAILABLE

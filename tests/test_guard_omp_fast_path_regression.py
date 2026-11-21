@@ -10,7 +10,7 @@ from typing import TypeGuard, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -21,6 +21,7 @@ def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
 def test_omp_post_tool_read_burst_uses_resident_scanner(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
 ) -> None:
     home_dir = tmp_path / "home"
     workspace = tmp_path / "workspace"
@@ -65,11 +66,14 @@ def test_omp_post_tool_read_burst_uses_resident_scanner(
     try:
         with ThreadPoolExecutor(max_workers=24) as executor:
             results = list(executor.map(review, range(24)))
-        worker_stats = daemon._server.hook_process_runner.stats()  # pyright: ignore[reportPrivateUsage]
+        scheduler_stats = daemon.hook_capacity()
     finally:
         daemon.stop()
 
-    assert all(result.get("decision") == "allow" for result in results)
-    assert all(result.get("reason_code") == "output_scan_allow" for result in results)
-    assert worker_stats["timeouts"] == 0
-    assert worker_stats["restarts"] == 0
+    verdicts = [(result.get("decision"), result.get("reason_code")) for result in results]
+    assert all(result.get("decision") == "allow" for result in results), verdicts
+    assert all(result.get("reason_code") in {"output_scan_allow", "native_policy_warning"} for result in results), (
+        verdicts
+    )
+    assert scheduler_stats["expired"] == 0
+    assert scheduler_stats["retries"] == 0

@@ -1,0 +1,535 @@
+{
+  "decisions": {
+    "agent-rule-beats-every-agent-rule": {
+      "ambiguous": false,
+      "candidates": [
+        {
+          "reason": "workspace",
+          "rowIndex": 0,
+          "ruleId": "block-shell-in-ci",
+          "state": "unmatched"
+        },
+        {
+          "reason": "more_specific_rule",
+          "rowIndex": 1,
+          "ruleId": "allow-mcp",
+          "state": "outranked"
+        },
+        {
+          "reason": null,
+          "rowIndex": 2,
+          "ruleId": "allow-mcp-in-codex",
+          "state": "selected"
+        },
+        {
+          "reason": "publisher",
+          "rowIndex": 3,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 4,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 5,
+          "ruleId": "allow-acme-reviewed",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 6,
+          "ruleId": "allow-legacy-tool",
+          "state": "unmatched"
+        }
+      ],
+      "document": {
+        "digest": "b01f11a56de6a6856503d25428c84f6110c7a0bb2c232a6c16e10e0a813d01b5",
+        "id": "policy.enforceable-scopes"
+      },
+      "effect": "allow",
+      "lookup": {
+        "artifactId": "family:mcp",
+        "at": "2026-10-14T12:00:00Z",
+        "familyKey": "family:mcp"
+      },
+      "matchLimitExceeded": false,
+      "ruleId": "allow-mcp-in-codex",
+      "tiedRuleIds": []
+    },
+    "block-beats-more-specific-allow": {
+      "ambiguous": false,
+      "candidates": [
+        {
+          "reason": "workspace",
+          "rowIndex": 0,
+          "ruleId": "block-shell-in-ci",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 1,
+          "ruleId": "allow-mcp",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 2,
+          "ruleId": "allow-mcp-in-codex",
+          "state": "unmatched"
+        },
+        {
+          "reason": null,
+          "rowIndex": 3,
+          "ruleId": "block-acme-publisher",
+          "state": "selected"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 4,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "block_wins",
+          "rowIndex": 5,
+          "ruleId": "allow-acme-reviewed",
+          "state": "outranked"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 6,
+          "ruleId": "allow-legacy-tool",
+          "state": "unmatched"
+        }
+      ],
+      "document": {
+        "digest": "b01f11a56de6a6856503d25428c84f6110c7a0bb2c232a6c16e10e0a813d01b5",
+        "id": "policy.enforceable-scopes"
+      },
+      "effect": "block",
+      "lookup": {
+        "artifactId": "pkg:npm/acme-reviewed",
+        "at": "2026-10-14T12:00:00Z",
+        "familyKey": null
+      },
+      "matchLimitExceeded": false,
+      "ruleId": "block-acme-publisher",
+      "tiedRuleIds": []
+    },
+    "block-publisher-in-cursor": {
+      "ambiguous": false,
+      "candidates": [
+        {
+          "reason": "workspace",
+          "rowIndex": 0,
+          "ruleId": "block-shell-in-ci",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 1,
+          "ruleId": "allow-mcp",
+          "state": "unmatched"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 2,
+          "ruleId": "allow-mcp-in-codex",
+          "state": "unmatched"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 3,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": null,
+          "rowIndex": 4,
+          "ruleId": "block-acme-publisher",
+          "state": "selected"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 5,
+          "ruleId": "allow-acme-reviewed",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 6,
+          "ruleId": "allow-legacy-tool",
+          "state": "unmatched"
+        }
+      ],
+      "document": {
+        "digest": "b01f11a56de6a6856503d25428c84f6110c7a0bb2c232a6c16e10e0a813d01b5",
+        "id": "policy.enforceable-scopes"
+      },
+      "effect": "block",
+      "lookup": {
+        "artifactId": "pkg:npm/acme-tool",
+        "at": "2026-10-14T12:00:00Z",
+        "familyKey": null
+      },
+      "matchLimitExceeded": false,
+      "ruleId": "block-acme-publisher",
+      "tiedRuleIds": []
+    },
+    "command-falls-through": {
+      "ambiguous": false,
+      "candidates": [
+        {
+          "reason": "command",
+          "rowIndex": 0,
+          "ruleId": "block-docker",
+          "state": "unmatched"
+        }
+      ],
+      "document": {
+        "digest": "7e0466c34a04ba6dbb5ef6ba0df3fe6bdd3ae242044713592be9eb9ef194c2d5",
+        "id": "policy.parity-commands"
+      },
+      "effect": "default",
+      "lookup": {
+        "artifactId": null,
+        "at": "2026-10-14T12:00:00Z",
+        "familyKey": null
+      },
+      "matchLimitExceeded": false,
+      "ruleId": null,
+      "tiedRuleIds": []
+    },
+    "command-matches-block": {
+      "action": "block",
+      "ambiguous": false,
+      "candidates": [
+        {
+          "reason": null,
+          "rowIndex": 0,
+          "ruleId": "block-docker",
+          "state": "selected"
+        }
+      ],
+      "document": {
+        "digest": "7e0466c34a04ba6dbb5ef6ba0df3fe6bdd3ae242044713592be9eb9ef194c2d5",
+        "id": "policy.parity-commands"
+      },
+      "effect": "block",
+      "lookup": {
+        "artifactId": null,
+        "at": "2026-10-14T12:00:00Z",
+        "familyKey": null
+      },
+      "matchLimitExceeded": false,
+      "ruleId": "block-docker",
+      "tiedRuleIds": []
+    },
+    "rule-allowed-before-expiry": {
+      "ambiguous": false,
+      "candidates": [
+        {
+          "reason": "workspace",
+          "rowIndex": 0,
+          "ruleId": "block-shell-in-ci",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 1,
+          "ruleId": "allow-mcp",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 2,
+          "ruleId": "allow-mcp-in-codex",
+          "state": "unmatched"
+        },
+        {
+          "reason": "publisher",
+          "rowIndex": 3,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 4,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 5,
+          "ruleId": "allow-acme-reviewed",
+          "state": "unmatched"
+        },
+        {
+          "reason": null,
+          "rowIndex": 6,
+          "ruleId": "allow-legacy-tool",
+          "state": "selected"
+        }
+      ],
+      "document": {
+        "digest": "b01f11a56de6a6856503d25428c84f6110c7a0bb2c232a6c16e10e0a813d01b5",
+        "id": "policy.enforceable-scopes"
+      },
+      "effect": "allow",
+      "lookup": {
+        "artifactId": "pkg:npm/legacy-tool",
+        "at": "2026-06-01T00:00:00Z",
+        "familyKey": null
+      },
+      "matchLimitExceeded": false,
+      "ruleId": "allow-legacy-tool",
+      "tiedRuleIds": []
+    },
+    "rule-ignored-after-expiry": {
+      "ambiguous": false,
+      "candidates": [
+        {
+          "reason": "workspace",
+          "rowIndex": 0,
+          "ruleId": "block-shell-in-ci",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 1,
+          "ruleId": "allow-mcp",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 2,
+          "ruleId": "allow-mcp-in-codex",
+          "state": "unmatched"
+        },
+        {
+          "reason": "publisher",
+          "rowIndex": 3,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 4,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 5,
+          "ruleId": "allow-acme-reviewed",
+          "state": "unmatched"
+        },
+        {
+          "reason": "expired",
+          "rowIndex": 6,
+          "ruleId": "allow-legacy-tool",
+          "state": "expired"
+        }
+      ],
+      "document": {
+        "digest": "b01f11a56de6a6856503d25428c84f6110c7a0bb2c232a6c16e10e0a813d01b5",
+        "id": "policy.enforceable-scopes"
+      },
+      "effect": "default",
+      "lookup": {
+        "artifactId": "pkg:npm/legacy-tool",
+        "at": "2026-07-01T00:00:00Z",
+        "familyKey": null
+      },
+      "matchLimitExceeded": false,
+      "ruleId": null,
+      "tiedRuleIds": []
+    },
+    "shell-blocked-in-ci": {
+      "ambiguous": false,
+      "candidates": [
+        {
+          "reason": null,
+          "rowIndex": 0,
+          "ruleId": "block-shell-in-ci",
+          "state": "selected"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 1,
+          "ruleId": "allow-mcp",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 2,
+          "ruleId": "allow-mcp-in-codex",
+          "state": "unmatched"
+        },
+        {
+          "reason": "publisher",
+          "rowIndex": 3,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 4,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 5,
+          "ruleId": "allow-acme-reviewed",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 6,
+          "ruleId": "allow-legacy-tool",
+          "state": "unmatched"
+        }
+      ],
+      "document": {
+        "digest": "b01f11a56de6a6856503d25428c84f6110c7a0bb2c232a6c16e10e0a813d01b5",
+        "id": "policy.enforceable-scopes"
+      },
+      "effect": "block",
+      "lookup": {
+        "artifactId": "family:tool-action",
+        "at": "2026-10-14T12:00:00Z",
+        "familyKey": "family:tool-action"
+      },
+      "matchLimitExceeded": false,
+      "ruleId": "block-shell-in-ci",
+      "tiedRuleIds": []
+    },
+    "shell-family-alias": {
+      "ambiguous": false,
+      "candidates": [
+        {
+          "reason": null,
+          "rowIndex": 0,
+          "ruleId": "block-shell-in-ci",
+          "state": "selected"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 1,
+          "ruleId": "allow-mcp",
+          "state": "unmatched"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 2,
+          "ruleId": "allow-mcp-in-codex",
+          "state": "unmatched"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 3,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 4,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 5,
+          "ruleId": "allow-acme-reviewed",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 6,
+          "ruleId": "allow-legacy-tool",
+          "state": "unmatched"
+        }
+      ],
+      "document": {
+        "digest": "b01f11a56de6a6856503d25428c84f6110c7a0bb2c232a6c16e10e0a813d01b5",
+        "id": "policy.enforceable-scopes"
+      },
+      "effect": "block",
+      "lookup": {
+        "artifactId": "family:tool-action",
+        "at": "2026-10-14T12:00:00Z",
+        "familyKey": "family:tool-action"
+      },
+      "matchLimitExceeded": false,
+      "ruleId": "block-shell-in-ci",
+      "tiedRuleIds": []
+    },
+    "shell-outside-ci-falls-through": {
+      "ambiguous": false,
+      "candidates": [
+        {
+          "reason": "workspace",
+          "rowIndex": 0,
+          "ruleId": "block-shell-in-ci",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 1,
+          "ruleId": "allow-mcp",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 2,
+          "ruleId": "allow-mcp-in-codex",
+          "state": "unmatched"
+        },
+        {
+          "reason": "publisher",
+          "rowIndex": 3,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "harness",
+          "rowIndex": 4,
+          "ruleId": "block-acme-publisher",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 5,
+          "ruleId": "allow-acme-reviewed",
+          "state": "unmatched"
+        },
+        {
+          "reason": "artifact",
+          "rowIndex": 6,
+          "ruleId": "allow-legacy-tool",
+          "state": "unmatched"
+        }
+      ],
+      "document": {
+        "digest": "b01f11a56de6a6856503d25428c84f6110c7a0bb2c232a6c16e10e0a813d01b5",
+        "id": "policy.enforceable-scopes"
+      },
+      "effect": "default",
+      "lookup": {
+        "artifactId": "family:tool-action",
+        "at": "2026-10-14T12:00:00Z",
+        "familyKey": "family:tool-action"
+      },
+      "matchLimitExceeded": false,
+      "ruleId": null,
+      "tiedRuleIds": []
+    }
+  },
+  "now": "2026-10-14T12:00:00Z",
+  "version": 1
+}

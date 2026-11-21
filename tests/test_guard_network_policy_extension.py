@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import pytest
-
-from codex_plugin_scanner.guard.policy_document import (
+from codex_plugin_scanner.guard.policy_document import GuardPolicyDocument, policy_document_digest
+from tests.network_policy_model import (
     NETWORK_POLICY_SCHEMA_VERSION,
-    GuardPolicyDocument,
-    guard_policy_network_extension,
-    policy_document_digest,
 )
 
 
@@ -34,38 +30,8 @@ def test_versioned_network_contract_round_trips_inside_guard_policy() -> None:
         "rules": [],
     }
     document = GuardPolicyDocument.from_mapping(_mapping(extension))
-    assert guard_policy_network_extension(document) == extension
     encoded = document.to_mapping()
     encoded_spec = encoded["spec"]
     assert isinstance(encoded_spec, dict)
     assert encoded_spec["networkPolicy"] == extension
     assert policy_document_digest(document) == policy_document_digest(GuardPolicyDocument.from_mapping(encoded))
-
-
-def test_legacy_guard_policy_remains_explicitly_compatible() -> None:
-    document = GuardPolicyDocument.from_mapping(_mapping())
-    assert guard_policy_network_extension(document) is None
-
-
-def test_explicit_null_network_extension_is_rejected() -> None:
-    mapping = _mapping()
-    spec = mapping["spec"]
-    assert isinstance(spec, dict)
-    spec["networkPolicy"] = None
-    document = GuardPolicyDocument.from_mapping(mapping)
-    with pytest.raises(ValueError, match="networkPolicy must be an object"):
-        guard_policy_network_extension(document)
-
-
-@pytest.mark.parametrize(
-    "extension",
-    (
-        "guard.network-policy.v1",
-        {"schemaVersion": "guard.network-policy.v2"},
-        {},
-    ),
-)
-def test_network_extension_rejects_ambiguous_or_unknown_versions(extension: object) -> None:
-    document = GuardPolicyDocument.from_mapping(_mapping(extension))
-    with pytest.raises(ValueError, match=r"networkPolicy|schemaVersion"):
-        guard_policy_network_extension(document)

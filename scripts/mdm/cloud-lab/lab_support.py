@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from codex_plugin_scanner.guard.mdm.cloud_control import ContractError
+from cloud_control import ContractError
 
 MAX_BODY_BYTES = 1024 * 1024
 MAX_JSON_DEPTH = 24

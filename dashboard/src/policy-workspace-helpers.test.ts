@@ -1,6 +1,7 @@
 import type { GuardPolicyDecision } from "./guard-types";
 import {
   resolvePolicyApprovalRecordLabel,
+  resolveExactApprovedAction,
   resolvePolicyDisplay,
   resolvePolicyEvidenceHref,
   resolvePolicyMatcherFamily,
@@ -37,7 +38,7 @@ const basePolicy = (overrides: Partial<GuardPolicyDecision>): GuardPolicyDecisio
 const enrichedPackageRule = basePolicy({
   remembered_command: "pnpm install",
   remembered_context: "Package install via pnpm",
-  workspace_label: "hol-points-portal",
+  workspace_label: "cloud-portal",
   source_receipt_id: "receipt-abc123",
   artifact_hash: "sha256:62de981049ed20f850ae2bb52a9aaa2820c6d9be809592ec0c4b3d207b83f9b6",
 });
@@ -47,7 +48,7 @@ const enrichedDisplay = resolvePolicyDisplay(enrichedPackageRule);
 assert(enrichedDisplay.headline === "pnpm install", "POL-H1: enriched command becomes headline");
 assert(enrichedDisplay.kindLine === "Package install via pnpm", "POL-H2: enriched context becomes kind line");
 assert(
-  enrichedDisplay.rememberSentence.includes("hol-points-portal"),
+  enrichedDisplay.rememberSentence.includes("cloud-portal"),
   "POL-H3: remember sentence names project folder",
 );
 assert(
@@ -112,7 +113,7 @@ assert(
   resolvePolicyRowTitle(scannerLabelRule, resolvePolicyDisplay(scannerLabelRule)).toLowerCase().includes("shell"),
   "POL-H19: scanner labels fall back to action family headline",
 );
-assert(resolvePolicyRowFolder(enrichedPackageRule) === "hol-points-portal", "POL-H20: folder resolves workspace label");
+assert(resolvePolicyRowFolder(enrichedPackageRule) === "cloud-portal", "POL-H20: folder resolves workspace label");
 assert(resolvePolicyRowFrequency(enrichedPackageRule) === "This project", "POL-H21: frequency uses policy scope label");
 assert(
   resolvePolicyRowSubtitle(enrichedPackageRule, enrichedDisplay)?.includes("This project"),
@@ -147,5 +148,47 @@ assert(
   )?.startsWith("…/"),
   "POL-H17: long paths truncate with ellipsis",
 );
+
+const exactRule = basePolicy({
+  scope: "artifact",
+  artifact_id: "omp:native-pretool:bash",
+  artifact_hash: "guard-approval-context:v1:token",
+  remembered_command: "cd /repo && git status && rm -rf /tmp/build",
+});
+assert(resolveExactApprovedAction(exactRule) === "cd /repo && git status && rm -rf /tmp/build", "POL-H18: exact approved action surfaces verbatim");
+assert(resolvePolicyDisplay(exactRule).headline === "cd /repo && git status && rm -rf /tmp/build", "POL-H19: row headline is the exact action");
+assert(resolvePolicyDisplay(exactRule).rememberSentence.includes("cd /repo && git status"), "POL-H20: sentence quotes the exact action");
+assert(resolveExactApprovedAction(basePolicy({ scope: "artifact", remembered_command: "credential-looking output review" })) === null, "POL-H21: scanner labels never pose as exact actions");
+assert(
+  resolveExactApprovedAction(
+    basePolicy({ scope: "global", remembered_command: "npm install left-pad" }),
+  ) === null,
+  "POL-H24: broad rules never claim one exact action",
+);
+assert(
+  resolveExactApprovedAction(
+    basePolicy({ scope: "workspace", remembered_command: "npm install left-pad" }),
+  ) === null,
+  "POL-H25: workspace rules never claim one exact action",
+);
+assert(
+  resolveExactApprovedAction(
+    basePolicy({
+      scope: "artifact",
+      remembered_command: "trusted build tool",
+      reason: "trusted build tool",
+    }),
+  ) === null,
+  "POL-H26: the reason fallback is descriptive text, not an action",
+);
+assert(
+  resolveExactApprovedAction(
+    basePolicy({ scope: "artifact", action: "block", remembered_command: "rm -rf /prod" }),
+  ) === "rm -rf /prod",
+  "POL-H27: artifact-scoped block rules still name the exact action",
+);
+const longRule = basePolicy({ scope: "artifact", remembered_command: "x".repeat(200) });
+assert(resolvePolicyDisplay(longRule).rememberSentence.length < 230, "POL-H22: row sentence bounds very long commands");
+assert(resolvePolicyDisplay(longRule).rememberSentence.includes("…"), "POL-H23: truncated sentence is marked");
 
 console.log("policy-workspace-helpers.test.ts: all assertions passed");

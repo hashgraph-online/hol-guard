@@ -8,14 +8,14 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.shims import (
-    build_shim_content_hash,
+    activate_package_shims,
     get_path_order_status,
-    get_real_binary_info,
     install_package_shims,
     package_shim_status,
     repair_package_shims,
     uninstall_package_shims,
 )
+from tests.shim_execution_helpers import build_shim_content_hash
 
 
 def _make_context(tmp_path: Path):
@@ -151,30 +151,6 @@ class TestScrg265PathOrderVerification:
         assert result["foreign_shim_path"] == str(evil_shim)
 
 
-class TestScrg268RealBinaryInfo:
-    """SCRG268: real binary info recorded safely (hash, mtime), no private path in Cloud."""
-
-    def test_get_real_binary_info_returns_hash_and_mtime(self, tmp_path: Path) -> None:
-        real_bin = tmp_path / "npm"
-        real_bin.write_bytes(b"#!/bin/sh\necho npm")
-        real_bin.chmod(0o755)
-        info = get_real_binary_info(str(real_bin))
-        assert info["found"] is True
-        assert len(info["content_hash"]) == 64
-        assert info["mtime"] > 0
-
-    def test_get_real_binary_info_not_found(self, tmp_path: Path) -> None:
-        info = get_real_binary_info(str(tmp_path / "nonexistent"))
-        assert info["found"] is False
-        assert info["content_hash"] is None
-
-    def test_real_binary_info_redacts_private_path_prefix(self, tmp_path: Path) -> None:
-        real_bin = tmp_path / "npm"
-        real_bin.write_bytes(b"#!/bin/sh")
-        info = get_real_binary_info(str(real_bin), redact_path_prefix=str(tmp_path))
-        assert str(tmp_path) not in info.get("path_display", "")
-
-
 class TestScrg269ShimTamperDetection:
     """SCRG269: shim content hash/version stored; status reports modified/missing/stale."""
 
@@ -267,6 +243,25 @@ class TestScrg266ShimAutoRepair:
         assert result["path_repair_required"] == ["npm"]
         assert result["shell_hints"]["bash"].startswith("export PATH=")
 
+    def test_repair_restores_shell_profile_for_intact_shim(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = _make_context(tmp_path)
+        ctx.home_dir = tmp_path / "home"
+        ctx.home_dir.mkdir()
+        monkeypatch.setenv("SHELL", "/bin/bash")
+        monkeypatch.setattr("codex_plugin_scanner.guard.shims._is_transient_path", lambda _: False)
+        install_package_shims(ctx, managers=("npm",))
+        (ctx.home_dir / ".bashrc").unlink(missing_ok=True)
+        real_dir = tmp_path / "bin"
+        real_dir.mkdir()
+        (real_dir / "npm").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        monkeypatch.setenv("PATH", str(real_dir))
+        result = activate_package_shims(ctx, managers=("npm",), repair=True)
+        assert result["repaired"] == []
+        assert result["profile"]["changed"] is True
+        assert "package-shims" in (ctx.home_dir / ".bashrc").read_text(encoding="utf-8")
+
     def test_status_includes_shell_hints_for_path_repair(self, tmp_path: Path) -> None:
         ctx = _make_context(tmp_path)
         install_package_shims(ctx, managers=("npm",))
@@ -353,19 +348,3 @@ class TestScrg267FixtureAllManagers:
         assert detail["real_binary_path"] == str(real_binary)
         assert detail["path_index"] == 0
         assert detail["real_binary_path_index"] == 1
-
-
-class TestScrg270DaemonShimCoverage:
-    """SCRG270: daemon snapshot includes shim coverage."""
-
-    def test_daemon_snapshot_route_includes_shim_coverage(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.daemon.server import _build_snapshot_payload
-
-        ctx = _make_context(tmp_path)
-        install_package_shims(ctx, managers=("npm", "pip"))
-        snapshot = _build_snapshot_payload(ctx)
-        assert "package_manager_coverage" in snapshot
-        coverage = snapshot["package_manager_coverage"]
-        assert "shims_installed" in coverage
-        assert "npm" in coverage["shims_installed"]
-        assert "pip" in coverage["shims_installed"]

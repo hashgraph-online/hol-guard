@@ -1,0 +1,345 @@
+"""Doctor separates passive setup checks from proof of Guard evaluation."""
+
+from __future__ import annotations
+
+import json
+from io import StringIO
+from typing import Any
+
+import pytest
+from rich.console import Console
+
+from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.cli.doctor_readiness import doctor_runtime_readiness
+from codex_plugin_scanner.guard.cli.render import _render_doctor, emit_guard_payload
+from codex_plugin_scanner.guard.command_probes import _run_command_probe, without_command_probes
+from tests.codex_hook_state_support import fixed_hook_state
+
+
+def _doctor_json(rc: int, capsys: pytest.CaptureFixture[str]) -> Any:
+    """Doctor's JSON report; an empty report names the exit code and stderr."""
+    captured = capsys.readouterr()
+    assert captured.out.strip(), f"doctor printed no report (rc={rc}): {captured.err[-2000:]}"
+    return json.loads(captured.out)
+
+
+@pytest.mark.parametrize(
+    ("setup_status", "probe", "state", "reason"),
+    [
+        ("active", None, "unknown", "hook_evaluation_unverified"),
+        ("active", {"ok": True, "return_code": 0}, "unknown", "hook_evaluation_unverified"),
+        ("active", {"ok": False, "return_code": 1}, "unknown", "harness_probe_failed"),
+        ("active", {"ok": False, "timed_out": True}, "unknown", "harness_probe_timed_out"),
+        ("broken", {"ok": True}, "fail", "guard_setup_broken"),
+        ("partial", {"ok": True}, "unknown", "hook_registration_unconfirmed"),
+        ("not_found", None, "unknown", "hook_registration_unconfirmed"),
+        ("active", {"skipped": True, "ok": None}, "unknown", "harness_probe_not_run"),
+    ],
+)
+def test_doctor_json_does_not_promote_registration_or_cli_success_to_readiness(
+    tmp_path, monkeypatch, capsys, setup_status, probe, state, reason
+) -> None:
+    availability = {
+        "mode": "auto",
+        "available": True,
+        "compatible": True,
+        "reason_code": "native_available",
+        "evaluation_verified": False,
+    }
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.doctor_native_runtime.doctor_native_availability",
+        lambda _guard_home=None: availability,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli._commands_shared.harness_diagnostics",
+        lambda _harness, _context: {
+            "harness": "codex",
+            "installed": True,
+            "command_available": True,
+            "setup_status": setup_status,
+            "runtime_probe": probe,
+            "native_hook_state": {"integrity_status": "valid", "protection_active": True},
+            "warnings": [],
+            "artifacts": [],
+        },
+    )
+    rc = main(
+        [
+            "guard",
+            "doctor",
+            "codex",
+            "--json",
+            "--home",
+            str(tmp_path / "home"),
+            "--guard-home",
+            str(tmp_path / "guard-home"),
+            "--workspace",
+            str(tmp_path / "workspace"),
+        ]
+    )
+    payload = _doctor_json(rc, capsys)
+
+    assert rc == 0
+    assert payload["setup_status"] == setup_status
+    assert payload["runtime_readiness"]["state"] == state
+    assert payload["runtime_readiness"]["reason_code"] == reason
+    assert payload["native_runtime"]["availability"] == availability
+
+
+def test_global_doctor_reports_readiness_for_every_registered_harness(tmp_path, capsys) -> None:
+    rc = main(
+        [
+            "guard",
+            "doctor",
+            "--json",
+            "--home",
+            str(tmp_path / "home"),
+            "--guard-home",
+            str(tmp_path / "guard-home"),
+            "--workspace",
+            str(tmp_path / "workspace"),
+        ]
+    )
+    payload = _doctor_json(rc, capsys)
+
+    assert rc == 0
+    assert {item["harness"] for item in payload["adapters"]} == set(harness_ops.list_harnesses())
+    assert all(item["runtime_readiness"]["state"] == "unknown" for item in payload["adapters"])
+    assert payload["native_runtime"]["availability"]["reason_code"] == "native_status_probe_skipped"
+    # Installation is answered from the files; compatibility needs the binary to run.
+    assert payload["native_runtime"]["availability"]["compatible"] is None
+
+
+@pytest.mark.parametrize("probe", [None, {"ok": True, "return_code": 0}])
+def test_doctor_text_shows_unverified_evaluation_even_when_setup_is_active(capsys, probe) -> None:
+    emit_guard_payload(
+        "doctor",
+        {
+            "harness": "codex",
+            "installed": True,
+            "command_available": True,
+            "setup_status": "active",
+            "runtime_probe": probe,
+            "warnings": [],
+        },
+        False,
+    )
+    output = " ".join(capsys.readouterr().out.split())
+
+    assert "Registration" in output
+    assert "Runtime readiness" in output
+    assert "Unverified" in output
+    assert "authenticated Guard decision" in output
+
+
+def test_global_doctor_text_does_not_label_detected_harness_ready(capsys) -> None:
+    emit_guard_payload(
+        "doctor",
+        {
+            "tables": [],
+            "adapters": [{"harness": "codex", "installed": True, "command_available": True}],
+        },
+        False,
+    )
+    output = " ".join(capsys.readouterr().out.split())
+
+    assert "Registration" in output
+    assert "Runtime readiness" in output
+    assert "Unverified" in output
+    assert "No Guard decision verified" in output
+    assert "Ready" not in output
+
+
+@pytest.mark.parametrize("installed", [True, False])
+@pytest.mark.parametrize("width", [80, 120])
+def test_global_doctor_distinguishes_detection_from_missing_registration(installed, width) -> None:
+    stream = StringIO()
+    console = Console(file=stream, width=width, color_system=None)
+    _render_doctor(
+        console,
+        {
+            "tables": [],
+            "adapters": [{"harness": "codex", "installed": installed, "setup_status": "not_found"}],
+        },
+    )
+    output = " ".join(stream.getvalue().split())
+
+    assert "Detection" in output
+    detection = "Found" if installed else "Not found"
+    assert f"codex {detection} Not found Unverified" in output
+
+
+def test_doctor_readiness_does_not_echo_raw_probe_data_or_accept_claimed_health() -> None:
+    readiness = doctor_runtime_readiness(
+        {
+            "setup_status": "active",
+            "runtime_probe": {
+                "ok": True,
+                "ready": True,
+                "authenticated": True,
+                "stdout": "private-probe-output",
+                "stderr": "private-probe-error",
+            },
+            "runtime_readiness": {"state": "pass"},
+            "trust": {"healthy": True},
+        }
+    )
+
+    assert readiness["state"] == "unknown"
+    assert readiness["reason_code"] == "hook_evaluation_unverified"
+    assert "private-probe" not in json.dumps(readiness)
+
+
+@pytest.mark.parametrize("width", [48, 80, 120])
+def test_doctor_readiness_is_visible_at_narrow_terminal_widths(width) -> None:
+    stream = StringIO()
+    console = Console(file=stream, width=width, color_system=None)
+    _render_doctor(
+        console,
+        {
+            "harness": "antigravity",
+            "installed": True,
+            "command_available": True,
+            "setup_status": "active",
+            "warnings": [],
+        },
+    )
+
+    output = stream.getvalue()
+    assert "Unverified" in output
+    assert "Registration" in output
+    assert "active" in output
+
+
+@pytest.mark.parametrize("key", ["command", "paths", "config"])
+@pytest.mark.parametrize("timed_out", [False, True])
+def test_doctor_identifies_known_nested_probe_failures(key, timed_out) -> None:
+    readiness = doctor_runtime_readiness(
+        {"setup_status": "active", "runtime_probe": {key: {"ok": False, "timed_out": timed_out}}}
+    )
+
+    assert readiness["state"] == "unknown"
+    assert readiness["reason_code"] == ("harness_probe_timed_out" if timed_out else "harness_probe_failed")
+
+
+def test_global_doctor_validates_registration_without_executable_probes(tmp_path, monkeypatch, capsys) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority_module
+
+    original = authority_module.native_runner_authority
+
+    def no_probes(kind, *args, **kwargs):
+        if kind == "command_probe":
+            pytest.fail("Global doctor must not run harness CLI probes")
+        return original(kind, *args, **kwargs)
+
+    monkeypatch.setattr(authority_module, "native_runner_authority", no_probes)
+    home = tmp_path / "home"
+    codex_home = home / ".codex"
+    codex_home.mkdir(parents=True)
+    codex_home.joinpath("config.toml").write_text("[features]\nhooks = true\n", encoding="utf-8")
+    entry = {
+        "matcher": "*",
+        "hooks": [
+            {
+                "type": "command",
+                "command": "python -I ./codex_daemon_hook_bridge.py '{}'",
+                "statusMessage": "HOL Guard checking tool action",
+            }
+        ],
+    }
+    codex_home.joinpath("hooks.json").write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    event: [entry] for event in ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.codex_harness_client.codex_native_hook_state",
+        fixed_hook_state(verified=False, reason="codex_hook_interpreter_path_mismatch"),
+    )
+    rc = main(
+        [
+            "guard",
+            "doctor",
+            "--json",
+            "--home",
+            str(home),
+            "--guard-home",
+            str(tmp_path / "guard-home"),
+            "--workspace",
+            str(tmp_path / "workspace"),
+        ]
+    )
+    payload = _doctor_json(rc, capsys)
+    codex = next(item for item in payload["adapters"] if item["harness"] == "codex")
+
+    assert rc == 0
+    assert codex["setup_status"] == "broken"
+    assert codex["runtime_readiness"]["state"] == "fail"
+    assert codex["runtime_readiness"]["reason_code"] == "guard_setup_broken"
+
+
+def test_passive_probe_scope_resets_after_nested_scope_and_exception(monkeypatch) -> None:
+    calls = []
+
+    def run(kind, request, **_kwargs):
+        assert kind == "command_probe"
+        if request.get("probes") is False:
+            # The runtime's record for a probe that did not run.
+            return {"command": request["command"], "ok": None, "skipped": True}
+        calls.append(request["command"])
+        return {"command": request["command"], "ok": True, "return_code": 0, "stdout": "probe", "stderr": ""}
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_runner_authority.native_runner_authority", run)
+    with pytest.raises(ValueError, match="fixture failure"), without_command_probes():
+        with without_command_probes():
+            skipped = _run_command_probe(["fixture-cli", "--help"])
+            assert skipped["skipped"] is True
+            assert skipped["ok"] is None
+        assert _run_command_probe(["fixture-cli", "--help"])["skipped"] is True
+        raise ValueError("fixture failure")
+
+    assert calls == []
+    assert _run_command_probe(["fixture-cli", "--help"])["ok"] is True
+    assert calls == [["fixture-cli", "--help"]]
+
+
+def test_global_doctor_text_distinguishes_partial_registration_and_probe_failures(capsys) -> None:
+    emit_guard_payload(
+        "doctor",
+        {
+            "tables": [],
+            "adapters": [
+                {"harness": "hermes", "setup_status": "partial"},
+                {
+                    "harness": "opencode",
+                    "setup_status": "active",
+                    "runtime_readiness": {
+                        "state": "unknown",
+                        "reason_code": "harness_probe_failed",
+                        "detail": "raw-projection-marker",
+                    },
+                },
+                {
+                    "harness": "codex",
+                    "setup_status": "broken",
+                    "runtime_readiness": {
+                        "state": "unknown",
+                        "reason_code": "harness_probe_not_run",
+                    },
+                },
+            ],
+        },
+        False,
+    )
+    output = " ".join(capsys.readouterr().out.split())
+
+    assert "Partial" in output
+    assert "CLI check failed" in output
+    assert "raw-projection-marker" not in output
+    assert "Setup broken" in output

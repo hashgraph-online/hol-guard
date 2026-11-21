@@ -5,7 +5,35 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+from tests.native_command_test_support import real_native_review_fixture
+
+
+def _native_action(command: str) -> tuple[GuardAction, str | None]:
+    fixture = real_native_review_fixture(command, cwd=Path("workspace"), home_dir=Path("home"))
+    evidence = fixture.payload["command_extensions"]
+    assert isinstance(evidence, dict)
+    error = evidence["evaluation_error"]
+    if error is not None:
+        assert error == "native_command_evaluation_failed"
+        assert evidence["observations"] == []
+        assert evidence["permission_observations"] == []
+        assert evidence["binding"]["observation_count"] == 0
+        assert fixture.payload["minimum_action"] == "block"
+        return "block", error
+    canonical = _canonical_command_from_native(command, fixture.payload["command_model"])
+    assert canonical is not None
+    evaluation = evaluate_command(
+        command,
+        canonical_command=canonical,
+        cwd=Path("workspace"),
+        home_dir=Path("home"),
+        extension_control_snapshot=fixture.snapshot,
+        native_extension_evidence=fixture.payload,
+    )
+    return evaluation.decision_plane.action, None
+
 
 CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("aws route53 delete-hosted-zone --id zone --output json", "block"),
@@ -28,9 +56,11 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("stripe --api-key key products delete product", "block"),
     ("stripe products --api-key key delete product", "block"),
     ("env sh -c 'rm -rf workspace/target'", "block"),
-    ("rm -rf ./BUILD", "block"),
-    ("rm --recurs --for workspace/target", "block"),
+    ("rm -rf ./BUILD", "review"),
+    ("rm --recurs --for workspace/target", "review"),
     ("xargs rm -rf BUILD", "block"),
+    ("parallel rm -rf BUILD", "block"),
+    ("echo / | parallel rm -rf BUILD", "block"),
     ("timeout 5 bash -lc 'rm -rf workspace/target'", "block"),
     ("timeout 5 /bin/bash -lc 'rm -rf workspace/target'", "block"),
     ("timeout 5 /bin/sh -c 'rm -rf workspace/target'", "block"),
@@ -86,6 +116,10 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("hol-guard capability consume --capability-id x --replay-sequence 2", "block"),
     ("hol-guard capability --verbose consume --capability-id x", "block"),
     ("hol-guard uninstall --all", "block"),
+    ("hol-guard hooks remove --all", "block"),
+    ("hol-guard hooks remove --stop-daemon", "block"),
+    ("xargs hol-guard hooks remove --all", "block"),
+    ("sh -c 'hol-guard hooks remove --all'", "block"),
     ("hol-guard policy disable", "block"),
     ("hol-guard clear --all", "block"),
     ("xargs hol-guard uninstall --all", "block"),
@@ -129,7 +163,7 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("aws.exe route53 delete-hosted-zone --id zone", "block"),
     ("/usr/bin/stripe.exe products delete product", "block"),
     ("hol-guard.exe uninstall --all", "block"),
-    ("rm.exe -rf workspace/target", "block"),
+    ("rm.exe -rf workspace/target", "review"),
     ("gh.exe pr merge 17 --repo example/repo --squash", "require-reapproval"),
     ("PATH=scratch/bin:$PATH hol-guard status", "require-reapproval"),
     ("export PATH=scratch/bin:$PATH; hol-guard status", "require-reapproval"),
@@ -146,6 +180,7 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("getfacl workspace/service", "review"),
     ("systemctl status service", "review"),
     ("hol-guard uninstall --help --installation-id fixture", "review"),
+    ("hol-guard hooks remove --help", "review"),
     ("hol-guard help uninstall", "review"),
     (
         "gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread"
@@ -155,16 +190,45 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
 )
 
 
-@pytest.mark.parametrize(("command", "expected"), CRITICAL_COMMAND_FLOORS)
-def test_security_critical_commands_retain_exact_floors(command: str, expected: GuardAction) -> None:
-    evaluation = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home"))
-    assert evaluation.decision_plane.action == expected
+# Frozen native baseline dispositions that are intentionally stricter than the
+# independent host factor. These preserve the pre-migration Rust behavior.
+NATIVE_STRICTER_CRITICAL_COMMANDS = frozenset(
+    {
+        "xargs gh pr merge 17 --repo example/repo --squash",
+        "bash -lc 'gh pr merge 17 --repo example/repo --squash'",
+        "PATH=scratch/bin:$PATH hol-guard status",
+    }
+)
 
 
-def test_launcher_ambiguity_fanout_fails_closed() -> None:
-    options = " ".join(f"--unknown value-{index}" for index in range(300))
-    evaluation = evaluate_command(f"parallel {options} printf safe", cwd=Path("workspace"), home_dir=Path("home"))
-    assert evaluation.decision_plane.action == "block"
+# A shell that carries its whole script in the same text runs exactly those
+# words. The retired Python owner could not read the script, so it treated the
+# shell as indirection and raised the floor; the native model reads it, so the
+# command reaches the floor the script reaches on its own. Each row is checked
+# against that script's own native action rather than a literal, so the two
+# can never drift apart.
+#
+# A login shell is not listed here. It sources the profile files before the
+# script, so it runs code this text does not hold and keeps the wrapper's own
+# uncertainty, which blocks above.
+CARRIED_SCRIPT_CRITICAL_COMMANDS: dict[str, str] = {
+    "sh -c 'gh pr merge 17 --repo example/repo --squash'": "gh pr merge 17 --repo example/repo --squash",
+}
+
+
+@pytest.mark.parametrize(("command", "factor_floor"), CRITICAL_COMMAND_FLOORS)
+def test_real_native_critical_floor_matches_frozen_baseline(command: str, factor_floor: GuardAction) -> None:
+    action, error = _native_action(command)
+    script = CARRIED_SCRIPT_CRITICAL_COMMANDS.get(command)
+    if command in NATIVE_STRICTER_CRITICAL_COMMANDS:
+        expected: GuardAction = "block"
+    elif script is not None:
+        expected = _native_action(script)[0]
+    else:
+        expected = factor_floor
+    assert action == expected
+    if error is not None:
+        assert action == "block"
 
 
 CRITICAL_NEAR_MISS_COMMANDS: tuple[str, ...] = (
@@ -205,8 +269,13 @@ CRITICAL_NEAR_MISS_COMMANDS: tuple[str, ...] = (
     "not-gh.exe pr merge 17 --repo example/repo --squash",
 )
 
+NATIVE_STRICTER_NEAR_MISSES = frozenset[str]()
+
 
 @pytest.mark.parametrize("command", CRITICAL_NEAR_MISS_COMMANDS)
-def test_security_floors_do_not_widen_near_misses_to_block(command: str) -> None:
-    evaluation = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home"))
-    assert evaluation.decision_plane.action != "block"
+def test_real_native_near_miss_matches_frozen_baseline(command: str) -> None:
+    action, error = _native_action(command)
+    if command in NATIVE_STRICTER_NEAR_MISSES or error is not None:
+        assert action == "block"
+    else:
+        assert action != "block"

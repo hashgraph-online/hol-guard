@@ -1,0 +1,1093 @@
+{
+  "extension": {
+    "action_classes": [
+      "API gateway destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews API and gateway deletion through supported cloud CLIs.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.api-gateway",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "API gateway command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "API gateway destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies documented api gateway deletion operations through supported command-line tools.",
+        "example_command": "aws apigateway delete-rest-api",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "API gateway deletion",
+        "permission_id": "command.api-gateway.permission.delete",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export the API definition and inspect active routes before deletion."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://docs.aws.amazon.com/cli/latest/reference/apigateway/delete-rest-api.html",
+      "https://docs.aws.amazon.com/cli/latest/reference/apigatewayv2/delete-api.html",
+      "https://cloud.google.com/sdk/gcloud/reference/api-gateway/gateways/delete",
+      "https://learn.microsoft.com/cli/azure/apim#az-apim-delete"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "API gateway destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies documented api gateway deletion operations through supported command-line tools.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "apigateway",
+                  "delete-rest-api"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "apigatewayv2",
+                  "delete-api"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "api-gateway",
+                  "gateways",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "alpha",
+                  "api-gateway",
+                  "gateways",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "beta",
+                  "api-gateway",
+                  "gateways",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "api-gateway",
+                  "apis",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "alpha",
+                  "api-gateway",
+                  "apis",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "beta",
+                  "api-gateway",
+                  "apis",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "apim",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.api-gateway.permission.delete",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.api-gateway.delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "apigateway",
+                      "delete-rest-api"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "apigatewayv2",
+                      "delete-api"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "api-gateway",
+                      "gateways",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "alpha",
+                      "api-gateway",
+                      "gateways",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "beta",
+                      "api-gateway",
+                      "gateways",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "api-gateway",
+                      "apis",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "alpha",
+                      "api-gateway",
+                      "apis",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "beta",
+                      "api-gateway",
+                      "apis",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "apim",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "apigateway",
+                      "delete-rest-api"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "apigatewayv2",
+                      "delete-api"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "AWS request skeleton",
+            "variant_id": "generate-cli-skeleton"
+          }
+        ],
+        "safer_alternatives": [
+          "Export the API definition and inspect active routes before deletion."
+        ],
+        "severity": "critical",
+        "title": "API gateway deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "Export the API definition and inspect active routes before deletion."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

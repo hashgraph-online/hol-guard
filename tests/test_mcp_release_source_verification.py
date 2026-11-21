@@ -42,6 +42,13 @@ class GitHubFixture:
         self.run = copy.deepcopy(RUN)
         self.workflow = copy.deepcopy(WORKFLOW)
         self.comparison = {"status": "ahead", "base_commit": {"sha": SHA}, "merge_base_commit": {"sha": SHA}}
+        self.jobs = {
+            "total_count": 2,
+            "jobs": [
+                {"name": name, "run_id": RUN["id"], "head_sha": SHA, "status": "completed", "conclusion": "success"}
+                for name in sorted(verifier._PUBLICATION_JOBS["main"])
+            ],
+        }
         self.calls: list[str] = []
 
     def fetch(self, path: str) -> object:
@@ -52,6 +59,8 @@ class GitHubFixture:
             return self.workflow
         if path == f"{prefix}/actions/runs/12345":
             return self.run
+        if path == f"{prefix}/actions/runs/12345/attempts/1/jobs?per_page=100&page=1":
+            return self.jobs
         if path.startswith(f"{prefix}/compare/{SHA}...refs%2Fheads%2F"):
             return self.comparison
         raise AssertionError(f"Unexpected API request: {path}")
@@ -204,7 +213,103 @@ def test_verified_outputs_are_safe_for_actions(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
     monkeypatch.setattr(verifier, "github_json", fixture.fetch)
     assert verifier.main() == 0
-    assert output_path.read_text() == f"sha={SHA}\nbranch=main\n"
+    assert output_path.read_text() == f"sha={SHA}\nbranch=main\ntag=\n"
+
+
+@pytest.mark.parametrize("branch", ["main", "release/3.0"])
+@pytest.mark.parametrize("conclusion,published", [("success", True), ("skipped", False)])
+def test_publication_requires_completed_package_and_release_jobs(branch: str, conclusion: str, published: bool) -> None:
+    """A green build-only run does not authorize downstream publishing or tag polling."""
+    fixture = GitHubFixture()
+    for job, name in zip(fixture.jobs["jobs"], sorted(verifier._PUBLICATION_JOBS[branch]), strict=True):
+        job.update(name=name, conclusion=conclusion)
+    assert (
+        verifier.publication_completed(
+            fixture.event, repository=REPOSITORY, sha=SHA, branch=branch, fetch_json=fixture.fetch
+        )
+        is published
+    )
+    assert fixture.calls == [f"/repos/{REPOSITORY}/actions/runs/12345/attempts/1/jobs?per_page=100&page=1"]
+
+
+def _alpha_job(name: str, conclusion: str = "success") -> dict[str, object]:
+    return {"name": name, "run_id": RUN["id"], "head_sha": SHA, "status": "completed", "conclusion": conclusion}
+
+
+@pytest.mark.parametrize("main_jobs_listed", [True, False])
+@pytest.mark.parametrize("alpha_conclusion", ["success", "failure"])
+def test_main_ref_alpha_publication_is_not_a_main_publication(main_jobs_listed: bool, alpha_conclusion: str) -> None:
+    """A main-ref dispatch that only published an alpha never authorizes MCP registry or MCPB consumers."""
+    fixture = GitHubFixture()
+    alpha = [_alpha_job(name, alpha_conclusion) for name in sorted(verifier._PUBLICATION_JOBS["release/3.0"])]
+    main = [_alpha_job(name, "skipped") for name in sorted(verifier._PUBLICATION_JOBS["main"]) if main_jobs_listed]
+    fixture.jobs = {"total_count": len(main) + len(alpha), "jobs": [*main, *alpha]}
+    assert (
+        verifier.publication_completed(
+            fixture.event, repository=REPOSITORY, sha=SHA, branch="main", fetch_json=fixture.fetch
+        )
+        is False
+    )
+
+
+def test_main_publication_still_completes_alongside_listed_alpha_jobs() -> None:
+    """Skipped alpha jobs next to successful main jobs keep the stable release authorized."""
+    fixture = GitHubFixture()
+    alpha = [_alpha_job(name, "skipped") for name in sorted(verifier._PUBLICATION_JOBS["release/3.0"])]
+    fixture.jobs = {"total_count": 4, "jobs": [*fixture.jobs["jobs"], *alpha]}
+    assert verifier.publication_completed(
+        fixture.event, repository=REPOSITORY, sha=SHA, branch="main", fetch_json=fixture.fetch
+    )
+
+
+def test_main_ref_run_with_no_publication_jobs_still_fails_closed() -> None:
+    """The alpha exemption needs an actual alpha job; an empty job list is still an error."""
+    fixture = GitHubFixture()
+    fixture.jobs = {"total_count": 0, "jobs": []}
+    with pytest.raises(ValueError):
+        verifier.publication_completed(
+            fixture.event, repository=REPOSITORY, sha=SHA, branch="main", fetch_json=fixture.fetch
+        )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("conclusion", "skipped"),
+        ("conclusion", "failure"),
+        ("conclusion", None),
+        ("status", "in_progress"),
+        ("head_sha", OTHER_SHA),
+        ("run_id", 999),
+        ("name", "Other publishing job"),
+        ("name", {}),
+    ],
+)
+def test_incomplete_or_mismatched_publication_fails_closed(field: str, value: object) -> None:
+    """A partial release, unrelated job, or malformed API response cannot authorize writes."""
+    fixture = GitHubFixture()
+    fixture.jobs["jobs"][0][field] = value
+    with pytest.raises(ValueError):
+        verifier.publication_completed(
+            fixture.event, repository=REPOSITORY, sha=SHA, branch="main", fetch_json=fixture.fetch
+        )
+
+
+def test_build_only_run_emits_no_checkout_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Legitimate skipped publication succeeds promptly without starting privileged consumers."""
+    fixture = GitHubFixture()
+    for job in fixture.jobs["jobs"]:
+        job["conclusion"] = "skipped"
+    event_path = tmp_path / "event.json"
+    output_path = tmp_path / "output"
+    event_path.write_text(json.dumps(fixture.event))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_run")
+    monkeypatch.setenv("GITHUB_REPOSITORY", REPOSITORY)
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setattr(verifier, "github_json", fixture.fetch)
+    assert verifier.main() == 0
+    assert not output_path.exists()
 
 
 def test_gate_executes_only_trusted_default_branch_verification_code() -> None:
@@ -213,22 +318,40 @@ def test_gate_executes_only_trusted_default_branch_verification_code() -> None:
     job = workflow["jobs"]["verify"]
     assert workflow["permissions"] == {}
     assert job["permissions"] == {"actions": "read", "contents": "read"}
-    assert job["if"] == "github.event_name == 'workflow_run'"
+    assert " ".join(job["if"].split()) == (
+        "github.event_name == 'workflow_run' || "
+        "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')"
+    )
     checkout = job["steps"][0]
     assert checkout["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
     assert job["steps"][1]["run"] == "python3 -I -S scripts/ci/verify_release_workflow_run.py"
-    assert job["outputs"] == {"sha": "${{ steps.source.outputs.sha }}", "branch": "${{ steps.source.outputs.branch }}"}
+    assert job["outputs"] == {
+        "sha": "${{ steps.source.outputs.sha }}",
+        "branch": "${{ steps.source.outputs.branch }}",
+        "tag": "${{ steps.source.outputs.tag }}",
+    }
 
 
 def test_pull_request_validation_is_separate_from_privileged_triggers() -> None:
     """Unmerged bundles are validated only under the ordinary read-only pull_request event."""
     workflow = yaml.safe_load((ROOT / ".github/workflows/mcpb-validation.yml").read_text())
-    assert workflow[True] == {"pull_request": {"branches": ["main", "release/3.0"]}}
+    assert workflow[True] == {
+        "pull_request": {
+            "branches": ["main", "release/3.0"],
+            "paths": [
+                "distributions/mcpb/**",
+                "scripts/ci/pack_mcpb.py",
+                "tests/test_pack_mcpb.py",
+                ".github/workflows/mcpb-validation.yml",
+            ],
+        }
+    }
     assert workflow["permissions"] == {"contents": "read"}
     job = workflow["jobs"]["validate"]
     assert "permissions" not in job
     assert "ref" not in job["steps"][0]["with"]
     assert job["steps"][0]["with"]["persist-credentials"] is False
     commands = "\n".join(step.get("run", "") for step in job["steps"])
-    assert "compileall" in commands and "npm ci --ignore-scripts" in commands
-    assert '"$MCPB_CLI" validate' in commands and '"$MCPB_CLI" pack' in commands
+    assert "compileall" in commands
+    assert 'python3 scripts/ci/pack_mcpb.py distributions/mcpb' in commands
+    assert "npm ci" not in commands

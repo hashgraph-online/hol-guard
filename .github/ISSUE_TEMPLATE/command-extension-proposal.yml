@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this form for new command safety Extensions and material coverage expansions. Do not include secrets, private command history, local paths, or vulnerability details. Report vulnerabilities through SECURITY.md.
+        Use this form for a new command safety Extension or a material authority change. Small coverage and fixture corrections can use the Command extension pull-request template directly. Do not include secrets, private command history, local paths, or vulnerability details. Report vulnerabilities through SECURITY.md.
   - type: dropdown
     id: contribution_type
     attributes:
@@ -54,6 +54,13 @@ body:
       description: Pair every destructive family with preview, read-only, help, or otherwise safe commands that must remain non-reviewable.
     validations:
       required: true
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current HOL Guard behavior
+      description: With the released CLI installed (`pipx install hol-guard`), paste redacted `hol-guard command explain '<command>'` results for one destructive example and its safe counterpart, and note your `hol-guard --version`. This shows what the current catalog already covers.
+    validations:
+      required: false
   - type: textarea
     id: edge_cases
     attributes:

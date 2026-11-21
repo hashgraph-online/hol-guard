@@ -15,9 +15,7 @@ from scripts.ci import sonar_findings_report as report
 def report_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("PULL_REQUEST_NUMBER", raising=False)
-    monkeypatch.setattr(
-        report, "sonar_snapshot", Mock(return_value={"issues": {"total": 0}, "gate": {"status": "OK"}})
-    )
+    monkeypatch.setattr(report, "sonar_snapshot", Mock(return_value={"issues": {"total": 0}, "gate": {"status": "OK"}}))
     return tmp_path / "sonar-findings-report"
 
 

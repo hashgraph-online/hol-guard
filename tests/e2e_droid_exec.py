@@ -8,6 +8,12 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
+
+if __package__:
+    from .skill_fixture_support import materialize_malicious_skill_plugin
+else:
+    from skill_fixture_support import materialize_malicious_skill_plugin
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -26,19 +32,27 @@ def run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str, str]:
 
 
 def test_scanner():
+    with TemporaryDirectory(prefix="hol-guard-skill-fixture-") as temporary_dir:
+        malicious_plugin = materialize_malicious_skill_plugin(Path(temporary_dir) / "malicious-skill-plugin")
+        return _test_scanner(malicious_plugin)
+
+
+def _test_scanner(malicious_plugin: Path):
     fixtures_dir = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
     test_cases = [
         (fixtures_dir / "good-plugin", 0, "json", False),
         (fixtures_dir / "good-plugin", 0, "text", False),
         (fixtures_dir / "good-plugin", 0, "sarif", False),
         (fixtures_dir / "bad-plugin", 0, "json", True),  # expect low score
-        (fixtures_dir / "malicious-skill-plugin", 0, "json", False),  # can score high w/few findings
+        (malicious_plugin, 0, "json", False),  # can score high w/few findings
         (fixtures_dir / "multi-plugin-repo" / "plugins" / "alpha-plugin", 0, "json", False),
     ]
     failures: list[str] = []
 
     for fixture_path, expected_code, fmt, expect_issues in test_cases:
         cmd = _scan_cmd(fixture_path, fmt)
+        if fixture_path == malicious_plugin:
+            cmd.extend(["--cisco-skill-scan", "off"])
         code, stdout, stderr = run(cmd, cwd=PROJECT_ROOT)
 
         payload = None
@@ -65,6 +79,17 @@ def test_scanner():
             passed = False  # Good plugin should score well
         if fmt == "json" and expect_issues and payload is not None and score > 60:
             passed = False  # Bad plugin should score poorly
+        if (
+            fixture_path == malicious_plugin
+            and payload is not None
+            and not any(
+                finding.get("ruleId") == "RISKY_SKILL_INSTRUCTION"
+                and finding.get("severity") == "high"
+                and finding.get("filePath") == "skills/leaky-skill/SKILL.md"
+                for finding in payload.get("findings", [])
+            )
+        ):
+            passed = False
 
         if not passed:
             failures.append(f"{fixture_path.name} fmt={fmt} code={code} expected={expected_code} score={score}")

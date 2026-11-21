@@ -8,8 +8,57 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
-from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.native_command_test_support import (
+    extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
+)
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
+from tests.native_command_test_support import real_native_review_fixture
+
+
+def _isolate_command_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Answer the CLI as the daemon of a fresh, default-enrolled home would.
+
+    The CLI otherwise asks the daemon of the runner's own Guard home, whose
+    enrollment depends on whatever ran before.
+    """
+    from codex_plugin_scanner.guard.cli import extension_controls_commands
+    from codex_plugin_scanner.guard.runtime import command_inspection
+    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    from .guard_extension_control_authority_fixtures import MemorySecretStore
+
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    store._extension_control_authority_secret_store = MemorySecretStore()
+    view = store.enroll_extension_control_authority_by_default(BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
+
+    class DaemonInspectionClient:
+        def inspect_command(self, request: dict[str, str], timeout: float | None = None) -> dict[str, object]:
+            return command_inspection.inspect_command(
+                request["command"],
+                cwd=Path(request["cwd"]),
+                home_dir=Path(request["home_dir"]),
+                guard_home=store.guard_home,
+                extension_control_snapshot=snapshot,
+            )
+
+    monkeypatch.setattr(extension_controls_commands, "_client", lambda _guard_home: DaemonInspectionClient())
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+
+def _assert_native_unavailable(command: str) -> None:
+    payload = real_native_review_fixture(command).payload
+    extensions = payload["command_extensions"]
+    assert extensions["evaluation_error"] == "native_command_evaluation_failed"
+    assert extensions["observations"] == []
+    assert extensions["permission_observations"] == []
+    assert extensions["binding"]["observation_count"] == 0
+    assert extensions["binding"]["uncertainty_count"] == 1
+    assert payload["minimum_action"] == "block"
 
 
 @pytest.mark.parametrize(
@@ -75,17 +124,7 @@ def test_specialized_variants_feed_runtime_classification(
 )
 def test_unquoted_data_heredoc_expands_substitutions_despite_body_quotes(body: str, tmp_path: Path) -> None:
     command = f"cat <<EOF\n{body}\nEOF"
-    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
-    match = extract_sensitive_tool_action_request(
-        "Shell",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-
-    assert payload["status"] == "review"
-    assert payload["controlling_rule_id"] == "command.filesystem.recursive-delete"
-    assert match is not None
+    _assert_native_unavailable(command)
 
 
 @pytest.mark.parametrize(
@@ -99,26 +138,27 @@ def test_unquoted_data_heredoc_expands_substitutions_despite_body_quotes(body: s
 def test_heredoc_substitution_shell_wrappers_feed_cli_and_runtime_classification(
     substitution: str,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     command = f"cat <<EOF\n{substitution}\nEOF"
 
+    _isolate_command_cli(tmp_path, monkeypatch)
     exit_code = main(["guard", "command", "test", "--json", command])
     payload = json.loads(capsys.readouterr().out)
-    match = extract_sensitive_tool_action_request(
-        "Shell",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
+    assert exit_code == 2
+    assert payload["status"] == "native_unavailable"
+    assert payload["minimum_action"] == "review"
+    assert payload["rules"] == []
+    _assert_native_unavailable(command)
 
-    assert exit_code == 0
-    assert payload["status"] == "review"
-    assert payload["classification"]["matched"] is True
-    assert payload["classification"]["action_class"] == "filesystem destructive command"
-    assert payload["controlling_rule_id"] == "command.filesystem.recursive-delete"
-    assert match is not None
-    assert match.action_class == "filesystem destructive command"
+
+def _assert_quoted_cat_heredoc_reviews_without_evaluation_failure(command: str) -> None:
+    payload = real_native_review_fixture(command).payload
+    extensions = payload["command_extensions"]
+    assert extensions["evaluation_error"] is None
+    assert extensions["binding"]["uncertainty_count"] == 0
+    assert payload["minimum_action"] == "review"
 
 
 @pytest.mark.parametrize(
@@ -131,21 +171,22 @@ def test_heredoc_substitution_shell_wrappers_feed_cli_and_runtime_classification
 def test_literal_shell_wrapped_heredoc_substitutions_remain_safe_at_cli_and_runtime_boundaries(
     command: str,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    _isolate_command_cli(tmp_path, monkeypatch)
     exit_code = main(["guard", "command", "test", "--json", command])
     payload = json.loads(capsys.readouterr().out)
-    match = extract_sensitive_tool_action_request(
-        "Shell",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-
-    assert exit_code == 0
-    assert payload["status"] == "no_match"
-    assert payload["classification"]["matched"] is False
-    assert match is None
+    assert exit_code == 2
+    assert payload["rules"] == []
+    if command.startswith("cat <<'"):
+        assert payload["status"] == "native_unavailable"
+        assert payload["minimum_action"] == "review"
+        _assert_quoted_cat_heredoc_reviews_without_evaluation_failure(command)
+        return
+    assert payload["status"] == "native_unavailable"
+    assert payload["minimum_action"] == "review"
+    _assert_native_unavailable(command)
 
 
 SPECIALIZED_SAFE_VARIANT_CASES = (
@@ -184,12 +225,18 @@ SPECIALIZED_SAFE_VARIANT_CASES = (
 
 def test_specialized_literal_observer_and_option_value_variants_remain_safe(tmp_path: Path) -> None:
     for case_id, command in enumerate(SPECIALIZED_SAFE_VARIANT_CASES, start=1):
+        if command.startswith("cat <<'"):
+            _assert_quoted_cat_heredoc_reviews_without_evaluation_failure(command)
+            continue
+        if command.startswith("cat <<"):
+            _assert_native_unavailable(command)
+            continue
         payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
-        match = extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": command},
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        assert payload["status"] == "no_match", f"specialized-safe-{case_id:03}: {command!r}"
-        assert match is None, f"specialized-safe-{case_id:03}: {command!r}"
+        rule_ids = {rule["rule_id"] for rule in payload["rules"]}
+        assert rule_ids.isdisjoint(
+            {
+                "command.search.elasticsearch.delete",
+                "command.remote.ssh.configured-execution",
+                "command.git.force-push",
+            }
+        ), f"specialized-safe-{case_id:03}: {command!r}"

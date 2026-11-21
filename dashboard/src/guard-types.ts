@@ -1,3 +1,7 @@
+import type { GuardApprovalExtensionCoverage } from "./approval-extension-coverage-types";
+import type { GuardApprovalExtensionRecommendation } from "./approval-extension-recommendation-types";
+import type { NativeDecisionSelector } from "./context-assistance/native-decision-selector";
+
 export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" | "global";
 export type ApprovalResolutionAction = "allow" | "block";
 
@@ -104,10 +108,18 @@ export type PackageExecutionContextEvidence = {
   changed_components?: string[];
 };
 
+export type GuardWatchOnlyScannerEvidence = {
+  source: "observe_mode_inbox";
+  observed_policy_action: GuardAction;
+  queued_policy_action: GuardAction;
+  authoritative_action: GuardAction;
+};
+
 export type GuardScannerEvidence =
   | RiskSignalV2
   | GuardSupplyChainScannerEvidence
-  | PackageExecutionContextEvidence;
+  | PackageExecutionContextEvidence
+  | GuardWatchOnlyScannerEvidence;
 
 export type GuardDecisionV2 = {
   /** Exact six-valued enforcement action. */
@@ -213,6 +225,8 @@ export type GuardActionEnvelope = {
   policy_action?: GuardAction | null;
   script_name: string | null;
   raw_payload_redacted: Record<string, unknown>;
+  /** Advisory selector only; the native context service checks its own origin. */
+  native_origin_receipt?: NativeDecisionSelector;
 };
 
 export type GuardHeadlineState =
@@ -226,6 +240,8 @@ export type GuardHeadlineState =
   | "connected";
 
 export type GuardApprovalRequest = {
+  /** Local native snapshot projection; never a decision-capable approval row. */
+  native_business_review_display_only?: boolean;
   request_id: string;
   harness: string;
   artifact_id: string;
@@ -243,6 +259,7 @@ export type GuardApprovalRequest = {
   scope_restrictions?: string[];
   task_capability_eligibility?: GuardTaskCapabilityEligibility;
   exact_action_persistence_eligible?: boolean;
+  once_only_reason?: string | null;
   risk_headline?: string;
   risk_summary?: string;
   risk_signals?: string[];
@@ -276,9 +293,15 @@ export type GuardApprovalRequest = {
   dedupe_count?: number;
   last_seen_at?: string | null;
   display_status?: string;
+  superseded_by_request_id?: string;
+  /** Explicit Core classification; absent on older daemons that only emit scanner evidence. */
+  watch_only_observation?: boolean;
   scanner_evidence?: GuardScannerEvidence[];
   temporary_mcp_approval?: GuardTemporaryMcpApproval | null;
   local_tool_approval?: GuardLocalToolApproval | null;
+  /** Live daemon advice: a built-in extension permission that would let this command run automatically. */
+  extension_recommendation?: GuardApprovalExtensionRecommendation;
+  extension_coverage?: GuardApprovalExtensionCoverage;
 };
 
 export type GuardTemporaryMcpGrantTarget = "exact" | "category" | "server";
@@ -655,6 +678,8 @@ export type GuardRuntimeSnapshot = {
   operator_health?: GuardOperatorHealth;
   security_level?: "balanced" | "strict" | "custom";
   protection_posture?: "protected" | "extra_careful" | "watch";
+  harness_postures?: Record<string, GuardProtectionPostureValue>;
+  harnesses_in_watch?: string[];
   protection_capabilities?: GuardProtectionCapability[];
   supply_chain?: SupplyChainSnapshot;
 };
@@ -676,6 +701,7 @@ export type GuardReceipt = {
   diff_summary?: string | null;
   scanner_evidence?: GuardScannerEvidence[];
   action_envelope_json?: GuardActionEnvelope | null;
+  raw_command_text?: string | null;
   action_explanation?: GuardActionExplanationV1 | null;
   decision_contract_error?: string;
 };
@@ -949,6 +975,36 @@ export type GuardApprovalGatePublicConfig = {
   strict_all_decisions: boolean;
   totp_enabled?: boolean;
   totp_pending?: boolean; totp_recent_satisfied?: boolean;
+  pulse_enabled?: boolean;
+  pulse_cooldown_seconds?: number;
+  /** Whether the YID app shows the agent's command. Off unless the user opted in. */
+  pulse_show_command?: boolean;
+};
+
+export type GuardProtectionPostureValue = "protected" | "extra_careful" | "watch";
+
+/** Merge-patch for per-app postures: `null` clears the override (inherit). */
+export type GuardHarnessPosturePatch = Record<string, GuardProtectionPostureValue | null>;
+
+export type GuardContextAssistanceConfig = {
+  schema_version: 1;
+  enabled: boolean;
+  runtime_id: string;
+  resource_profile: "low_memory" | "balanced" | "custom";
+  features: { review_briefs: boolean; agent_context: boolean; shared_agents: boolean; execution_context?: boolean };
+  sources: {
+    native_policy_facts: boolean;
+    sanitized_receipt_facts: boolean;
+    workspace_documents: boolean;
+    source_set_id: string;
+  };
+  storage: { mode: "memory" | "sqlite"; retention_hours: number };
+  limits: {
+    context_tokens: number;
+    reserve_tokens: number;
+    max_active_workspaces: number;
+    idle_shutdown_seconds: number;
+  };
 };
 
 export type GuardSettings = {
@@ -962,6 +1018,17 @@ export type GuardSettings = {
   protection_posture?: "protected" | "extra_careful" | "watch";
   protection_posture_explicit?: boolean;
   watch_auto_revert_hours?: number;
+  /** Per-app overrides only; an app with no entry inherits `protection_posture`. */
+  harness_postures?: Record<string, GuardProtectionPostureValue>;
+  harness_watch_entered_at?: Record<string, string>;
+  /** Apps whose prompts CIGAR leaves alone; an app with no entry follows CIGAR. */
+  harness_cigar?: Record<string, "off">;
+  /** Read-only: the posture each known app actually runs under. */
+  harness_postures_effective?: Record<string, GuardProtectionPostureValue>;
+  /** Read-only: true when managed policy blocks local Watch/Protected app overrides. */
+  harness_postures_locked?: boolean;
+  /** Draft-only: apps whose Watch timer should restart on the next save. Never sent as-is. */
+  harness_watch_restart?: string[];
   security_level: "relaxed" | "gentle" | "balanced" | "strict" | "custom";
   default_action: string;
   unknown_publisher_action: string;
@@ -973,12 +1040,23 @@ export type GuardSettings = {
   harness_risk_actions: Record<string, Record<string, string>>;
   approval_wait_timeout_seconds: number;
   approval_surface_policy: string;
+  blocked_request_mode?: "safe-alternative" | "ask";
   approval_browser_delay_seconds: number;
   approval_browser_immediate_severity: RiskSignalV2Severity;
   telemetry: boolean;
   sync: boolean;
   receipt_redaction_level: "full" | "partial" | "none";
   billing: boolean;
+  /** Requested preferences only; runtime readiness is a separate capability. */
+  context_assistance?: GuardContextAssistanceConfig | null;
+  /** Read-only local intent; absence means an older native core cannot provide it. */
+  context_assistance_requested?: GuardContextAssistanceConfig | null;
+  /** Read-only, content-free native configuration diagnostic. */
+  context_assistance_diagnostic?: string | null;
+  /** Read-only: whether CIGAR adds context after validation and managed policy. Absent on older cores. */
+  context_assistance_effective_ready?: boolean;
+  /** Apps whose prompts can take CIGAR's context in this Guard home. */
+  cigar_apps?: string[];
   update_channel?: "stable" | "alpha";
   approval_gate?: GuardApprovalGatePublicConfig;
   managed_locked_settings?: string[];
@@ -1195,6 +1273,7 @@ export type GuardUpdateStatus = {
   retry_command?: string;
   update_attempt_message?: string;
   release_channel: "stable" | "alpha";
+  update_mode: "automatic" | "ask" | "off";
 };
 
 export type GuardUpdateReconnectOptions = {

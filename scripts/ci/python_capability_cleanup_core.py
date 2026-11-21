@@ -144,7 +144,7 @@ class _StaticScopeAnalysis:
             else:
                 bindings = parent.merged_bindings if parent is not None else {}
                 sequences = parent.merged_sequences if parent is not None else {}
-                import_aliases = set(parent.merged_import_aliases) if parent is not None else set()
+                import_aliases = set(parent.merged_import_aliases) if parent is not None else {"__import__"}
                 importlib_aliases = set(parent.merged_importlib_aliases) if parent is not None else set()
                 function_bindings = parent.merged_function_bindings if parent is not None else {}
                 module_bindings = parent.merged_module_bindings if parent is not None else {}
@@ -235,7 +235,7 @@ def _import_module_call(node: ast.Call, import_aliases: set[str], importlib_alia
         return node.func.id in import_aliases
     return (
         isinstance(node.func, ast.Attribute)
-        and node.func.attr == "import_module"
+        and node.func.attr in {"import_module", "__import__"}
         and isinstance(node.func.value, ast.Name)
         and node.func.value.id in importlib_aliases
     )

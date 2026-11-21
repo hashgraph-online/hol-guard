@@ -19,17 +19,30 @@ POLICY_SNAPSHOT_V3_SCHEMA = "hol-guard-native-policy.v3"
 POLICY_SNAPSHOT_SCHEMA = POLICY_SNAPSHOT_V3_SCHEMA
 POLICY_SNAPSHOT_PUSH_SCHEMA = "guard-policy-snapshot-push.v1"
 POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION = "native_policy_snapshot_requires_new_generation"
-POLICY_SNAPSHOT_V3_VERSION = 3
-POLICY_SNAPSHOT_PROTOCOL_VERSION = 1
+POLICY_SNAPSHOT_UNAVAILABLE_ERRORS = frozenset(
+    {
+        "native_policy_snapshot_native_disabled",
+        "native_policy_snapshot_runtime_unavailable",
+        "native_policy_snapshot_protocol_unsupported",
+        "native_policy_snapshot_integrity_key_unavailable",
+        "native_policy_snapshot_ack_mismatch",
+    }
+)
+# Errors the installed files cannot recover from on their own. A runtime and
+# a command catalog that came from different builds reject every snapshot the
+# publisher sends, so retrying only spends the publish timeout on each hook
+# call. The install has to be repaired.
+POLICY_SNAPSHOT_PERSISTENT_ERRORS = frozenset({"native_command_program_binding_mismatch"})
+POLICY_SNAPSHOT_UNRECOVERABLE_ERRORS = POLICY_SNAPSHOT_UNAVAILABLE_ERRORS | POLICY_SNAPSHOT_PERSISTENT_ERRORS
 POLICY_SNAPSHOT_MAX_BYTES = 256 * 1024
 POLICY_SNAPSHOT_MAX_STRING_BYTES = 4 * 1024
 POLICY_SNAPSHOT_MAX_MAP_ENTRIES = 256
+POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS = 1024
 POLICY_SNAPSHOT_MAX_HARNESS_ENTRIES = 64
 POLICY_SNAPSHOT_MAX_JSON_DEPTH = 32
 POLICY_SNAPSHOT_MAX_JSON_COLLECTION_ITEMS = 4_096
 POLICY_SNAPSHOT_MAX_JSON_STRING_BYTES = 1024 * 1024
 POLICY_SNAPSHOT_MAX_EXPIRY_MS = 24 * 60 * 60 * 1000
-POLICY_SNAPSHOT_INTEGRITY_ALGORITHM = "hmac-sha256"
 
 # Keep these bytes byte-for-byte aligned with guard-policy-snapshot. Rust's
 # HMAC helper authenticates ``domain || message`` rather than using a second
@@ -42,20 +55,45 @@ POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES = POLICY_SNAPSHOT_MAX_BYTES + 16 * 1024
 
 NATIVE_RUNTIME_STATE_DIRECTORY = "native-runtime"
 NATIVE_POLICY_VERIFIER_KEY_NAME = "policy-verifier.key"
-_V3_GENERATION_SCHEMA = "guard-native-policy-snapshot-generation.v3"
-_V3_GENERATION_STATE_NAME = "native-policy-snapshot-generation-v3.json"
-_V3_GENERATION_LOCK_NAME = "native-policy-snapshot-generation-v3.lock"
 _RUST_GENERATION_FLOOR_NAME = "policy-snapshot-generation-floor.json"
 _RUST_SNAPSHOT_STATE_NAME = "policy-snapshot-v3.json"
 NATIVE_POLICY_SNAPSHOT_CACHE_NAME = "policy-snapshot-publisher-v3.json"
-_NATIVE_POLICY_SNAPSHOT_PENDING_NAME = "policy-snapshot-publisher-v3.pending.json"
 _VERIFIER_KEY_BYTES = 32
 _PUBLISH_RETRY_SECONDS = 0.25
 _PUBLISH_TIMEOUT_SECONDS = 8.0 if sys.platform == "win32" else 2.0
+_PUBLISH_STARTUP_TIMEOUT_SECONDS = 9.0
+# One business-policy native exchange: runtime probe plus compile or codec call.
+# A cold native start on a slow Windows host can use most of the 5 s budget alone.
+BUSINESS_NATIVE_TIMEOUT_SECONDS = 15.0 if sys.platform == "win32" else 5.0
 _MAX_ACK_BYTES = 4 * 1024
 _RENEWAL_LEAD_SECONDS = 5 * 60
 _RENEWAL_JITTER_MAX_SECONDS = 30.0
 _PUBLISH_RETRY_MAX_SECONDS = 5.0
+# Another writer or the resident moved while a candidate was in flight, so the
+# next publish usually succeeds. A hook waits for that ACK inside a deadline of
+# a few seconds, so the backoff for these codes stays well under it. Every
+# other failure keeps the exponential delay.
+#
+# ``native_approval_authority_busy`` is the policy write losing a short wait
+# for the approval-authority lock to another Guard process. On a loaded host
+# that wait is easy to miss and the holder releases it within moments, so the
+# hook waits for the next attempt instead of refusing the action at once.
+TRANSIENT_PUBLICATION_ERRORS = frozenset(
+    {
+        "native_policy_snapshot_resident_changed",
+        "native_approval_authority_busy",
+        "native_resident_restart_budget_busy",
+        "native_command_control_mutation_in_progress",
+        "native_command_control_authority_not_current",
+        "native_command_control_binding_changed",
+        "native_command_pack_projection_changed",
+        "native_business_source_mutation_in_progress",
+        "native_business_source_binding_changed",
+        "native_local_cli_revision_changed",
+        "native_provider_catalog_changed",
+    }
+)
+_TRANSIENT_PUBLISH_RETRY_MAX_SECONDS = 0.5
 _REQUIRED_PUBLISH_FEATURES = frozenset(
     {
         "policy-snapshot-v3",
@@ -63,76 +101,11 @@ _REQUIRED_PUBLISH_FEATURES = frozenset(
         "policy-snapshot-resident-generation-v1",
         "native-policy-in-memory-v1",
         "native-resident-client-v1",
+        "native-command-program-v1",
+        "native-command-control-fence-v1",
     }
 )
-_VALID_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
-_VALID_POSTURES = frozenset({"protected", "extra_careful", "watch"})
-_VALID_SECURITY_LEVELS = frozenset({"relaxed", "gentle", "balanced", "strict", "paranoid", "custom"})
-_VALID_SANDBOX_ANALYSIS = frozenset({"off", "suspicious", "strict"})
-_VALID_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
-_VALID_RISK_ACTION_KEYS = frozenset(
-    {
-        "local_secret_read",
-        "credential_exfiltration",
-        "data_flow_exfiltration",
-        "destructive_shell",
-        "encoded_execution",
-        "network_egress",
-        "prompt_injection",
-        "mcp_dangerous_tool",
-        "malicious_skill",
-        "package_script",
-        "persistence",
-        "guard_bypass",
-        "cloud_advisory",
-        "encoded_exfiltration",
-        "execution",
-        "supply_chain",
-        "policy_bypass",
-    }
-)
-_SNAPSHOT_FIELDS = frozenset(
-    {
-        "schema",
-        "version",
-        "generation",
-        "policy_digest",
-        "config_digest",
-        "rule_digest",
-        "runtime_identity",
-        "protocol_version",
-        "mode",
-        "scope_contract",
-        "effective_policy",
-        "issued_at_ms",
-        "expires_at_ms",
-        "integrity",
-    }
-)
-_SCOPE_FIELDS = frozenset({"schema", "kind", "scope_digest", "workspace_binding"})
-_EFFECTIVE_POLICY_FIELDS = frozenset(
-    {
-        "protection_posture",
-        "security_level",
-        "default_action",
-        "unknown_publisher_action",
-        "changed_hash_action",
-        "new_network_domain_action",
-        "subprocess_action",
-        "risk_actions",
-        "harness_risk_actions",
-        "harness_actions",
-        "publisher_actions",
-        "artifact_actions",
-        "sandbox_analysis",
-        "receipt_redaction_level",
-    }
-)
-_INTEGRITY_FIELDS = frozenset({"algorithm", "key_id", "mac"})
-_PUSH_ENVELOPE_FIELDS = frozenset({"operation", "deadline_budget_ms", "request"})
-_PUSH_REQUEST_FIELDS = frozenset({"schema", "snapshot"})
 _VALID_INPUT_MODES = frozenset({"observe", "prompt", "enforce"})
-_MAX_U16 = (1 << 16) - 1
 _MAX_U64 = (1 << 64) - 1
 
 # Windows verifier state uses the same protected explicit owner+SYSTEM DACL
@@ -172,30 +145,6 @@ _WINDOWS_ACCESS_ALLOWED_ACE_TYPE = 0
 _WINDOWS_INHERITED_ACE = 0x10
 _WINDOWS_FILE_ALL_ACCESS = 0x001F01FF
 _WINDOWS_SYSTEM_SID = "S-1-5-18"
-_ACTION_SEVERITY = {
-    "allow": 0,
-    "warn": 1,
-    "review": 2,
-    "require-reapproval": 3,
-    "sandbox-required": 4,
-    "block": 5,
-}
-# ``watch`` is observe-only; it must never override an enforcing posture when
-# home/workspace policies are composed into one resident snapshot.
-_POSTURE_SEVERITY = {"watch": 0, "protected": 1, "extra_careful": 2}
-_SECURITY_LEVEL_SEVERITY = {
-    "relaxed": 0,
-    "gentle": 1,
-    "balanced": 2,
-    "strict": 3,
-    "paranoid": 4,
-    # ``custom`` is a validated configuration value whose individual floors
-    # are represented by the action maps below. It must not be weakened by a
-    # less-specific workspace overlay.
-    "custom": 5,
-}
-_SANDBOX_SEVERITY = {"off": 0, "suspicious": 1, "strict": 2}
-_REDACTION_SEVERITY = {"none": 0, "partial": 1, "full": 2}
 
 
 class NativePolicySnapshotError(RuntimeError):

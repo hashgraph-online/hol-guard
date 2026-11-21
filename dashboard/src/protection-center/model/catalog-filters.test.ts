@@ -145,3 +145,13 @@ assert.equal(
 );
 
 console.log("catalog-filters.test.ts: all assertions passed");
+
+const futureSurface = protectionModuleFixture({
+  extension_id: "command.future",
+  name: "Future",
+  trust_class: "first-party",
+  surface: "unsupported",
+});
+assert.equal(catalogItemMatchesFilters(futureSurface, { ...EMPTY_CATALOG_FILTERS, kinds: ["commands"] }), false, "unknown surfaces are not listed as commands");
+assert.equal(catalogItemMatchesFilters(futureSurface, { ...EMPTY_CATALOG_FILTERS, kinds: ["mcp"] }), false, "unknown surfaces are not listed as MCP");
+assert.equal(catalogItemMatchesFilters(futureSurface, EMPTY_CATALOG_FILTERS), true, "unknown surfaces stay in the unfiltered inventory");

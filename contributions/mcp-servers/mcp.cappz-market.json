@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.cappz-market",
+  "version": "1.0.0",
+  "name": "CAPPZ Marketplace (cappz-market)",
+  "description": "Reviews the local cappz-market MCP server, which trades on the CAPPZ Marketplace over XRPL: it publishes listings, bids and contracts to a shared market log, funds and releases XRP escrow, pays for counterparty checks and hires paid agents from a wallet kept on this computer. Market reads inherit Guard's handling; every write, signature or payment needs review. The server is external and remains off until enabled by a local administrator.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "cappz",
+    "displayName": "CAPPZ",
+    "url": "https://cappz.ai"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#0B1F33"
+  },
+  "homepage": "https://github.com/CAPPZ-ai/cappz-sdk/tree/main/packages/cappz-market",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "cappz-market"
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-shared-state-write",
+    "external-public-listing",
+    "external-metered-payment",
+    "external-account-creation",
+    "local-file-read",
+    "local-file-write"
+  ],
+  "tools": [
+    {
+      "name": "market_setup",
+      "state": "inherit"
+    },
+    {
+      "name": "market_find",
+      "state": "inherit"
+    },
+    {
+      "name": "market_show",
+      "state": "inherit"
+    },
+    {
+      "name": "market_deals",
+      "state": "inherit"
+    },
+    {
+      "name": "market_ops",
+      "state": "inherit"
+    },
+    {
+      "name": "market_demo",
+      "state": "inherit"
+    },
+    {
+      "name": "market_wallet",
+      "state": "review"
+    },
+    {
+      "name": "market_login",
+      "state": "review"
+    },
+    {
+      "name": "market_profile",
+      "state": "review"
+    },
+    {
+      "name": "market_mandate",
+      "state": "review"
+    },
+    {
+      "name": "market_cosign",
+      "state": "review"
+    },
+    {
+      "name": "market_sell",
+      "state": "review"
+    },
+    {
+      "name": "market_ask",
+      "state": "review"
+    },
+    {
+      "name": "market_bid",
+      "state": "review"
+    },
+    {
+      "name": "market_award",
+      "state": "review"
+    },
+    {
+      "name": "market_buy",
+      "state": "review"
+    },
+    {
+      "name": "market_fund",
+      "state": "review"
+    },
+    {
+      "name": "market_deliver",
+      "state": "review"
+    },
+    {
+      "name": "market_release",
+      "state": "review"
+    },
+    {
+      "name": "market_dispute",
+      "state": "review"
+    },
+    {
+      "name": "market_review",
+      "state": "review"
+    },
+    {
+      "name": "market_check",
+      "state": "review"
+    },
+    {
+      "name": "market_hire",
+      "state": "review"
+    },
+    {
+      "name": "market_call",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/CAPPZ-ai/cappz-sdk/tree/main/packages/cappz-market",
+    "https://github.com/CAPPZ-ai/cappz-sdk/blob/main/packages/cappz-market/mcp.ts",
+    "https://github.com/CAPPZ-ai/cappz-sdk/blob/main/packages/cappz-market/commands.ts",
+    "https://github.com/CAPPZ-ai/cappz-sdk/blob/main/skills/using-cappz-marketplace/reference/mcp.md"
+  ],
+  "saferAlternatives": [
+    "Practise with demo=true (a local practice market: nothing is published and no real money moves) and validate on network=testnet before using network=mainnet.",
+    "Run the cappz-market CLI directly when MCP access is not needed; it prints JSON and requires --yes for every mainnet money movement.",
+    "Keep the contribution disabled until a local administrator enables it, keep XRPL_SEED and CAPPZ_PASSWORD in the server environment rather than prompts, and limit agent parties with a scoped, expiring mandate granted on the web."
+  ]
+}

@@ -32,6 +32,12 @@ An extension proposal must publish:
 
 Registration does not grant permission to weaken core policy. An extension that changes authority, precedence, signing, or rollback requires a new core API version.
 
+### Registered extensions
+
+| Key | Location | Purpose | Registration |
+| --- | --- | --- | --- |
+| `x-hol.tests` | `spec` | Example events and the decision each must produce; authoring and CI only. | [`extensions/x-hol.tests.md`](extensions/x-hol.tests.md) |
+
 ## Conformance and ambiguity
 
 Implementations report fixture mismatches against `fixtures/manifest.json` with the fixture path, expected result, observed result, implementation version, and platform. Ambiguity findings belong in the public RFC before stabilization. No alpha behavior becomes v1.0 solely because one implementation shipped it.

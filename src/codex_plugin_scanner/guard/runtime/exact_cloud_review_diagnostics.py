@@ -55,8 +55,14 @@ def _outbox_status(store, workspace_id: str | None) -> dict[str, object]:
         return {"state": "unavailable"}
     if not isinstance(status, dict):
         return {"state": "unavailable"}
+    depth = status.get("depth", 0)
+    last_error = status.get("last_error")
+    state = status.get("binding_state", "unknown")
+    if state == "healthy" and depth:
+        state = "retrying" if last_error else "pending"
     return {
-        "depth": status.get("depth", 0),
-        "last_delivery_error": status.get("last_error"),
-        "state": status.get("binding_state", "unknown"),
+        "depth": depth,
+        "quarantined_depth": status.get("quarantined_depth", 0),
+        "last_delivery_error": last_error,
+        "state": state,
     }

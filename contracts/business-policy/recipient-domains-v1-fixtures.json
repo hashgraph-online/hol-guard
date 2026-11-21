@@ -1,0 +1,29 @@
+{
+  "schema": "guard.business-recipient-domain-vectors.v1",
+  "cases": [
+    {"id":"exact","domains":["example.test"],"valid":true},
+    {"id":"alternatives","domains":["example.test","sub.example.test"],"valid":true},
+    {"id":"punycode","domains":["xn--bcher-kva.test"],"valid":true},
+    {"id":"single-label","domains":["internal"],"valid":true},
+    {"id":"numeric-label","domains":["123.example"],"valid":true},
+    {"id":"uppercase","domains":["EXAMPLE.test"],"valid":false},
+    {"id":"wildcard","domains":["*.example.test"],"valid":false},
+    {"id":"leading-hyphen","domains":["-bad.test"],"valid":false},
+    {"id":"trailing-hyphen","domains":["bad-.test"],"valid":false},
+    {"id":"empty-label","domains":["example..test"],"valid":false},
+    {"id":"trailing-dot","domains":["example.test."],"valid":false},
+    {"id":"underscore","domains":["exa_mple.test"],"valid":false},
+    {"id":"url","domains":["https://example.test"],"valid":false},
+    {"id":"mailbox","domains":["user@example.test"],"valid":false},
+    {"id":"raw-unicode","domains":["bücher.test"],"valid":false},
+    {"id":"newline","domains":["example.test\n"],"valid":false},
+    {"id":"unicode-separator","domains":["example.test\u2028"],"valid":false},
+    {"id":"nul","domains":["example.test\u0000"],"valid":false},
+    {"id":"empty-set","domains":[],"valid":false},
+    {"id":"duplicate","domains":["example.test","example.test"],"valid":false},
+    {"id":"explicit-null","domains":null,"valid":false},
+    {"id":"scalar","domains":"example.test","valid":false},
+    {"id":"non-string","domains":[1],"valid":false},
+    {"id":"empty-name","domains":[""],"valid":false}
+  ]
+}

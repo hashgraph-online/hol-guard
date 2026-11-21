@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import stat
@@ -16,45 +17,6 @@ from .native_policy_snapshot_constants import (
     NATIVE_RUNTIME_STATE_DIRECTORY,
     NativePolicySnapshotError,
 )
-
-
-def _windows_write_chunks_and_flush(kernel32: Any, handle: Any, payload: bytes) -> None:
-    """Write bounded chunks through one private handle and flush it durably."""
-
-    import ctypes
-    from ctypes import wintypes
-
-    write_file = kernel32.WriteFile
-    write_file.argtypes = [
-        wintypes.HANDLE,
-        ctypes.c_void_p,
-        wintypes.DWORD,
-        ctypes.POINTER(wintypes.DWORD),
-        ctypes.c_void_p,
-    ]
-    write_file.restype = wintypes.BOOL
-    buffer = (ctypes.c_ubyte * len(payload)).from_buffer_copy(payload)
-    written = 0
-    while written < len(payload):
-        request_size = min(64 * 1024, len(payload) - written)
-        count = wintypes.DWORD()
-        if not write_file(
-            handle,
-            ctypes.byref(buffer, written),
-            request_size,
-            ctypes.byref(count),
-            None,
-        ):
-            raise NativePolicySnapshotError("native_policy_windows_write_failed")
-        chunk_size = int(count.value)
-        if chunk_size <= 0 or chunk_size > request_size:
-            raise NativePolicySnapshotError("native_policy_windows_write_failed")
-        written += chunk_size
-    flush = kernel32.FlushFileBuffers
-    flush.argtypes = [wintypes.HANDLE]
-    flush.restype = wintypes.BOOL
-    if not flush(handle):
-        raise NativePolicySnapshotError("native_policy_windows_sync_failed")
 
 
 def _snapshot_api() -> Any:
@@ -84,8 +46,13 @@ def _windows_path_has_reparse_component(path: Path) -> bool:
 def _runtime_state_directory(guard_home: Path) -> Path:
     api = _snapshot_api()
     if os.name == "nt":
-        with api._windows_private_state_binding(guard_home) as binding:
-            return binding.path
+        from .store_base import _ensure_windows_private_directory_recently
+
+        # Store lookups ask for this directory per call; the runtime is asked
+        # again only when its identity changes or the recheck window passes.
+        state_dir = Path(os.path.abspath(guard_home)) / NATIVE_RUNTIME_STATE_DIRECTORY
+        _ensure_windows_private_directory_recently(state_dir, private_root=state_dir.parent)
+        return state_dir
     api._private_guard_home(guard_home)
     state_dir = guard_home / NATIVE_RUNTIME_STATE_DIRECTORY
     try:
@@ -190,6 +157,7 @@ def _windows_private_descriptor(directory: bool) -> Iterator[tuple[Any, Any, Any
         local_free(descriptor)
 
 
+@functools.cache
 def _windows_file_information_type() -> Any:
     import ctypes
     from ctypes import wintypes
@@ -211,6 +179,7 @@ def _windows_file_information_type() -> Any:
     return ByHandleFileInformation
 
 
+@functools.cache
 def _windows_security_attributes_type() -> Any:
     import ctypes
     from ctypes import wintypes

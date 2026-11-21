@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "mcp.mail-server",
+  "tagline": "User review for permanent message deletion through mcp-mail-server.",
+  "summary": "Opt-in HOL Guard coverage for mcp-mail-server. After local-admin enablement, delete_message and delete_messages require review. Mailbox listing and search can receive automatic allow defaults only when the reviewed launch identity matches. Other tools inherit host handling, while this-device custom grants and stronger Guard policy constraints retain their existing priority.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage focuses on permanent deletion through delete_message and delete_messages; other mail mutations retain host policy.",
+    "Automatic read allowances require the reviewed npx launcher, stdio transport, registry package selectors and default package-source evidence without configured package-manager overrides.",
+    "Default package-source evidence does not attest to installed code or the contents of ambient package-manager configuration files.",
+    "A publisher profile is not a security certification or an endorsement by HOL."
+  ],
+  "documentationUrl": "https://github.com/yunfeizhu/mcp-mail-server#readme",
+  "tags": ["mcp", "email", "imap", "approval"],
+  "contributors": [
+    {"githubId": "12027613", "githubLogin": "yunfeizhu", "roles": ["author"]}
+  ],
+  "originalContributions": [
+    {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3278"},
+    {"kind": "issue", "url": "https://github.com/yunfeizhu/mcp-mail-server/issues/14"}
+  ],
+  "upstream": {"name": "mcp-mail-server", "url": "https://github.com/yunfeizhu/mcp-mail-server"},
+  "maintainerGithubIds": ["12027613"]
+}

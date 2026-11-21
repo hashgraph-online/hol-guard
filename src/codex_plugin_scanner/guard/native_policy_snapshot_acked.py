@@ -13,6 +13,10 @@ from .native_policy_snapshot_constants import (
     POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES,
     NativePolicySnapshotError,
 )
+from .native_policy_snapshot_harness_postures import (
+    binding_with_harness_postures,
+    read_harness_postures_sidecar,
+)
 from .native_policy_snapshot_storage import _read_v3_snapshot_file
 
 logger = logging.getLogger(__name__)
@@ -58,9 +62,14 @@ def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
         return None
     if not isinstance(digest, str) or not isinstance(identity, str) or not isinstance(mode, str):
         return None
-    return {
+    binding: dict[str, object] = {
         "generation": generation,
         "policy_digest": digest,
         "runtime_identity": identity,
         "mode": mode,
     }
+    if "command_extensions" in snapshot:
+        binding["command_extensions_bound"] = True
+    return binding_with_harness_postures(
+        binding, read_harness_postures_sidecar(store, generation=generation, policy_digest=digest)
+    )

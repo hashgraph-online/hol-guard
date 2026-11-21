@@ -22,14 +22,41 @@ function source(path: string): string {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
-assert(SHELL_NAV_ITEMS.length === 9, "The shell exposes every top-level Guard destination");
+assert(SHELL_NAV_ITEMS.length === 12, "The shell exposes every top-level Guard destination");
 assert(
   new Set(SHELL_NAV_ITEMS.map((item) => item.href)).size === SHELL_NAV_ITEMS.length,
   "Top-level navigation destinations are unique",
 );
 assert(
-  mobilePrimaryNavigationItems().map((item) => item.view).join(",") === "home,inbox,fleet,evidence",
+  mobilePrimaryNavigationItems().map((item) => item.view).join(",") === "home,inbox,fleet,cigar",
   "Compact screens keep the four highest-frequency sections one tap away",
+);
+assert(
+  SHELL_NAV_ITEMS.map((item) => item.view).join(",") ===
+    "home,inbox,fleet,swarm,cigar,extensions,policy,supply-chain,settings,evidence,releases,about",
+  "Swarm and Context are primary destinations beside Protect, with existing management surfaces retained",
+);
+assert(
+  navigationItemForView("cigar").label === "Context" &&
+    navigationItemForView("cigar").shortLabel === "Context",
+  "The sidebar introduces CIGAR as Context while the workspace keeps its identity",
+);
+assert(
+  navigationItemForView("cigar").badge === "Beta",
+  "The Context entry carries a Beta status chip",
+);
+assert(
+  navigationItemForView("swarm").badge === "Alpha",
+  "The Swarm entry carries an Alpha status chip",
+);
+assert(
+  SHELL_NAV_ITEMS.every((item) => item.badge === undefined || item.view === "cigar" || item.view === "swarm"),
+  "Only prerelease workspaces carry navigation status chips",
+);
+assert(
+  SHELL_NAV_ITEMS.find((item) => item.view === "extensions")?.group === "primary" &&
+    SHELL_NAV_ITEMS.find((item) => item.view === "evidence")?.group === "manage",
+  "Extensions lives in the Guard group while Evidence sits with the Manage surfaces",
 );
 assert(
   canonicalNavigationView("app-detail") === "fleet",
@@ -37,8 +64,13 @@ assert(
 );
 assert(
   canonicalNavigationView("audit") === "supply-chain" &&
-    canonicalNavigationView("feed-health") === "supply-chain",
+    canonicalNavigationView("feed-health") === "supply-chain" &&
+    canonicalNavigationView("workspaces") === "supply-chain",
   "Supply-chain subroutes keep their parent destination active",
+);
+assert(
+  canonicalNavigationView("protection-repair") === "extensions",
+  "Repair protection stays inside Extensions without a new navigation item",
 );
 assert(
   navigationItemForView("settings").label === "Settings",
@@ -81,6 +113,16 @@ assert(
   "The active destination remains visible while the window changes size",
 );
 assert(
+  markup.includes('data-navigation-item="cigar"') &&
+    markup.includes('aria-label="Context"') &&
+    markup.includes('guard-shell-navigation-link__flag" aria-hidden="true">Beta</span>'),
+  "The sidebar labels the CIGAR workspace Context and marks it Beta without changing its announced name",
+);
+assert(
+  markup.includes('title="Context"'),
+  "The collapsed rail keeps the Context name as its tooltip",
+);
+assert(
   markup.includes("104 local actions need a Guard decision.") &&
     markup.includes("Open Inbox") &&
     markup.includes("guard-shell-status-action"),
@@ -101,6 +143,7 @@ assert(
 const css = source("./shell-navigation.css");
 const drawerSource = source("./shell-navigation-drawer.tsx");
 const layoutSource = source("./approval-center-layout.tsx");
+const appSource = source("./app.tsx");
 const responsiveSource = source("./responsive-layout.css");
 const mainSource = source("./main.tsx");
 
@@ -137,6 +180,12 @@ assert(
 assert(
   drawerSource.includes("onSetUpdateChannel={props.onSetUpdateChannel}"),
   "The navigation drawer keeps the alpha update control",
+);
+assert(
+  layoutSource.includes("useGuardUpdate({ onReconnected: props.onGuardReconnected })") &&
+    !layoutSource.includes("enableUpdateStatus") &&
+    !appSource.includes("enableUpdateStatus"),
+  "Update status stays enabled on every view so the Update action cannot disappear on Inbox",
 );
 
 const alphaMarkup = renderToStaticMarkup(

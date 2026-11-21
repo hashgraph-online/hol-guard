@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard.extension_control_host import host_for
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -25,10 +25,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
     ExtensionControlRuntime,
     ExtensionControlRuntimeSnapshot,
-    current_extension_control_binding_digest,
-    current_extension_control_snapshot,
-    extension_control_policy_version,
-    use_extension_control_snapshot,
+    ExtensionControlSnapshotUnavailableError,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -241,20 +238,6 @@ def test_snapshot_digest_is_independent_of_layer_and_control_order() -> None:
     assert first.effective_digest == second.effective_digest
 
 
-def test_active_snapshot_is_request_local_and_restored_after_evaluation() -> None:
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(_view(7))
-    inactive_digest = current_extension_control_binding_digest()
-
-    assert current_extension_control_snapshot() is None
-    with use_extension_control_snapshot(snapshot):
-        assert current_extension_control_snapshot() is snapshot
-        assert current_extension_control_binding_digest() == snapshot.effective_digest
-        assert extension_control_policy_version("policy.v1") == f"policy.v1@{snapshot.effective_digest}"
-
-    assert current_extension_control_snapshot() is None
-    assert current_extension_control_binding_digest() == inactive_digest
-
-
 def test_authority_health_maps_to_fail_closed_runtime_failure() -> None:
     unavailable = ExtensionControlRuntimeSnapshot.from_authority_view(_view(0, health=AuthorityHealth.UNENROLLED))
     tampered = ExtensionControlRuntimeSnapshot.from_authority_view(_view(1, health=AuthorityHealth.TAMPERED))
@@ -263,50 +246,159 @@ def test_authority_health_maps_to_fail_closed_runtime_failure() -> None:
     assert tampered.authority_failure is ResolverFailureCode.AUTHORITY_TAMPERED
 
 
-def test_daemon_starts_fail_closed_with_future_authority_schema(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
-    with store._connect() as connection:
-        connection.execute("update extension_control_schema_migration set version = 99 where singleton = 1")
+def _resident_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_extension_control
 
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        snapshot = daemon._server.extension_control_runtime.current()
-        assert snapshot.health is AuthorityHealth.TAMPERED
-        assert snapshot.authority_failure is ResolverFailureCode.AUTHORITY_TAMPERED
-    finally:
-        daemon.stop()
+    def unavailable(**_kwargs: object) -> str:
+        raise native_extension_control.NativeExtensionControlError("native_extension_control_unavailable")
+
+    monkeypatch.setattr(native_extension_control, "snapshot_digest", unavailable)
 
 
-def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
+def test_resident_outage_keeps_the_installed_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = ExtensionControlRuntime(_view(1))
+    installed = runtime.current()
+    with monkeypatch.context() as patch:
+        _resident_unavailable(patch)
+        with pytest.raises(ExtensionControlSnapshotUnavailableError):
+            runtime.refresh(_view(2))
+    assert runtime.current() is installed
+    assert runtime.refresh(_view(2)).revision == 2
+
+
+def test_runtime_starts_fail_closed_when_the_resident_cannot_digest(monkeypatch: pytest.MonkeyPatch) -> None:
+    with monkeypatch.context() as patch:
+        _resident_unavailable(patch)
+        runtime = ExtensionControlRuntime(_view(4))
+    snapshot = runtime.current()
+    assert snapshot.unread
+    assert snapshot.layers == ()
+    assert snapshot.authority_failure is ResolverFailureCode.AUTHORITY_UNAVAILABLE
+    # The next answered read replaces it, and no protected floor came from it.
+    assert runtime.refresh(_view(1)).health is AuthorityHealth.PROTECTED
+
+
+def test_daemon_starts_fail_closed_without_a_resident_digest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(
-        store,
-        host="127.0.0.1",
-        port=0,
-        extension_control_refresh_interval_seconds=0.01,
-    )
+    _resident_unavailable(monkeypatch)
+    daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
     daemon.start()
     try:
-        updated = ExtensionControlAuthorityView(
-            AuthorityHealth.PROTECTED,
-            7,
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            (),
-        )
+        snapshot = daemon._server.extension_control_runtime.current()
+        assert snapshot.unread
+        assert snapshot.authority_failure is ResolverFailureCode.AUTHORITY_UNAVAILABLE
+    finally:
+        daemon.stop()
+
+
+def test_daemon_rebinds_control_api_when_activated_catalog_changes_after_startup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.catalog_delivery import projection
+    from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
+
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    try:
+        server = daemon._server
+        # Startup read a healthy authority, so the core-registry fallback flag
+        # that used to be the only rebind trigger stays off.
+        assert not host_for(store)._on_core_registry
+        assert server.extension_control_api.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+
+        activated = GeneratedCommandCatalog(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[:-1])
+        assert activated.catalog_digest != BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        metadata, _, _ = projection.capture(store)
+        monkeypatch.setattr(projection, "capture", lambda _store: (metadata, activated, None))
+        monkeypatch.setattr(projection, "require_current", lambda *_args: None)
         monkeypatch.setattr(
             store,
             "read_extension_control_authority_for_registry",
-            lambda registry: updated,
+            lambda registry, *, read_only=False, **_kwargs: ExtensionControlAuthorityView(
+                AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ()
+            ),
         )
-        deadline = time.monotonic() + 1
-        while daemon._server.extension_control_runtime.current().revision != 7:
-            assert time.monotonic() < deadline
-            time.sleep(0.01)
-        assert daemon._server.extension_control_runtime.current().revision == 7
+
+        snapshot = server.refresh_extension_control_runtime()
+
+        # The dashboard compares these two digests and refuses to render the
+        # Extensions page while they differ.
+        assert snapshot.catalog_digest == activated.catalog_digest
+        assert server.extension_control_api.catalog_digest == activated.catalog_digest
+        assert server.extension_control_api.effective()["catalog_digest"] == activated.catalog_digest
     finally:
         daemon.stop()
+
+
+def test_refresh_does_not_roll_back_an_activation_applied_after_its_lease(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.catalog_delivery import projection
+    from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
+
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    try:
+        server = daemon._server
+        api = server.extension_control_api
+        runtime = server.extension_control_runtime
+        captured = GeneratedCommandCatalog(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[:-1])
+        applied = GeneratedCommandCatalog(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[:-2])
+        metadata, _, _ = projection.capture(store)
+        monkeypatch.setattr(projection, "capture", lambda _store: (metadata, captured, None))
+        monkeypatch.setattr(projection, "require_current", lambda *_args: None)
+        monkeypatch.setattr(
+            store,
+            "read_extension_control_authority_for_registry",
+            lambda registry, *, read_only=False, **_kwargs: ExtensionControlAuthorityView(
+                AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ()
+            ),
+        )
+        rebind = api.rebind_registry
+
+        def apply_lands_first(registry, **kwargs):
+            # A dashboard apply activates a newer pack after the refresh
+            # released its lease but before it rebinds the API.
+            with api._apply_lock:
+                api._registry = applied
+                api.catalog_digest = applied.catalog_digest
+                runtime.refresh(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 2, applied.catalog_digest, ()))
+            return rebind(registry, **kwargs)
+
+        monkeypatch.setattr(api, "rebind_registry", apply_lands_first)
+
+        server.refresh_extension_control_runtime()
+
+        assert runtime.current().catalog_digest == applied.catalog_digest
+        assert api.catalog_digest == applied.catalog_digest
+        assert api.effective()["catalog_digest"] == applied.catalog_digest
+    finally:
+        daemon.stop()
+
+
+def test_resident_snapshot_digest_matches_the_python_digest() -> None:
+    # The digest the Python snapshot computed for this view before the resident
+    # took it over; policy versions and saved bindings carry it.
+    catalog = "ab" * 32
+    local = ExtensionControlLayer(
+        CONTROL_SCHEMA_VERSION,
+        ControlLayerKind.LOCAL_ADMIN,
+        catalog,
+        False,
+        (
+            ExtensionControl(
+                ControlTarget(ControlTargetKind.PERMISSION, "command.alpha.permission.write"), ControlState.ENABLED
+            ),
+            ExtensionControl(ControlTarget(ControlTargetKind.EXTENSION, "command.alpha"), ControlState.DISABLED),
+        ),
+    )
+    cloud = ExtensionControlLayer(CONTROL_SCHEMA_VERSION, ControlLayerKind.SIGNED_CLOUD, catalog, True, ())
+    view = ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 3, catalog, (local, cloud), managed_revision=2)
+
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
+
+    assert snapshot.effective_digest == "b174519abd9d7b38cd53d4d3a856e60357db724e45a08423a7d1b81a127055bb"

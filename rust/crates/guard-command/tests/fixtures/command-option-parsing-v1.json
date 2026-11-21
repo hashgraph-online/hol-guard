@@ -1,0 +1,4115 @@
+[
+  {
+    "options": [
+      "--config",
+      "--mode",
+      "--name",
+      "-o",
+      "-c"
+    ],
+    "known": [
+      "--force",
+      "--no-force",
+      "--dry-run",
+      "--no-dry-run",
+      "--execute",
+      "--help",
+      "-q",
+      "-v",
+      "-n",
+      "-f"
+    ],
+    "inverse": [
+      [
+        "--force",
+        "--no-force"
+      ],
+      [
+        "-n",
+        "--execute"
+      ],
+      [
+        "--dry-run",
+        "--no-dry-run"
+      ]
+    ],
+    "subcommands": [
+      "delete"
+    ],
+    "required": [
+      "--dry-run"
+    ],
+    "cases": [
+      {
+        "args": [],
+        "present": [],
+        "effective": [],
+        "advance": [],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "delete"
+        ],
+        "present": [
+          "delete"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "database",
+          "reset"
+        ],
+        "present": [
+          "database",
+          "reset"
+        ],
+        "effective": [],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--",
+          "delete"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--",
+          "database",
+          "reset"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--",
+          "--force"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-"
+        ],
+        "present": [
+          "-"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--help"
+        ],
+        "present": [
+          "--help"
+        ],
+        "effective": [
+          [
+            "--help",
+            "--help",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force"
+        ],
+        "present": [
+          "--force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=true"
+        ],
+        "present": [
+          "--force",
+          "--force=true"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=true",
+            "true"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=false"
+        ],
+        "present": [
+          "--force=false",
+          "--no-force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=False"
+        ],
+        "present": [
+          "--force=False"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=False",
+            "False"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=TRUE"
+        ],
+        "present": [
+          "--force=TRUE"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=TRUE",
+            "TRUE"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force="
+        ],
+        "present": [
+          "--force="
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=",
+            ""
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=maybe"
+        ],
+        "present": [
+          "--force=maybe"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=maybe",
+            "maybe"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force",
+          "--no-force"
+        ],
+        "present": [
+          "--no-force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--no-force",
+            null
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--no-force",
+          "--force"
+        ],
+        "present": [
+          "--force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force",
+            null
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=false",
+          "--no-force=false"
+        ],
+        "present": [
+          "--force",
+          "--no-force=false"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--no-force=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force",
+          "--no-force=true"
+        ],
+        "present": [
+          "--no-force",
+          "--no-force=true"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--no-force=true",
+            "true"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=yes",
+          "--force=no"
+        ],
+        "present": [
+          "--force=no",
+          "--no-force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=no",
+            "no"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force",
+          "--mode=x",
+          "--force=false"
+        ],
+        "present": [
+          "--force=false",
+          "--mode",
+          "--mode=x",
+          "--no-force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=false",
+            "false"
+          ],
+          [
+            "--mode",
+            "--mode=x",
+            "x"
+          ]
+        ],
+        "advance": [
+          1,
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": true
+      },
+      {
+        "args": [
+          "--dry-run=false"
+        ],
+        "present": [
+          "--dry-run=false",
+          "--no-dry-run"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run=true"
+        ],
+        "present": [
+          "--dry-run",
+          "--dry-run=true"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=true",
+            "true"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": true
+      },
+      {
+        "args": [
+          "--dry-run=true",
+          "--dry-run=false"
+        ],
+        "present": [
+          "--dry-run=false",
+          "--no-dry-run"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run=false",
+          "--dry-run=true"
+        ],
+        "present": [
+          "--dry-run",
+          "--dry-run=true"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=true",
+            "true"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": true
+      },
+      {
+        "args": [
+          "--no-dry-run=false"
+        ],
+        "present": [
+          "--dry-run",
+          "--no-dry-run=false"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--no-dry-run=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--no-dry-run"
+        ],
+        "present": [
+          "--no-dry-run"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--no-dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config",
+          "--help"
+        ],
+        "present": [
+          "--config"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            "--help"
+          ]
+        ],
+        "advance": [
+          2,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config=--help"
+        ],
+        "present": [
+          "--config",
+          "--config=--help"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config=--help",
+            "--help"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config",
+          "--dry-run"
+        ],
+        "present": [
+          "--config"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            "--dry-run"
+          ]
+        ],
+        "advance": [
+          2,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config",
+          "delete"
+        ],
+        "present": [
+          "--config"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            "delete"
+          ]
+        ],
+        "advance": [
+          2,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config=x",
+          "delete"
+        ],
+        "present": [
+          "--config",
+          "--config=x",
+          "delete"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config=x",
+            "x"
+          ]
+        ],
+        "advance": [
+          1,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config"
+        ],
+        "present": [
+          "--config"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            ""
+          ]
+        ],
+        "advance": [
+          2
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config="
+        ],
+        "present": [
+          "--config",
+          "--config="
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config=",
+            ""
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--name",
+          "old",
+          "--name",
+          "new"
+        ],
+        "present": [
+          "--name"
+        ],
+        "effective": [
+          [
+            "--name",
+            "--name",
+            "new"
+          ]
+        ],
+        "advance": [
+          2,
+          null,
+          2,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--name=old",
+          "--name=new"
+        ],
+        "present": [
+          "--name",
+          "--name=new"
+        ],
+        "effective": [
+          [
+            "--name",
+            "--name=new",
+            "new"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--name",
+          "--",
+          "--force"
+        ],
+        "present": [
+          "--force",
+          "--name"
+        ],
+        "effective": [
+          [
+            "--name",
+            "--name",
+            "--"
+          ],
+          [
+            "--force",
+            "--force",
+            null
+          ]
+        ],
+        "advance": [
+          2,
+          null,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "delete"
+        ],
+        "present": [
+          "--future",
+          "delete"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "value",
+          "delete"
+        ],
+        "present": [
+          "--future",
+          "delete",
+          "value"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run",
+          "--future"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future=value",
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run",
+          "--future=value"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future=value",
+            "value"
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": true
+      },
+      {
+        "args": [
+          "--future",
+          "--dry-run",
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run",
+          "--future"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": true
+      },
+      {
+        "args": [
+          "--future=x",
+          "database",
+          "reset"
+        ],
+        "present": [
+          "--future=x",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future=x",
+            "x"
+          ]
+        ],
+        "advance": [
+          1,
+          null,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "database",
+          "reset"
+        ],
+        "present": [
+          "--future",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-n"
+        ],
+        "present": [
+          "-n"
+        ],
+        "effective": [
+          [
+            "-n",
+            "-n",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-n",
+          "--execute"
+        ],
+        "present": [
+          "--execute"
+        ],
+        "effective": [
+          [
+            "-n",
+            "--execute",
+            null
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--execute",
+          "-n"
+        ],
+        "present": [
+          "-n"
+        ],
+        "effective": [
+          [
+            "-n",
+            "-n",
+            null
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-nv"
+        ],
+        "present": [
+          "-n",
+          "-nv",
+          "-v"
+        ],
+        "effective": [
+          [
+            "-n",
+            "-n",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-vn"
+        ],
+        "present": [
+          "-n",
+          "-v",
+          "-vn"
+        ],
+        "effective": [
+          [
+            "-n",
+            "-n",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-on"
+        ],
+        "present": [
+          "-o",
+          "-on"
+        ],
+        "effective": [],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-o",
+          "--help"
+        ],
+        "present": [
+          "-o"
+        ],
+        "effective": [],
+        "advance": [
+          2,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-o--help"
+        ],
+        "present": [
+          "-o",
+          "-o--help"
+        ],
+        "effective": [],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-vo",
+          "--help"
+        ],
+        "present": [
+          "--help",
+          "-o",
+          "-v",
+          "-vo"
+        ],
+        "effective": [
+          [
+            "--help",
+            "--help",
+            null
+          ]
+        ],
+        "advance": [
+          2,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-xvo",
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run",
+          "-o",
+          "-v",
+          "-x",
+          "-xvo"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-xn"
+        ],
+        "present": [
+          "-n",
+          "-x",
+          "-xn"
+        ],
+        "effective": [
+          [
+            "-n",
+            "-n",
+            null
+          ]
+        ],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-nx"
+        ],
+        "present": [
+          "-n",
+          "-nx",
+          "-x"
+        ],
+        "effective": [
+          [
+            "-n",
+            "-n",
+            null
+          ]
+        ],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-nq"
+        ],
+        "present": [
+          "-n",
+          "-nq",
+          "-q"
+        ],
+        "effective": [
+          [
+            "-n",
+            "-n",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-q=0"
+        ],
+        "present": [
+          "-q",
+          "-q=0"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-q=x"
+        ],
+        "present": [
+          "-q",
+          "-q=x"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-o=value"
+        ],
+        "present": [
+          "-o",
+          "-o=value"
+        ],
+        "effective": [],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-\u00e9\u00b2\u0345f"
+        ],
+        "present": [
+          "-f",
+          "-\u00b2",
+          "-\u00e9",
+          "-\u00e9\u00b2\u0345f"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-\u0661f"
+        ],
+        "present": [
+          "-f",
+          "-\u0661",
+          "-\u0661f"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-\ud839\udcd0n"
+        ],
+        "present": [
+          "-n",
+          "-\ud839\udcd0",
+          "-\ud839\udcd0n"
+        ],
+        "effective": [
+          [
+            "-n",
+            "-n",
+            null
+          ]
+        ],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--\u00e9=foo"
+        ],
+        "present": [
+          "--\u00e9=foo"
+        ],
+        "effective": [
+          [
+            "--\u00e9",
+            "--\u00e9=foo",
+            "foo"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "\u00e9=foo"
+        ],
+        "present": [
+          "\u00e9=foo"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "ordinary"
+        ],
+        "present": [
+          "ordinary"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-\u001c"
+        ],
+        "present": [
+          "-\u001c"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "---"
+        ],
+        "present": [
+          "---"
+        ],
+        "effective": [
+          [
+            "---",
+            "---",
+            null
+          ]
+        ],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "database",
+          "--config",
+          "ignore",
+          "reset"
+        ],
+        "present": [
+          "--config",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            "ignore"
+          ]
+        ],
+        "advance": [
+          null,
+          2,
+          null,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "database",
+          "--help",
+          "reset"
+        ],
+        "present": [
+          "--help",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--help",
+            "--help",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "database",
+          "--future",
+          "reset"
+        ],
+        "present": [
+          "--future",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "delete",
+          "--config",
+          "--help"
+        ],
+        "present": [
+          "--config",
+          "delete"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            "--help"
+          ]
+        ],
+        "advance": [
+          null,
+          2,
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run",
+          "--",
+          "delete"
+        ],
+        "present": [
+          "--dry-run"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          1,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": true
+      },
+      {
+        "args": [
+          "--config",
+          "unused",
+          "--dry-run",
+          "delete"
+        ],
+        "present": [
+          "--config",
+          "--dry-run",
+          "delete"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            "unused"
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          2,
+          null,
+          1,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": true
+      },
+      {
+        "args": [
+          "--force=0",
+          "--force=on"
+        ],
+        "present": [
+          "--force",
+          "--force=on"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=on",
+            "on"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-n=false"
+        ],
+        "present": [
+          "--execute",
+          "-n=false"
+        ],
+        "effective": [
+          [
+            "-n",
+            "-n=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--execute=false"
+        ],
+        "present": [
+          "--execute=false",
+          "-n"
+        ],
+        "effective": [
+          [
+            "-n",
+            "--execute=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--execute=FALSE"
+        ],
+        "present": [
+          "--execute=FALSE"
+        ],
+        "effective": [
+          [
+            "-n",
+            "--execute=FALSE",
+            "FALSE"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--name=one=two"
+        ],
+        "present": [
+          "--name",
+          "--name=one=two"
+        ],
+        "effective": [
+          [
+            "--name",
+            "--name=one=two",
+            "one=two"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      }
+    ]
+  },
+  {
+    "options": [],
+    "known": [
+      "--force",
+      "--dry-run",
+      "--help",
+      "-n",
+      "-f",
+      "-v"
+    ],
+    "inverse": [],
+    "subcommands": [
+      "database",
+      "reset"
+    ],
+    "required": [
+      "-n"
+    ],
+    "cases": [
+      {
+        "args": [],
+        "present": [],
+        "effective": [],
+        "advance": [],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "delete"
+        ],
+        "present": [
+          "delete"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "database",
+          "reset"
+        ],
+        "present": [
+          "database",
+          "reset"
+        ],
+        "effective": [],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--",
+          "delete"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--",
+          "database",
+          "reset"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--",
+          "--force"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-"
+        ],
+        "present": [
+          "-"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--help"
+        ],
+        "present": [
+          "--help"
+        ],
+        "effective": [
+          [
+            "--help",
+            "--help",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force"
+        ],
+        "present": [
+          "--force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=true"
+        ],
+        "present": [
+          "--force",
+          "--force=true"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=true",
+            "true"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=false"
+        ],
+        "present": [
+          "--force=false"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=False"
+        ],
+        "present": [
+          "--force=False"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=False",
+            "False"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=TRUE"
+        ],
+        "present": [
+          "--force=TRUE"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=TRUE",
+            "TRUE"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force="
+        ],
+        "present": [
+          "--force="
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=",
+            ""
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=maybe"
+        ],
+        "present": [
+          "--force=maybe"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=maybe",
+            "maybe"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force",
+          "--no-force"
+        ],
+        "present": [
+          "--force",
+          "--no-force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force",
+            null
+          ],
+          [
+            "--no-force",
+            "--no-force",
+            null
+          ]
+        ],
+        "advance": [
+          1,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--no-force",
+          "--force"
+        ],
+        "present": [
+          "--force",
+          "--no-force"
+        ],
+        "effective": [
+          [
+            "--no-force",
+            "--no-force",
+            null
+          ],
+          [
+            "--force",
+            "--force",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=false",
+          "--no-force=false"
+        ],
+        "present": [
+          "--force=false",
+          "--no-force=false"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=false",
+            "false"
+          ],
+          [
+            "--no-force",
+            "--no-force=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force",
+          "--no-force=true"
+        ],
+        "present": [
+          "--force",
+          "--no-force",
+          "--no-force=true"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force",
+            null
+          ],
+          [
+            "--no-force",
+            "--no-force=true",
+            "true"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=yes",
+          "--force=no"
+        ],
+        "present": [
+          "--force=no"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=no",
+            "no"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force",
+          "--mode=x",
+          "--force=false"
+        ],
+        "present": [
+          "--force=false",
+          "--mode=x"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=false",
+            "false"
+          ],
+          [
+            "--mode",
+            "--mode=x",
+            "x"
+          ]
+        ],
+        "advance": [
+          1,
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run=false"
+        ],
+        "present": [
+          "--dry-run=false"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run=true"
+        ],
+        "present": [
+          "--dry-run",
+          "--dry-run=true"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=true",
+            "true"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run=true",
+          "--dry-run=false"
+        ],
+        "present": [
+          "--dry-run=false"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run=false",
+          "--dry-run=true"
+        ],
+        "present": [
+          "--dry-run",
+          "--dry-run=true"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=true",
+            "true"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--no-dry-run=false"
+        ],
+        "present": [
+          "--no-dry-run=false"
+        ],
+        "effective": [
+          [
+            "--no-dry-run",
+            "--no-dry-run=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--no-dry-run"
+        ],
+        "present": [
+          "--no-dry-run"
+        ],
+        "effective": [
+          [
+            "--no-dry-run",
+            "--no-dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config",
+          "--help"
+        ],
+        "present": [
+          "--config",
+          "--help"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            null
+          ],
+          [
+            "--help",
+            "--help",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config=--help"
+        ],
+        "present": [
+          "--config=--help"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config=--help",
+            "--help"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config",
+          "--dry-run"
+        ],
+        "present": [
+          "--config",
+          "--dry-run"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            null
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--name",
+          "--",
+          "--force"
+        ],
+        "present": [
+          "--name"
+        ],
+        "effective": [
+          [
+            "--name",
+            "--name",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "delete"
+        ],
+        "present": [
+          "--future",
+          "delete"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "value",
+          "delete"
+        ],
+        "present": [
+          "--future",
+          "delete",
+          "value"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run",
+          "--future"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future=value",
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run",
+          "--future=value"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future=value",
+            "value"
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "--dry-run",
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run",
+          "--future"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future=x",
+          "database",
+          "reset"
+        ],
+        "present": [
+          "--future=x",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future=x",
+            "x"
+          ]
+        ],
+        "advance": [
+          1,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "database",
+          "reset"
+        ],
+        "present": [
+          "--future",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-n"
+        ],
+        "present": [
+          "-n"
+        ],
+        "effective": [],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": true
+      },
+      {
+        "args": [
+          "-n",
+          "--execute"
+        ],
+        "present": [
+          "--execute",
+          "-n"
+        ],
+        "effective": [
+          [
+            "--execute",
+            "--execute",
+            null
+          ]
+        ],
+        "advance": [
+          1,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": true
+      },
+      {
+        "args": [
+          "database",
+          "--config",
+          "ignore",
+          "reset"
+        ],
+        "present": [
+          "--config",
+          "database",
+          "ignore",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "database",
+          "--help",
+          "reset"
+        ],
+        "present": [
+          "--help",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--help",
+            "--help",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "database",
+          "--future",
+          "reset"
+        ],
+        "present": [
+          "--future",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "delete",
+          "--config",
+          "--help"
+        ],
+        "present": [
+          "--config",
+          "--help",
+          "delete"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            null
+          ],
+          [
+            "--help",
+            "--help",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run",
+          "--",
+          "delete"
+        ],
+        "present": [
+          "--dry-run"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          1,
+          null,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config",
+          "unused",
+          "--dry-run",
+          "delete"
+        ],
+        "present": [
+          "--config",
+          "--dry-run",
+          "delete",
+          "unused"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            null
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          1,
+          null
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=0",
+          "--force=on"
+        ],
+        "present": [
+          "--force",
+          "--force=on"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=on",
+            "on"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-n=false"
+        ],
+        "present": [
+          "-n",
+          "-n=false"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": false,
+        "all_flags": true
+      },
+      {
+        "args": [
+          "--execute=false"
+        ],
+        "present": [
+          "--execute=false"
+        ],
+        "effective": [
+          [
+            "--execute",
+            "--execute=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--execute=FALSE"
+        ],
+        "present": [
+          "--execute=FALSE"
+        ],
+        "effective": [
+          [
+            "--execute",
+            "--execute=FALSE",
+            "FALSE"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--name=one=two"
+        ],
+        "present": [
+          "--name=one=two"
+        ],
+        "effective": [
+          [
+            "--name",
+            "--name=one=two",
+            "one=two"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": false,
+        "all_flags": false
+      }
+    ]
+  },
+  {
+    "options": [
+      "--force",
+      "--mode",
+      "-o"
+    ],
+    "known": [
+      "--force",
+      "--no-force",
+      "--help",
+      "-q"
+    ],
+    "inverse": [
+      [
+        "--force",
+        "--no-force"
+      ]
+    ],
+    "subcommands": [],
+    "required": [
+      "--force",
+      "--help"
+    ],
+    "cases": [
+      {
+        "args": [],
+        "present": [],
+        "effective": [],
+        "advance": [],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "delete"
+        ],
+        "present": [
+          "delete"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "database",
+          "reset"
+        ],
+        "present": [
+          "database",
+          "reset"
+        ],
+        "effective": [],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--",
+          "delete"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--",
+          "database",
+          "reset"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--",
+          "--force"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null,
+          2
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--"
+        ],
+        "present": [],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-"
+        ],
+        "present": [
+          "-"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--help"
+        ],
+        "present": [
+          "--help"
+        ],
+        "effective": [
+          [
+            "--help",
+            "--help",
+            null
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force"
+        ],
+        "present": [
+          "--force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force",
+            ""
+          ]
+        ],
+        "advance": [
+          2
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=true"
+        ],
+        "present": [
+          "--force",
+          "--force=true"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=true",
+            "true"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=false"
+        ],
+        "present": [
+          "--force=false",
+          "--no-force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=False"
+        ],
+        "present": [
+          "--force=False"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=False",
+            "False"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=TRUE"
+        ],
+        "present": [
+          "--force=TRUE"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=TRUE",
+            "TRUE"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force="
+        ],
+        "present": [
+          "--force="
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=",
+            ""
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=maybe"
+        ],
+        "present": [
+          "--force=maybe"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=maybe",
+            "maybe"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force",
+          "--no-force"
+        ],
+        "present": [
+          "--force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force",
+            "--no-force"
+          ]
+        ],
+        "advance": [
+          2,
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--no-force",
+          "--force"
+        ],
+        "present": [
+          "--force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force",
+            ""
+          ]
+        ],
+        "advance": [
+          1,
+          2
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=false",
+          "--no-force=false"
+        ],
+        "present": [
+          "--force",
+          "--no-force=false"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--no-force=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force",
+          "--no-force=true"
+        ],
+        "present": [
+          "--force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force",
+            "--no-force=true"
+          ]
+        ],
+        "advance": [
+          2,
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=yes",
+          "--force=no"
+        ],
+        "present": [
+          "--force=no",
+          "--no-force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=no",
+            "no"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force",
+          "--mode=x",
+          "--force=false"
+        ],
+        "present": [
+          "--force=false",
+          "--no-force"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          2,
+          1,
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run=false"
+        ],
+        "present": [
+          "--dry-run=false"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run=true"
+        ],
+        "present": [
+          "--dry-run",
+          "--dry-run=true"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=true",
+            "true"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run=true",
+          "--dry-run=false"
+        ],
+        "present": [
+          "--dry-run=false"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run=false",
+          "--dry-run=true"
+        ],
+        "present": [
+          "--dry-run",
+          "--dry-run=true"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run=true",
+            "true"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--no-dry-run=false"
+        ],
+        "present": [
+          "--no-dry-run=false"
+        ],
+        "effective": [
+          [
+            "--no-dry-run",
+            "--no-dry-run=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--no-dry-run"
+        ],
+        "present": [
+          "--no-dry-run"
+        ],
+        "effective": [
+          [
+            "--no-dry-run",
+            "--no-dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config",
+          "--help"
+        ],
+        "present": [
+          "--config",
+          "--help"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            null
+          ],
+          [
+            "--help",
+            "--help",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config=--help"
+        ],
+        "present": [
+          "--config=--help"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config=--help",
+            "--help"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config",
+          "--dry-run"
+        ],
+        "present": [
+          "--config",
+          "--dry-run"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            null
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--name",
+          "--",
+          "--force"
+        ],
+        "present": [
+          "--name"
+        ],
+        "effective": [
+          [
+            "--name",
+            "--name",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          2
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "delete"
+        ],
+        "present": [
+          "--future",
+          "delete"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "value",
+          "delete"
+        ],
+        "present": [
+          "--future",
+          "delete",
+          "value"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run",
+          "--future"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future=value",
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run",
+          "--future=value"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future=value",
+            "value"
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          1,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "--dry-run",
+          "--dry-run"
+        ],
+        "present": [
+          "--dry-run",
+          "--future"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future=x",
+          "database",
+          "reset"
+        ],
+        "present": [
+          "--future=x",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future=x",
+            "x"
+          ]
+        ],
+        "advance": [
+          1,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--future",
+          "database",
+          "reset"
+        ],
+        "present": [
+          "--future",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-n"
+        ],
+        "present": [
+          "-n"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-n",
+          "--execute"
+        ],
+        "present": [
+          "--execute",
+          "-n"
+        ],
+        "effective": [
+          [
+            "--execute",
+            "--execute",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "database",
+          "--config",
+          "ignore",
+          "reset"
+        ],
+        "present": [
+          "--config",
+          "database",
+          "ignore",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "database",
+          "--help",
+          "reset"
+        ],
+        "present": [
+          "--help",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--help",
+            "--help",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          1,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "database",
+          "--future",
+          "reset"
+        ],
+        "present": [
+          "--future",
+          "database",
+          "reset"
+        ],
+        "effective": [
+          [
+            "--future",
+            "--future",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "delete",
+          "--config",
+          "--help"
+        ],
+        "present": [
+          "--config",
+          "--help",
+          "delete"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            null
+          ],
+          [
+            "--help",
+            "--help",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--dry-run",
+          "--",
+          "delete"
+        ],
+        "present": [
+          "--dry-run"
+        ],
+        "effective": [
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--config",
+          "unused",
+          "--dry-run",
+          "delete"
+        ],
+        "present": [
+          "--config",
+          "--dry-run",
+          "delete",
+          "unused"
+        ],
+        "effective": [
+          [
+            "--config",
+            "--config",
+            null
+          ],
+          [
+            "--dry-run",
+            "--dry-run",
+            null
+          ]
+        ],
+        "advance": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--force=0",
+          "--force=on"
+        ],
+        "present": [
+          "--force",
+          "--force=on"
+        ],
+        "effective": [
+          [
+            "--force",
+            "--force=on",
+            "on"
+          ]
+        ],
+        "advance": [
+          1,
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "-n=false"
+        ],
+        "present": [
+          "-n",
+          "-n=false"
+        ],
+        "effective": [],
+        "advance": [
+          null
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--execute=false"
+        ],
+        "present": [
+          "--execute=false"
+        ],
+        "effective": [
+          [
+            "--execute",
+            "--execute=false",
+            "false"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--execute=FALSE"
+        ],
+        "present": [
+          "--execute=FALSE"
+        ],
+        "effective": [
+          [
+            "--execute",
+            "--execute=FALSE",
+            "FALSE"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      },
+      {
+        "args": [
+          "--name=one=two"
+        ],
+        "present": [
+          "--name=one=two"
+        ],
+        "effective": [
+          [
+            "--name",
+            "--name=one=two",
+            "one=two"
+          ]
+        ],
+        "advance": [
+          1
+        ],
+        "subcommand": true,
+        "all_flags": false
+      }
+    ]
+  }
+]

@@ -1,6 +1,17 @@
 use super::*;
 use std::sync::atomic::Ordering;
 
+#[path = "policy_store_launch_fence.rs"]
+pub(crate) mod launch_fence;
+
+#[cfg(target_os = "macos")]
+#[path = "policy_store_bash_journal.rs"]
+pub(crate) mod bash_journal;
+
+#[cfg(target_os = "macos")]
+#[path = "policy_store_bash_cancellation.rs"]
+pub(crate) mod bash_cancellation;
+
 pub(crate) struct ApprovalPolicyFence<'a> {
     pub(crate) generation: u64,
     pub(crate) policy_digest: &'a str,
@@ -9,6 +20,26 @@ pub(crate) struct ApprovalPolicyFence<'a> {
 }
 
 impl PolicySnapshotStore {
+    #[cfg(target_os = "macos")]
+    pub(crate) fn approval_database_path(&self) -> std::path::PathBuf {
+        std::path::Path::new(&self.expected_guard_home).join("guard.db")
+    }
+    /// Fence an approval challenge to the resident's current authenticated
+    /// snapshot. The callback runs while the state mutex is held, so action
+    /// reconstruction and binding derivation cannot observe a policy push in
+    /// between. The callback must not call APIs that reacquire `state`.
+    pub(crate) fn with_approval_fence<F, T>(
+        &self,
+        envelope: &guard_contracts::GuardHookEnvelopeV2,
+        callback: F,
+    ) -> Result<T, String>
+    where
+        F: FnOnce(&AdmittedPolicySnapshot) -> Result<T, String>,
+    {
+        let fence = self.fence_for_launch(envelope)?;
+        callback(fence.snapshot())
+    }
+
     pub(crate) fn approval_v4_authority(
         &self,
     ) -> Result<&crate::policy_store::approval_v4_authority::ApprovalV4Authority, String> {
@@ -125,6 +156,7 @@ impl PolicySnapshotStore {
         {
             return Err("native_approval_policy_context_mismatch".to_owned());
         }
+        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
         if snapshot.expires_at_ms <= now {
             return Err("native_approval_receipt_expired".to_owned());
         }
@@ -165,6 +197,7 @@ impl PolicySnapshotStore {
         {
             return Err("native_approval_policy_context_mismatch".to_owned());
         }
+        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
         if snapshot.expires_at_ms <= now {
             return Err("native_approval_receipt_expired".to_owned());
         }

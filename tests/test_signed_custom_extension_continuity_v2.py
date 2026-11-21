@@ -7,12 +7,10 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.custom_extension_continuity import (
-    CUSTOM_EXTENSION_CONTINUITY_FIELD,
-    apply_verified_custom_extension_continuity,
-)
+from codex_plugin_scanner.guard.runtime.custom_extension_continuity import CUSTOM_EXTENSION_CONTINUITY_FIELD
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.custom_extension_continuity_client import apply_verified_custom_extension_continuity
 
 _NOW = "2026-08-27T12:00:00Z"
 _FUTURE = "2026-08-28T12:00:00Z"
@@ -239,12 +237,11 @@ def test_omitted_projection_retains_last_known_good_until_explicit_tombstone(tmp
 
 def test_shared_signed_projection_contract_is_privacy_safe_and_bounded() -> None:
     contract = json.loads(
-        (Path(__file__).parents[1] / "contracts/managed-controls/v1/signed-custom-extension-continuity.schema.json")
-        .read_text(encoding="utf-8")
+        (
+            Path(__file__).parents[1] / "contracts/managed-controls/v1/signed-custom-extension-continuity.schema.json"
+        ).read_text(encoding="utf-8")
     )
-    assert contract["properties"]["schemaVersion"]["const"] == (
-        "guard.custom-extension-continuity.v2"
-    )
+    assert contract["properties"]["schemaVersion"]["const"] == ("guard.custom-extension-continuity.v2")
     assert contract["properties"]["items"]["maxItems"] == 100
     item = contract["properties"]["items"]["items"]
     assert item["additionalProperties"] is False

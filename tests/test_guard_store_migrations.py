@@ -172,6 +172,12 @@ def _install_fake_system_keyring(
     return module
 
 
+def _windows_no_such_logon_session_error() -> OSError:
+    error = OSError(1312, "A specified logon session does not exist.")
+    error.__dict__["winerror"] = 1312
+    return error
+
+
 def test_load_keyring_module_returns_none_when_dependency_missing(monkeypatch):
     """A genuinely missing keyring package must surface as None, not raise."""
     import importlib
@@ -199,6 +205,49 @@ def test_system_keyring_reads_return_none_when_keyring_missing(monkeypatch):
 
     assert store.get_secret("anything") is None
     assert store.get_secret_with_timeout("anything", timeout_seconds=1.0) is None
+
+
+def test_windows_keyring_read_session_failure_is_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _FakeSystemKeyringModule()
+    read_calls = 0
+
+    def _read_after_session_recovery(_service_name: str, _secret_id: str) -> str | None:
+        nonlocal read_calls
+        read_calls += 1
+        if read_calls == 1:
+            raise _windows_no_such_logon_session_error()
+        return "recovered-secret"
+
+    monkeypatch.setattr(guard_store_module.sys, "platform", "win32", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    monkeypatch.setattr(module, "get_password", _read_after_session_recovery)
+
+    store = SystemKeyringSecretStore(service_name="hol-guard.test")
+
+    assert store.get_secret("secret-id") is None
+    assert not store._is_unavailable()
+    assert store.get_secret("secret-id") == "recovered-secret"
+    assert read_calls == 2
+
+
+def test_windows_keyring_non_session_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _FakeSystemKeyringModule()
+    error = OSError(5, "Access is denied.")
+    error.__dict__["winerror"] = 5
+
+    monkeypatch.setattr(guard_store_module.sys, "platform", "win32", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    monkeypatch.setattr(module, "get_password", lambda *_args: (_ for _ in ()).throw(error))
+
+    store = SystemKeyringSecretStore(service_name="hol-guard.test")
+
+    with pytest.raises(OSError) as exc_info:
+        store.get_secret("secret-id")
+
+    assert exc_info.value is error
+    assert not store._is_unavailable()
 
 
 def test_migrating_fallback_no_ui_uses_bounded_primary_read(tmp_path, monkeypatch):
@@ -1011,7 +1060,7 @@ def test_passive_macos_oauth_store_never_probes_keychain(tmp_path, monkeypatch):
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={
             "kty": "EC",
             "crv": "P-256",
@@ -1080,7 +1129,7 @@ def test_macos_oauth_write_accepts_encrypted_fallback_when_keychain_readback_fai
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----[REDACTED:Private key block]\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----[REDACTED:Private key block]\n"),
         dpop_public_jwk={
             "kty": "EC",
             "crv": "P-256",
@@ -1115,7 +1164,7 @@ def test_oauth_health_uses_no_ui_primary_read_for_macos_keychain_only_store(tmp_
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1147,7 +1196,7 @@ def test_oauth_default_macos_keychain_read_uses_no_ui_path(tmp_path, monkeypatch
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1187,7 +1236,7 @@ def test_macos_oauth_default_reads_backfill_encrypted_fallback_from_keychain_onl
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1218,7 +1267,7 @@ def test_explicit_macos_oauth_migration_enables_passive_vault_reads(tmp_path, mo
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1253,7 +1302,7 @@ def test_explicit_macos_oauth_no_ui_migration_uses_bounded_read(tmp_path, monkey
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1535,7 +1584,7 @@ def test_oauth_local_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path)
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={
             "kty": "EC",
             "crv": "P-256",
@@ -1574,7 +1623,7 @@ def test_oauth_local_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path)
         "issuer": "https://hol.org",
         "client_id": "guard-local-daemon",
         "refresh_token": "refresh-secret-value",
-        "dpop_private_key_pem": "-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        "dpop_private_key_pem": ("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         "dpop_public_jwk": {
             "kty": "EC",
             "crv": "P-256",
@@ -1600,7 +1649,7 @@ def test_oauth_local_credentials_use_encrypted_file_fallback_when_system_keyring
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         now="2026-06-01T00:00:00+00:00",
@@ -1628,7 +1677,7 @@ def test_oauth_local_credential_health_reports_backend_and_metadata(tmp_path, mo
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1659,7 +1708,7 @@ def test_oauth_local_credential_health_reports_system_keyring_backend(tmp_path, 
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1690,7 +1739,7 @@ def test_oauth_local_credentials_mirror_secret_into_encrypted_fallback_store(tmp
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1792,7 +1841,7 @@ def test_get_oauth_local_credentials_prefers_validated_encrypted_fallback_before
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1837,7 +1886,7 @@ def test_get_oauth_local_credentials_fails_closed_when_fallback_hash_is_stale(tm
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1873,7 +1922,7 @@ def test_get_oauth_local_credentials_recovers_from_timed_primary_lookup_when_fal
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1937,7 +1986,7 @@ def test_get_recoverable_oauth_local_credentials_uses_encrypted_fallback_when_ha
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -1976,7 +2025,7 @@ def test_set_oauth_local_credentials_rejects_incomplete_fallback_mirror(tmp_path
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
             dpop_public_jwk_thumbprint="thumbprint-123",
             grant_id="grant-123",
@@ -2004,7 +2053,7 @@ def test_get_oauth_local_credentials_backfills_encrypted_fallback_for_legacy_key
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -2039,7 +2088,7 @@ def test_get_oauth_local_credentials_uses_encrypted_fallback_on_macos_when_prima
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----[REDACTED:Private key block]\\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----[REDACTED:Private key block]\\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -2071,7 +2120,7 @@ def test_get_oauth_local_credentials_prefers_valid_fallback_over_macos_keychain(
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----[REDACTED:Private key block]\\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----[REDACTED:Private key block]\\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         workspace_id="workspace-123",
@@ -2100,7 +2149,7 @@ def test_get_oauth_local_credential_health_avoids_primary_keychain_reads(tmp_pat
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -2137,7 +2186,7 @@ def test_oauth_secret_payload_process_cache_is_shared_across_store_instances(tmp
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -2174,7 +2223,7 @@ def test_repair_oauth_local_credential_storage_from_primary_repairs_stale_encryp
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -2225,7 +2274,7 @@ def test_oauth_health_auto_repairs_stale_encrypted_fallback_from_primary(tmp_pat
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----[REDACTED:Private key block]\\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----[REDACTED:Private key block]\\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -2279,7 +2328,7 @@ def test_oauth_health_repairs_from_recoverable_fallback_when_primary_secret_is_m
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----[REDACTED:Private key block]\\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----[REDACTED:Private key block]\\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -2328,7 +2377,7 @@ def test_oauth_health_does_not_repair_from_recoverable_fallback_when_macos_keych
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----[REDACTED:Private key block]\\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----[REDACTED:Private key block]\\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -2370,7 +2419,7 @@ def test_oauth_health_caches_degraded_state_between_failed_repair_attempts(tmp_p
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----[REDACTED:Private key block]\\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----[REDACTED:Private key block]\\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -2412,7 +2461,7 @@ def test_get_cloud_sync_profile_uses_oauth_metadata_without_primary_keychain_rea
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",

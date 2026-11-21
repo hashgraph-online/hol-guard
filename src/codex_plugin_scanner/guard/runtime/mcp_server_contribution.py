@@ -13,6 +13,7 @@ from typing import Final, cast
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
+from ..native_cli_runtime_support import cli_runtime_support
 from .extension_contribution import frozen_package_data
 
 _SCHEMA_VERSION: Final = "guard.mcp-server-contribution.v1"
@@ -27,14 +28,35 @@ _ALLOWED_ICON_NAMES: Final = frozenset(
     }
 )
 _ALLOWED_LAUNCHERS: Final = frozenset({"bunx", "npx", "npm", "pnpm", "uvx", "yarn", "pipx"})
+_TOOL_STATES: Final = frozenset({"inherit", "allow", "review", "block"})
+_REMOTE_TOOL_STATES: Final = frozenset({"inherit", "review", "block"})
 
 
-def contributions_dir() -> Path:
-    return Path(__file__).resolve().parents[4] / "contributions" / "mcp-servers"
+def _bound_grammar(operation: str, value: object) -> str | None:
+    """Ask the resident for one contributed-MCP grammar answer.
+
+    The grammar itself lives in the native runtime; a value that is not a
+    string cannot be one of its inputs, so it is rejected here rather than
+    sent. Nothing about the answer is recomputed or repaired locally.
+    """
+    if not isinstance(value, str):
+        return None
+    result = cli_runtime_support(operation, {"value": value})
+    if result is not None and not isinstance(result, str):
+        raise ValueError("native_cli_runtime_support_result_invalid")
+    return result
 
 
-def catalog_id_for_mcp_id(mcp_id: str) -> str:
-    return f"command.mcp-{mcp_id.removeprefix('mcp.')}"
+def direct_mcp_command_name(value: object) -> str | None:
+    """Recognize a portable executable basename for tightening-only MCP defaults.
+
+    Paths may be POSIX or Windows, independent of the host running Guard.
+    Backslashes are treated as path separators on every host, including POSIX,
+    so matching follows portable configured-command syntax rather than host
+    filesystem basename semantics. This is catalog selection, never executable
+    authentication or saved approval.
+    """
+    return _bound_grammar("direct_command_name", value)
 
 
 def _normalized_tool_name(name: object) -> str:
@@ -42,21 +64,14 @@ def _normalized_tool_name(name: object) -> str:
     return "-".join(part for part in compact.split("-") if part)
 
 
-def load_mcp_contribution_payloads(root: Path | None = None) -> tuple[dict[str, object], ...]:
-    if root is not None:
-        return _load_from_directory(root)
-    packaged = _load_packaged_payloads()
-    if packaged:
-        return packaged
-    return _load_from_directory(contributions_dir())
+def normalized_remote_mcp_url(value: object) -> str | None:
+    """Normalize a configured remote MCP URL, keeping its validated query."""
+    return _bound_grammar("remote_url", value)
 
 
-def validate_mcp_contribution_file(path: Path) -> dict[str, object]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path.name} must contain an object")
-    validate_mcp_contribution(payload, filename=path.name)
-    return payload
+def normalized_remote_server_name(value: object) -> str | None:
+    """Fold a contributed remote server name to its comparison form."""
+    return _bound_grammar("remote_server_name", value)
 
 
 def validate_mcp_contribution(payload: Mapping[str, object], *, filename: str = "contribution") -> None:
@@ -75,8 +90,35 @@ def validate_mcp_contribution(payload: Mapping[str, object], *, filename: str = 
     if isinstance(icon, dict) and icon.get("kind") == "react-icon" and icon.get("name") not in _ALLOWED_ICON_NAMES:
         raise ValueError(f"{filename} uses an icon name that is not allowlisted")
     launch = payload.get("launch")
-    if not isinstance(launch, dict) or launch.get("command") not in _ALLOWED_LAUNCHERS:
-        raise ValueError(f"{filename} launch command is not an allowlisted package launcher")
+    if not isinstance(launch, dict):
+        raise ValueError(f"{filename} launch metadata is invalid")
+    launch_kind = launch.get("kind")
+    if launch_kind == "package-launcher":
+        if launch.get("command") not in _ALLOWED_LAUNCHERS:
+            raise ValueError(f"{filename} launch command is not an allowlisted package launcher")
+    elif launch_kind == "direct-command":
+        command = launch.get("command")
+        if not isinstance(command, str) or direct_mcp_command_name(command) != command:
+            raise ValueError(
+                f"{filename} direct command must be a canonical lowercase executable basename, not a generic launcher"
+            )
+    elif launch_kind == "remote-http":
+        if normalized_remote_mcp_url(launch.get("url")) is None:
+            raise ValueError(
+                f"{filename} remote launch URL must be a public HTTPS endpoint without credentials or a custom port"
+            )
+        server_names = launch.get("serverNames")
+        normalized_names = (
+            [normalized_remote_server_name(item) for item in server_names] if isinstance(server_names, list) else []
+        )
+        if (
+            not normalized_names
+            or any(item is None for item in normalized_names)
+            or len(normalized_names) != len(set(normalized_names))
+        ):
+            raise ValueError(f"{filename} remote launch server names are invalid or duplicate")
+    else:
+        raise ValueError(f"{filename} launch kind is unsupported")
     tools = payload.get("tools")
     if not isinstance(tools, list) or not tools:
         raise ValueError(f"{filename} must declare tools")
@@ -87,121 +129,20 @@ def validate_mcp_contribution(payload: Mapping[str, object], *, filename: str = 
     ]
     if not names or len(names) != len(set(names)):
         raise ValueError(f"{filename} declares duplicate tool names")
-
-
-def mcp_catalog_ids(root: Path | None = None) -> frozenset[str]:
-    return frozenset(catalog_id_for_mcp_id(str(item["id"])) for item in load_mcp_contribution_payloads(root))
-
-
-def mcp_tool_state(payload: Mapping[str, object], tool_name: str) -> str:
-    tools = payload.get("tools")
-    if not isinstance(tools, list):
-        return "inherit"
-    wanted = _normalized_tool_name(tool_name)
-    fallback = "inherit"
     for item in tools:
         if not isinstance(item, dict):
             continue
-        name = item.get("name")
         state = item.get("state")
-        normalized = _normalized_tool_name(name) if isinstance(name, str) else ""
-        if normalized == "other" and state in {"inherit", "allow", "block"}:
-            fallback = state
-        if normalized == wanted and state in {"inherit", "allow", "block"}:
-            return state
-    return fallback
-
-
-def mcp_payload_for_catalog_id(extension_id: str) -> dict[str, object] | None:
-    return _contribution_index().get(extension_id)
-
-
-def catalog_mcp_fields(extension_id: str) -> dict[str, object] | None:
-    payload = _contribution_index().get(extension_id)
-    if payload is None:
-        return None
-    launch = payload.get("launch")
-    tools = payload.get("tools")
-    if not isinstance(launch, dict) or not isinstance(tools, list):
-        return None
-    return {
-        "surface": "mcp",
-        "mcp_launch": dict(launch),
-        "mcp_tools": [dict(item) for item in tools if isinstance(item, dict)],
-    }
-
-
-def reset_mcp_contribution_cache() -> None:
-    _contribution_index.cache_clear()
-    _validator.cache_clear()
-
-
-def _load_from_directory(directory: Path) -> tuple[dict[str, object], ...]:
-    if not directory.is_dir():
-        return ()
-    files = sorted(directory.glob("mcp.*.json"))
-    return _finalize_payloads(tuple(validate_mcp_contribution_file(path) for path in files))
+        if state not in _TOOL_STATES:
+            raise ValueError(f"{filename} declares unsupported MCP tool state {state!r}")
+        if launch_kind == "remote-http" and state not in _REMOTE_TOOL_STATES:
+            raise ValueError(f"{filename} remote HTTP contributions cannot declare allow defaults")
+        if launch_kind == "direct-command" and state == "allow":
+            raise ValueError(f"{filename} direct-command contributions cannot declare allow defaults")
 
 
 def _frozen_runtime() -> bool:
     return bool(getattr(sys, "frozen", False))
-
-
-def _load_packaged_payloads() -> tuple[dict[str, object], ...]:
-    try:
-        root = resources.files("codex_plugin_scanner.guard.contracts.data.mcp_servers") / "contributions"
-        names = [item for item in root.iterdir() if item.name.startswith("mcp.") and item.name.endswith(".json")]
-    except (FileNotFoundError, ModuleNotFoundError, OSError, AttributeError):
-        frozen = frozen_package_data("mcp_servers", "contributions")
-        if frozen is None or not frozen.is_dir():
-            if _frozen_runtime():
-                raise FileNotFoundError("frozen Guard is missing packaged MCP server contributions") from None
-            return ()
-        names = [item for item in frozen.iterdir() if item.name.startswith("mcp.") and item.name.endswith(".json")]
-    if not names:
-        if _frozen_runtime():
-            raise FileNotFoundError("frozen Guard is missing packaged MCP server contributions")
-        return ()
-    payloads: list[dict[str, object]] = []
-    for item in sorted(names, key=lambda entry: entry.name):
-        payload = json.loads(item.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            raise ValueError(f"{item.name} must contain an object")
-        validate_mcp_contribution(payload, filename=item.name)
-        payloads.append(payload)
-    return _finalize_payloads(tuple(payloads))
-
-
-def _finalize_payloads(payloads: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
-    packages: dict[str, str] = {}
-    ids: set[str] = set()
-    for payload in payloads:
-        mcp_id = payload.get("id")
-        if not isinstance(mcp_id, str):
-            raise ValueError("MCP contribution is missing id")
-        if mcp_id in ids:
-            raise ValueError(f"duplicate MCP contribution id {mcp_id}")
-        ids.add(mcp_id)
-        launch = payload.get("launch")
-        package = launch.get("package") if isinstance(launch, dict) else None
-        if not isinstance(package, str) or not package.strip():
-            raise ValueError(f"{mcp_id} is missing a launch package")
-        key = package.strip().lower()
-        previous = packages.get(key)
-        if previous is not None:
-            raise ValueError(f"duplicate MCP launch package {package} for {previous} and {mcp_id}")
-        packages[key] = mcp_id
-    return payloads
-
-
-@lru_cache(maxsize=1)
-def _contribution_index() -> dict[str, dict[str, object]]:
-    index: dict[str, dict[str, object]] = {}
-    for payload in load_mcp_contribution_payloads():
-        mcp_id = payload.get("id")
-        if isinstance(mcp_id, str):
-            index[catalog_id_for_mcp_id(mcp_id)] = payload
-    return index
 
 
 @lru_cache(maxsize=1)

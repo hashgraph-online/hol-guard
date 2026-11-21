@@ -6,9 +6,6 @@ import json
 import sqlite3
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.contracts import setup_contract_for
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.cli.install_commands import (
     _grok_protection_checks,
     build_harness_setup_plan,
@@ -16,12 +13,14 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     grok_hooks_protection_ready,
     uninstall_confirmation_token,
 )
+from codex_plugin_scanner.guard.harness_context import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
-from codex_plugin_scanner.guard.store_approvals import (
+from codex_plugin_scanner.guard.setup_contracts import setup_contract_for
+from tests import harness_ops_support as harness_support
+from tests.native_approval_writes import (
     add_approval_request,
-    approval_index_statements,
-    approval_schema_statement,
+    native_approval_connection,
     resolve_request_with_queue_result,
 )
 
@@ -55,10 +54,12 @@ def test_build_harness_setup_plan_disconnect_confirmation(tmp_path: Path) -> Non
 def test_grok_protection_checks_ready_after_install(tmp_path: Path, monkeypatch) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+        "codex_plugin_scanner.guard.shims.prepare_guard_shim",
+        lambda *args, **kwargs: PreparedHarnessInstall(
+            (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
+        ),
     )
-    GrokHarnessAdapter().install(ctx)
+    harness_support.install("grok", ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
     (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
     checks = _grok_protection_checks(ctx)
@@ -73,10 +74,12 @@ def test_grok_protection_checks_ready_after_install(tmp_path: Path, monkeypatch)
 def test_build_harness_verification_includes_grok_checks(tmp_path: Path, monkeypatch) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+        "codex_plugin_scanner.guard.shims.prepare_guard_shim",
+        lambda *args, **kwargs: PreparedHarnessInstall(
+            (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
+        ),
     )
-    GrokHarnessAdapter().install(ctx)
+    harness_support.install("grok", ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
     (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
     payload = build_harness_verification("grok", ctx)
@@ -106,10 +109,12 @@ def test_normalize_harness_payload_supports_grok_bash(tmp_path: Path) -> None:
 def test_grok_protection_checks_flag_stale_matchers(tmp_path: Path, monkeypatch) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+        "codex_plugin_scanner.guard.shims.prepare_guard_shim",
+        lambda *args, **kwargs: PreparedHarnessInstall(
+            (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
+        ),
     )
-    GrokHarnessAdapter().install(ctx)
+    harness_support.install("grok", ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
     (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
     pretool = ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json"
@@ -138,10 +143,12 @@ def test_grok_protection_checks_flag_stale_matchers(tmp_path: Path, monkeypatch)
 def test_grok_protection_checks_reject_empty_catchall(tmp_path: Path, monkeypatch) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+        "codex_plugin_scanner.guard.shims.prepare_guard_shim",
+        lambda *args, **kwargs: PreparedHarnessInstall(
+            (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
+        ),
     )
-    GrokHarnessAdapter().install(ctx)
+    harness_support.install("grok", ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
     (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
     pretool = ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json"
@@ -189,12 +196,7 @@ def test_normalize_harness_payload_supports_grok_secret_read(tmp_path: Path) -> 
 
 
 def _approval_connection() -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    connection.execute(approval_schema_statement())
-    for statement in approval_index_statements():
-        connection.execute(statement)
-    return connection
+    return native_approval_connection()
 
 
 def _grok_approval_request(request_id: str, *, command: str, harness: str = "grok") -> GuardApprovalRequest:
@@ -248,13 +250,15 @@ def test_scoped_grok_approval_keeps_unrelated_queue() -> None:
 def test_grok_protection_checks_flag_literal_home_prefix_deny_rules(tmp_path: Path, monkeypatch) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+        "codex_plugin_scanner.guard.shims.prepare_guard_shim",
+        lambda *args, **kwargs: PreparedHarnessInstall(
+            (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
+        ),
     )
-    GrokHarnessAdapter().install(ctx)
+    harness_support.install("grok", ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
     (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
-    managed_config = ctx.home_dir / ".grok" / "managed_config.toml"
+    managed_config = ctx.home_dir / ".grok" / "config.toml"
     managed_text = managed_config.read_text(encoding="utf-8")
     legacy_text = managed_text.replace(
         "Read(**/.ssh/**)",

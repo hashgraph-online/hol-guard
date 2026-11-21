@@ -126,13 +126,6 @@ class ComposedExtensionControls:
     controls: tuple[ExtensionControl, ...]
     failures: tuple[ControlResolverFailure, ...] = ()
 
-    def state_for(self, kind: ControlTargetKind, target_id: str) -> ControlState:
-        target = ControlTarget(kind, target_id)
-        return next(
-            (control.state for control in self.controls if control.target == target),
-            ControlState.ENABLED,
-        )
-
 
 @dataclass(frozen=True, slots=True)
 class ControlResolution:

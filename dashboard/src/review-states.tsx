@@ -6,12 +6,15 @@ import {
   HiMiniInformationCircle,
   HiMiniShieldCheck,
 } from "react-icons/hi2";
+import { resolveAgentStatedIntent } from "./agent-stated-intent";
 import { ActionButton, GuardHero, ProofStrip, SectionLabel } from "./approval-center-primitives";
 import {
   buildCodexResumeUx,
   buildPrimaryReviewAction,
   harnessDisplayName,
+  isWatchOnlyObservation,
   resolveRequestWorkingDirectory,
+  watchProtectedOutcome,
 } from "./approval-center-utils";
 import type {
   GuardApprovalRequest,
@@ -21,6 +24,8 @@ import type {
 } from "./guard-types";
 import { normalizeGuardAction } from "./guard-action";
 import { LoggedActionPanel } from "./logged-action-panel";
+import { explainMcpCall } from "./mcp-call/explain-mcp-call";
+import { McpCallCard } from "./mcp-call/mcp-call-card";
 import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
 
 const PROTECTION_APPEARANCE = {
@@ -101,7 +106,7 @@ function ReviewCodexResumePanel({ resume, onRetry }: ReviewCodexResumePanelProps
   );
 }
 
-export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume }: { runtime: GuardRuntimeSnapshot | null; resolutionMessage: string | null; codexResume: GuardCodexResumeResult | null; onRetryResume?: () => void }) {
+export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume, queueReadIncomplete = false }: { runtime: GuardRuntimeSnapshot | null; resolutionMessage: string | null; codexResume: GuardCodexResumeResult | null; onRetryResume?: () => void; queueReadIncomplete?: boolean }) {
   const protectionHealth = runtime === null ? unavailableProtectionHealth() : protectionHealthFor(runtime);
   const presentation = useProtectionPresentationState(protectionHealth);
   if (runtime === null) {
@@ -130,7 +135,7 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
 
   return (
     <div className="space-y-6">
-      <GuardHero
+      {!queueReadIncomplete && <GuardHero
         status={heroStatus}
         headline={presentation === "checking" ? "Checking protection" : "Nothing to review"}
         subheadline={
@@ -138,11 +143,11 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
             ? protectionDetail
             : `No actions need your decision right now. ${protectionDetail}`
         }
-      />
+      />}
 
       <ProofStrip
         items={[
-          { label: "Queue", value: "All clear", tone: "green" },
+          { label: "Queue", value: queueReadIncomplete ? "Incomplete" : "All clear", tone: queueReadIncomplete ? "slate" : "green" },
           { label: "Protection", value: protectionLabel, tone: protectionHealth.state === "protected" ? "green" : "slate" },
           { label: "Apps protected", value: protectedAppsCount, tone: protectedAppsCount > 0 ? "green" : "slate" },
         ]}
@@ -196,14 +201,26 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
 }
 
 export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return <McpCallCard item={item} explanation={mcpCall} />;
+  }
+  return <LoggedActionCard item={item} />;
+}
+
+function LoggedActionCard({ item }: { item: GuardApprovalRequest }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
+  const agentIntent = resolveAgentStatedIntent(item);
+  const watchOnlyObservation = isWatchOnlyObservation(item);
+  const actionDescription = watchOnlyObservation ? "observed action" : "stopped action";
+  const actionLabel = watchOnlyObservation ? "Would have stopped" : action.label;
 
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <SectionLabel>What was stopped</SectionLabel>
+          <SectionLabel>{watchOnlyObservation ? "What Watch observed" : "What was stopped"}</SectionLabel>
           {action.detail !== null && (
             <p className="mt-1 text-sm text-brand-dark/70">
               {action.detail}
@@ -211,17 +228,17 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
           )}
         </div>
         <span className="rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue">
-          {action.label}
+          {actionLabel}
         </span>
       </div>
       <div className="mt-3">
         <LoggedActionPanel
           key={item.request_id}
-          label={action.label}
+          label={actionLabel}
           text={action.text}
-          copyAriaLabel="Copy full stopped action to clipboard"
-          expandAriaLabel="Expand full stopped action"
-          collapseAriaLabel="Collapse full stopped action"
+          copyAriaLabel={`Copy full ${actionDescription} to clipboard`}
+          expandAriaLabel={`Expand full ${actionDescription}`}
+          collapseAriaLabel={`Collapse full ${actionDescription}`}
         />
         {workingDirectory !== null && (
           <div className="mt-3 flex min-w-0 items-start gap-2 text-xs text-muted-foreground">
@@ -232,12 +249,30 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
             </code>
           </div>
         )}
+        {agentIntent !== null && (
+          <figure className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2">
+            <figcaption className="text-xs font-medium text-brand-dark/70">
+              What the agent said it is doing
+            </figcaption>
+            <blockquote className="mt-1 break-words text-sm text-brand-dark">
+              “{agentIntent.text}”
+            </blockquote>
+            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+              In the agent's own words. Guard has not checked this, so decide from the command above.
+            </p>
+          </figure>
+        )}
       </div>
     </div>
   );
 }
 
 export function buildWhatWouldHappen(item: GuardApprovalRequest): string | null {
+  if (isWatchOnlyObservation(item)) {
+    return `Watch allowed this action to continue. ${watchProtectedOutcome(item)}`;
+  }
+  // The MCP card says what the call does and why Guard paused it, so it has no generic line to add.
+  if (explainMcpCall(item) !== null) return null;
   const type = item.artifact_type;
   if (type?.includes("file_write") || type?.includes("file_read")) {
     return `Without Guard, ${harnessDisplayName(item.harness)} would access "${item.artifact_name ?? item.artifact_id}" immediately. Guard paused it so you can review first.`;

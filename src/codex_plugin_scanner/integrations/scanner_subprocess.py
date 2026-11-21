@@ -68,12 +68,6 @@ class ScannerProcessResult:
     timed_out: bool = False
 
 
-class _WindowsJob(Protocol):
-    def terminate(self) -> None: ...
-
-    def close(self) -> None: ...
-
-
 class _Kqueue(Protocol):
     def control(self, changelist: list[object], max_events: int, timeout: float) -> list[object]: ...
 
@@ -136,7 +130,14 @@ def run_bounded_scanner_process(
 ) -> ScannerProcessResult:
     command = _validated_scanner_argv(argv)
     with tempfile.TemporaryDirectory(prefix="hol-guard-scanner-") as working_directory:
-        process, windows_job = _spawn_scanner_process(
+        if os.name == "nt":
+            return _run_windows_scanner_through_native(
+                command,
+                env=env,
+                timeout_seconds=timeout_seconds,
+                working_directory=Path(working_directory),
+            )
+        process = _spawn_scanner_process(
             command,
             env=env,
             timeout_seconds=timeout_seconds,
@@ -151,15 +152,12 @@ def run_bounded_scanner_process(
         deadline = time.monotonic() + timeout_seconds
         timed_out = False
         try:
-            if os.name == "posix":
-                timed_out = not _wait_for_posix_leader_without_reaping(process, deadline)
-                _terminate_process_group(process)
-                process.wait(timeout=1)
-            else:
-                process.wait(timeout=_remaining_deadline(deadline))
+            timed_out = not _wait_for_posix_leader_without_reaping(process, deadline)
+            _terminate_process_group(process)
+            process.wait(timeout=1)
         except subprocess.TimeoutExpired:
             timed_out = True
-            _terminate_process_group(process, windows_job=windows_job)
+            _terminate_process_group(process)
             try:
                 process.wait(timeout=max(_remaining_deadline(deadline), 0.1))
             except subprocess.TimeoutExpired:
@@ -168,9 +166,7 @@ def run_bounded_scanner_process(
         finally:
             # A scanner leader may exit while descendants retain the captured
             # pipes. Close the whole sandbox before waiting for EOF.
-            if windows_job is not None:
-                _close_windows_job(windows_job)
-            elif process.returncode is None:
+            if process.returncode is None:
                 _terminate_process_group(process)
             _finish_bounded_drain(stdout_thread, cast(BinaryIO | None, process.stdout), deadline)
             _finish_bounded_drain(stderr_thread, cast(BinaryIO | None, process.stderr), deadline)
@@ -179,6 +175,36 @@ def run_bounded_scanner_process(
     if process.returncode is None:
         raise RuntimeError("scanner subprocess was not reaped")
     return ScannerProcessResult(process.returncode, stdout, stderr, timed_out)
+
+
+def _run_windows_scanner_through_native(
+    command: Sequence[str],
+    *,
+    env: Mapping[str, str],
+    timeout_seconds: float,
+    working_directory: Path,
+) -> ScannerProcessResult:
+    """Run the scanner in a native-owned Job Object with the memory and process limits."""
+    from ..guard.codex_hook_launch_runtime import run_isolated_hook_process
+
+    result = run_isolated_hook_process(
+        command,
+        input_text="",
+        cwd=working_directory,
+        environment=env,
+        timeout_seconds=timeout_seconds,
+        output_limit=MAX_SCANNER_OUTPUT_BYTES,
+        windows_job_memory_limit_bytes=_MAX_SCANNER_MEMORY_BYTES,
+        windows_active_process_limit=64,
+    )
+    if result.containment_failed or (result.returncode is None and not result.timed_out):
+        raise RuntimeError("scanner subprocess was not reaped")
+    return ScannerProcessResult(
+        -1 if result.returncode is None else result.returncode,
+        result.stdout,
+        result.stderr,
+        result.timed_out,
+    )
 
 
 def _remaining_deadline(deadline: float) -> float:
@@ -249,19 +275,8 @@ def _spawn_scanner_process(
     env: Mapping[str, str],
     timeout_seconds: float,
     working_directory: Path,
-) -> tuple[subprocess.Popen[bytes], _WindowsJob | None]:
-    if os.name == "nt":
-        from ..guard.codex_hook_windows_job import spawn_windows_hook_process
-
-        process, job = spawn_windows_hook_process(
-            list(argv),
-            cwd=working_directory,
-            environment=dict(env),
-            memory_limit_bytes=_MAX_SCANNER_MEMORY_BYTES,
-            active_process_limit=64,
-        )
-        return process, job
-    process = subprocess.Popen(
+) -> subprocess.Popen[bytes]:
+    return subprocess.Popen(
         _scanner_argv_with_posix_lockdown(argv),
         cwd=working_directory,
         env=dict(env),
@@ -272,7 +287,6 @@ def _spawn_scanner_process(
         start_new_session=True,
         preexec_fn=(lambda: _apply_resource_limits(timeout_seconds)) if os.name == "posix" else None,
     )
-    return process, None
 
 
 def _scanner_argv_with_posix_lockdown(argv: Sequence[str]) -> list[str]:
@@ -408,26 +422,10 @@ def _set_limit(resource_name: int, requested: int) -> None:
         return
 
 
-def _terminate_process_group(
-    process: subprocess.Popen[bytes],
-    *,
-    windows_job: _WindowsJob | None = None,
-) -> None:
+def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
     if os.name == "posix":
         with contextlib.suppress(OSError):
             os.killpg(process.pid, signal.SIGKILL)
         return
-    if windows_job is not None:
-        with contextlib.suppress(OSError):
-            windows_job.terminate()
     with contextlib.suppress(OSError):
         process.kill()
-
-
-def _close_windows_job(job: _WindowsJob) -> None:
-    try:
-        job.close()
-    except OSError:
-        with contextlib.suppress(OSError):
-            job.terminate()
-        job.close()

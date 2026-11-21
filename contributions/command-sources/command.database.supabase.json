@@ -1,0 +1,697 @@
+{
+  "extension": {
+    "action_classes": [
+      "Supabase destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews database reset and migration rollback commands.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.database.supabase",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Supabase command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Supabase destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Supabase reset and migration-down operations that discard database state.",
+        "example_command": "supabase db reset",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Supabase database reset",
+        "permission_id": "command.database.supabase.permission.reset",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Confirm the target and create a database dump before resetting or rolling back migrations."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://supabase.com/docs/reference/cli/supabase-db-reset"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Supabase destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Supabase reset and migration-down operations that discard database state.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "supabase",
+                  "supabase.cmd",
+                  "supabase.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--create-ticket",
+                  "--debug",
+                  "--experimental",
+                  "--yes"
+                ],
+                "interspersed_options_with_values": [
+                  "--agent",
+                  "--dns-resolver",
+                  "--network-id",
+                  "--output",
+                  "--profile",
+                  "--workdir",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "db",
+                  "reset"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "bunx",
+                  "bunx.cmd",
+                  "bunx.exe",
+                  "npx",
+                  "npx.cmd",
+                  "npx.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--create-ticket",
+                  "--debug",
+                  "--experimental",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--agent",
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--dns-resolver",
+                  "--filter",
+                  "--network-id",
+                  "--output",
+                  "--package",
+                  "--profile",
+                  "--reporter",
+                  "--workdir",
+                  "--workspace",
+                  "-c",
+                  "-f",
+                  "-o",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "supabase",
+                  "db",
+                  "reset"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--create-ticket",
+                  "--debug",
+                  "--experimental",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--agent",
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--dns-resolver",
+                  "--filter",
+                  "--network-id",
+                  "--output",
+                  "--package",
+                  "--profile",
+                  "--reporter",
+                  "--workdir",
+                  "--workspace",
+                  "-c",
+                  "-f",
+                  "-o",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "supabase",
+                  "db",
+                  "reset"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--create-ticket",
+                  "--debug",
+                  "--experimental",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--agent",
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--dns-resolver",
+                  "--filter",
+                  "--network-id",
+                  "--output",
+                  "--package",
+                  "--profile",
+                  "--reporter",
+                  "--workdir",
+                  "--workspace",
+                  "-c",
+                  "-f",
+                  "-o",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "exec",
+                  "supabase",
+                  "db",
+                  "reset"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--create-ticket",
+                  "--debug",
+                  "--experimental",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--agent",
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--dns-resolver",
+                  "--filter",
+                  "--network-id",
+                  "--output",
+                  "--package",
+                  "--profile",
+                  "--reporter",
+                  "--workdir",
+                  "--workspace",
+                  "-c",
+                  "-f",
+                  "-o",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "dlx",
+                  "supabase",
+                  "db",
+                  "reset"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "supabase",
+                  "supabase.cmd",
+                  "supabase.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--create-ticket",
+                  "--debug",
+                  "--experimental",
+                  "--yes"
+                ],
+                "interspersed_options_with_values": [
+                  "--agent",
+                  "--dns-resolver",
+                  "--network-id",
+                  "--output",
+                  "--profile",
+                  "--workdir",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "migration",
+                  "down"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "bunx",
+                  "bunx.cmd",
+                  "bunx.exe",
+                  "npx",
+                  "npx.cmd",
+                  "npx.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--create-ticket",
+                  "--debug",
+                  "--experimental",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--agent",
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--dns-resolver",
+                  "--filter",
+                  "--network-id",
+                  "--output",
+                  "--package",
+                  "--profile",
+                  "--reporter",
+                  "--workdir",
+                  "--workspace",
+                  "-c",
+                  "-f",
+                  "-o",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "supabase",
+                  "migration",
+                  "down"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--create-ticket",
+                  "--debug",
+                  "--experimental",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--agent",
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--dns-resolver",
+                  "--filter",
+                  "--network-id",
+                  "--output",
+                  "--package",
+                  "--profile",
+                  "--reporter",
+                  "--workdir",
+                  "--workspace",
+                  "-c",
+                  "-f",
+                  "-o",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "supabase",
+                  "migration",
+                  "down"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--create-ticket",
+                  "--debug",
+                  "--experimental",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--agent",
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--dns-resolver",
+                  "--filter",
+                  "--network-id",
+                  "--output",
+                  "--package",
+                  "--profile",
+                  "--reporter",
+                  "--workdir",
+                  "--workspace",
+                  "-c",
+                  "-f",
+                  "-o",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "exec",
+                  "supabase",
+                  "migration",
+                  "down"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--create-ticket",
+                  "--debug",
+                  "--experimental",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--agent",
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--dns-resolver",
+                  "--filter",
+                  "--network-id",
+                  "--output",
+                  "--package",
+                  "--profile",
+                  "--reporter",
+                  "--workdir",
+                  "--workspace",
+                  "-c",
+                  "-f",
+                  "-o",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "dlx",
+                  "supabase",
+                  "migration",
+                  "down"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.database.supabase.permission.reset",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.database.supabase.reset",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Confirm the target and create a database dump before resetting or rolling back migrations."
+        ],
+        "severity": "critical",
+        "title": "Supabase database reset"
+      }
+    ],
+    "safer_alternatives": [
+      "Use --dry-run and verify the selected database target first."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

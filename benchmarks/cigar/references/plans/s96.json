@@ -1,0 +1,112 @@
+{
+ "repo": "jinja",
+ "seed": 96,
+ "steps": [
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_filters.py::TestFilter::test_filter_undefined_in_nested_if"
+     ],
+     "line": 267,
+     "new": "        else_symbols = inner_visit(node.else_ and ())\n",
+     "orig": "        else_symbols = inner_visit(node.else_ or ())\n",
+     "path": "src/jinja2/idtracking.py",
+     "qual": "FrameSymbolVisitor.visit_If"
+    },
+    {
+     "failing": [
+      "tests/test_loader.py::TestLoaders::test_dict_loader_cache_invalidates",
+      "tests/test_loader.py::TestLoaders::test_limited_size_cache",
+      "tests/test_regression.py::TestBug::test_cached_extends[extends]",
+      "tests/test_regression.py::TestBug::test_cached_extends[include]"
+     ],
+     "line": 424,
+     "new": "            return source, None, lambda: source != self.mapping.get(template)\n",
+     "orig": "            return source, None, lambda: source == self.mapping.get(template)\n",
+     "path": "src/jinja2/loaders.py",
+     "qual": "DictLoader.get_source"
+    }
+   ]
+  },
+  {
+   "doc": {
+    "module": "jinja2.lexer",
+    "path": "src/jinja2/lexer.py",
+    "qual": "get_lexer"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `get_lexer` in src/jinja2/lexer.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "stub",
+   "prompt": "Tests fail because Environment.list_templates is not implemented (src/jinja2/environment.py). Write the implementation; the docstring and tests describe the expected behavior.",
+   "stub": {
+    "body": "        assert self.loader is not None, \"No loader configured.\"\n        names = self.loader.list_templates()\n\n        if extensions is not None:\n            if filter_func is not None:\n                raise TypeError(\n                    \"either extensions or filter_func can be passed, but not both\"\n                )\n\n            def filter_func(x: str) -> bool:\n                return \".\" in x and x.rsplit(\".\", 1)[1] in extensions\n\n        if filter_func is not None:\n            names = [name for name in names if filter_func(name)]\n\n        return names\n",
+    "body_start": 916,
+    "end": 931,
+    "failing": [
+     "tests/test_compile.py::test_filters_deterministic",
+     "tests/test_compile.py::test_import_as_with_context_deterministic",
+     "tests/test_loader.py::TestModuleLoader::test_choice_loader",
+     "tests/test_loader.py::TestModuleLoader::test_deflated_zip_compile",
+     "tests/test_loader.py::TestModuleLoader::test_filesystem_compile",
+     "tests/test_loader.py::TestModuleLoader::test_log",
+     "tests/test_loader.py::TestModuleLoader::test_path_as_pathlib",
+     "tests/test_loader.py::TestModuleLoader::test_prefix_loader",
+     "tests/test_loader.py::TestModuleLoader::test_stored_zip_compile",
+     "tests/test_loader.py::TestModuleLoader::test_supports_pathlib_in_list_of_paths",
+     "tests/test_loader.py::TestModuleLoader::test_weak_references"
+    ],
+    "indent": 8,
+    "path": "src/jinja2/environment.py",
+    "qual": "Environment.list_templates"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_tests.py::TestTestsCase::test_types[0",
+      "tests/test_tests.py::TestTestsCase::test_types[0.0",
+      "tests/test_tests.py::TestTestsCase::test_types[1",
+      "tests/test_tests.py::TestTestsCase::test_types[1.0",
+      "tests/test_tests.py::TestTestsCase::test_types[3.14159",
+      "tests/test_tests.py::TestTestsCase::test_types[42",
+      "tests/test_tests.py::TestTestsCase::test_types[false",
+      "tests/test_tests.py::TestTestsCase::test_types[none"
+     ],
+     "line": 102,
+     "new": "    return value is True or value is not False\n",
+     "orig": "    return value is True or value is False\n",
+     "path": "src/jinja2/tests.py",
+     "qual": "test_boolean"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "`tests/test_ext.py::TestAutoEscape::test_overlay_scopes` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_ext.py::TestAutoEscape::test_overlay_scopes"
+     ],
+     "line": 229,
+     "new": "            return Frame(self.eval_ctx, level=self.symbols.level - 1)\n",
+     "orig": "            return Frame(self.eval_ctx, level=self.symbols.level + 1)\n",
+     "path": "src/jinja2/compiler.py",
+     "qual": "Frame.inner"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

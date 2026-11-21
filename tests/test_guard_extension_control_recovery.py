@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import extension_control_api as extension_control_api_module
-from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
+from codex_plugin_scanner.guard.extension_controls import extension_control_api as extension_control_api_module
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -44,7 +44,7 @@ def test_recovery_refreshes_stale_runtime_after_store_already_recovered(
         runtime=ExtensionControlRuntime(replace(protected, health=AuthorityHealth.RECOVERY_REQUIRED)),
     )
     recovery_calls: list[object] = []
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: protected)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: protected)
     monkeypatch.setattr(
         store,
         "recover_extension_control_authority",
@@ -70,7 +70,7 @@ def test_recovery_can_install_lower_recovered_revision(
         registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         runtime=ExtensionControlRuntime(damaged),
     )
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: damaged)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: damaged)
     monkeypatch.setattr(store, "recover_extension_control_authority", lambda **_kwargs: recovered)
     _approve_recovery(monkeypatch)
 
@@ -103,7 +103,7 @@ def test_recovery_marks_runtime_fail_safe_before_reset(
         runtime=runtime,
     )
     observed_runtime_health: list[AuthorityHealth] = []
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: damaged)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: damaged)
     monkeypatch.setattr(
         store,
         "recover_extension_control_authority",
@@ -131,7 +131,7 @@ def test_concurrent_recovery_is_idempotent(tmp_path: Path, monkeypatch: pytest.M
         registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         runtime=ExtensionControlRuntime(damaged),
     )
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: damaged)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: damaged)
     monkeypatch.setattr(store, "recover_extension_control_authority", lambda **_kwargs: recovered)
     _approve_recovery(monkeypatch)
 

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, type ChangeEvent } from "react";
+import { StyledSelect } from "./styled-select";
 import {
   HiOutlineArrowTrendingUp,
   HiOutlineArrowTrendingDown,
@@ -180,14 +181,14 @@ function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Peri
     [onChange]
   );
   return (
-    <select
+    <StyledSelect
       value={value}
       onChange={handleChange}
-      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      className="min-h-8 rounded-lg py-1 text-xs font-medium"
     >
       <option value="7d">Last 7 days</option>
       <option value="30d">Last 30 days</option>
       <option value="90d">Last 90 days</option>
-    </select>
+    </StyledSelect>
   );
 }

@@ -7,7 +7,7 @@
       "red_team_fixture": null
     },
     "benign-health-check.json": {
-      "permission": "allow",
+      "permission": "review",
       "red_team_fixture": "benign-health-endpoint.py"
     },
     "malicious-canary-exfil-shell.json": {

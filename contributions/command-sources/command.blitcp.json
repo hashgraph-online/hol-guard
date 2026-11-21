@@ -1,0 +1,925 @@
+{
+  "extension": {
+    "action_classes": [
+      "Blitcp remote destination command",
+      "Blitcp privilege escalation command",
+      "Blitcp self-update command",
+      "Blitcp unverified copy command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews blitcp copies that leave the host, elevate privileges, or skip verification.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.blitcp",
+    "homepage": "https://blitcp.dev/docs/",
+    "icon": {
+      "background": "#0F766E",
+      "kind": "react-icon",
+      "name": "HiMiniGlobeAlt"
+    },
+    "license": "MIT",
+    "name": "Blitcp transfer protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Blitcp privilege escalation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies blitcp runs that re-execute the tool under sudo — copies elevated with --use-sudo, and `creds lock`/`creds unlock --use-sudo`, which needs root to set or clear credentials-file immutability.",
+        "example_command": "blitcp --use-sudo /var/lib/data /mnt/backup",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Blitcp privilege escalation",
+        "permission_id": "command.blitcp.permission.privilege-escalation",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Copy as a user that already reaches both paths rather than elevating the copier."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Blitcp remote destination command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies blitcp copies whose final operand is a remote destination — an object-store or SMB endpoint, an scp-style [user@]host:path target, or a saved connection referenced as NAME:subpath (or as a bare NAME when --credentials-file is on the command) — which sends local data off the host. The same endpoint in an earlier position is a source and reads data instead.",
+        "example_command": "blitcp /data s3://backups/nightly",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Blitcp copy to a remote destination",
+        "permission_id": "command.blitcp.permission.remote-destination",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run the same command with --dry-run and confirm the destination before copying."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Blitcp self-update command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies blitcp self-update runs, which download a release over the network and replace the running executable in place.",
+        "example_command": "blitcp --update",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Blitcp self-update",
+        "permission_id": "command.blitcp.permission.self-update",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Update through the package manager that installed blitcp instead of rewriting the binary."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Blitcp unverified copy command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies blitcp runs that skip the whole post-copy verification phase, so the run reports success without reading anything back and the destination can silently diverge from the source — data loss once the source is cleaned up on the strength of that success report.",
+        "example_command": "blitcp --no-verify /data /mnt/backup",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Blitcp copy without verification",
+        "permission_id": "command.blitcp.permission.unverified-copy",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Drop --no-verify so every copied file is read back and compared against the source."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.gekap",
+      "url": "https://github.com/gekap/blitcp"
+    },
+    "reference_urls": [
+      "https://blitcp.dev/docs/",
+      "https://github.com/gekap/blitcp"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Blitcp remote destination command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies blitcp copies whose final operand is a remote destination — an object-store or SMB endpoint, an scp-style [user@]host:path target, or a saved connection referenced as NAME:subpath (or as a bare NAME when --credentials-file is on the command) — which sends local data off the host. The same endpoint in an earlier position is a source and reads data instead.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "excluded_first_arguments": [
+                  "check-deps",
+                  "creds",
+                  "deps",
+                  "doctor",
+                  "list-objects",
+                  "ls"
+                ],
+                "executables": [
+                  "blitcp",
+                  "blitcp.cmd",
+                  "blitcp.exe"
+                ],
+                "forbidden_flags": [],
+                "minimum_operands": 2,
+                "operand_prefixes": [
+                  "az://",
+                  "gs://",
+                  "s3://",
+                  "smb://"
+                ],
+                "options_with_values": [
+                  "--az-account",
+                  "--az-connection-string",
+                  "--az-key",
+                  "--buffer",
+                  "--chunk-size",
+                  "--cloud-concurrency",
+                  "--credentials-file",
+                  "--endpoint-url",
+                  "--exclude",
+                  "--gcs-credentials",
+                  "--gcs-project",
+                  "--hash",
+                  "--index-existing",
+                  "--lang",
+                  "--log-file",
+                  "--preserve",
+                  "--s3-profile",
+                  "--s3-region",
+                  "--small-files",
+                  "--smb-domain",
+                  "--smb-password-env",
+                  "--smb-port",
+                  "--smb-user",
+                  "--ssh-dst-key",
+                  "--ssh-dst-password-env",
+                  "--ssh-dst-port",
+                  "--ssh-src-key",
+                  "--ssh-src-password-env",
+                  "--ssh-src-port",
+                  "--threads",
+                  "--update-sha256"
+                ],
+                "required_flags": []
+              },
+              "op": "trailing-operand-prefix.v1"
+            },
+            {
+              "config": {
+                "excluded_first_arguments": [
+                  "check-deps",
+                  "creds",
+                  "deps",
+                  "doctor",
+                  "list-objects",
+                  "ls"
+                ],
+                "executables": [
+                  "blitcp",
+                  "blitcp.cmd",
+                  "blitcp.exe"
+                ],
+                "forbidden_flags": [],
+                "minimum_operands": 2,
+                "options_with_values": [
+                  "--az-account",
+                  "--az-connection-string",
+                  "--az-key",
+                  "--buffer",
+                  "--chunk-size",
+                  "--cloud-concurrency",
+                  "--credentials-file",
+                  "--endpoint-url",
+                  "--exclude",
+                  "--gcs-credentials",
+                  "--gcs-project",
+                  "--hash",
+                  "--index-existing",
+                  "--lang",
+                  "--log-file",
+                  "--preserve",
+                  "--s3-profile",
+                  "--s3-region",
+                  "--small-files",
+                  "--smb-domain",
+                  "--smb-password-env",
+                  "--smb-port",
+                  "--smb-user",
+                  "--ssh-dst-key",
+                  "--ssh-dst-password-env",
+                  "--ssh-dst-port",
+                  "--ssh-src-key",
+                  "--ssh-src-password-env",
+                  "--ssh-src-port",
+                  "--threads",
+                  "--update-sha256"
+                ],
+                "required_flags": []
+              },
+              "op": "trailing-operand-host-target.v1"
+            },
+            {
+              "config": {
+                "allow_bare_names": false,
+                "bare_names_only": false,
+                "excluded_first_arguments": [
+                  "check-deps",
+                  "creds",
+                  "deps",
+                  "doctor",
+                  "list-objects",
+                  "ls"
+                ],
+                "executables": [
+                  "blitcp",
+                  "blitcp.cmd",
+                  "blitcp.exe"
+                ],
+                "forbidden_flags": [],
+                "minimum_operands": 2,
+                "options_with_values": [
+                  "--az-account",
+                  "--az-connection-string",
+                  "--az-key",
+                  "--buffer",
+                  "--chunk-size",
+                  "--cloud-concurrency",
+                  "--credentials-file",
+                  "--endpoint-url",
+                  "--exclude",
+                  "--gcs-credentials",
+                  "--gcs-project",
+                  "--hash",
+                  "--index-existing",
+                  "--lang",
+                  "--log-file",
+                  "--preserve",
+                  "--s3-profile",
+                  "--s3-region",
+                  "--small-files",
+                  "--smb-domain",
+                  "--smb-password-env",
+                  "--smb-port",
+                  "--smb-user",
+                  "--ssh-dst-key",
+                  "--ssh-dst-password-env",
+                  "--ssh-dst-port",
+                  "--ssh-src-key",
+                  "--ssh-src-password-env",
+                  "--ssh-src-port",
+                  "--threads",
+                  "--update-sha256"
+                ],
+                "required_flags": []
+              },
+              "op": "trailing-operand-remote-alias.v1"
+            },
+            {
+              "config": {
+                "allow_bare_names": true,
+                "bare_names_only": true,
+                "excluded_first_arguments": [
+                  "check-deps",
+                  "creds",
+                  "deps",
+                  "doctor",
+                  "list-objects",
+                  "ls"
+                ],
+                "executables": [
+                  "blitcp",
+                  "blitcp.cmd",
+                  "blitcp.exe"
+                ],
+                "forbidden_flags": [],
+                "minimum_operands": 2,
+                "options_with_values": [
+                  "--az-account",
+                  "--az-connection-string",
+                  "--az-key",
+                  "--buffer",
+                  "--chunk-size",
+                  "--cloud-concurrency",
+                  "--credentials-file",
+                  "--endpoint-url",
+                  "--exclude",
+                  "--gcs-credentials",
+                  "--gcs-project",
+                  "--hash",
+                  "--index-existing",
+                  "--lang",
+                  "--log-file",
+                  "--preserve",
+                  "--s3-profile",
+                  "--s3-region",
+                  "--small-files",
+                  "--smb-domain",
+                  "--smb-password-env",
+                  "--smb-port",
+                  "--smb-user",
+                  "--ssh-dst-key",
+                  "--ssh-dst-password-env",
+                  "--ssh-dst-port",
+                  "--ssh-src-key",
+                  "--ssh-src-password-env",
+                  "--ssh-src-port",
+                  "--threads",
+                  "--update-sha256"
+                ],
+                "required_flags": [
+                  "--credentials-file"
+                ]
+              },
+              "op": "trailing-operand-remote-alias.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.blitcp.permission.remote-destination",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.blitcp.remote-destination",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "excluded_first_arguments": [
+                      "check-deps",
+                      "creds",
+                      "deps",
+                      "doctor",
+                      "list-objects",
+                      "ls"
+                    ],
+                    "executables": [
+                      "blitcp",
+                      "blitcp.cmd",
+                      "blitcp.exe"
+                    ],
+                    "forbidden_flags": [],
+                    "minimum_operands": 2,
+                    "operand_prefixes": [
+                      "az://",
+                      "gs://",
+                      "s3://",
+                      "smb://"
+                    ],
+                    "options_with_values": [
+                      "--az-account",
+                      "--az-connection-string",
+                      "--az-key",
+                      "--buffer",
+                      "--chunk-size",
+                      "--cloud-concurrency",
+                      "--credentials-file",
+                      "--endpoint-url",
+                      "--exclude",
+                      "--gcs-credentials",
+                      "--gcs-project",
+                      "--hash",
+                      "--index-existing",
+                      "--lang",
+                      "--log-file",
+                      "--preserve",
+                      "--s3-profile",
+                      "--s3-region",
+                      "--small-files",
+                      "--smb-domain",
+                      "--smb-password-env",
+                      "--smb-port",
+                      "--smb-user",
+                      "--ssh-dst-key",
+                      "--ssh-dst-password-env",
+                      "--ssh-dst-port",
+                      "--ssh-src-key",
+                      "--ssh-src-password-env",
+                      "--ssh-src-port",
+                      "--threads",
+                      "--update-sha256"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ]
+                  },
+                  "op": "trailing-operand-prefix.v1"
+                },
+                {
+                  "config": {
+                    "excluded_first_arguments": [
+                      "check-deps",
+                      "creds",
+                      "deps",
+                      "doctor",
+                      "list-objects",
+                      "ls"
+                    ],
+                    "executables": [
+                      "blitcp",
+                      "blitcp.cmd",
+                      "blitcp.exe"
+                    ],
+                    "forbidden_flags": [],
+                    "minimum_operands": 2,
+                    "options_with_values": [
+                      "--az-account",
+                      "--az-connection-string",
+                      "--az-key",
+                      "--buffer",
+                      "--chunk-size",
+                      "--cloud-concurrency",
+                      "--credentials-file",
+                      "--endpoint-url",
+                      "--exclude",
+                      "--gcs-credentials",
+                      "--gcs-project",
+                      "--hash",
+                      "--index-existing",
+                      "--lang",
+                      "--log-file",
+                      "--preserve",
+                      "--s3-profile",
+                      "--s3-region",
+                      "--small-files",
+                      "--smb-domain",
+                      "--smb-password-env",
+                      "--smb-port",
+                      "--smb-user",
+                      "--ssh-dst-key",
+                      "--ssh-dst-password-env",
+                      "--ssh-dst-port",
+                      "--ssh-src-key",
+                      "--ssh-src-password-env",
+                      "--ssh-src-port",
+                      "--threads",
+                      "--update-sha256"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ]
+                  },
+                  "op": "trailing-operand-host-target.v1"
+                },
+                {
+                  "config": {
+                    "allow_bare_names": false,
+                    "bare_names_only": false,
+                    "excluded_first_arguments": [
+                      "check-deps",
+                      "creds",
+                      "deps",
+                      "doctor",
+                      "list-objects",
+                      "ls"
+                    ],
+                    "executables": [
+                      "blitcp",
+                      "blitcp.cmd",
+                      "blitcp.exe"
+                    ],
+                    "forbidden_flags": [],
+                    "minimum_operands": 2,
+                    "options_with_values": [
+                      "--az-account",
+                      "--az-connection-string",
+                      "--az-key",
+                      "--buffer",
+                      "--chunk-size",
+                      "--cloud-concurrency",
+                      "--credentials-file",
+                      "--endpoint-url",
+                      "--exclude",
+                      "--gcs-credentials",
+                      "--gcs-project",
+                      "--hash",
+                      "--index-existing",
+                      "--lang",
+                      "--log-file",
+                      "--preserve",
+                      "--s3-profile",
+                      "--s3-region",
+                      "--small-files",
+                      "--smb-domain",
+                      "--smb-password-env",
+                      "--smb-port",
+                      "--smb-user",
+                      "--ssh-dst-key",
+                      "--ssh-dst-password-env",
+                      "--ssh-dst-port",
+                      "--ssh-src-key",
+                      "--ssh-src-password-env",
+                      "--ssh-src-port",
+                      "--threads",
+                      "--update-sha256"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ]
+                  },
+                  "op": "trailing-operand-remote-alias.v1"
+                },
+                {
+                  "config": {
+                    "allow_bare_names": true,
+                    "bare_names_only": true,
+                    "excluded_first_arguments": [
+                      "check-deps",
+                      "creds",
+                      "deps",
+                      "doctor",
+                      "list-objects",
+                      "ls"
+                    ],
+                    "executables": [
+                      "blitcp",
+                      "blitcp.cmd",
+                      "blitcp.exe"
+                    ],
+                    "forbidden_flags": [],
+                    "minimum_operands": 2,
+                    "options_with_values": [
+                      "--az-account",
+                      "--az-connection-string",
+                      "--az-key",
+                      "--buffer",
+                      "--chunk-size",
+                      "--cloud-concurrency",
+                      "--credentials-file",
+                      "--endpoint-url",
+                      "--exclude",
+                      "--gcs-credentials",
+                      "--gcs-project",
+                      "--hash",
+                      "--index-existing",
+                      "--lang",
+                      "--log-file",
+                      "--preserve",
+                      "--s3-profile",
+                      "--s3-region",
+                      "--small-files",
+                      "--smb-domain",
+                      "--smb-password-env",
+                      "--smb-port",
+                      "--smb-user",
+                      "--ssh-dst-key",
+                      "--ssh-dst-password-env",
+                      "--ssh-dst-port",
+                      "--ssh-src-key",
+                      "--ssh-src-password-env",
+                      "--ssh-src-port",
+                      "--threads",
+                      "--update-sha256"
+                    ],
+                    "required_flags": [
+                      "--credentials-file",
+                      "--dry-run"
+                    ]
+                  },
+                  "op": "trailing-operand-remote-alias.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Blitcp dry run",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Run the same command with --dry-run and confirm the destination before copying."
+        ],
+        "severity": "high",
+        "title": "Blitcp copy to a remote destination"
+      },
+      {
+        "action_classes": [
+          "Blitcp privilege escalation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies blitcp runs that re-execute the tool under sudo — copies elevated with --use-sudo, and `creds lock`/`creds unlock --use-sudo`, which needs root to set or clear credentials-file immutability.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "excluded_first_arguments": [
+                  "check-deps",
+                  "creds",
+                  "deps",
+                  "doctor",
+                  "list-objects",
+                  "ls"
+                ],
+                "executables": [
+                  "blitcp",
+                  "blitcp.cmd",
+                  "blitcp.exe"
+                ],
+                "forbidden_flags": [],
+                "minimum_operands": 2,
+                "options_with_values": [
+                  "--az-account",
+                  "--az-connection-string",
+                  "--az-key",
+                  "--buffer",
+                  "--chunk-size",
+                  "--cloud-concurrency",
+                  "--credentials-file",
+                  "--endpoint-url",
+                  "--exclude",
+                  "--gcs-credentials",
+                  "--gcs-project",
+                  "--hash",
+                  "--index-existing",
+                  "--lang",
+                  "--log-file",
+                  "--preserve",
+                  "--s3-profile",
+                  "--s3-region",
+                  "--small-files",
+                  "--smb-domain",
+                  "--smb-password-env",
+                  "--smb-port",
+                  "--smb-user",
+                  "--ssh-dst-key",
+                  "--ssh-dst-password-env",
+                  "--ssh-dst-port",
+                  "--ssh-src-key",
+                  "--ssh-src-password-env",
+                  "--ssh-src-port",
+                  "--threads",
+                  "--update-sha256"
+                ],
+                "required_flags": [
+                  "--use-sudo"
+                ]
+              },
+              "op": "operand-gated-flags.v1"
+            },
+            {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "blitcp",
+                      "blitcp.cmd",
+                      "blitcp.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--use-sudo"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "creds",
+                      "lock"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "blitcp",
+                      "blitcp.cmd",
+                      "blitcp.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--use-sudo"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "creds",
+                      "unlock"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.blitcp.permission.privilege-escalation",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.blitcp.privilege-escalation",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Copy as a user that already reaches both paths rather than elevating the copier."
+        ],
+        "severity": "critical",
+        "title": "Blitcp privilege escalation"
+      },
+      {
+        "action_classes": [
+          "Blitcp self-update command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies blitcp self-update runs, which download a release over the network and replace the running executable in place.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "blitcp",
+              "blitcp.cmd",
+              "blitcp.exe"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [
+              "--update"
+            ],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": []
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.blitcp.permission.self-update",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.blitcp.self-update",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Update through the package manager that installed blitcp instead of rewriting the binary."
+        ],
+        "severity": "high",
+        "title": "Blitcp self-update"
+      },
+      {
+        "action_classes": [
+          "Blitcp unverified copy command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies blitcp runs that skip the whole post-copy verification phase, so the run reports success without reading anything back and the destination can silently diverge from the source — data loss once the source is cleaned up on the strength of that success report.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "excluded_first_arguments": [
+              "check-deps",
+              "creds",
+              "deps",
+              "doctor",
+              "list-objects",
+              "ls"
+            ],
+            "executables": [
+              "blitcp",
+              "blitcp.cmd",
+              "blitcp.exe"
+            ],
+            "forbidden_flags": [
+              "--dry-run"
+            ],
+            "minimum_operands": 2,
+            "options_with_values": [
+              "--az-account",
+              "--az-connection-string",
+              "--az-key",
+              "--buffer",
+              "--chunk-size",
+              "--cloud-concurrency",
+              "--credentials-file",
+              "--endpoint-url",
+              "--exclude",
+              "--gcs-credentials",
+              "--gcs-project",
+              "--hash",
+              "--index-existing",
+              "--lang",
+              "--log-file",
+              "--preserve",
+              "--s3-profile",
+              "--s3-region",
+              "--small-files",
+              "--smb-domain",
+              "--smb-password-env",
+              "--smb-port",
+              "--smb-user",
+              "--ssh-dst-key",
+              "--ssh-dst-password-env",
+              "--ssh-dst-port",
+              "--ssh-src-key",
+              "--ssh-src-password-env",
+              "--ssh-src-port",
+              "--threads",
+              "--update-sha256"
+            ],
+            "required_flags": [
+              "--no-verify"
+            ]
+          },
+          "op": "operand-gated-flags.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.blitcp.permission.unverified-copy",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.blitcp.unverified-copy",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Drop --no-verify so every copied file is read back and compared against the source."
+        ],
+        "severity": "medium",
+        "title": "Blitcp copy without verification"
+      }
+    ],
+    "safer_alternatives": [
+      "Use --dry-run to print the plan, and keep verification enabled on real copies."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

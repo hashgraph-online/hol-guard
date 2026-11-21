@@ -5,8 +5,6 @@ from __future__ import annotations
 import pytest
 
 from codex_plugin_scanner.guard.extension_builder.source_oclif import _command_path
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
-from codex_plugin_scanner.guard.runtime.command_reviewed_literal_matcher import ReviewedLiteralCommandMatcher
 
 
 @pytest.mark.parametrize("separator", ["colon", "space"])
@@ -33,23 +31,3 @@ def test_oclif_paths_keep_the_configured_token_boundaries(
     result = _command_path(command_id, separator)
     assert isinstance(result, tuple)
     assert result == expected
-
-
-@pytest.mark.parametrize(
-    ("text", "count"),
-    [
-        ("samplectl items list", 1),
-        ("samplectl items list extra", 0),
-        ("samplectl items list; otherctl", 0),
-        ("samplectl items list > output.txt", 0),
-        ("env samplectl items list", 0),
-        ("OTHER=value samplectl items list", 0),
-        ("samplectl items delete", 0),
-        ("otherctl", 0),
-    ],
-)
-def test_literal_evidence_is_an_immutable_sequence_without_relaxing_scope(text: str, count: int) -> None:
-    matcher = ReviewedLiteralCommandMatcher("samplectl", ("items", "list"))
-    evidence = matcher.match(parse_shell_command(text))
-    assert isinstance(evidence, tuple)
-    assert len(evidence) == count

@@ -5,8 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.extension_control_errors import ExtensionControlApiError
-from codex_plugin_scanner.guard.daemon.extension_control_test_api import (
+import codex_plugin_scanner.guard.extension_controls.extension_control_test_api as test_api
+from codex_plugin_scanner.guard.extension_controls.extension_control_errors import ExtensionControlApiError
+from codex_plugin_scanner.guard.extension_controls.extension_control_test_api import (
     evaluate_extension_control_test,
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import (
@@ -17,6 +18,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
+from tests.native_command_test_support import real_native_command_evaluation
 
 
 def _runtime() -> ExtensionControlRuntime:
@@ -61,6 +63,44 @@ def test_test_lab_canonicalizes_extension_alias_and_filters_matches() -> None:
     for match in result["matches"]:
         assert match["extension_id"] == "command.git"
         assert match["permission_id"] == "command.git.permission.hard-reset"
+
+
+def test_test_lab_projects_a_bound_native_evaluation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    command_text = "git reset --hard HEAD~1"
+    reviewed = real_native_command_evaluation(command_text)
+    evaluation = reviewed.evaluation
+    snapshot = reviewed.snapshot
+    runtime = ExtensionControlRuntime(
+        ExtensionControlAuthorityView(
+            AuthorityHealth.PROTECTED,
+            snapshot.revision,
+            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            snapshot.layers,
+            snapshot.managed_revision,
+        )
+    )
+
+    def native_evaluate(received: str, **kwargs: object):
+        assert received == command_text
+        assert kwargs["guard_home"] == tmp_path
+        assert kwargs["extension_control_snapshot"] is runtime.current()
+        return evaluation
+
+    monkeypatch.setattr(test_api, "evaluate_command_native", native_evaluate)
+    result = evaluate_extension_control_test(
+        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        runtime=runtime,
+        guard_home=tmp_path,
+        payload={"command": command_text, "extension_id": "command.git"},
+    )
+
+    assert "status" not in result
+    assert result["matched"] is True
+    assert result["matches"]
+    assert result["revision"] == snapshot.revision
 
 
 def test_test_lab_rejects_unknown_or_oversized_inputs() -> None:

@@ -21,14 +21,14 @@ const DECISION_LABELS: Record<GuardAction, string> = {
 const EXECUTION_LABELS: Record<CommandExecutionStatus, string> = {
   attempted: "Attempt recorded",
   prevented: "Prevented before execution",
-  allowed_unconfirmed: "Allowed; execution not confirmed",
+  allowed_unconfirmed: "Result not recorded",
   confirmed_success: "Execution confirmed successful",
   confirmed_failure: "Execution confirmed failed",
   unpaired_post: "Execution observed; initial decision unavailable",
 };
 
 const PROOF_LABELS: Record<CommandProofLevel, string> = {
-  pre_hook: "Pre-execution check only",
+  pre_hook: "Before-command check recorded",
   post_hook: "Post-execution proof recorded",
   unpaired_post: "Unpaired post-execution proof",
 };
@@ -157,12 +157,12 @@ export function commandTrendPoints(
 export function commandExecutionEvidenceCopy(harness: string | null, hasPostProof: boolean): string {
   if (harness === null) {
     return hasPostProof
-      ? "This view includes correlated post-execution evidence on this page."
-      : "No correlated post-execution evidence appears on this page. Allowed commands remain unconfirmed unless post-execution proof is recorded.";
+      ? "Some commands on this page have a matching result recorded after Guard's decision."
+      : "No matching run results appear on this page. For allowed commands, Guard checked them before they could run but cannot confirm what happened afterward.";
   }
   const source = harnessDisplayName(harness);
-  if (hasPostProof) return `${source} includes correlated post-execution evidence on this page.`;
-  return `No correlated post-execution evidence from ${source} appears on this page. Allowed commands remain unconfirmed unless post-execution proof is recorded.`;
+  if (hasPostProof) return `Some ${source} commands on this page have a matching result recorded after Guard's decision.`;
+  return `No matching ${source} run results appear on this page. For allowed commands, Guard checked them before they could run but cannot confirm what happened afterward.`;
 }
 
 export function homeCommandActivityModel(analytics: CommandActivityAnalytics): {
@@ -178,9 +178,23 @@ export function homeCommandActivityModel(analytics: CommandActivityAnalytics): {
   };
 }
 
+const COMMAND_HEALTH_CAUSES: Readonly<Record<string, string>> = {
+  pre_record_failed: "Guard could not save some command checks.",
+  post_record_failed: "Guard could not save some command results.",
+  pre_native_control_unavailable: "Guard's policy engine was unavailable while saving some command checks.",
+  shadow_evaluation_failed: "Guard could not save some policy previews.",
+  maintenance_failed: "Guard could not finish evidence cleanup.",
+};
+
 export function commandHealthCopy(analytics: CommandActivityAnalytics): string | null {
   if (analytics.health.status === "healthy") return null;
-  return "Command activity evidence is degraded. Counts may be incomplete.";
+  const errorClass = analytics.health.last_error_class;
+  const cause = errorClass !== null && Object.hasOwn(COMMAND_HEALTH_CAUSES, errorClass)
+    ? COMMAND_HEALTH_CAUSES[errorClass]
+    : "Guard could not save some command evidence.";
+  // last_error_class is the most recent failure, not necessarily the one that
+  // left health degraded, so it is named as history rather than as the cause.
+  return `Counts may be incomplete. Last recorded problem: ${cause}`;
 }
 
 export function commandWindowLabel(analytics: CommandActivityAnalytics): string {

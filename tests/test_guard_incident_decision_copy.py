@@ -6,13 +6,13 @@ from dataclasses import replace
 
 import pytest
 
-from codex_plugin_scanner.guard.incident import build_incident_context
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
 )
+from tests.incident_context_support import build_incident_context
 
 
 @pytest.mark.parametrize(
@@ -227,6 +227,48 @@ def test_native_raw_command_credentials_are_redacted_in_incident_copy() -> None:
     assert "sk-testcredential123" not in incident["launch_summary"]
     assert "--token=sk-*****" in incident["launch_summary"]
     assert retained_tail in incident["launch_summary"]
+
+
+def test_package_request_from_guard_cli_is_a_local_package_command() -> None:
+    incident = build_incident_context(
+        harness="guard-cli",
+        artifact=None,
+        artifact_id="guard-cli:project:package-request:vitest",
+        artifact_name="bunx execute vitest",
+        artifact_type="package_request",
+        source_scope="project",
+        config_path=None,
+        changed_fields=["package_request"],
+        policy_action="require-reapproval",
+        launch_target="bunx vitest run example.test.ts",
+        risk_summary="HOL Guard's current package policy requires fresh approval for `vitest@latest`.",
+    )
+
+    assert incident["source_label"] == "Local package command"
+    assert "local package command" in incident["trigger_summary"]
+    assert "tool call" not in incident["trigger_summary"].lower()
+    assert "Guard-Cli" not in incident["source_label"]
+    assert "Guard CLI" not in incident["trigger_summary"] or "local package command" in incident["trigger_summary"]
+
+
+def test_package_request_from_grok_names_the_harness_command() -> None:
+    incident = build_incident_context(
+        harness="grok",
+        artifact=None,
+        artifact_id="guard-cli:project:package-request:chrome-devtools-mcp",
+        artifact_name="npx execute chrome-devtools-mcp",
+        artifact_type="package_request",
+        source_scope="project",
+        config_path=None,
+        changed_fields=["package_request"],
+        policy_action="require-reapproval",
+        launch_target="npx -y chrome-devtools-mcp@latest",
+        risk_summary="HOL Guard's current package policy requires fresh approval for `chrome-devtools-mcp@latest`.",
+    )
+
+    assert incident["source_label"] == "Grok command"
+    assert "Grok command" in incident["trigger_summary"]
+    assert "tool call" not in incident["trigger_summary"].lower()
 
 
 def test_native_raw_launch_target_is_redacted_without_truncating_command_tail() -> None:

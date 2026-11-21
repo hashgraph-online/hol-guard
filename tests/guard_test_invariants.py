@@ -25,14 +25,14 @@ class TestInvariant:
 TEST_INVARIANTS: Final[tuple[TestInvariant, ...]] = (
     TestInvariant(
         "GUARD-INV-001",
-        "tests/test_guard_command_corpus.py::test_full_guard_evaluation_matches_exact_non_widening_known_gap_baseline",
+        "tests/test_guard_command_corpus.py::test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences",
         "command-corpus",
         "Known command-evaluation gaps cannot widen without an explicit reviewed baseline update.",
         ("security_critical", "regression", "parser", "release"),
     ),
     TestInvariant(
         "GUARD-INV-002",
-        "tests/test_guard_command_corpus.py::test_ten_reviewed_pairs_have_one_machine_checked_delta_and_run_through_guard",
+        "tests/test_guard_command_corpus.py::test_ten_reviewed_pairs_preserve_semantic_deltas_and_characterize_native_floors",
         "command-corpus",
         "Reviewed minimal pairs keep their single semantic delta and Guard decision boundary.",
         ("security_critical", "regression", "parser", "release"),
@@ -165,7 +165,7 @@ TEST_INVARIANTS: Final[tuple[TestInvariant, ...]] = (
     ),
     TestInvariant(
         "GUARD-INV-021",
-        "tests/test_guard_command_critical_floors.py::test_security_critical_commands_retain_exact_floors",
+        "tests/test_guard_command_critical_floors.py::test_real_native_critical_floor_matches_frozen_baseline",
         "command-floor-corpus",
         "Critical destructive, secret, managed-service, and self-protection command floors remain exact.",
         ("security_critical", "regression", "parser", "policy", "release"),

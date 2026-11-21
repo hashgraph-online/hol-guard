@@ -1,7 +1,7 @@
 use super::policy_store_migration::load_legacy_authority;
 use super::policy_store_persistence::{read_generation_floor, read_private_json};
 use super::*;
-use guard_policy_snapshot::{canonical_json_bytes, generation_floor_mac, SnapshotError};
+use guard_policy_snapshot::{canonical_json_bytes, SnapshotError};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::fs::OpenOptions;
@@ -279,11 +279,14 @@ pub(super) fn load_authority(
             if let Some(floor) = read_generation_floor(legacy_floor_path, verifier_key)? {
                 return Ok(LoadedAuthority {
                     snapshot: None,
+                    recovered_snapshot: None,
                     canonical_bytes: Vec::new(),
                     generation_floor: floor.generation,
                     policy_digest: Some(floor.policy_digest),
                     invalid_on_startup: true,
                     migrate: true,
+                    command_control_floor: None,
+                    business_policy_floor: None,
                 });
             }
             return Err(error);
@@ -320,11 +323,14 @@ pub(super) fn load_authority(
             if let Some(floor) = read_generation_floor(legacy_floor_path, verifier_key)? {
                 Ok(LoadedAuthority {
                     snapshot: None,
+                    recovered_snapshot: None,
                     canonical_bytes: Vec::new(),
                     generation_floor: floor.generation,
                     policy_digest: Some(floor.policy_digest),
                     invalid_on_startup: true,
                     migrate: true,
+                    command_control_floor: None,
+                    business_policy_floor: None,
                 })
             } else {
                 Err("native_policy_snapshot_state_invalid".to_owned())
@@ -353,11 +359,14 @@ pub(super) fn load_current_authority(
     else {
         return Ok(LoadedAuthority {
             snapshot: None,
+            recovered_snapshot: None,
             canonical_bytes: Vec::new(),
             generation_floor: 0,
             policy_digest: None,
             invalid_on_startup: false,
             migrate: false,
+            command_control_floor: None,
+            business_policy_floor: None,
         });
     };
     if value.get("schema").and_then(Value::as_str) != Some(AUTHORITY_RECORD_SCHEMA) {
@@ -390,8 +399,14 @@ pub(super) fn load_combined_authority(
         || !is_lower_hex(&record.policy_digest, 64)
         || !is_lower_hex(&record.floor_mac, 64)
         || !crate::constant_time_eq(
-            generation_floor_mac(record.generation_floor, &record.policy_digest, verifier_key)
-                .as_bytes(),
+            super::policy_store_business_floor::authority_floor_mac(
+                record.generation_floor,
+                &record.policy_digest,
+                record.command_control_floor.as_ref(),
+                record.business_policy_floor.as_deref(),
+                verifier_key,
+            )?
+            .as_bytes(),
             record.floor_mac.as_bytes(),
         )
     {
@@ -400,9 +415,42 @@ pub(super) fn load_combined_authority(
     let mut snapshot = None;
     let mut canonical_snapshot = Vec::new();
     let mut invalid_on_startup = false;
+    let mut business_floor = record.business_policy_floor;
+    let mut migrate = false;
+    let mut recovered_snapshot = None;
     if let Some(candidate) = record.snapshot {
+        // Recover an old record's floor only from authenticated whole content,
+        // including expired snapshots. This grants no current admission.
+        if business_floor.is_none()
+            && candidate.business_policy.is_some()
+            && candidate.generation == record.generation_floor
+            && candidate.policy_digest == record.policy_digest
+            && candidate.scope_contract.scope_digest == expected_scope_digest
+            && validate_v3(
+                &candidate,
+                record.generation_floor,
+                &candidate.runtime_identity,
+                &candidate.rule_digest,
+                verifier_key,
+                candidate.issued_at_ms,
+            )
+            .is_ok()
+        {
+            business_floor = super::policy_store_business_floor::snapshot_floor(Some(&candidate))?;
+            migrate = true;
+            recovered_snapshot = Some(candidate.clone());
+        }
         if candidate.generation != record.generation_floor
             || candidate.policy_digest != record.policy_digest
+            || super::policy_store_command_floor::next_floor(
+                record.command_control_floor.as_ref(),
+                &candidate,
+            )
+            .ok()
+                != Some(record.command_control_floor.clone())
+            || super::policy_store_business_floor::next_floor(business_floor.as_deref(), &candidate)
+                .ok()
+                != Some(business_floor.clone())
         {
             invalid_on_startup = true;
         } else if validate_v3(
@@ -422,11 +470,14 @@ pub(super) fn load_combined_authority(
     }
     Ok(LoadedAuthority {
         snapshot,
+        recovered_snapshot,
         canonical_bytes: canonical_snapshot,
         generation_floor: record.generation_floor,
         policy_digest: Some(record.policy_digest),
         invalid_on_startup,
-        migrate: false,
+        migrate,
+        command_control_floor: record.command_control_floor,
+        business_policy_floor: business_floor,
     })
 }
 

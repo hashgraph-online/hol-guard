@@ -39,12 +39,15 @@ import { sortEvidence } from "../evidence/evidence-sort";
 import { computeMetrics } from "../evidence/evidence-metrics";
 import { guardActionDisposition, guardActionPresentation } from "../guard-action";
 import { HarnessSetupPanel } from "./harness-setup-panel";
+import { AppModesPanel } from "./app-modes-panel";
 import { appSetupTarget } from "./harness-setup-target";
 import { DEFAULT_FILTER_STATE } from "../evidence/evidence-url-state";
 import type { EvidenceFilterState, EvidenceSortKey } from "../evidence/evidence-types";
 import { CommandActivityWorkspace } from "../command-activity/command-activity-workspace";
 import { protectionHealthFor, useProtectionPresentationState } from "../protection-health";
-import { isHarnessDetected, useHarnessDetection } from "../harness-detection";
+import { isHarnessDetected, useHarnessDetection, versionCompatibilityFor } from "../harness-detection";
+import type { HarnessVersionCompatibility } from "../harness-version-compatibility";
+import { AppVersionCompatibilityCard } from "./app-version-compatibility-card";
 import {
   AppCommandActivityModeTabs,
   type AppActivityMode,
@@ -214,6 +217,34 @@ function TabButton({ tabKey, label, icon: Icon, isActive, tabRefs, onSelect }: T
 
 export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
   const harnessDetection = useHarnessDetection();
+  const [cleanedLeftoverHarnesses, setCleanedLeftoverHarnesses] = useState<ReadonlySet<string>>(() => new Set());
+  const detectedSetupWarnings = harnessDetection.kind === "ready"
+    ? harnessDetection.items.find((item) => item.harness === props.harness)?.warnings ?? []
+    : [];
+  const setupWarnings = cleanedLeftoverHarnesses.has(props.harness) ? [] : detectedSetupWarnings;
+  const handleLeftoverRemoved = useCallback((change: "removed" | "installed" = "removed") => {
+    if (change === "installed") {
+      void harnessDetection.refresh().then((refreshed) => {
+        if (refreshed) {
+          setCleanedLeftoverHarnesses((current) => {
+            const next = new Set(current);
+            next.delete(props.harness);
+            return next;
+          });
+        }
+      });
+      return;
+    }
+    setCleanedLeftoverHarnesses((current) => {
+      const next = new Set(current);
+      next.add(props.harness);
+      return next;
+    });
+  }, [harnessDetection.refresh, props.harness]);
+  const versionCompatibility = useMemo(
+    () => versionCompatibilityFor(harnessDetection, props.harness),
+    [harnessDetection, props.harness],
+  );
   const [activeTab, setActiveTab] = useState<TabKey>(readTabFromUrl);
   const [tabDirection, setTabDirection] = useState<"left" | "right">("right");
   const tabRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({ overview: null, activity: null, settings: null });
@@ -409,6 +440,15 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
         ]}
       />
 
+      {appSetupTarget(harness) === "harness" ? (
+        <AppModesPanel
+          harness={harness}
+          managed={isActive}
+          onSetUp={handleGoSettings}
+          onChanged={props.onManagedInstallChanged}
+        />
+      ) : null}
+
       <div
         className="relative"
         role="tablist"
@@ -460,6 +500,9 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
                 harnessInventory={harnessInventory}
                 pendingItems={pendingItems}
                 protection={runtime.supply_chain?.package_manager_protection}
+                setupWarnings={setupWarnings}
+                onLeftoverRemoved={handleLeftoverRemoved}
+                versionCompatibility={versionCompatibility}
                 onOpenRequest={props.onOpenRequest}
                 onManagedInstallChanged={props.onManagedInstallChanged}
               />
@@ -479,6 +522,8 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
                 harness={harness}
                 status={status}
                 install={install}
+                setupWarnings={setupWarnings}
+                onLeftoverRemoved={handleLeftoverRemoved}
                 harnessPolicies={harnessPolicies}
                 onClearAppPolicies={props.onClearAppPolicies}
                 onClearPolicy={props.onClearPolicy}
@@ -536,6 +581,9 @@ function AppOverviewTab(props: {
   harnessInventory: GuardInventoryItem[];
   pendingItems: GuardApprovalRequest[];
   protection: PackageManagerProtection | undefined;
+  setupWarnings: string[];
+  onLeftoverRemoved: (change?: "removed" | "installed") => void;
+  versionCompatibility: HarnessVersionCompatibility | null;
   onOpenRequest: (requestId: string) => void;
   onManagedInstallChanged?: () => Promise<void>;
 }) {
@@ -558,6 +606,8 @@ function AppOverviewTab(props: {
           harness={props.harness}
           install={props.install}
           status={props.status}
+          setupWarnings={props.setupWarnings}
+          onLeftoverRemoved={props.onLeftoverRemoved}
           onManagedInstallChanged={props.onManagedInstallChanged}
         />
         <div className="grid gap-6 lg:grid-cols-2">
@@ -573,6 +623,7 @@ function AppOverviewTab(props: {
             protection={props.protection}
           />
           <div className="space-y-6">
+            <AppVersionCompatibilityCard initial={props.versionCompatibility} />
             <AppFirewallStatusCard protection={props.protection} />
           </div>
         </div>
@@ -676,6 +727,7 @@ function AppOverviewTab(props: {
           </div>
         )}
 
+        <AppVersionCompatibilityCard initial={props.versionCompatibility} />
         <AppFirewallStatusCard protection={props.protection} />
       </section>
     </div>
@@ -800,6 +852,8 @@ function FirstRunGuide(props: {
   harness: string;
   install: GuardManagedInstall | undefined;
   status: "active" | "needs_setup" | "observed" | "unknown";
+  setupWarnings: string[];
+  onLeftoverRemoved: (change?: "removed" | "installed") => void;
   onManagedInstallChanged?: () => Promise<void>;
 }) {
   const displayName = harnessDisplayName(props.harness);
@@ -825,6 +879,8 @@ function FirstRunGuide(props: {
             harness={props.harness}
             install={props.install}
             status={props.status}
+            setupWarnings={props.setupWarnings}
+            onLeftoverRemoved={props.onLeftoverRemoved}
             onManagedInstallChanged={props.onManagedInstallChanged}
           />
         </div>
@@ -1230,6 +1286,8 @@ function AppSettingsTab(props: {
   harness: string;
   status: "active" | "needs_setup" | "observed" | "unknown";
   install: GuardManagedInstall | undefined;
+  setupWarnings: string[];
+  onLeftoverRemoved: (change?: "removed" | "installed") => void;
   harnessPolicies: GuardPolicyDecision[];
   onClearAppPolicies?: (harness: string) => Promise<void>;
   onClearPolicy?: (policy: GuardPolicyDecision) => Promise<void>;
@@ -1288,6 +1346,8 @@ function AppSettingsTab(props: {
             harness={props.harness}
             install={props.install}
             status={props.status}
+            setupWarnings={props.setupWarnings}
+            onLeftoverRemoved={props.onLeftoverRemoved}
             onManagedInstallChanged={props.onManagedInstallChanged}
           />
         ) : (

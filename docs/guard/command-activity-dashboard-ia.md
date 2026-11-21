@@ -53,8 +53,8 @@ Command activity is local evidence that Guard evaluated a command. It is not a t
 
 - Use "command activity", "command checked", "rule match", and "review".
 - Never call an allow, monitor event, or rule match a threat, attack, or incident.
-- Present `Decision` and `Execution proof` as separate labeled facts.
-- Render `allowed_unconfirmed` as "Allowed; execution not confirmed".
+- Present `Decision` and `Run result` as separate labeled facts.
+- Render `allowed_unconfirmed` as "Result not recorded" beside the independent decision, and explain that Guard cannot tell whether the app ran or completed the command.
 - Do not infer protection from low prompt volume, high allow volume, or analytics health.
 - Top extensions and rules describe frequency, not danger.
 

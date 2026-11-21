@@ -1,0 +1,18 @@
+{
+  "schema": "hol-guard-recovery.v1",
+  "capabilities": ["inspect"],
+  "operationId": null,
+  "sequence": 0,
+  "startedAt": "2026-09-20T00:00:00+00:00",
+  "updatedAt": "2026-09-20T00:00:00+00:00",
+  "phase": "checking",
+  "activeElapsedMs": 0,
+  "workerActive": false,
+  "retryAllowed": true,
+  "outcome": "pending",
+  "reasonCode": "invented_exception",
+  "service": "unknown",
+  "protection": "unknown",
+  "requiresHumanAction": false,
+  "checks": []
+}

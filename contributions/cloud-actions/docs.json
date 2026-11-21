@@ -1,0 +1,948 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "docs",
+    "name": "Google Docs",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "docs.googleapis.com",
+    "www.googleapis.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "https://www.googleapis.com/auth/documents",
+      "https://www.googleapis.com/auth/documents.readonly",
+      "https://www.googleapis.com/auth/drive.readonly"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "docs.documents.get",
+      "title": "Read a document's details",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "docs.googleapis.com",
+          "path": "/v1/documents/{document_id}",
+          "query": [
+            {
+              "name": "fields",
+              "value": {
+                "const": "documentId,title,revisionId"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "document_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{20,128}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "documentId"
+            }
+          },
+          {
+            "name": "title",
+            "value": {
+              "from": "title"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "revision",
+            "value": {
+              "from": "revisionId"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "https://www.googleapis.com/auth/documents.readonly"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 250,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "reads a document's title",
+          "kind": "safe",
+          "arguments": {
+            "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://docs.googleapis.com/v1/documents/195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE?fields=documentId%2Ctitle%2CrevisionId"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a document id with a custom method",
+          "kind": "risky",
+          "arguments": {
+            "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE:batchUpdate"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "docs.documents.create",
+      "title": "Create a document",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "docs.googleapis.com",
+          "path": "/v1/documents",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "title",
+                "value": {
+                  "arg": "title"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "title": {
+          "type": "string",
+          "required": true,
+          "maxLength": 256,
+          "pattern": "^[^\\x00-\\x1f\\x7f]{1,256}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "documentId"
+            }
+          },
+          {
+            "name": "title",
+            "value": {
+              "from": "title"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/documents"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "creates a blank document",
+          "kind": "safe",
+          "arguments": {
+            "title": "Meeting notes 2026-11-13"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"title\":\"Meeting notes 2026-11-13\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://docs.googleapis.com/v1/documents"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a title with a newline",
+          "kind": "risky",
+          "arguments": {
+            "title": "a\nb"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "docs.documents.append_text",
+      "title": "Add text at the end",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "docs.googleapis.com",
+          "path": "/v1/documents/{document_id}:batchUpdate",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "requests",
+                "value": {
+                  "array": [
+                    {
+                      "object": [
+                        {
+                          "name": "insertText",
+                          "value": {
+                            "object": [
+                              {
+                                "name": "endOfSegmentLocation",
+                                "value": {
+                                  "object": []
+                                }
+                              },
+                              {
+                                "name": "text",
+                                "value": {
+                                  "arg": "text"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "document_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{20,128}$"
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "maxLength": 65536,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "documentId"
+            }
+          },
+          {
+            "name": "revision",
+            "value": {
+              "from": "writeControl.requiredRevisionId"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/documents"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "appends a paragraph",
+          "kind": "safe",
+          "arguments": {
+            "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+            "text": "\nAction items: ship it."
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"requests\":[{\"insertText\":{\"endOfSegmentLocation\":{},\"text\":\"\\nAction items: ship it.\"}}]}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://docs.googleapis.com/v1/documents/195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE:batchUpdate"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a missing document id",
+          "kind": "risky",
+          "arguments": {
+            "text": "x"
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "docs.documents.replace_text",
+      "title": "Replace every match",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "docs.googleapis.com",
+          "path": "/v1/documents/{document_id}:batchUpdate",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "requests",
+                "value": {
+                  "array": [
+                    {
+                      "object": [
+                        {
+                          "name": "replaceAllText",
+                          "value": {
+                            "object": [
+                              {
+                                "name": "containsText",
+                                "value": {
+                                  "object": [
+                                    {
+                                      "name": "text",
+                                      "value": {
+                                        "arg": "find"
+                                      }
+                                    },
+                                    {
+                                      "name": "matchCase",
+                                      "value": {
+                                        "const": true
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "name": "replaceText",
+                                "value": {
+                                  "arg": "replace"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "document_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{20,128}$"
+        },
+        "find": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1000,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$"
+        },
+        "replace": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1000,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]*$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "documentId"
+            }
+          },
+          {
+            "name": "changed",
+            "value": {
+              "from": "replies.0.replaceAllText.occurrencesChanged"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/documents"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "renames a product everywhere",
+          "kind": "safe",
+          "arguments": {
+            "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+            "find": "Project X",
+            "replace": "Atlas"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "response": "{\"documentId\":\"195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE\",\"replies\":[{\"replaceAllText\":{\"occurrencesChanged\":7}}]}",
+            "projection": {
+              "id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+              "changed": 7
+            },
+            "request": {
+              "body": "{\"requests\":[{\"replaceAllText\":{\"containsText\":{\"text\":\"Project X\",\"matchCase\":true},\"replaceText\":\"Atlas\"}}]}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://docs.googleapis.com/v1/documents/195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE:batchUpdate"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a control character in the search",
+          "kind": "risky",
+          "arguments": {
+            "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+            "find": "a\u0007",
+            "replace": "b"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "docs.documents.delete_range",
+      "title": "Delete a span of text",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "docs.googleapis.com",
+          "path": "/v1/documents/{document_id}:batchUpdate",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "requests",
+                "value": {
+                  "array": [
+                    {
+                      "object": [
+                        {
+                          "name": "deleteContentRange",
+                          "value": {
+                            "object": [
+                              {
+                                "name": "range",
+                                "value": {
+                                  "object": [
+                                    {
+                                      "name": "startIndex",
+                                      "value": {
+                                        "arg": "start"
+                                      }
+                                    },
+                                    {
+                                      "name": "endIndex",
+                                      "value": {
+                                        "arg": "end"
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "document_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{20,128}$"
+        },
+        "start": {
+          "type": "integer",
+          "required": true,
+          "minimum": 1,
+          "maximum": 10000000
+        },
+        "end": {
+          "type": "integer",
+          "required": true,
+          "minimum": 2,
+          "maximum": 10000000
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "enumerated"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "documentId"
+            }
+          },
+          {
+            "name": "revision",
+            "value": {
+              "from": "writeControl.requiredRevisionId"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/documents"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "deletes one paragraph, restorable from version history",
+          "kind": "safe",
+          "arguments": {
+            "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+            "start": 120,
+            "end": 480
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              }
+            },
+            "request": {
+              "body": "{\"requests\":[{\"deleteContentRange\":{\"range\":{\"startIndex\":120,\"endIndex\":480}}}]}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://docs.googleapis.com/v1/documents/195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE:batchUpdate"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses index zero",
+          "kind": "risky",
+          "arguments": {
+            "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+            "start": 0,
+            "end": 10
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "docs.documents.export",
+      "title": "Export a document",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{document_id}/download",
+          "query": [
+            {
+              "name": "mimeType",
+              "value": {
+                "arg": {
+                  "name": "mime_type"
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": []
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "document_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{20,128}$"
+        },
+        "mime_type": {
+          "type": "string",
+          "required": true,
+          "maxLength": 80,
+          "pattern": "^(?:application/pdf|text/plain|text/markdown|application/vnd\\.openxmlformats-officedocument\\.wordprocessingml\\.document)$"
+        }
+      },
+      "facts": {
+        "class": "export",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            }
+          },
+          {
+            "name": "done",
+            "value": {
+              "from": "done"
+            }
+          },
+          {
+            "name": "download_uri",
+            "value": {
+              "from": "response.downloadUri"
+            },
+            "sensitivity": "confidential"
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.readonly"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 2000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "exports a document as Markdown",
+          "kind": "safe",
+          "arguments": {
+            "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+            "mime_type": "text/markdown"
+          },
+          "expect": {
+            "facts": {
+              "class": "export"
+            },
+            "request": {
+              "body": "{}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://www.googleapis.com/drive/v3/files/195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE/download?mimeType=text%2Fmarkdown"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an unlisted format",
+          "kind": "risky",
+          "arguments": {
+            "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+            "mime_type": "text/html"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

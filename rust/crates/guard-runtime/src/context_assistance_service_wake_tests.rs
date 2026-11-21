@@ -1,0 +1,393 @@
+use super::*;
+use guard_context_assistance::ContextAssistanceConfig;
+
+fn saved_on(service: &Service) -> AssistanceSettings {
+    let config = ContextAssistanceConfig {
+        enabled: true,
+        runtime_id: "selected".into(),
+        ..Default::default()
+    };
+    let settings = AssistanceSettings {
+        requested: config.clone(),
+        effective: config,
+        ..Default::default()
+    };
+    service.configure(settings.clone()).unwrap();
+    settings
+}
+
+fn home() -> tempfile::TempDir {
+    let home = tempfile::tempdir().unwrap();
+    std::fs::write(
+        home.path().join("config.toml"),
+        "[context_assistance]\nenabled=true\nruntime_id='selected'\n",
+    )
+    .unwrap();
+    home
+}
+
+#[test]
+fn a_saved_opt_in_without_a_worker_reports_resting_not_off() {
+    let service = Service::default();
+    saved_on(&service);
+    let fresh = service.status().unwrap();
+    assert_eq!(fresh["requested_enabled"], true);
+    assert_eq!(fresh["diagnostic"], "runtime_resting");
+    for (error, expected) in [
+        ("runtime_idle", "runtime_resting"),
+        ("runtime_closed", "runtime_resting"),
+        ("runtime_unverified", "runtime_unverified"),
+    ] {
+        lock(&service.state).unwrap().error = Some(error.into());
+        assert_eq!(service.status().unwrap()["diagnostic"], expected, "{error}");
+    }
+    service.stop().unwrap();
+    assert_ne!(service.status().unwrap()["diagnostic"], "runtime_resting");
+}
+
+#[test]
+fn a_request_wakes_a_resting_opt_in_once_and_a_failed_start_stays_visible() {
+    let home = home();
+    let service = Service::default();
+    saved_on(&service);
+    lock(&service.state).unwrap().error = Some("runtime_idle".into());
+    assert!(
+        !service.wake(home.path(), |_| false),
+        "an unused feature never starts the worker"
+    );
+    assert!(service.wake(home.path(), |_| true));
+    assert!(
+        !service.wake(home.path(), |_| true),
+        "one attempt per retry window"
+    );
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while service.status().unwrap()["job"].is_object() {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let status = service.status().unwrap();
+    assert_eq!(
+        status["requested_enabled"], true,
+        "waking never changes consent"
+    );
+    assert_eq!(status["effective_enabled"], false);
+    assert!(status["diagnostic"].is_string());
+    assert_ne!(status["diagnostic"], "runtime_resting");
+    lock(&service.state).unwrap().woke = None;
+    assert!(
+        !service.wake(home.path(), |_| true),
+        "a failed start is not retried automatically"
+    );
+}
+
+#[test]
+fn a_wake_and_a_click_share_one_pending_start() {
+    let service = Service::default();
+    saved_on(&service);
+    let cancel = Arc::new(AtomicBool::new(false));
+    {
+        let mut state = lock(&service.state).unwrap();
+        state.pending = Some(Pending {
+            id: state.generation,
+            operation: Check::Activate,
+            cancel: Arc::clone(&cancel),
+        });
+    }
+    service
+        .schedule(Check::Activate, "/not-opened".into())
+        .unwrap();
+    assert_eq!(
+        service
+            .schedule(Check::Recheck, "/not-opened".into())
+            .unwrap_err(),
+        "native_context_assistance_busy"
+    );
+    cancel.store(true, Ordering::Release);
+    assert_eq!(
+        service
+            .schedule(Check::Activate, "/not-opened".into())
+            .unwrap_err(),
+        "native_context_assistance_busy"
+    );
+    assert!(!service.wake(std::path::Path::new("/not-opened"), |_| true));
+}
+
+#[test]
+fn a_worker_that_stops_right_after_starting_is_shown_not_rested() {
+    let service = Service::default();
+    saved_on(&service);
+    let mut state = lock(&service.state).unwrap();
+    assert_eq!(wake::closed(&state), "runtime_closed", "never started here");
+    state.started = Some(Instant::now());
+    assert_eq!(wake::closed(&state), "runtime_crashed");
+    state.error = Some(wake::closed(&state).into());
+    assert!(!resting(&state), "a crash is never restarted automatically");
+    state.started = Instant::now().checked_sub(Duration::from_secs(600));
+    assert_eq!(
+        wake::closed(&state),
+        "runtime_closed",
+        "a settled worker rests"
+    );
+}
+
+#[test]
+fn a_recheck_starts_a_new_crash_window_for_its_worker() {
+    let home = home();
+    let service = Service::default();
+    saved_on(&service);
+    lock(&service.state).unwrap().started = Instant::now().checked_sub(Duration::from_secs(600));
+    service
+        .schedule(Check::Recheck, home.path().to_path_buf())
+        .unwrap();
+    let state = lock(&service.state).unwrap();
+    assert_eq!(
+        wake::closed(&state),
+        "runtime_crashed",
+        "a replacement that stops at once is shown, not rested"
+    );
+}
+
+#[test]
+fn a_start_that_cannot_be_queued_is_shown_instead_of_resting() {
+    let home = home();
+    std::fs::write(home.path().join("cigar-erasure.json"), "{}").unwrap();
+    let service = Service::default();
+    saved_on(&service);
+    assert!(!service.wake(home.path(), |_| true));
+    let status = service.status().unwrap();
+    assert_ne!(status["diagnostic"], "runtime_resting");
+    assert_eq!(status["requested_enabled"], true, "consent is unchanged");
+}
+
+#[test]
+fn a_restarted_resident_remembers_a_saved_opt_in_before_any_request() {
+    let home = home();
+    let service = Service::default();
+    service.restore(home.path());
+    let status = service.status().unwrap();
+    assert_eq!(status["requested_enabled"], true);
+    assert_eq!(status["diagnostic"], "runtime_resting");
+    let unreadable = tempfile::tempdir().unwrap();
+    std::fs::write(
+        unreadable.path().join("config.toml"),
+        "[context_assistance\n",
+    )
+    .unwrap();
+    let fresh = Service::default();
+    fresh.restore(unreadable.path());
+    assert_eq!(fresh.status().unwrap()["requested_enabled"], false);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_command_hook_reaches_the_wake_only_for_resting_execution_context() {
+    let service = Service::default();
+    let mut settings = saved_on(&service);
+    assert!(
+        !service.execution_resting(),
+        "execution context was never chosen"
+    );
+    settings.requested.features.execution_context = true;
+    settings.requested.sources.native_policy_facts = true;
+    settings.effective = settings.requested.clone();
+    service.configure(settings).unwrap();
+    assert!(service.execution_resting());
+    lock(&service.state).unwrap().woke = Some(Instant::now());
+    assert!(!service.execution_resting(), "one attempt per retry window");
+    let guard = lock(&service.state).unwrap();
+    assert!(
+        !service.execution_resting(),
+        "a busy service never blocks a hook"
+    );
+    drop(guard);
+}
+
+#[test]
+fn a_new_session_wakes_project_context_only_when_it_is_on() {
+    let home = home();
+    let service = Service::default();
+    let mut settings = saved_on(&service);
+    service.warm_prompt_lane(home.path());
+    assert!(
+        lock(&service.state).unwrap().woke.is_none(),
+        "project context off: nothing starts"
+    );
+    settings.effective.features.agent_context = true;
+    settings.effective.sources.workspace_documents = true;
+    settings.verification_permitted = true;
+    service.configure(settings).unwrap();
+    service.warm_prompt_lane(home.path());
+    assert!(lock(&service.state).unwrap().woke.is_some());
+    assert_eq!(
+        service.status().unwrap()["requested_enabled"],
+        true,
+        "waking never changes consent"
+    );
+}
+
+#[test]
+fn a_lane_watch_waits_for_a_start_from_another_thread() {
+    let service = Service::default();
+    service.hold_start_for_tests();
+    let watch = service.lane_watch();
+    let soon = Instant::now() + Duration::from_millis(120);
+    let waited = std::thread::spawn(move || watch.wait(soon)).join().unwrap();
+    assert!(matches!(waited, Err(LaneMiss::Starting)));
+    service.end_start_for_tests();
+    assert!(
+        matches!(service.lane_watch().wait(soon), Err(LaneMiss::Off)),
+        "a start that ended without a worker is not waited on"
+    );
+}
+
+#[test]
+fn changed_settings_may_wake_the_worker_again_at_once() {
+    let home = home();
+    let service = Service::default();
+    let mut settings = saved_on(&service);
+    lock(&service.state).unwrap().woke = Some(Instant::now());
+    assert!(
+        !service.wake(home.path(), |_| true),
+        "one attempt per retry window"
+    );
+    settings.effective.features.agent_context = true;
+    service.configure(settings).unwrap();
+    assert!(
+        lock(&service.state).unwrap().woke.is_none(),
+        "turning a feature on or off starts a new retry window"
+    );
+}
+
+#[test]
+fn a_busy_lock_keeps_the_last_project_context_choice() {
+    let service = Service::default();
+    let mut settings = saved_on(&service);
+    settings.effective.features.agent_context = true;
+    settings.effective.sources.workspace_documents = true;
+    settings.verification_permitted = true;
+    service.configure(settings.clone()).unwrap();
+    let guard = lock(&service.state).unwrap();
+    assert!(
+        service.prompt_context_chosen(),
+        "a prompt that lands while other hooks hold the lock still gets its note"
+    );
+    drop(guard);
+    settings.effective.features.agent_context = false;
+    service.configure(settings.clone()).unwrap();
+    let guard = lock(&service.state).unwrap();
+    assert!(
+        !service.prompt_context_chosen(),
+        "a choice turned off reads as off while the lock is busy"
+    );
+    drop(guard);
+    settings.effective.features.agent_context = true;
+    service.configure(settings.clone()).unwrap();
+    service.stop().unwrap();
+    let guard = lock(&service.state).unwrap();
+    assert!(
+        !service.prompt_context_chosen(),
+        "stop publishes off for a prompt that finds the lock busy"
+    );
+    drop(guard);
+    let closing = Service::default();
+    saved_on(&closing);
+    closing.configure(settings).unwrap();
+    closing.shutdown();
+    let guard = lock(&closing.state).unwrap();
+    assert!(!closing.prompt_context_chosen(), "so does shutdown");
+    drop(guard);
+}
+
+fn chosen_on(service: &Service) {
+    let mut settings = saved_on(service);
+    settings.effective.features.agent_context = true;
+    settings.effective.sources.workspace_documents = true;
+    settings.verification_permitted = true;
+    service.configure(settings).unwrap();
+}
+
+#[test]
+fn a_prompt_never_waits_on_a_busy_lock_to_wake_the_worker() {
+    let home = home();
+    let service = Service::default();
+    chosen_on(&service);
+    assert!(wake::resting(&lock(&service.state).unwrap()));
+    let (sent, got) = std::sync::mpsc::channel();
+    std::thread::scope(|scope| {
+        let guard = lock(&service.state).unwrap();
+        scope.spawn(|| {
+            service.warm_prompt_lane(home.path());
+            let soon = Instant::now() + Duration::from_millis(150);
+            let lane = service.prompt_lane(home.path(), soon);
+            sent.send(matches!(lane, Err(LaneMiss::Starting))).unwrap();
+        });
+        let answered = got.recv_timeout(Duration::from_secs(2));
+        drop(guard);
+        assert_eq!(
+            answered,
+            Ok(true),
+            "the prompt gave up at its deadline instead of queueing on the lock"
+        );
+    });
+    assert!(
+        lock(&service.state).unwrap().woke.is_none(),
+        "nothing was woken while the lock was busy; a later prompt wakes it"
+    );
+}
+
+#[test]
+fn old_engine_folders_are_removed_on_every_start() {
+    let home = tempfile::tempdir().unwrap();
+    let root = home.path().join("context-assistance");
+    for name in ["interpreters", "downloads", "work"] {
+        std::fs::create_dir_all(root.join(name).join("inner")).unwrap();
+    }
+    std::fs::write(root.join("staging"), b"not a folder").unwrap();
+
+    retire_old_engine(home.path());
+    retire_old_engine(home.path());
+
+    assert!(!root.join("interpreters").exists());
+    assert!(!root.join("downloads").exists());
+    assert!(root.join("work/inner").is_dir());
+    assert!(root.join("staging").is_file());
+}
+
+/// Follows saved settings until project context reads `want`, for 5 s at most.
+fn follows_to(service: &Service, home: &std::path::Path, want: bool) -> bool {
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        service.follow_saved_settings(home);
+        let enabled = lock(&service.state).unwrap().settings.requested.enabled;
+        if enabled == want || Instant::now() >= until {
+            return enabled == want;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn a_prompt_follows_settings_saved_since_the_last_one() {
+    let home = home();
+    let service = Service::default();
+    assert!(
+        follows_to(&service, home.path(), true),
+        "a saved opt-in reaches the prompt lane without a status request"
+    );
+    std::fs::write(
+        home.path().join("config.toml"),
+        "[context_assistance]\nenabled=false\nruntime_id='selected'\n",
+    )
+    .unwrap();
+    assert!(
+        follows_to(&service, home.path(), false),
+        "turning project context off reaches the next prompt"
+    );
+    let generation = service.configuration_generation().unwrap();
+    service.follow_saved_settings(home.path());
+    assert_eq!(
+        service.configuration_generation().unwrap(),
+        generation,
+        "unchanged settings are not loaded again"
+    );
+}

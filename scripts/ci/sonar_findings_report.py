@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,10 +13,7 @@ from urllib.request import Request, urlopen
 PROJECT = "hashgraph-online_hol-guard"
 REPOSITORY = "hashgraph-online/hol-guard"
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
-METRICS = (
-    "new_coverage,new_lines_to_cover,new_uncovered_lines,"
-    "new_conditions_to_cover,new_uncovered_conditions"
-)
+METRICS = "new_coverage,new_lines_to_cover,new_uncovered_lines,new_conditions_to_cover,new_uncovered_conditions"
 
 
 def read_json(service: str, path: str, **parameters: object) -> object:
@@ -51,14 +49,44 @@ def sonar_pages(path: str, field: str, **parameters: object) -> dict:
     raise ValueError("report exceeds the pagination limit")
 
 
+def _metric_value(metric: dict) -> float | None:
+    """Read the new-code period; unknown data must not masquerade as zero gaps."""
+    raw = metric.get("value")
+    periods = metric.get("periods")
+    if periods:
+        if not isinstance(periods, list) or any(not isinstance(item, dict) for item in periods):
+            return None
+        selected = [item for item in periods if type(item.get("index")) is int and item["index"] == 1]
+        if not selected and len(periods) == 1 and "index" not in periods[0]:
+            selected = periods
+        if len(selected) != 1:
+            return None
+        raw = selected[0].get("value")
+    elif periods is not None and periods != []:
+        return None
+    elif isinstance(metric.get("period"), dict):
+        raw = metric["period"].get("value", raw)
+    elif metric.get("period") is not None:
+        return None
+    if not isinstance(raw, (str, int, float)) or isinstance(raw, bool):
+        return None
+    try:
+        value = float(raw)
+    except (ValueError, OverflowError):
+        return None
+    return value if math.isfinite(value) and value >= 0 else None
+
+
 def sonar_snapshot(pull_request: int | None) -> dict:
     scope = {} if pull_request is None else {"pullRequest": pull_request}
-    issues = sonar_pages(
-        "/api/issues/search", "issues", componentKeys=PROJECT, resolved="false", **scope
-    )
+    issues = sonar_pages("/api/issues/search", "issues", componentKeys=PROJECT, resolved="false", **scope)
     measures = sonar_pages(
-        "/api/measures/component_tree", "components", component=PROJECT,
-        metricKeys=METRICS, qualifiers="FIL", **scope,
+        "/api/measures/component_tree",
+        "components",
+        component=PROJECT,
+        metricKeys=METRICS,
+        qualifiers="FIL",
+        **scope,
     )
     snapshot = {
         "issues": issues,
@@ -69,14 +97,16 @@ def sonar_snapshot(pull_request: int | None) -> dict:
         sources = {}
         for component in measures["components"]:
             has_gaps = any(
-                metric["metric"].startswith("new_uncovered")
-                and float(metric.get("period", {}).get("value", metric.get("value", "0"))) > 0
+                metric["metric"].startswith("new_uncovered") and ((value := _metric_value(metric)) is None or value > 0)
                 for metric in component.get("measures", [])
             )
             if has_gaps:
                 sources[component["key"]] = read_json(
-                    "sonar", "/api/sources/lines", key=component["key"],
-                    **{"from": 1, "to": 1000}, **scope,
+                    "sonar",
+                    "/api/sources/lines",
+                    key=component["key"],
+                    **{"from": 1, "to": 1000},
+                    **scope,
                 )
         snapshot["sources"] = sources
     return snapshot
@@ -143,12 +173,22 @@ def _collect_report(output: Path, report: dict) -> None:
             head = pull["head"]["sha"]
             report["pull_requests"][str(number)] = {"head": head, "checks": [], "checks_complete": False}
             checks = github_pages(f"/repos/{REPOSITORY}/commits/{head}/check-runs", "check_runs")
-            checks = [{key: item.get(key) for key in ("id", "name", "status", "conclusion", "output")}
-                      for item in checks]
+            checks = [
+                {key: item.get(key) for key in ("id", "name", "status", "conclusion", "output")} for item in checks
+            ]
             report["pull_requests"][str(number)].update(checks=checks, checks_complete=True)
-            print("PR", number, "head", head, "nonpassing checks",
-                  [(c["id"], c["name"], c["status"], c["conclusion"]) for c in checks
-                   if c["conclusion"] not in {"success", "skipped", "neutral"}])
+            print(
+                "PR",
+                number,
+                "head",
+                head,
+                "nonpassing checks",
+                [
+                    (c["id"], c["name"], c["status"], c["conclusion"])
+                    for c in checks
+                    if c["conclusion"] not in {"success", "skipped", "neutral"}
+                ],
+            )
         except errors as error:
             _record_error(report, name, error)
     for number in scopes:

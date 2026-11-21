@@ -9,11 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .native_policy_snapshot_constants import (
-    _WINDOWS_ERROR_ALREADY_EXISTS,
-    NATIVE_RUNTIME_STATE_DIRECTORY,
-    NativePolicySnapshotError,
-)
+from .native_policy_snapshot_constants import _WINDOWS_ERROR_ALREADY_EXISTS, NativePolicySnapshotError
 
 
 @dataclass
@@ -181,49 +177,3 @@ def _windows_private_directory_binding(path: Path) -> Iterator[_WindowsDirectory
             yield binding
         finally:
             _windows_close_directory_binding(binding, api)
-
-
-@contextmanager
-def _windows_private_state_binding(guard_home: Path) -> Iterator[_WindowsDirectoryBinding]:
-    """Hold guard-home and runtime-state directory identities across writes."""
-
-    api = _snapshot_api()
-    with api._windows_private_descriptor(True) as (_advapi32, descriptor, dacl, owner_sid):
-        guard_binding = _windows_bind_directory_path(
-            guard_home,
-            api=api,
-            descriptor=descriptor,
-            dacl=dacl,
-            owner_sid=owner_sid,
-        )
-        state_binding: tuple[Any, Any] | None = None
-        try:
-            state_path = guard_binding.path / NATIVE_RUNTIME_STATE_DIRECTORY
-            _created, state_binding = _windows_bind_directory_component(
-                state_path,
-                api=api,
-                descriptor=descriptor,
-                dacl=dacl,
-                owner_sid=owner_sid,
-                private=True,
-            )
-            yield _WindowsDirectoryBinding(
-                state_path,
-                [*guard_binding.handles, state_binding],
-            )
-        finally:
-            try:
-                if state_binding is not None:
-                    api._windows_close_handle(*state_binding)
-            finally:
-                _windows_close_directory_binding(guard_binding, api)
-
-
-def _windows_ensure_private_directory(path: Path) -> None:
-    try:
-        with _windows_private_directory_binding(path):
-            pass
-    except NativePolicySnapshotError:
-        raise
-    except (OSError, RuntimeError, TypeError, ValueError) as error:
-        raise NativePolicySnapshotError("native_policy_windows_state_directory_invalid") from error

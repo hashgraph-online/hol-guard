@@ -5,8 +5,8 @@ from __future__ import annotations
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import TracebackType
-from typing import Protocol
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,8 +26,13 @@ class RestrictedArchiveDownload:
     size: int
     source_url: str = field(repr=False)
     final_url: str = field(repr=False)
+    _temporary_directory: TemporaryDirectory[str] | None = field(default=None, repr=False, compare=False)
 
     def cleanup(self) -> None:
+        if self._temporary_directory is not None:
+            with suppress(OSError):
+                self._temporary_directory.cleanup()
+            return
         with suppress(OSError):
             self.path.unlink()
 
@@ -47,36 +52,6 @@ class RestrictedArchiveDownload:
 
 
 RestrictedArchiveDownloadResult = RestrictedArchiveDownload | RestrictedArchiveFailure
-
-
-@dataclass(frozen=True, slots=True)
-class _CanonicalDestination:
-    url: str
-    hostname: str
-    port: int
-    request_target: str
-    host_header: str
-
-
-class _ReadableResponse(Protocol):
-    status: int
-
-    def read(self, amount: int = -1) -> bytes: ...
-
-    def get_header(self, name: str) -> str | None: ...
-
-    def header_items(self) -> tuple[tuple[str, str], ...]: ...
-
-    def set_timeout(self, timeout: float) -> None: ...
-
-    def close(self) -> None: ...
-
-
-class _RestrictedDownloadError(RuntimeError):
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(code)
-        self.code = code
-        self.message = message
 
 
 __all__ = [

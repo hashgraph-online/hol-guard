@@ -1,0 +1,3682 @@
+{
+  "source": "c4bd916fb0d0f375a4e2de0d1e498a0a533f63c8",
+  "cases": [
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible",
+          "arguments": []
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible",
+          "arguments": [
+            "all",
+            "-m",
+            "ping"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible",
+          "arguments": [
+            "all",
+            "--list-hosts"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible",
+          "arguments": [
+            "all",
+            "--list-hosts=false"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible",
+          "arguments": [
+            "all",
+            "--syntax-check"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible-playbook",
+          "arguments": [
+            "playbook.yml"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible-playbook",
+          "arguments": [
+            "playbook.yml",
+            "--check"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible-playbook",
+          "arguments": [
+            "playbook.yml",
+            "--syntax-check"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible-playbook",
+          "arguments": [
+            "playbook.yml",
+            "--list-tasks"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible-playbook",
+          "arguments": [
+            "playbook.yml",
+            "--list-tags"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible-pull",
+          "arguments": [
+            "-U",
+            "example.invalid/repository"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible-pull",
+          "arguments": [
+            "--list-hosts"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible-pull",
+          "arguments": [
+            "--version"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible",
+          "arguments": [
+            "--help=false"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible",
+          "arguments": [
+            "--helping"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible",
+          "arguments": [
+            "--inventory",
+            "--help"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ANSIBLE.CMD",
+          "arguments": [
+            "all"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "C:\\tools\\ANSIBLE-PLAYBOOK.EXE",
+          "arguments": [
+            "playbook.yml"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible.ps1",
+          "arguments": [
+            "all"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": null,
+          "arguments": [
+            "all"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "select 1; UPDATE items SET value=1"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "delete from items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "alter table items add value int"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "truncate items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "select 1"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "DROPdatabase"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "drop_thing"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "update2"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "drop\u00e9"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "drop\u00b2"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "drop\u216b"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "drop\u0345"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "\u001cTrUnCaTe table items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "-- comment\nDROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "print(\"; delete x\")"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            ";; \tdelete(x)"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "drop"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "\u00a0update items set x=1"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "-cDROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "-c=DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command=DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "-c"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--",
+            "--command",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "DROP TABLE items",
+            "--help"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--help=false",
+            "--command",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--username",
+            "--help",
+            "--command",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "select 1",
+            "--command",
+            "delete from items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "delete from items",
+            "--command",
+            "select 1"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "PSQL.EXE",
+          "arguments": [
+            "-c",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "unrelated",
+          "arguments": [
+            "-c",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "select 1; UPDATE items SET value=1"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "delete from items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "alter table items add value int"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "truncate items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "select 1"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "DROPdatabase"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "drop_thing"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "update2"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "drop\u00e9"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "drop\u00b2"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "drop\u216b"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "drop\u0345"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "\u001cTrUnCaTe table items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "-- comment\nDROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "print(\"; delete x\")"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            ";; \tdelete(x)"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "drop"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "\u00a0update items set x=1"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "-eDROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "-e=DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute=DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "-e"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--",
+            "--execute",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "DROP TABLE items",
+            "--help"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--help=false",
+            "--execute",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--username",
+            "--help",
+            "--execute",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "select 1",
+            "--execute",
+            "delete from items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "mysql",
+          "arguments": [
+            "--execute",
+            "delete from items",
+            "--execute",
+            "select 1"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "MYSQL.EXE",
+          "arguments": [
+            "-e",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "mysql",
+        "long_option": "--execute",
+        "short_option": "-e"
+      },
+      "segments": [
+        {
+          "executable": "unrelated",
+          "arguments": [
+            "-e",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "project.csproj",
+            "package",
+            "Package"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "ADD",
+            "project.csproj",
+            "PACKAGE",
+            "Package"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "package",
+            "Package"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "--verbosity",
+            "info",
+            "add",
+            "project",
+            "package",
+            "Package"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "remove",
+            "project",
+            "package",
+            "Package"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "-project",
+            "package",
+            "Package"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "project",
+            "package",
+            "--version"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "",
+            "package",
+            ""
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "project",
+            "package",
+            "Package",
+            "--help"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "project",
+            "package",
+            "Package",
+            "--help=false"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "project",
+            "package",
+            "Package",
+            "--helping"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "project",
+            "packages",
+            "Package"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "one",
+            "add",
+            "project",
+            "package",
+            "Package"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "one",
+            "package",
+            "first",
+            "add",
+            "two",
+            "package",
+            "second"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "--",
+            "add",
+            "project",
+            "package",
+            "Package"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": []
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "C:\\sdk\\DOTNET.EXE",
+          "arguments": [
+            "add",
+            "project",
+            "package",
+            "Package"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.dropDatabase()"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.dropUser(\"user\")"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.items.drop()"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.items.deleteOne({})"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.items.deleteMany({})"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.items.remove({})"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db . items . deleteMany ( { } )"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db\u001c.\u2003items\n.\tdrop ()"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "DB.DROPDATABASE()"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.items.find({})"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "drop_database()"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "print(\"dropDatabase(\")"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.items.drop_count()"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "-edb.dropDatabase()"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "-e=db.dropDatabase()"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval=db.dropDatabase()"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "db.dropDatabase()"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.dropDatabase()",
+            "--help"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--",
+            "--eval",
+            "db.dropDatabase()"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "print(1)",
+            "--eval",
+            "db.items.drop()"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "select 1; UPDATE items SET value=1"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "delete from items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "alter table items add value int"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "truncate items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "select 1"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "DROPdatabase"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "drop_thing"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "update2"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "drop\u00e9"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "drop\u00b2"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "drop\u216b"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "drop\u0345"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "\u001cTrUnCaTe table items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "-- comment\nDROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "print(\"; delete x\")"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            ";; \tdelete(x)"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "drop"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "\u00a0update items set x=1"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            ".restore backup.db"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            ".restore\tbackup.db"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            ".import source.csv items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "\u001c.IMPORT\u0085source.csv items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            ".restore"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            ".import"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            ".restored backup.db"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "update.db"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "select * from items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "-readonly",
+            "database.db",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            ".import source.csv items",
+            "--help"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "--cmd",
+            "UPDATE items SET x=1"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "--help=false",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": []
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "adm",
+            "drain",
+            "node"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "apply",
+            "-f",
+            "manifest.yml"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "patch",
+            "deployment",
+            "item"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "scale",
+            "deployment",
+            "item"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "rollout",
+            "restart",
+            "deployment",
+            "item"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "get",
+            "pods"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run=client"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run",
+            "server"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run=client",
+            "--dry-run=false"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run=false",
+            "--dry-run=client"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run=client",
+            "--dry-run"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-runclient"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run= client"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "adm",
+            "drain",
+            "node",
+            "--dry-run=client"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "apply",
+            "-f",
+            "manifest.yml",
+            "--dry-run=SERVER"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "rollout",
+            "restart",
+            "deployment",
+            "item",
+            "--dry-run=client"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "--namespace",
+            "demo",
+            "delete",
+            "pod",
+            "item"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "--namespace=demo",
+            "delete",
+            "pod",
+            "item"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "--",
+            "delete",
+            "pod",
+            "item"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--help"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "apply",
+            "-f",
+            "manifest.yml",
+            "--help=false"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": []
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "C:\\cluster\\OC.CMD",
+          "arguments": [
+            "delete",
+            "pod",
+            "item"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "adm",
+            "drain",
+            "node"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "apply",
+            "-f",
+            "manifest.yml"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "patch",
+            "deployment",
+            "item"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "scale",
+            "deployment",
+            "item"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "rollout",
+            "restart",
+            "deployment",
+            "item"
+          ]
+        }
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "get",
+            "pods"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run=client"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run",
+            "server"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run=client",
+            "--dry-run=false"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run=false",
+            "--dry-run=client"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run=client",
+            "--dry-run"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-runclient"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--dry-run= client"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "adm",
+            "drain",
+            "node",
+            "--dry-run=client"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "apply",
+            "-f",
+            "manifest.yml",
+            "--dry-run=SERVER"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "rollout",
+            "restart",
+            "deployment",
+            "item",
+            "--dry-run=client"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "--namespace",
+            "demo",
+            "delete",
+            "pod",
+            "item"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "--namespace=demo",
+            "delete",
+            "pod",
+            "item"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "--",
+            "delete",
+            "pod",
+            "item"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item",
+            "--help"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "apply",
+            "-f",
+            "manifest.yml",
+            "--help=false"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": []
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "C:\\cluster\\OC.CMD",
+          "arguments": [
+            "delete",
+            "pod",
+            "item"
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "op": "ansible-execution.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "ansible",
+          "arguments": []
+        },
+        {
+          "executable": "ansible",
+          "arguments": [
+            "all",
+            "-m",
+            "ping"
+          ]
+        },
+        {
+          "executable": "ansible",
+          "arguments": [
+            "all",
+            "-m",
+            "ping"
+          ]
+        }
+      ],
+      "expected": [
+        1,
+        2
+      ]
+    },
+    {
+      "op": "dotnet-project-package.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "package",
+            "Package"
+          ]
+        },
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "project.csproj",
+            "package",
+            "Package"
+          ]
+        },
+        {
+          "executable": "dotnet",
+          "arguments": [
+            "add",
+            "project.csproj",
+            "package",
+            "Package"
+          ]
+        }
+      ],
+      "expected": [
+        1,
+        2
+      ]
+    },
+    {
+      "op": "mongo-eval-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.items.find({})"
+          ]
+        },
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.dropDatabase()"
+          ]
+        },
+        {
+          "executable": "mongosh",
+          "arguments": [
+            "--eval",
+            "db.dropDatabase()"
+          ]
+        }
+      ],
+      "expected": [
+        1,
+        2
+      ]
+    },
+    {
+      "op": "openshift-delete-drain.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "apply",
+            "-f",
+            "manifest.yml"
+          ]
+        },
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item"
+          ]
+        },
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item"
+          ]
+        }
+      ],
+      "expected": [
+        1,
+        2
+      ]
+    },
+    {
+      "op": "openshift-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "oc",
+          "arguments": [
+            "delete",
+            "pod",
+            "item"
+          ]
+        },
+        {
+          "executable": "oc",
+          "arguments": [
+            "apply",
+            "-f",
+            "manifest.yml"
+          ]
+        },
+        {
+          "executable": "oc",
+          "arguments": [
+            "apply",
+            "-f",
+            "manifest.yml"
+          ]
+        }
+      ],
+      "expected": [
+        1,
+        2
+      ]
+    },
+    {
+      "op": "sql-option-mutation.v1",
+      "config": {
+        "executable": "psql",
+        "long_option": "--command",
+        "short_option": "-c"
+      },
+      "segments": [
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "select 1"
+          ]
+        },
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "DROP TABLE items"
+          ]
+        },
+        {
+          "executable": "psql",
+          "arguments": [
+            "--command",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        1,
+        2
+      ]
+    },
+    {
+      "op": "sqlite-mutation.v1",
+      "config": {},
+      "segments": [
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "select 1"
+          ]
+        },
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "DROP TABLE items"
+          ]
+        },
+        {
+          "executable": "sqlite3",
+          "arguments": [
+            "database.db",
+            "DROP TABLE items"
+          ]
+        }
+      ],
+      "expected": [
+        1,
+        2
+      ]
+    }
+  ]
+}

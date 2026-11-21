@@ -1,21 +1,28 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import sqlite_cloud_review_recovery as recovery
 from codex_plugin_scanner.guard import store_connection_schema
+from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.review_event_wake import review_event_wake_signal
+from codex_plugin_scanner.guard.review_policy_attribution import ATTRIBUTION_STATE_PREFIX
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     apply_exact_cloud_review,
     disable_exact_cloud_review,
     enable_exact_cloud_review,
     exact_cloud_review_status,
 )
+from codex_plugin_scanner.guard.sqlite_recovery import salvage_quarantined_state
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_native_workspace_review import (
+    NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX,
+)
 from tests.guard_exact_cloud_review_support import (
     add_review_request,
     connected_exact_review_store,
@@ -34,6 +41,36 @@ def _prepare(tmp_path: Path) -> GuardStore:
             ("consumed-receipt", "resolved-request", datetime.now(timezone.utc).isoformat()),
         )
     return store
+
+
+def _native_receipt(request_id: str) -> dict[str, object]:
+    fields = (
+        "claim_id",
+        "workspace_binding",
+        "device_binding",
+        "installation_binding",
+        "scope_binding",
+        "request_binding",
+        "action_binding",
+        "intent_binding",
+        "revision_binding",
+        "policy_binding",
+        "retry_scope_binding",
+        "request_snapshot_digest",
+        "authority_record_digest",
+        "envelope_digest",
+    )
+    return {
+        **{field: hashlib.sha256(field.encode()).hexdigest() for field in fields},
+        "request_id": request_id,
+        "decision": "allow",
+        "status": "verified",
+        "replayed": False,
+    }
+
+
+def _salvage_cloud_review(source: Path, destination: Path) -> bool:
+    return salvage_quarantined_state(source=source, destination=destination)[0]
 
 
 def _recover(store: GuardStore, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,6 +105,74 @@ def test_recovery_preserves_identity_consent_pending_events_and_replay_barrier(
     assert result.resolved_request["status"] == "resolved"
 
 
+def test_recovery_preserves_bound_native_receipt_for_lost_ack_and_skips_corrupt_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _prepare(tmp_path)
+    request = store.get_approval_request("recover-pending")
+    assert request is not None
+    receipt = _native_receipt("recover-pending")
+    assert (
+        store.resolve_native_workspace_review_request(
+            "recover-pending",
+            resolution_action="allow",
+            expected_request=request,
+            resolved_at="2026-09-27T00:00:00+00:00",
+            native_replayed=False,
+            native_receipt=receipt,
+        )["resolved"]
+        is True
+    )
+    for request_id in ("cross-request", "corrupt-request"):
+        add_review_request(store, review_request(request_id))
+        other = store.get_approval_request(request_id)
+        assert other is not None
+        assert (
+            store.resolve_native_workspace_review_request(
+                request_id,
+                resolution_action="allow",
+                expected_request=other,
+                resolved_at="2026-09-27T00:00:00+00:00",
+                native_replayed=False,
+                native_receipt=_native_receipt(request_id),
+            )["resolved"]
+            is True
+        )
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "update sync_state set payload_json = ? where state_key = ?",
+            (
+                json.dumps({**receipt, "request_id": "recover-pending"}),
+                NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX + "cross-request",
+            ),
+        )
+        connection.execute(
+            "update sync_state set payload_json = ? where state_key = ?",
+            (
+                "{malformed",
+                NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX + "corrupt-request",
+            ),
+        )
+    _recover(store, monkeypatch)
+    restarted = GuardStore(store.guard_home)
+    assert restarted.get_sync_payload(NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX + "recover-pending") == receipt
+    assert restarted.get_sync_payload(NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX + "cross-request") is None
+    assert restarted.get_sync_payload(NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX + "corrupt-request") is None
+
+    replay = {**receipt, "status": "replayed", "replayed": True}
+    resolved = restarted.get_approval_request("recover-pending")
+    assert resolved is not None
+    result = restarted.resolve_native_workspace_review_request(
+        "recover-pending",
+        resolution_action="allow",
+        expected_request=resolved,
+        resolved_at="2026-09-27T00:01:00+00:00",
+        native_replayed=True,
+        native_receipt=replay,
+    )
+    assert result["resolved"] is True and result["replayed"] is True
+
+
 def test_recovery_does_not_resurrect_revoked_consent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _prepare(tmp_path)
     disable_exact_cloud_review(store)
@@ -86,35 +191,62 @@ def test_incomplete_recovery_never_restores_authority(tmp_path: Path, table: str
     with sqlite3.connect(store.path) as connection:
         connection.execute(f'drop table "{table}"')
     destination = GuardStore(tmp_path / "new")
-    assert recovery.salvage_cloud_review_state(source=store.path, destination=destination.path) is False
+    assert _salvage_cloud_review(store.path, destination.path) is False
     assert destination.get_sync_payload("oauth_local_credentials") is None
     assert destination.get_sync_payload("guard_exact_cloud_review_capability") is None
     assert destination.get_approval_request("recover-pending") is None
 
 
-def test_partial_replay_copy_rolls_back_everything(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_partial_replay_copy_rolls_back_everything(tmp_path: Path) -> None:
     source = _prepare(tmp_path)
     destination = GuardStore(tmp_path / "new")
     identity = destination.get_or_create_installation_id()
-    copy = recovery._copy_complete_table
-
-    def fail_after_receipts(src: sqlite3.Connection, dst: sqlite3.Connection, table: str) -> None:
-        copy(src, dst, table)
-        if table == "guard_exact_cloud_review_receipts":
-            raise sqlite3.DatabaseError("database disk image is malformed")
-
-    monkeypatch.setattr(recovery, "_copy_complete_table", fail_after_receipts)
-    assert not recovery.salvage_cloud_review_state(source=source.path, destination=destination.path)
+    with sqlite3.connect(destination.path) as connection:
+        connection.execute(
+            "create trigger reject_replay before insert on guard_exact_cloud_review_receipts "
+            "begin select raise(abort, 'database disk image is malformed'); end"
+        )
+    assert not _salvage_cloud_review(source.path, destination.path)
     assert destination.get_or_create_installation_id() == identity
     assert destination.get_sync_payload("oauth_local_credentials") is None
+    with sqlite3.connect(destination.path) as connection:
+        connection.execute("drop trigger reject_replay")
     assert not destination.has_exact_cloud_review_receipt("consumed-receipt")
+
+
+def _lose_the_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    answer = runtime_request.runtime_answer
+
+    def lost(*args: object, **kwargs: object) -> None:
+        assert answer(*args, **kwargs) is not None  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lost)
+
+
+def test_a_lost_answer_after_a_committed_restore_still_reports_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _prepare(tmp_path)
+    destination = GuardStore(tmp_path / "new")
+    _lose_the_answer(monkeypatch)
+    assert salvage_quarantined_state(source=source.path, destination=destination.path) == (True, False)
+    assert destination.get_sync_payload("oauth_local_credentials") is not None
+
+
+def test_a_lost_answer_never_reports_credentials_the_store_already_held(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _prepare(tmp_path)
+    destination = connected_exact_review_store(tmp_path / "different")
+    _lose_the_answer(monkeypatch)
+    assert salvage_quarantined_state(source=source.path, destination=destination.path) == (False, False)
 
 
 def test_recovery_refuses_nonempty_destination(tmp_path: Path) -> None:
     source = _prepare(tmp_path)
     destination = connected_exact_review_store(tmp_path / "different")
     identity = destination.get_or_create_installation_id()
-    assert not recovery.salvage_cloud_review_state(source=source.path, destination=destination.path)
+    assert not _salvage_cloud_review(source.path, destination.path)
     assert destination.get_or_create_installation_id() == identity
     assert destination.get_sync_payload("guard_exact_cloud_review_capability") is None
 
@@ -163,10 +295,24 @@ def test_independent_cli_recovery_failure_does_not_discard_complete_review_state
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = _prepare(tmp_path)
-    monkeypatch.setattr(store_connection_schema, "salvage_local_cli_state", lambda **_kwargs: False)
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("drop table local_cli_grant")
     _recover(store, monkeypatch)
     assert exact_cloud_review_status(store)["enabled"] is True
     assert store._last_sqlite_recovery_details == {"cloud_review": True, "local_cli": False}
     assert not store._recover_fatal_sqlite_store(ValueError("not a storage failure"))
     assert store._last_sqlite_recovery == "skipped"
     assert store._last_sqlite_recovery_details is None
+
+
+def test_recovery_keeps_each_requests_recorded_policy_rule(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _prepare(tmp_path)
+    now = datetime.now(timezone.utc).isoformat()
+    recorded = {"policyBundleVersion": "policy-1730000000000", "policyRuleId": "review-env-reads"}
+    store.insert_sync_payload_if_absent(ATTRIBUTION_STATE_PREFIX + "recover-pending", recorded, now)
+    store.insert_sync_payload_if_absent(ATTRIBUTION_STATE_PREFIX + "no-cloud-rule", {}, now)
+    _recover(store, monkeypatch)
+    restarted = GuardStore(store.guard_home)
+    # A lost attribution would change the claim Cloud already holds for the request.
+    assert restarted.get_sync_payload(ATTRIBUTION_STATE_PREFIX + "recover-pending") == recorded
+    assert restarted.get_sync_payload(ATTRIBUTION_STATE_PREFIX + "no-cloud-rule") == {}

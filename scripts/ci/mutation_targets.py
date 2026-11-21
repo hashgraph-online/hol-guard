@@ -27,16 +27,6 @@ TARGETS: Final[dict[str, MutationTarget]] = {
             "tests/test_guard_command_corpus.py",
         ),
     ),
-    "secret-flow": MutationTarget(
-        "secret-flow",
-        "src/codex_plugin_scanner/guard/runtime/data_flow.py",
-        ("tests/test_guard_data_flow.py",),
-    ),
-    "hook-output": MutationTarget(
-        "hook-output",
-        "src/codex_plugin_scanner/guard/runtime/hook_review_engine.py",
-        ("tests/test_hook_review_engine.py", "tests/test_hook_security_regressions.py"),
-    ),
     "approval-reuse": MutationTarget(
         "approval-reuse",
         "src/codex_plugin_scanner/guard/runtime/approval_reuse.py",
@@ -45,7 +35,13 @@ TARGETS: Final[dict[str, MutationTarget]] = {
     "package-intent": MutationTarget(
         "package-intent",
         "src/codex_plugin_scanner/guard/runtime/package_intent_parser.py",
-        ("tests/test_guard_package_intent.py", "tests/test_guard_tier2_package_intent_phase13.py"),
+        (
+            "tests/test_guard_package_intent.py",
+            "tests/test_guard_package_intent_local_execution.py",
+            "tests/test_guard_package_intent_typescript.py",
+            "tests/test_guard_package_intent_ecosystems.py",
+            "tests/test_guard_tier2_package_intent_phase13.py",
+        ),
     ),
     "package-policy": MutationTarget(
         "package-policy",
@@ -69,7 +65,7 @@ def render_mutmut_config(target: MutationTarget) -> str:
             "[tool.mutmut]",
             'source_paths = ["src"]',
             f'only_mutate = ["{target.source_path}"]',
-            'also_copy = ["src/codex_plugin_scanner"]',
+            'also_copy = ["src/codex_plugin_scanner", "docs/guard/contracts/guard-cloud-review.md"]',
             f"pytest_add_cli_args_test_selection = [{test_selection}]",
             "timeout_multiplier = 30.0",
             "timeout_constant = 5.0",

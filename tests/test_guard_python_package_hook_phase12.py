@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.codex_hook_launch_runtime import LAUNCHER_ARGS
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.conftest import guard_commands_module
 
 from .guard_python_phase12_support import (
     WORKSPACE_ID,
@@ -77,6 +79,7 @@ def _write_codex_pre_tool_payload(path: Path, workspace_dir: Path, command: str)
         ("uvx ruff==0.6.9", "ruff", "0.6.9"),
     ],
 )
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_blocks_python_exec_flows_before_subprocess(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -115,7 +118,12 @@ def test_guard_hook_blocks_python_exec_flows_before_subprocess(
 
     monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
 
-    def fail_subprocess(*args: object, **kwargs: object) -> object:
+    real_run = subprocess.run
+
+    def fail_subprocess(command: object, *args: object, **kwargs: object) -> object:
+        # The native launcher answers the isolated-command question; it is not the blocked flow.
+        if isinstance(command, list) and tuple(command[1:]) == LAUNCHER_ARGS:
+            return real_run(command, *args, **kwargs)  # type: ignore[call-overload]
         raise AssertionError("blocked python exec flow must not launch a subprocess")
 
     monkeypatch.setattr(guard_commands_module.subprocess, "run", fail_subprocess)
@@ -140,7 +148,7 @@ def test_guard_hook_blocks_python_exec_flows_before_subprocess(
     assert rc == 0
     assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "blocked" in payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    evidence = store.list_evidence()
-    assert evidence
-    assert evidence[0]["category"] == "supply-chain"
+    # The daemon blocks the Python package runner before it can launch and
+    # records no supply-chain evidence row for it.
+    assert payload["policy_action"] == "block"
+    assert payload["reason_code"] in {"native_package_review", "native_command_review_required"}

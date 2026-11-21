@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.custom_extension_suggestion import is_suggestable_custom_tool
-from codex_plugin_scanner.guard.runtime.local_cli_compound import identify_unlisted_cli_identities
+from codex_plugin_scanner.guard.runtime.custom_extension_suggestion import suggestion_tool, suggestion_verdicts
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     catalog_owned_executables,
     identify_unlisted_cli,
+    identify_unlisted_cli_identities,
     is_local_cli_id,
     recognize_operator_cli,
 )
@@ -147,8 +147,11 @@ def test_recognize_script_path_and_reject_grep(tmp_path: Path) -> None:
     assert rejected is None
     assert reject_code == "common_shell_utility"
     assert "grep" in reject_message
-    assert is_suggestable_custom_tool(name="cwv.py", kind="script")
-    assert not is_suggestable_custom_tool(name="ls", kind="executable")
+    verdicts = suggestion_verdicts(
+        [suggestion_tool(name="cwv.py", kind="script"), suggestion_tool(name="ls", kind="executable")]
+    )
+    assert verdicts is not None
+    assert [verdict["suggestable"] for verdict in verdicts] == [True, False]
     for junk in ("rg", "whoami", "script"):
         rejected_junk, junk_code, junk_message = recognize_operator_cli(
             junk,

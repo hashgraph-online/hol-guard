@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import os
 
+from cloud_control import ContractError, iso, validate_remediation
 from lab_common import atomic, decode_json_object, json_bytes
 
-from codex_plugin_scanner.guard.mdm.cloud_control import ContractError, iso, validate_remediation
 from codex_plugin_scanner.guard.mdm.policy import parse_managed_policy
 
 

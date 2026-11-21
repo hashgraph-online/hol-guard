@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.remote-pc-mcp",
+  "version": "1.0.0",
+  "name": "remote-pc-mcp",
+  "description": "Reviews remote-pc-mcp's act tools. remote-pc-mcp is a self-hosted daemon that exposes a PC to MCP clients over streamable HTTP, usually inside a tailnet. Shell, process, file-write, download, screenshot and desktop-input tools are gated on review; read and status tools keep Guard's usual handling. Every install has its own endpoint, so this matches on the configured server name. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.raghibrm",
+    "displayName": "Raghib Murt",
+    "url": "https://github.com/raghibrm"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#1E3A8A" },
+  "homepage": "https://github.com/raghibrm/remote-pc-mcp",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://remote-pc-mcp.invalid/mcp",
+    "serverNames": ["remote-pc", "remote-pc-mcp"]
+  },
+  "riskClasses": [
+    "external-command-execution",
+    "external-filesystem-write",
+    "external-network-read",
+    "external-desktop-control",
+    "external-screen-capture"
+  ],
+  "tools": [
+    { "name": "system_info", "state": "inherit" },
+    { "name": "list_directory", "state": "inherit" },
+    { "name": "get_process_output", "state": "inherit" },
+    { "name": "read_file", "state": "inherit" },
+    { "name": "shell_exec", "state": "review" },
+    { "name": "start_process", "state": "review" },
+    { "name": "kill_process", "state": "review" },
+    { "name": "write_file", "state": "review" },
+    { "name": "download_file", "state": "review" },
+    { "name": "take_screenshot", "state": "review" },
+    { "name": "click", "state": "review" },
+    { "name": "move_mouse", "state": "review" },
+    { "name": "type_text", "state": "review" },
+    { "name": "press_key", "state": "review" },
+    { "name": "scroll", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/raghibrm/remote-pc-mcp",
+    "https://github.com/raghibrm/remote-pc-mcp#security",
+    "https://pypi.org/project/remote-pc-mcp/"
+  ],
+  "saferAlternatives": [
+    "Bind the daemon to the host's Tailscale IP with REMOTE_PC_MCP_HOST so it is unreachable from outside the tailnet. Do not expose it publicly without TLS and a reverse proxy.",
+    "Keep shell_exec, start_process, kill_process, write_file and download_file on review: they run commands, end processes and change files on the host as the daemon user.",
+    "Keep click, move_mouse, type_text, press_key and scroll on review: they drive the host's live desktop session.",
+    "take_screenshot stays on review because it captures every monitor and the image lands in model context.",
+    "Treat the bearer token as a root-equivalent credential. Keep it only in the daemon's .env and the client's config."
+  ]
+}

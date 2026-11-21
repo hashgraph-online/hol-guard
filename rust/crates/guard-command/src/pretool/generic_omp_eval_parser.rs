@@ -1,0 +1,497 @@
+//! Grammar for the OMP eval bridge: the literal-only JavaScript program and
+//! the Python `read` lines, each parsed into ordered tool calls.
+
+use super::tokens::{tokenize, tokenize_lines, Token};
+use serde_json::{json, Value};
+use std::collections::HashSet;
+
+const MAX_CODE_BYTES: usize = 16 * 1024;
+const MAX_CALLS: usize = 24;
+const MAX_DEPTH: usize = 12;
+
+#[derive(Debug, Clone, PartialEq)]
+pub(super) enum Lit {
+    Str(String),
+    Scalar(Value),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct Call {
+    pub(super) tool: String,
+    pub(super) args: Vec<(String, Lit)>,
+    pub(super) sdk_read_helper: bool,
+    /// Oh My Pi's `sh(command)` helper, which runs the command on the eval
+    /// shell bridge rather than through the `bash` tool, so no hook of its
+    /// own fires for it.
+    pub(super) shell_helper: bool,
+}
+
+struct Parser {
+    tokens: Vec<Token>,
+    /// Whether a line terminator came before each token.
+    breaks: Vec<bool>,
+    /// Whether each token is a template literal whose raw text is its value.
+    raw_templates: Vec<bool>,
+    pos: usize,
+    declared: HashSet<String>,
+    /// Names bound to a draft of Oh My Pi's `commit` prelude.
+    drafts: HashSet<String>,
+    calls: Vec<Call>,
+}
+
+#[path = "generic_omp_eval_parser_builtins.rs"]
+mod builtins;
+#[path = "generic_omp_eval_parser_commit.rs"]
+mod commit;
+pub(super) use commit::uses_earlier_cell_draft;
+#[path = "generic_omp_eval_parser_vocabulary.rs"]
+mod vocabulary;
+use vocabulary::{PURE_METHODS, RESERVED};
+
+impl Parser {
+    fn peek(&self) -> Option<&Token> {
+        self.tokens.get(self.pos)
+    }
+
+    fn next(&mut self) -> Option<Token> {
+        let token = self.tokens.get(self.pos).cloned();
+        self.pos += 1;
+        token
+    }
+
+    fn eat(&mut self, punct: char) -> Option<()> {
+        (self.next()? == Token::Punct(punct)).then_some(())
+    }
+
+    fn eat_ident(&mut self, name: &str) -> Option<()> {
+        matches!(self.next()?, Token::Ident(ref ident) if ident == name).then_some(())
+    }
+
+    fn at(&self, punct: char) -> bool {
+        self.peek() == Some(&Token::Punct(punct))
+    }
+
+    fn ident(&mut self) -> Option<String> {
+        match self.next()? {
+            Token::Ident(ident) => Some(ident),
+            _ => None,
+        }
+    }
+
+    fn program(&mut self) -> Option<()> {
+        while self.peek().is_some() {
+            if self.at(';') {
+                self.pos += 1;
+                continue;
+            }
+            self.statement()?;
+            // A `(`, `[`, `.`, operator or (template) string after an
+            // expression continues it even across a newline, so the host would
+            // run a different program. Only `;`, the end, or a statement that
+            // starts with a word (where JavaScript inserts the semicolon) may
+            // follow.
+            match self.peek() {
+                None | Some(Token::Punct(';')) | Some(Token::Ident(_)) => {}
+                Some(_) => return None,
+            }
+        }
+        Some(())
+    }
+
+    fn binding_name(&mut self) -> Option<String> {
+        let name = self.ident()?;
+        (!RESERVED.contains(&name.as_str())).then_some(name)
+    }
+
+    fn statement(&mut self) -> Option<()> {
+        match self.peek()? {
+            Token::Ident(word) if word == "const" || word == "let" => {
+                self.pos += 1;
+                let mut names = Vec::new();
+                if self.at('[') {
+                    self.pos += 1;
+                    while !self.at(']') {
+                        names.push(self.binding_name()?);
+                        if self.at(',') {
+                            self.pos += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    self.eat(']')?;
+                } else {
+                    names.push(self.binding_name()?);
+                }
+                self.eat('=')?;
+                if let [name] = names.as_slice() {
+                    if self.draft_ahead() {
+                        self.pos += 2;
+                        self.commit_draft()?;
+                        self.drafts.insert(name.clone());
+                        self.declared.insert(name.clone());
+                        return Some(());
+                    }
+                }
+                self.value(0)?;
+                // A name bound again no longer holds the draft.
+                for name in &names {
+                    self.drafts.remove(name);
+                }
+                self.declared.extend(names);
+                Some(())
+            }
+            // The JavaScript prelude binds `print` to the same console bridge
+            // as `log`, so all three only show what they are given.
+            Token::Ident(word) if matches!(word.as_str(), "display" | "print" | "log") => {
+                self.pos += 1;
+                self.paren_value()
+            }
+            // The host rewrites a final top-level `return value;` into the
+            // cell's shown result, like a trailing expression. A `return`
+            // anywhere else would end the cell before later statements run,
+            // so it must be the last statement. A line break after `return`
+            // ends it there, leaving the value unread and unshown.
+            Token::Ident(word) if word == "return" => {
+                self.pos += 1;
+                if self.breaks.get(self.pos).copied().unwrap_or(true) {
+                    return None;
+                }
+                self.value(0)?;
+                self.tokens[self.pos..]
+                    .iter()
+                    .all(|token| matches!(token, Token::Punct(';')))
+                    .then_some(())
+            }
+            Token::Ident(word) if word == "console" => {
+                self.pos += 1;
+                self.eat('.')?;
+                self.eat_ident("log")?;
+                self.paren_value()
+            }
+            _ => self.value(0),
+        }
+    }
+
+    /// Output calls take one or more values, as `console.log(a, b)` does.
+    fn paren_value(&mut self) -> Option<()> {
+        self.eat('(')?;
+        self.value(0)?;
+        while self.at(',') {
+            self.pos += 1;
+            self.value(0)?;
+        }
+        self.eat(')')
+    }
+
+    fn value(&mut self, depth: usize) -> Option<()> {
+        if depth > MAX_DEPTH {
+            return None;
+        }
+        match self.next()? {
+            Token::Ident(word) => match word.as_str() {
+                "await" => self.awaited(depth)?,
+                "tool" => self.tool_call(depth)?,
+                // An un-awaited `read(...)`, as inside `Promise.all([...])`.
+                "read" => self.read_helper()?,
+                "sh" => self.shell_helper()?,
+                "Promise" => self.promise_all(depth)?,
+                "JSON" | "typeof" | "Object" => self.builtin(&word, depth)?,
+                "true" | "false" | "null" => {}
+                name if self.drafts.contains(name) => self.draft_use()?,
+                name if self.declared.contains(name) => {}
+                _ => return None,
+            },
+            Token::Str(_) | Token::Num(_) => {}
+            Token::Punct('(') => {
+                self.value(depth + 1)?;
+                self.eat(')')?;
+            }
+            Token::Punct('[') => {
+                while !self.at(']') {
+                    self.value(depth + 1)?;
+                    if self.at(',') {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
+                self.eat(']')?;
+            }
+            Token::Punct('{') => self.display_object(depth)?,
+            _ => return None,
+        }
+        self.postfix(depth)
+    }
+
+    /// What may follow a value: the `.text` and `.length` accessors, a
+    /// numeric index, and the pure string and array methods in
+    /// `PURE_METHODS` called with plain values. No method takes a callback,
+    /// and an index is a number literal, so no member lookup can reach a
+    /// constructor or anything else that runs code.
+    fn postfix(&mut self, depth: usize) -> Option<()> {
+        loop {
+            if self.at('[') {
+                self.pos += 1;
+                match self.next()? {
+                    Token::Num(_) => {}
+                    _ => return None,
+                }
+                self.eat(']')?;
+            } else if self.at('.') {
+                self.pos += 1;
+                let name = self.ident()?;
+                if matches!(name.as_str(), "text" | "length") {
+                    continue;
+                }
+                if !PURE_METHODS.contains(&name.as_str()) {
+                    return None;
+                }
+                self.eat('(')?;
+                while !self.at(')') {
+                    self.value(depth + 1)?;
+                    if self.at(',') {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
+                self.eat(')')?;
+            } else {
+                return Some(());
+            }
+        }
+    }
+
+    fn display_object(&mut self, depth: usize) -> Option<()> {
+        while !self.at('}') {
+            match self.next()? {
+                Token::Ident(name) if self.at(',') || self.at('}') => {
+                    if !self.declared.contains(&name) {
+                        return None;
+                    }
+                }
+                Token::Ident(_) | Token::Str(_) => {
+                    self.eat(':')?;
+                    self.value(depth + 1)?;
+                }
+                _ => return None,
+            }
+            if self.at(',') {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        self.eat('}')
+    }
+
+    fn awaited(&mut self, depth: usize) -> Option<()> {
+        match self.next()? {
+            Token::Ident(word) if word == "tool" => self.tool_call(depth),
+            Token::Ident(word) if word == "read" => self.read_helper(),
+            Token::Ident(word) if word == "sh" => self.shell_helper(),
+            Token::Ident(word) if word == "Promise" => self.promise_all(depth),
+            Token::Ident(word) if word == "commit" => self.commit_draft(),
+            Token::Ident(word) if self.drafts.contains(&word) => self.draft_use(),
+            Token::Punct('(') => {
+                self.value(depth + 1)?;
+                self.eat(')')
+            }
+            _ => None,
+        }
+    }
+
+    fn read_helper(&mut self) -> Option<()> {
+        self.eat('(')?;
+        let Token::Str(path) = self.next()? else {
+            return None;
+        };
+        if self.calls.len() >= MAX_CALLS {
+            return None;
+        }
+        let call = read_helper_call(path)?;
+        self.eat(')')?;
+        self.calls.push(call);
+        Some(())
+    }
+
+    /// `sh(literal)` with one string literal and nothing else, or `sh` tagging
+    /// a template with no interpolation and no escape, whose raw text the
+    /// prelude runs. The `{ cwd, timeout }` options, interpolation and any
+    /// computed command stay outside the grammar, so the command judged is
+    /// the command run.
+    fn shell_helper(&mut self) -> Option<()> {
+        let command = if self.at('(') {
+            self.pos += 1;
+            let Token::Str(command) = self.next()? else {
+                return None;
+            };
+            self.eat(')')?;
+            command
+        } else {
+            let raw = self.raw_templates.get(self.pos).copied().unwrap_or(false);
+            match self.next()? {
+                Token::Str(command) if raw => command,
+                _ => return None,
+            }
+        };
+        // JavaScript normalizes a literal CR in a template to LF at runtime.
+        // Reviewing the unnormalized shell text could miss a new command.
+        if self.calls.len() >= MAX_CALLS || command.trim().is_empty() || command.contains('\r') {
+            return None;
+        }
+        self.calls.push(Call {
+            tool: "bash".to_owned(),
+            args: vec![("command".to_owned(), Lit::Str(command))],
+            sdk_read_helper: false,
+            shell_helper: true,
+        });
+        Some(())
+    }
+
+    fn promise_all(&mut self, depth: usize) -> Option<()> {
+        self.eat('.')?;
+        self.eat_ident("all")?;
+        self.eat('(')?;
+        self.value(depth + 1)?;
+        self.eat(')')
+    }
+
+    fn tool_call(&mut self, _depth: usize) -> Option<()> {
+        self.eat('.')?;
+        let tool = self.ident()?;
+        if !matches!(tool.as_str(), "read" | "grep" | "glob" | "bash") {
+            return None;
+        }
+        self.eat('(')?;
+        self.eat('{')?;
+        let mut args: Vec<(String, Lit)> = Vec::new();
+        while !self.at('}') {
+            let key = match self.next()? {
+                Token::Ident(key) | Token::Str(key) => key,
+                _ => return None,
+            };
+            if args.iter().any(|(seen, _)| *seen == key) {
+                return None;
+            }
+            self.eat(':')?;
+            let lit = match self.next()? {
+                Token::Str(text) => Lit::Str(text),
+                Token::Num(number) => Lit::Scalar(number),
+                Token::Ident(word) if word == "true" => Lit::Scalar(json!(true)),
+                Token::Ident(word) if word == "false" => Lit::Scalar(json!(false)),
+                _ => return None,
+            };
+            args.push((key, lit));
+            if self.at(',') {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        self.eat('}')?;
+        self.eat(')')?;
+        if self.calls.len() >= MAX_CALLS {
+            return None;
+        }
+        self.calls.push(Call {
+            tool,
+            args,
+            sdk_read_helper: false,
+            shell_helper: false,
+        });
+        Some(())
+    }
+}
+
+/// Parse a complete program into its ordered tool calls, or `None` when any
+/// byte falls outside the grammar. At least one call is required.
+pub(super) fn parse_program(code: &str) -> Option<Vec<Call>> {
+    if code.len() > MAX_CODE_BYTES {
+        return None;
+    }
+    let lexed = tokenize_lines(code)?;
+    let mut parser = Parser {
+        tokens: lexed.tokens,
+        breaks: lexed.breaks,
+        raw_templates: lexed.raw_templates,
+        pos: 0,
+        declared: HashSet::new(),
+        drafts: HashSet::new(),
+        calls: Vec::new(),
+    };
+    parser.program()?;
+    (!parser.calls.is_empty()).then_some(parser.calls)
+}
+
+/// The SDK `read(path)` helper in both kernels resolves a raw filesystem path
+/// against cwd. It does not expand ~, parse line selectors, or normalize
+/// Windows separators, so spellings the standalone tool would interpret
+/// differently are rejected.
+fn read_helper_call(path: String) -> Option<Call> {
+    // `xd://` names Oh My Pi's own tool documentation; the helper hands any
+    // URL to the `read` tool, whose own proof judges it.
+    let device_doc = path.starts_with("xd://");
+    if path.starts_with('~')
+        || (path.contains("://") && !device_doc)
+        || path.contains(['\\', '$'])
+        || path.trim() != path
+        || path.chars().any(char::is_control)
+    {
+        return None;
+    }
+    Some(Call {
+        tool: "read".to_owned(),
+        args: vec![("path".to_owned(), Lit::Str(path))],
+        sdk_read_helper: true,
+        shell_helper: false,
+    })
+}
+
+/// Parse a Python kernel program made only of whole lines of `read(LIT)`,
+/// `print(read(LIT))` or `display(read(LIT))`. The Python prelude's `read`
+/// is `Path(path).read_text()` for a plain path, the same contract as the JS
+/// helper. Indented lines, continuations, string prefixes, comments and every
+/// other statement are rejected.
+pub(super) fn parse_python(code: &str) -> Option<Vec<Call>> {
+    if code.len() > MAX_CODE_BYTES {
+        return None;
+    }
+    let mut calls = Vec::new();
+    for line in code.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if line.starts_with(char::is_whitespace) || calls.len() >= MAX_CALLS {
+            return None;
+        }
+        // The shared lexer decodes JS escapes and backtick strings. Python
+        // keeps the backslash, and a backtick string never reaches read().
+        // Reject both so the proven path is the literal text.
+        if line.contains(['\\', '`']) {
+            return None;
+        }
+        let tokens = tokenize(line)?;
+        let inner = match tokens.as_slice() {
+            [Token::Ident(word), Token::Punct('('), inner @ .., Token::Punct(')')]
+                if word == "print" || word == "display" =>
+            {
+                inner
+            }
+            all => all,
+        };
+        let [Token::Ident(word), Token::Punct('('), Token::Str(path), Token::Punct(')')] = inner
+        else {
+            return None;
+        };
+        if word != "read" {
+            return None;
+        }
+        calls.push(read_helper_call(path.clone())?);
+    }
+    (!calls.is_empty()).then_some(calls)
+}
+
+#[cfg(test)]
+#[path = "generic_omp_eval_parser_tests.rs"]
+mod tests;

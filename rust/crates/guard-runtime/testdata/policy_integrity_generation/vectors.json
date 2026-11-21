@@ -1,0 +1,1425 @@
+{
+ "cases": [
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": true
+   },
+   "name": "steady_current",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "7e2d2687237ffbd066c0a16917ef79a273295ad19c957d2094a356ede3ee1de8",
+     "payload_mac": "d6e0b863c35440909033b1920052f146e4a4fed7b8a5c74d6d22f1bba00979f2",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "4a4589ff7866c7b746a9c92f0d1e6f766a8365c601c1dfd20860789799fad00b",
+     "payload_mac": "42f7ea8f9bf71b3b3cfb863b91971152b2bd7d369fbd918b859e131f66f5243f",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": true
+   },
+   "name": "steady_current_cutover_done",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "7e2d2687237ffbd066c0a16917ef79a273295ad19c957d2094a356ede3ee1de8",
+     "payload_mac": "d6e0b863c35440909033b1920052f146e4a4fed7b8a5c74d6d22f1bba00979f2",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": true,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 5,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "newer_single_generation",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 5,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "2ac0bdf651ae3b5db013f92aaf491600952d8d851db5e49f007a46d980c90d1f",
+     "payload_mac": "c63ea8836e1b62e922f9f9ed3a3eda64185d69124b87870a1a59ae56362e0973",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 5,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "2326216a9dcddb0a8c796d8f0e5eae77108125ace4150b7a5d49a5f6f2f32467",
+     "payload_mac": "a72cb4594d88345df0328bbc1e3f917c1cdfba000067b822bd47b9049ea52548",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "newer_two_generations",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 4,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "f7474049ea38bde5a47df94d783e201744d32506cc1b0375d3e79b3a0c9fd2e5",
+     "payload_mac": "0931340e1c1392fc6e8d66993bd877286c7db2358bf49b38a8e9ccd137bcb2da",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 5,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "2326216a9dcddb0a8c796d8f0e5eae77108125ace4150b7a5d49a5f6f2f32467",
+     "payload_mac": "a72cb4594d88345df0328bbc1e3f917c1cdfba000067b822bd47b9049ea52548",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "older_generation",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 2,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "b7305fe79124d74f23452a817e45756b0f0e60599418af3639f1114bcb7fc59f",
+     "payload_mac": "f6050fda0ac797801f0e12f6bbf7d0864c7bdbc0a4e74c4c2d39bce19fe86b14",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "current_and_newer",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "7e2d2687237ffbd066c0a16917ef79a273295ad19c957d2094a356ede3ee1de8",
+     "payload_mac": "d6e0b863c35440909033b1920052f146e4a4fed7b8a5c74d6d22f1bba00979f2",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 5,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "2326216a9dcddb0a8c796d8f0e5eae77108125ace4150b7a5d49a5f6f2f32467",
+     "payload_mac": "a72cb4594d88345df0328bbc1e3f917c1cdfba000067b822bd47b9049ea52548",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "newer_tampered",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 5,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "2ac0bdf651ae3b5db013f92aaf491600952d8d851db5e49f007a46d980c90d1f",
+     "payload_mac": "c63ea8836e1b62e922f9f9ed3a3eda64185d69124b87870a1a59ae56362e0973",
+     "publisher": null,
+     "reason": "changed after signing",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "newer_other_key",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 5,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:0000000000000000",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "2ac0bdf651ae3b5db013f92aaf491600952d8d851db5e49f007a46d980c90d1f",
+     "payload_mac": "c63ea8836e1b62e922f9f9ed3a3eda64185d69124b87870a1a59ae56362e0973",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "newer_null_generation",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": null,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "2ac0bdf651ae3b5db013f92aaf491600952d8d851db5e49f007a46d980c90d1f",
+     "payload_mac": "c63ea8836e1b62e922f9f9ed3a3eda64185d69124b87870a1a59ae56362e0973",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": false,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "legacy_unsigned_no_pending",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": null,
+     "integrity_key_id": null,
+     "integrity_version": null,
+     "owner": "local-user",
+     "payload_hash": null,
+     "payload_mac": null,
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": null,
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "4a4589ff7866c7b746a9c92f0d1e6f766a8365c601c1dfd20860789799fad00b",
+     "payload_mac": "42f7ea8f9bf71b3b3cfb863b91971152b2bd7d369fbd918b859e131f66f5243f",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": false,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "legacy_v1_no_pending",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": null,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 1,
+     "owner": "local-user",
+     "payload_hash": "1c7ad1281ef5efae1c6b69f7727aa7ef3bcc771e630479184caa66c309e9fda8",
+     "payload_mac": "58bc3482160b17a88aed8a7f7abcf8f2aa91a9fa6d0e9daabfb3a6abdc13bb25",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 5,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "2326216a9dcddb0a8c796d8f0e5eae77108125ace4150b7a5d49a5f6f2f32467",
+     "payload_mac": "a72cb4594d88345df0328bbc1e3f917c1cdfba000067b822bd47b9049ea52548",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": false,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "v2_missing_signed_at",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "7e2d2687237ffbd066c0a16917ef79a273295ad19c957d2094a356ede3ee1de8",
+     "payload_mac": "d6e0b863c35440909033b1920052f146e4a4fed7b8a5c74d6d22f1bba00979f2",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "4a4589ff7866c7b746a9c92f0d1e6f766a8365c601c1dfd20860789799fad00b",
+     "payload_mac": "42f7ea8f9bf71b3b3cfb863b91971152b2bd7d369fbd918b859e131f66f5243f",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": null,
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 4,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "pending_all_at_pending",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 4,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "f7474049ea38bde5a47df94d783e201744d32506cc1b0375d3e79b3a0c9fd2e5",
+     "payload_mac": "0931340e1c1392fc6e8d66993bd877286c7db2358bf49b38a8e9ccd137bcb2da",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 4,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "be4cd996cbdc1a7c49a6ea786b23084af92a19c10cca0b246db4091a639eebdf",
+     "payload_mac": "3f8aef55e1243697f9d835221cf7181395e0c212e2775d931db1ed82d0697442",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": 4,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": true
+   },
+   "name": "pending_all_at_current",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "7e2d2687237ffbd066c0a16917ef79a273295ad19c957d2094a356ede3ee1de8",
+     "payload_mac": "d6e0b863c35440909033b1920052f146e4a4fed7b8a5c74d6d22f1bba00979f2",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "4a4589ff7866c7b746a9c92f0d1e6f766a8365c601c1dfd20860789799fad00b",
+     "payload_mac": "42f7ea8f9bf71b3b3cfb863b91971152b2bd7d369fbd918b859e131f66f5243f",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": 4,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": 4,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "pending_mixed",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "7e2d2687237ffbd066c0a16917ef79a273295ad19c957d2094a356ede3ee1de8",
+     "payload_mac": "d6e0b863c35440909033b1920052f146e4a4fed7b8a5c74d6d22f1bba00979f2",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 4,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "be4cd996cbdc1a7c49a6ea786b23084af92a19c10cca0b246db4091a639eebdf",
+     "payload_mac": "3f8aef55e1243697f9d835221cf7181395e0c212e2775d931db1ed82d0697442",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": 4,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": 4,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "pending_tampered",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 4,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "f7474049ea38bde5a47df94d783e201744d32506cc1b0375d3e79b3a0c9fd2e5",
+     "payload_mac": "0931340e1c1392fc6e8d66993bd877286c7db2358bf49b38a8e9ccd137bcb2da",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 4,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "be4cd996cbdc1a7c49a6ea786b23084af92a19c10cca0b246db4091a639eebdf",
+     "payload_mac": "3f8aef55e1243697f9d835221cf7181395e0c212e2775d931db1ed82d0697442",
+     "publisher": null,
+     "reason": "changed after signing",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": 4,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": false,
+     "generation": 3,
+     "pending_generation": 4,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "pending_legacy_unsigned",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": null,
+     "integrity_key_id": null,
+     "integrity_version": null,
+     "owner": "local-user",
+     "payload_hash": null,
+     "payload_mac": null,
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": null,
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "4a4589ff7866c7b746a9c92f0d1e6f766a8365c601c1dfd20860789799fad00b",
+     "payload_mac": "42f7ea8f9bf71b3b3cfb863b91971152b2bd7d369fbd918b859e131f66f5243f",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": 4,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": false,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": true
+   },
+   "name": "pending_legacy_v1_current_valid",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": null,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 1,
+     "owner": "local-user",
+     "payload_hash": "1c7ad1281ef5efae1c6b69f7727aa7ef3bcc771e630479184caa66c309e9fda8",
+     "payload_mac": "58bc3482160b17a88aed8a7f7abcf8f2aa91a9fa6d0e9daabfb3a6abdc13bb25",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "4a4589ff7866c7b746a9c92f0d1e6f766a8365c601c1dfd20860789799fad00b",
+     "payload_mac": "42f7ea8f9bf71b3b3cfb863b91971152b2bd7d369fbd918b859e131f66f5243f",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": 4,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": false,
+     "generation": 3,
+     "pending_generation": 4,
+     "version": 1
+    },
+    "still_matches": true
+   },
+   "name": "pending_legacy_v1_only",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": null,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 1,
+     "owner": "local-user",
+     "payload_hash": "1c7ad1281ef5efae1c6b69f7727aa7ef3bcc771e630479184caa66c309e9fda8",
+     "payload_mac": "58bc3482160b17a88aed8a7f7abcf8f2aa91a9fa6d0e9daabfb3a6abdc13bb25",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": 4,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": false,
+     "generation": 3,
+     "pending_generation": 4,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "pending_legacy_v1_pending_signed",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": null,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 1,
+     "owner": "local-user",
+     "payload_hash": "1c7ad1281ef5efae1c6b69f7727aa7ef3bcc771e630479184caa66c309e9fda8",
+     "payload_mac": "58bc3482160b17a88aed8a7f7abcf8f2aa91a9fa6d0e9daabfb3a6abdc13bb25",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 4,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "be4cd996cbdc1a7c49a6ea786b23084af92a19c10cca0b246db4091a639eebdf",
+     "payload_mac": "3f8aef55e1243697f9d835221cf7181395e0c212e2775d931db1ed82d0697442",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": 4,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 4,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "pending_cutover_done",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 4,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "f7474049ea38bde5a47df94d783e201744d32506cc1b0375d3e79b3a0c9fd2e5",
+     "payload_mac": "0931340e1c1392fc6e8d66993bd877286c7db2358bf49b38a8e9ccd137bcb2da",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": true,
+    "generation": 3,
+    "pending_generation": 4,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": true
+   },
+   "name": "remote_rows_ignored",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "7e2d2687237ffbd066c0a16917ef79a273295ad19c957d2094a356ede3ee1de8",
+     "payload_mac": "d6e0b863c35440909033b1920052f146e4a4fed7b8a5c74d6d22f1bba00979f2",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 9,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "938c35e6a0b98537728ff21759936ee6f62441f93fc426a14c4596970e70c48f",
+     "payload_mac": "fd7fc51b3d7f2cd14fde7ceb91cd210bfe4eeb93894f0bae8d7fb13e957a58c8",
+     "publisher": null,
+     "reason": "changed after signing",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "cloud-sync",
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000003",
+     "artifact_id": "codex:project:tool-3",
+     "decision_id": 3,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": null,
+     "integrity_key_id": null,
+     "integrity_version": null,
+     "owner": "local-user",
+     "payload_hash": null,
+     "payload_mac": null,
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": null,
+     "source": "team-policy",
+     "updated_at": "2026-10-15T12:00:03Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": true
+   },
+   "name": "null_source_ignored",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2,
+     "owner": "local-user",
+     "payload_hash": "7e2d2687237ffbd066c0a16917ef79a273295ad19c957d2094a356ede3ee1de8",
+     "payload_mac": "d6e0b863c35440909033b1920052f146e4a4fed7b8a5c74d6d22f1bba00979f2",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    },
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+     "artifact_id": "codex:project:tool-2",
+     "decision_id": 2,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": null,
+     "integrity_key_id": null,
+     "integrity_version": null,
+     "owner": "local-user",
+     "payload_hash": null,
+     "payload_mac": null,
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": null,
+     "source": null,
+     "updated_at": "2026-10-15T12:00:02Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": false
+   },
+   "name": "real_integrity_version",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": 3,
+     "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988",
+     "integrity_version": 2.0,
+     "owner": "local-user",
+     "payload_hash": "7e2d2687237ffbd066c0a16917ef79a273295ad19c957d2094a356ede3ee1de8",
+     "payload_mac": "d6e0b863c35440909033b1920052f146e4a4fed7b8a5c74d6d22f1bba00979f2",
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": "2026-10-15T12:00:00Z",
+     "source": "local",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 3,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": true
+   },
+   "name": "no_local_rows",
+   "rows": [],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": null,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 4,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": true
+   },
+   "name": "no_local_rows_pending",
+   "rows": [],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": 4,
+    "version": 1
+   }
+  },
+  {
+   "expected": {
+    "prepared_state": {
+     "cutover_complete": true,
+     "generation": 4,
+     "pending_generation": null,
+     "version": 1
+    },
+    "still_matches": true
+   },
+   "name": "only_remote_rows_pending",
+   "rows": [
+    {
+     "action": "allow",
+     "artifact_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+     "artifact_id": "codex:project:tool-1",
+     "decision_id": 1,
+     "expires_at": null,
+     "harness": "codex",
+     "integrity_generation": null,
+     "integrity_key_id": null,
+     "integrity_version": null,
+     "owner": "local-user",
+     "payload_hash": null,
+     "payload_mac": null,
+     "publisher": null,
+     "reason": "approved",
+     "scope": "artifact",
+     "signed_at": null,
+     "source": "policy-bundle",
+     "updated_at": "2026-10-15T12:00:01Z",
+     "workspace": null
+    }
+   ],
+   "trusted_state": {
+    "cutover_complete": false,
+    "generation": 3,
+    "pending_generation": 4,
+    "version": 1
+   }
+  }
+ ],
+ "integrity_key_id": "guard-policy-integrity-key:00000000feedface:1f2e3d4c5b6a7988"
+}

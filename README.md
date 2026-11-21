@@ -2,8 +2,6 @@
 
 <!-- mcp-name: io.github.hashgraph-online/hol-guard -->
 
-[![HOL Guard Version](https://img.shields.io/pypi/v/hol-guard.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/hol-guard/)
-[![Plugin Scanner Version](https://img.shields.io/pypi/v/plugin-scanner.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/plugin-scanner/)
 [![HOL Guard Downloads](https://img.shields.io/pypi/dm/hol-guard?logo=pypi&logoColor=white)](https://pypi.org/project/hol-guard/)
 [![Plugin Scanner Downloads](https://img.shields.io/pypi/dm/plugin-scanner?logo=pypi&logoColor=white)](https://pypi.org/project/plugin-scanner/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](#install-hol-guard)
@@ -11,22 +9,44 @@
 [![Publish](https://img.shields.io/github/actions/workflow/status/hashgraph-online/hol-guard/publish.yml?branch=main&label=Publish&logo=githubactions&logoColor=white)](https://github.com/hashgraph-online/hol-guard/actions/workflows/publish.yml)
 [![Container Image](https://img.shields.io/badge/ghcr-hol--guard-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/hol-guard/pkgs/container/hol-guard)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/hol-guard/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/hol-guard)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
+<a href="https://vercel.com/oss"><img src="https://vercel.com/oss/program-badge.svg" alt="Vercel OSS Program" height="20"></a>
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/hol-guard?style=social)](https://github.com/hashgraph-online/hol-guard/stargazers)
-[![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
+[![Reviewed by Enclave](https://img.shields.io/badge/reviewed%20by-Enclave-111111?style=flat-square&labelColor=111111&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTI2IiBoZWlnaHQ9IjEyNiIgdmlld0JveD0iMTYgMTggMTI2IDEyNiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBzdHJva2U9Im5vbmUiIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0ibm9uemVybyI%2BPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTE2LCAtMjIpIj48cGF0aCBkPSJNMTMzLjcsNDQuMSBDMTM3LjQsNDYuNiAxMzguNCw1MS41IDEzNi4wLDU1LjIgQzEyNy4yLDY4LjYgMTEyLjMsNzYuOCA5Niw3Ni44IEM3OS42LDc2LjggNjQuNyw2OC42IDU1LjksNTUuMiBDNTMuNSw1MS41IDU0LjUsNDYuNiA1OC4yLDQ0LjEgQzYxLjksNDEuNyA2Ni44LDQyLjcgNjkuMyw0Ni40IEM3NS4xLDU1LjQgODUuMSw2MC45IDk2LDYwLjkgQzEwNi44LDYwLjkgMTE2LjgsNTUuNCAxMjIuNiw0Ni40IEMxMjUuMSw0Mi43IDEzMC4wLDQxLjcgMTMzLjcsNDQuMSBaIiBmaWxsPSIjZmZmIj48L3BhdGg%2BPHBhdGggZD0iTTEzNS42LDU1LjggQzEyOC45LDY0LjIgMTI2LjgsNzUuNCAxMzAuMSw4NS44IEMxMzMuNSw5Ni4wIDE0MS41LDEwMy43IDE1MS42LDEwNi42IEwxNTIuMSwxMDYuOCBDMTU2LjMsMTA3LjkgMTU4LjgsMTEyLjMgMTU3LjcsMTE2LjYgQzE1Ni41LDEyMC45IDE1Mi4xLDEyMy4zIDE0Ny44LDEyMi4yIEMxMzIuNCwxMTcuOSAxMjAuMCwxMDYuMiAxMTQuOSw5MC43IEMxMDkuOSw3NS4xIDExMy4xLDU4LjQgMTIzLjEsNDUuOSBDMTI1LjgsNDIuNCAxMzAuOCw0MS44IDEzNC4zLDQ0LjYgQzEzNy43LDQ3LjMgMTM4LjMsNTIuMSAxMzUuNyw1NS42IEwxMzUuNiw1NS44IFoiIGZpbGw9IiNmZmYiPjwvcGF0aD48cGF0aCBkPSJNOTYuMywxNjEuOCBDOTEuOSwxNjIuMCA4OC4yLDE1OC42IDg4LjAsMTU0LjIgQzg3LjMsMTM4LjIgOTQuNSwxMjIuNyAxMDcuNywxMTMuMSBDMTIwLjksMTAzLjUgMTM3LjgsMTAxLjQgMTUyLjgsMTA3LjAgQzE1Ni45LDEwOC42IDE1OS4wLDExMy4yIDE1Ny40LDExNy4zIEMxNTUuOSwxMjEuMyAxNTEuNCwxMjMuNCAxNDcuNCwxMjIuMCBMMTQ3LjEsMTIyLjAgQzEzNy4xLDExOC4yIDEyNS45LDExOS42IDExNy4xLDEyNi4wIEMxMDguNCwxMzIuMyAxMDMuNiwxNDIuNCAxMDMuOSwxNTMuMCBMMTAzLjksMTUzLjUgQzEwNC4xLDE1Ny45IDEwMC43LDE2MS42IDk2LjMsMTYxLjggWiIgZmlsbD0iI2ZmZiI%2BPC9wYXRoPjxwYXRoIGQ9Ik04OC4wLDE1My41IEM4OC40LDE0Mi43IDgzLjYsMTMyLjQgNzQuOCwxMjYuMCBDNjYuMiwxMTkuNyA1NS4xLDExOC4yIDQ1LjIsMTIxLjggTDQ0LjgsMTIyLjAgQzQwLjYsMTIzLjUgMzYuMCwxMjEuNCAzNC41LDExNy4zIEMzMi45LDExMy4yIDM1LjAsMTA4LjYgMzkuMSwxMDcuMCBDNTQuMSwxMDEuNCA3MS4wLDEwMy41IDg0LjIsMTEzLjEgQzk3LjQsMTIyLjcgMTA0LjYsMTM4LjIgMTAzLjksMTU0LjIgQzEwMy43LDE1OC42IDEwMC4wLDE2Mi4wIDk1LjYsMTYxLjggQzkxLjMsMTYxLjYgODcuOSwxNTguMCA4OC4wLDE1My43IEw4OC4wLDE1My41IFoiIGZpbGw9IiNmZmYiPjwvcGF0aD48cGF0aCBkPSJNNTcuNiw0NC42IEM2MS4xLDQxLjggNjYuMSw0Mi40IDY4LjgsNDUuOSBDNzguOCw1OC40IDgyLjAsNzUuMSA3Ny4wLDkwLjcgQzcxLjksMTA2LjIgNTkuNSwxMTcuOSA0NC4xLDEyMi4yIEMzOS44LDEyMy4zIDM1LjQsMTIwLjkgMzQuMiwxMTYuNiBDMzMuMSwxMTIuNCAzNS41LDEwOC4xIDM5LjYsMTA2LjggTDM5LjgsMTA2LjggQzUwLjEsMTAzLjkgNTguNCw5Ni4xIDYxLjgsODUuOCBDNjUuMSw3NS41IDYzLjEsNjQuNSA1Ni42LDU2LjIgTDU2LjMsNTUuOCBDNTMuNiw1Mi4zIDU0LjEsNDcuMyA1Ny42LDQ0LjYgWiIgZmlsbD0iI2ZmZiI%2BPC9wYXRoPjwvZz48L2c%2BPC9zdmc%2B)](https://enclave.ai/?utm_source=github&utm_medium=readme_badge)
 
 | ![HOL whole dark logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Stop risky AI actions before they compromise your machine.** HOL Guard is a local-first security layer for AI agents, tools, plugins, skills, MCP servers, and package installs.<br><br>[Install HOL Guard](https://hol.org/guard/activate)<br>[Read the documentation](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md)<br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
 | :--- | :--- |
 
-HOL Guard reviews agent actions before they run: shell commands, file access, package installs, and MCP tool calls. It detects secret exposure, destructive operations, prompt injection, and supply-chain risks, then allows, blocks, or requests approval according to your policy.
+HOL Guard reviews agent actions before they run: shell commands, file access, package installs, and MCP tool calls. It detects secret exposure, destructive operations, prompt injection, and supply-chain risks, then allows, blocks, or requests approval according to your policy. It sees only the events each agent exposes to it: the [support matrix](docs/guard/harness-support.md) lists, for each agent, the event surfaces Guard hooks and the actions it does not cover.
 
 Run it locally without an account. Use the CLI and local dashboard to manage protection, resolve approvals, and inspect decision history. Optional [Guard Cloud](docs/guard/local-vs-cloud.md) adds shared history, team policy, and fleet management.
 
-[Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contribute an extension](#contribute-a-new-extension) · [Development](#development)
+[Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contribute an extension](#contribute-a-new-extension) · [Contribute an adapter](docs/guard/adapter-contributions.md) · [Development](#development)
+
+<!-- hol-sponsors:start -->
+### Sponsors
+#### Gold sponsors
+
+<p align="center">
+<a href="https://www.yanez.ai/"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/4783ec9c93e4aa9ee19b558bd1902157bcddae28/assets/yanez-sponsor-gold.svg" alt="Yanez" width="240" height="68" /></a>&nbsp;&nbsp;&nbsp;<a href="https://seltz.ai/?utm_source=hol-newsletter&amp;utm_medium=newsletter&amp;utm_campaign=the-stack-2026-11-09&amp;utm_content=banner"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/de9ab0eb38707c53ffb56ab7d8bf41a115584488/assets/seltz-sponsor-gold.svg" alt="Seltz" width="240" height="72" /></a>
+</p>
+
+#### Bronze sponsors
+
+<p align="center">
+<a href="https://synthetic.new/?referral=FTVR2kb0"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/451f3fee55db9fe86c42f545606a25af8ae8b66f/assets/synthetic-sponsor-bronze.png" alt="Synthetic" width="160" height="48" /></a>
+&nbsp;&nbsp;&nbsp;
+<a href="https://www.firecrawl.dev/referral?rid=SLPLSKAU"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/451f3fee55db9fe86c42f545606a25af8ae8b66f/assets/firecrawl-sponsor-bronze.png" alt="Firecrawl" width="160" height="48" /></a>
+</p>
+
+<p align="center"><sub>Thank you to our sponsors for supporting HOL Guard. Some sponsor links are referral links.<br>Sponsorship does not change Guard's security decisions or coverage.</sub></p>
+<p align="center">
+<a href="https://hol.org/advertise"><img src="https://img.shields.io/badge/Become_a_sponsor-hol.org%2Fadvertise-1e3970?style=flat" alt="Become a sponsor" height="22"></a>
+</p>
+<!-- hol-sponsors:end -->
 
 ## Install HOL Guard
 
-Requires Python 3.10 or newer and [pipx](https://pipx.pypa.io/stable/installation/).
+Requires Python 3.10 or newer, [pipx](https://pipx.pypa.io/stable/how-to/install-pipx.html), and a matching native runtime. Check the [platform support and Windows ARM64 setup notes](docs/guard/get-started.md#platform-support) before installing.
 
 ```bash
 pipx install hol-guard
@@ -34,6 +54,8 @@ hol-guard init
 ```
 
 The first-run wizard discovers supported agents and walks you through protection setup. It asks before each setup change, including opening the dashboard, installing agent integrations, and connecting optional cloud services.
+
+**Python recommendation:** Use Python 3.11 or newer for the `pipx` installation shown above, in line with [pipx's current installation guide](https://pipx.pypa.io/stable/how-to/install-pipx.html). HOL Guard itself supports Python 3.10+, so this is a setup recommendation, not a change to the package's minimum supported Python version.
 
 Check your installation:
 
@@ -48,7 +70,7 @@ To update an existing installation:
 hol-guard update
 ```
 
-For manual setup, see the [installation guide](docs/guard/get-started.md). Release details and prereleases are on the [releases page](https://github.com/hashgraph-online/hol-guard/releases).
+For manual setup, see the [installation guide](docs/guard/get-started.md). Annotated release notes with upgrade context live at [hol.org/guard/releases](https://hol.org/guard/releases); raw releases and prereleases are on the [GitHub releases page](https://github.com/hashgraph-online/hol-guard/releases).
 
 ## What HOL Guard Protects
 
@@ -65,7 +87,7 @@ Guard connects through native agent hooks, managed MCP proxies, and launch integ
 
 ## Supported AI Agents
 
-Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage.
+Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, ZCode, and Devin. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage.
 
 For example, to set up Codex explicitly:
 
@@ -111,7 +133,7 @@ hol-guard command extensions command.git --json
 
 `command test` and `command explain` inspect the command without executing it or creating an approval. Use `hol-guard approvals` to resolve a pending request and `hol-guard receipts` to review the recorded decision.
 
-The [Extension directory](docs/guard/extensions/README.md) lists command coverage generated from the runtime registry. External contributions require explicit opt-in; required core protections remain enabled. To add coverage, follow the [Extension contribution guide](docs/guard/extensions/contributing.md).
+The [Extension directory](docs/guard/extensions/README.md) lists command coverage generated from the Rust-compiled catalog. External contributions require explicit opt-in; required core protections remain enabled. To add coverage, follow the [Extension contribution guide](docs/guard/extensions/contributing.md).
 
 ### Check a package
 
@@ -157,6 +179,21 @@ plugin-scanner scan . --fail-on-severity high
 Quality grades use the checks applicable to each package. Trust scoring has separate provenance and weights; see the [skill](docs/trust/skill-trust-local.md), [MCP](docs/trust/mcp-trust-draft.md), and [plugin](docs/trust/plugin-trust-draft.md) scoring references.
 
 <a id="ci-and-automation"></a>
+
+### Package a plugin for every runtime
+
+`hol-guard plugin` is the Plugin Kit. Point it at one plugin source, such as a Claude Code plugin, Codex plugin, Gemini CLI extension, MCP Registry `server.json` or a folder of skills, and it checks the source and writes a ready-to-load copy for each agent runtime that can use it. It runs locally, reads only the folder you name and makes no network calls.
+
+```bash
+hol-guard plugin check            # what marketplaces and runtime loaders would reject
+hol-guard plugin package          # writes dist/hol-plugin/<runtime>/ for each runtime
+hol-guard plugin convert --to agent-plugins   # Agent Plugins 1.0 package, checked against the spec
+hol-guard plugin links            # install commands per runtime, plus listing links
+hol-guard plugin card             # draft .well-known plugin card as JSON
+hol-guard plugin init --name my-plugin   # scaffold a new plugin in an empty folder
+```
+
+Runtimes: `claude-code`, `codex`, `gemini-cli`, `cursor`, `vscode`, `opencode`, `mcp-registry`, `agent-skills` and `agent-plugins`. See [the Plugin Kit guide](docs/guard/plugin-kit.md).
 
 ### GitHub Actions
 
@@ -336,7 +373,7 @@ Use it for AI agent security on a developer machine, MCP security around connect
 
 ### What is HOL Guard?
 
-HOL Guard is open-source antivirus and runtime protection for AI agents. It reviews supported tool calls, shell commands, file access, and package operations for risks such as secret exposure, prompt injection, destructive actions, and malicious dependencies.
+HOL Guard is open-source antivirus and runtime protection for AI agents. It reviews supported tool calls, shell commands, file access, and package operations for risks such as secret exposure, prompt injection, destructive actions, and malicious dependencies. Unlike endpoint antivirus, it does not scan the whole machine: it sees only the actions a supported agent sends through its hooks, and some events fail open or are only observed. The [support matrix](docs/guard/harness-support.md) names those limits per agent.
 
 ### Does HOL Guard work without a cloud account?
 
@@ -344,7 +381,7 @@ Yes. Local protection, CLI commands, approvals, and receipts work without signin
 
 ### Which AI agents does HOL Guard support?
 
-Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
+Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, ZCode, and Devin. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
 
 ### What is the difference between HOL Guard and Plugin Scanner?
 
@@ -360,6 +397,8 @@ The action may need approval under your active policy, or its tools or artifacts
 
 ## Documentation
 
+For enrollment or stale native authority errors, see [extension-control recovery](docs/guard/extension-control-recovery.md).
+
 | Guide | Contents |
 | :--- | :--- |
 | [Get started](docs/guard/get-started.md) | Installation, manual setup, package protection, and common commands. |
@@ -368,6 +407,7 @@ The action may need approval under your active policy, or its tools or artifacts
 | [Policy specification](spec/guard-policy/v1alpha1/README.md) | GuardPolicy document format. |
 | [Policy recipes](docs/guard/policy-recipes.md) | Configuration examples for common workflows. |
 | [Extensions](docs/guard/extensions/README.md) | Built-in command rules and contribution guidance. |
+| [Native extension authoring](docs/guard/extension-builder/README.md) | Canonical JSON sources, the Rust compiler, portable fixtures, and review kits. |
 | [Contribute an extension](#contribute-a-new-extension) | Generate, review, integrate, and test a new extension with the CLI. |
 | [Local vs. cloud](docs/guard/local-vs-cloud.md) | Local capabilities and optional cloud services. |
 | [Troubleshooting](docs/guard/troubleshooting.md) | Diagnosis and recovery. |
@@ -375,9 +415,27 @@ The action may need approval under your active policy, or its tools or artifacts
 
 ## Contribute a New Extension
 
-Use the **Extension Builder CLI** to turn exported command metadata or an MCP tool inventory into contribution files and tests. It works offline: it reads the export without importing or running the target tool.
+To integrate a new AI coding agent or IDE, use the separate [harness adapter contribution guide](docs/guard/adapter-contributions.md). Harness adapters provide discovery, managed setup, and event integration. The command extensions below add policy coverage for CLI tools and do not install agent hooks.
 
-**1. Propose the coverage.** Check the [Extension directory](docs/guard/extensions/README.md) for existing coverage. For a new capability, open an [Extension proposal](https://github.com/hashgraph-online/hol-guard/issues/new?template=command-extension-proposal.yml) with the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Extend an existing extension when it already owns the operation.
+Command extensions are authored as **declarative JSON compiled and evaluated by Rust**. Add metadata, permissions, matcher trees, and safe variants in `contributions/command-sources/command.<name>.json`, then verify behavior with portable JSON fixtures. Most extensions compose existing native operations; a new Rust operation is needed only when the existing matcher contracts cannot express the behavior.
+
+| Contribution | Authoring input | Verification |
+| :--- | :--- | :--- |
+| Command coverage | `contributions/command-sources/command.<name>.json` | Portable fixtures evaluated by `guard-command-source test`. |
+| MCP server knowledge | `contributions/mcp-servers/<id>.json` | MCP contribution tests and native catalog validation. |
+| New matcher semantics | Reviewed Rust changes in `rust/crates/guard-command/` | Native contract, admission, evaluation, and regression tests. |
+
+The Rust compiler generates command descriptors, the catalog, and the native matcher program. Python remains part of the CLI, build orchestration, and tests; new command coverage does not require a Python detector or registry registration. See the [authoring guide](docs/guard/extension-builder/README.md) for direct source authoring and the [architecture](docs/guard/command-extension-architecture.md) for the runtime boundary.
+
+The **Extension Builder CLI** can create those command sources and portable fixtures from exported command metadata. It also supports MCP inventories. It works offline and reads the export without importing or running the target tool.
+
+Use the Builder's plan-and-apply flow to create the canonical source and fixture. Open a draft
+PR early for scope review. Before marking that PR ready for review, run
+`scripts/prepare_extension_contribution.py --source ... --fixture ...` to synchronize deterministic
+projections, then run `hol-guard extensions handoff --repo . --source ... --fixture ...`. The handoff
+check catches missing generated descriptors, catalog entries, and source bindings before final review.
+
+**1. Define the coverage in the PR.** Check the [Extension directory](docs/guard/extensions/README.md) and current [open pull requests](https://github.com/hashgraph-online/hol-guard/pulls) for existing or overlapping coverage. For a new capability, open a draft PR with the **Command extension** template and include the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Scope review happens on the PR; a separate issue is not required. Extend an existing extension when it already owns the operation.
 
 Follow the [development setup](#development), then run the examples below from your HOL Guard checkout. `uv run --no-sync` uses that checkout's installed development version.
 
@@ -394,7 +452,7 @@ uv run --no-sync hol-guard extensions generate --from cli \
 uv run --no-sync hol-guard extensions validate samplectl-kit
 ```
 
-The output directory must be new, with an existing parent directory. The kit includes `discovery.json`, `review.json`, `report.json`, contribution metadata, a native detector, generated tests, and a file manifest.
+The output directory must be new, with an existing parent directory. A command kit includes `discovery.json`, `review.json`, `report.json`, the canonical JSON source, a portable native fixture, a generated descriptor, and a file manifest. MCP kits contain their contribution metadata and generated Python tests.
 
 Other inputs: `--from help` reads saved command help; `--from click` reads a Click `Context.to_info_dict()` export; `--from oclif` reads `oclif.manifest.json`; `--from mcp` reads a complete exported `tools/list` result; and `--from snapshot` replays `discovery.json`. The `cli` example above uses normalized `guard.cli-surface.v1` JSON.
 
@@ -408,7 +466,7 @@ cp samplectl-kit/review.json samplectl-review.json
 
 Edit `samplectl-review.json`, keeping its discovery binding and operation IDs intact. CLI operations use `review` or `block`; the root operation stays `review`. Set `reviewed: true` for entries you have assessed, with rationale and a public HTTPS evidence reference. Add `safeArgv` only for exact, verified safe invocations. The [review format](docs/guard/extension-builder/README.md#review-and-recompile) includes a complete entry example.
 
-Recompile from the saved snapshot rather than editing generated detectors or manifests:
+Recompile the saved snapshot after reviewing it:
 
 ```bash
 uv run --no-sync hol-guard extensions generate --from snapshot \
@@ -417,9 +475,12 @@ uv run --no-sync hol-guard extensions generate --from snapshot \
 
 uv run --no-sync hol-guard extensions validate samplectl-reviewed
 uv run --no-sync hol-guard extensions diff samplectl-kit samplectl-reviewed
+
+"$HOL_GUARD_NATIVE_SOURCE_COMPILER" test \
+  < samplectl-reviewed/artifacts/tests/fixtures/command-source-samplectl.v1.json
 ```
 
-`diff` exits `0` for equal kits and `1` when valid kits differ. If the upstream export changes, generate and review a new snapshot.
+`diff` exits `0` for equal kits and `1` when valid kits differ. The Rust fixture runner evaluates command text without executing it. If the upstream export changes, generate and review a new snapshot.
 
 **4. Preview and apply the integration.** On your contribution branch, preview the changes to the current checkout:
 
@@ -435,25 +496,27 @@ uv run --no-sync hol-guard extensions apply samplectl-reviewed --repo . \
   --write
 ```
 
-The write applies the reviewed plan to contribution files, the external trust map, catalog registration, packaging, and authoring ownership records. Existing IDs or conflicting files stop integration for review.
+The write integrates the canonical source, fixture, generated contribution descriptor, external trust map, packaging, and authoring ownership records. Regenerate the complete program and catalog in the next step. Existing IDs or conflicting files stop integration for review.
 
-**5. Test and submit a pull request.** For the `samplectl` example:
+**5. Test and submit a pull request.** Follow the [native validation sequence](docs/guard/extension-builder/VALIDATION.md) to regenerate the complete catalog, rebuild the compiler and runtime against that program, and run the contribution's fixtures against the integrated sources. This also covers updating an existing extension, where an addition to the packaged baseline would conflict with the existing ID. Then run the contribution checks and regenerate the public directory:
 
 ```bash
 uv run --no-sync python scripts/release/stage_guard_cloud_review_artifacts.py
-uv run --no-sync pytest -q tests/test_generated_cli_samplectl_extension.py
 uv run --no-sync pytest -q \
   tests/test_guard_extension_contribution.py \
   tests/test_guard_extension_trust.py \
+  tests/test_native_source_program.py \
   tests/test_guard_command_extension_registry.py
+uv run --no-sync python scripts/export_extension_directory.py
+uv run --no-sync python scripts/export_extension_directory.py --check
 uv run --no-sync python scripts/render_command_extension_directory.py
 uv run --no-sync python scripts/render_command_extension_directory.py --check
 git diff --check
 ```
 
-Use your generated test filename for a different slug. Add cases for destructive operations, safe previews, aliases, reordered flags, quoting, malformed input, and compound commands. Run lint and formatting checks on changed Python files. Inspect the final diff, commit the integration and regenerated directory, and open a PR against `main` linking the proposal and test results. Include the generated authoring records; keep scratch kit directories and raw upstream exports out of the PR.
+Add fixture cases for destructive operations, safe previews, aliases, reordered flags, quoting, malformed input, and compound commands. Run the Rust checks when changing native semantics and the relevant Python checks when changing tooling. Inspect the final diff, commit the canonical inputs, generated projections, fixtures, and authoring records, and update the existing draft PR against `main` with the test results. Mark it ready for review after the handoff check passes. Keep scratch kit directories and raw upstream exports out of the PR.
 
-**Community contributions remain External and off by default.** Tests must prove they are inert until a local administrator enables them. Generating, applying, or merging a contribution does not activate it, and its detector cannot weaken Guard's required protections.
+**Community contributions remain External and off by default.** Tests must prove they are inert until a local administrator enables them. Generating, applying, or merging a contribution does not activate it, and its rules cannot weaken Guard's required protections.
 
 [Full builder reference](docs/guard/extension-builder/README.md) · [Contribution review requirements](docs/guard/extensions/contributing.md) · [External extension contract](docs/guard/extension-contributions.md) · [Builder validation](docs/guard/extension-builder/VALIDATION.md)
 
@@ -461,15 +524,35 @@ Use your generated test filename for a different slug. Add cases for destructive
 
 ## Development
 
-Clone the repository and install the development dependencies with uv:
+The development toolchain includes Python 3.10 or newer, [uv](https://docs.astral.sh/uv/), and Rust 1.89.0, pinned in [`rust/rust-toolchain.toml`](rust/rust-toolchain.toml). Rust builds the native runtime and extension compiler; Python supplies the CLI and development tooling. The commands below use a POSIX shell from the repository root. See [CONTRIBUTING.md](CONTRIBUTING.md) for Windows setup and the checks for each kind of change.
 
 ```bash
 git clone https://github.com/hashgraph-online/hol-guard.git
 cd hol-guard
-uv sync --extra dev
-uv run ruff check src tests
-uv run ruff format --check src tests
-uv run pytest --tb=short
+uv sync --frozen --extra dev
+rustup toolchain install 1.89.0 --profile minimal --component rustfmt --component clippy
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml \
+  -p guard-command --bin guard-command-source
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml \
+  -p hol-guard-runtime
+
+export HOL_GUARD_NATIVE_SOURCE_COMPILER="$PWD/rust/target/release/guard-command-source"
+export HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER="$HOL_GUARD_NATIVE_SOURCE_COMPILER"
+export HOL_GUARD_NATIVE_BINARY="$PWD/rust/target/release/hol-guard-runtime"
+
+uv run --no-sync python scripts/build_native_command_program.py \
+  --compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER" --check
+uv run --no-sync pytest tests/test_guard_extension_builder_public_docs.py \
+  tests/test_native_source_program.py --tb=short
+```
+
+Those compiler overrides are for an editable checkout. Installed native wheels use their bundled compiler and verify its manifest. After changing canonical sources or Rust semantics, regenerate the projections and rebuild as described in the [validation guide](docs/guard/extension-builder/VALIDATION.md).
+
+For Python tooling and package changes:
+
+```bash
+uv run --no-sync ruff check src tests
+uv run --no-sync ruff format --check src tests
 uv build
 ```
 
@@ -488,12 +571,16 @@ For optional Cisco coverage, use the dependency group command above. See [CONTRI
 
 ## Community
 
-Maintained by [Hashgraph Online](https://github.com/hashgraph-online).
+Maintained by [HOL](https://github.com/hashgraph-online).
 
 - [Report a bug or request a feature](https://github.com/hashgraph-online/hol-guard/issues)
-- [Browse releases](https://github.com/hashgraph-online/hol-guard/releases)
+- [Browse release notes](https://hol.org/guard/releases)
+- [See who builds Guard](https://hol.org/guard/contributors)
+- [Browse raw GitHub releases](https://github.com/hashgraph-online/hol-guard/releases)
 - [Explore the plugin security dataset](https://huggingface.co/datasets/HashgraphOnline/hol-plugin-security)
 
 ## License
 
 Licensed under [Apache-2.0](LICENSE).
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hashgraph-online/hol-guard)

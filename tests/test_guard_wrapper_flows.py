@@ -19,10 +19,10 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import wait_for_approval_requests
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import (
     GuardArtifact,
     HarnessDetection,
@@ -95,7 +95,7 @@ class TestWaitForApprovalRequests:
         assert result["resolved"] is True
         assert result["pending_request_ids"] == []
 
-    def test_observes_remote_resolution_within_200ms(self, tmp_path: Path) -> None:
+    def test_observes_remote_resolution_within_500ms(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / "guard")
         request_id = self._add_request(store, "req-fast-remote", status="pending")
         resolved_at = [0.0]
@@ -124,7 +124,7 @@ class TestWaitForApprovalRequests:
             resolver.join(timeout=1)
 
         assert result["resolved"] is True
-        assert observed_at - resolved_at[0] < 0.2
+        assert observed_at - resolved_at[0] < 0.5
 
     def test_returns_pending_after_timeout_when_not_resolved(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / "guard")

@@ -75,6 +75,7 @@ fn policy_push_after_claim_before_consume_cannot_authorize_execution() {
             &serde_json::to_value(PolicySnapshotPushV1 {
                 schema: POLICY_SNAPSHOT_PUSH_SCHEMA.into(),
                 snapshot: next,
+                direct_lane: None,
             })
             .unwrap(),
         )

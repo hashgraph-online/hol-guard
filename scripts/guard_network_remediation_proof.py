@@ -11,11 +11,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final, cast
 
-_REPOSITORY_SOURCE = Path(__file__).resolve().parents[1] / "src"
-if str(_REPOSITORY_SOURCE) not in sys.path:
-    sys.path.insert(0, str(_REPOSITORY_SOURCE))
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPOSITORY_ROOT))
 
-from codex_plugin_scanner.guard.runtime.network_capability_reachability import (  # noqa: E402
+from scripts.network_capability_reachability import (  # noqa: E402
     load_reachability_manifest,
     repository_manifest_path,
     validate_reachability_manifest,
@@ -47,7 +47,7 @@ EXPECTED_TASK_EVIDENCE: Final[Mapping[str, tuple[str, ...]]] = {
     "REM-122": (
         "tests/test_guard_harness_smoke.py",
         "tests/test_guard_risk.py",
-        "tests/test_guard_containment_executor.py",
+        "rust/crates/guard-command/src/contained_runner/real_backend_tests.rs",
     ),
     "REM-123": (
         "tests/test_guard_harness_contracts.py",
@@ -56,7 +56,7 @@ EXPECTED_TASK_EVIDENCE: Final[Mapping[str, tuple[str, ...]]] = {
     ),
     "REM-124": (
         "tests/test_guard_compound_developer_inspection.py",
-        "tests/test_guard_compound_readonly_auto_allow.py",
+        "rust/crates/guard-runtime/src/hook_decision_benign_tool_action_tests.rs",
         "tests/test_guard_trusted_local_tools.py",
     ),
     "REM-125": (
@@ -65,23 +65,18 @@ EXPECTED_TASK_EVIDENCE: Final[Mapping[str, tuple[str, ...]]] = {
         "tests/test_guard_network_grant_engine.py",
     ),
     "REM-126": (
-        "tests/test_guard_network_supervisor.py",
+        "rust/crates/guard-runtime/src/daemon_edge_network_tests.rs",
         "tests/test_guard_daemon_recovery_resilience.py",
-        "tests/test_guard_provider_recovery.py",
     ),
-    "REM-127": (
-        ".github/workflows/guard-network-remediation-proof.yml",
-        "tests/test_guard_network_capability_reachability.py",
-    ),
+    "REM-127": ("tests/test_guard_network_capability_reachability.py",),
     "REM-128": (
         "tests/test_guard_linux_tcp_enforcement.py",
         "tests/test_guard_linux_udp_dns_enforcement.py",
         "tests/test_guard_linux_network_observer.py",
     ),
     "REM-129": (
-        ".github/workflows/guard-gvisor-reference.yml",
+        ".github/workflows/nightly-native.yml",
         "tests/test_guard_gvisor_reference_runtime.py",
-        "tests/test_guard_container_network_plan.py",
         "tests/test_guard_kubernetes_runtime.py",
     ),
     "REM-130": (
@@ -105,7 +100,7 @@ EXPECTED_TASK_EVIDENCE: Final[Mapping[str, tuple[str, ...]]] = {
         "tests/test_guard_network_remediation_proof.py",
         "scripts/guard_network_remediation_proof.py",
     ),
-    "REM-135": (".github/workflows/guard-network-remediation-proof.yml",),
+    "REM-135": ("tests/test_guard_network_remediation_proof.py",),
     "REM-136": (
         "docs/guard/network-remediation-readiness.md",
         "ci/guard-network-remediation-proof.v1.json",
@@ -147,6 +142,15 @@ _CAPABILITY_LINK_FIELDS: Final = (
     "active_generation_source",
     "observer",
     "behavioral_test",
+)
+_REVIEW_LOOP_TASK: Final = "REM-135"
+_REVIEW_LOOP_FIELDS: Final = frozenset({"number", "actionable_unresolved_findings"})
+_REVIEW_LOOP_BLOCKER: Final = (
+    "Review-loop completion is recorded only after the synchronized pull requests "
+    "have no actionable unresolved findings."
+)
+_REVIEW_LOOP_FINDINGS_ERROR: Final = (
+    "REM-135: review-loop completion requires synchronized pull requests with no actionable unresolved findings"
 )
 
 
@@ -328,6 +332,39 @@ def _validate_task(
         errors.append(f"{label}: completed tasks must pass without blockers")
     if complete is False and not blockers:
         errors.append(f"{label}: incomplete tasks must retain exact blockers")
+    if label == _REVIEW_LOOP_TASK:
+        _validate_review_loop(task, blockers=blockers, complete=complete, errors=errors)
+
+
+def _review_loop_findings_are_clear(task: Mapping[str, object]) -> bool:
+    findings = task.get("synchronized_pull_requests")
+    if not isinstance(findings, list) or not findings:
+        return False
+    for item in findings:
+        if not isinstance(item, Mapping) or set(item) != _REVIEW_LOOP_FIELDS:
+            return False
+        number = item["number"]
+        count = item["actionable_unresolved_findings"]
+        if type(number) is not int or number < 1:
+            return False
+        if type(count) is not int or count != 0:
+            return False
+    return True
+
+
+def _validate_review_loop(
+    task: Mapping[str, object],
+    *,
+    blockers: list[str],
+    complete: object,
+    errors: list[str],
+) -> None:
+    if complete is True:
+        if not _review_loop_findings_are_clear(task):
+            errors.append(_REVIEW_LOOP_FINDINGS_ERROR)
+        return
+    if _REVIEW_LOOP_BLOCKER not in blockers:
+        errors.append("REM-135: incomplete review loop must retain the unresolved-findings blocker")
 
 
 def _validate_closure(raw_closure: object, tasks: list[Mapping[str, object]], errors: list[str]) -> object:

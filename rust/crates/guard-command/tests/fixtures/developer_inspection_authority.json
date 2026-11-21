@@ -1,0 +1,2580 @@
+{
+  "cases": [
+    {
+      "args": [
+        ""
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        ""
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        ""
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        ""
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": []
+    },
+    {
+      "args": [
+        ""
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        ""
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "plain"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "plain"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "plain"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "plain"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": []
+    },
+    {
+      "args": [
+        "plain"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "plain"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "$HOME"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "$HOME"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "$HOME"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "$HOME"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": []
+    },
+    {
+      "args": [
+        "$HOME"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "$HOME"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "$?"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "$?"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "$?"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "$?"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": []
+    },
+    {
+      "args": [
+        "$?"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "$?"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "$(pwd)"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "$(pwd)"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "$(pwd)"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "$(pwd)"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": []
+    },
+    {
+      "args": [
+        "$(pwd)"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "$(pwd)"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "`pwd`"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "`pwd`"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "`pwd`"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "`pwd`"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": []
+    },
+    {
+      "args": [
+        "`pwd`"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "`pwd`"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "\u00e9"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "\u00e9"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "\u00e9"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "\u00e9"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": []
+    },
+    {
+      "args": [
+        "\u00e9"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "\u00e9"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": [
+        "s/a/b/"
+      ]
+    },
+    {
+      "args": [
+        "s/a/b/"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s#a#b#g"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s#a#b#g"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s#a#b#g"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s#a#b#g"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": [
+        "s#a#b#g"
+      ]
+    },
+    {
+      "args": [
+        "s#a#b#g"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s#a#b#g"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/e"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/e"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/b/e"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/b/e"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": [
+        "s/a/b/e"
+      ]
+    },
+    {
+      "args": [
+        "s/a/b/e"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/e"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/;d"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/;d"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/b/;d"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/b/;d"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": []
+    },
+    {
+      "args": [
+        "s/a/b/;d"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/;d"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/[a]/b/"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s/[a]/b/"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/[a]/b/"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/[a]/b/"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": [
+        "s/[a]/b/"
+      ]
+    },
+    {
+      "args": [
+        "s/[a]/b/"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "s/[a]/b/"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/\\1/"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/\\1/"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/\\1/"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/\\1/"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": [
+        "s/a/\\1/"
+      ]
+    },
+    {
+      "args": [
+        "s/a/\\1/"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/\\1/"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/&/"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/&/"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/&/"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/&/"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": [
+        "s/a/&/"
+      ]
+    },
+    {
+      "args": [
+        "s/a/&/"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/&/"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/b/2"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/2"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/b/2"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/b/2"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": [
+        "s/a/b/2"
+      ]
+    },
+    {
+      "args": [
+        "s/a/b/2"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/2"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/\n"
+      ],
+      "call": "_static_shell_arg_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/\n"
+      ],
+      "call": "_literal_sed_script_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/\n"
+      ],
+      "call": "_literal_sed_substitution_is_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "s/a/b/\n"
+      ],
+      "call": "_split_literal_sed_commands",
+      "kwargs": {},
+      "result": [
+        "s/a/b/"
+      ]
+    },
+    {
+      "args": [
+        "s/a/b/\n"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "s/a/b/\n"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        []
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        []
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        []
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        []
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        []
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        []
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        []
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-u"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        [
+          "-u"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-u"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-u"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-u"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "-u"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "-u"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "+%Y"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        [
+          "+%Y"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "+%Y"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "+%Y"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "+%Y"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "+%Y"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "+%Y"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "+%Y",
+          "+%m"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "+%Y",
+          "+%m"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "+%Y",
+          "+%m"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "+%Y",
+          "+%m"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "+%Y",
+          "+%m"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "+%Y",
+          "+%m"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "+%Y",
+          "+%m"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--set",
+          "now"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--set",
+          "now"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--set",
+          "now"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--set",
+          "now"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--set",
+          "now"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "--set",
+          "now"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "--set",
+          "now"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-f",
+          "pattern"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-f",
+          "pattern"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-f",
+          "pattern"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-f",
+          "pattern"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-f",
+          "pattern"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "-f",
+          "pattern"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "-f",
+          "pattern"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        [
+          "--file=pattern"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--file=pattern"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--file=pattern"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--file=pattern"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--file=pattern"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "--file=pattern"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "--file=pattern"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        [
+          "--no-config",
+          "needle"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--no-config",
+          "needle"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        [
+          "--no-config",
+          "needle"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--no-config",
+          "needle"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--no-config",
+          "needle"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "--no-config",
+          "needle"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "--no-config",
+          "needle"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-e",
+          "needle"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-e",
+          "needle"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-e",
+          "needle"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-e",
+          "needle"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-e",
+          "needle"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "-e",
+          "needle"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "-e",
+          "needle"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--",
+          "-f"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--",
+          "-f"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--",
+          "-f"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--",
+          "-f"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "--",
+          "-f"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "--",
+          "-f"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "--",
+          "-f"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "{}"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "{}"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "{}"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        [
+          "{}"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "{}"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "{}"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "{}"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-n",
+          "{}"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-n",
+          "{}"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-n",
+          "{}"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        [
+          "-n",
+          "{}"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-n",
+          "{}"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "-n",
+          "{}"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "-n",
+          "{}"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-exec",
+          "ls",
+          "{}",
+          ";"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-exec",
+          "ls",
+          "{}",
+          ";"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-exec",
+          "ls",
+          "{}",
+          ";"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-exec",
+          "ls",
+          "{}",
+          ";"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-exec",
+          "ls",
+          "{}",
+          ";"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "-exec",
+          "ls",
+          "{}",
+          ";"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "-exec",
+          "ls",
+          "{}",
+          ";"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-delete"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-delete"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-delete"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-delete"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        [
+          "-delete"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "-delete"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "-delete"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-exec",
+          "sh",
+          "-c",
+          "x",
+          ";"
+        ]
+      ],
+      "call": "_read_only_lookup_date_args_are_safe",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-exec",
+          "sh",
+          "-c",
+          "x",
+          ";"
+        ]
+      ],
+      "call": "_ripgrep_config_is_disabled",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-exec",
+          "sh",
+          "-c",
+          "x",
+          ";"
+        ]
+      ],
+      "call": "_find_exec_ls_args_are_read_only",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        [
+          "-exec",
+          "sh",
+          "-c",
+          "x",
+          ";"
+        ]
+      ],
+      "call": "_find_args_use_write_or_unsafe_exec_action",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        [
+          "-exec",
+          "sh",
+          "-c",
+          "x",
+          ";"
+        ]
+      ],
+      "call": "_static_shell_segment_is_safe",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "grep",
+        [
+          "-exec",
+          "sh",
+          "-c",
+          "x",
+          ";"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "rg",
+        [
+          "-exec",
+          "sh",
+          "-c",
+          "x",
+          ";"
+        ]
+      ],
+      "call": "_read_only_lookup_search_uses_file_input",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "python"
+      ],
+      "call": "_is_read_only_observer_interpreter_command",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "python3"
+      ],
+      "call": "_is_read_only_observer_interpreter_command",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "python3.12"
+      ],
+      "call": "_is_read_only_observer_interpreter_command",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "pythonw.exe"
+      ],
+      "call": "_is_read_only_observer_interpreter_command",
+      "kwargs": {},
+      "result": true
+    },
+    {
+      "args": [
+        "python3x"
+      ],
+      "call": "_is_read_only_observer_interpreter_command",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "node"
+      ],
+      "call": "_is_read_only_observer_interpreter_command",
+      "kwargs": {},
+      "result": false
+    },
+    {
+      "args": [
+        "literal"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "literal"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\:"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\:"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\/"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\/"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\\u96ea"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\\u96ea"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\$"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\$"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\&"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\&"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": ""
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "literal"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "literal"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\:"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\:"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\/"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\/"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\\u96ea"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\\u96ea"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\$"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\$"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\&"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\&"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "/"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "literal"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "literal"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\:"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\:"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\/"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\/"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\\u96ea"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\\u96ea"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\$"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\$"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\&"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\&"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "::"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "literal"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "literal"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\:"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\:"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\/"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\/"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\\u96ea"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\\u96ea"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\$"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\$"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": true
+    },
+    {
+      "args": [
+        "a\\&"
+      ],
+      "call": "_sed_pattern_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": false
+    },
+    {
+      "args": [
+        "a\\&"
+      ],
+      "call": "_sed_replacement_is_literal",
+      "kwargs": {
+        "delimiter": "\u96ea"
+      },
+      "result": true
+    }
+  ],
+  "retained_original_fixture_sha256": {
+    "rust/crates/guard-command/tests/fixtures/sfrs/build_file_read_request_artifact.json.gz": "177a775ee064501181f8a03f4a8a8f6c7c41739eaaf33fce26127f6c21d913ab",
+    "rust/crates/guard-command/tests/fixtures/sfrs/build_file_write_request_artifact.json.gz": "5ed0d8ec94d33d7ffe3cd7554d48831b5062bab187514cee202172f0f3a2ab27",
+    "rust/crates/guard-command/tests/fixtures/sfrs/build_tool_action_request_artifact.json.gz": "ca66c9d5e597e60af1fd689f335054a6cc8541b9921776d620c2d0e87f9b99c3",
+    "rust/crates/guard-command/tests/fixtures/sfrs/classify_github_shell_capabilities.json.gz": "82f67f1fc406e50db843190085caa2a9ce204298c1c77b73e481a3ba590d14b4",
+    "rust/crates/guard-command/tests/fixtures/sfrs/classify_sensitive_path.json.gz": "6a0c30831ee47ccf1340829b4e87a169b59a58edbdf259b8816f56afd615d954",
+    "rust/crates/guard-command/tests/fixtures/sfrs/command_list_candidate_texts.json.gz": "1502889eed428bc241ad7bc2649dd583b05512a248ec6ab3b8ead9251e0180ba",
+    "rust/crates/guard-command/tests/fixtures/sfrs/extract_sensitive_file_read_request.json.gz": "3fabf76769a0a0b5c69357f6b93c4f3f8487d1b3e8d180fe47b9328f5e710828",
+    "rust/crates/guard-command/tests/fixtures/sfrs/extract_sensitive_file_read_request_from_action.json.gz": "140bdd0fbadb9d2dabbedbbf1aa846dfa8d59a400fbe0fb607e011125b4cf8bf",
+    "rust/crates/guard-command/tests/fixtures/sfrs/extract_sensitive_file_write_request.json.gz": "a6e3451e248bc7629154986ea775f9f3ed07aa54f9751395b523f8e0c2543b0d",
+    "rust/crates/guard-command/tests/fixtures/sfrs/extract_sensitive_tool_action_request.json.gz": "bf27f7649da3adac80c15715d6ac888b3e3f1f985850778778438d0e040a9ca9",
+    "rust/crates/guard-command/tests/fixtures/sfrs/fs_helpers.json.gz": "f5249e6f6d02e50f1ab8ab3c5791a3b3e1fe1d60b1b5a511bdf91a2580deb359",
+    "rust/crates/guard-command/tests/fixtures/sfrs/github_body.json.gz": "de532d1d1d69a678b932fe20682723a86189cf76d242b923d3671742a6d9d005",
+    "rust/crates/guard-command/tests/fixtures/sfrs/hook_runtime_artifact.json.gz": "3f0f95622f351c38f7971ec57ac925c1cc63bcccd20ee303f4422f469a623a3f",
+    "rust/crates/guard-command/tests/fixtures/sfrs/intermediate_tokens.json.gz": "fe85e5500ef3cf7c9f81bd69650d09e6cfca8813dedb5717c78e9de32223105a",
+    "rust/crates/guard-command/tests/fixtures/sfrs/interpreter.json.gz": "16a3ad6100a574e064a897707e41e614b771d5095c399acfb521b0ea02e0126a",
+    "rust/crates/guard-command/tests/fixtures/sfrs/is_explicitly_benign_native_file_read_request.json.gz": "282e074ddae26f2af513384e71fc1ba5b02363ae350110001cb8db1eff73eb47",
+    "rust/crates/guard-command/tests/fixtures/sfrs/is_explicitly_benign_tool_action_request.json.gz": "ce576d6fa9944b14932c76f9ded3e67190e97c35ca8094b990f576657814e8b7",
+    "rust/crates/guard-command/tests/fixtures/sfrs/kubernetes.json.gz": "2ded389e038387c4891b6f7fc4778dafb25b159d72056af31ba1e9b23dd846f0",
+    "rust/crates/guard-command/tests/fixtures/sfrs/literal_cd_execution_context.json.gz": "a8c3da455627ba9c35b7312562b8e5062ce1fb885f54b524016514ce85076624",
+    "rust/crates/guard-command/tests/fixtures/sfrs/low_risk_compound_developer_execution_context.json.gz": "c20595d5c653f9eacf5ef6963320699dfb876aed4b57c6fbfdd5ab479382c604",
+    "rust/crates/guard-command/tests/fixtures/sfrs/pytest_helpers.json.gz": "dafcad042231e250345fa408ce63d70d4b7d60a020e86cc55cf72b0a90d3d651",
+    "rust/crates/guard-command/tests/fixtures/sfrs/read_only_lookup_target_is_safe.json.gz": "7b2504cae7dd3729f2c44e25b5b867119f00f78462c2c00f9c2a36501a78d074",
+    "rust/crates/guard-command/tests/fixtures/sfrs/routines.json.gz": "e7c45639d0397012e5ad6caef525a2e81d55c91912ff7d9937d5926a8ac375db",
+    "rust/crates/guard-command/tests/fixtures/sfrs/sfrs_destructive.json.gz": "ab42d7c89baddc277e3261e91b68b4efca40bfb2e2ee5241c04ccb05cc7535e1",
+    "rust/crates/guard-command/tests/fixtures/sfrs/sfrs_dispatcher.json.gz": "f33dc0f688842c03a981be910dc5babe91c6627efd618607898912ff3799f3ef",
+    "rust/crates/guard-command/tests/fixtures/sfrs/sfrs_leaf.json.gz": "6f6427253e851d2f42887813f79b8af10121f48b246124f268af96f94276bbcf",
+    "rust/crates/guard-command/tests/fixtures/sfrs/sfrs_net.json.gz": "dfb59131236e0147b2790f36c4a6ac614b4bb0b1421157a28fe4f1247c0e9df3",
+    "rust/crates/guard-command/tests/fixtures/sfrs/sfrs_node.json.gz": "99c26b8db37a131010b409c993ba65c5686728ea30d9d571cbfbec0baeb15574",
+    "rust/crates/guard-command/tests/fixtures/sfrs/shell_execution_context_starts_with_literal_cd.json.gz": "ce5c4993a5694649a632fcf0b041ba97b2b7467cf45d4ecdcd6e6c92089877f7"
+  },
+  "source_commit": "225df27eac6b8291eebd00f6722540cd33dbd872",
+  "source_sha256": {
+    "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py": "f6d0184abba2aae634007a8480cbfc4d30e2715c1bfb0c166e421d73d886f2cc",
+    "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/source_edit_context.py": "895e59d8fb5e9d1f275a2c4eb5ae27c4e61cc4662ac4645dba98bec79263bc1c"
+  }
+}

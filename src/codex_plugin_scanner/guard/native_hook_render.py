@@ -1,0 +1,412 @@
+"""Resident bridge for the ``hook_render`` op.
+
+Rust renders every harness hook response. The edge decision already returns the
+response for the verdict Rust produced; this op renders a verdict the daemon
+adjusted afterwards (a saved approval, a queued review, a policy repair). This
+module only ships the adjusted verdict, binds the reply by ``request_id`` plus
+``request_sha256`` and decodes it. A missing, malformed or mismatched reply
+returns ``None``; nothing is ever rendered in Python.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import sqlite3
+import time
+from collections.abc import Callable, Mapping
+from contextlib import suppress
+from pathlib import Path
+from typing import TYPE_CHECKING, cast
+from uuid import uuid4
+
+from .native_context import _resolve_digest_home, ensure_resident_prerequisite
+from .native_execution import _resident_request
+from .native_store_policy import _payload
+
+if TYPE_CHECKING:
+    from .store_policy import PolicyLookupEvidence
+
+HOOK_RENDER_FEATURE = "hook-render-v2"
+_REQUEST_SCHEMA = "guard-hook-render-request.v1"
+_RESULT_SCHEMA = "guard-hook-render-result.v1"
+_TIMEOUT_SECONDS = 5.0
+_CURSOR_PROBE_TIMEOUT_SECONDS = 9.0
+_MAX_REQUEST_BYTES = 256 * 1024
+# ``cli_hook_emit`` carries a whole daemon answer as escaped JSON text and
+# ``cursor_shell_route`` carries the edge result the daemon already produced;
+# the resident gives both kinds the larger budget (``hook_render_max_bytes``).
+_CLI_HOOK_EMIT_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+_CURSOR_ROUTE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+# The bridge kinds carry the whole daemon reply they render, which may be as
+# large as a native response, so they ask for the same larger budget.
+_DAEMON_REPLY_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+_LOGGER = logging.getLogger(__name__)
+
+
+def _render_payload(
+    request: dict[str, object],
+    guard_home: Path | None,
+    deadline: float | None = None,
+    *,
+    max_request_bytes: int = _MAX_REQUEST_BYTES,
+    timeout_seconds: float = _TIMEOUT_SECONDS,
+) -> dict[str, object] | None:
+    if deadline is not None:
+        timeout_seconds = min(timeout_seconds, deadline - time.monotonic())
+        if timeout_seconds <= 0:
+            return None
+    home = Path(_resolve_digest_home(guard_home))
+    if not ensure_resident_prerequisite(home):
+        return None
+    wire: dict[str, object] = {"schema": _REQUEST_SCHEMA, "request_id": f"hook-render-{uuid4().hex}", **request}
+    try:
+        response = _resident_request(
+            operation="hook_render",
+            request=wire,
+            guard_home=home,
+            timeout_seconds=timeout_seconds,
+            required_feature=HOOK_RENDER_FEATURE,
+            response_schema=_RESULT_SCHEMA,
+            max_request_bytes=max_request_bytes,
+            record_success=False,
+        )
+    except (TypeError, ValueError, OSError, RuntimeError):
+        return None
+    return _payload(response, wire, home)
+
+
+def _render(
+    request: dict[str, object], guard_home: Path | None, deadline: float | None = None
+) -> dict[str, object] | None:
+    payload = _render_payload(request, guard_home, deadline)
+    rendered = payload.get("response") if payload is not None else None
+    return dict(rendered) if isinstance(rendered, dict) else None
+
+
+def native_hook_availability(
+    payload: Mapping[str, object], *, guard_home: Path | None = None, deadline: float | None = None
+) -> dict[str, object] | None:
+    """Read event outage posture from the Rust renderer."""
+
+    rendered = _render_payload(
+        {"kind": "availability", "harness": "hook", "cli": {"payload": dict(payload)}},
+        guard_home,
+        deadline,
+    )
+    response = rendered.get("response") if rendered is not None else None
+    return dict(response) if isinstance(response, dict) else None
+
+
+def native_render_cli(
+    kind: str,
+    harness: str,
+    params: Mapping[str, object],
+    *,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+) -> tuple[str, dict[str, object] | None] | None:
+    """Render the in-process CLI hook outcome; ``None`` when the resident cannot answer.
+
+    ``kind`` is ``cli_response`` or ``cli_document``. The result is the outcome
+    (``document``, ``silent`` or ``fallback``) and the document for ``document``.
+    """
+
+    wire: dict[str, object] = {"kind": kind, "harness": harness, "cli": dict(params)}
+    # Each kind names its own bound here rather than reading one out of a
+    # table, so the scan that compares every bound against the transport's
+    # ceiling can still read what this call offers.
+    if kind == "cli_hook_emit":
+        payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CLI_HOOK_EMIT_MAX_REQUEST_BYTES)
+    elif kind == "cursor_shell_route" and params.get("op") == "answer" and "probe_budget_ms" in params:
+        payload = _render_payload(
+            wire,
+            guard_home,
+            deadline,
+            max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES,
+            timeout_seconds=_CURSOR_PROBE_TIMEOUT_SECONDS,
+        )
+    elif kind in {"cursor_shell_route", "binding_recording_only"}:
+        payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES)
+    elif kind in {"hermes_bridge", "muse_bridge", "saved_approval", "package_review_settle", "review_reuse"}:
+        payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_DAEMON_REPLY_MAX_REQUEST_BYTES)
+    else:
+        payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_MAX_REQUEST_BYTES)
+    outcome = payload.get("outcome") if payload is not None else None
+    if payload is None or outcome not in {"document", "silent", "fallback"}:
+        return None
+    document = payload.get("response")
+    return str(outcome), dict(document) if isinstance(document, dict) else None
+
+
+def native_cursor_shell_route(
+    payload: Mapping[str, object],
+    *,
+    home_dir: Path,
+    guard_home: Path,
+    workspace: Path | None,
+    binding: Callable[[], Mapping[str, object] | None],
+    deadline: float | None,
+) -> dict[str, object] | None:
+    """Pass the hook and any requested workspace or launcher facts to Rust."""
+    from .contained_sink_command import contained_sink_command_prefix
+    from .native_hook_edge import _capture_deadline
+
+    params: dict[str, object] = {
+        "op": "answer",
+        "payload": dict(payload),
+        "workspace": str(workspace) if workspace is not None else None,
+        "home_dir": str(home_dir),
+        "guard_home": str(guard_home),
+        "native_sink": True,
+    }
+
+    def query(until: float | None) -> dict[str, object] | None:
+        try:
+            rendered = native_render_cli("cursor_shell_route", "cursor", params, guard_home=guard_home, deadline=until)
+        except Exception:
+            _LOGGER.warning("Cursor shell route unavailable", exc_info=True)
+            return None
+        return rendered[1] if rendered is not None else None
+
+    document = query(deadline)
+    if document is None:
+        return None
+    value = document.get("value")
+    needed = document.get("needs")
+    try:
+        if needed == "probe_binding":
+            snapshot = binding()
+            if snapshot is not None:
+                deadline, budget = _capture_deadline(deadline)
+                params["snapshot"] = {
+                    key: snapshot.get(key) for key in ("generation", "policy_digest", "runtime_identity")
+                }
+                params["harness_postures"] = snapshot.get("harness_postures")
+                params["probe_budget_ms"] = budget
+        if (needed == "sink_command" or "snapshot" in params) and (deadline is None or time.monotonic() < deadline):
+            params["sink_command"] = list(contained_sink_command_prefix())
+            answered = query(deadline)
+            if answered is not None and isinstance(answered.get("value"), dict):
+                value = answered["value"]
+    except Exception:
+        _LOGGER.warning("Cursor shell route inputs unavailable", exc_info=True)
+    return dict(value) if isinstance(value, dict) else None
+
+
+def native_saved_decision_response(
+    store: object,
+    *,
+    harness: str,
+    token: str | None,
+    artifact_id: str,
+    native_result: Mapping[str, object],
+    workspace: Path | None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    if token is None:
+        return None
+    return _saved_approval_response(
+        store,
+        harness,
+        native_result,
+        workspace,
+        deadline,
+        {"check": "action", "artifact_id": artifact_id, "token": token},
+    )
+
+
+def native_exact_command_block_response(
+    store: object,
+    *,
+    harness: str,
+    command: str | None,
+    native_result: Mapping[str, object],
+    workspace: Path | None,
+    edge_hint: object = None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    if command is None or edge_hint is False:
+        return None
+    return _saved_approval_response(
+        store,
+        harness,
+        native_result,
+        workspace,
+        deadline,
+        {"check": "command", "command": command, "edge_hint": edge_hint},
+    )
+
+
+def _saved_approval_response(
+    store: object,
+    harness: str,
+    native_result: Mapping[str, object],
+    workspace: Path | None,
+    deadline: float | None,
+    selector: dict[str, object],
+) -> dict[str, object] | None:
+    from .hook_review.hook_fail_closed import fail_closed_pre_tool
+
+    home = getattr(store, "guard_home", None)
+    procure = getattr(store, "policy_lookup_evidence", None)
+    if not isinstance(home, Path) or not callable(procure):
+        return None
+    action = native_result.get("action")
+    inputs: dict[str, object] = {
+        **selector,
+        "guard_home": str(home),
+        "workspace": str(workspace) if workspace is not None else None,
+        # The preflight only reads the action type. Carry the full verdict
+        # when Rust has a saved decision to evaluate or render.
+        "verdict": {"action": {"action_type": action.get("action_type")}} if isinstance(action, Mapping) else {},
+    }
+
+    def request() -> dict[str, object] | None:
+        rendered = native_render_cli("saved_approval", harness, inputs, guard_home=home, deadline=deadline)
+        return rendered[1] if rendered is not None else None
+
+    answer = request()
+    if answer is not None and answer.get("needs_lookup") is True:
+        inputs["verdict"] = dict(native_result)
+        try:
+            evidence = cast("PolicyLookupEvidence", procure())
+        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+            _LOGGER.warning("Native saved decision evidence unavailable (%s)", type(error).__name__)
+            inputs["evidence"] = None
+        else:
+            inputs["evidence"] = {
+                "degraded": evidence.degraded_trust_status is not None,
+                "now": evidence.now,
+                "integrity_state": evidence.integrity_state,
+                "integrity_key_b64": evidence.integrity_key_b64,
+                "integrity_key_id": evidence.integrity_key_id,
+                "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
+                "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
+            }
+        answer = request()
+    if answer is None:
+        return fail_closed_pre_tool(harness)
+    value = answer.get("value")
+    return dict(value) if isinstance(value, dict) else None
+
+
+def native_cli_hook_emit(
+    harness: str,
+    response: Mapping[str, object],
+    *,
+    event_name: str,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+    bridge: bool = False,
+    document: bool = False,
+) -> dict[str, object] | None:
+    """Read a daemon answer the way ``hol-guard hook`` prints it.
+
+    ``harness`` is canonical. A bridge-rendered harness gets ``stdout``,
+    ``stderr`` and ``exit_code``; any other gets the ``policy_action`` its
+    exit status follows. ``bridge`` asks for the bounded bridge's output for
+    every harness, which is what that bridge prints. ``document`` also asks
+    a harness outside the bridges for the redacted document it prints, as
+    ``stdout``, and the ``exit_code`` it exits with; the resident shortens
+    this process's home directory in it. A resident that predates
+    ``document`` answers without ``stdout``. ``None`` when the resident
+    cannot answer, so the caller fails closed rather than reading the answer here. The answer
+    travels as compact JSON so the resident reads the exact text Python would
+    have printed, lone surrogates included. ``deadline`` is the hook's
+    absolute ``time.monotonic()`` budget; the render gets only what remains.
+    """
+
+    try:
+        response_json = json.dumps(dict(response), ensure_ascii=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return None
+    params: dict[str, object] = {"event_name": event_name, "response_json": response_json}
+    if guard_home is not None:
+        # The store this command reads. An authority block's recovery line
+        # names it, so a person pasting the command repairs this install and
+        # not whichever one the bare command would find.
+        params["guard_home"] = str(guard_home)
+    if bridge:
+        params["bridge"] = True
+    if document:
+        params["document"] = True
+        with suppress(RuntimeError):
+            params["home_dir"] = str(Path.home())
+    rendered = native_render_cli("cli_hook_emit", harness, params, guard_home=guard_home, deadline=deadline)
+    return rendered[1] if rendered is not None else None
+
+
+def native_evaluation_has_terminal_policy_action(
+    harness: str,
+    evaluation: Mapping[str, object],
+    *,
+    guard_home: Path | None = None,
+) -> bool | None:
+    """Whether an approval could still change this evaluation; ``None`` when unavailable.
+
+    A ``block`` or ``sandbox-required`` policy action is terminal: no answer a
+    user gives can lift it, so the caller does not open an approval flow for
+    it. Ranking those actions is the resident's own verdict about the
+    evaluation it produced, so Python asks rather than re-reads it.
+    """
+
+    params: dict[str, object] = {"evaluation": {"artifacts": evaluation.get("artifacts")}}
+    rendered = native_render_cli("terminal_policy_action", harness, params, guard_home=guard_home)
+    if rendered is None or rendered[1] is None:
+        return None
+    value = rendered[1].get("value")
+    return value if isinstance(value, bool) else None
+
+
+def native_recording_only_for_binding(
+    binding: Mapping[str, object] | None,
+    harness: object,
+    *,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+) -> bool:
+    """Whether the resident reads this acknowledged binding as recording only.
+
+    The resident reads the snapshot mode and the per-harness posture map. A
+    resident that cannot answer reads as ``False``: the call is then treated as
+    enforcing, so an unanswered question stops a call rather than letting it
+    record.
+    """
+
+    params: dict[str, object] = {"binding": None if binding is None else dict(binding), "harness": harness}
+    rendered = native_render_cli("binding_recording_only", "codex", params, guard_home=guard_home, deadline=deadline)
+    value = rendered[1].get("value") if rendered is not None and rendered[1] is not None else None
+    return value is True
+
+
+def native_render_pre_tool(
+    harness: str, verdict: Mapping[str, object], *, guard_home: Path | None = None, deadline: float | None = None
+) -> dict[str, object] | None:
+    """Render a PreToolUse verdict the daemon adjusted after the edge decision."""
+
+    return _render({"kind": "pre_tool", "harness": harness, "verdict": dict(verdict)}, guard_home, deadline)
+
+
+def native_render_recording_only_pre_tool(
+    harness: str, *, reason_code: str, reason: str, guard_home: Path | None = None, deadline: float | None = None
+) -> dict[str, object] | None:
+    """Render a Watch-posture PreToolUse that continues instead of pausing."""
+
+    return _render(
+        {"kind": "recording_only_pre_tool", "harness": harness, "reason_code": reason_code, "reason": reason},
+        guard_home,
+        deadline,
+    )
+
+
+__all__ = [
+    "HOOK_RENDER_FEATURE",
+    "native_cli_hook_emit",
+    "native_evaluation_has_terminal_policy_action",
+    "native_hook_availability",
+    "native_recording_only_for_binding",
+    "native_render_cli",
+    "native_render_pre_tool",
+    "native_render_recording_only_pre_tool",
+]

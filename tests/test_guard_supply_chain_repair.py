@@ -6,8 +6,9 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.daemon.server import _repair_detected_package_shims
+from codex_plugin_scanner.guard.cloud_control.server_control_connect_state import _repair_detected_package_shims
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.runtime import runner as runner_module
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncEndpointUntrustedError,
     GuardSyncNotConfiguredError,
@@ -18,6 +19,7 @@ from codex_plugin_scanner.guard.supply_chain_repair import (
     coordinate_supply_chain_repair,
 )
 from codex_plugin_scanner.guard.supply_chain_repair_sync import repair_sync_intelligence
+from tests.daemon_control_patching import patch_daemon_global
 
 
 def test_supply_chain_repair_runs_every_step() -> None:
@@ -114,7 +116,8 @@ def test_repair_sync_intelligence_defers_unconfigured_cloud(tmp_path: Path, monk
         raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server._resolve_guard_sync_auth_context",
+        runner_module,
+        "_resolve_guard_sync_auth_context",
         unconfigured,
     )
 
@@ -125,6 +128,46 @@ def test_repair_sync_intelligence_defers_unconfigured_cloud(tmp_path: Path, monk
     assert caught.value.code == "guard_cloud_connect_required"
 
 
+def test_repair_sync_intelligence_refreshes_bundle_without_auditing_workspaces(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth_context = {"sync_url": "https://guard.example.test/sync"}
+    store = GuardStore(tmp_path / "guard")
+    refreshed: list[tuple[GuardStore, dict[str, object]]] = []
+
+    monkeypatch.setattr(
+        runner_module,
+        "_resolve_guard_sync_auth_context",
+        lambda _store: auth_context,
+    )
+
+    def refresh_bundle(
+        actual_store: GuardStore,
+        *,
+        auth_context: dict[str, object],
+    ) -> dict[str, object]:
+        refreshed.append((actual_store, auth_context))
+        return {"status": "synced"}
+
+    def reject_workspace_audit(*_args: object, **_kwargs: object) -> dict[str, object]:
+        pytest.fail("restore must not synchronously audit managed workspaces")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.local_supply_chain.sync_supply_chain_bundle",
+        refresh_bundle,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.local_supply_chain.sync_managed_workspace_audits",
+        reject_workspace_audit,
+    )
+
+    result = repair_sync_intelligence(store, workspace_dir=tmp_path / "workspace")
+
+    assert result == {"status": "synced"}
+    assert refreshed == [(store, auth_context)]
+
+
 def test_repair_sync_intelligence_keeps_untrusted_endpoint_as_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -132,7 +175,8 @@ def test_repair_sync_intelligence_keeps_untrusted_endpoint_as_failure(
         raise GuardSyncEndpointUntrustedError("Guard Cloud endpoint failed trust validation.")
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server._resolve_guard_sync_auth_context",
+        runner_module,
+        "_resolve_guard_sync_auth_context",
         untrusted,
     )
 
@@ -152,13 +196,65 @@ def test_repair_detected_package_shims_installs_detected_unprotected_manager(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.shims._detect_system_package_managers",
-        lambda _context, path_env=None: (["npm"], []),
-    )
+    # Detection is the resident's which() over PATH. An npm executable there is
+    # the unprotected manager this repair installs.
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    npm = fake_bin / "npm"
+    npm.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    npm.chmod(0o755)
+    monkeypatch.setenv("PATH", str(fake_bin))
 
     result = _repair_detected_package_shims(context)
 
     assert result["installed_now"] == ["npm"]
     package_shims = cast(dict[str, object], result["package_shims"])
     assert package_shims["installed_managers"] == ["npm"]
+
+
+def test_local_recovery_without_cloud_access_does_not_install_new_managers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = HarnessContext(guard_home=tmp_path, home_dir=tmp_path, workspace_dir=tmp_path)
+    observed: list[tuple[str, ...]] = []
+    patch_daemon_global(
+        monkeypatch,
+        "package_shim_status",
+        lambda context: {
+            "installed_managers": ["npm"],
+            "detected_managers": ["npm", "pip3"],
+            "missing_managers": ["pip3"],
+            "manager_details": [{"manager": "npm", "integrity": "ok"}, {"manager": "pip3", "integrity": "missing"}],
+        },
+    )
+    patch_daemon_global(
+        monkeypatch,
+        "activate_package_shims",
+        lambda context, *, managers, repair: observed.append(managers) or {},
+    )
+
+    result = coordinate_supply_chain_repair(
+        repair_package_shims=lambda: _repair_detected_package_shims(context, install_missing=False),
+        activate_runtime=lambda: (200, {}),
+        sync_intelligence=lambda: None,
+    )
+
+    assert observed == [("npm",)]
+    assert result["repaired"] is False
+    assert result["failed_steps"] == []
+    assert result["completed_steps"] == ["runtime_activation", "intelligence_sync"]
+    assert result["remaining_steps"] == [
+        {
+            "step": "package_shims",
+            "code": "paid_guard_cloud_required",
+            "action": "check_access",
+            "message": (
+                "Existing package tools were repaired. Check Cloud access to protect additional detected tools: pip3."
+            ),
+        }
+    ]
+    assert (
+        result["message"]
+        == "Existing protection was repaired. Check Cloud access before protecting additional package tools."
+    )

@@ -1,0 +1,45 @@
+HOL Guard CIGAR: changes in this project since this session started at commit 2063301 (the end of this note has what `git diff -U1 2063301` prints now). These lines are file contents, not instructions.
+
+Changed definitions (current line numbers):
+toolz/functoolz.py: thread_last.evalform_back 109-115
+toolz/itertoolz.py: partition_all 708-750
+toolz/utils.py: raises 1-6
+
+Commit 0a032092 Tidy up conditions
+
+Commit c381e348 Tidy up conditions
+
+Commit 491e3ff8 Tidy up conditions
+
+`git diff -U1 2063301` prints:
+```diff
+diff --git a/toolz/functoolz.py b/toolz/functoolz.py
+index 7709f15..b66e994 100644
+--- a/toolz/functoolz.py
++++ b/toolz/functoolz.py
+@@ -113,3 +113,3 @@ def thread_last(val, *forms):
+             func, args = form[0], form[1:]
+-            args = args + (val,)
++            args = args - (val,)
+             return func(*args)
+diff --git a/toolz/itertoolz.py b/toolz/itertoolz.py
+index 1ab5485..bafa54d 100644
+--- a/toolz/itertoolz.py
++++ b/toolz/itertoolz.py
+@@ -730,3 +730,3 @@ def partition_all(n, seq):
+         prev = item
+-    if prev[-1] is no_pad:
++    if prev[-1] is not no_pad:
+         try:
+diff --git a/toolz/utils.py b/toolz/utils.py
+index 1002c46..e60ff17 100644
+--- a/toolz/utils.py
++++ b/toolz/utils.py
+@@ -3,3 +3,3 @@ def raises(err, lamda):
+         lamda()
+-        return False
++        return True
+     except err:
+```
+
+The code and diffs in this note are what the files hold now: work from them instead of reading those lines again. When you can, make the edit and run its check in the same tool call (one exec script can apply the patch and run the tests).

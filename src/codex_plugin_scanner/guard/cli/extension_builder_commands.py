@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import TextIO
 
 from ..extension_builder.errors import BuilderError
-from ..extension_builder.io import canonical_json
+from ..extension_builder.io import canonical_json, object_value, read_json
+from .inventory_list_commands import configure_inventory_list_parser
 
 _METADATA_FLAGS = (
     "slug",
@@ -20,7 +23,10 @@ _METADATA_FLAGS = (
     "executable",
     "launcher",
     "package",
+    "license",
+    "description",
 )
+_HANDOFF_TIMEOUT_SECONDS = 1_500
 
 
 def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -28,9 +34,14 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
         "extensions", help="Generate and review extension contributions from offline metadata"
     )
     commands = parser.add_subparsers(dest="extension_builder_command", required=True)
+    list_parser = commands.add_parser("list", help="List the plugins and extensions in the local Guard inventory")
+    configure_inventory_list_parser(list_parser)
     generate = commands.add_parser("generate", help="Compile an offline inventory into a new contribution kit")
     generate.add_argument(
-        "--from", dest="source_adapter", required=True, choices=("cli", "help", "click", "oclif", "mcp", "snapshot")
+        "--from",
+        dest="source_adapter",
+        required=True,
+        choices=("cli", "help", "click", "oclif", "mcp", "snapshot", "openapi"),
     )
     generate.add_argument("--input", type=Path, required=True, help="Local exported inventory or discovery snapshot")
     generate.add_argument(
@@ -40,12 +51,20 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
     for name in _METADATA_FLAGS:
         generate.add_argument("--" + name.replace("_", "-"))
     generate.add_argument(
+        "--cloud",
+        action="store_true",
+        help="Draft a cloud action pack from an OpenAPI document or MCP tool list; --output names a new file",
+    )
+    generate.add_argument("--host", help="API host for --cloud drafts; required for MCP tool lists")
+    generate.add_argument("--auth-mode", choices=("none", "oauth2", "api-key"), help="Auth mode for MCP --cloud drafts")
+    generate.add_argument(
         "--topic-separator", choices=("colon", "space"), help="oclif invocation topic separator; defaults to colon"
     )
     validate = commands.add_parser(
         "validate", help="Rebuild a kit and verify every byte without importing generated code"
     )
-    validate.add_argument("kit", type=Path)
+    validate.add_argument("kit", type=Path, help="Kit directory, or a pack file with --cloud")
+    validate.add_argument("--cloud", action="store_true", help="Validate a cloud action pack and run its fixtures")
     diff = commands.add_parser("diff", help="Compare valid kits; exit 1 when their inventories or reviews differ")
     diff.add_argument("previous", type=Path)
     diff.add_argument("current", type=Path)
@@ -54,7 +73,16 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
     apply.add_argument("--repo", type=Path, required=True, help="HOL Guard source checkout")
     apply.add_argument("--write", action="store_true", help="Explicitly apply the inspected source changes")
     apply.add_argument("--expected-plan", help="Require the plan digest from a previous inspection")
-    for command in (generate, validate, diff, apply):
+    handoff = commands.add_parser(
+        "handoff", help="Check command-extension inputs and generated projections before opening a pull request"
+    )
+    handoff.add_argument("--source", type=Path, required=True, help="Canonical command source JSON")
+    handoff.add_argument("--fixture", type=Path, required=True, help="Portable command fixture JSON")
+    handoff.add_argument(
+        "--repo", type=Path, default=Path("."), help="HOL Guard checkout containing generated projections"
+    )
+    handoff.add_argument("--compiler", type=Path, help="Use an already-built native source compiler")
+    for command in (generate, validate, diff, apply, handoff):
         command.add_argument("--json", action="store_true", help="Emit a deterministic JSON result")
 
 
@@ -65,6 +93,12 @@ def _generate(args: argparse.Namespace) -> dict[str, object]:
     from ..extension_builder.models import Metadata
     from ..extension_builder.review import default_review, load_review
 
+    if args.cloud:
+        from .extension_builder_cloud import generate_cloud_draft
+
+        return generate_cloud_draft(args)
+    if args.source_adapter == "openapi":
+        raise BuilderError("cloud_source", "OpenAPI input drafts a cloud action pack; add --cloud.")
     metadata: Metadata | None = None
     if args.source_adapter == "snapshot":
         if any(getattr(args, name) is not None for name in _METADATA_FLAGS):
@@ -88,12 +122,90 @@ def _generate(args: argparse.Namespace) -> dict[str, object]:
             executable=args.executable or "",
             launcher=args.launcher or "",
             package=args.package or "",
+            license=args.license or "",
+            description=args.description or "",
         )
     discovery = discover(args.source_adapter, args.input, metadata, topic_separator=args.topic_separator)
     review = load_review(read_json(args.review), discovery) if args.review is not None else default_review(discovery)
     kit = build_kit(discovery, review)
     write_kit(kit, args.output)
     return {**kit.summary(), "generated": True}
+
+
+def _handoff(args: argparse.Namespace) -> dict[str, object]:
+    source = object_value(read_json(args.source), code="source_shape")
+    if source.get("schema") != "guard.command-extension-source.v1":
+        raise BuilderError("source_schema", "Source must use guard.command-extension-source.v1.")
+    extension = object_value(source.get("extension"), code="source_shape")
+    extension_id = extension.get("extension_id")
+    if not isinstance(extension_id, str) or not extension_id.startswith("command."):
+        raise BuilderError("source_identity", "Source must declare a command.* extension ID.")
+    try:
+        repo = args.repo.resolve(strict=True)
+        source_path = args.source.resolve(strict=True)
+        fixture_path = args.fixture.resolve(strict=True)
+    except OSError as exc:
+        raise BuilderError("repository_path", "Repository, source, and fixture paths must exist.") from exc
+    expected_source = repo / "contributions" / "command-sources" / f"{extension_id}.json"
+    expected_fixture = repo / "tests" / "fixtures" / f"command-source-{extension_id.removeprefix('command.')}.v1.json"
+    if source_path != expected_source or fixture_path != expected_fixture:
+        raise BuilderError("canonical_paths", "Source and fixture must use their canonical repository paths.")
+    bindings = repo / "contracts" / "extensions" / "trust"
+    if not bindings.is_dir():
+        raise BuilderError("trust_shape", "Repository authored trust bindings are missing.")
+    from ..runtime.extension_trust import trust_binding_index
+
+    try:
+        trust_class = trust_binding_index(bindings).get(extension_id)
+    except (OSError, ValueError) as exc:
+        raise BuilderError("trust_shape", "Repository trust bindings are invalid.") from exc
+    if trust_class is None:
+        raise BuilderError("missing_external_trust", "The extension needs a reviewed external trust binding.")
+    if trust_class != "external":
+        raise BuilderError("trust_class", "External contributions must remain in the reviewed external trust class.")
+    script = repo / "scripts" / "prepare_extension_contribution.py"
+    if script.is_symlink() or not script.is_file():
+        raise BuilderError("repository_layout", "Repository preparation tooling is unavailable.")
+    command = [
+        sys.executable,
+        str(script),
+        "--check",
+        "--source",
+        str(source_path),
+        "--fixture",
+        str(fixture_path),
+    ]
+    if args.compiler is not None:
+        command.extend(("--compiler", str(args.compiler)))
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=_HANDOFF_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise BuilderError("handoff_validation", "Native handoff validation could not be completed.") from exc
+    if completed.returncode:
+        raise BuilderError("handoff_validation", "Native source or generated-projection validation failed.")
+    try:
+        validation = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise BuilderError("handoff_validation", "Native handoff validation produced an invalid result.") from exc
+    if (
+        not isinstance(validation, dict)
+        or validation.get("ok") is not True
+        or validation.get("checked") is not True
+        or validation.get("targetCommandsExecuted") != 0
+    ):
+        raise BuilderError("handoff_validation", "Native handoff validation did not complete safely.")
+    return {
+        "contributionId": extension_id,
+        "readyForPullRequest": True,
+        "targetCommandsExecuted": 0,
+    }
 
 
 def _operate(args: argparse.Namespace) -> dict[str, object]:
@@ -104,7 +216,13 @@ def _operate(args: argparse.Namespace) -> dict[str, object]:
     command = args.extension_builder_command
     if command == "generate":
         return _generate(args)
+    if command == "handoff":
+        return _handoff(args)
     if command == "validate":
+        if args.cloud:
+            from .extension_builder_cloud import validate_cloud_pack
+
+            return validate_cloud_pack(args.kit)
         return {**load_kit(args.kit).summary(), "validated": True}
     if command == "diff":
         return diff_kits(load_kit(args.previous), load_kit(args.current))
@@ -129,6 +247,19 @@ def _emit(result: dict[str, object], command: str, output: TextIO) -> None:
         print("Kits differ." if result["changed"] else "Kits are identical.", file=output)
         for name in ("addedOperations", "removedOperations", "changedOperations", "changedReviews"):
             print(f"{name}: {result[name]}", file=output)
+    elif command == "generate" and result.get("cloud"):
+        from .extension_builder_cloud import emit_cloud_summary
+
+        emit_cloud_summary(result, output)
+    elif command == "validate" and result.get("cloud"):
+        print(
+            f"Validated {result['providerId']}: {result['actions']} actions, {result['fixtures']} fixtures passed.",
+            file=output,
+        )
+    elif command == "handoff":
+        print(f"Contribution handoff is ready for {result['contributionId']}.", file=output)
+        print("Source, fixture, external trust mapping, and generated projections agree.", file=output)
+        print("No target was executed and active protection was not changed.", file=output)
     else:
         verb = "Generated" if command == "generate" else "Validated"
         print(

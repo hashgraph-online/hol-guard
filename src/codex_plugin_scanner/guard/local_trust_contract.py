@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal, Protocol, TypeVar, cast
 
 from .codex_hook_windows_job import assign_current_process_to_windows_hook_job
-from .daemon.hook_process_worker import terminate_worker_tree
+from .worker_process_tree import terminate_worker_tree
 
 LocalTrustMode = Literal[
     "protected",

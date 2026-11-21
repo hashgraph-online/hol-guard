@@ -1,0 +1,326 @@
+{
+  "schema": "guard-mcp-launch-tokens-parity.v1",
+  "cases": [
+    {
+      "name": "a package launcher is one safe invocation",
+      "command_text": "npx -y @modelcontextprotocol/server-filesystem /srv",
+      "tokens": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/srv"
+      ]
+    },
+    {
+      "name": "a uvx launcher is one safe invocation",
+      "command_text": "uvx mcp-server-git",
+      "tokens": [
+        "uvx",
+        "mcp-server-git"
+      ]
+    },
+    {
+      "name": "a bunx launcher carries its version",
+      "command_text": "bunx server-everything@1.2.3",
+      "tokens": [
+        "bunx",
+        "server-everything@1.2.3"
+      ]
+    },
+    {
+      "name": "a relative executable is one safe invocation",
+      "command_text": "./github-mcp",
+      "tokens": [
+        "./github-mcp"
+      ]
+    },
+    {
+      "name": "an interpreter keeps its arguments",
+      "command_text": "node server.js --port 3000",
+      "tokens": [
+        "node",
+        "server.js",
+        "--port",
+        "3000"
+      ]
+    },
+    {
+      "name": "a quoted argument stays one token",
+      "command_text": "npx -y srv --root \"/a b\"",
+      "tokens": [
+        "npx",
+        "-y",
+        "srv",
+        "--root",
+        "/a b"
+      ]
+    },
+    {
+      "name": "a single-quoted argument stays one token",
+      "command_text": "npx -y srv --root '/a b'",
+      "tokens": [
+        "npx",
+        "-y",
+        "srv",
+        "--root",
+        "/a b"
+      ]
+    },
+    {
+      "name": "an absolute executable is one safe invocation",
+      "command_text": "/usr/local/bin/mcp-server --stdio",
+      "tokens": [
+        "/usr/local/bin/mcp-server",
+        "--stdio"
+      ]
+    },
+    {
+      "name": "a pipeline is not one invocation",
+      "command_text": "npx -y srv | tee log",
+      "tokens": null
+    },
+    {
+      "name": "an and-list is not one invocation",
+      "command_text": "npx -y srv && echo done",
+      "tokens": null
+    },
+    {
+      "name": "an or-list is not one invocation",
+      "command_text": "npx -y srv || echo failed",
+      "tokens": null
+    },
+    {
+      "name": "a semicolon list is not one invocation",
+      "command_text": "npx -y srv; rm -rf /tmp/x",
+      "tokens": null
+    },
+    {
+      "name": "output redirection is not one invocation",
+      "command_text": "npx -y srv > out.log",
+      "tokens": null
+    },
+    {
+      "name": "input redirection is not one invocation",
+      "command_text": "npx -y srv < in.txt",
+      "tokens": null
+    },
+    {
+      "name": "a leading assignment is not a bare invocation",
+      "command_text": "FOO=1 npx -y srv",
+      "tokens": null
+    },
+    {
+      "name": "a PATH override is not a bare invocation",
+      "command_text": "PATH=/evil npx -y srv",
+      "tokens": null
+    },
+    {
+      "name": "a privilege wrapper is not a bare invocation",
+      "command_text": "sudo npx -y srv",
+      "tokens": null
+    },
+    {
+      "name": "an env wrapper is not a bare invocation",
+      "command_text": "env FOO=1 npx -y srv",
+      "tokens": null
+    },
+    {
+      "name": "a shell -c wrapper embeds another command",
+      "command_text": "bash -c \"npx -y srv\"",
+      "tokens": null
+    },
+    {
+      "name": "command substitution is not an exact reading",
+      "command_text": "npx -y srv --user $(whoami)",
+      "tokens": null
+    },
+    {
+      "name": "backtick substitution is not an exact reading",
+      "command_text": "npx -y srv --user `whoami`",
+      "tokens": null
+    },
+    {
+      "name": "empty text launches nothing",
+      "command_text": "",
+      "tokens": null
+    },
+    {
+      "name": "whitespace launches nothing",
+      "command_text": "   ",
+      "tokens": null
+    },
+    {
+      "name": "a backgrounded launch drops the operator",
+      "command_text": "npx -y srv &",
+      "tokens": [
+        "npx",
+        "-y",
+        "srv"
+      ]
+    },
+    {
+      "name": "a subshell keeps its parentheses in the tokens",
+      "command_text": "(npx -y srv)",
+      "tokens": [
+        "(npx",
+        "-y",
+        "srv)"
+      ]
+    },
+    {
+      "name": "a tilde path is expanded against the home directory",
+      "command_text": "~/bin/mcp-server --stdio",
+      "tokens": [
+        "~/bin/mcp-server",
+        "--stdio"
+      ]
+    },
+    {
+      "name": "a variable stays a literal token",
+      "command_text": "npx -y srv --token $TOKEN",
+      "tokens": [
+        "npx",
+        "-y",
+        "srv",
+        "--token",
+        "$TOKEN"
+      ]
+    },
+    {
+      "name": "a quoted executable is still one invocation",
+      "command_text": "\"npx\" -y srv",
+      "tokens": [
+        "npx",
+        "-y",
+        "srv"
+      ]
+    },
+    {
+      "name": "a nohup wrapper is not a bare invocation",
+      "command_text": "nohup npx -y srv",
+      "tokens": null
+    },
+    {
+      "name": "a command wrapper is not a bare invocation",
+      "command_text": "command npx -y srv",
+      "tokens": null
+    },
+    {
+      "name": "a time wrapper is not a bare invocation",
+      "command_text": "time npx -y srv",
+      "tokens": null
+    },
+    {
+      "name": "a stderr dup stays a literal argument",
+      "command_text": "npx -y srv 2>&1",
+      "tokens": [
+        "npx",
+        "-y",
+        "srv",
+        "2>&1"
+      ]
+    },
+    {
+      "name": "two lines are not one invocation",
+      "command_text": "npx -y srv\nrm -rf /tmp/x",
+      "tokens": null
+    },
+    {
+      "name": "a trailing newline does not change the invocation",
+      "command_text": "npx -y srv\n",
+      "tokens": [
+        "npx",
+        "-y",
+        "srv"
+      ]
+    },
+    {
+      "name": "a glob stays the literal token",
+      "command_text": "node servers/*.js",
+      "tokens": [
+        "node",
+        "servers/*.js"
+      ]
+    },
+    {
+      "name": "a heredoc is more than one invocation",
+      "command_text": "npx -y srv <<EOF\nbody\nEOF",
+      "tokens": null
+    },
+    {
+      "name": "a brace group is more than one segment",
+      "command_text": "{ npx -y srv; }",
+      "tokens": null
+    },
+    {
+      "name": "a conditional is more than one segment",
+      "command_text": "if true; then npx -y srv; fi",
+      "tokens": null
+    },
+    {
+      "name": "a loop is more than one segment",
+      "command_text": "for x in a; do npx -y srv; done",
+      "tokens": null
+    },
+    {
+      "name": "an eval wrapper keeps eval as the executable",
+      "command_text": "eval npx -y srv",
+      "tokens": [
+        "eval",
+        "npx",
+        "-y",
+        "srv"
+      ]
+    },
+    {
+      "name": "an exec wrapper keeps exec as the executable",
+      "command_text": "exec npx -y srv",
+      "tokens": [
+        "exec",
+        "npx",
+        "-y",
+        "srv"
+      ]
+    },
+    {
+      "name": "a negation keeps the bang as the executable",
+      "command_text": "! npx -y srv",
+      "tokens": [
+        "!",
+        "npx",
+        "-y",
+        "srv"
+      ]
+    },
+    {
+      "name": "a spaced subshell keeps the paren as the executable",
+      "command_text": "( npx -y srv )",
+      "tokens": [
+        "(",
+        "npx",
+        "-y",
+        "srv",
+        ")"
+      ]
+    },
+    {
+      "name": "a leading pipe keeps the bar as the executable",
+      "command_text": "| npx -y srv",
+      "tokens": [
+        "|",
+        "npx",
+        "-y",
+        "srv"
+      ]
+    },
+    {
+      "name": "an unterminated and-list still reads one invocation",
+      "command_text": "npx -y srv &&",
+      "tokens": [
+        "npx",
+        "-y",
+        "srv"
+      ]
+    }
+  ]
+}

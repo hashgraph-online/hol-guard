@@ -13,96 +13,14 @@ import re
 
 from codex_plugin_scanner.checks.security import TEST_FILE_RE
 from codex_plugin_scanner.checks.skill_security import _RISKY_SKILL_PATTERNS
-from codex_plugin_scanner.guard.runtime.local_request_snapshots import _SOURCE_SEARCH_SECRET_ASSIGNMENT_RE
-
-_PRE_FIX_SECRET_ASSIGNMENT_RE = re.compile(
-    r"""(?ix)
-    (?P<prefix>
-        [\"']?
-        (?:
-            access[_-]?token
-            |refresh[_-]?token
-            |authorization[_-]?code
-            |user[_-]?code
-            |dpop[_-]?private[_-]?key(?:[_-]?(?:pem|ref))?
-            |api[_-]?key
-            |token
-            |secret
-            |password
-            |credential
-        )
-        [\"']?
-        \s*[:=]\s*
-    )
-    (?P<value>
-        \"(?:\\.|[^\"])*\"
-        |'(?:\\.|[^'])*'
-        |[^\s,;)}\]]+
-    )
-    """
-)
 
 _PRE_FIX_TEST_FILE_RE = re.compile(r"(^test_.*|.*(?:\.test|\.spec)\.[^.]+$|.*_test\.[^.]+$)", re.I)
-
-
-def _assignment_spans(pattern: re.Pattern[str], value: str) -> list[tuple[tuple[int, int], tuple[int, int]]]:
-    return [(match.span(), match.span("value")) for match in pattern.finditer(value)]
 
 
 def _exhaustive(alphabet: str, max_length: int) -> list[str]:
     return [
         "".join(chars) for length in range(1, max_length + 1) for chars in itertools.product(alphabet, repeat=length)
     ]
-
-
-def test_secret_assignment_re_matches_same_spans_as_pre_fix_form() -> None:
-    corpus = (
-        _exhaustive("a\\\"':=; \n", 6)
-        + _exhaustive("a\\\"'=tpk", 5)
-        + [
-            'access_token = "abc\\"def"',
-            "api_key='v'",
-            "token=\\",
-            'secret = "\\\\\\\\\\\\\\"',
-            "password = 'a\\'b'",
-            "credential=x;y",
-            'authorization_code = "unterminated',
-            "user_code = 'unterminated",
-            'dpop_private_key_pem = "k"',
-            "token:a\\b",
-            'token = "a b\\"',
-            'token = "a b\\',
-            "a token=\"x\" b secret='y' c",
-            "\\",
-            "\\\\",
-            'token = "\\\\"',
-            "token = '\\\\'",
-            # Escaped and bare newlines must stay inside quoted values so the
-            # whole assignment is scrubbed, as the pre-fix pattern did.
-            'token = "first\\\nsecond"',
-            "token = 'first\\\nsecond'",
-            'token = "a\nb"',
-            "token = 'a\nb'",
-            'token = "first\\"\\\n"',
-            "token = 'x\\'\\\ny'",
-        ]
-    )
-    for sample in corpus:
-        assert _assignment_spans(_PRE_FIX_SECRET_ASSIGNMENT_RE, sample) == _assignment_spans(
-            _SOURCE_SEARCH_SECRET_ASSIGNMENT_RE, sample
-        ), f"span divergence on {sample!r}"
-
-
-def test_secret_assignment_re_is_linear_on_unterminated_quote_backslashes() -> None:
-    # The pre-fix value alternative backtracked exponentially on unterminated
-    # quoted backslash runs; the rewrite must scan them in linear time.
-    for adversarial in (
-        'token = "' + "\\" * 512,
-        "token = '" + "\\" * 512,
-        'access_token = "' + ("a\\" * 256),
-        "x " + "\\" * 1024,
-    ):
-        _assignment_spans(_SOURCE_SEARCH_SECRET_ASSIGNMENT_RE, adversarial)
 
 
 def test_risky_skill_url_patterns_match_same_spans_as_pre_fix_form() -> None:

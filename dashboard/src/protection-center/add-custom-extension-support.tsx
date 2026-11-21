@@ -8,6 +8,15 @@ function enrollableCount(item: LocalCliItem): number {
 
 export type EnrollStep = "pick" | "review" | "confirm";
 
+/** Tool-level MCP records: seen in agent calls, or a remote server from a harness config. */
+const OBSERVED_MCP_LABEL_SUFFIXES = [" · observed tools", " · configured server"];
+
+export function isObservedMcpItem(item: LocalCliItem | null): boolean {
+  return item?.surface === "mcp"
+    && item.example_label.startsWith("mcp__")
+    && OBSERVED_MCP_LABEL_SUFFIXES.some((suffix) => item.source_label?.endsWith(suffix) === true);
+}
+
 export function addDialogSubmitLabel(input: {
   recognized: LocalCliItem | null;
   busy: boolean;
@@ -29,14 +38,18 @@ export function addDialogSubmitLabel(input: {
   if (input.pending === "blocked") {
     return blockActionLabel(input.recognized.surface);
   }
-  return allowActionLabel(input.recognized.surface);
+  return isObservedMcpItem(input.recognized) ? "Save tool permissions" : allowActionLabel(input.recognized.surface);
 }
 
 export function enrollConfirmCopy(
   surface: LocalCliItem["surface"],
   recentlySatisfied: boolean,
   totpEnabled: boolean,
+  gateReady: boolean | null,
 ): string {
+  if (gateReady === false) {
+    return "Local approval isn't ready on this device. Set it up below, then come back to save these settings.";
+  }
   if (recentlySatisfied) {
     return "Recently confirmed with your authenticator. Save these settings.";
   }
@@ -94,11 +107,13 @@ export function dialogIntro(
   surface: LocalCliItem["surface"] | null,
   discovering = false,
   mcpHasTools = true,
+  observedMcp = false,
 ): string {
   if (surface === "package-scripts") {
-    return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
+    return "Adding this project allows its scripts, so Guard stops asking about them. Block any script you want stopped.";
   }
   if (surface === "mcp") {
+    if (observedMcp) return "Review each detected tool before saving. Allow listed applies only to the tools shown here.";
     if (!mcpHasTools) {
       return "You can still add this server. List tools again to set Recommended, Allow, or Block on each tool.";
     }
@@ -160,13 +175,11 @@ export function McpListingStatus(props: {
   );
 }
 
-export function filterCountCopy(visible: number, total: number): string {
-  if (visible === 0) return "No scripts match that name. Try another nested name, or pick a different project.";
-  if (visible === total) return `${visible} scripts in this project.`;
-  return `${visible} of ${total} scripts match. Allow still enrolls the whole project.`;
-}
-
 export function suggestionSummary(item: LocalCliItem): string {
+  if (isObservedMcpItem(item)) {
+    const count = item.commands.filter((entry) => entry.command_id !== "other").length;
+    return `${count} detected ${count === 1 ? "tool" : "tools"}. Set permissions for each one. New tools keep the usual review, and safety policy still applies.`;
+  }
   if (item.surface === "package-scripts" && item.commands.length > 0) {
     const count = enrollableCount(item);
     const unit = count === 1 ? "script" : "scripts";
@@ -217,8 +230,8 @@ export function SuggestionPanel(props: {
         onSelect={props.onSelect}
       />
       <SuggestionGroup
-        heading="From your apps"
-        helper="MCP servers already configured in apps on this device."
+        heading="MCP servers and connectors"
+        helper="Configured in your apps or detected from tool activity. Pick one to review its tools."
         items={props.harnessSuggestions}
         onSelect={props.onSelect}
       />
@@ -229,26 +242,6 @@ export function SuggestionPanel(props: {
         onSelect={props.onSelect}
       />
     </>
-  );
-}
-
-export function ProjectSwitcher(props: {
-  items: LocalCliItem[];
-  currentId: string;
-  onSelect: (item: LocalCliItem) => void;
-}) {
-  if (props.items.length < 2) return null;
-  return (
-    <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Remembered projects">
-      {props.items.map((item) => (
-        <ProjectChip
-          key={item.cli_id}
-          item={item}
-          selected={item.cli_id === props.currentId}
-          onSelect={props.onSelect}
-        />
-      ))}
-    </div>
   );
 }
 
@@ -284,43 +277,29 @@ function SuggestionGroup(props: {
   );
 }
 
-function ProjectChip(props: {
-  item: LocalCliItem;
-  selected: boolean;
-  onSelect: (item: LocalCliItem) => void;
-}) {
-  const handleSelect = useCallback(() => {
-    props.onSelect(props.item);
-  }, [props]);
-  return (
-    <button
-      type="button"
-      onClick={handleSelect}
-      aria-pressed={props.selected}
-      className={`min-h-11 rounded-full px-3 text-xs font-semibold ${
-        props.selected
-          ? "bg-brand-blue text-white"
-          : "border border-slate-300 text-brand-dark"
-      }`}
-    >
-      {props.item.source_label ?? props.item.name}
-    </button>
-  );
-}
-
 function SuggestionButton(props: { item: LocalCliItem; onSelect: (item: LocalCliItem) => void }) {
   const handleSelect = useCallback(() => {
     props.onSelect(props.item);
   }, [props]);
+  let connectorLabel = "Load tools";
+  if (mcpCatalogHasTools(props.item.commands)) {
+    connectorLabel = `${props.item.commands.filter((entry) => entry.command_id !== "other").length} tools`;
+  }
   return (
-    <button type="button" onClick={handleSelect} className="flex min-h-11 w-full items-baseline justify-between gap-3 py-2 text-left">
+    <button type="button" onClick={handleSelect} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg px-2 py-3 text-left hover:bg-brand-blue/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue">
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold text-brand-dark">{props.item.name}</span>
         <span className="block truncate text-xs text-brand-dark/60">
           {props.item.source_label ?? seenSuggestionMeta(props.item)}
         </span>
       </span>
-      <span className="truncate font-mono text-xs text-brand-dark/60">{props.item.example_label}</span>
+      {props.item.surface === "mcp" ? (
+        <span className="shrink-0 text-xs font-semibold text-brand-blue">
+          {connectorLabel}
+        </span>
+      ) : (
+        <span className="max-w-[55%] truncate font-mono text-xs text-brand-dark/60">{props.item.example_label}</span>
+      )}
     </button>
   );
 }

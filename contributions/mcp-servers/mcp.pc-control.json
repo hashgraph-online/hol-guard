@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.pc-control",
+  "version": "1.0.0",
+  "name": "PC-Control",
+  "description": "Lets an agent see and operate Windows apps without taking focus or moving the mouse. Click, type, key, drag, steps and open_app are reviewed. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.vortexjer",
+    "displayName": "VortexJer",
+    "url": "https://github.com/VortexJer/PC-Control"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#9A3412" },
+  "homepage": "https://github.com/VortexJer/PC-Control",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "pc-control-mcp"
+  },
+  "riskClasses": ["external-desktop-control", "external-command-execution"],
+  "tools": [
+    { "name": "windows", "state": "inherit" },
+    { "name": "look", "state": "inherit" },
+    { "name": "read", "state": "inherit" },
+    { "name": "show", "state": "inherit" },
+    { "name": "scroll", "state": "inherit" },
+    { "name": "wait_for", "state": "inherit" },
+    { "name": "click", "state": "review" },
+    { "name": "type", "state": "review" },
+    { "name": "key", "state": "review" },
+    { "name": "drag", "state": "review" },
+    { "name": "steps", "state": "review" },
+    { "name": "open_app", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/VortexJer/PC-Control",
+    "https://pypi.org/project/claude-pc-control/"
+  ],
+  "saferAlternatives": [
+    "Keep click, type, key, drag, steps and open_app on review: they can press buttons, write text, run shortcuts and start programs on the desktop. steps runs several of those in one call.",
+    "Use PC-Control's own permission modes (ask or strict) so protected windows such as terminals and password managers always ask first.",
+    "Install an exact version from PyPI, for example pip install claude-pc-control==0.7.7, and run pc-control status to see which mode is active."
+  ]
+}

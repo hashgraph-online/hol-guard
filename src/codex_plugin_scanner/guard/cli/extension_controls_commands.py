@@ -13,19 +13,24 @@ from typing import TextIO, cast
 from ..approval_gate import (
     ApprovalGateError,
     consume_extension_control_grant,
+    public_config,
     require_extension_control,
 )
-from ..daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
-from ..daemon.runtime_peer import load_guard_daemon_endpoint
+from ..native_daemon_client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
+from ..native_daemon_peer import load_guard_daemon_endpoint
+from ..native_extension_control import NativeExtensionControlError
+from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from ..runtime.extension_control_authority import ExtensionControlAuthorityError
+from ..runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityError
 from ..runtime.extension_control_proof import (
     ExtensionControlEnrollment,
     ExtensionControlProofError,
     issue_extension_control_enrollment_proof,
 )
 from ..store import GuardStore
-from .approval_gate_prompt import prompt_for_approval_gate
+from .approval_gate_prompt import prompt_for_approval_gate, submit_with_pulse
+from .commands_support_prompts import _shell_join
+from .extension_catalog_reads import catalog_list, catalog_show, pattern_extensions
 
 
 def _client(guard_home: Path) -> GuardSurfaceDaemonClient:
@@ -95,12 +100,24 @@ def _mutation_payload(effective: dict[str, object], args: argparse.Namespace) ->
     }
 
 
+def _recovery_command(guard_home: Path) -> str:
+    arguments = ["hol-guard", "command", "--guard-home", str(guard_home), "controls", "recover-authority"]
+    return _shell_join(arguments)
+
+
 def _enroll(guard_home: Path, actor: str, output_stream: TextIO | None) -> int:
     store = GuardStore(guard_home)
+    current = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    if current.health is not AuthorityHealth.UNENROLLED:
+        raise ExtensionControlAuthorityError(
+            f"Extension-control authority is {current.health.value}; enrollment is only for a new authority. "
+            f"Authenticate recovery with: {_recovery_command(guard_home)}"
+        )
     enrollment = ExtensionControlEnrollment(
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         actor_id=actor,
         nonce=secrets.token_hex(16),
+        guard_home=guard_home,
     )
     gate_input = prompt_for_approval_gate(guard_home, use_cooldown=False)
     proof = issue_extension_control_enrollment_proof(
@@ -123,6 +140,30 @@ def _enroll(guard_home: Path, actor: str, output_stream: TextIO | None) -> int:
     return 0
 
 
+def _install_recovered_authority_in_daemon(guard_home: Path) -> None:
+    """Hand recovered authority to a running daemon.
+
+    Recovery can reset the authority revision, which a plain refresh rejects as
+    moving backwards. The daemon's recovery route replaces a tampered snapshot
+    with the recovered store without another approval, so a failure there means
+    the live runtime is still blocking and must not be reported as success.
+    """
+
+    try:
+        client = _client(guard_home)
+    except GuardDaemonRequestError:
+        return
+    try:
+        _ = client.recover_extension_control_authority({})
+    except GuardDaemonTransportError:
+        return
+    except GuardDaemonRequestError as error:
+        if error.code != "authority_not_recoverable":
+            raise
+        with contextlib.suppress(GuardDaemonRequestError):
+            _ = client.refresh_extension_controls()
+
+
 def _recover_authority(
     guard_home: Path,
     *,
@@ -138,8 +179,14 @@ def _recover_authority(
         guard_home,
         use_cooldown=False,
         summary=f"Authenticate extension-control authority {command}.",
+        require_fresh_totp=command == "recover-authority",
     )
     if command == "recover-authority":
+        gate = public_config(guard_home)
+        if gate.enabled and gate.totp_enabled and (gate_input is None or not gate_input.totp_code):
+            raise ApprovalGateError(
+                "approval_gate_totp_required", "Enter a fresh authenticator code for authority recovery."
+            )
         grant = require_extension_control(
             guard_home,
             approval_gate_input=gate_input,
@@ -158,25 +205,35 @@ def _recover_authority(
             catalog_digest=catalog_digest,
             migration_registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         )
-        with contextlib.suppress(GuardDaemonRequestError):
-            _ = _client(guard_home).refresh_extension_controls()
+        _install_recovered_authority_in_daemon(guard_home)
         response: dict[str, object] = {
             "health": view.health.value,
             "revision": view.revision,
             "catalog_digest": view.catalog_digest,
         }
+        recovery_warnings = getattr(store, "extension_control_recovery_warnings", ())
+        if recovery_warnings:
+            response["warnings"] = list(recovery_warnings)
+            for warning in recovery_warnings:
+                print(f"Warning: {warning}", file=sys.stderr)
     else:
+        from ..native_daemon_manage import ensure_guard_daemon
+
+        try:
+            ensure_guard_daemon(guard_home)
+        except RuntimeError as error:
+            raise GuardDaemonRequestError(str(error)) from error
         payload: dict[str, object] = {"session_nonce": session_nonce}
         if gate_input is not None:
             payload["approval_password"] = gate_input.password
             payload["approval_totp_code"] = gate_input.totp_code
-        response = _client(guard_home).acknowledge_degraded_extension_controls(payload)
+        client = _client(guard_home)
+        response = submit_with_pulse(guard_home, client.acknowledge_degraded_extension_controls, payload, gate_input)
     _emit(response, output_stream)
     return 0
 
 
 def _patterns(client: GuardSurfaceDaemonClient, args: argparse.Namespace, output_stream: TextIO | None) -> int:
-    catalog = client.extension_control_catalog()
     effective = client.effective_extension_controls()
     local_states: dict[str, str] = {}
     layers = effective.get("layers")
@@ -197,15 +254,8 @@ def _patterns(client: GuardSurfaceDaemonClient, args: argparse.Namespace, output
     query = str(getattr(args, "query", "") or "").strip().lower()
     tool = str(getattr(args, "tool", "") or "").strip().lower() or None
     rows: list[dict[str, object]] = []
-    extensions = catalog.get("extensions")
-    if not isinstance(extensions, list):
-        raise ValueError("daemon returned an invalid catalog")
-    for extension in extensions:
-        if not isinstance(extension, dict):
-            continue
+    for extension in pattern_extensions(client, tool, query):
         extension_id = str(extension.get("extension_id", ""))
-        if tool and extension_id != tool:
-            continue
         permissions = extension.get("permissions")
         if not isinstance(permissions, list):
             continue
@@ -273,6 +323,11 @@ def run_extension_controls_command(
 
     command = str(args.controls_command)
     try:
+        if command in {"prefetch", "export-offline", "import-offline", "cleanup-cache"}:
+            from .extension_offline_commands import run
+
+            _emit(run(args, GuardStore(guard_home=guard_home)), output_stream)
+            return 0
         if command == "enroll":
             return _enroll(guard_home, str(args.actor), output_stream)
         if command in {"recover-authority", "acknowledge-degraded"}:
@@ -281,6 +336,13 @@ def run_extension_controls_command(
                 command=command,
                 output_stream=output_stream,
             )
+        if command != "status":
+            from ..native_daemon_manage import ensure_guard_daemon
+
+            try:
+                ensure_guard_daemon(guard_home)
+            except RuntimeError as error:
+                raise GuardDaemonRequestError(str(error)) from error
         client = _client(guard_home)
         if command == "patterns":
             return _patterns(client, args, output_stream)
@@ -295,19 +357,12 @@ def run_extension_controls_command(
         if command == "status":
             _emit(client.effective_extension_controls(), output_stream)
             return 0
-        if command in {"list", "show"}:
-            catalog = client.extension_control_catalog()
-            if command == "list":
-                _emit(catalog, output_stream)
-                return 0
-            target_id = str(args.target_id)
-            extensions = catalog.get("extensions")
-            if isinstance(extensions, list):
-                for extension in extensions:
-                    if isinstance(extension, dict) and extension.get("extension_id") == target_id:
-                        _emit(extension, output_stream)
-                        return 0
-            raise ValueError(f"unknown extension target: {target_id}")
+        if command == "list":
+            _emit(catalog_list(client), output_stream)
+            return 0
+        if command == "show":
+            _emit(catalog_show(client, str(args.target_id)), output_stream)
+            return 0
         effective = client.effective_extension_controls()
         payload = _mutation_payload(effective, args)
         if command in {"preview", "global-preview"}:
@@ -318,13 +373,32 @@ def run_extension_controls_command(
         if gate_input is not None:
             payload["approval_password"] = gate_input.password
             payload["approval_totp_code"] = gate_input.totp_code
-        preview = client.preview_extension_controls(payload)
+        # The approval is spent on the preview, which issues the proof the apply
+        # uses, so the apply payload carries no Pulse fields.
+        preview = submit_with_pulse(guard_home, client.preview_extension_controls, payload, gate_input)
         proof_id = preview.get("proof_id")
         if not isinstance(proof_id, str):
             raise ExtensionControlProofError("daemon did not issue a mutation proof")
         payload["proof_id"] = proof_id
         _emit(client.apply_extension_controls(payload), output_stream)
         return 0
+    except NativePolicySnapshotError as error:
+        print(f"Error: native extension-control authority could not be verified ({error}).", file=sys.stderr)
+        if command == "recover-authority":
+            print(
+                "Recovery could not authenticate the retained native state. "
+                "Stop the Guard daemon for this guard home, restore access to the original "
+                "policy-integrity keyring or local vault, and retry. "
+                "Do not delete native authority, verifier, or rollback-floor files.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"Authenticate recovery with: {_recovery_command(guard_home)}\n"
+                "Recovery preserves verifiable controls and requires fresh approval; do not delete native state files.",
+                file=sys.stderr,
+            )
+        return 4
     except (
         ApprovalGateError,
         ExtensionControlAuthorityError,
@@ -336,6 +410,10 @@ def run_extension_controls_command(
     except GuardDaemonRequestError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 4 if error.status in {401, 403, 423} else 2
+    except NativeExtensionControlError as error:
+        # Enrollment asks the native runtime for its digest before prompting.
+        print(f"Error: the native extension-control runtime did not answer ({error.code}); retry.", file=sys.stderr)
+        return 2
     except (TypeError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2

@@ -4,13 +4,30 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 import threading
 from collections.abc import Callable
 
+from .native_policy_integrity_finalize import native_policy_integrity_finalization
+from .native_policy_integrity_rows import (
+    NativePolicyIntegrityUnavailableError,
+    PolicyRowSignItem,
+    PolicyRowVerifyItem,
+    native_prepare_policy_integrity_generation,
+    native_reconcile_policy_integrity_generation,
+    native_sign_policy_rows,
+    native_verify_policy_rows,
+)
 from .policy_integrity import POLICY_INTEGRITY_VERSION
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
+from .store_policy_integrity_key_mint import mint_policy_integrity_key_once
+from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
 
 def _facade_store_attr(name: str, fallback: object) -> object:
@@ -85,6 +102,9 @@ class StoreSecretPolicyIntegrityMixin:
         self.guard_home = guard_home
         self.guard_home.mkdir(parents=True, exist_ok=True)
         _set_private_mode_compat(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
+        from .extension_builder.native_executable_root import use_guard_home
+
+        use_guard_home(self.guard_home)
         self.__oauth_secret_store = _OAUTH_SECRET_STORE_UNSET
         self.__policy_integrity_secret_store = _POLICY_INTEGRITY_SECRET_STORE_UNSET
         self._cached_oauth_secret_payload: tuple[str, str, str] | None = None
@@ -185,7 +205,7 @@ class StoreSecretPolicyIntegrityMixin:
         return cast(SecretStore | None, secret_store)
 
     @_policy_integrity_secret_store.setter
-    def _policy_integrity_secret_store(self, value: SecretStore | None | object) -> None:
+    def _policy_integrity_secret_store(self, value: SecretStore | object | None) -> None:
         self.__policy_integrity_secret_store = value
 
     def _build_scoped_secret_ref(self, prefix: str) -> str:
@@ -271,10 +291,105 @@ class StoreSecretPolicyIntegrityMixin:
             )
         return self._get_secret_from_store(store, secret_id)
 
-    def _get_policy_integrity_secret_from_store(self, secret_id: str) -> str | None:
+    @staticmethod
+    def _get_secret_from_system_keyring_strict(store: SystemKeyringSecretStore, secret_id: str) -> str | None:
+        """Read the primary keyring behind a process timeout for strict state reads.
+
+        A strict read runs while the integrity generation lock is held. The
+        normal keyring helper is intentionally compatible with test backends,
+        but can call a platform keyring synchronously outside macOS. The
+        disposable process gives every production backend the same bounded
+        outcome. A timeout or crashed child raises so callers never interpret
+        an unavailable keyring as an absent control state.
+        """
+
+        if store._test_keyring_module() is not None:
+            return store.get_secret(secret_id)
+        if sys.platform == "darwin":
+            return store.get_secret_with_timeout(
+                secret_id,
+                timeout_seconds=_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS,
+            )
+        worker = (
+            "import json,sys,keyring\n"
+            "try:\n"
+            "    value=keyring.get_password(sys.argv[1],sys.argv[2])\n"
+            "    print(json.dumps({'status':'found','value':value} if value else "
+            "{'status':'missing'},separators=(',',':')))\n"
+            "except Exception:\n"
+            "    print(json.dumps({'status':'unavailable'},separators=(',',':')))\n"
+            "    sys.exit(2)"
+        )
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key
+            in {
+                "HOME",
+                "LANG",
+                "LC_ALL",
+                "LOGNAME",
+                "PATH",
+                "TMPDIR",
+                "USER",
+                "DBUS_SESSION_BUS_ADDRESS",
+                "XDG_RUNTIME_DIR",
+                "DISPLAY",
+                "PYTHON_KEYRING_BACKEND",
+                "XDG_CONFIG_HOME",
+                "XDG_DATA_HOME",
+                "SYSTEMROOT",
+                "USERPROFILE",
+                "APPDATA",
+                "LOCALAPPDATA",
+            }
+            or key.startswith("LC_")
+        }
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-I", "-c", worker, store.service_name, secret_id],
+                check=False,
+                capture_output=True,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                timeout=max(_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS, 0.1),
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("policy_integrity_secret_read_timeout") from error
+        except OSError as error:
+            raise RuntimeError("policy_integrity_secret_read_unavailable") from error
+        try:
+            payload = json.loads(completed.stdout.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise RuntimeError("policy_integrity_secret_read_unavailable") from error
+        if not isinstance(payload, dict):
+            raise RuntimeError("policy_integrity_secret_read_unavailable")
+        status = payload.get("status")
+        if status == "missing":
+            return None
+        if status == "found" and isinstance(payload.get("value"), str) and payload["value"]:
+            return payload["value"]
+        raise RuntimeError("policy_integrity_secret_read_unavailable")
+
+    def _get_policy_integrity_secret_from_store(self, secret_id: str, *, strict: bool = False) -> str | None:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
+        if strict:
+            if isinstance(secret_store, FallbackSecretStore):
+                fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
+                if fallback_value is not None:
+                    return fallback_value
+                if isinstance(secret_store.primary, SystemKeyringSecretStore):
+                    return self._get_secret_from_system_keyring_strict(secret_store.primary, secret_id)
+                return secret_store.primary.get_secret(secret_id)
+            if isinstance(secret_store, SystemKeyringSecretStore):
+                return self._get_secret_from_system_keyring_strict(secret_store, secret_id)
+            return secret_store.get_secret(secret_id)
+        if isinstance(secret_store, MirroredPolicyIntegritySecretStore):
+            return secret_store.get_secret(secret_id)
+        if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
+            return self._get_secret_from_store(secret_store, secret_id)
         if isinstance(secret_store, FallbackSecretStore):
             fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
             if fallback_value is not None:
@@ -293,6 +408,15 @@ class StoreSecretPolicyIntegrityMixin:
                 timeout_seconds=_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS,
             )
         return self._get_secret_from_store(secret_store, secret_id)
+
+    @staticmethod
+    def _policy_integrity_secret_store_is_unavailable(secret_store: SecretStore | None) -> bool:
+        if isinstance(secret_store, SystemKeyringSecretStore):
+            return secret_store._is_unavailable()
+        if isinstance(secret_store, FallbackSecretStore):
+            primary = secret_store.primary
+            return isinstance(primary, SystemKeyringSecretStore) and primary._is_unavailable()
+        return False
 
     @staticmethod
     def _should_skip_policy_integrity_keychain_access(secret_store: SecretStore) -> bool:
@@ -406,9 +530,12 @@ class StoreSecretPolicyIntegrityMixin:
         return [token]
 
     def _policy_integrity_backend_name(self) -> str:
-        if self._policy_integrity_secret_store is None:
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None or self._policy_integrity_secret_store_is_unavailable(secret_store):
             return "unavailable"
-        return _secret_store_backend_name(self._policy_integrity_secret_store)
+        if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
+            return _secret_store_backend_name(secret_store.fallback)
+        return _secret_store_backend_name(secret_store)
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
         cached = self._cached_policy_integrity_secret_material
@@ -423,12 +550,32 @@ class StoreSecretPolicyIntegrityMixin:
             return None, None
         encoded_key = self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
         if encoded_key is None and create:
-            generated_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
+            from .native_command_control_authority import AUTHORITY_FILE_NAME
+            from .native_policy_snapshot_constants import (
+                NATIVE_POLICY_VERIFIER_KEY_NAME,
+                NATIVE_RUNTIME_STATE_DIRECTORY,
+            )
+
+            native_state = self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY
+            key_ref = self._policy_integrity_key_ref
+
+            def _native_controls_armed() -> bool:
+                # A different process may have armed native controls with an
+                # inaccessible keyring key. Never mint a second signing key.
+                return any(
+                    os.path.lexists(native_state / name)
+                    for name in (AUTHORITY_FILE_NAME, NATIVE_POLICY_VERIFIER_KEY_NAME)
+                )
+
             try:
-                secret_store.set_secret(self._policy_integrity_key_ref, generated_key)
+                encoded_key = mint_policy_integrity_key_once(
+                    self.guard_home,
+                    read_key=lambda: self._get_policy_integrity_secret_from_store(key_ref),
+                    write_key=lambda value: secret_store.set_secret(key_ref, value),
+                    native_controls_armed=_native_controls_armed,
+                )
             except Exception:
                 return None, None
-            encoded_key = self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
         if encoded_key is None:
             return None, None
         try:
@@ -483,18 +630,7 @@ class StoreSecretPolicyIntegrityMixin:
         now = time.monotonic()
         if cached is not None and cached[0] == marker and (now - cached[1]) < _POLICY_INTEGRITY_CACHE_TTL_SECONDS:
             return dict(cached[2])
-        secret_store = self._policy_integrity_secret_store
-        if secret_store is None:
-            return None
-        if self._should_skip_policy_integrity_keychain_access(secret_store):
-            return None
-        payload_json = self._get_policy_integrity_secret_from_store(self._policy_integrity_control_ref)
-        payload: dict[str, object] | None = None
-        if payload_json is not None:
-            try:
-                payload = self._normalize_policy_integrity_control_state(json.loads(payload_json))
-            except json.JSONDecodeError:
-                payload = None
+        payload = self._read_policy_integrity_control_state_uncached()
         if payload is not None:
             self._cached_policy_integrity_control_state = (marker, now, dict(payload))
         if payload is not None or not create:
@@ -503,6 +639,31 @@ class StoreSecretPolicyIntegrityMixin:
         if not self._store_policy_integrity_control_state(payload):
             return None
         return self._load_policy_integrity_control_state(create=False)
+
+    def _read_policy_integrity_control_state_uncached(self, *, strict: bool = False) -> dict[str, object] | None:
+        """Read the secret-backed generation without consulting the cache."""
+
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None:
+            if strict:
+                raise RuntimeError("policy_integrity_secret_store_unavailable")
+            return None
+        if self._should_skip_policy_integrity_keychain_access(secret_store):
+            if strict:
+                raise RuntimeError("policy_integrity_secret_store_unavailable")
+            return None
+        payload_json = StoreSecretPolicyIntegrityMixin._get_policy_integrity_secret_from_store(
+            self,
+            self._policy_integrity_control_ref,
+            strict=strict,
+        )
+        payload: dict[str, object] | None = None
+        if payload_json is not None:
+            try:
+                payload = self._normalize_policy_integrity_control_state(json.loads(payload_json))
+            except json.JSONDecodeError:
+                payload = None
+        return payload
 
     def _store_policy_integrity_control_state(self, payload: Mapping[str, object]) -> bool:
         secret_store = self._policy_integrity_secret_store
@@ -526,8 +687,45 @@ class StoreSecretPolicyIntegrityMixin:
         )
         return True
 
-    def _finalize_policy_integrity_control_state(self, payload: Mapping[str, object]) -> None:
-        self._store_policy_integrity_control_state(payload)
+    def _finalize_policy_integrity_control_state(
+        self, payload: Mapping[str, object], *, deadline: float | None = None
+    ) -> bool:
+        """Adopt a native generation, or leave its pending marker for recovery.
+
+        Callers must stop reporting success when this returns ``False``. The
+        next store refresh reconciles a still-pending generation against the
+        committed rows before allowing another protected write.
+        """
+
+        normalized = self._normalize_policy_integrity_control_state(payload)
+        if normalized is None:
+            return False
+        from .native_context import ensure_resident_prerequisite
+
+        lock_options: dict[str, float] = {}
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            lock_options["timeout_seconds"] = min(remaining, _POLICY_INTEGRITY_GENERATION_LOCK_TIMEOUT_SECONDS)
+        with self.hold_policy_integrity_generation_lock(**lock_options):
+            if deadline is not None and time.monotonic() >= deadline:
+                return False
+            try:
+                current = self._read_policy_integrity_control_state_uncached(strict=True)
+            except Exception:
+                return False
+            # Setup can reach finalization before the publisher starts.
+            # Provision the resident from this store's own secret backend.
+            if not ensure_resident_prerequisite(self.guard_home, store=self):
+                return False
+            try:
+                next_state = native_policy_integrity_finalization(
+                    self.guard_home, current=current, proposed=normalized, deadline=deadline
+                )
+            except NativePolicyIntegrityUnavailableError:
+                return False
+            return next_state is not None and self._store_policy_integrity_control_state(next_state)
 
     def _policy_integrity_path_warnings(self) -> list[str]:
         warnings: list[str] = []
@@ -622,23 +820,26 @@ class StoreSecretPolicyIntegrityMixin:
         ).fetchone()
         return int(row["total"]) if row is not None else 0
 
-    @staticmethod
-    def _count_local_policy_rows(
-        connection: sqlite3.Connection,
-        *,
-        harness: str | None = None,
-    ) -> int:
-        query = f"""
-            select count(*) as total
-            from policy_decisions
-            where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
+    def _begin_policy_integrity_generation(self, trusted_state: Mapping[str, object]) -> int:
+        """Persist the pending generation; return the one it advances from.
+
+        The pending state lands before any row is signed, so an interrupted
+        advance leaves a generation the next start reconciles instead of a
+        trusted set that moved only halfway.
         """
-        params: tuple[object, ...] = _REMOTE_POLICY_SOURCE_PARAMS
-        if harness is not None:
-            query += " and harness = ?"
-            params = (*params, harness)
-        row = connection.execute(query, params).fetchone()
-        return int(row["total"]) if row is not None else 0
+
+        current_generation = _mapping_int(trusted_state, "generation")
+        if current_generation is None:
+            raise RuntimeError("Guard policy integrity control state is invalid.")
+        pending_state: dict[str, object] = {
+            "cutover_complete": True,
+            "generation": current_generation,
+            "pending_generation": current_generation + 1,
+            "version": _POLICY_INTEGRITY_CONTROL_VERSION,
+        }
+        if not self._store_policy_integrity_control_state(pending_state):
+            raise RuntimeError("Guard could not persist the policy integrity control state.")
+        return current_generation
 
     def _advance_policy_integrity_generation(
         self,
@@ -651,40 +852,28 @@ class StoreSecretPolicyIntegrityMixin:
         force_sign_decision_ids: set[int] | None = None,
         harness: str | None = None,
     ) -> dict[str, object]:
-        current_generation = _mapping_int(trusted_state, "generation")
-        if current_generation is None:
-            raise RuntimeError("Guard policy integrity control state is invalid.")
+        current_generation = self._begin_policy_integrity_generation(trusted_state)
         next_generation = current_generation + 1
         sign_ids = force_sign_decision_ids or set()
-        pending_state: dict[str, object] = {
-            "cutover_complete": True,
-            "generation": current_generation,
-            "pending_generation": next_generation,
-            "version": _POLICY_INTEGRITY_CONTROL_VERSION,
+        rows = [_row_mapping(row) for row in self._load_local_policy_rows(connection, harness=harness)]
+        unforced = [row for row in rows if int(row["decision_id"]) not in sign_ids]
+        verified = self._verify_policy_rows(
+            [PolicyRowVerifyItem(row, degraded_mode=False, trusted_generation=current_generation) for row in unforced],
+            key=key,
+            key_id=key_id,
+        )
+        still_valid = {
+            int(row["decision_id"]) for row, result in zip(unforced, verified, strict=True) if result.status == "valid"
         }
-        if not self._store_policy_integrity_control_state(pending_state):
-            raise RuntimeError("Guard could not persist the policy integrity control state.")
-        for row in self._load_local_policy_rows(connection, harness=harness):
+        to_sign = [row for row in rows if int(row["decision_id"]) in sign_ids or int(row["decision_id"]) in still_valid]
+        signatures = native_sign_policy_rows(
+            guard_home=self.guard_home,
+            items=[PolicyRowSignItem(row, generation=next_generation, signed_at=now) for row in to_sign],
+            key=key,
+            key_id=key_id,
+        )
+        for row, signed in zip(to_sign, signatures, strict=True):
             decision_id = int(row["decision_id"])
-            should_sign = decision_id in sign_ids
-            if not should_sign:
-                integrity_result = verify_local_policy_row(
-                    _row_mapping(row),
-                    key=key,
-                    key_id=key_id,
-                    degraded_mode=False,
-                    trusted_generation=current_generation,
-                )
-                should_sign = integrity_result.status == "valid"
-            if not should_sign:
-                continue
-            signed = sign_local_policy_row(
-                _row_mapping(row),
-                key,
-                key_id=key_id,
-                signed_at=now,
-                generation=next_generation,
-            )
             connection.execute(
                 """
                 update policy_decisions
@@ -721,211 +910,28 @@ class StoreSecretPolicyIntegrityMixin:
         key_id: str,
         trusted_state: dict[str, object],
     ) -> dict[str, object]:
-        next_state = self._resolved_policy_integrity_pending_generation(
-            connection,
-            key=key,
-            key_id=key_id,
-            trusted_state=trusted_state,
-        )
-        if next_state is trusted_state:
-            return trusted_state
-        if not self._store_policy_integrity_control_state(next_state):
-            raise RuntimeError("Guard could not persist the policy integrity control state.")
-        return next_state
-
-    def _classify_policy_integrity_pending_generation_rows(
-        self,
-        rows: Sequence[sqlite3.Row],
-        *,
-        key: bytes,
-        key_id: str,
-        current_generation: int,
-        pending_generation: int,
-    ) -> tuple[bool, int, int, int]:
-        has_legacy_rows = False
-        pending_candidates = 0
-        pending_valid = 0
-        current_valid = 0
-        for row in rows:
-            row_payload = _row_mapping(row)
-            if _mapping_int(row_payload, "integrity_version") != POLICY_INTEGRITY_VERSION:
-                has_legacy_rows = True
-                current_result = verify_local_policy_row(
-                    row_payload,
-                    key=key,
-                    key_id=key_id,
-                    degraded_mode=False,
-                    trusted_generation=current_generation,
-                )
-                if current_result.status == "valid":
-                    current_valid += 1
-                continue
-            pending_candidates += 1
-            pending_result = verify_local_policy_row(
-                row_payload,
-                key=key,
-                key_id=key_id,
-                degraded_mode=False,
-                trusted_generation=pending_generation,
-            )
-            if pending_result.status == "valid":
-                pending_valid += 1
-                continue
-            current_result = verify_local_policy_row(
-                row_payload,
-                key=key,
-                key_id=key_id,
-                degraded_mode=False,
-                trusted_generation=current_generation,
-            )
-            if current_result.status == "valid":
-                current_valid += 1
-        return has_legacy_rows, pending_candidates, pending_valid, current_valid
-
-    def _newer_authenticated_policy_integrity_generation(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        key: bytes,
-        key_id: str,
-        trusted_generation: int | None,
-    ) -> int | None:
-        current_valid = 0
-        newer_generations: set[int] = set()
-        rows = self._load_local_policy_rows(connection)
-        validated_rows = 0
-        for row in rows:
-            row_payload = _row_mapping(row)
-            if _mapping_int(row_payload, "integrity_version") != POLICY_INTEGRITY_VERSION:
-                return None
-            row_generation = _mapping_int(row_payload, "integrity_generation")
-            if row_generation is None:
-                return None
-            result = verify_local_policy_row(
-                row_payload,
-                key=key,
-                key_id=key_id,
-                degraded_mode=False,
-                trusted_generation=row_generation,
-            )
-            if result.status != "valid":
-                return None
-            validated_rows += 1
-            if trusted_generation is not None and row_generation == trusted_generation:
-                current_valid += 1
-                continue
-            if trusted_generation is None or row_generation > trusted_generation:
-                newer_generations.add(row_generation)
-                continue
-            return None
-        if current_valid > 0 or len(newer_generations) != 1 or validated_rows != len(rows):
-            return None
-        return next(iter(newer_generations))
-
-    def _resolved_policy_integrity_pending_generation(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        key: bytes,
-        key_id: str,
-        trusted_state: dict[str, object],
-    ) -> dict[str, object]:
         current_generation = _mapping_int(trusted_state, "generation")
         if current_generation is None:
             raise RuntimeError("Guard policy integrity control state is invalid.")
         pending_generation = trusted_state.get("pending_generation")
         if not isinstance(pending_generation, int) or pending_generation <= current_generation:
+            # Nothing is pending, so there is no decision to put to the runtime,
+            # which refuses such a state rather than handing it back unchanged.
             return trusted_state
-        rows = self._load_local_policy_rows(connection)
-        next_state: dict[str, object]
-        if not rows:
-            next_state = {
-                "cutover_complete": True,
-                "generation": pending_generation,
-                "pending_generation": None,
-                "version": _POLICY_INTEGRITY_CONTROL_VERSION,
-            }
-        else:
-            (
-                has_legacy_rows,
-                pending_candidates,
-                pending_valid,
-                current_valid,
-            ) = self._classify_policy_integrity_pending_generation_rows(
-                rows,
-                key=key,
-                key_id=key_id,
-                current_generation=current_generation,
-                pending_generation=pending_generation,
-            )
-            if has_legacy_rows:
-                next_state = dict(trusted_state)
-                if pending_candidates > 0 and current_valid == len(rows):
-                    next_state["pending_generation"] = None
-            elif pending_valid == len(rows):
-                next_state = {
-                    "cutover_complete": True,
-                    "generation": pending_generation,
-                    "pending_generation": None,
-                    "version": _POLICY_INTEGRITY_CONTROL_VERSION,
-                }
-            elif current_valid == len(rows):
-                next_state = dict(trusted_state)
-                next_state["pending_generation"] = None
-            else:
-                next_state = dict(trusted_state)
-        return next_state
-
-    def _prepared_startup_policy_integrity_state(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        key: bytes,
-        key_id: str,
-        trusted_state: dict[str, object],
-    ) -> dict[str, object]:
-        has_legacy_rows = self._count_legacy_local_policy_rows(connection) > 0
-        prepared_state = dict(trusted_state)
-        pending_generation = prepared_state.get("pending_generation")
-        if not isinstance(pending_generation, int) and not has_legacy_rows:
-            newer_authenticated_generation = self._newer_authenticated_policy_integrity_generation(
-                connection,
-                key=key,
-                key_id=key_id,
-                trusted_generation=_mapping_int(prepared_state, "generation"),
-            )
-            if newer_authenticated_generation is not None:
-                prepared_state["generation"] = newer_authenticated_generation
-        prepared_state = self._resolved_policy_integrity_pending_generation(
-            connection,
+        # The rows travel with the request: this runs inside the caller's open
+        # transaction, which the runtime's own read-only connection cannot see.
+        next_state = native_reconcile_policy_integrity_generation(
+            guard_home=self.guard_home,
             key=key,
             key_id=key_id,
-            trusted_state=prepared_state,
+            trusted_state=trusted_state,
+            rows=[_row_mapping(row) for row in self._load_local_policy_rows(connection)],
         )
-        if not bool(prepared_state.get("cutover_complete")) and not has_legacy_rows:
-            prepared_state["cutover_complete"] = True
-        return prepared_state
-
-    def _prefetched_startup_state_still_matches_local_rows(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        key: bytes,
-        key_id: str,
-        trusted_state: dict[str, object],
-    ) -> bool:
-        trusted_generation = _mapping_int(trusted_state, "generation")
-        for row in self._load_local_policy_rows(connection):
-            result = verify_local_policy_row(
-                _row_mapping(row),
-                key=key,
-                key_id=key_id,
-                degraded_mode=False,
-                trusted_generation=trusted_generation,
-            )
-            if result.status != "valid":
-                return False
-        return True
+        if next_state == trusted_state:
+            return trusted_state
+        if not self._store_policy_integrity_control_state(next_state):
+            raise RuntimeError("Guard could not persist the policy integrity control state.")
+        return next_state
 
     def _refresh_policy_integrity_state(
         self,
@@ -967,7 +973,8 @@ class StoreSecretPolicyIntegrityMixin:
             raw_key, key_id = cast(tuple[bytes | None, str | None], prefetched_secret_material)
         else:
             raw_key, key_id = self._policy_integrity_secret_material(create=create_key)
-        if self._policy_integrity_secret_store is None:
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None or self._policy_integrity_secret_store_is_unavailable(secret_store):
             warnings.append(POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE)
         elif raw_key is None or key_id is None:
             warnings.append(POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE)
@@ -1021,6 +1028,13 @@ class StoreSecretPolicyIntegrityMixin:
         return payload
 
     def _prepare_startup_prefetched_policy_integrity_state(self) -> None:
+        try:
+            self._prepare_startup_prefetched_policy_integrity_state_with_resident()
+        except NativePolicyIntegrityUnavailableError:
+            # No row was verified, so the prefetched state is never trusted.
+            self._startup_prefetched_policy_integrity_repair_failed = True
+
+    def _prepare_startup_prefetched_policy_integrity_state_with_resident(self) -> None:
         prefetched_trusted_state = getattr(
             self,
             "_startup_prefetched_policy_integrity_trusted_state",
@@ -1043,37 +1057,32 @@ class StoreSecretPolicyIntegrityMixin:
         if raw_key is None or key_id is None:
             return
 
-        def compute_prepared_state(base_state: dict[str, object]) -> dict[str, object]:
-            connect_timeout_seconds = sqlite_connect_timeout_seconds()
-            connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
-            connection.row_factory = sqlite3.Row
-            try:
-                connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
-                return self._prepared_startup_policy_integrity_state(
-                    connection,
+        def compute_prepared_state(base_state: dict[str, object]) -> tuple[dict[str, object], bool]:
+            with self._hold_storage_gate(exclusive=False):
+                connect_timeout_seconds = sqlite_connect_timeout_seconds()
+                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
+                try:
+                    connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
+                    local_row = connection.execute(
+                        "select 1 from policy_decisions "
+                        f"where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS} limit 1",
+                        _REMOTE_POLICY_SOURCE_PARAMS,
+                    ).fetchone()
+                finally:
+                    connection.close()
+                if local_row is None:
+                    return _prepared_state_without_local_rows(base_state), True
+                return native_prepare_policy_integrity_generation(
+                    guard_home=self.guard_home,
+                    store_path=self.path,
                     key=raw_key,
                     key_id=key_id,
                     trusted_state=base_state,
                 )
-            finally:
-                connection.close()
 
-        prepared_state = compute_prepared_state(trusted_state)
+        prepared_state, still_matches = compute_prepared_state(trusted_state)
         current_trusted_state = self._load_policy_integrity_control_state(create=False)
         if current_trusted_state is None:
-            connect_timeout_seconds = sqlite_connect_timeout_seconds()
-            connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
-            connection.row_factory = sqlite3.Row
-            try:
-                connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
-                still_matches = self._prefetched_startup_state_still_matches_local_rows(
-                    connection,
-                    key=raw_key,
-                    key_id=key_id,
-                    trusted_state=trusted_state,
-                )
-            finally:
-                connection.close()
             if prepared_state == trusted_state and still_matches:
                 self._startup_prefetched_policy_integrity_trusted_state = trusted_state
                 return
@@ -1081,7 +1090,7 @@ class StoreSecretPolicyIntegrityMixin:
             return
         if current_trusted_state != trusted_state:
             trusted_state = dict(current_trusted_state)
-            prepared_state = compute_prepared_state(trusted_state)
+            prepared_state, _ = compute_prepared_state(trusted_state)
         if prepared_state == trusted_state:
             self._startup_prefetched_policy_integrity_trusted_state = trusted_state
             return
@@ -1099,55 +1108,55 @@ class StoreSecretPolicyIntegrityMixin:
         key_id: str | None,
         trusted_generation: int | None = None,
     ) -> PolicyIntegrityVerificationResult:
-        source = str(row["source"]) if row["source"] is not None else None
-        if is_remote_policy_source(source):
-            return PolicyIntegrityVerificationResult(status="valid")
-        return verify_local_policy_row(
-            _row_mapping(row),
+        return self._policy_integrity_results_for_rows(
+            [row],
+            mode=mode,
             key=key,
             key_id=key_id,
-            degraded_mode=mode != "protected",
             trusted_generation=trusted_generation,
-        )
+        )[0]
 
-    @staticmethod
-    def _policy_row_payload(
-        row: sqlite3.Row,
+    def _policy_integrity_results_for_rows(
+        self,
+        rows: Sequence[sqlite3.Row],
         *,
-        integrity_result: PolicyIntegrityVerificationResult | None = None,
-        state: dict[str, object] | None = None,
-    ) -> dict[str, object]:
-        source = str(row["source"])
-        payload: dict[str, object] = {
-            "action": str(row["action"]),
-            "artifact_hash": row["artifact_hash"],
-            "artifact_id": row["artifact_id"],
-            "decision_id": int(row["decision_id"]) if row["decision_id"] is not None else None,
-            "expires_at": row["expires_at"],
-            "harness": str(row["harness"]),
-            "owner": row["owner"],
-            "publisher": row["publisher"],
-            "reason": row["reason"],
-            "scope": str(row["scope"]),
-            "source": source,
-            "updated_at": str(row["updated_at"]),
-            "workspace": row["workspace"],
-        }
-        if integrity_result is not None and not is_remote_policy_source(source):
-            payload["integrity_status"] = integrity_result.status
-            payload["integrity_message"] = integrity_result.message
-        if state is not None and not is_remote_policy_source(source):
-            payload["integrity_mode"] = state.get("mode")
-            payload["integrity_enforcement"] = state.get("enforcement")
-        if row["integrity_version"] is not None:
-            payload["integrity_version"] = int(row["integrity_version"])
-        if row["integrity_generation"] is not None:
-            payload["integrity_generation"] = int(row["integrity_generation"])
-        if row["integrity_key_id"] is not None:
-            payload["integrity_key_id"] = str(row["integrity_key_id"])
-        if row["signed_at"] is not None:
-            payload["signed_at"] = str(row["signed_at"])
-        return payload
+        mode: str,
+        key: bytes | None,
+        key_id: str | None,
+        trusted_generation: int | None = None,
+    ) -> list[PolicyIntegrityVerificationResult]:
+        """One result per row; remote rows are valid, local rows go to the resident in one batch."""
+
+        local = [
+            _row_mapping(row)
+            for row in rows
+            if not is_remote_policy_source(str(row["source"]) if row["source"] is not None else None)
+        ]
+        verified = iter(
+            self._verify_policy_rows(
+                [
+                    PolicyRowVerifyItem(row, degraded_mode=mode != "protected", trusted_generation=trusted_generation)
+                    for row in local
+                ],
+                key=key,
+                key_id=key_id,
+            )
+        )
+        return [
+            PolicyIntegrityVerificationResult(status="valid")
+            if is_remote_policy_source(str(row["source"]) if row["source"] is not None else None)
+            else next(verified)
+            for row in rows
+        ]
+
+    def _verify_policy_rows(
+        self,
+        items: Sequence[PolicyRowVerifyItem],
+        *,
+        key: bytes | None,
+        key_id: str | None,
+    ) -> list[PolicyIntegrityVerificationResult]:
+        return native_verify_policy_rows(guard_home=self.guard_home, items=items, key=key, key_id=key_id)
 
     def _repair_store_permissions(self) -> None:
         _set_private_mode_compat(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
@@ -1159,3 +1168,19 @@ class StoreSecretPolicyIntegrityMixin:
         ):
             if candidate.exists():
                 _set_private_mode_compat(candidate, _GUARD_STORE_PRIVATE_FILE_MODE)
+
+
+def _prepared_state_without_local_rows(trusted_state: dict[str, object]) -> dict[str, object]:
+    """Startup's control state for a store with no local rows: a pending
+    generation completes and cutover is complete, as no row could disagree."""
+
+    generation = _mapping_int(trusted_state, "generation")
+    pending_generation = trusted_state.get("pending_generation")
+    if generation is not None and isinstance(pending_generation, int) and pending_generation > generation:
+        return {
+            "cutover_complete": True,
+            "generation": pending_generation,
+            "pending_generation": None,
+            "version": _POLICY_INTEGRITY_CONTROL_VERSION,
+        }
+    return {**trusted_state, "cutover_complete": True}

@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
 from codex_plugin_scanner.guard.protection_capabilities import (
     capability_for,
     protection_capability_payloads,
 )
+from codex_plugin_scanner.guard.setup_contract_registry import harness_contracts
 
 
 def test_every_supported_harness_has_a_protection_capability() -> None:
-    missing = [contract.harness for contract in HARNESS_CONTRACTS if capability_for(contract.harness) is None]
+    missing = [contract.harness for contract in harness_contracts() if capability_for(contract.harness) is None]
     assert missing == []
 
 
 def test_fail_open_harnesses_are_marked_limited() -> None:
-    for harness in ("grok", "kimi", "zcode", "pi", "omp"):
+    for harness in ("grok", "kimi", "zcode", "pi", "omp", "devin"):
         capability = capability_for(harness)
         assert capability is not None
         payload = capability.to_dict()
@@ -46,4 +46,4 @@ def test_cursor_uses_native_prompt_honesty() -> None:
 
 def test_capability_payloads_cover_contracted_harnesses() -> None:
     harnesses = {item["harness"] for item in protection_capability_payloads()}
-    assert harnesses == {contract.harness for contract in HARNESS_CONTRACTS}
+    assert harnesses == {contract.harness for contract in harness_contracts()}

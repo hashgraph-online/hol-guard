@@ -1,0 +1,221 @@
+"""Bound resident transport for the sensitive-request classifiers.
+
+Python sends the tool call, its own observations and the caller's canonical
+command and native evaluation. The resident reparses the command, re-proves
+git trust, derives extension-control authority and answers; a canonical claim
+binds only when the resident's parse has the same security identity. Missing
+or malformed replies raise rather than read as "not sensitive".
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+from dataclasses import fields
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
+
+from .native_direct_tool_context import _facts
+from .native_git_execution_safety import _environment_snapshot
+from .native_request_context import NativeRequestContextFailure, _call
+from .runtime.command_model import _canonical_from_wire
+from .runtime.secret_file_request_services.request_models import ToolActionRequestMatch
+
+if TYPE_CHECKING:
+    from .runtime.command_evaluation import CompositeCommandEvaluation
+    from .runtime.command_model import CanonicalCommand
+
+_BUDGET_MS = 9_000
+_TOOL_ACTION_FIELDS = frozenset(item.name for item in fields(ToolActionRequestMatch))
+_TUPLE_FIELDS = frozenset(
+    {
+        "wrapper_chain",
+        "shell_execution_effective_cwds",
+        "pytest_config_sources",
+        "pytest_config_reason_codes",
+    }
+)
+_REQUIRED_TEXT = frozenset({"tool_name", "normalized_tool_name", "command_text", "action_class", "reason"})
+_OPTIONAL_TEXT = frozenset(
+    {
+        "raw_command_text",
+        "shell_execution_context_hash",
+        "shell_execution_context_reason_code",
+        "guard_default_action",
+        "reason_code",
+        "restricted_profile_version",
+        "pytest_config_identity_sha256",
+        "script_read_identity_sha256",
+    }
+)
+# Names the native classifiers read that neither shared snapshot carries.
+_CLASSIFIER_ENVIRONMENT_NAMES = ("GH_HOST", "GH_PAGER", "PAGER", "RIPGREP_CONFIG_PATH", "TMPDIR", "TEMP", "TMP")
+
+
+class NativeSensitiveRequestError(RuntimeError):
+    """The resident gave no authoritative answer; ``code`` says why."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def _git_executable() -> str | None:
+    found = shutil.which("git")
+    return found if found is not None and os.path.isabs(found) else None
+
+
+def _path_text(value: Path | None) -> str | None:
+    return None if value is None else str(value)
+
+
+def _ask(query: str, input_value: dict[str, Any], *, cwd: Path | None, home_dir: Path | None) -> Any:
+    facts = _facts(cwd or Path.cwd(), home_dir or Path.home())
+    environment = dict(_environment_snapshot())
+    environment.update(cast("dict[str, str]", facts["environment"]))
+    environment.update(
+        (name, value) for name in _CLASSIFIER_ENVIRONMENT_NAMES if (value := os.environ.get(name)) is not None
+    )
+    facts["environment"] = environment
+    payload = _call(
+        {
+            "kind": "sensitive_request",
+            "body": {
+                "query": query,
+                "input": {**input_value, "cwd": _path_text(cwd), "home_dir": _path_text(home_dir)},
+                "facts": facts,
+                "git_executable": _git_executable(),
+                "control_snapshot": None,
+            },
+        },
+        source="hook",
+        guard_home=None,
+        budget_ms=_BUDGET_MS,
+    )
+    if isinstance(payload, NativeRequestContextFailure):
+        raise NativeSensitiveRequestError(payload.code)
+    if set(payload) != {"kind", "query", "result"} or payload["kind"] != "sensitive_request":
+        raise NativeSensitiveRequestError("native_sensitive_request_reply_invalid")
+    if payload["query"] != query:
+        raise NativeSensitiveRequestError("native_sensitive_request_reply_invalid")
+    return payload["result"]
+
+
+def _invalid() -> NativeSensitiveRequestError:
+    return NativeSensitiveRequestError("native_sensitive_request_reply_invalid")
+
+
+def _text(value: object) -> str:
+    if not isinstance(value, str):
+        raise _invalid()
+    return value
+
+
+def _optional_text(value: object) -> str | None:
+    return None if value is None else _text(value)
+
+
+def _object(value: object, names: frozenset[str]) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != names:
+        raise _invalid()
+    return cast("dict[str, Any]", value)
+
+
+def _bool(value: object) -> bool:
+    if not isinstance(value, bool):
+        raise _invalid()
+    return value
+
+
+def _canonical_claim(command: CanonicalCommand | None) -> dict[str, str] | None:
+    if command is None:
+        return None
+    return {
+        "raw_text": command.raw_text,
+        "security_identity": command.security_identity,
+        "dialect": command.dialect,
+        "transport": command.transport,
+        "extraction_provenance": command.extraction_provenance,
+    }
+
+
+def _evaluation_view(evaluation: CompositeCommandEvaluation | None) -> dict[str, object] | None:
+    """The evaluation fields the classifier reads, bound to the evaluated command."""
+
+    if evaluation is None:
+        return None
+    return {
+        "security_identity": evaluation.command.security_identity,
+        "minimum_action": evaluation.minimum_action,
+        "match_default_modes": [owned.match.rule.default_mode for owned in evaluation.matches],
+        "reason_codes": [reason.reason_code for reason in evaluation.decision_plane.reasons],
+        "explicitly_enabled_permission_ids": list(evaluation.control_resolution.explicitly_enabled_permission_ids),
+        "controlling_action_class": evaluation.controlling_action_class,
+        "controlling_reason": evaluation.controlling_reason,
+    }
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise _invalid()
+    return tuple(value)
+
+
+def _tool_action_match(value: object, canonical: CanonicalCommand | None) -> ToolActionRequestMatch:
+    wire = _object(value, _TOOL_ACTION_FIELDS)
+    values: dict[str, Any] = {}
+    for name, item in wire.items():
+        if name == "canonical_command":
+            continue
+        if name in _TUPLE_FIELDS:
+            values[name] = _string_tuple(item)
+        elif name == "interpreter_executable_identities":
+            if not isinstance(item, list) or any(not isinstance(entry, dict) for entry in item):
+                raise _invalid()
+            values[name] = tuple(item)
+        elif name in _REQUIRED_TEXT:
+            values[name] = _text(item)
+        elif name in _OPTIONAL_TEXT:
+            values[name] = _optional_text(item)
+        else:
+            raise _invalid()
+    command_wire = wire["canonical_command"]
+    if command_wire is not None:
+        if not isinstance(command_wire, dict):
+            raise _invalid()
+        if canonical is not None and command_wire.get("security_identity") == canonical.security_identity:
+            values["canonical_command"] = canonical
+        else:
+            try:
+                values["canonical_command"] = _canonical_from_wire(command_wire)
+            except (KeyError, TypeError, ValueError) as error:
+                raise _invalid() from error
+    return ToolActionRequestMatch(**values)
+
+
+def native_sensitive_tool_action_request(
+    tool_name: object,
+    arguments: object,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    canonical_command: CanonicalCommand | None,
+    native_evaluation: CompositeCommandEvaluation | None,
+) -> ToolActionRequestMatch | None:
+    result = _ask(
+        "tool_action",
+        {
+            "tool_name": tool_name,
+            "arguments": arguments,
+            "canonical": _canonical_claim(canonical_command),
+            "evaluation": _evaluation_view(native_evaluation),
+        },
+        cwd=cwd,
+        home_dir=home_dir,
+    )
+    if isinstance(result, dict) and set(result) == {"error"}:
+        raise ValueError(_text(result["error"]))
+    wire = _object(result, frozenset({"match"}))
+    if wire["match"] is None:
+        return None
+    return _tool_action_match(wire["match"], canonical_command)

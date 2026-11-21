@@ -90,7 +90,7 @@ export function CommandActivityTable(props: {
               <th className="px-3 py-2.5">Command</th>
               <th className="px-3 py-2.5">App</th>
               <th className="px-3 py-2.5">Decision</th>
-              <th className="px-3 py-2.5">Execution proof</th>
+              <th className="px-3 py-2.5">Run result</th>
               <th className="px-3 py-2.5">Rule evidence</th>
               <th className="px-3 py-2.5"><span className="sr-only">Open detail</span></th>
             </tr>

@@ -8,6 +8,10 @@ from typing import cast
 from ..store import GuardStore
 from .exact_cloud_review import ExactCloudReviewError
 from .exact_cloud_review_apply import apply_exact_cloud_review
+from .native_workspace_review_queue import (
+    execute_native_workspace_review_command,
+    native_workspace_review_payload,
+)
 
 ResumeAfterApproval = Callable[..., dict[str, object]]
 
@@ -19,6 +23,16 @@ def execute_exact_cloud_review_operation(
     generated_at: str,
     resume_after_approval: ResumeAfterApproval,
 ) -> dict[str, object]:
+    native_command = native_workspace_review_payload(payload)
+    if native_command is not None:
+        return {
+            "data": execute_native_workspace_review_command(
+                store,
+                native_command,
+                generated_at=generated_at,
+            ),
+            "generatedAt": generated_at,
+        }
     signed_decision = _mapping(payload.get("remoteApproval"))
     if not signed_decision:
         raise ValueError("remote_exact_approval_missing")

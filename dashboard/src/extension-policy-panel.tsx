@@ -14,15 +14,18 @@ import { useModalDialog } from "./use-modal-dialog";
 import {
   type EffectiveExtensionControls,
   type ExtensionCatalogItem,
+  type ExtensionCatalogSummary,
   type ExtensionMutationPreview,
   type ExtensionPermission,
 } from "./extension-controls-api";
 import { isCurrentExtensionPolicyDraft, localPermissionDraftState, type PermissionDraftState } from "./extension-policy-draft";
 import { type ExtensionPolicyRebaseConflict } from "./extension-policy-rebase";
 import { useExtensionPolicyDraft } from "./use-extension-policy-draft";
-import { controlProvenance, groupPermissionsByFamily, treatmentLabel } from "./extension-control-center-model";
+import { controlProvenance, groupPermissionsByFamily, managedPermissionState, treatmentLabel } from "./extension-control-center-model";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { ProtectionSettingsHistory } from "./protection-center/protection-settings-history";
+import { QuickApplyToolbar } from "./protection-center/components/quick-apply-toolbar";
+import { PolicyEditingLocks } from "./protection-center/components/policy-editing-locks";
 import { AppliedPolicyToast, appliedPolicyCloudHref } from "./extension-policy-applied-toast";
 
 export const RISK_TONE: Record<string, string> = {
@@ -44,20 +47,9 @@ function cloneLayers(effective: EffectiveExtensionControls) {
   return effective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
 }
 
-export function managedPermissionState(effective: EffectiveExtensionControls, permissionId: string): "enabled" | "disabled" | null {
-  const projected = effective.projection?.permissions.find((item) => item.permission_id === permissionId)?.managed_state;
-  if (projected && projected !== "inherited") return projected;
-  for (const layer of effective.layers) {
-    if (layer.kind !== "signed-cloud") continue;
-    const control = layer.controls.find((item) => item.target_kind === "permission" && item.target_id === permissionId);
-    if (control) return control.state;
-  }
-  return null;
-}
-
-export function extensionPolicyRadioTabStop(
-  choices: Array<{ value: PermissionDraftState; disabled?: boolean }>,
-  state: PermissionDraftState,
+export function extensionPolicyRadioTabStop<T extends string>(
+  choices: Array<{ value: T; disabled?: boolean }>,
+  state: T,
   groupDisabled: boolean,
 ): number {
   if (groupDisabled) return -1;
@@ -133,7 +125,7 @@ function DraftControl(props: {
 
 export function PermissionPolicyRow(props: {
   permission: ExtensionPermission;
-  extension: ExtensionCatalogItem;
+  extension: ExtensionCatalogSummary;
   effective: EffectiveExtensionControls;
   draftState: PermissionDraftState;
   disabled: boolean;
@@ -141,12 +133,14 @@ export function PermissionPolicyRow(props: {
 }) {
   const managed = managedPermissionState(props.effective, props.permission.permission_id);
   const provenance = controlProvenance(props.effective, "permission", props.permission.permission_id);
-  const example = props.permission.example_command ?? (props.extension.executables[0]?.trim() || props.permission.label);
+  const example = props.permission.example_command ?? props.extension.executables[0]?.trim();
   return (
     <article id={`pattern-${props.permission.permission_id}`} className="guard-pattern-row" data-permission-id={props.permission.permission_id}>
       <div className="min-w-0">
         <h3 className="text-sm font-semibold text-brand-dark">{props.permission.label}</h3>
-        <p className="guard-pattern-example mt-1">{example}</p>
+        {props.permission.description ? <p className="mt-1 text-xs leading-5 text-brand-dark/80">{props.permission.description}</p> : null}
+        {/* The catalog's sample command, not a package or command this device has allowed. */}
+        {example ? <p className="mt-1 text-xs text-brand-dark/70">Example: <code className="guard-pattern-example">{example}</code></p> : null}
         {!props.permission.configurable ? (
           <p className="mt-2 text-xs leading-5 text-brand-dark">
             Why this cannot be changed: {props.permission.fixed_reason ?? "Guard marks this safety permission as immutable."}
@@ -257,7 +251,7 @@ export function PolicyReviewSheet(props: {
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
   const count = props.preview.semantic_preview.changed_target_count;
-  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }, props.busy);
+  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }, props.busy, false, true);
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (submitDisabled) return;
@@ -293,14 +287,15 @@ export function PolicyReviewSheet(props: {
             approvalGate={props.approvalGate}
             approvalPassword={password}
             approvalTotpCode={totpCode}
+            requireGate={true}
             onApprovalPasswordChange={(event) => setPassword(event.target.value)}
             onApprovalTotpCodeChange={(event) => setTotpCode(event.target.value)}
           />
         </div>
         {props.error ? <p role="alert" className="mt-3 text-sm text-red-950">{props.error}</p> : null}
-        <div className="sticky bottom-0 mt-4 flex flex-wrap justify-end gap-2 bg-[var(--surface-1)] pb-1 pt-3">
-          <button type="button" disabled={props.busy} onClick={props.onClose} className="min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark">Continue editing</button>
-          <button type="submit" disabled={submitDisabled} className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">
+        <div className="sticky bottom-0 z-10 -mx-5 mt-4 flex flex-wrap items-center justify-end gap-2 bg-[var(--surface-1)] px-5 pb-1 pt-3 sm:-mx-6 sm:px-6">
+          <button type="button" disabled={props.busy} onClick={props.onClose} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-center text-sm font-semibold text-brand-dark">Continue editing</button>
+          <button type="submit" disabled={submitDisabled} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-blue px-4 text-center text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">
             {props.busy ? "Applying…" : `Apply ${count} reviewed change${count === 1 ? "" : "s"}`}
           </button>
         </div>
@@ -323,7 +318,7 @@ export function ExtensionPolicyPanel(props: {
     baseEffective, dirty, preview, previewBusy, applyBusy, reviewOpen,
     error, stale, pendingRebase, refreshRequired, lastApplied, undoLastApplied,
     setReviewOpen, setPermissionState, resetDraft, runPreview, apply, rebaseDraft,
-    keepConflicts, useCurrent, applyProfile, useHistoricalDraft, permissionState,
+    keepConflicts, useCurrent, useHistoricalDraft, permissionState, setPermissionStates,
   } = draft;
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
 
@@ -363,24 +358,19 @@ export function ExtensionPolicyPanel(props: {
       <p className="mt-2 max-w-2xl text-sm leading-6 text-brand-dark/80">
         Recommended follows Guard defaults. Allow is available only where built-in safety and organization policy still permit it. Block is a stricter local floor.
       </p>
-      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-xs font-semibold text-brand-dark/60">Apply to every pattern you can change:</span>
-        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile(policyExtension.permissions, "recommended")} className="min-h-10 px-1 text-xs font-semibold text-brand-blue disabled:opacity-40">Reset to Recommended</button>
-        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile(policyExtension.permissions, "stricter")} className="min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40">Block all changeable variants</button>
-      </div>
+      <QuickApplyToolbar
+        permissions={policyExtension.permissions}
+        effective={baseEffective}
+        permissionState={permissionState}
+        onApply={setPermissionStates}
+        disabled={refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected"}
+        subject={{ one: "changeable setting", other: "changeable settings" }}
+      />
       <div id="extension-settings-history"><ProtectionSettingsHistory catalogDigest={baseEffective.catalog_digest} disabled={baseEffective.health !== "protected" || refreshRequired} onUse={(layers) => useHistoricalDraft(layers)} /></div>
-      {baseEffective.global_lockdown ? (
-        <p role="status" className="mt-4 flex gap-2 text-sm text-brand-dark">
-          <HiMiniLockClosed className="mt-0.5 size-4 shrink-0" />
-          Emergency Lockdown remains dominant. You can prepare a local draft, but matching commands stay blocked while lockdown is active.
-        </p>
-      ) : null}
-      {baseEffective.health !== "protected" ? (
-        <p role="alert" className="mt-4 flex gap-2 text-sm text-amber-950">
-          <HiMiniExclamationTriangle className="mt-0.5 size-4 shrink-0" />
-          Settings cannot be changed until Guard verifies local settings integrity.
-        </p>
-      ) : null}
+      <PolicyEditingLocks
+        health={baseEffective.health}
+        globalLockdown={baseEffective.global_lockdown}
+      />
       {managedCount ? (
         <p className="mt-4 text-sm text-indigo-950">
           {managedCount} setting{managedCount === 1 ? " is" : "s are"} managed by your organization. This device can add stricter blocks but cannot weaken an organization block.
@@ -395,7 +385,7 @@ export function ExtensionPolicyPanel(props: {
           onViewHistory={() => { document.getElementById("extension-settings-history")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
         />
       ) : refreshRequired ? (
-        <div role="status" className="mt-4 text-sm text-blue-950">Settings applied. Editing stays locked until Guard reloads the current protected state.</div>
+        <PolicyEditingLocks refreshRequired />
       ) : null}
 
       <div className="mt-4">

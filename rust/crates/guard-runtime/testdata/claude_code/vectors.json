@@ -1,0 +1,3697 @@
+{
+ "cases": [
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "nothing",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_empty_object",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"model\": \"x\"}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_unused_keys",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{not json"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_invalid_json",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": ""
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_empty_file",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "[{\"mcpServers\": {}}]"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_top_level_list",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "efbbbf7b226d6f64656c223a202278227d",
+     "mode": 420,
+     "path": "home/.claude/settings.json"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_bom",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "7b226d6f64656c223a2022ff227d",
+     "mode": 420,
+     "path": "home/.claude/settings.json"
+    }
+   ],
+   "home": "home",
+   "name": "settings_invalid_utf8",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"n\": 99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999}"
+    }
+   ],
+   "home": "home",
+   "name": "settings_huge_integer",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 0,
+     "path": "home/.claude/settings.json",
+     "text": "{\"model\": \"x\"}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_unreadable",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [
+    "home/.claude/settings.json"
+   ],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_is_directory",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "elsewhere/settings.json",
+     "text": "{\"model\": \"x\"}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_symlink_to_file",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.claude/settings.json",
+     "target": "<ROOT>/elsewhere/settings.json"
+    }
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_dangling_symlink",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.claude/settings.json",
+     "target": "<ROOT>/missing.json"
+    }
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\r\n\"model\": \"x\"\r\n}\r\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_crlf",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"x\": [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_deep_nesting",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"other\": \"\\ud800\", \"model\": \"x\"}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "unused_key_lone_surrogate",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:a",
+     "artifact_type": "mcp_server",
+     "command": "a",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "a",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+       "hashBasis": "content",
+       "versionLabel": "a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:b",
+     "artifact_type": "mcp_server",
+     "command": "b",
+     "config_path": "<ROOT>/home/.claude/settings.local.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "1fc01c352038726e8561d770689e7403fd445dc447d80ee7314cac2c7282ff73",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "b",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "1fc01c352038726e8561d770689e7403fd445dc447d80ee7314cac2c7282ff73",
+       "hashBasis": "content",
+       "versionLabel": "b"
+      }
+     },
+     "name": "b",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:c",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "c",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "c"
+      }
+     },
+     "name": "c",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:d",
+     "artifact_type": "mcp_server",
+     "command": "d",
+     "config_path": "<ROOT>/work/.claude/settings.local.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "befbd346379832369194ad590d61b53231471285833ae7434b0851c7b8368393",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "d",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "befbd346379832369194ad590d61b53231471285833ae7434b0851c7b8368393",
+       "hashBasis": "content",
+       "versionLabel": "d"
+      }
+     },
+     "name": "d",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:e",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "af50528bcae55e37ae83993fe8a65267403752ebd249b44df2d71dda68d744ba",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "e",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "af50528bcae55e37ae83993fe8a65267403752ebd249b44df2d71dda68d744ba",
+       "hashBasis": "content",
+       "versionLabel": "e"
+      }
+     },
+     "name": "e",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "http",
+     "url": "https://e.example/mcp"
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"a\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.local.json",
+     "text": "{\"mcpServers\": {\"b\": {\"command\": \"b\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"c\": {\"command\": \"c\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/settings.local.json",
+     "text": "{\"mcpServers\": {\"d\": {\"command\": \"d\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.mcp.json",
+     "text": "{\"mcpServers\": {\"e\": {\"url\": \"https://e.example/mcp\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.mcp.json",
+     "text": "{\"mcpServers\": {\"ignored\": {\"command\": \"x\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json",
+    "<ROOT>/home/.claude/settings.local.json",
+    "<ROOT>/work/.claude/settings.json",
+    "<ROOT>/work/.claude/settings.local.json",
+    "<ROOT>/work/.mcp.json"
+   ],
+   "home": "home",
+   "name": "every_candidate",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:a",
+     "artifact_type": "mcp_server",
+     "command": "a",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "a",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+       "hashBasis": "content",
+       "versionLabel": "a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [
+    "work/.claude/agents"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"a\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.mcp.json",
+     "text": "{\"mcpServers\": {\"e\": {\"command\": \"e\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "no_workspace",
+   "relative": false,
+   "symlinks": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/home"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:a",
+     "artifact_type": "mcp_server",
+     "command": "a",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "a",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+       "hashBasis": "content",
+       "versionLabel": "a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:a",
+     "artifact_type": "mcp_server",
+     "command": "a",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "a",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+       "hashBasis": "content",
+       "versionLabel": "a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:m",
+     "artifact_type": "mcp_server",
+     "command": "m",
+     "config_path": "<ROOT>/home/.mcp.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "85d1af6003f951619f8efbc57c4b14c010a7137188bba4d69f7843dc0a20bb5d",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "m",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "85d1af6003f951619f8efbc57c4b14c010a7137188bba4d69f7843dc0a20bb5d",
+       "hashBasis": "content",
+       "versionLabel": "m"
+      }
+     },
+     "name": "m",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"a\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.mcp.json",
+     "text": "{\"mcpServers\": {\"m\": {\"command\": \"m\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json",
+    "<ROOT>/home/.claude/settings.json",
+    "<ROOT>/home/.mcp.json"
+   ],
+   "home": "home",
+   "name": "workspace_is_home",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "home"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/work/h",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:a",
+     "artifact_type": "mcp_server",
+     "command": "a",
+     "config_path": "<ROOT>/work/h/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "a",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+       "hashBasis": "content",
+       "versionLabel": "a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/h/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"a\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/h/.claude/settings.json"
+   ],
+   "home": "work/h",
+   "name": "home_inside_workspace",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "cwd": "<ROOT>",
+    "harness": "claude-code",
+    "home": "home",
+    "workspace": "work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:a",
+     "artifact_type": "mcp_server",
+     "command": "a",
+     "config_path": "home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "a",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bceafa212d20d9c4572349b230e4eb2a1d8e7f4224e74d5609b3977d7ffef1d1",
+       "hashBasis": "content",
+       "versionLabel": "a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:e",
+     "artifact_type": "mcp_server",
+     "command": "e",
+     "config_path": "work/.mcp.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "df93357a477482bbe49cfeee728870df7d6f21977f23976021a02dbcc2a6a61c",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "e",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "df93357a477482bbe49cfeee728870df7d6f21977f23976021a02dbcc2a6a61c",
+       "hashBasis": "content",
+       "versionLabel": "e"
+      }
+     },
+     "name": "e",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:agent:one",
+     "artifact_type": "agent",
+     "command": null,
+     "config_path": "work/.claude/agents/one.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "one",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"a\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.mcp.json",
+     "text": "{\"mcpServers\": {\"e\": {\"command\": \"e\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/agents/one.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "home/.claude/settings.json",
+    "work/.mcp.json",
+    "work/.claude/agents"
+   ],
+   "home": "home",
+   "name": "relative_paths",
+   "relative": true,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "-y",
+      "pkg",
+      ""
+     ],
+     "artifact_id": "claude-code:global:mcp:stdio",
+     "artifact_type": "mcp_server",
+     "command": "npx",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "4866736a5bf7d8043afcd7d79c14a79ae323eacbbdd634f98db0abe55dd397ee",
+      "env": {
+       "A": "2",
+       "D": "d"
+      },
+      "env_keys": [
+       "A",
+       "D"
+      ],
+      "env_values_hash": "ff75ed8ffd8848e3a875940aee7970511e4a34080759ea2219eb227cf5c356d1",
+      "header_values_hash": "094924fab24d6dd14bdd90b40d030b13ca6c1251736b0b7b02b47fed897287f0",
+      "headers_keys": [
+       "H",
+       "N"
+      ],
+      "name": "stdio",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "4866736a5bf7d8043afcd7d79c14a79ae323eacbbdd634f98db0abe55dd397ee",
+       "hashBasis": "content",
+       "versionLabel": "stdio"
+      }
+     },
+     "name": "stdio",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:http",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "e77581ab98d12a47fa2e28b9e97bb926c8d3846ccd92d867eb56f38aa3782ca6",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "6548e77c18876e6eaeab557216df846cbbc6df815c41ce9bb4603fbd07c3b476",
+      "headers_keys": [
+       "Authorization",
+       "X"
+      ],
+      "name": "http",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "e77581ab98d12a47fa2e28b9e97bb926c8d3846ccd92d867eb56f38aa3782ca6",
+       "hashBasis": "content",
+       "versionLabel": "http"
+      }
+     },
+     "name": "http",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://h.example/mcp"
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:both",
+     "artifact_type": "mcp_server",
+     "command": "run",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "73d5f28c718893e7994121d8e7948ae584d724d1c3664b80c00c596fcf1e193a",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "both",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "73d5f28c718893e7994121d8e7948ae584d724d1c3664b80c00c596fcf1e193a",
+       "hashBasis": "content",
+       "versionLabel": "both"
+      }
+     },
+     "name": "both",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://b.example"
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:neither",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "neither",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+       "hashBasis": "content",
+       "versionLabel": "neither"
+      }
+     },
+     "name": "neither",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:list_command",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "list_command",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+       "hashBasis": "content",
+       "versionLabel": "list_command"
+      }
+     },
+     "name": "list_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"stdio\": {\"command\": \"npx\", \"args\": [\"-y\", 5, null, \"pkg\", [\"n\"], \"\"], \"env\": {\" A \": \"1\", \"A\": \"2\", \"\": \"x\", \"  \": \"y\", \"B\": 3, \"C\": null, \"D\": \"d\"}, \"headers\": {\" H \": \"v\", \"\": \"e\", \"N\": 1}}, \"http\": {\"url\": \"https://h.example/mcp\", \"headers\": {\"Authorization\": \"Bearer t\", \"X\": \"y\"}}, \"both\": {\"command\": \"run\", \"url\": \"https://b.example\"}, \"neither\": {}, \"list_command\": {\"command\": [\"a\", \"b\"], \"url\": 5}, \"not_object\": \"x\", \"null_config\": null}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_matrix",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "a",
+      "b",
+      "c"
+     ],
+     "artifact_id": "claude-code:global:mcp:s",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "852ca9169c22fc25d47f7202f82857f589b1f0a633781bf8ecc7b12bb220081c",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "852ca9169c22fc25d47f7202f82857f589b1f0a633781bf8ecc7b12bb220081c",
+       "hashBasis": "content",
+       "versionLabel": "s"
+      }
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"c\", \"args\": \"abc\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_args_string",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "k1",
+      "k2"
+     ],
+     "artifact_id": "claude-code:global:mcp:s",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "722723a7b7f1ed39ae0796345a0c48bf19509655f17af129b72afe63ce5f2413",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "722723a7b7f1ed39ae0796345a0c48bf19509655f17af129b72afe63ce5f2413",
+       "hashBasis": "content",
+       "versionLabel": "s"
+      }
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"c\", \"args\": {\"k1\": 1, \"k2\": 2}}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_args_object",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"c\", \"args\": null}}}"
+    }
+   ],
+   "home": "home",
+   "name": "mcp_args_null",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"c\", \"args\": 3}}}"
+    }
+   ],
+   "home": "home",
+   "name": "mcp_args_integer",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"c\", \"args\": true}}}"
+    }
+   ],
+   "home": "home",
+   "name": "mcp_args_bool",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:s",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "s"
+      }
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"c\", \"args\": \"\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_args_empty_string",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:s",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "s"
+      }
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"c\", \"env\": [\"A=1\"], \"headers\": \"x\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_env_not_object",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": [{\"command\": \"c\"}]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_servers_not_object",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:a",
+     "artifact_type": "mcp_server",
+     "command": "two",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "f47d95534f643e9074d939883677ceb3d63c0123c5297959097612d7c37fccbe",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "a",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "f47d95534f643e9074d939883677ceb3d63c0123c5297959097612d7c37fccbe",
+       "hashBasis": "content",
+       "versionLabel": "a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:b",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "b",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+       "hashBasis": "content",
+       "versionLabel": "b"
+      }
+     },
+     "name": "b",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"one\"}, \"b\": {}, \"a\": {\"command\": \"two\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_duplicate_names",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:a",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "aa0e8320499a43b04b49d499ae8d4e27c0c1f5cb5695406db28b6cad64839a36",
+      "env": {
+       "J": "2",
+       "K": "3"
+      },
+      "env_keys": [
+       "J",
+       "K"
+      ],
+      "env_values_hash": "dbc2a009e81acabec44d05aa994b0a056b4d696585134347c368be82afe59191",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "a",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "aa0e8320499a43b04b49d499ae8d4e27c0c1f5cb5695406db28b6cad64839a36",
+       "hashBasis": "content",
+       "versionLabel": "a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"c\", \"env\": {\"K\": \"1\", \"J\": \"2\", \"K\": \"3\"}}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_duplicate_env_keys",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:café",
+     "artifact_type": "mcp_server",
+     "command": "ü",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "a0730a0fb4f0d5b8e032db30513fb91130849f13947b872c41e014aeae32c2ef",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "café",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "a0730a0fb4f0d5b8e032db30513fb91130849f13947b872c41e014aeae32c2ef",
+       "hashBasis": "content",
+       "versionLabel": "café"
+      }
+     },
+     "name": "café",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:😀",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "d676195c4fec00685d8796ea5e915d7430de3c21e8c3b619dd5e461f922ce986",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "😀",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "d676195c4fec00685d8796ea5e915d7430de3c21e8c3b619dd5e461f922ce986",
+       "hashBasis": "content",
+       "versionLabel": "😀"
+      }
+     },
+     "name": "😀",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://x"
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"caf\\u00e9\": {\"command\": \"\\u00fc\"}, \"\\ud83d\\ude00\": {\"url\": \"https://x\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_unicode_names",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"\\ud800\": {\"command\": \"c\"}}}"
+    }
+   ],
+   "home": "home",
+   "name": "mcp_name_lone_surrogate",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"a\": {\"env\": {\"K\": \"\\udc00\"}}}}"
+    }
+   ],
+   "home": "home",
+   "name": "mcp_env_value_lone_surrogate",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"c\", \"args\": [\"ok\", \"\\ud800\"]}}}"
+    }
+   ],
+   "home": "home",
+   "name": "mcp_arg_lone_surrogate_dropped_type",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:a",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "a",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"c\", \"extra\": \"\\ud800\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_unused_field_lone_surrogate",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:a",
+     "artifact_type": "mcp_server",
+     "command": "😀",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "44d513c0f8041f251736fe7bc9d10f45cb8f23db8a538c8a90a958d0dbaee191",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "a",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "44d513c0f8041f251736fe7bc9d10f45cb8f23db8a538c8a90a958d0dbaee191",
+       "hashBasis": "content",
+       "versionLabel": "a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"\\ud83d\\ude00\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_escaped_pair",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:mcp:w",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "ab3b801aaadaa12530cedce77384168f4c4d0d7b35fbe2aea2ee4ca8926bfac7",
+      "env": {
+       "K": "v",
+       "L": "w"
+      },
+      "env_keys": [
+       "K",
+       "L"
+      ],
+      "env_values_hash": "3a6dd94b353eba79301a525c2b5cccb99a95d71e78ba28ebbf0ae7786933b8b3",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "w",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "ab3b801aaadaa12530cedce77384168f4c4d0d7b35fbe2aea2ee4ca8926bfac7",
+       "hashBasis": "content",
+       "versionLabel": "w"
+      }
+     },
+     "name": "w",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"mcpServers\": {\"w\": {\"command\": \"c\", \"env\": {\"\\u00a0K\\u2003\": \"v\", \"\\u001cL\": \"w\"}}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "mcp_whitespace_keys",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:p",
+     "artifact_type": "mcp_server",
+     "command": "p",
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "e6f65d25fd3f69ef8dfab51bb34e4450cfb7fcb7fa9b2940fc9f452751b8e996",
+      "env": {
+       "T": "1"
+      },
+      "env_keys": [
+       "T"
+      ],
+      "env_values_hash": "ec277b5d4dc25bd48a9e80d8689a567b4f8953f1142e053bf6a823b944ce6d80",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "p",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "e6f65d25fd3f69ef8dfab51bb34e4450cfb7fcb7fa9b2940fc9f452751b8e996",
+       "hashBasis": "content",
+       "versionLabel": "p"
+      }
+     },
+     "name": "p",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.mcp.json",
+     "text": "{\"mcpServers\": {\"p\": {\"command\": \"p\", \"env\": {\"T\": \"1\"}}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_project_scope",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "hook",
+      "--x"
+     ],
+     "artifact_id": "claude-code:global:pretooluse:0",
+     "artifact_type": "hook",
+     "command": "guard",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:pretooluse:1",
+     "artifact_type": "hook",
+     "command": "bare",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:pretooluse:2",
+     "artifact_type": "hook",
+     "command": "mixed",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:pretooluse:3",
+     "artifact_type": "hook",
+     "command": "notlist",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:pretooluse:4",
+     "artifact_type": "hook",
+     "command": "with_hooks",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"command\": \"guard\", \"args\": [\"hook\", \"--x\"]}, {\"command\": \"bare\"}, {\"command\": \"mixed\", \"args\": [\"a\", 1]}, {\"command\": \"notlist\", \"args\": \"a\"}, {\"command\": \"with_hooks\", \"hooks\": [{\"command\": \"ignored\"}]}, \"string\", null]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "hooks_flat",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "1"
+     ],
+     "artifact_id": "claude-code:global:posttooluse:0:0",
+     "artifact_type": "hook",
+     "command": "a",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "if": "x",
+      "matcher": "Bash",
+      "timeout": 5,
+      "type": "command"
+     },
+     "name": "  PostToolUse ",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:posttooluse:0:1",
+     "artifact_type": "hook",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "matcher": "Bash",
+      "timeout": true,
+      "type": "http",
+      "url": "http://127.0.0.1/h"
+     },
+     "name": "  PostToolUse ",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": "http://127.0.0.1/h"
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:posttooluse:0:2",
+     "artifact_type": "hook",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "matcher": "Bash"
+     },
+     "name": "  PostToolUse ",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:posttooluse:0:3",
+     "artifact_type": "hook",
+     "command": "b",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "matcher": "Bash"
+     },
+     "name": "  PostToolUse ",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:posttooluse:0:4",
+     "artifact_type": "hook",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "matcher": "Bash",
+      "timeout": 12345678901234567890
+     },
+     "name": "  PostToolUse ",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:posttooluse:0:5",
+     "artifact_type": "hook",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "matcher": "Bash",
+      "timeout": -1
+     },
+     "name": "  PostToolUse ",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:posttooluse:0:6",
+     "artifact_type": "hook",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "matcher": "Bash",
+      "timeout": 1000000000000000000000000000000
+     },
+     "name": "  PostToolUse ",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:posttooluse:0:7",
+     "artifact_type": "hook",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {
+      "matcher": "Bash"
+     },
+     "name": "  PostToolUse ",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:posttooluse:1:0",
+     "artifact_type": "hook",
+     "command": "c",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "  PostToolUse ",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"  PostToolUse \": [{\"matcher\": \"Bash\", \"hooks\": [{\"type\": \"command\", \"command\": \"a\", \"args\": [\"1\"], \"timeout\": 5, \"if\": \"x\"}, {\"type\": \"http\", \"url\": \"http://127.0.0.1/h\", \"timeout\": true}, {\"type\": 1, \"url\": 2, \"timeout\": 1.5, \"if\": 3, \"command\": 4}, {\"command\": \"b\", \"timeout\": \"5\"}, {\"timeout\": 12345678901234567890}, {\"timeout\": -1}, {\"timeout\": 1000000000000000000000000000000}, {}, \"skip\"]}, {\"matcher\": 7, \"hooks\": [{\"command\": \"c\"}]}, {\"hooks\": {\"command\": \"d\"}}, {\"matcher\": \"m\"}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "hooks_grouped",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:über:0",
+     "artifact_type": "hook",
+     "command": "u",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "ÜBER",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global::0",
+     "artifact_type": "hook",
+     "command": "e",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"Stop\": {\"command\": \"x\"}, \"SessionStart\": [], \"\\u00dcBER\": [{\"command\": \"u\"}], \"\": [{\"command\": \"e\"}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "hooks_shapes",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": [{\"command\": \"x\"}]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "hooks_not_object",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"command\": \"\\ud800\"}]}}"
+    }
+   ],
+   "home": "home",
+   "name": "hooks_lone_surrogate_command",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:stop:0",
+     "artifact_type": "hook",
+     "command": "c",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"command\": \"c\", \"note\": \"\\ud800\"}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "hooks_lone_surrogate_unused",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:m",
+     "artifact_type": "mcp_server",
+     "command": "m",
+     "config_path": "<ROOT>/work/.claude/settings.local.json",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "85d1af6003f951619f8efbc57c4b14c010a7137188bba4d69f7843dc0a20bb5d",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "m",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "85d1af6003f951619f8efbc57c4b14c010a7137188bba4d69f7843dc0a20bb5d",
+       "hashBasis": "content",
+       "versionLabel": "m"
+      }
+     },
+     "name": "m",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:stop:0:0",
+     "artifact_type": "hook",
+     "command": "s",
+     "config_path": "<ROOT>/work/.claude/settings.local.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.claude/settings.local.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"s\"}]}]}, \"mcpServers\": {\"m\": {\"command\": \"m\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.claude/settings.local.json"
+   ],
+   "home": "home",
+   "name": "hooks_and_mcp_project",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:οδος:0",
+     "artifact_type": "hook",
+     "command": "x",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "ΟΔΟΣ",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:global:i̇x:0",
+     "artifact_type": "hook",
+     "command": "y",
+     "config_path": "<ROOT>/home/.claude/settings.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "İx",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"\\u039f\\u0394\\u039f\\u03a3\": [{\"command\": \"x\"}], \"\\u0130x\": [{\"command\": \"y\"}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/settings.json"
+   ],
+   "home": "home",
+   "name": "hooks_final_sigma",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:agent:.hidden",
+     "artifact_type": "agent",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/agents/.hidden.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "e564b4081d7a9ea4b00dada53bdae70c99b87b6fce869f0c3dd4d2bfa1e53e1c"
+     },
+     "name": ".hidden",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:agent:.md",
+     "artifact_type": "agent",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/agents/.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "e392dad8b08599f74d4819cd291feef81ab4389e0a6fae2b1286f99411b0c7ca"
+     },
+     "name": ".md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:agent:a-b",
+     "artifact_type": "agent",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/agents/a-b.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "a-b",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:agent:a",
+     "artifact_type": "agent",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/agents/a.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8"
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:agent:linked_in",
+     "artifact_type": "agent",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/agents/linked_in.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "106b086224a4d945eae25f7be3805a931a873270326dd868b0e41f71ee9fff72"
+     },
+     "name": "linked_in",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:agent:locked",
+     "artifact_type": "agent",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/agents/locked.md",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "locked",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:agent:z b",
+     "artifact_type": "agent",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/agents/z b.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "z b",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:agent:é",
+     "artifact_type": "agent",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/agents/é.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "é",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [
+    "work/.claude/agents/dir.md"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.claude/agents/a.md",
+     "text": "alpha"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/agents/B.MD",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/agents/.hidden.md",
+     "text": "hidden"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/agents/.md",
+     "text": "dot"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/agents/notes.txt",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/agents/sub/nested.md",
+     "text": "x"
+    },
+    {
+     "mode": 0,
+     "path": "work/.claude/agents/locked.md",
+     "text": "secret"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/agents/z b.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/agents/a-b.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/agents/é.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "outside/out.md",
+     "text": "outside"
+    },
+    {
+     "mode": 420,
+     "path": "work/inside.md",
+     "text": "inside"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.claude/agents"
+   ],
+   "home": "home",
+   "name": "agents",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "work/.claude/agents/linked_in.md",
+     "target": "<ROOT>/work/inside.md"
+    },
+    {
+     "path": "work/.claude/agents/linked_out.md",
+     "target": "<ROOT>/outside/out.md"
+    },
+    {
+     "path": "work/.claude/agents/dangling.md",
+     "target": "<ROOT>/work/missing.md"
+    }
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:command:.hidden",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/commands/.hidden.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "e564b4081d7a9ea4b00dada53bdae70c99b87b6fce869f0c3dd4d2bfa1e53e1c"
+     },
+     "name": ".hidden",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:command:.md",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/commands/.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "e392dad8b08599f74d4819cd291feef81ab4389e0a6fae2b1286f99411b0c7ca"
+     },
+     "name": ".md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:command:a-b",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/commands/a-b.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "a-b",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:command:a",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/commands/a.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8"
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:command:linked_in",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/commands/linked_in.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "106b086224a4d945eae25f7be3805a931a873270326dd868b0e41f71ee9fff72"
+     },
+     "name": "linked_in",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:command:locked",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/commands/locked.md",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "locked",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:command:z b",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/commands/z b.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "z b",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:command:é",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/commands/é.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "é",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.claude/commands/a.md",
+     "text": "alpha"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/commands/B.MD",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/commands/.hidden.md",
+     "text": "hidden"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/commands/.md",
+     "text": "dot"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/commands/notes.txt",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/commands/sub/nested.md",
+     "text": "x"
+    },
+    {
+     "mode": 0,
+     "path": "work/.claude/commands/locked.md",
+     "text": "secret"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/commands/z b.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/commands/a-b.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/commands/é.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "outside/out.md",
+     "text": "outside"
+    },
+    {
+     "mode": 420,
+     "path": "work/inside.md",
+     "text": "inside"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "commands",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "work/.claude/commands/linked_in.md",
+     "target": "<ROOT>/work/inside.md"
+    },
+    {
+     "path": "work/.claude/commands/linked_out.md",
+     "target": "<ROOT>/outside/out.md"
+    },
+    {
+     "path": "work/.claude/commands/dangling.md",
+     "target": "<ROOT>/work/missing.md"
+    }
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:rules-.hidden",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/.hidden.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "e564b4081d7a9ea4b00dada53bdae70c99b87b6fce869f0c3dd4d2bfa1e53e1c"
+     },
+     "name": "rules-.hidden",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:rules-.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "e392dad8b08599f74d4819cd291feef81ab4389e0a6fae2b1286f99411b0c7ca"
+     },
+     "name": "rules-.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:rules-a-b",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/a-b.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "rules-a-b",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:rules-a",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/a.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8"
+     },
+     "name": "rules-a",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:rules-linked_in",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/linked_in.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "106b086224a4d945eae25f7be3805a931a873270326dd868b0e41f71ee9fff72"
+     },
+     "name": "rules-linked_in",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:rules-locked",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/locked.md",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "rules-locked",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:rules-z b",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/z b.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "rules-z b",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:rules-é",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/é.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "rules-é",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/a.md",
+     "text": "alpha"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/B.MD",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/.hidden.md",
+     "text": "hidden"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/.md",
+     "text": "dot"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/notes.txt",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/sub/nested.md",
+     "text": "x"
+    },
+    {
+     "mode": 0,
+     "path": "work/.claude/rules/locked.md",
+     "text": "secret"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/z b.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/a-b.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/é.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "outside/out.md",
+     "text": "outside"
+    },
+    {
+     "mode": 420,
+     "path": "work/inside.md",
+     "text": "inside"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "rules",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "work/.claude/rules/linked_in.md",
+     "target": "<ROOT>/work/inside.md"
+    },
+    {
+     "path": "work/.claude/rules/linked_out.md",
+     "target": "<ROOT>/outside/out.md"
+    },
+    {
+     "path": "work/.claude/rules/dangling.md",
+     "target": "<ROOT>/work/missing.md"
+    }
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [
+    "work/.claude/agents"
+   ],
+   "files": [],
+   "found_paths": [
+    "<ROOT>/work/.claude/agents"
+   ],
+   "home": "home",
+   "name": "empty_agents_dir",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.claude/agents",
+     "text": "x"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "agents_is_file",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:agent:x",
+     "artifact_type": "agent",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/agents/x.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "x",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/real-agents/x.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.claude/agents"
+   ],
+   "home": "home",
+   "name": "agents_dir_link_inside",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "work/.claude/agents",
+     "target": "<ROOT>/work/real-agents"
+    }
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "outside/agents/x.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "agents_dir_link_outside",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "work/.claude/agents",
+     "target": "<ROOT>/outside/agents"
+    },
+    {
+     "path": "work/.claude/commands",
+     "target": "<ROOT>/outside/agents"
+    }
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "agents_dir_dangling",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "work/.claude/agents",
+     "target": "<ROOT>/nowhere"
+    }
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {
+    "work/.claude/agents": 0
+   },
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.claude/agents/x.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.claude/agents"
+   ],
+   "home": "home",
+   "name": "agents_dir_unreadable",
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:.hidden",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/.hidden/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "aaa9402664f1a41f40ebbc52c9993eb66aeb366602958fdfaa283b71e64db123"
+     },
+     "name": ".hidden",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:.",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "4813494d137e1631bba301d5acab6e7bb7aa74ce1185d456565ef51d737677b2"
+     },
+     "name": ".",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:Z",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/Z/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "Z",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:a",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/a/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:a b",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/a b/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "a b",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:a-b",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/a-b/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "a-b",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:a.b",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/a.b/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "a.b",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/alpha/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+     },
+     "name": "alpha",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:alpha/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/alpha/beta/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d"
+     },
+     "name": "alpha/beta",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:filelink",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/filelink/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2272bea616a05ae194c58b63752b39924a7beed67597c20dcb5586d1ee517290"
+     },
+     "name": "filelink",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:locked",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/locked/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "locked",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:é",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/é/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "é",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {
+    "work/.claude/skills/sealed": 0
+   },
+   "dirs": [
+    "work/.claude/skills/isdir/SKILL.md"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/SKILL.md",
+     "text": "root"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/alpha/SKILL.md",
+     "text": "a"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/alpha/beta/SKILL.md",
+     "text": "b"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/.hidden/SKILL.md",
+     "text": "h"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/gamma/skill.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/a/SKILL.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/a-b/SKILL.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/a b/SKILL.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/a.b/SKILL.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/Z/SKILL.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/é/SKILL.md",
+     "text": "x"
+    },
+    {
+     "mode": 0,
+     "path": "work/.claude/skills/locked/SKILL.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/sealed/inner/SKILL.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/elsewhere/linked/SKILL.md",
+     "text": "linked"
+    },
+    {
+     "mode": 420,
+     "path": "outside/skill/SKILL.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "skills_tree",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "work/.claude/skills/dirlink",
+     "target": "<ROOT>/work/elsewhere/linked"
+    },
+    {
+     "path": "work/.claude/skills/filelink/SKILL.md",
+     "target": "<ROOT>/work/elsewhere/linked/SKILL.md"
+    },
+    {
+     "path": "work/.claude/skills/outlink/SKILL.md",
+     "target": "<ROOT>/outside/skill/SKILL.md"
+    },
+    {
+     "path": "work/.claude/skills/dangle/SKILL.md",
+     "target": "<ROOT>/nowhere"
+    }
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "outside/s/SKILL.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "skills_dir_link_outside",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "work/.claude/skills",
+     "target": "<ROOT>/outside/s"
+    }
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:agent:x",
+     "artifact_type": "agent",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/agents/x.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "x",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:s",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/s/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "real-work/.claude/agents/x.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "real-work/.claude/skills/s/SKILL.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.claude/agents"
+   ],
+   "home": "home",
+   "name": "workspace_is_link",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "work",
+     "target": "<ROOT>/real-work"
+    }
+   ],
+   "workspace": "work"
+  }
+ ],
+ "schema": "guard-claude-code-vectors.v1"
+}

@@ -1,0 +1,57 @@
+[
+  {
+    "label": "empty servers object",
+    "settings": "{\"mcpServers\": {}}",
+    "expected": "{\"key\":\"mcpServers\",\"managed\":[],\"remote\":[]}"
+  },
+  {
+    "label": "no servers key",
+    "settings": "{\"other\": 1}",
+    "expected": "{\"key\":\"mcpServers\",\"managed\":[],\"remote\":[]}"
+  },
+  {
+    "label": "mcp key used when mcpServers is not an object",
+    "settings": "{\"mcpServers\": [1], \"mcp\": {\"a\": {\"command\": \"node\", \"args\": [\"s.js\"]}}}",
+    "expected": "{\"key\":\"mcp\",\"managed\":[{\"name\":\"a\",\"command\":\"node\",\"args\":[\"s.js\"],\"transport\":\"stdio\",\"env\":{}}],\"remote\":[]}"
+  },
+  {
+    "label": "mcpServers wins over mcp",
+    "settings": "{\"mcp\": {\"b\": {\"command\": \"b\"}}, \"mcpServers\": {\"a\": {\"command\": \"a\"}}}",
+    "expected": "{\"key\":\"mcpServers\",\"managed\":[{\"name\":\"a\",\"command\":\"a\",\"args\":[],\"transport\":\"stdio\",\"env\":{}}],\"remote\":[]}"
+  },
+  {
+    "label": "local transports and their spellings",
+    "settings": "{\"mcpServers\": {\"plain\": {\"command\": \"node\", \"args\": [\"a\", 1, null, \"b\"], \"env\": {\"K\": \"v\"}}, \"upper\": {\"command\": \"uvx\", \"type\": \"  STDIO \"}, \"local\": {\"command\": \"x\", \"transport\": \"Local\"}, \"empty type\": {\"command\": \"x\", \"type\": \"\", \"transport\": \"stdio\"}, \"blank type\": {\"command\": \"x\", \"type\": \"   \"}, \"number type\": {\"command\": \"x\", \"type\": 1}}}",
+    "expected": "{\"key\":\"mcpServers\",\"managed\":[{\"name\":\"plain\",\"command\":\"node\",\"args\":[\"a\",\"b\"],\"transport\":\"stdio\",\"env\":{\"K\":\"v\"}},{\"name\":\"upper\",\"command\":\"uvx\",\"args\":[],\"transport\":\"stdio\",\"env\":{}},{\"name\":\"local\",\"command\":\"x\",\"args\":[],\"transport\":\"local\",\"env\":{}},{\"name\":\"empty type\",\"command\":\"x\",\"args\":[],\"transport\":\"stdio\",\"env\":{}},{\"name\":\"blank type\",\"command\":\"x\",\"args\":[],\"transport\":\"stdio\",\"env\":{}},{\"name\":\"number type\",\"command\":\"x\",\"args\":[],\"transport\":\"stdio\",\"env\":{}}],\"remote\":[]}"
+  },
+  {
+    "label": "remote transports",
+    "settings": "{\"mcpServers\": {\"sse\": {\"command\": \"x\", \"type\": \"sse\"}, \"url\": {\"url\": \"https://example.test/mcp\"}, \"endpoint\": {\"endpoint\": \" https://example.test \"}, \"blank url\": {\"command\": \"x\", \"url\": \"  \"}, \"falsy url then endpoint\": {\"command\": \"x\", \"url\": \"\", \"endpoint\": \"https://e.test\"}, \"number type with url\": {\"type\": 1, \"url\": \"https://e.test\"}, \"http no command\": {\"type\": \"streamableHttp\"}}}",
+    "expected": "{\"key\":\"mcpServers\",\"managed\":[{\"name\":\"blank url\",\"command\":\"x\",\"args\":[],\"transport\":\"stdio\",\"env\":{}}],\"remote\":[\"sse\",\"url\",\"endpoint\",\"falsy url then endpoint\",\"number type with url\",\"http no command\"]}"
+  },
+  {
+    "label": "skipped local servers",
+    "settings": "{\"mcpServers\": {\"no command\": {\"args\": [\"x\"]}, \"blank command\": {\"command\": \" \\t\"}, \"number command\": {\"command\": 3}, \"disabled\": {\"command\": \"x\", \"disabled\": true}, \"disabled one\": {\"command\": \"x\", \"disabled\": 1}, \"disabled string\": {\"command\": \"x\", \"disabled\": \"true\"}, \"not an object\": \"node\", \"list\": [\"node\"]}}",
+    "expected": "{\"key\":\"mcpServers\",\"managed\":[{\"name\":\"disabled one\",\"command\":\"x\",\"args\":[],\"transport\":\"stdio\",\"env\":{}},{\"name\":\"disabled string\",\"command\":\"x\",\"args\":[],\"transport\":\"stdio\",\"env\":{}}],\"remote\":[]}"
+  },
+  {
+    "label": "guard proxies are skipped",
+    "settings": "{\"mcpServers\": {\"launcher\": {\"command\": \"/opt/bin/hol-guard\", \"args\": [\"cline-mcp-proxy\", \"--x\"]}, \"guard verb\": {\"command\": \"HOL-GUARD.EXE\", \"args\": [\"guard\", \"codex-mcp-proxy\"]}, \"module\": {\"command\": \"python3\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"cline-mcp-proxy\", \"--server\", \"x\"]}, \"launcher module\": {\"command\": \"current-hol-guard\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"cline-mcp-proxy\", \"--server\", \"x\"]}, \"relay\": {\"command\": \"hol-guard\", \"args\": [\"mcp-relay\", \"/usr/bin/python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"cline-mcp-proxy\", \"--server\", \"x\"]}, \"relay wrong\": {\"command\": \"hol-guard\", \"args\": [\"mcp-relay\", \"/usr/bin/python3\", \"cline-mcp-proxy\"]}, \"launcher other\": {\"command\": \"hol-guard\", \"args\": [\"scan\"]}, \"module without guard\": {\"command\": \"python3\", \"args\": [\"codex_plugin_scanner.cli\", \"mcp-proxy\"]}, \"scattered\": {\"command\": \"python3\", \"args\": [\"guard\", \"x\", \"mcp-proxy\", \"codex_plugin_scanner.cli\"]}}}",
+    "expected": "{\"key\":\"mcpServers\",\"managed\":[{\"name\":\"relay wrong\",\"command\":\"hol-guard\",\"args\":[\"mcp-relay\",\"/usr/bin/python3\",\"cline-mcp-proxy\"],\"transport\":\"stdio\",\"env\":{}},{\"name\":\"launcher other\",\"command\":\"hol-guard\",\"args\":[\"scan\"],\"transport\":\"stdio\",\"env\":{}},{\"name\":\"module without guard\",\"command\":\"python3\",\"args\":[\"codex_plugin_scanner.cli\",\"mcp-proxy\"],\"transport\":\"stdio\",\"env\":{}}],\"remote\":[]}"
+  },
+  {
+    "label": "env shapes",
+    "settings": "{\"mcpServers\": {\"env wins\": {\"command\": \"x\", \"env\": {\"A\": \"1\"}, \"environment\": {\"B\": \"2\"}}, \"null env hides environment\": {\"command\": \"x\", \"env\": null, \"environment\": {\"B\": \"2\"}}, \"environment fallback\": {\"command\": \"x\", \"environment\": {\"B\": \"2\"}}, \"stripped keys collide\": {\"command\": \"x\", \"env\": {\" K\": \"1\", \"M\": \"m\", \"K \": \"2\", \"\": \"e\", \"  \": \"s\", \"N\": 3, \"O\": null}}, \"env list\": {\"command\": \"x\", \"env\": [\"A\"]}}}",
+    "expected": "{\"key\":\"mcpServers\",\"managed\":[{\"name\":\"env wins\",\"command\":\"x\",\"args\":[],\"transport\":\"stdio\",\"env\":{\"A\":\"1\"}},{\"name\":\"null env hides environment\",\"command\":\"x\",\"args\":[],\"transport\":\"stdio\",\"env\":{}},{\"name\":\"environment fallback\",\"command\":\"x\",\"args\":[],\"transport\":\"stdio\",\"env\":{\"B\":\"2\"}},{\"name\":\"stripped keys collide\",\"command\":\"x\",\"args\":[],\"transport\":\"stdio\",\"env\":{\"K\":\"2\",\"M\":\"m\"}},{\"name\":\"env list\",\"command\":\"x\",\"args\":[],\"transport\":\"stdio\",\"env\":{}}],\"remote\":[]}"
+  },
+  {
+    "label": "unicode and odd values",
+    "settings": "{\"note\": NaN, \"mcpServers\": {\"caf\\u00e9 \\u2603\": {\"command\": \"n\\u00f6de\", \"args\": [\"\\u00e9\"], \"env\": {\"\\u00c5\": \"\\u00f8\"}}, \"big\": {\"command\": \"x\", \"args\": [\"1000000000000000000000000000000\"], \"extra\": 1000000000000000000000000000000, \"f\": 1.5}}}",
+    "expected": "{\"key\":\"mcpServers\",\"managed\":[{\"name\":\"café ☃\",\"command\":\"nöde\",\"args\":[\"é\"],\"transport\":\"stdio\",\"env\":{\"Å\":\"ø\"}},{\"name\":\"big\",\"command\":\"x\",\"args\":[\"1000000000000000000000000000000\"],\"transport\":\"stdio\",\"env\":{}}],\"remote\":[]}"
+  },
+  {
+    "label": "duplicate names keep the last value",
+    "settings": "{\"mcpServers\": {\"a\": {\"command\": \"one\"}, \"b\": {\"command\": \"b\"}, \"a\": {\"command\": \"two\"}}}",
+    "expected": "{\"key\":\"mcpServers\",\"managed\":[{\"name\":\"a\",\"command\":\"two\",\"args\":[],\"transport\":\"stdio\",\"env\":{}},{\"name\":\"b\",\"command\":\"b\",\"args\":[],\"transport\":\"stdio\",\"env\":{}}],\"remote\":[]}"
+  }
+]

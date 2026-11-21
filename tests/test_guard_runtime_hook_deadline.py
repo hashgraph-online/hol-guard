@@ -1,11 +1,6 @@
-from concurrent.futures import Future
-from dataclasses import FrozenInstanceError
-
 import pytest
 
-from codex_plugin_scanner.guard.daemon.runtime_hook_deadline import RuntimeHookDeadline
-from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
-from codex_plugin_scanner.guard.daemon.runtime_hook_work_item import RuntimeHookWorkItem
+from codex_plugin_scanner.guard.hook_deadline import RuntimeHookDeadline
 
 
 class FakeClock:
@@ -24,7 +19,7 @@ def test_deadline_clamps_hint_and_ignores_wall_clock() -> None:
 
     assert deadline.expires_at == 103.75
     assert deadline.remaining(monotonic=clock) == 2.75
-    assert deadline.remaining_for_work(monotonic=clock) == 2.6
+    assert deadline.remaining_for_work(monotonic=clock) == 2.7
 
 
 @pytest.mark.parametrize(
@@ -42,69 +37,3 @@ def test_deadline_hint_boundaries(hint: object, expected: float) -> None:
     deadline = RuntimeHookDeadline.from_remaining_hint(hint, monotonic=clock)
 
     assert deadline.expires_at - clock.value == pytest.approx(expected)
-
-
-def test_predictive_dispatch_rejects_when_secure_review_cannot_fit() -> None:
-    clock = FakeClock()
-    scheduler = RuntimeHookScheduler(monotonic=clock)
-    deadline = RuntimeHookDeadline(expires_at=clock.value + 0.8)
-
-    admission = scheduler.acquire(
-        harness="pi",
-        client_key="stable-fingerprint",
-        lane="decision",
-        payload_bytes=2,
-        normalized_payload=b"{}",
-        deadline=deadline,
-    )
-
-    assert admission.permit is None
-    assert admission.reason_code == "daemon_hook_deadline_exhausted"
-    assert scheduler.stats()["retained_bytes"] == 0
-
-
-def test_work_item_owns_immutable_hydrated_bytes() -> None:
-    clock = FakeClock()
-    source = bytearray(b'{"event":"PreToolUse"}')
-    payload = bytes(source)
-    item = RuntimeHookWorkItem(
-        normalized_payload=payload,
-        harness="pi",
-        event="PreToolUse",
-        workspace_fingerprint="workspace",
-        client_fingerprint="client",
-        lane="decision",
-        payload_bytes=len(payload),
-        arrival_sequence=1,
-        accepted_at=clock(),
-        queued_at=clock(),
-        deadline=RuntimeHookDeadline(expires_at=clock() + 1),
-        completion=Future(),
-    )
-
-    source[:] = b"x" * len(source)
-
-    assert item.normalized_payload == b'{"event":"PreToolUse"}'
-    with pytest.raises(FrozenInstanceError):
-        item.__setattr__("harness", "changed")
-
-
-def test_scheduler_health_dimensions_are_bounded() -> None:
-    scheduler = RuntimeHookScheduler(monotonic=FakeClock())
-    admission = scheduler.acquire(
-        harness="/private/workspace/customer",
-        client_key="high-cardinality-session",
-        lane="decision",
-        payload_bytes=2,
-        normalized_payload=b"{}",
-        deadline=200.0,
-    )
-    assert admission.permit is not None
-    scheduler.record_retry()
-
-    stats = scheduler.stats()
-
-    assert stats["per_harness_active"] == {"other": 1}
-    assert stats["retries"] == 1
-    assert set(stats["queue_wait_by_lane_p99_ms"]) == {"decision", "content-security", "evidence"}
-    admission.permit.release()

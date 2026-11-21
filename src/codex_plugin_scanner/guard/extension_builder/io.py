@@ -32,23 +32,58 @@ def sha256(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
-def checked_path(path: Path) -> Path:
-    """Reject symlinks in every existing component without resolving through them."""
+def checked_path(path: Path, *, anchor: Path | None = None) -> Path:
+    """Reject symlinks in every existing component without resolving through them.
+
+    ``anchor`` names a root the installer or the operating system chose, not the
+    caller: the frozen bundle's extraction directory, the directory the package
+    was installed into, or the directory above the Guard home. Platforms put
+    those roots behind symlinks we do not control -- macOS resolves the
+    per-user ``TMPDIR`` through ``/var``, several Linux distributions symlink
+    ``/tmp``, Fedora Silverblue reaches ``/home`` through a symlink to
+    ``var/home``, and a Windows profile can sit behind a directory symlink
+    (``mklink /D``) -- so refusing to read through the prefix refuses to read
+    the program's own data files. A Windows junction (``mklink /J``) is not one
+    of these cases: ``Path.is_symlink`` is measured False for a junction, so an
+    ancestor walk passes through it unchanged.
+
+    The anchor is resolved exactly once and every component strictly below it
+    is still rejected when it is a symlink, which is the part an attacker who
+    can write into the tree would have to plant.
+    """
+
     absolute = path.absolute()
     if ".." in absolute.parts:
         raise BuilderError("unsafe_path", "Paths must not contain parent traversal.")
+    if anchor is None:
+        resolved = absolute
+        components: tuple[Path, ...] = (*reversed(absolute.parents), absolute)
+    else:
+        base = anchor.absolute()
+        if ".." in base.parts:
+            raise BuilderError("unsafe_path", "Paths must not contain parent traversal.")
+        try:
+            relative = absolute.relative_to(base)
+        except ValueError:
+            raise BuilderError("unsafe_path", "Paths must stay inside their installation root.") from None
+        try:
+            root = Path(os.path.realpath(base))
+        except OSError as exc:
+            raise BuilderError("unsafe_path", "Cannot inspect an authoring path safely.") from exc
+        resolved = root.joinpath(relative)
+        components = tuple(root.joinpath(*relative.parts[:count]) for count in range(1, len(relative.parts) + 1))
     try:
-        for item in (*reversed(absolute.parents), absolute):
+        for item in components:
             if item.is_symlink():
                 raise BuilderError("unsafe_path", "Symlink paths are not supported for authoring input or output.")
     except OSError as exc:
         raise BuilderError("unsafe_path", "Cannot inspect an authoring path safely.") from exc
-    return absolute
+    return resolved
 
 
-def read_bytes(path: Path, *, limit: int = MAX_INPUT_BYTES) -> bytes:
+def read_bytes(path: Path, *, limit: int = MAX_INPUT_BYTES, anchor: Path | None = None) -> bytes:
     """Read a bounded regular file; O_NONBLOCK prevents waiting on a substituted FIFO."""
-    path = checked_path(path)
+    path = checked_path(path, anchor=anchor)
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
     try:
         fd = os.open(path, flags)

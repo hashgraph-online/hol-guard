@@ -1,0 +1,1 @@
+hol-guard run --command 'git push --force'

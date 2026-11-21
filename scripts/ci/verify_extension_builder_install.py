@@ -17,7 +17,9 @@ from pathlib import Path
 def _environment(home: Path) -> dict[str, str]:
     environment = os.environ.copy()
     for name in tuple(environment):
-        if name in {"PYTHONPATH", "PYTHONHOME"} or name.startswith(("COV_CORE_", "COVERAGE_")):
+        # Guard variables include development compiler and runtime overrides,
+        # which would bypass the packaged identity this check exists to prove.
+        if name in {"PYTHONPATH", "PYTHONHOME"} or name.startswith(("COV_CORE_", "COVERAGE_", "HOL_GUARD_")):
             environment.pop(name)
     home.mkdir()
     environment.update({"HOME": str(home), "USERPROFILE": str(home), "PYTHONDONTWRITEBYTECODE": "1"})
@@ -45,8 +47,6 @@ def _source_copy(source: Path, target: Path) -> None:
     for name in (
         "pyproject.toml",
         "scripts/release/stage_guard_cloud_review_artifacts.py",
-        "src/codex_plugin_scanner/guard/runtime/command_builtin_extension_catalog.py",
-        "src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py",
     ):
         destination = target / name
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -217,6 +217,19 @@ def verify(python: Path, wheel: Path, source: Path) -> dict[str, object]:
         environment_root = python.parent.parent.resolve()
         if not package.is_relative_to(environment_root) or package.is_relative_to(source):
             raise AssertionError("Authoring was imported from source instead of the isolated installed wheel")
+        listing_schema = _run(
+            [
+                str(python),
+                "-I",
+                "-c",
+                "import json; from codex_plugin_scanner.guard.extension_builder.listing import listing_schema; "
+                "print(json.dumps({'schemaVersion': listing_schema()['properties']['schemaVersion']['const']}))",
+            ],
+            root,
+            environment,
+        )
+        if listing_schema != {"schemaVersion": "guard.extension-listing.v2"}:
+            raise AssertionError("Installed wheel did not include the current extension listing schema")
         results = [_example(binary, source, root, environment, kind) for kind in ("cli", "mcp")]
         maximum = _maximum_inventory(binary, root, environment)
         if list((root / "home").glob(".hol-guard*")):

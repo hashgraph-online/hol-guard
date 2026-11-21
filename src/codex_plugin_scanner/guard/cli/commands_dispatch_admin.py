@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -27,13 +28,20 @@ if TYPE_CHECKING:
     )
 
 
-from ..daemon.bounded_http import daemon_admission_snapshot
-from ..native_runtime_admission import native_resident_admission_snapshot
+from ..approval_gate_nudge import approval_gate_posture
+from ..command_probes import without_command_probes
+from ..harness_version_api import compatibility_or_unknown
+from ..native_aibom_summaries import NativeAibomSummariesError
+from ..native_command_state import CommandStateRefusedError, CommandStateUnavailableError
+from ..native_daemon_peer import load_guard_daemon_endpoint_url
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
+from ..runtime.connector_setup_items import connector_setup_status
 from ..shims import package_shim_dashboard_status
 from ._commands_shared import *
 from .commands_dispatch_trust import build_trust_doctor_payload
 from .commands_parser_helpers import *
+from .doctor_native_runtime import native_runtime_section
+from .doctor_readiness import doctor_runtime_readiness
 
 
 def _run_guard_exceptions_command(
@@ -153,6 +161,12 @@ def _run_guard_approvals_command(
 ) -> int:
     store = _require_guard_store(store)
     approvals_command = getattr(args, "approvals_command", None)
+    if approvals_command == "wait":
+        from .approval_wait import run_approval_wait_command
+
+        payload, exit_code = run_approval_wait_command(args, store=store)
+        _emit("approvals", payload, getattr(args, "json", False))
+        return exit_code
     if approvals_command == "open":
         payload, exit_code = run_approval_open_command(args, store=store)
         _emit("approvals", payload, getattr(args, "json", False))
@@ -209,7 +223,11 @@ def _run_guard_policy_action_command(
         approval_gate_grant = None
         if _policy_write_requires_approval_gate(store, action=args.policy_action, scope=args.scope):
             gate_input = (
-                prompt_for_approval_gate(store.guard_home, use_cooldown=True)
+                prompt_for_approval_gate(
+                    store.guard_home,
+                    use_cooldown=True,
+                    strict=str(args.scope) == "global",
+                )
                 if _policy_write_needs_approval_gate(store, action=args.policy_action, scope=args.scope)
                 else None
             )
@@ -271,12 +289,40 @@ def _run_guard_doctor_command(
         guidance = macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None
         _emit(
             "doctor",
-            {"desktop_notifications": desktop_notification_setup_payload(result, guidance=guidance)},
+            {
+                "desktop_notifications": desktop_notification_setup_payload(result, guidance=guidance),
+                "approval_gate": approval_gate_posture(guard_home, passive=True),
+            },
             getattr(args, "json", False),
         )
         return 0
+    if getattr(args, "native", False):
+        # Native state alone, without the rest of doctor's scan. Nothing is
+        # started or repaired here, so support can ask for it at any time.
+        import sys
+
+        from .render import emit_guard_payload
+        from .runtime_posture_command import render_runtime_status
+
+        with without_command_probes():
+            section = native_runtime_section(guard_home)
+        if getattr(args, "json", False):
+            # Both branches honour the caller's stream; a caller that captures
+            # the text report must not have the JSON one land on stdout instead.
+            emit_guard_payload(
+                "doctor",
+                {"generated_at": _now(), "native_runtime": section},
+                True,
+                output_stream=output_stream,
+            )
+        else:
+            # The doctor renderer describes a harness; this payload describes a
+            # runtime, so it is rendered by the command that owns that report.
+            stream = output_stream if output_stream is not None else sys.stdout
+            stream.write(render_runtime_status(section))
+        return 0
     if getattr(args, "harnesses", False):
-        from ..adapters.contracts import HARNESS_CONTRACTS
+        from ..setup_contracts import HARNESS_CONTRACTS
 
         contracts_payload = [
             {
@@ -292,20 +338,38 @@ def _run_guard_doctor_command(
             }
             for c in HARNESS_CONTRACTS
         ]
-        _emit("doctor", {"harnesses": contracts_payload}, getattr(args, "json", False))
+        _emit(
+            "doctor",
+            {"harnesses": contracts_payload, "approval_gate": approval_gate_posture(guard_home, passive=True)},
+            getattr(args, "json", False),
+        )
         return 0
     if args.harness:
-        adapter = get_adapter(args.harness)
-        payload: dict[str, object] = adapter.diagnostics(context)
+        harness = resolve_harness(args.harness)
+        payload: dict[str, object] = harness_diagnostics(harness, context)
+        payload["runtime_readiness"] = doctor_runtime_readiness(payload)
+        # The native runtime decides the per-event proof states; a failure
+        # reports version_unknown, never a proven state.
+        payload["version_compatibility"] = compatibility_or_unknown(harness, context)
         payload["runtime_detector_registry"] = _runtime_detector_registry_payload(config)
         payload["connect_health"] = _guard_doctor_connect_health_payload(store)
         if args.harness == "codex":
             payload["codex_resume"] = inspect_codex_resume_capabilities(store)
     else:
+        detected_harnesses = []
+        with without_command_probes():
+            for detection in detect_all(context):
+                item = detection.to_dict()
+                diagnostics = harness_diagnostics(detection.harness, context)
+                item["setup_status"] = diagnostics.get("setup_status")
+                item["warnings"] = diagnostics.get("warnings", [])
+                item["runtime_readiness"] = doctor_runtime_readiness(diagnostics)
+                detected_harnesses.append(item)
         payload = {
             "tables": store.list_table_names(),
-            "adapters": [detection.to_dict() for detection in detect_all(context)],
+            "adapters": detected_harnesses,
             "runtime_detector_registry": _runtime_detector_registry_payload(config),
+            "connector_setup": connector_setup_status(store, load_guard_daemon_endpoint_url(guard_home)),
         }
     if getattr(args, "perf", False):
         payload["detector_perf"] = _runtime_detector_perf_payload(config)
@@ -348,18 +412,66 @@ def _run_guard_doctor_command(
     payload["package_shims"] = package_shims_payload
     command_queue_payload = command_queue_status(store)
     if getattr(args, "repair", False):
-        command_queue_payload["repair"] = repair_command_queue_state(store)
+        try:
+            command_queue_payload["repair"] = repair_command_queue_state(store)
+        except (CommandStateRefusedError, CommandStateUnavailableError) as error:
+            code = error.code if isinstance(error, CommandStateRefusedError) else error.reason
+            command_queue_payload["repair"] = {"repaired": [], "repaired_count": 0, "error": code}
     payload["command_queue"] = command_queue_payload
-    payload["native_runtime"] = {
-        "admission": native_resident_admission_snapshot(),
-        "daemon_http": daemon_admission_snapshot(),
-    }
+    if getattr(args, "repair", False):
+        # `doctor --repair` and `hol-guard repair` share one engine. Shims and
+        # the queue were repaired above with doctor's own payload shape.
+        from ..repair_engine import run_repair
+
+        payload["guard_repair"] = run_repair(
+            guard_home=guard_home,
+            context=context,
+            store=store,
+            skip_steps=frozenset({"package_shims", "command_queue"}),
+            harness=args.harness or None,
+        )
+    native_runtime_repair: dict[str, object] | None = None
+    if getattr(args, "repair", False):
+        repair = repair_native_runtime_if_missing(
+            context=context,
+            store=store,
+            workspace=str(workspace) if workspace else None,
+            now=_now(),
+            guard_home=guard_home,
+        )
+        native_runtime_repair = repair[0] if repair is not None else None
+    with nullcontext() if args.harness else without_command_probes():
+        payload["native_runtime"] = native_runtime_section(guard_home, repair=native_runtime_repair)
     payload["trust"] = build_trust_doctor_payload(store)
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
-    payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
+    from ..native_inventory_url_redaction import NativeInventoryUrlRedactionError
+
+    with nullcontext() if args.harness else without_command_probes():
+        try:
+            payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
+        except (NativeAibomSummariesError, NativeInventoryUrlRedactionError) as error:
+            # The rest of the report still diagnoses why the resident is missing.
+            payload["aibom"] = {"available": False, "error": str(error)}
+    from ..harness_posture import harness_posture_summary
+    from ..protection_coverage import protection_is_in_effect
     from ..protection_posture import protection_status_fields
 
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
+    payload["protection_basis"] = "configured_posture_and_hook_registration"
+    payload["protection_health_note"] = (
+        "Live protection health is a separate runtime check. Run `hol-guard approvals list --json` "
+        "to inspect protection_health; trust it for current enforcement health."
+    )
+    # A doctor run that reports a broken or partial registration must not also
+    # report the posture as though something were applying it. Judge the one
+    # harness this run inspected, or every harness the global run detected.
+    adapter_rows = payload.get("adapters")
+    payload["protection_in_effect"] = protection_is_in_effect(
+        adapter_rows if isinstance(adapter_rows, list) else [payload]
+    )
+    payload.update(harness_posture_summary(config))
+    # Doctor stays passive: read the gate state file, never the native resident.
+    payload["approval_gate"] = approval_gate_posture(guard_home, passive=True)
     _emit("doctor", payload, getattr(args, "json", False))
     return 0
 

@@ -3,25 +3,29 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
-from codex_plugin_scanner.guard.cli import update_commands
+from codex_plugin_scanner.guard.cli import commands_support_workspace, update_commands
 from codex_plugin_scanner.guard.cli.commands import (
     _resolve_default_install_workspace,
     _resolve_guard_workspace,
 )
 from codex_plugin_scanner.guard.config import resolve_guard_home
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
+from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cursor_bridge_support import keyed_guard_home, live_cursor_daemon, run_cursor_hook
+from tests.pi_extension_support import previous_managed_extension_source
+
+PREVIOUS_OMP_BASE_SOURCE_SHA256 = "778b4830857695f9c9d1c5682f77e71c2d86baf3e0b2fb814ae7589f9f600eb2"
 
 
 def _install_args(*, harness: str = "cursor", workspace: str | None = None) -> argparse.Namespace:
@@ -31,6 +35,78 @@ def _install_args(*, harness: str = "cursor", workspace: str | None = None) -> a
         harness=harness,
         all=False,
     )
+
+
+def test_workspace_detection_uses_selected_home_and_explicit_marker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cwd = tmp_path / "project"
+    cwd.mkdir()
+    selected_home = tmp_path / "selected-home"
+    selected_home.mkdir()
+    guard_home = tmp_path / "guard-home"
+    seen: list[HarnessContext] = []
+
+    def detect(_harness: str, context: HarnessContext) -> HarnessDetection:
+        seen.append(context)
+        return HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=False,
+            config_paths=(str(cwd / ".codex" / "config.toml"),),
+            artifacts=(),
+        )
+
+    monkeypatch.setattr(commands_support_workspace, "harness_detect", detect)
+    monkeypatch.chdir(cwd)
+    monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
+
+    resolved = commands_support_workspace._resolve_default_install_workspace(
+        _install_args(harness="codex"),
+        guard_home=guard_home,
+        home_dir=selected_home,
+        home_override_explicit=True,
+    )
+
+    assert resolved == cwd.resolve()
+    assert seen and seen[0].home_dir == selected_home.resolve()
+    assert seen[0].home_override_explicit is True
+
+
+@pytest.mark.parametrize("home_name", ["default-home", "foreign-home"])
+def test_workspace_detection_rejects_config_paths_outside_current_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    home_name: str,
+) -> None:
+    cwd = tmp_path / "project"
+    cwd.mkdir()
+    candidate_home = tmp_path / home_name
+    candidate_home.mkdir()
+    guard_home = tmp_path / "guard-home"
+
+    def detect(_harness: str, context: HarnessContext) -> HarnessDetection:
+        return HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=False,
+            config_paths=(str(context.home_dir / ".codex" / "config.toml"),),
+            artifacts=(),
+        )
+
+    monkeypatch.setattr(commands_support_workspace, "harness_detect", detect)
+    monkeypatch.chdir(cwd)
+    monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
+
+    resolved = commands_support_workspace._resolve_default_install_workspace(
+        _install_args(harness="codex"),
+        guard_home=guard_home,
+        home_dir=candidate_home,
+        home_override_explicit=home_name == "foreign-home",
+    )
+
+    assert resolved is None
 
 
 def test_resolve_default_install_workspace_prefers_cwd_markers_over_git_root(
@@ -127,7 +203,39 @@ def test_install_omp_preserves_legacy_pi_record(
     assert store.get_managed_install("omp") is not None
 
 
-def test_update_migrates_verified_legacy_omp_extension_to_its_own_record(tmp_path: Path) -> None:
+def test_previous_omp_source_matches_merge_base_snapshot() -> None:
+    from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
+
+    guard_home = "/omp-snapshot/guard-home"
+    home_dir = "/omp-snapshot/home"
+    guard_args = ["hook", "--json", "--guard-home", guard_home, "--harness", "pi", "--home", home_dir]
+    source = native_runner_authority(
+        "pi_extension_render",
+        {
+            "variant": "previous",
+            "harness": "pi",
+            "display_name": "Pi",
+            "guard_args": guard_args,
+            "guard_home": guard_home,
+            "home_dir": home_dir,
+            "home_dir_is_default": False,
+            "config_path": "/omp-snapshot/home/.omp/agent/settings.json",
+            "compatibility_version": 2,
+            "cli_command": "/snapshot/bin/hol-guard",
+            "cli_args": guard_args,
+            "cli_accepts_json_args": False,
+            "recovery_command": "/snapshot/bin/hol-guard",
+            "recovery_args": ["daemon", "recover", "--guard-home", guard_home, "--home", home_dir],
+            "recovery_accepts_failure_kind": True,
+            "taskkill_path": None,
+        },
+    )["source"]
+
+    assert hashlib.sha256(source.encode()).hexdigest() == PREVIOUS_OMP_BASE_SOURCE_SHA256
+    assert "chars += Array.from(text).length" in source
+
+
+def test_update_does_not_migrate_modified_previous_omp_extension(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
@@ -137,19 +245,20 @@ def test_update_migrates_verified_legacy_omp_extension_to_its_own_record(tmp_pat
     omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
     omp_extension_path.parent.mkdir(parents=True)
     omp_extension_path.write_text(
-        managed_extension_source(
+        previous_managed_extension_source(
             guard_home=guard_home,
             home_dir=home_dir,
             settings_path=omp_settings_path,
             harness="pi",
-        ),
+        )
+        + "\n// user edit\n",
         encoding="utf-8",
     )
     omp_settings_path.parent.mkdir(parents=True, exist_ok=True)
     omp_settings_path.write_text(json.dumps({"extensions": [str(omp_extension_path)]}), encoding="utf-8")
     store.set_managed_install("pi", True, None, {"config_path": str(pi_extension_path)}, "2026-08-05T00:00:00Z")
 
-    repaired, notes = update_commands._repair_supported_harnesses_in_process(
+    update_commands._repair_supported_harnesses_in_process(
         context=context,
         store=store,
         workspace=None,
@@ -157,13 +266,8 @@ def test_update_migrates_verified_legacy_omp_extension_to_its_own_record(tmp_pat
         dry_run=False,
     )
 
-    assert notes == []
-    assert {item["harness"] for item in repaired} == {"pi", "omp"}
-    omp_install = store.get_managed_install("omp")
-    assert omp_install is not None and omp_install["active"] is True
-    omp_source = omp_extension_path.read_text(encoding="utf-8")
-    assert '"--harness", "omp"' in omp_source
-    assert "Oh My Pi hook failed before completing review" in omp_source
+    assert store.get_managed_install("omp") is None
+    assert omp_extension_path.read_text(encoding="utf-8").endswith("\n// user edit\n")
 
 
 def test_update_does_not_migrate_unverified_omp_extension(tmp_path: Path) -> None:
@@ -204,6 +308,10 @@ def test_launcher_drops_relative_pythonpath_when_current_directory_is_unavailabl
 
     monkeypatch.setattr(Path, "cwd", staticmethod(unavailable_cwd))
 
+    monkeypatch.delenv("HOL_GUARD_NATIVE", raising=False)
+    monkeypatch.delenv("HOL_GUARD_NATIVE_BINARY", raising=False)
+    monkeypatch.delenv("HOL_GUARD_NATIVE_DIAGNOSTIC", raising=False)
+    monkeypatch.delenv("HOL_GUARD_TEST_MODE", raising=False)
     assert merge_guard_launcher_env() == {"PYTHONPATH": str(absolute_entry)}
 
 
@@ -289,6 +397,7 @@ def test_resolve_default_install_workspace_ignores_cursor_dir_without_git(
 def test_install_cursor_hook_script_allows_benign_shell_command(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
 ) -> None:
     repo = tmp_path / "repo"
     home_dir = tmp_path / "home"
@@ -297,33 +406,40 @@ def test_install_cursor_hook_script_allows_benign_shell_command(
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     monkeypatch.chdir(repo)
     monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
+    # Guard state follows the home this install writes into. Without the
+    # override the hook, the daemon it asks and every other worker in the
+    # run share the account's own Guard home, where one worker's resident
+    # answers another worker's hook.
+    monkeypatch.setenv("HOME", str(home_dir))
 
-    rc = main(
-        [
-            "guard",
-            "install",
-            "cursor",
-            "--home",
-            str(home_dir),
-            "--json",
-        ]
-    )
-    assert rc == 0
-    hook_script = home_dir / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
-    assert hook_script.is_file()
-    payload = json.dumps({"hook_event_name": "beforeShellExecution", "command": "echo guard-e2e"})
-    env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
-    completed = subprocess.run(
-        [sys.executable, str(hook_script)],
-        input=payload,
-        text=True,
-        capture_output=True,
-        cwd=repo,
-        env=env,
-        timeout=60,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr
+    # Cursor runs the client behind the native bridge, which answers from a
+    # live resident when one is serving and from the daemon when none is. A
+    # resident serves only a Guard home whose policy verifier key exists, so
+    # key this one before anything can spawn a resident against it; without
+    # the key the resident comes up, refuses the hook, and the bridge fails
+    # closed on a command the harness really allows.
+    with keyed_guard_home(resolve_guard_home(str(home_dir))) as guard_home:
+        rc = main(
+            [
+                "guard",
+                "install",
+                "cursor",
+                "--home",
+                str(home_dir),
+                "--json",
+            ]
+        )
+        assert rc == 0
+        hook_script = home_dir / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
+        assert hook_script.is_file()
+        payload = {"hook_event_name": "beforeShellExecution", "command": "echo guard-e2e"}
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+        with live_cursor_daemon(guard_home):
+            completed = run_cursor_hook(native_hook_force, hook_script, payload, env=env, cwd=repo)
+    # A refused hook and a hook the bridge denied both exit 2, and only the
+    # answer on stdout tells them apart, so report both streams.
+    detail = f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
+    assert completed.returncode == 0, detail
     response = json.loads(completed.stdout)
-    assert response.get("permission") == "allow"
+    assert response.get("permission") == "allow", detail

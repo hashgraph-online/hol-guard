@@ -11,8 +11,9 @@ import type { GuardReceipt } from "../guard-types";
 import { guardActionDisposition } from "../guard-action";
 import { filterByDecision } from "./evidence-filters";
 import { groupByCategory, getCategoryInfo, type ReceiptCategory, CATEGORIES, detectCategory } from "./categories";
-import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionSubtitle } from "./plain-english";
+import { plainEnglishDescription, resolveActionTitle, resolveActionTitleTooltip, resolveActionType, resolveActionSubtitle } from "./plain-english";
 import { formatRelativeTime, harnessDisplayName } from "../approval-center-utils";
+import { StyledSelect } from "../styled-select";
 import { DecisionBadge } from "./decision-badge";
 import { Badge } from "../approval-center-primitives";
 
@@ -128,26 +129,26 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
             <HiMiniFunnel className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Filter:</span>
           </div>
-          <select
+          <StyledSelect
             value={decisionFilter}
             onChange={(e) => setDecisionFilter(e.target.value)}
-            className="min-h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+            className="min-h-8 rounded-lg py-1 text-xs font-medium"
           >
             <option value="all">All decisions</option>
             <option value="allow">Allowed</option>
             <option value="ask">Review</option>
             <option value="block">Stopped</option>
-          </select>
-          <select
+          </StyledSelect>
+          <StyledSelect
             value={harnessFilter}
             onChange={(e) => setHarnessFilter(e.target.value)}
-            className="min-h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+            className="min-h-8 rounded-lg py-1 text-xs font-medium"
           >
             <option value="">All apps</option>
             {harnesses.map((h) => (
               <option key={h} value={h}>{harnessDisplayName(h)}</option>
             ))}
-          </select>
+          </StyledSelect>
           {(decisionFilter !== "all" || harnessFilter) && (
             <button
               type="button"
@@ -181,6 +182,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
                     const category = detectCategory(receipt);
                     const catInfo = getCategoryInfo(category);
                     const actionTitle = resolveActionTitle(receipt);
+                    const actionTitleTooltip = resolveActionTitleTooltip(receipt);
                     const actionType = resolveActionType(receipt);
                     const actionSubtitle = resolveActionSubtitle(receipt);
                     return (
@@ -190,15 +192,27 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex flex-col min-w-0">
-                            <span className="text-sm font-medium text-brand-dark truncate block max-w-[260px]">{actionTitle}</span>
-                            <span className="text-[11px] text-slate-400 truncate block max-w-[260px]">{actionSubtitle ?? actionType}</span>
+                            <span
+                              className="text-sm font-medium text-brand-dark line-clamp-2 break-words block max-w-[70vw] sm:max-w-[420px] lg:max-w-[520px]"
+                              title={actionTitleTooltip}
+                            >
+                              <span aria-hidden="true">{actionTitle}</span>
+                              <span className="sr-only">{actionTitleTooltip}</span>
+                            </span>
+                            <span
+                              className="text-[11px] text-slate-400 truncate block max-w-[70vw] sm:max-w-[420px] lg:max-w-[520px]"
+                              title={actionSubtitle ?? actionType}
+                            >
+                              <span aria-hidden="true">{actionSubtitle ?? actionType}</span>
+                              <span className="sr-only">{actionSubtitle ?? actionType}</span>
+                            </span>
                           </div>
                         </td>
                         <td className="px-3 py-2.5 hidden md:table-cell">
                           <span className="text-xs text-slate-500">{harnessDisplayName(receipt.harness)}</span>
                         </td>
                         <td className="px-3 py-2.5">
-                          <DecisionBadge decision={receipt.policy_decision} />
+                          <DecisionBadge decision={receipt.policy_decision} userOverride={receipt.user_override} />
                         </td>
                         <td className="px-3 py-2.5 hidden lg:table-cell">
                           <span className="text-xs text-slate-400 whitespace-nowrap">{formatRelativeTime(receipt.timestamp)}</span>

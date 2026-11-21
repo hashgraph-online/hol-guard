@@ -20,7 +20,6 @@ uv run --no-sync pytest tests/test_privileged_workflow_policy.py tests/test_work
 | Workflow or job | Write access | Consumer |
 | --- | --- | --- |
 | `dependabot-uv-lock.yml` | `contents` | Commits the regenerated lockfile to the Dependabot branch. |
-| `finish-extension-authority-stability.yml` / `finish` | `contents` | Updates its dedicated repair branch; no other job inherits this grant. |
 | `publish.yml` tag reservation and reservation cleanup jobs | `contents` | Creates or deletes release reservation tags. |
 | `publish.yml` PyPI jobs | `id-token` | Authenticates the existing trusted-publisher uploads. |
 | `publish.yml` release jobs | `contents`, `attestations`, `id-token` | Publishes release assets and their provenance. |

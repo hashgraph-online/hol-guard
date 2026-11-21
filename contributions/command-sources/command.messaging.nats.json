@@ -1,0 +1,548 @@
+{
+  "extension": {
+    "action_classes": [
+      "NATS destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews NATS stream, consumer, key-value, and object-store removal operations.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.messaging.nats",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "NATS command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "NATS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies stream, consumer, key-value, and object-store removal operations.",
+        "example_command": "nats str rm ORDERS",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "NATS resource deletion",
+        "permission_id": "command.messaging.nats.permission.delete",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Report the selected context and inspect the resource before removal or purge."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://docs.nats.io/using-nats/nats-tools/nats_cli"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "NATS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies stream, consumer, key-value, and object-store removal operations.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "stream",
+                  "rm"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "stream",
+                  "purge"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "str",
+                  "rm"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "str",
+                  "purge"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "consumer",
+                  "rm"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "con",
+                  "rm"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "kv",
+                  "rm"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "kv",
+                  "nuke"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "object",
+                  "rm"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "object",
+                  "nuke"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "obj",
+                  "rm"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [],
+                "interleaved_options_with_values": [],
+                "options_with_values": [
+                  "--colors",
+                  "--context",
+                  "--creds",
+                  "--nkey",
+                  "--password",
+                  "--server",
+                  "--socks-proxy",
+                  "--timeout",
+                  "--tlsca",
+                  "--tlscert",
+                  "--tlskey",
+                  "--user",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "obj",
+                  "nuke"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.messaging.nats.permission.delete",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.messaging.nats.delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            "title": "NATS command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "nats",
+                  "nats.cmd",
+                  "nats.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--version"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            "title": "NATS version",
+            "variant_id": "version"
+          }
+        ],
+        "safer_alternatives": [
+          "Report the selected context and inspect the resource before removal or purge."
+        ],
+        "severity": "critical",
+        "title": "NATS resource deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect the active context and selected resource before removal."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

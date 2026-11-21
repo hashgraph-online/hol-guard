@@ -1,0 +1,78 @@
+{
+  "extension": {
+    "action_classes": [],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": "package-firewall",
+    "dependencies": [],
+    "description": "Routes operating-system package installation requests through Guard's package firewall.",
+    "ecosystem_ids": [
+      "system",
+      "homebrew"
+    ],
+    "executables": [
+      "apt",
+      "apt-get",
+      "yum",
+      "dnf",
+      "apk",
+      "pacman",
+      "zypper",
+      "brew"
+    ],
+    "extension_id": "command.package.system",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "System package protection",
+    "permissions": [
+      {
+        "action_classes": [],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Routes operating-system package installation requests through Guard's package firewall.",
+        "example_command": "brew install wget",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "System package protection",
+        "permission_id": "command.package.system.permission.package-protection",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Use the existing project manifest and lockfile instead of an unpinned package source.",
+          "Review package provenance and advisory evidence before installation or one-shot execution."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [
+      "Brewfile"
+    ],
+    "publisher": null,
+    "reference_urls": [
+      "https://docs.brew.sh/Manpage#install-options-formulacask-",
+      "https://manpages.debian.org/bookworm/apt/apt-get.8.en.html"
+    ],
+    "required": false,
+    "risk_classes": [
+      "supply_chain"
+    ],
+    "rules": [],
+    "safer_alternatives": [
+      "Use the existing project manifest and lockfile instead of an unpinned package source.",
+      "Review package provenance and advisory evidence before installation or one-shot execution."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

@@ -1006,6 +1006,7 @@ def test_stage_rejects_source_identity_change_during_copy(
         return types.SimpleNamespace(
             st_dev=metadata.st_dev,
             st_ino=metadata.st_ino,
+            st_nlink=metadata.st_nlink,
             st_size=metadata.st_size,
             st_mtime_ns=metadata.st_mtime_ns + 1,
             st_ctime_ns=metadata.st_ctime_ns,

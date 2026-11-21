@@ -1,0 +1,1617 @@
+{
+ "cases": [
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "nothing",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:pretooluse:0",
+     "artifact_type": "hook",
+     "command": "a.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "a.sh",
+      "event": "PreToolUse",
+      "matcher": "Bash",
+      "timeout": 30
+     },
+     "name": "PreToolUse:Bash",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:unknown:1",
+     "artifact_type": "hook",
+     "command": "b.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "b.sh",
+      "event": ""
+     },
+     "name": "hook",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:stop:4",
+     "artifact_type": "hook",
+     "command": "c.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "c.sh",
+      "event": "Stop",
+      "matcher": "",
+      "timeout": 1.5
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:x:5",
+     "artifact_type": "hook",
+     "command": "d.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "d.sh",
+      "event": "X",
+      "timeout": true
+     },
+     "name": "X",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:äy:6",
+     "artifact_type": "hook",
+     "command": "e.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "e.sh",
+      "event": "ÄY"
+     },
+     "name": "ÄY",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:unknown:7",
+     "artifact_type": "hook",
+     "command": "f.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "f.sh",
+      "event": "",
+      "matcher": "m",
+      "timeout": 0.0
+     },
+     "name": "hook:m",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:unknown:8",
+     "artifact_type": "hook",
+     "command": "g.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "g.sh",
+      "event": ""
+     },
+     "name": "hook",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:big:9",
+     "artifact_type": "hook",
+     "command": "h.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "h.sh",
+      "event": "Big",
+      "timeout": 9223372036854775807
+     },
+     "name": "Big",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:neg:10",
+     "artifact_type": "hook",
+     "command": "i.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "i.sh",
+      "event": "Neg",
+      "timeout": -0.0
+     },
+     "name": "Neg",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml",
+     "text": "hooks = [\n  { event = \"PreToolUse\", command = \"a.sh\", matcher = \"Bash\", timeout = 30 },\n  { event = 5, command = \"b.sh\" },\n  { event = \"Stop\", command = \"   \" },\n  { event = \"Stop\", command = 5 },\n  { event = \"Stop\", command = \"c.sh\", matcher = \"\", timeout = 1.5 },\n  { event = \"X\", command = \"d.sh\", matcher = 3, timeout = true },\n  { event = \"ÄY\", command = \"e.sh\", timeout = \"30\" },\n  { command = \"f.sh\", matcher = \"m\", timeout = 0.0 },\n  { event = \"\", command = \"g.sh\", timeout = 1979-05-27 },\n  { event = \"Big\", command = \"h.sh\", timeout = 9223372036854775807 },\n  { event = \"Neg\", command = \"i.sh\", timeout = -0.0 },\n  \"not-a-table\",\n  7,\n]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/config.toml"
+   ],
+   "home": "home",
+   "name": "no_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:pretooluse:0",
+     "artifact_type": "hook",
+     "command": "a.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "a.sh",
+      "event": "PreToolUse",
+      "matcher": "Bash",
+      "timeout": 30
+     },
+     "name": "PreToolUse:Bash",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:unknown:1",
+     "artifact_type": "hook",
+     "command": "b.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "b.sh",
+      "event": ""
+     },
+     "name": "hook",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:stop:4",
+     "artifact_type": "hook",
+     "command": "c.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "c.sh",
+      "event": "Stop",
+      "matcher": "",
+      "timeout": 1.5
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:x:5",
+     "artifact_type": "hook",
+     "command": "d.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "d.sh",
+      "event": "X",
+      "timeout": true
+     },
+     "name": "X",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:äy:6",
+     "artifact_type": "hook",
+     "command": "e.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "e.sh",
+      "event": "ÄY"
+     },
+     "name": "ÄY",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:unknown:7",
+     "artifact_type": "hook",
+     "command": "f.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "f.sh",
+      "event": "",
+      "matcher": "m",
+      "timeout": 0.0
+     },
+     "name": "hook:m",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:unknown:8",
+     "artifact_type": "hook",
+     "command": "g.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "g.sh",
+      "event": ""
+     },
+     "name": "hook",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:big:9",
+     "artifact_type": "hook",
+     "command": "h.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "h.sh",
+      "event": "Big",
+      "timeout": 9223372036854775807
+     },
+     "name": "Big",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:neg:10",
+     "artifact_type": "hook",
+     "command": "i.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "i.sh",
+      "event": "Neg",
+      "timeout": -0.0
+     },
+     "name": "Neg",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml",
+     "text": "hooks = [\n  { event = \"PreToolUse\", command = \"a.sh\", matcher = \"Bash\", timeout = 30 },\n  { event = 5, command = \"b.sh\" },\n  { event = \"Stop\", command = \"   \" },\n  { event = \"Stop\", command = 5 },\n  { event = \"Stop\", command = \"c.sh\", matcher = \"\", timeout = 1.5 },\n  { event = \"X\", command = \"d.sh\", matcher = 3, timeout = true },\n  { event = \"ÄY\", command = \"e.sh\", timeout = \"30\" },\n  { command = \"f.sh\", matcher = \"m\", timeout = 0.0 },\n  { event = \"\", command = \"g.sh\", timeout = 1979-05-27 },\n  { event = \"Big\", command = \"h.sh\", timeout = 9223372036854775807 },\n  { event = \"Neg\", command = \"i.sh\", timeout = -0.0 },\n  \"not-a-table\",\n  7,\n]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/config.toml"
+   ],
+   "home": "home",
+   "name": "config_hooks",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:project:hook:sessionstart:0",
+     "artifact_type": "hook",
+     "command": "s.sh",
+     "config_path": "<ROOT>/work/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "s.sh",
+      "event": "SessionStart",
+      "matcher": "startup"
+     },
+     "name": "SessionStart:startup",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:project:hook:posttooluse:1",
+     "artifact_type": "hook",
+     "command": " p.sh ",
+     "config_path": "<ROOT>/work/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": " p.sh ",
+      "event": "PostToolUse",
+      "timeout": 10
+     },
+     "name": "PostToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.kimi-code/config.toml",
+     "text": "[[hooks]]\nevent = \"SessionStart\"\ncommand = \"s.sh\"\nmatcher = \"startup\"\n\n[[hooks]]\nevent = \"PostToolUse\"\ncommand = \" p.sh \"\ntimeout = 10\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.kimi-code/config.toml"
+   ],
+   "home": "home",
+   "name": "config_hook_tables",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml",
+     "text": "[hooks]\nevent = \"x\"\ncommand = \"y\"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/config.toml"
+   ],
+   "home": "home",
+   "name": "hooks_not_list",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml",
+     "text": "# nothing\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/config.toml"
+   ],
+   "home": "home",
+   "name": "config_empty",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml",
+     "text": "[[\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/config.toml"
+   ],
+   "home": "home",
+   "name": "config_invalid",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "efbbbf686f6f6b73203d205b7b20636f6d6d616e64203d20227822207d5d0a",
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/config.toml"
+   ],
+   "home": "home",
+   "name": "config_bom",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "61203d2022ff220a",
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml"
+    }
+   ],
+   "home": "home",
+   "name": "config_invalid_utf8",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 0,
+     "path": "home/.kimi-code/config.toml",
+     "text": "hooks = [{ command = \"x\" }]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/config.toml"
+   ],
+   "home": "home",
+   "name": "config_unreadable",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [
+    "home/.kimi-code/config.toml"
+   ],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "config_is_directory",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:stop:0",
+     "artifact_type": "hook",
+     "command": "l.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "l.sh",
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "elsewhere/c.toml",
+     "text": "hooks = [{ event = \"Stop\", command = \"l.sh\" }]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/config.toml"
+   ],
+   "home": "home",
+   "name": "config_symlink",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.kimi-code/config.toml",
+     "target": "<ROOT>/elsewhere/c.toml"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "a",
+      "1",
+      "1.5",
+      "True",
+      "False",
+      "None",
+      "1e+20",
+      "1e-05",
+      "-0.0",
+      "12345678901234567890123"
+     ],
+     "artifact_id": "kimi:global:mcp:local",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:mcp:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:mcp:both",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "both",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://both"
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:mcp:args_not_list",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "args_not_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, 1.5, true, false, null, 1e+20, 1e-05, -0.0, 12345678901234567890123]}, \"remote\": {\"url\": \"https://mcp.example/x\", \"command\": 5}, \"both\": {\"command\": \"c\", \"url\": \"https://both\", \"transport\": \"sse\"}, \"args_not_list\": {\"command\": \"c\", \"args\": \"abc\"}, \"bare\": {}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_servers",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "nan",
+      "inf",
+      "-inf"
+     ],
+     "artifact_id": "kimi:project:mcp:n",
+     "artifact_type": "mcp_server",
+     "command": "x",
+     "config_path": "<ROOT>/work/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "n",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": {\"n\": {\"command\": \"x\", \"args\": [NaN, Infinity, -Infinity]}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_nan_args",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": [\"x\"]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_not_dict",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "[{\"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, 1.5, true, false, null, 1e+20, 1e-05, -0.0, 12345678901234567890123]}, \"remote\": {\"url\": \"https://mcp.example/x\", \"command\": 5}, \"both\": {\"command\": \"c\", \"url\": \"https://both\", \"transport\": \"sse\"}, \"args_not_list\": {\"command\": \"c\", \"args\": \"abc\"}, \"bare\": {}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}]"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_top_level_list",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "{}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_empty",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "{"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_invalid",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "7b226d637053657276657273223a207b22ff223a207b7d7d7d",
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json"
+    }
+   ],
+   "home": "home",
+   "name": "mcp_invalid_utf8",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "efbbbf7b226d637053657276657273223a207b2262223a207b22636f6d6d616e64223a202278227d7d7d",
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_bom",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:mcp:d",
+     "artifact_type": "mcp_server",
+     "command": "two",
+     "config_path": "<ROOT>/home/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "d",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:mcp:e",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "e",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "u"
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": {\"d\": {\"command\": \"one\"}, \"e\": {\"url\": \"u\"}, \"d\": {\"command\": \"two\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_duplicate_keys",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:mcp:café 😀",
+     "artifact_type": "mcp_server",
+     "command": "é",
+     "config_path": "<ROOT>/home/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "café 😀",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": {\"caf\\u00e9 \\ud83d\\ude00\": {\"command\": \"\\u00e9\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_escaped_text",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"\\ud800\"}}}"
+    }
+   ],
+   "home": "home",
+   "name": "mcp_lone_surrogate_server",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:mcp:ok",
+     "artifact_type": "mcp_server",
+     "command": "x",
+     "config_path": "<ROOT>/home/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "ok",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "{\"other\": \"\\ud800\", \"mcpServers\": {\"ok\": {\"command\": \"x\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_lone_surrogate_unused",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": {}, \"x\": [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "mcp_deep_nesting",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:stop:0",
+     "artifact_type": "hook",
+     "command": "g.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "g.sh",
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:project:hook:stop:0",
+     "artifact_type": "hook",
+     "command": "p.sh",
+     "config_path": "<ROOT>/work/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "p.sh",
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:mcp:g",
+     "artifact_type": "mcp_server",
+     "command": "g",
+     "config_path": "<ROOT>/home/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "g",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:project:mcp:p",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "p",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "http",
+     "url": "https://p"
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml",
+     "text": "hooks = [{ event = \"Stop\", command = \"g.sh\" }]\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.kimi-code/config.toml",
+     "text": "hooks = [{ event = \"Stop\", command = \"p.sh\" }]\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": {\"g\": {\"command\": \"g\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": {\"p\": {\"url\": \"https://p\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/config.toml",
+    "<ROOT>/work/.kimi-code/config.toml",
+    "<ROOT>/home/.kimi-code/mcp.json",
+    "<ROOT>/work/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "home_and_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/kh",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:stop:0",
+     "artifact_type": "hook",
+     "command": "env.sh",
+     "config_path": "<ROOT>/kh/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "env.sh",
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:mcp:e",
+     "artifact_type": "mcp_server",
+     "command": "e",
+     "config_path": "<ROOT>/kh/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "e",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "kh/.kimi-code/config.toml",
+     "text": "hooks = [{ event = \"Stop\", command = \"env.sh\" }]\n"
+    },
+    {
+     "mode": 420,
+     "path": "kh/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": {\"e\": {\"command\": \"e\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml",
+     "text": "hooks = [{ event = \"Stop\", command = \"ignored.sh\" }]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/kh/.kimi-code/config.toml",
+    "<ROOT>/kh/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "kimi_home_env",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/real",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:stop:0",
+     "artifact_type": "hook",
+     "command": "r.sh",
+     "config_path": "<ROOT>/real/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "r.sh",
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "real/.kimi-code/config.toml",
+     "text": "hooks = [{ event = \"Stop\", command = \"r.sh\" }]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/real/.kimi-code/config.toml"
+   ],
+   "home": "home",
+   "name": "kimi_home_env_symlink",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "linkhome",
+     "target": "<ROOT>/real"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/home"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:stop:0",
+     "artifact_type": "hook",
+     "command": "s.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "s.sh",
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:project:hook:stop:0",
+     "artifact_type": "hook",
+     "command": "s.sh",
+     "config_path": "<ROOT>/home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "s.sh",
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:global:mcp:s",
+     "artifact_type": "mcp_server",
+     "command": "s",
+     "config_path": "<ROOT>/home/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:project:mcp:s",
+     "artifact_type": "mcp_server",
+     "command": "s",
+     "config_path": "<ROOT>/home/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "s",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml",
+     "text": "hooks = [{ event = \"Stop\", command = \"s.sh\" }]\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"s\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.kimi-code/config.toml",
+    "<ROOT>/home/.kimi-code/config.toml",
+    "<ROOT>/home/.kimi-code/mcp.json",
+    "<ROOT>/home/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "workspace_is_home",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "home"
+  },
+  {
+   "args": {
+    "cwd": "<ROOT>",
+    "harness": "kimi",
+    "home": "home",
+    "workspace": "work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:stop:0",
+     "artifact_type": "hook",
+     "command": "s.sh",
+     "config_path": "home/.kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "s.sh",
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "kimi:project:mcp:w",
+     "artifact_type": "mcp_server",
+     "command": "w",
+     "config_path": "work/.kimi-code/mcp.json",
+     "harness": "kimi",
+     "metadata": {},
+     "name": "w",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml",
+     "text": "hooks = [{ event = \"Stop\", command = \"s.sh\" }]\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.kimi-code/mcp.json",
+     "text": "{\"mcpServers\": {\"w\": {\"command\": \"w\"}}}"
+    }
+   ],
+   "found_paths": [
+    "home/.kimi-code/config.toml",
+    "work/.kimi-code/mcp.json"
+   ],
+   "home": "home",
+   "name": "relative_context",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "cwd": "<ROOT>",
+    "harness": "kimi",
+    "home": ".",
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "kimi:global:hook:stop:0",
+     "artifact_type": "hook",
+     "command": "s.sh",
+     "config_path": ".kimi-code/config.toml",
+     "harness": "kimi",
+     "metadata": {
+      "command": "s.sh",
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": ".kimi-code/config.toml",
+     "text": "hooks = [{ event = \"Stop\", command = \"s.sh\" }]\n"
+    }
+   ],
+   "found_paths": [
+    ".kimi-code/config.toml"
+   ],
+   "home": ".",
+   "name": "home_is_cwd",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "harness": "kimi",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {
+    "home/.kimi-code": 0
+   },
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.kimi-code/config.toml",
+     "text": "hooks = [{ command = \"x\" }]\n"
+    }
+   ],
+   "home": "home",
+   "name": "kimi_root_unsearchable",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  }
+ ],
+ "schema": "guard-kimi-vectors.v1"
+}

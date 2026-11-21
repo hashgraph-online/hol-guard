@@ -10,6 +10,17 @@ import pytest
 from tests import command_extension_contracts
 
 
+@pytest.fixture(autouse=True)
+def _stub_native_review_for_diagnostic_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    # These tests exercise error aggregation with stubbed inspection and runtime
+    # results; native semantics are covered by the extension contract suites.
+    monkeypatch.setattr(
+        command_extension_contracts,
+        "real_native_command_evaluation",
+        lambda command, **_: SimpleNamespace(evaluation=SimpleNamespace(command=command)),
+    )
+
+
 def test_reviewed_cases_report_every_failing_command(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

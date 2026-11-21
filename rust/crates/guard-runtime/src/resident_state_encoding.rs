@@ -9,21 +9,42 @@ pub(crate) fn hex_bytes(bytes: &[u8]) -> String {
     output
 }
 
+/// Hashes a runtime executable with ring's SHA-256, which uses the CPU's SHA
+/// instructions where available. Resident startup hashes the whole binary
+/// before it serves, so the portable fallback would sit on the recovery path.
+pub(crate) fn sha256_hex_from_reader(reader: &mut impl std::io::Read) -> std::io::Result<String> {
+    let mut context = ring::digest::Context::new(&ring::digest::SHA256);
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = reader.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        context.update(&buffer[..count]);
+    }
+    Ok(hex_bytes(context.finish().as_ref()))
+}
+
 pub(crate) fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
-    if value.len() % 2 != 0 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+    if !value.len().is_multiple_of(2) || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err("native_resident_state_hex_invalid".to_owned());
     }
-    value
-        .as_bytes()
-        .chunks_exact(2)
-        .map(|pair| {
-            let high = hex_nibble(pair[0])
-                .ok_or_else(|| "native_resident_state_hex_invalid".to_owned())?;
-            let low = hex_nibble(pair[1])
-                .ok_or_else(|| "native_resident_state_hex_invalid".to_owned())?;
-            Ok((high << 4) | low)
-        })
-        .collect()
+    // Collecting into a `Result` reports a lower size bound of zero, so the
+    // vector would start at a default capacity and grow as the bytes arrive,
+    // freeing a part-filled buffer at each step. When the value being decoded
+    // is the resident's authentication key, those freed buffers hold a prefix
+    // of it and are not the allocation the caller wraps in `Zeroizing`, so
+    // nothing ever clears them. Sizing the vector once leaves exactly one
+    // buffer, which is the one the caller clears.
+    let mut decoded = Vec::with_capacity(value.len() / 2);
+    for pair in value.as_bytes().chunks_exact(2) {
+        let high =
+            hex_nibble(pair[0]).ok_or_else(|| "native_resident_state_hex_invalid".to_owned())?;
+        let low =
+            hex_nibble(pair[1]).ok_or_else(|| "native_resident_state_hex_invalid".to_owned())?;
+        decoded.push((high << 4) | low);
+    }
+    Ok(decoded)
 }
 
 fn hex_nibble(value: u8) -> Option<u8> {
@@ -32,5 +53,18 @@ fn hex_nibble(value: u8) -> Option<u8> {
         b'a'..=b'f' => Some(value - b'a' + 10),
         b'A'..=b'F' => Some(value - b'A' + 10),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn reader_digest_matches_portable_sha256_across_buffer_boundaries() {
+        use sha2::{Digest, Sha256};
+
+        let bytes: Vec<u8> = (0..200_000u32).map(|index| (index % 251) as u8).collect();
+        let expected = super::hex_bytes(&Sha256::digest(bytes.as_slice()));
+        let actual = super::sha256_hex_from_reader(&mut bytes.as_slice()).unwrap();
+        assert_eq!(actual, expected);
     }
 }

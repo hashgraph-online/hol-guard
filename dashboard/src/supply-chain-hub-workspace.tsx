@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
@@ -14,18 +14,25 @@ import { lazyWorkspace } from "./lazy-workspace";
 const SupplyChainWorkspace = lazyWorkspace("supply-chain-workspace", () =>
   import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
 );
+const SupplyChainWorkspaceDetails = lazyWorkspace("supply-chain-workspace-details", () =>
+  import("./supply-chain-workspace-details").then((m) => ({ default: m.SupplyChainWorkspaceDetails }))
+);
 const AuditWorkspace = lazyWorkspace("audit-workspace", () =>
   import("./audit-workspace").then((m) => ({ default: m.AuditWorkspace }))
+);
+const WorkspaceFindingsWorkspace = lazyWorkspace("workspace-findings-workspace", () =>
+  import("./workspace-findings-workspace").then((m) => ({ default: m.WorkspaceFindingsWorkspace }))
 );
 const FeedHealthWorkspace = lazyWorkspace("feed-health-workspace", () =>
   import("./feed-health-workspace").then((m) => ({ default: m.FeedHealthWorkspace }))
 );
 
-type HubTab = "supply-chain" | "audit" | "feed-health";
+type HubTab = "supply-chain" | "audit" | "workspaces" | "feed-health";
 
 const hubTabs: Array<{ value: HubTab; label: string }> = [
   { value: "supply-chain", label: "Supply Chain" },
   { value: "audit", label: "Audit" },
+  { value: "workspaces", label: "Workspaces" },
   { value: "feed-health", label: "Feed Health" },
 ];
 
@@ -34,7 +41,7 @@ export function hubTitleForTab(tab: HubTab): string {
 }
 
 function viewToTab(view: string): HubTab {
-  if (view === "supply-chain" || view === "audit" || view === "feed-health") {
+  if (view === "supply-chain" || view === "audit" || view === "workspaces" || view === "feed-health") {
     return view;
   }
   return "supply-chain";
@@ -50,7 +57,7 @@ export function SupplyChainHubWorkspace(props: {
   onOpenSettings: () => void;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
-  onRuntimeRefresh?: () => Promise<void> | void;
+  onRuntimeRefresh?: (requireComplete?: boolean) => Promise<void> | void;
 }) {
   const tab = viewToTab(props.activeView);
   const firewallPanelRef = useRef<PackageFirewallPanelHandle>(null);
@@ -62,10 +69,14 @@ export function SupplyChainHubWorkspace(props: {
     onNavigate: props.onNavigate,
   });
 
-  const auditWorkspaceDir = useMemo(
+  const managedAuditWorkspaceDir = useMemo(
     () => resolveSupplyChainAuditWorkspaceDir(props.snapshot.managed_installs ?? []),
     [props.snapshot.managed_installs],
   );
+
+  useEffect(() => {
+    auditSession.adoptDiscoveredAuditWorkspace(managedAuditWorkspaceDir);
+  }, [auditSession.adoptDiscoveredAuditWorkspace, managedAuditWorkspaceDir]);
 
   const handleTabChange = useCallback(
     (value: HubTab) => {
@@ -74,6 +85,12 @@ export function SupplyChainHubWorkspace(props: {
     },
     [props.onNavigate]
   );
+  const handleAuditNavigate = useCallback(() => {
+    props.onNavigate("/audit");
+  }, [props.onNavigate]);
+  const handleWorkspacesNavigate = useCallback(() => {
+    props.onNavigate("/workspaces");
+  }, [props.onNavigate]);
   const handleFixAll = useCallback(() => {
     firewallPanelRef.current?.fixAll();
   }, []);
@@ -81,7 +98,6 @@ export function SupplyChainHubWorkspace(props: {
   return (
     <div className={SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS}>
       <WorkspacePageHeader
-        eyebrow="Supply chain"
         title={hubTitleForTab(tab)}
         tabs={hubTabs}
         activeTab={tab}
@@ -91,10 +107,7 @@ export function SupplyChainHubWorkspace(props: {
         {tab === "supply-chain" && (
           <SupplyChainWorkspace
             snapshot={props.snapshot}
-            onGoHome={props.onGoHome}
-            onAuditNavigate={() => props.onNavigate("/audit")}
-            auditSnapshot={auditSession.auditSnapshot}
-            auditRunning={auditSession.auditRunning}
+            receipts={props.receipts}
             fixAllState={fixAllState}
             onFixAll={handleFixAll}
           />
@@ -105,6 +118,13 @@ export function SupplyChainHubWorkspace(props: {
             receipts={props.receipts}
             approvalGate={props.approvalGate}
             auditSession={auditSession}
+            onOpenWorkspaces={handleWorkspacesNavigate}
+          />
+        )}
+        {tab === "workspaces" && (
+          <WorkspaceFindingsWorkspace
+            suggestedRoot={auditSession.auditWorkspaceDir || managedAuditWorkspaceDir || ""}
+            onChooseFolder={auditSession.handleChooseAuditWorkspace}
           />
         )}
         {tab === "feed-health" && (
@@ -115,9 +135,12 @@ export function SupplyChainHubWorkspace(props: {
         <PackageFirewallPanel
           ref={firewallPanelRef}
           approvalGate={props.approvalGate}
-          auditWorkspaceDir={auditWorkspaceDir}
+          auditWorkspaceDir={auditSession.auditWorkspaceDir}
+          managedAuditWorkspaceDir={managedAuditWorkspaceDir}
           onAuditConnectGateChange={auditSession.setAuditConnectGate}
           onAuditErrorChange={auditSession.handleAuditErrorChange}
+          onAuditWorkspaceRequired={auditSession.handleAuditWorkspaceRequired}
+          onAuditWorkspaceDiscovered={auditSession.adoptDiscoveredAuditWorkspace}
           onStateChanged={props.onRuntimeRefresh}
           onAuditStarted={auditSession.handleAuditStarted}
           onAuditCompleted={auditSession.handleAuditCompleted}
@@ -126,6 +149,19 @@ export function SupplyChainHubWorkspace(props: {
           runAuditRef={auditSession.runAuditRef}
         />
       </div>
+      {/* Status, then the roster, then the facts behind it: DOM order matches
+          what the eye reads, so keyboard and screen-reader users meet the
+          manager rows before the supporting detail. */}
+      {tab === "supply-chain" && (
+        <Suspense fallback={null}>
+          <SupplyChainWorkspaceDetails
+            snapshot={props.snapshot}
+            onAuditNavigate={handleAuditNavigate}
+            auditSnapshot={auditSession.auditSnapshot}
+            auditRunning={auditSession.auditRunning}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

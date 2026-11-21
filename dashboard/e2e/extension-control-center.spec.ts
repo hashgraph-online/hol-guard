@@ -1,151 +1,13 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import {
-  defaultSettingsPayload,
-  emptyInventoryPayload,
-  emptyPoliciesPayload,
-  emptyReceiptsPayload,
-  freeStateSnapshot,
-} from "./fixture-states";
-
-const DAEMON_ORIGIN = "http://127.0.0.1:4175";
-const DIGEST = "a".repeat(64);
-
-function extension(id = "command.git", alias = "command.scm") {
-  const slug = id.slice("command.".length);
-  const ruleId = `${id}.hard-reset`;
-  const permissionId = `${id}.permission.hard-reset`;
-  return {
-    schema_version: 2,
-    extension_id: id,
-    version: "1.2.3",
-    name: slug === "git" ? "Git" : slug.replaceAll("-", " "),
-    description: "Canonical extension metadata <script>window.__ecc_xss = true</script>",
-    enabled: true,
-    required: false,
-    trust_class: "first-party",
-    activation: "default-on",
-    publisher: { id: "hol", displayName: "Hashgraph Online" },
-    icon: { kind: "none" },
-    source: "built-in",
-    aliases: alias ? [alias] : [],
-    dependencies: [],
-    conflicts: [],
-    delegated_protection: null,
-    ecosystem_ids: [slug],
-    executables: [slug],
-    project_markers: [`.${slug}`],
-    reference_urls: ["https://example.com/reference"],
-    action_classes: [`${slug}.history.rewrite`],
-    risk_classes: ["destructive_shell"],
-    safer_alternatives: ["Create a checkpoint first."],
-    rule_count: 1,
-    rules: [{
-      rule_id: ruleId,
-      rule_version: 1,
-      title: "Hard reset",
-      description: "Detects destructive reset behavior.",
-      severity: "high",
-      risk_classes: ["destructive_shell"],
-      action_classes: [`${slug}.history.rewrite`],
-      safer_alternatives: ["Use a narrower restore operation."],
-      default_mode: "review",
-      matcher_kind: "ExecutableMatcher",
-      safe_variants: [{ variant_id: "status", title: "Status", matcher_kind: "ExecutableMatcher" }],
-      compatibility_fallback: false,
-    }],
-    permission_count: 1,
-    permissions: [{
-      permission_id: permissionId,
-      schema_version: 1,
-      extension_id: id,
-      implementation_version: "1.2.3",
-      label: "Hard reset",
-      description: "Controls destructive reset behavior.",
-      risk_tier: "high",
-      baseline_floor: "review",
-      default_enabled: true,
-      configurable: true,
-      fixed_reason: null,
-      typed_capabilities: [],
-      action_classes: [`${slug}.history.rewrite`],
-      rule_ids: [ruleId],
-      dependencies: [],
-      conflicts: [],
-      implied_permissions: [],
-      introduced_version: "1.0.0",
-      deprecated: false,
-      replacement_permission_id: null,
-      safer_guidance: ["Create a checkpoint first."],
-    }],
-  };
-}
-
-function catalog() {
-  return {
-    schema_version: "guard.daemon.extension-controls.v1",
-    control_schema_version: "1.0.0",
-    catalog_digest: DIGEST,
-    extensions: [extension(), extension("command.filesystem", ""), extension("command.cloud.aws", "")],
-    limits: { max_body_bytes: 1_000_000, max_controls: 4096, max_observations: 2048 },
-  };
-}
-
-function effective(overrides: Record<string, unknown> = {}) {
-  return {
-    schema_version: "guard.daemon.extension-controls.v1",
-    health: "protected",
-    revision: 7,
-    catalog_digest: DIGEST,
-    global_lockdown: false,
-    controls: [],
-    layers: [],
-    failures: [],
-    ...overrides,
-  };
-}
-
-async function mount(page: Page, options: {
-  malformedCatalog?: boolean;
-  effective?: Record<string, unknown>;
-  runtime?: unknown;
-  runtimeRefresh?: unknown;
-  failEffectiveRefresh?: boolean;
-  refreshEffectiveDelayMs?: number;
-} = {}) {
-  let effectiveCalls = 0;
-  let runtimeCalls = 0;
-  await page.route("**/v1/**", async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    let body: unknown = {};
-    if (path.endsWith("/initialize")) body = { auth_token: "fixture-session-token" };
-    else if (path.endsWith("/runtime")) { runtimeCalls += 1; body = runtimeCalls > 1 ? options.runtimeRefresh ?? options.runtime ?? freeStateSnapshot : options.runtime ?? freeStateSnapshot; }
-    else if (path.endsWith("/requests")) body = { items: [], next_cursor: null, total_pending_count: 0, total_count: 0, status: "pending" };
-    else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
-    else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
-    else if (path.endsWith("/settings")) body = defaultSettingsPayload;
-    else if (path.endsWith("/inventory")) body = emptyInventoryPayload;
-    else if (path.endsWith("/extension-controls/catalog")) {
-      body = options.malformedCatalog ? { ...catalog(), extensions: [{ extension_id: "../../bad" }] } : catalog();
-    } else if (path.endsWith("/extension-controls/effective")) {
-      effectiveCalls += 1;
-      if (effectiveCalls > 1 && options.failEffectiveRefresh) {
-        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "unavailable" }) });
-        return;
-      }
-      if (effectiveCalls > 1 && options.refreshEffectiveDelayMs) {
-        await new Promise((resolve) => setTimeout(resolve, options.refreshEffectiveDelayMs));
-      }
-      body = options.effective ?? effective();
-    }
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-  });
-}
-
-async function initialize(page: Page) {
-  await page.goto(`/extensions?guardDaemon=${DAEMON_ORIGIN}`);
-  await expect(page.getByRole("heading", { name: "Extensions", exact: true })).toBeVisible();
-}
+  DAEMON_ORIGIN,
+  DIGEST,
+  effective,
+  initialize,
+  mount,
+} from "./extension-control-fixtures";
+import { freeStateSnapshot } from "./fixture-states";
 
 test("extension cards navigate through one canonical detail action", async ({ page }) => {
   await mount(page);
@@ -497,4 +359,57 @@ test("malformed catalog response is rejected at the client boundary", async ({ p
   await page.goto(`/extensions?guardDaemon=${DAEMON_ORIGIN}`);
   await expect(page.getByRole("heading", { name: "Extensions unavailable" })).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("Invalid extension-control response");
+});
+
+// A daemon whose catalog read model and whose effective controls name different
+// catalogs used to take the whole page away: the list, the policies and the
+// editor were replaced by "Extensions unavailable", and its "Try again" ran the
+// same unresolvable read. The daemon refuses a mutation carrying the wrong
+// catalog digest on its own, so the page shows what it has and says so.
+test("a catalog the daemon has not finished binding still lists every extension", async ({ page }) => {
+  test.setTimeout(60_000);
+  await mount(page, { effective: effective({ catalog_digest: `${"c".repeat(63)}1` }) });
+  await page.goto(`/extensions?guardDaemon=${DAEMON_ORIGIN}`);
+  // The loader retries across the daemon's control-refresh interval before it
+  // settles for the pair it has, so this first paint is slower than a normal one.
+  await expect(page.getByRole("heading", { name: "Extensions", exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("protection-data-unsettled")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Extensions unavailable" })).toHaveCount(0);
+  const card = page.getByRole("button", { name: /^Git/ });
+  await expect(card).toBeVisible();
+  await card.press("Enter");
+  await expect(page.getByTestId("protection-module-detail")).toBeVisible();
+});
+
+// A frozen build extracts under a symlinked temporary prefix, so every read of
+// its own installed data files failed and the daemon answered
+// catalog_read_preparation_failed on every attempt. The page used to become a
+// dead end: no list, no policies, and a "Try again" that re-ran the same
+// unresolvable read. The legacy catalog is served from the registry the daemon
+// already holds in memory, so the page falls back to it, says what is reduced
+// and still edits policy.
+test("a daemon that cannot prepare its catalog still lists extensions and edits policy", async ({ page }) => {
+  await mount(page);
+  // Registered after mount so it wins: Playwright matches the newest route first.
+  await page.route("**/v2/extension-controls/catalog/index**", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "catalog_read_preparation_failed" }),
+    });
+  });
+  await page.goto(`/extensions?guardDaemon=${DAEMON_ORIGIN}`);
+
+  await expect(page.getByRole("heading", { name: "Extensions", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Extensions unavailable" })).toHaveCount(0);
+  await expect(page.getByTestId("catalog-preparation-degraded")).toBeVisible();
+  await expect(page.getByTestId("catalog-preparation-degraded")).toContainText("the list Guard already had");
+
+  await page.getByRole("button", { name: /^Git/ }).click();
+  await expect(page.getByTestId("protection-module-detail")).toBeVisible();
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  const quickApply = page.getByRole("group", { name: "Quick apply to 1 changeable settings" });
+  await quickApply.getByRole("button", { name: "Deny all" }).click();
+  await expect(page.getByText("1 unsaved setting change.")).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Block" })).toHaveAttribute("aria-checked", "true");
 });

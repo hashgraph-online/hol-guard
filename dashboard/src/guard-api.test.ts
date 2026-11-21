@@ -1,14 +1,18 @@
 import { readFileSync } from "node:fs";
 
 import {
+  GuardDesktopHandoffError,
+  requestGuardDesktopHandoff,
   buildDemoRuntimeSnapshot,
   clearReviewQueue,
   fetchCommandActivityApi,
   fetchAllPendingRequests,
   fetchApprovalPage,
   GuardHarnessActionError,
+  GuardOperationTimeoutError,
   GuardProtectionRepairError,
   GuardSessionUnavailableError,
+  GuardDecisionSignInRequiredError,
   fetchQueueSummary,
 	  fetchResumeStatus,
 	  formatHarnessCommand,
@@ -19,6 +23,8 @@ import {
   readGuardToken,
   runPackageFirewallAction,
   runPackageSync,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS,
+  repairSupplyChainProtection,
   startPackageFirewallConnect,
 	  runAuditRemediation,
 	  resolveRequestWithQueueResult,
@@ -1446,6 +1452,87 @@ assert(
   "L079db: runPackageFirewallAction preserves daemon error code for approval modal fallback"
 );
 
+installGuardWindow("?guard-token=token-repair&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const originalSetTimeout = globalThis.setTimeout;
+const repairDeadline: { expire?: () => void } = {};
+let repairSignal: AbortSignal | undefined;
+globalThis.setTimeout = ((callback: () => void) => {
+  repairDeadline.expire = callback;
+  return 1 as unknown as ReturnType<typeof setTimeout>;
+}) as typeof setTimeout;
+globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  repairSignal = init?.signal ?? undefined;
+  return new Promise<Response>(() => undefined);
+};
+const pendingRepair = repairSupplyChainProtection();
+await Promise.resolve();
+assert(repairSignal !== undefined, "local repair passes a cancellation signal to fetch");
+assert(typeof repairDeadline.expire === "function", "local repair sets a deadline");
+repairDeadline.expire();
+let repairTimeout: unknown = null;
+try {
+  await pendingRepair;
+} catch (error) {
+  repairTimeout = error;
+} finally {
+  globalThis.setTimeout = originalSetTimeout;
+}
+assert(repairTimeout instanceof GuardOperationTimeoutError, "a stalled repair reports a bounded timeout");
+assert(repairSignal.aborted, "a stalled repair aborts the pending fetch");
+
+const bodyDeadline: { expire?: () => void } = {};
+let bodySignal: AbortSignal | undefined;
+globalThis.setTimeout = ((callback: () => void) => {
+  bodyDeadline.expire = callback;
+  return 1 as unknown as ReturnType<typeof setTimeout>;
+}) as typeof setTimeout;
+globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  bodySignal = init?.signal ?? undefined;
+  return { ok: true, status: 200, json: () => new Promise<unknown>(() => undefined) } as Response;
+};
+const pendingBody = repairSupplyChainProtection();
+await Promise.resolve();
+await Promise.resolve();
+assert(typeof bodyDeadline.expire === "function", "repair keeps its deadline while reading the body");
+bodyDeadline.expire();
+try {
+  await pendingBody;
+  throw new Error("a stalled response body must time out");
+} catch (error) {
+  assert(error instanceof GuardOperationTimeoutError, "a stalled response body reports a bounded timeout");
+} finally {
+  globalThis.setTimeout = originalSetTimeout;
+}
+assert(bodySignal?.aborted, "a stalled response body aborts the pending request");
+
+installGuardWindow("?guard-token=token-sync-deadline&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const syncDeadline: { expire?: () => void; delay?: number } = {};
+let syncSignal: AbortSignal | undefined;
+globalThis.setTimeout = ((callback: () => void, delay?: number) => {
+  syncDeadline.expire = callback;
+  syncDeadline.delay = delay;
+  return 1 as unknown as ReturnType<typeof setTimeout>;
+}) as typeof setTimeout;
+globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  syncSignal = init?.signal ?? undefined;
+  return new Promise<Response>(() => undefined);
+};
+const pendingSync = runPackageSync({ approval_password: "pw" });
+await Promise.resolve();
+assert(syncSignal !== undefined, "an intel sync passes a cancellation signal to fetch");
+assert(syncDeadline.delay === SUPPLY_CHAIN_SYNC_TIMEOUT_MS, "an intel sync waits for the published sync deadline");
+syncDeadline.expire?.();
+let syncTimeout: unknown = null;
+try {
+  await pendingSync;
+} catch (error) {
+  syncTimeout = error;
+} finally {
+  globalThis.setTimeout = originalSetTimeout;
+}
+assert(syncTimeout instanceof GuardOperationTimeoutError, "a stalled intel sync reports a bounded timeout");
+assert(syncSignal?.aborted === true, "a stalled intel sync aborts the pending fetch");
+
 installGuardWindow("?guard-token=token-sync&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const syncCalls = installFetchStub({
   "/v1/supply-chain/sync": {
@@ -1731,15 +1818,14 @@ try {
     scope: "global",
     reason: "reviewed"
   });
-  throw new Error("expected malformed token refresh to preserve the 401 failure");
+  throw new Error("expected a refused tab without a session to ask for sign-in");
 } catch (error) {
-  assert(error instanceof Error, "L077c: malformed refresh returns an Error");
-  if (!(error instanceof Error)) {
-    throw error;
-  }
-  assert(error.message.includes("401"), "L077c: malformed refresh preserves original 401 status");
+  assert(
+    error instanceof GuardDecisionSignInRequiredError && error.reason === "no_session",
+    "L077c: a 401 to a tab without a session asks for sign-in instead of a bare failure",
+  );
 }
-assert(malformedRefreshCalls.length === 1, "L077c: malformed refresh does not retry or bootstrap without a token");
+assert(malformedRefreshCalls.length === 1, "L077c: a tab without a session sends once and does not retry or bootstrap");
 
 installGuardWindow("?guard-token=token-codex-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchCodexResolveCalls = installFetchStub({
@@ -1949,5 +2035,96 @@ try {
 }
 assert(hostileCommandActivityError instanceof Error, "command activity path traversal is rejected");
 assert(hostileCommandActivityFetches === 0, "path traversal cannot receive the dashboard session token");
+
+// A busy computer can keep Guard's policy check from answering in time; the
+// daemon refuses before acting, so the dashboard sends the request again
+// instead of treating the refusal as a lost session.
+installGuardWindow("?guard-token=token-busy-retry&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const busyReplies: Array<[number, Record<string, string>]> = [
+  [503, { error: "native_route_policy_unavailable" }],
+  [503, { error: "native_route_policy_unavailable" }],
+  [200, { ok: "yes" }],
+];
+let busyFetches = 0;
+globalThis.fetch = async (): Promise<Response> => {
+  const [status, body] = busyReplies[Math.min(busyFetches, busyReplies.length - 1)];
+  busyFetches += 1;
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+};
+const busyResponse = await fetchCommandActivityApi("/v1/command-activity");
+assert(busyResponse.status === 200, "a busy refusal is retried until Guard answers");
+assert(busyFetches === 3, "each busy refusal is sent again once");
+
+for (const [status, body] of [
+  [503, { error: "native_route_policy_unavailable", reason_code: "native_resident_restart_blocked" }],
+  [403, { error: "forbidden_origin" }],
+] as const) {
+  busyFetches = 0;
+  globalThis.fetch = async (): Promise<Response> => {
+    busyFetches += 1;
+    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  };
+  const refused = await fetchCommandActivityApi("/v1/command-activity");
+  assert(refused.status === status, `a ${status} refusal is returned as is`);
+  assert(busyFetches === 1, `a ${status} refusal that is not a busy check is not retried`);
+}
+
+// A caller that gives up while the dashboard waits to retry gets the same
+// AbortError fetch would give it, so its own recovery still runs.
+busyFetches = 0;
+globalThis.fetch = async (): Promise<Response> => {
+  busyFetches += 1;
+  return new Response(JSON.stringify({ error: "native_route_policy_unavailable" }), {
+    status: 503,
+    headers: { "Content-Type": "application/json" },
+  });
+};
+const busyAbort = new AbortController();
+const abandoned = fetchCommandActivityApi("/v1/command-activity", { signal: busyAbort.signal });
+setTimeout(() => busyAbort.abort(new DOMException("gave up", "AbortError")), 50);
+let abandonedError: unknown = null;
+try {
+  await abandoned;
+} catch (error) {
+  abandonedError = error;
+}
+assert(abandonedError instanceof DOMException && abandonedError.name === "AbortError", "an abort during the retry wait rejects");
+assert(busyFetches === 1, "an aborted request is not sent again");
+
+// The desktop update hand-off names the version the banner offered and
+// keeps a daemon refusal distinct from a request that never got an answer.
+installGuardWindow("?guard-token=token-handoff&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+Object.assign(window, { setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout });
+const handoffBodies: unknown[] = [];
+globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  handoffBodies.push(JSON.parse(String(init?.body ?? "{}")));
+  return new Response(
+    JSON.stringify({ handoff_requested: true, current_version: "3.61.0a1", latest_version: "3.61.0a5" }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+};
+const handoffResult = await requestGuardDesktopHandoff("3.61.0a5");
+assert(handoffResult.handoff_requested && handoffResult.latest_version === "3.61.0a5", "hand-off reports the requested version");
+assert(
+  JSON.stringify(handoffBodies[0]) === JSON.stringify({ handoff_to_desktop: true, latest_version: "3.61.0a5" }),
+  "hand-off sends the offered version",
+);
+globalThis.fetch = async (): Promise<Response> =>
+  new Response(JSON.stringify({ error: "update_not_available", message: "Guard is already on the latest version." }), {
+    status: 400,
+    headers: { "Content-Type": "application/json" },
+  });
+let handoffRefusal: unknown = null;
+try {
+  await requestGuardDesktopHandoff("3.61.0a5");
+} catch (error) {
+  handoffRefusal = error;
+}
+assert(
+  handoffRefusal instanceof GuardDesktopHandoffError &&
+    handoffRefusal.code === "update_not_available" &&
+    handoffRefusal.status === 400,
+  "a daemon refusal keeps its code",
+);
 
 console.log("guard-api.test.ts: all tests passed");

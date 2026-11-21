@@ -1,7 +1,10 @@
 {
   "valid": [
     "valid/basic.yaml",
-    "valid/extensions-and-scalars.yaml"
+    "valid/extensions-and-scalars.yaml",
+    "valid/business-selector.yaml",
+    "valid/with-tests.yaml",
+    "valid/enforceable-scopes.yaml"
   ],
   "invalid": {
     "invalid/anchor-alias.yaml": "yaml_anchor",
@@ -13,5 +16,10 @@
     "invalid/merge-key.yaml": "yaml_merge_key",
     "invalid/raw-secret.yaml": "forbidden_sensitive_field",
     "invalid/unknown-core-field.yaml": "schema_additionalProperties"
+  },
+  "parity": {
+    "cases": "parity/cases.json",
+    "decisions": "parity/decisions.json",
+    "decisionSchema": "../decision.schema.json"
   }
 }

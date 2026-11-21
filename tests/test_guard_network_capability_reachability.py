@@ -4,13 +4,13 @@ import copy
 from pathlib import Path
 from typing import cast
 
-from codex_plugin_scanner.guard.runtime.network_capability_reachability import (
+from codex_plugin_scanner.guard.runtime.network_status import build_network_status
+from scripts.network_capability_reachability import (
     REQUIRED_CAPABILITY_IDS,
     load_reachability_manifest,
     repository_manifest_path,
     validate_reachability_manifest,
 )
-from codex_plugin_scanner.guard.runtime.network_status import build_network_status
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 

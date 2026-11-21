@@ -5,17 +5,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TextIO
 
 if TYPE_CHECKING:
-    from ..daemon import GuardDaemonHookFailureKind
-    from ..daemon.manager import _guard_daemon_pid_is_running, _guard_daemon_pid_matches_command
+    from ..native_daemon_manage import GuardDaemonHookFailureKind
+    from ..native_daemon_manage import _guard_daemon_pid_is_running, _guard_daemon_pid_matches_command
     from ._commands_shared import _now
     from .commands_support_connect import _guard_service_runtime_profile
     from .commands_support_interaction import _emit, _resolve_cisco_scan_options
     from .commands_support_runtime_artifacts import _optional_string
 
-from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
+from ..native_daemon_peer import load_guard_daemon_endpoint_url
+from ..native_daemon_manage import GuardDaemonStillStartingError
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -197,8 +198,10 @@ def _matching_advisories(store: GuardStore, publisher: object) -> list[dict[str,
 
 def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
     from codex_plugin_scanner.version import __version__
-    from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
-    from codex_plugin_scanner.guard.daemon.lifecycle_journal import load_daemon_lifecycle_events
+    from codex_plugin_scanner.guard.native_daemon_manage import (
+        load_authenticated_daemon_state,
+        load_daemon_lifecycle_events,
+    )
 
     running = False
     port: int | None = None
@@ -243,42 +246,54 @@ def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
     _emit("daemon", payload, as_json)
     return 0
 
+def _repair_resident_update_marker(guard_home: Path) -> dict[str, object] | None:
+    """Recover a resident-update marker stranded by an interrupted update."""
+
+    try:
+        from ..native_resident_update_lock import repair_stale_resident_update_marker
+        from ..native_runtime import native_runtime_status
+
+        # Point the marker at the runtime resident requests actually select (an
+        # override included), and only once ordinary admission accepts it.
+        status = native_runtime_status()
+        if not status.compatible or status.identity is None:
+            return {"status": "unavailable", "reason_code": status.reason}
+        return repair_stale_resident_update_marker(guard_home, status.identity.path)
+    except Exception:  # repair must not block daemon repair
+        return {"status": "unavailable", "reason_code": "update_native_resident_lock_failed"}
+
+
 def _handle_daemon_repair(guard_home: Path, as_json: bool, *, home_dir: Path | None = None) -> int:
-    result = repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
+    from ..runtime_health.runtime_repair import DaemonRepairBusyError
+
+    marker = _repair_resident_update_marker(guard_home)
+    try:
+        result: dict[str, object] = dict(repair_guard_daemon_runtime(guard_home, home_dir=home_dir))
+    except DaemonRepairBusyError as busy:
+        # A bounded, typed answer: the daemon repair did not run. Only the stale
+        # resident-update marker above may have been rewritten, which is itself a repair.
+        _emit(
+            "daemon",
+            {
+                "repaired": False,
+                "status": "busy",
+                "reason_code": busy.reason_code,
+                "waited_seconds": busy.waited_seconds,
+                "recovery": busy.recovery,
+            },
+            as_json,
+        )
+        return 1
+    if marker is not None:
+        result["resident_update_marker"] = marker
     _emit("daemon", result, as_json)
     return 0
 
 
 def _handle_daemon_stop(guard_home: Path, as_json: bool) -> int:
-    import json as _json
-    import os
-    import signal as _signal
+    from ..daemon_stop import stop_guard_daemon
 
-    state_path = guard_home / "daemon-state.json"
-    stopped = False
-    pid: int | None = None
-    if state_path.is_file():
-        try:
-            state = _json.loads(state_path.read_text())
-            pid = state.get("pid") if isinstance(state, dict) else None
-            if (
-                isinstance(pid, int)
-                and pid > 0
-                and _guard_daemon_pid_is_running(pid)
-                and _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
-            ):
-                os.kill(pid, _signal.SIGTERM)
-                stopped = True
-        except (ProcessLookupError, PermissionError, OSError, _json.JSONDecodeError, ValueError):
-            pass
-    from codex_plugin_scanner.guard.daemon.manager import clear_guard_daemon_state
-
-    with suppress(OSError):
-        clear_guard_daemon_state(guard_home)
-    payload: dict[str, object] = {"stopped": stopped, "running": False}
-    if pid is not None:
-        payload["pid"] = pid
-    _emit("daemon", payload, as_json)
+    _emit("daemon", stop_guard_daemon(guard_home), as_json)
     return 0
 
 
@@ -288,7 +303,7 @@ def _handle_daemon_recover(
     home_dir: Path | None,
     failure_kind: GuardDaemonHookFailureKind,
 ) -> int:
-    from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure
+    from codex_plugin_scanner.guard.native_daemon_manage import recover_guard_daemon_after_hook_failure
 
     try:
         _ = recover_guard_daemon_after_hook_failure(
@@ -320,6 +335,8 @@ def _dispatch_guard_daemon_command(
     workspace: Path | None,
     context: HarnessContext | None,
     store: GuardStore | None,
+    output_stream: TextIO | None = None,
+    error_stream: TextIO | None = None,
 ) -> int:
     if guard_home is None:
         raise RuntimeError("Guard home is required")
@@ -329,6 +346,9 @@ def _dispatch_guard_daemon_command(
         wake_token = getattr(args, "wake_token", None)
         try:
             ensure_guard_daemon(guard_home, home_dir=home_dir)
+        except GuardDaemonStillStartingError:
+            # A slow machine is still loading the daemon; it was left running.
+            print("Guard daemon is still starting.")
         finally:
             if isinstance(wake_token, str) and wake_token:
                 clear_guard_daemon_wake_reservation(guard_home, token=wake_token)
@@ -339,30 +359,30 @@ def _dispatch_guard_daemon_command(
             home_dir=home_dir,
             failure_kind=args.failure_kind,
         )
+    if daemon_command == "recovery":
+        from .commands_daemon_recovery import dispatch_daemon_recovery
+
+        return dispatch_daemon_recovery(
+            args,
+            guard_home=guard_home,
+            home_dir=home_dir,
+            lifecycle_authorized=True,
+            lifecycle_context=getattr(args, "_lifecycle_gate_context", None),
+            stdout=output_stream,
+            stderr=error_stream,
+        )
     if daemon_command == "status":
         return _handle_daemon_status(guard_home, getattr(args, "json", False))
     if daemon_command == "repair":
         return _handle_daemon_repair(guard_home, getattr(args, "json", False), home_dir=home_dir)
     if daemon_command == "stop":
         return _handle_daemon_stop(guard_home, getattr(args, "json", False))
-    if store is None:
-        store = GuardStore(
-            guard_home,
-            prime_policy_integrity=bool(getattr(args, "serve", False)),
-        )
-    workspace_dir = (
-        context.workspace_dir if context is not None and context.workspace_dir is not None else workspace
-    )
-    daemon = GuardDaemonServer(
-        store,
-        port=args.port or 0,
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-    )
     if args.serve:
-        daemon.serve()
-        return 0
-    _emit("doctor", {"daemon_url": f"http://127.0.0.1:{daemon.port}"}, getattr(args, "json", False))
+        from .daemon_serve import serve_native_daemon
+
+        return serve_native_daemon(guard_home, args.port or 0, user_home=home_dir)
+    daemon_url = ensure_guard_daemon(guard_home, home_dir=home_dir)
+    _emit("doctor", {"daemon_url": daemon_url}, getattr(args, "json", False))
     return 0
 
 __all__ = [

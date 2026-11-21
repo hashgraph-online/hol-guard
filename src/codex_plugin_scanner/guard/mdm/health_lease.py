@@ -3,24 +3,17 @@
 from __future__ import annotations
 
 import base64
-import errno
 import hashlib
-import os
 import platform
-import secrets
-import stat
 from collections.abc import Callable, Mapping
-from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import cast
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from ..durable_io import fsync_directory as _fsync_directory
 from .continuity import (
     InstallationContinuityRecord,
     _atomic_write,
@@ -31,9 +24,8 @@ from .continuity import (
 from .contracts import LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION, LocalIntegritySnapshot, MachinePaths
 from .device_key import KeyGeneration
 from .device_key_access import verified_machine_device_key_by_id
-from .health_lease_ack import MAX_ACK_BYTES, HealthLeaseAck
+from .health_lease_ack import HealthLeaseAck
 from .health_lease_contract import (
-    MAX_OUTBOX_BYTES,
     MAX_SNAPSHOT_BYTES,
     HealthLeaseBinding,
     HealthLeaseClaims,
@@ -50,136 +42,30 @@ from .protection_lease_contract import (
     ProtectionLeaseClaims,
     SignedProtectionLease,
 )
+from .state_file import native_state, read_state, replace_state
 
-_OUTBOX_NAME = "health-lease-outbox.json"
-_ACK_NAME = "health-lease-ack.json"
 SnapshotFactory = Callable[[], LocalIntegritySnapshot]
 LeaseClaims = HealthLeaseClaims | ProtectionLeaseClaims
 LeaseSigner = Callable[[MachinePaths, KeyGeneration, LeaseClaims, str], bytes]
 CrashHook = Callable[[str], None]
 
 
-def _outbox_path(paths: MachinePaths) -> Path:
-    return paths.state_root / _OUTBOX_NAME
-
-
-def _ack_path(paths: MachinePaths) -> Path:
-    return paths.state_root / _ACK_NAME
-
-
-def _private_regular_file(metadata: os.stat_result) -> bool:
-    return stat.S_ISREG(metadata.st_mode) and (
-        os.name == "nt" or (metadata.st_uid == 0 and not stat.S_IMODE(metadata.st_mode) & 0o077)
-    )
-
-
-def _read_bounded(path: Path, *, maximum: int, acl_reason: str, invalid_reason: str) -> bytes:
-    try:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
-    except OSError as exc:
-        if exc.errno == errno.ELOOP:
-            raise PermissionError(acl_reason) from exc
-        raise
-    try:
-        before = os.fstat(descriptor)
-        if before.st_size > maximum or not _private_regular_file(before):
-            raise PermissionError(acl_reason)
-        payload = os.read(descriptor, maximum + 1)
-        after = os.fstat(descriptor)
-        before_identity = (before.st_dev, before.st_ino, before.st_size, before.st_ctime_ns)
-        after_identity = (after.st_dev, after.st_ino, after.st_size, after.st_ctime_ns)
-        if len(payload) != before.st_size or before_identity != after_identity:
-            raise OSError(invalid_reason)
-        return payload
-    finally:
-        os.close(descriptor)
-
-
-def _atomic_create(paths: MachinePaths, target: Path, payload: bytes, *, conflict_reason: str) -> None:
-    parent = paths.state_root
-    if parent.is_symlink() or not parent.is_dir():
-        raise OSError("health_lease_state_root_invalid")
-    if target.exists() or target.is_symlink():
-        raise FileExistsError(conflict_reason)
-    temporary = parent / f".{target.name}.{secrets.token_hex(16)}.tmp"
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        with os.fdopen(descriptor, "wb", closefd=True) as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(temporary, 0o600)
-        if os.name == "nt":
-            os.link(temporary, target)
-        else:
-            os.link(temporary, target, follow_symlinks=False)
-        _fsync_directory(parent)
-    finally:
-        with suppress(FileNotFoundError):
-            temporary.unlink()
-
-
 def _atomic_outbox_write(paths: MachinePaths, outbox: HealthLeaseOutbox) -> None:
-    _atomic_create(
-        paths,
-        _outbox_path(paths),
-        outbox.canonical_bytes(),
-        conflict_reason="health_lease_pending_conflict",
-    )
+    _ = native_state("create", "outbox", paths.state_root, outbox.canonical_bytes())
 
 
 def _atomic_ack_write(paths: MachinePaths, ack: HealthLeaseAck) -> None:
-    parent = paths.state_root
-    if parent.is_symlink() or not parent.is_dir():
-        raise OSError("health_lease_state_root_invalid")
-    target = _ack_path(paths)
-    temporary = parent / f".{target.name}.{secrets.token_hex(16)}.tmp"
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        with os.fdopen(descriptor, "wb", closefd=True) as handle:
-            handle.write(ack.canonical_bytes())
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, target)
-        _fsync_directory(parent)
-    finally:
-        with suppress(FileNotFoundError):
-            temporary.unlink()
+    replace_state(paths.state_root, "ack", ack.canonical_bytes())
 
 
 def _load_pending(paths: MachinePaths) -> HealthLeaseOutbox | None:
-    try:
-        return HealthLeaseOutbox.parse(
-            _read_bounded(
-                _outbox_path(paths),
-                maximum=MAX_OUTBOX_BYTES,
-                acl_reason="health_lease_outbox_acl_invalid",
-                invalid_reason="health_lease_outbox_invalid",
-            )
-        )
-    except FileNotFoundError:
-        return None
+    payload = read_state(paths.state_root, "outbox")
+    return None if payload is None else HealthLeaseOutbox.parse(payload)
 
 
 def _load_ack(paths: MachinePaths) -> HealthLeaseAck | None:
-    try:
-        return HealthLeaseAck.parse(
-            _read_bounded(
-                _ack_path(paths),
-                maximum=MAX_ACK_BYTES,
-                acl_reason="health_lease_ack_acl_invalid",
-                invalid_reason="health_lease_ack_invalid",
-            )
-        )
-    except FileNotFoundError:
-        return None
-
-
-def load_pending_health_lease(paths: MachinePaths) -> HealthLeaseOutbox | None:
-    """Read an exact pending artifact without changing continuity state."""
-
-    return _load_pending(paths)
+    payload = read_state(paths.state_root, "ack")
+    return None if payload is None else HealthLeaseAck.parse(payload)
 
 
 def _normalized_snapshot(
@@ -303,11 +189,7 @@ def _validate_ack(ack: HealthLeaseAck, pending: HealthLeaseOutbox) -> None:
 
 
 def _retire_outbox(paths: MachinePaths) -> None:
-    try:
-        _outbox_path(paths).unlink()
-    except FileNotFoundError:
-        return
-    _fsync_directory(paths.state_root)
+    _ = native_state("remove", "outbox", paths.state_root)
 
 
 def _advanced_record(
@@ -474,5 +356,4 @@ def issue_or_load_pending_health_lease(
 __all__ = [
     "acknowledge_pending_health_lease",
     "issue_or_load_pending_health_lease",
-    "load_pending_health_lease",
 ]

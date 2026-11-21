@@ -1,0 +1,17 @@
+#!/bin/bash
+set -euo pipefail
+
+# A disposable local registry. No network, login, or real infrastructure.
+case "${2:-}" in
+  alpha|beta) ;;
+  *) exit 64 ;;
+esac
+case "${1:-}" in
+  list) printf '%s\n' "$2/current" "$2/obsolete" ;;
+  inspect) printf '%s\t%s\n' "$2" 'local metadata' ;;
+  delete)
+    test "${3:-}" = obsolete
+    rm -- "$HOME/fixture-registry/$2/obsolete"
+    ;;
+  *) exit 64 ;;
+esac

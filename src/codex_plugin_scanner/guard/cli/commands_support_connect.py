@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ._commands_shared import _SERVICE_RUNTIME_CHOICES, _SERVICE_RUNTIME_PROFILE_STATE_KEY, _now
@@ -16,16 +16,15 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..browser_opener import open_browser_url
+from .connect_cloud_actions import (
+    check_connect_cloud_actions_declined,
+    check_connect_cloud_workspace,
+    cloud_actions_connect_summary,
+)
 from .connect_sync_result import apply_guard_connect_sync_result
-from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
 
-def _connect_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
-    resolver = globals().get("_resolve_guard_sync_auth_context")
-    if callable(resolver):
-        return cast(dict[str, object], resolver(store))
-    return _local_resolve_guard_sync_auth_context(store)
 
 def _validate_policy_scope(
     scope: str,
@@ -72,10 +71,6 @@ def _guard_doctor_connect_health_payload(store: GuardStore) -> dict[str, object]
         payload["latest_connect_state"] = _guard_doctor_latest_connect_state_payload(latest_state)
     return payload
 
-def _guard_doctor_oauth_storage_health_payload(store: GuardStore) -> dict[str, str]:
-    return _guard_doctor_oauth_storage_health_payload_from_health(
-        store.get_oauth_local_credential_health(),
-    )
 
 def _guard_doctor_oauth_storage_health_payload_from_health(oauth_storage_health: dict[str, object]) -> dict[str, str]:
     state = "unknown"
@@ -367,6 +362,7 @@ def _run_guard_device_connect_flow(
     open_browser: Callable[[str], bool] | None = None,
     ci_safe: bool = False,
     machine_label: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> dict[str, object]:
     return run_guard_device_connect_command(
         store=store,
@@ -377,6 +373,7 @@ def _run_guard_device_connect_flow(
         ci_safe=ci_safe,
         machine_label=machine_label,
         include_sync_auth_context=True,
+        cloud_actions_declined=cloud_actions_declined,
     )
 
 def _run_guard_browser_connect_flow(
@@ -384,12 +381,16 @@ def _run_guard_browser_connect_flow(
     store: GuardStore,
     connect_url: str,
     wait_timeout_seconds: int,
+    cloud_workspace_id: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> dict[str, object]:
     return run_guard_browser_connect_command(
         store=store,
         connect_url=connect_url,
         wait_timeout_seconds=wait_timeout_seconds,
         include_sync_auth_context=True,
+        cloud_workspace_id=cloud_workspace_id,
+        cloud_actions_declined=cloud_actions_declined,
     )
 
 def _build_guard_device_connect_payload(
@@ -404,13 +405,25 @@ def _build_guard_device_connect_payload(
     machine_label: str | None = None,
     home_dir: Path | None = None,
     workspace_dir: Path | None = None,
+    cloud_workspace_id: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> tuple[dict[str, object] | None, int]:
+    # Pass only the Cloud actions choices that were made, so a plain connect
+    # keeps the flow call it always had.
+    browser_choices: dict[str, Any] = {}
+    if cloud_workspace_id is not None:
+        browser_choices["cloud_workspace_id"] = cloud_workspace_id
+    device_choices: dict[str, Any] = {}
+    if cloud_actions_declined:
+        browser_choices["cloud_actions_declined"] = True
+        device_choices["cloud_actions_declined"] = True
     try:
         if use_browser_oauth:
             payload = _run_guard_browser_connect_flow(
                 store=store,
                 connect_url=connect_url,
                 wait_timeout_seconds=wait_timeout_seconds,
+                **browser_choices,
             )
         elif open_device_browser:
             payload = _run_guard_device_connect_flow(
@@ -421,6 +434,7 @@ def _build_guard_device_connect_payload(
                 open_browser=open_browser_url,
                 ci_safe=ci_safe,
                 machine_label=machine_label,
+                **device_choices,
             )
         else:
             payload = _run_guard_device_connect_flow(
@@ -430,6 +444,7 @@ def _build_guard_device_connect_payload(
                 announce_copy=announce_copy,
                 ci_safe=ci_safe,
                 machine_label=machine_label,
+                **device_choices,
             )
     except json.JSONDecodeError as error:
         print(f"Guard authorization failed: {error}", file=sys.stderr)
@@ -440,6 +455,25 @@ def _build_guard_device_connect_payload(
     except (RuntimeError, TimeoutError, urllib.error.URLError, http.client.HTTPException) as error:
         print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
+    workspace_problem = check_connect_cloud_workspace(
+        workspace_id=_optional_string(payload.get("workspace_id")),
+        cloud_workspace_id=cloud_workspace_id,
+    )
+    problem = workspace_problem or check_connect_cloud_actions_declined(
+        summary=payload.get("cloud_actions"),
+        cloud_actions_declined=cloud_actions_declined,
+    )
+    if problem is not None:
+        # Undo the pairing before the first sync so nothing reaches a workspace, or turns on
+        # Cloud actions, the user did not choose.
+        payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
+        payload["disconnect"] = _undo_unwanted_guard_connect_pairing(store)
+        payload["status"] = "disconnected"
+        # The pairing is gone, so the Cloud actions row must not still say "Ready".
+        payload["cloud_actions"] = cloud_actions_connect_summary(None, paired=False)
+        payload["cloud_actions_problem"] = problem
+        print(problem, file=sys.stderr)
+        return payload, 1
     payload = _finalize_guard_connect_payload(
         store=store,
         connect_url=connect_url,
@@ -450,6 +484,14 @@ def _build_guard_device_connect_payload(
     )
     return payload, 0
 
+def _undo_unwanted_guard_connect_pairing(store: GuardStore) -> dict[str, object]:
+    try:
+        return run_guard_disconnect_command(store=store, revoke_cloud_grant=True)
+    except (RuntimeError, ValueError, OSError, http.client.HTTPException) as error:
+        # OSError covers URLError and a timeout or reset while waiting for the answer.
+        store.clear_oauth_local_credentials()
+        return {"status": "disconnected", "cloud_grant_revoked": False, "detail": str(error)}
+
 def _announce_guard_device_connect_copy(payload: dict[str, object]) -> None:
     user_code = _optional_string(payload.get("user_code")) or "unknown"
     target = _optional_string(payload.get("verification_uri")) or _optional_string(
@@ -457,6 +499,12 @@ def _announce_guard_device_connect_copy(payload: dict[str, object]) -> None:
     )
     if target is None:
         return
+    if payload.get("approval_lost") is True:
+        print(
+            "Guard Cloud approved this device, but its answer never reached HOL Guard. "
+            "Approve once more with this new code.",
+            file=sys.stderr,
+        )
     print("HOL Guard headless approval", file=sys.stderr)
     print(f"1. Open {target}", file=sys.stderr)
     print(f"2. Enter code {user_code}", file=sys.stderr)
@@ -530,7 +578,6 @@ __all__ = [
     "_guard_cloud_urls_for_connect",
     "_guard_doctor_connect_health_payload",
     "_guard_doctor_latest_connect_state_payload",
-    "_guard_doctor_oauth_storage_health_payload",
     "_guard_service_runtime_profile",
     "_manual_guard_login_payload",
     "_refresh_cloud_policy_bundle",

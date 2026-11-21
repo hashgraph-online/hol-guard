@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
+from .policy_bundle_activation import PrecomputedVerdicts
 from .policy_bundle_parser import policy_bundle_acceptance_checkpoint, policy_bundle_is_version_downgrade
-from .store_custom_extension_continuity import (
-    CustomExtensionContinuityMutation,
-    apply_custom_extension_continuity_mutation_locked,
-)
+from .store_custom_extension_continuity import CustomExtensionContinuityMutation
 
 
 def encoded_policy_activation_payloads(
@@ -64,8 +62,13 @@ def continuity_activation_rejection(
 def policy_checkpoint_rejection(
     connection: sqlite3.Connection,
     policy_bundle: Mapping[str, object],
+    verdicts: PrecomputedVerdicts | None = None,
 ) -> str | None:
-    """Validate the persisted anti-downgrade checkpoint under the write lock."""
+    """Validate the persisted anti-downgrade checkpoint under the write lock.
+
+    With ``verdicts`` the downgrade verdict is never requested from the resident
+    while the lock is held; see ``PrecomputedVerdicts``.
+    """
 
     row = connection.execute(
         "select payload_json from sync_state where state_key = ?",
@@ -79,23 +82,15 @@ def policy_checkpoint_rejection(
         return "policy_bundle_checkpoint_invalid"
     if not isinstance(existing, dict) or not existing:
         return "policy_bundle_checkpoint_invalid"
-    if policy_bundle_is_version_downgrade(existing, dict(policy_bundle)):
-        return "bundle_version_downgrade"
-    return None
-
-
-def apply_continuity_rejection(
-    connection: sqlite3.Connection,
-    mutation: CustomExtensionContinuityMutation | None,
-    *,
-    boundary: Callable[[str], None],
-) -> str | None:
-    """Apply continuity inside the caller transaction or return its rejection."""
-
-    if mutation is None:
-        return None
-    try:
-        _ = apply_custom_extension_continuity_mutation_locked(connection, mutation, boundary=boundary)
-    except ValueError:
-        return "custom_extension_continuity_changed_during_activation"
-    return None
+    bundle = dict(policy_bundle)
+    if verdicts is None:
+        downgrade = policy_bundle_is_version_downgrade(existing, bundle)
+    else:
+        downgrade = bool(
+            verdicts.resolve(
+                ("downgrade", str(row["payload_json"])),
+                lambda: policy_bundle_is_version_downgrade(existing, bundle),
+                "policy_bundle_checkpoint_invalid",
+            )
+        )
+    return "bundle_version_downgrade" if downgrade else None

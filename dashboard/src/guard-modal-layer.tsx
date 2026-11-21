@@ -5,6 +5,7 @@ import { useFocusTrap } from "./use-focus-trap";
 
 interface GuardModalLayerProps {
   ariaLabel: string;
+  ariaDescribedBy?: string;
   children: ReactNode;
   onClose: () => void;
   panelClassName?: string;
@@ -12,6 +13,7 @@ interface GuardModalLayerProps {
 
 export function GuardModalLayer({
   ariaLabel,
+  ariaDescribedBy,
   children,
   onClose,
   panelClassName = "w-full max-w-2xl",
@@ -75,6 +77,7 @@ export function GuardModalLayer({
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
     >
       <div
         ref={panelRef}

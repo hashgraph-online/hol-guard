@@ -1,0 +1,119 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Pet Shop", "version": "1.0.0" },
+  "servers": [{ "url": "https://api.pet-shop.example/v2" }],
+  "components": {
+    "securitySchemes": {
+      "shop_auth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://auth.pet-shop.example/authorize",
+            "tokenUrl": "https://auth.pet-shop.example/token",
+            "scopes": { "pets:read": "Read pets", "pets:write": "Change pets", "orders:write": "Place orders" }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "PetId": { "name": "petId", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } }
+    },
+    "schemas": {
+      "Pet": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string", "maxLength": 80 },
+          "status": { "$ref": "#/components/schemas/Status" },
+          "tags": { "type": "array", "items": { "type": "string", "maxLength": 32 }, "maxItems": 10 },
+          "owner": { "$ref": "#/components/schemas/Owner" }
+        }
+      },
+      "Owner": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "pets": { "type": "array", "items": { "$ref": "#/components/schemas/Pet" } } }
+      },
+      "Status": { "type": "string", "enum": ["available", "pending", "sold"] },
+      "Order": {
+        "type": "object",
+        "required": ["petId", "amount", "currency"],
+        "properties": {
+          "petId": { "type": "integer", "minimum": 1 },
+          "amount": { "type": "integer", "minimum": 1, "maximum": 100000 },
+          "currency": { "type": "string", "pattern": "^[A-Z]{3}$", "maxLength": 3 }
+        }
+      }
+    }
+  },
+  "security": [{ "shop_auth": ["pets:read"] }],
+  "paths": {
+    "/pets": {
+      "get": {
+        "operationId": "listPets",
+        "summary": "List pets",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "$ref": "#/components/schemas/Status" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100 } },
+          { "name": "X-Request-Id", "in": "header", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pets",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Pet" } } } }
+          }
+        }
+      },
+      "post": {
+        "operationId": "addPet",
+        "summary": "Add a pet",
+        "security": [{ "shop_auth": ["pets:write"] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Pet" } } }
+        },
+        "responses": {
+          "201": { "description": "Added", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Pet" } } } }
+        }
+      }
+    },
+    "/pets/{petId}": {
+      "parameters": [{ "$ref": "#/components/parameters/PetId" }],
+      "get": {
+        "operationId": "getPetById",
+        "summary": "Find a pet by ID",
+        "responses": {
+          "200": { "description": "Pet", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Pet" } } } }
+        }
+      },
+      "delete": {
+        "operationId": "removePet",
+        "summary": "Remove a pet",
+        "security": [{ "shop_auth": ["pets:write"] }],
+        "responses": { "204": { "description": "Removed" } }
+      }
+    },
+    "/store/orders": {
+      "post": {
+        "operationId": "placeOrder",
+        "summary": "Place an order for a pet",
+        "security": [{ "shop_auth": ["orders:write"] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Order" } } }
+        },
+        "responses": { "200": { "description": "Placed" } }
+      }
+    },
+    "/pets/{petId}/photo.{format}": {
+      "get": {
+        "operationId": "getPhoto",
+        "parameters": [
+          { "$ref": "#/components/parameters/PetId" },
+          { "name": "format", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Photo" } }
+      }
+    }
+  }
+}

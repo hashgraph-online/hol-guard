@@ -1,0 +1,6819 @@
+[
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 30,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "deploy-tool",
+   "observed_count": 0,
+   "source_path": null,
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 45,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 1,
+   "source_path": "",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 55,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 2,
+   "source_path": "unknown",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "deploy-tool",
+   "observed_count": 5,
+   "source_path": "package-store",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 30,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "deploy-tool",
+   "observed_count": 7,
+   "source_path": "system-bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "deploy-tool",
+   "observed_count": -3,
+   "source_path": "user-tool",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "project-tool",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 0,
+   "source_path": "project-tool",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "registry-package",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 60,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "deploy-tool",
+   "observed_count": 9,
+   "source_path": "registry-package",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "mytool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "mytool",
+   "observed_count": 0,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "mytool is a built-in shell command, not a custom extension.",
+   "score": 25,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "mytool",
+   "observed_count": 1,
+   "source_path": "/usr/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "mytool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "mytool",
+   "observed_count": 2,
+   "source_path": "/usr/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "mytool is a built-in shell command, not a custom extension.",
+   "score": 40,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "mytool",
+   "observed_count": 5,
+   "source_path": "/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "mytool is a built-in shell command, not a custom extension.",
+   "score": 30,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "mytool",
+   "observed_count": 7,
+   "source_path": "/sbin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "mytool is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "mytool",
+   "observed_count": -3,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "mytool is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "mytool",
+   "observed_count": 0,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "mytool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "mytool",
+   "observed_count": 9,
+   "source_path": "node_modules",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "abc is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "abc",
+   "observed_count": 0,
+   "source_path": "node_modules/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "abc is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "abc",
+   "observed_count": 1,
+   "source_path": "/x/.pnpm/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "abc is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "abc",
+   "observed_count": 2,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "abc is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "abc",
+   "observed_count": 5,
+   "source_path": "/x/venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "abc is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "abc",
+   "observed_count": 7,
+   "source_path": "/x/site-packages/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "abc is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "abc",
+   "observed_count": -3,
+   "source_path": "/x/__pycache__/y",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "abc is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "abc",
+   "observed_count": 0,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "abc is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "abc",
+   "observed_count": 9,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ab-c is a built-in shell command, not a custom extension.",
+   "score": 10,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "ab-c",
+   "observed_count": 0,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ab-c is a built-in shell command, not a custom extension.",
+   "score": 25,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "ab-c",
+   "observed_count": 1,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ab-c is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "ab-c",
+   "observed_count": 2,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ab-c is a built-in shell command, not a custom extension.",
+   "score": 40,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "ab-c",
+   "observed_count": 5,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ab-c is a built-in shell command, not a custom extension.",
+   "score": 30,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "ab-c",
+   "observed_count": 7,
+   "source_path": "windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "ab-c is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "ab-c",
+   "observed_count": -3,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ab-c is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "ab-c",
+   "observed_count": 0,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "ab-c is a built-in shell command, not a custom extension.",
+   "score": 65,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "ab-c",
+   "observed_count": 9,
+   "source_path": "/home/a/bin/tool",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "abcd-e is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "abcd-e",
+   "observed_count": 0,
+   "source_path": "relative/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "abcd-e is a built-in shell command, not a custom extension.",
+   "score": 45,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "abcd-e",
+   "observed_count": 1,
+   "source_path": null,
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "abcd-e is a built-in shell command, not a custom extension.",
+   "score": 55,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "abcd-e",
+   "observed_count": 2,
+   "source_path": "",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "abcd-e is a built-in shell command, not a custom extension.",
+   "score": 60,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "abcd-e",
+   "observed_count": 5,
+   "source_path": "unknown",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "abcd-e is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "abcd-e",
+   "observed_count": 7,
+   "source_path": "package-store",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "abcd-e is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "abcd-e",
+   "observed_count": -3,
+   "source_path": "system-bin",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "abcd-e is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "abcd-e",
+   "observed_count": 0,
+   "source_path": "user-tool",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "project-tool",
+   "reject_message": "abcd-e is a built-in shell command, not a custom extension.",
+   "score": 65,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "abcd-e",
+   "observed_count": 9,
+   "source_path": "project-tool",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "registry-package",
+   "reject_message": "x_y is a built-in shell command, not a custom extension.",
+   "score": 10,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "x_y",
+   "observed_count": 0,
+   "source_path": "registry-package",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "x_y is a built-in shell command, not a custom extension.",
+   "score": 30,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "x_y",
+   "observed_count": 1,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "x_y is a built-in shell command, not a custom extension.",
+   "score": 15,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "x_y",
+   "observed_count": 2,
+   "source_path": "/usr/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "x_y is a built-in shell command, not a custom extension.",
+   "score": 20,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "x_y",
+   "observed_count": 5,
+   "source_path": "/usr/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "x_y is a built-in shell command, not a custom extension.",
+   "score": 10,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "x_y",
+   "observed_count": 7,
+   "source_path": "/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "x_y is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "x_y",
+   "observed_count": -3,
+   "source_path": "/sbin/x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "x_y is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "x_y",
+   "observed_count": 0,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "x_y is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "x_y",
+   "observed_count": 9,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "long_name is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "long_name",
+   "observed_count": 0,
+   "source_path": "node_modules",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "long_name is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "long_name",
+   "observed_count": 1,
+   "source_path": "node_modules/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "long_name is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "long_name",
+   "observed_count": 2,
+   "source_path": "/x/.pnpm/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "long_name is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "long_name",
+   "observed_count": 5,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "long_name is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "long_name",
+   "observed_count": 7,
+   "source_path": "/x/venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "long_name is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "long_name",
+   "observed_count": -3,
+   "source_path": "/x/site-packages/y",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "long_name is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "long_name",
+   "observed_count": 0,
+   "source_path": "/x/__pycache__/y",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "long_name is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "long_name",
+   "observed_count": 9,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "release.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "release.sh",
+   "observed_count": 0,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "release.sh is a built-in shell command, not a custom extension.",
+   "score": 25,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "release.sh",
+   "observed_count": 1,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "release.sh is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "release.sh",
+   "observed_count": 2,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "release.sh is a built-in shell command, not a custom extension.",
+   "score": 40,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "release.sh",
+   "observed_count": 5,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "release.sh is a built-in shell command, not a custom extension.",
+   "score": 30,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "release.sh",
+   "observed_count": 7,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "release.sh is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "release.sh",
+   "observed_count": -3,
+   "source_path": "windows/system32/x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "release.sh is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "release.sh",
+   "observed_count": 0,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "release.sh is a built-in shell command, not a custom extension.",
+   "score": 40,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "release.sh",
+   "observed_count": 9,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "rel.py is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "rel.py",
+   "observed_count": 0,
+   "source_path": "/home/a/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "rel.py is a built-in shell command, not a custom extension.",
+   "score": 50,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "rel.py",
+   "observed_count": 1,
+   "source_path": "relative/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "rel.py is a built-in shell command, not a custom extension.",
+   "score": 55,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "rel.py",
+   "observed_count": 2,
+   "source_path": null,
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "rel.py is a built-in shell command, not a custom extension.",
+   "score": 60,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "rel.py",
+   "observed_count": 5,
+   "source_path": "",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "rel.py is a built-in shell command, not a custom extension.",
+   "score": 50,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "rel.py",
+   "observed_count": 7,
+   "source_path": "unknown",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "rel.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "rel.py",
+   "observed_count": -3,
+   "source_path": "package-store",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "rel.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "rel.py",
+   "observed_count": 0,
+   "source_path": "system-bin",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "rel.py is a built-in shell command, not a custom extension.",
+   "score": 65,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "rel.py",
+   "observed_count": 9,
+   "source_path": "user-tool",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "project-tool",
+   "reject_message": "ab.py is a built-in shell command, not a custom extension.",
+   "score": 15,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "ab.py",
+   "observed_count": 0,
+   "source_path": "project-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "registry-package",
+   "reject_message": "ab.py is a built-in shell command, not a custom extension.",
+   "score": 25,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "ab.py",
+   "observed_count": 1,
+   "source_path": "registry-package",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "ab.py is a built-in shell command, not a custom extension.",
+   "score": 40,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "ab.py",
+   "observed_count": 2,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ab.py is a built-in shell command, not a custom extension.",
+   "score": 20,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "ab.py",
+   "observed_count": 5,
+   "source_path": "/usr/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ab.py is a built-in shell command, not a custom extension.",
+   "score": 10,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "ab.py",
+   "observed_count": 7,
+   "source_path": "/usr/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ab.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "ab.py",
+   "observed_count": -3,
+   "source_path": "/bin",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ab.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "ab.py",
+   "observed_count": 0,
+   "source_path": "/sbin/x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "ab.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "ab.py",
+   "observed_count": 9,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "build.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "build.sh",
+   "observed_count": 0,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "build.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "build.sh",
+   "observed_count": 1,
+   "source_path": "node_modules",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "build.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "build.sh",
+   "observed_count": 2,
+   "source_path": "node_modules/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "build.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "build.sh",
+   "observed_count": 5,
+   "source_path": "/x/.pnpm/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "build.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "build.sh",
+   "observed_count": 7,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "build.sh is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "build.sh",
+   "observed_count": -3,
+   "source_path": "/x/venv/bin/y",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "build.sh is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "build.sh",
+   "observed_count": 0,
+   "source_path": "/x/site-packages/y",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "build.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "build.sh",
+   "observed_count": 9,
+   "source_path": "/x/__pycache__/y",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "main.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "main.py",
+   "observed_count": 0,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "main.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "main.py",
+   "observed_count": 1,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "main.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "main.py",
+   "observed_count": 2,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "main.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "main.py",
+   "observed_count": 5,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "main.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "main.py",
+   "observed_count": 7,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "main.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "main.py",
+   "observed_count": -3,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "main.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "main.py",
+   "observed_count": 0,
+   "source_path": "windows/system32/x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "main.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "main.py",
+   "observed_count": 9,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "rg",
+   "observed_count": 0,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "user-tool",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "rg",
+   "observed_count": 1,
+   "source_path": "/home/a/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "user-tool",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "rg",
+   "observed_count": 2,
+   "source_path": "relative/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "unknown",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "rg",
+   "observed_count": 5,
+   "source_path": null,
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "unknown",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "rg",
+   "observed_count": 7,
+   "source_path": "",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "unknown",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "rg",
+   "observed_count": -3,
+   "source_path": "unknown",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "rg",
+   "observed_count": 0,
+   "source_path": "package-store",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "rg",
+   "observed_count": 9,
+   "source_path": "system-bin",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "user-tool",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "RG.EXE",
+   "observed_count": 0,
+   "source_path": "user-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "project-tool",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "RG.EXE",
+   "observed_count": 1,
+   "source_path": "project-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "registry-package",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "RG.EXE",
+   "observed_count": 2,
+   "source_path": "registry-package",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "user-tool",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "RG.EXE",
+   "observed_count": 5,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "RG.EXE",
+   "observed_count": 7,
+   "source_path": "/usr/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "RG.EXE",
+   "observed_count": -3,
+   "source_path": "/usr/bin",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "RG.EXE",
+   "observed_count": 0,
+   "source_path": "/bin",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "rg is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "RG.EXE",
+   "observed_count": 9,
+   "source_path": "/sbin/x",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "jq is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "  jq  ",
+   "observed_count": 0,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "jq is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "  jq  ",
+   "observed_count": 1,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "jq is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "  jq  ",
+   "observed_count": 2,
+   "source_path": "node_modules",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "jq is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "  jq  ",
+   "observed_count": 5,
+   "source_path": "node_modules/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "jq is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "  jq  ",
+   "observed_count": 7,
+   "source_path": "/x/.pnpm/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "jq is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "  jq  ",
+   "observed_count": -3,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "jq is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "  jq  ",
+   "observed_count": 0,
+   "source_path": "/x/venv/bin/y",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "jq is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "  jq  ",
+   "observed_count": 9,
+   "source_path": "/x/site-packages/y",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "grep is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "grep.cmd",
+   "observed_count": 0,
+   "source_path": "/x/__pycache__/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "grep is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "grep.cmd",
+   "observed_count": 1,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "grep is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "grep.cmd",
+   "observed_count": 2,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "grep is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "grep.cmd",
+   "observed_count": 5,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "grep is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "grep.cmd",
+   "observed_count": 7,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "grep is a common search tool, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "grep.cmd",
+   "observed_count": -3,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "grep is a common search tool, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "grep.cmd",
+   "observed_count": 0,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "grep is a common search tool, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "grep.cmd",
+   "observed_count": 9,
+   "source_path": "windows/system32/x",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "user-tool",
+   "reject_message": "whoami is a built-in identity command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "whoami",
+   "observed_count": 0,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "whoami is a built-in identity command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "whoami",
+   "observed_count": 1,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "user-tool",
+   "reject_message": "whoami is a built-in identity command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "whoami",
+   "observed_count": 2,
+   "source_path": "/home/a/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "user-tool",
+   "reject_message": "whoami is a built-in identity command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "whoami",
+   "observed_count": 5,
+   "source_path": "relative/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "unknown",
+   "reject_message": "whoami is a built-in identity command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "whoami",
+   "observed_count": 7,
+   "source_path": null,
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "unknown",
+   "reject_message": "whoami is a built-in identity command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "whoami",
+   "observed_count": -3,
+   "source_path": "",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "unknown",
+   "reject_message": "whoami is a built-in identity command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "whoami",
+   "observed_count": 0,
+   "source_path": "unknown",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "whoami is a built-in identity command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "whoami",
+   "observed_count": 9,
+   "source_path": "package-store",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "asciinema is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "asciinema",
+   "observed_count": 0,
+   "source_path": "system-bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "user-tool",
+   "reject_message": "asciinema is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "asciinema",
+   "observed_count": 1,
+   "source_path": "user-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "project-tool",
+   "reject_message": "asciinema is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "asciinema",
+   "observed_count": 2,
+   "source_path": "project-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "registry-package",
+   "reject_message": "asciinema is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "asciinema",
+   "observed_count": 5,
+   "source_path": "registry-package",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "user-tool",
+   "reject_message": "asciinema is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "asciinema",
+   "observed_count": 7,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "asciinema is a built-in terminal recorder, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "asciinema",
+   "observed_count": -3,
+   "source_path": "/usr/bin/tool",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "asciinema is a built-in terminal recorder, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "asciinema",
+   "observed_count": 0,
+   "source_path": "/usr/bin",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "asciinema is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "asciinema",
+   "observed_count": 9,
+   "source_path": "/bin",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "script is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "script",
+   "observed_count": 0,
+   "source_path": "/sbin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "script is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "script",
+   "observed_count": 1,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "script is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "script",
+   "observed_count": 2,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "script is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "script",
+   "observed_count": 5,
+   "source_path": "node_modules",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "script is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "script",
+   "observed_count": 7,
+   "source_path": "node_modules/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "script is a built-in terminal recorder, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "script",
+   "observed_count": -3,
+   "source_path": "/x/.pnpm/y",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "script is a built-in terminal recorder, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "script",
+   "observed_count": 0,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "script is a built-in terminal recorder, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "script",
+   "observed_count": 9,
+   "source_path": "/x/venv/bin/y",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "script.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "script.py",
+   "observed_count": 0,
+   "source_path": "/x/site-packages/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "script.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "script.py",
+   "observed_count": 1,
+   "source_path": "/x/__pycache__/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "script.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "script.py",
+   "observed_count": 2,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "script.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "script.py",
+   "observed_count": 5,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "script.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "script.py",
+   "observed_count": 7,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "script.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "script.py",
+   "observed_count": -3,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "script.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "script.py",
+   "observed_count": 0,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "script.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "script.py",
+   "observed_count": 9,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "hol-guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "hol-guard",
+   "observed_count": 0,
+   "source_path": "windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "hol-guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "hol-guard",
+   "observed_count": 1,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "hol-guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "hol-guard",
+   "observed_count": 2,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "hol-guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "hol-guard",
+   "observed_count": 5,
+   "source_path": "/home/a/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "hol-guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "hol-guard",
+   "observed_count": 7,
+   "source_path": "relative/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "hol-guard is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "hol-guard",
+   "observed_count": -3,
+   "source_path": null,
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "hol-guard is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "hol-guard",
+   "observed_count": 0,
+   "source_path": "",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "hol-guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "hol-guard",
+   "observed_count": 9,
+   "source_path": "unknown",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "Guard",
+   "observed_count": 0,
+   "source_path": "package-store",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "Guard",
+   "observed_count": 1,
+   "source_path": "system-bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "Guard",
+   "observed_count": 2,
+   "source_path": "user-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "project-tool",
+   "reject_message": "guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "Guard",
+   "observed_count": 5,
+   "source_path": "project-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "registry-package",
+   "reject_message": "guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "Guard",
+   "observed_count": 7,
+   "source_path": "registry-package",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "guard is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "Guard",
+   "observed_count": -3,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "guard is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "Guard",
+   "observed_count": 0,
+   "source_path": "/usr/bin/tool",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "guard is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "Guard",
+   "observed_count": 9,
+   "source_path": "/usr/bin",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "vitest is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "vitest",
+   "observed_count": 0,
+   "source_path": "/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "vitest is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "vitest",
+   "observed_count": 1,
+   "source_path": "/sbin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "vitest is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "vitest",
+   "observed_count": 2,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "vitest is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "vitest",
+   "observed_count": 5,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "vitest is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "vitest",
+   "observed_count": 7,
+   "source_path": "node_modules",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "vitest is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "vitest",
+   "observed_count": -3,
+   "source_path": "node_modules/x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "vitest is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "vitest",
+   "observed_count": 0,
+   "source_path": "/x/.pnpm/y",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "vitest is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "vitest",
+   "observed_count": 9,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "py.test is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "py.test",
+   "observed_count": 0,
+   "source_path": "/x/venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "py.test is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "py.test",
+   "observed_count": 1,
+   "source_path": "/x/site-packages/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "py.test is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "py.test",
+   "observed_count": 2,
+   "source_path": "/x/__pycache__/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "py.test is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "py.test",
+   "observed_count": 5,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "py.test is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "py.test",
+   "observed_count": 7,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "py.test is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "py.test",
+   "observed_count": -3,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "py.test is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "py.test",
+   "observed_count": 0,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "py.test is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "py.test",
+   "observed_count": 9,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "pytest.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "pytest.py",
+   "observed_count": 0,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "pytest.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "pytest.py",
+   "observed_count": 1,
+   "source_path": "windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "pytest.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "pytest.py",
+   "observed_count": 2,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "pytest.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "pytest.py",
+   "observed_count": 5,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "pytest.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "pytest.py",
+   "observed_count": 7,
+   "source_path": "/home/a/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "pytest.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "pytest.py",
+   "observed_count": -3,
+   "source_path": "relative/tool",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "pytest.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "pytest.py",
+   "observed_count": 0,
+   "source_path": null,
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "pytest.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "pytest.py",
+   "observed_count": 9,
+   "source_path": "",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "test_api.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "test_api.py",
+   "observed_count": 0,
+   "source_path": "unknown",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "test_api.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "test_api.py",
+   "observed_count": 1,
+   "source_path": "package-store",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "test_api.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "test_api.py",
+   "observed_count": 2,
+   "source_path": "system-bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "test_api.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "test_api.py",
+   "observed_count": 5,
+   "source_path": "user-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "project-tool",
+   "reject_message": "test_api.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "test_api.py",
+   "observed_count": 7,
+   "source_path": "project-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "registry-package",
+   "reject_message": "test_api.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "test_api.py",
+   "observed_count": -3,
+   "source_path": "registry-package",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "test_api.py is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "test_api.py",
+   "observed_count": 0,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "test_api.py is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "test_api.py",
+   "observed_count": 9,
+   "source_path": "/usr/bin/tool",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api.test.ts is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "api.test.ts",
+   "observed_count": 0,
+   "source_path": "/usr/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api.test.ts is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "api.test.ts",
+   "observed_count": 1,
+   "source_path": "/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api.test.ts is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "api.test.ts",
+   "observed_count": 2,
+   "source_path": "/sbin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.test.ts is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "api.test.ts",
+   "observed_count": 5,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.test.ts is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "api.test.ts",
+   "observed_count": 7,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.test.ts is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "api.test.ts",
+   "observed_count": -3,
+   "source_path": "node_modules",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.test.ts is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "api.test.ts",
+   "observed_count": 0,
+   "source_path": "node_modules/x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.test.ts is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "api.test.ts",
+   "observed_count": 9,
+   "source_path": "/x/.pnpm/y",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.spec.js is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "api.spec.js",
+   "observed_count": 0,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.spec.js is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "api.spec.js",
+   "observed_count": 1,
+   "source_path": "/x/venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.spec.js is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "api.spec.js",
+   "observed_count": 2,
+   "source_path": "/x/site-packages/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.spec.js is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "api.spec.js",
+   "observed_count": 5,
+   "source_path": "/x/__pycache__/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.spec.js is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "api.spec.js",
+   "observed_count": 7,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.spec.js is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "api.spec.js",
+   "observed_count": -3,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api.spec.js is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "api.spec.js",
+   "observed_count": 0,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api.spec.js is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "api.spec.js",
+   "observed_count": 9,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api_test.rb is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "api_test.rb",
+   "observed_count": 0,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api_test.rb is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "api_test.rb",
+   "observed_count": 1,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api_test.rb is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "api_test.rb",
+   "observed_count": 2,
+   "source_path": "windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "api_test.rb is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "api_test.rb",
+   "observed_count": 5,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api_test.rb is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "api_test.rb",
+   "observed_count": 7,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "api_test.rb is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "api_test.rb",
+   "observed_count": -3,
+   "source_path": "/home/a/bin/tool",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "api_test.rb is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "api_test.rb",
+   "observed_count": 0,
+   "source_path": "relative/tool",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "api_test.rb is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "api_test.rb",
+   "observed_count": 9,
+   "source_path": null,
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "api_spec.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "api_spec.sh",
+   "observed_count": 0,
+   "source_path": "",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "api_spec.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "api_spec.sh",
+   "observed_count": 1,
+   "source_path": "unknown",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api_spec.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "api_spec.sh",
+   "observed_count": 2,
+   "source_path": "package-store",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api_spec.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "api_spec.sh",
+   "observed_count": 5,
+   "source_path": "system-bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "api_spec.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "api_spec.sh",
+   "observed_count": 7,
+   "source_path": "user-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "project-tool",
+   "reject_message": "api_spec.sh is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "api_spec.sh",
+   "observed_count": -3,
+   "source_path": "project-tool",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "registry-package",
+   "reject_message": "api_spec.sh is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "api_spec.sh",
+   "observed_count": 0,
+   "source_path": "registry-package",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "api_spec.sh is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "api_spec.sh",
+   "observed_count": 9,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api.test.txt is a built-in shell command, not a custom extension.",
+   "score": 10,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "api.test.txt",
+   "observed_count": 0,
+   "source_path": "/usr/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api.test.txt is a built-in shell command, not a custom extension.",
+   "score": 25,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "api.test.txt",
+   "observed_count": 1,
+   "source_path": "/usr/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api.test.txt is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "api.test.txt",
+   "observed_count": 2,
+   "source_path": "/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "api.test.txt is a built-in shell command, not a custom extension.",
+   "score": 40,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "api.test.txt",
+   "observed_count": 5,
+   "source_path": "/sbin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.test.txt is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "api.test.txt",
+   "observed_count": 7,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.test.txt is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "api.test.txt",
+   "observed_count": -3,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.test.txt is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "api.test.txt",
+   "observed_count": 0,
+   "source_path": "node_modules",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "api.test.txt is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "api.test.txt",
+   "observed_count": 9,
+   "source_path": "node_modules/x",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "notes.test is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "notes.test",
+   "observed_count": 0,
+   "source_path": "/x/.pnpm/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "notes.test is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "notes.test",
+   "observed_count": 1,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "notes.test is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "notes.test",
+   "observed_count": 2,
+   "source_path": "/x/venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "notes.test is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "notes.test",
+   "observed_count": 5,
+   "source_path": "/x/site-packages/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "notes.test is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "notes.test",
+   "observed_count": 7,
+   "source_path": "/x/__pycache__/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "notes.test is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "notes.test",
+   "observed_count": -3,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "notes.test is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "notes.test",
+   "observed_count": 0,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "notes.test is a built-in shell command, not a custom extension.",
+   "score": 40,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "notes.test",
+   "observed_count": 9,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "kubectl is a built-in shell command, not a custom extension.",
+   "score": 10,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "kubectl",
+   "observed_count": 0,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "kubectl is a built-in shell command, not a custom extension.",
+   "score": 25,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "kubectl",
+   "observed_count": 1,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "kubectl is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "kubectl",
+   "observed_count": 2,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "kubectl is a built-in shell command, not a custom extension.",
+   "score": 40,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "kubectl",
+   "observed_count": 5,
+   "source_path": "windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "kubectl is a built-in shell command, not a custom extension.",
+   "score": 55,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "kubectl",
+   "observed_count": 7,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "kubectl is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "kubectl",
+   "observed_count": -3,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "kubectl is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "kubectl",
+   "observed_count": 0,
+   "source_path": "/home/a/bin/tool",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "kubectl is a built-in shell command, not a custom extension.",
+   "score": 65,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "kubectl",
+   "observed_count": 9,
+   "source_path": "relative/tool",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "terraform is a built-in shell command, not a custom extension.",
+   "score": 30,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "terraform",
+   "observed_count": 0,
+   "source_path": null,
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "terraform is a built-in shell command, not a custom extension.",
+   "score": 45,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "terraform",
+   "observed_count": 1,
+   "source_path": "",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "terraform is a built-in shell command, not a custom extension.",
+   "score": 55,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "terraform",
+   "observed_count": 2,
+   "source_path": "unknown",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "terraform is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "terraform",
+   "observed_count": 5,
+   "source_path": "package-store",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "terraform is a built-in shell command, not a custom extension.",
+   "score": 30,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "terraform",
+   "observed_count": 7,
+   "source_path": "system-bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "terraform is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "terraform",
+   "observed_count": -3,
+   "source_path": "user-tool",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "project-tool",
+   "reject_message": "terraform is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "terraform",
+   "observed_count": 0,
+   "source_path": "project-tool",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "registry-package",
+   "reject_message": "terraform is a built-in shell command, not a custom extension.",
+   "score": 60,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "terraform",
+   "observed_count": 9,
+   "source_path": "registry-package",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "ünïcode-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "Ünïcode-tool",
+   "observed_count": 0,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ünïcode-tool is a built-in shell command, not a custom extension.",
+   "score": 25,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "Ünïcode-tool",
+   "observed_count": 1,
+   "source_path": "/usr/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ünïcode-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "Ünïcode-tool",
+   "observed_count": 2,
+   "source_path": "/usr/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ünïcode-tool is a built-in shell command, not a custom extension.",
+   "score": 40,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "Ünïcode-tool",
+   "observed_count": 5,
+   "source_path": "/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "ünïcode-tool is a built-in shell command, not a custom extension.",
+   "score": 30,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "Ünïcode-tool",
+   "observed_count": 7,
+   "source_path": "/sbin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "ünïcode-tool is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "Ünïcode-tool",
+   "observed_count": -3,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "ünïcode-tool is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "Ünïcode-tool",
+   "observed_count": 0,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "ünïcode-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "Ünïcode-tool",
+   "observed_count": 9,
+   "source_path": "node_modules",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "i̇stanbul is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "İstanbul",
+   "observed_count": 0,
+   "source_path": "node_modules/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "i̇stanbul is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "İstanbul",
+   "observed_count": 1,
+   "source_path": "/x/.pnpm/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "i̇stanbul is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "İstanbul",
+   "observed_count": 2,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "i̇stanbul is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "İstanbul",
+   "observed_count": 5,
+   "source_path": "/x/venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "i̇stanbul is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "İstanbul",
+   "observed_count": 7,
+   "source_path": "/x/site-packages/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "i̇stanbul is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "İstanbul",
+   "observed_count": -3,
+   "source_path": "/x/__pycache__/y",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "i̇stanbul is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "İstanbul",
+   "observed_count": 0,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "i̇stanbul is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "İstanbul",
+   "observed_count": 9,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "padded is a built-in shell command, not a custom extension.",
+   "score": 10,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": " padded ",
+   "observed_count": 0,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "padded is a built-in shell command, not a custom extension.",
+   "score": 25,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": " padded ",
+   "observed_count": 1,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "padded is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": " padded ",
+   "observed_count": 2,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "padded is a built-in shell command, not a custom extension.",
+   "score": 40,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": " padded ",
+   "observed_count": 5,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "padded is a built-in shell command, not a custom extension.",
+   "score": 30,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": " padded ",
+   "observed_count": 7,
+   "source_path": "windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "padded is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": " padded ",
+   "observed_count": -3,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "padded is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": " padded ",
+   "observed_count": 0,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "padded is a built-in shell command, not a custom extension.",
+   "score": 65,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": " padded ",
+   "observed_count": 9,
+   "source_path": "/home/a/bin/tool",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": " is a built-in shell command, not a custom extension.",
+   "score": 15,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "",
+   "observed_count": 0,
+   "source_path": "relative/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": " is a built-in shell command, not a custom extension.",
+   "score": 25,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "",
+   "observed_count": 1,
+   "source_path": null,
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": " is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "",
+   "observed_count": 2,
+   "source_path": "",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": " is a built-in shell command, not a custom extension.",
+   "score": 40,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "",
+   "observed_count": 5,
+   "source_path": "unknown",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": " is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "",
+   "observed_count": 7,
+   "source_path": "package-store",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": " is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "",
+   "observed_count": -3,
+   "source_path": "system-bin",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": " is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "",
+   "observed_count": 0,
+   "source_path": "user-tool",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "project-tool",
+   "reject_message": " is a built-in shell command, not a custom extension.",
+   "score": 45,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "",
+   "observed_count": 9,
+   "source_path": "project-tool",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "registry-package",
+   "reject_message": ". is a built-in shell command, not a custom extension.",
+   "score": 10,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": ".",
+   "observed_count": 0,
+   "source_path": "registry-package",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": ". is a built-in shell command, not a custom extension.",
+   "score": 30,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": ".",
+   "observed_count": 1,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": ". is a built-in shell command, not a custom extension.",
+   "score": 15,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": ".",
+   "observed_count": 2,
+   "source_path": "/usr/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": ". is a built-in shell command, not a custom extension.",
+   "score": 20,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": ".",
+   "observed_count": 5,
+   "source_path": "/usr/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": ". is a built-in shell command, not a custom extension.",
+   "score": 10,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": ".",
+   "observed_count": 7,
+   "source_path": "/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": ". is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": ".",
+   "observed_count": -3,
+   "source_path": "/sbin/x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": ". is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": ".",
+   "observed_count": 0,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": ". is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": ".",
+   "observed_count": 9,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": ".hidden is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": ".hidden",
+   "observed_count": 0,
+   "source_path": "node_modules",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": ".hidden is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": ".hidden",
+   "observed_count": 1,
+   "source_path": "node_modules/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": ".hidden is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": ".hidden",
+   "observed_count": 2,
+   "source_path": "/x/.pnpm/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": ".hidden is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": ".hidden",
+   "observed_count": 5,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": ".hidden is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": ".hidden",
+   "observed_count": 7,
+   "source_path": "/x/venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": ".hidden is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": ".hidden",
+   "observed_count": -3,
+   "source_path": "/x/site-packages/y",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": ".hidden is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": ".hidden",
+   "observed_count": 0,
+   "source_path": "/x/__pycache__/y",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": ".hidden is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": ".hidden",
+   "observed_count": 9,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "tool.exe is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "tool.exe.cmd",
+   "observed_count": 0,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "tool.exe is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "tool.exe.cmd",
+   "observed_count": 1,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "tool.exe is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "tool.exe.cmd",
+   "observed_count": 2,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "tool.exe is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "tool.exe.cmd",
+   "observed_count": 5,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "tool.exe is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "tool.exe.cmd",
+   "observed_count": 7,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "tool.exe is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "tool.exe.cmd",
+   "observed_count": -3,
+   "source_path": "windows/system32/x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "tool.exe is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "tool.exe.cmd",
+   "observed_count": 0,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "tool.exe is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "tool.exe.cmd",
+   "observed_count": 9,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "deploy is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "deploy",
+   "observed_count": 0,
+   "source_path": "/home/a/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "deploy is a built-in shell command, not a custom extension.",
+   "score": 50,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy",
+   "observed_count": 1,
+   "source_path": "relative/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "deploy is a built-in shell command, not a custom extension.",
+   "score": 55,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy",
+   "observed_count": 2,
+   "source_path": null,
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "deploy is a built-in shell command, not a custom extension.",
+   "score": 60,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "deploy",
+   "observed_count": 5,
+   "source_path": "",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "deploy is a built-in shell command, not a custom extension.",
+   "score": 50,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "deploy",
+   "observed_count": 7,
+   "source_path": "unknown",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "deploy",
+   "observed_count": -3,
+   "source_path": "package-store",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "deploy",
+   "observed_count": 0,
+   "source_path": "system-bin",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "deploy is a built-in shell command, not a custom extension.",
+   "score": 65,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "deploy",
+   "observed_count": 9,
+   "source_path": "user-tool",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "project-tool",
+   "reject_message": "[ is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "[",
+   "observed_count": 0,
+   "source_path": "project-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "registry-package",
+   "reject_message": "[ is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "[",
+   "observed_count": 1,
+   "source_path": "registry-package",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "user-tool",
+   "reject_message": "[ is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "[",
+   "observed_count": 2,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "[ is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "[",
+   "observed_count": 5,
+   "source_path": "/usr/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "[ is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "[",
+   "observed_count": 7,
+   "source_path": "/usr/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "[ is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "[",
+   "observed_count": -3,
+   "source_path": "/bin",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "system-bin",
+   "reject_message": "[ is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "[",
+   "observed_count": 0,
+   "source_path": "/sbin/x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": true,
+   "path_class": "package-store",
+   "reject_message": "[ is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "[",
+   "observed_count": 9,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "a.b.c is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "a.b.c",
+   "observed_count": 0,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "a.b.c is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "a.b.c",
+   "observed_count": 1,
+   "source_path": "node_modules",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "a.b.c is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "a.b.c",
+   "observed_count": 2,
+   "source_path": "node_modules/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "a.b.c is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "a.b.c",
+   "observed_count": 5,
+   "source_path": "/x/.pnpm/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "a.b.c is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "a.b.c",
+   "observed_count": 7,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "a.b.c is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "a.b.c",
+   "observed_count": -3,
+   "source_path": "/x/venv/bin/y",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "a.b.c is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "a.b.c",
+   "observed_count": 0,
+   "source_path": "/x/site-packages/y",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "a.b.c is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "a.b.c",
+   "observed_count": 9,
+   "source_path": "/x/__pycache__/y",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "cli.mjs is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "cli.mjs",
+   "observed_count": 0,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "cli.mjs is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "cli.mjs",
+   "observed_count": 1,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "cli.mjs is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "cli.mjs",
+   "observed_count": 2,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "cli.mjs is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "cli.mjs",
+   "observed_count": 5,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "cli.mjs is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "cli.mjs",
+   "observed_count": 7,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "cli.mjs is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "cli.mjs",
+   "observed_count": -3,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "cli.mjs is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "cli.mjs",
+   "observed_count": 0,
+   "source_path": "windows/system32/x",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "cli.mjs is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "cli.mjs",
+   "observed_count": 9,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "tools is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "Tools",
+   "observed_count": 0,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "tools is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "Tools",
+   "observed_count": 1,
+   "source_path": "/home/a/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "tools is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "Tools",
+   "observed_count": 2,
+   "source_path": "relative/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "tools is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "executable",
+   "name": "Tools",
+   "observed_count": 5,
+   "source_path": null,
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "tools is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "failed",
+   "kind": "executable",
+   "name": "Tools",
+   "observed_count": 7,
+   "source_path": "",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "tools is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "executable",
+   "name": "Tools",
+   "observed_count": -3,
+   "source_path": "unknown",
+   "surface": "mcp"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "tools is a built-in shell command, not a custom extension.",
+   "score": 100,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": null,
+   "kind": "script",
+   "name": "Tools",
+   "observed_count": 0,
+   "source_path": "package-store",
+   "surface": "package-scripts"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "tools is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "weird",
+   "name": "Tools",
+   "observed_count": 9,
+   "source_path": "system-bin",
+   "surface": "other"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 55,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": null,
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 55,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "unknown",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 55,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "unknown",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "package-store",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "system-bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 60,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "user-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "project-tool",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 60,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "project-tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "registry-package",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 55,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "registry-package",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 60,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/usr/local/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/usr/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/usr/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/bin",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/sbin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/home/a/node_modules/.bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "C:\\Users\\a\\node_modules\\x\\cli.js",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "node_modules",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "node_modules/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/x/.pnpm/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/x/.venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/x/venv/bin/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/x/site-packages/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/x/__pycache__/y",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/home/a/.nvm/versions/node/bin/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "package-store",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 0,
+   "suggestable": false
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/opt/nvm/versions/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "C:\\Windows\\System32\\cmd.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "c:/windows/syswow64/x.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "\\\\?\\C:\\Windows\\System\\x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "//?/c:/windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "windows/system32/x",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 60,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "D:\\Tools\\deploy.exe",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "system-bin",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 35,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/USR/BIN/Tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 60,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "/home/a/bin/tool",
+   "surface": "cli"
+  }
+ },
+ {
+  "expected": {
+   "common_utility": false,
+   "path_class": "user-tool",
+   "reject_message": "deploy-tool is a built-in shell command, not a custom extension.",
+   "score": 60,
+   "suggestable": true
+  },
+  "tool": {
+   "help_status": "ok",
+   "kind": "script",
+   "name": "deploy-tool",
+   "observed_count": 3,
+   "source_path": "relative/tool",
+   "surface": "cli"
+  }
+ }
+]

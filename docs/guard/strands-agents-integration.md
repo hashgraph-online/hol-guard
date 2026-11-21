@@ -6,13 +6,25 @@ This integration is intentionally narrow. It does not claim that arbitrary Stran
 
 ## Install
 
-The vended intervention is currently in the HOL Guard 3.x alpha channel. Install the current published prerelease in the same Python environment as Strands Agents:
+The vended intervention is part of HOL Guard 3.x, not an alpha-only API. However, as of October 30, 2026, HOL Guard 3.58.x pins `idna==3.15`. The Strands catalog maintainer reported that a plain `pip install strands-agents hol-guard` backtracked to HOL Guard 2.2.x, which does **not** include this intervention. The exact `idna` pin was removed in the 3.59.0 prerelease series, starting with 3.59.0a13 ([dependency change](https://github.com/hashgraph-online/hol-guard/pull/6506)).
+
+Until a compatible stable 3.59.x release is published, explicitly select a published 3.59 prerelease and inspect the installed package and import:
 
 ```bash
-pip install --pre hol-guard "strands-agents>=1.53,<2"
+python -m pip install --pre "hol-guard>=3.59.0a13,<4" "strands-agents>=1.53,<2"
+python -m pip show hol-guard strands-agents
+python -c "from codex_plugin_scanner.guard.strands_intervention import HolGuardIntervention; print(HolGuardIntervention.__name__)"
 ```
 
-After evaluating the integration, pin the exact HOL Guard prerelease you tested. Check the [HOL Guard prereleases](https://github.com/hashgraph-online/hol-guard/releases) for the current 3.x alpha. Guard Cloud is not required for this local inspection path.
+Do not treat successful dependency resolution as proof the integration is enforcing policy. Confirm that pip selected HOL Guard 3.59 or later, and test your own tool boundary as described below. The commands above check installation and import only; they do not run a Strands agent or test downstream execution.
+
+Once a compatible stable HOL Guard 3.59.x (or newer 3.x) is released, the intended stable-only installation is:
+
+```bash
+python -m pip install "hol-guard>=3.59,<4" "strands-agents>=1.53,<2"
+```
+
+Pin the exact compatible versions you actually tested. Guard Cloud is not required for this local inspection path.
 
 ## Attach the intervention
 

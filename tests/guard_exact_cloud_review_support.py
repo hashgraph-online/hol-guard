@@ -12,10 +12,15 @@ from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
     payload_hash_for_remote_approval_envelope,
 )
+from codex_plugin_scanner.guard.runtime.command_queue_protocol import result_payload
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
+    EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY,
     EXACT_CLOUD_REVIEW_OPERATION,
+    _capability_digest,
     _oauth_metadata,
+    _verify,
 )
+from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import exact_transport_job
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_oauth_token_support import oauth_binding_access_token
 from tests.guard_review_signing_helpers import (
@@ -104,20 +109,39 @@ def remote_approval(
     issued_at: datetime | None = None,
     expires_at: datetime | None = None,
     source_claim: dict[str, object] | None = None,
+    authority: str | None = None,
+    reviewer_role: str = "owner",
+    step_up_challenge_id: str | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     assert isinstance(request, dict)
+    persisted_request = store.get_raw_approval_request_snapshot(request_id)
+    assert isinstance(persisted_request, dict)
     claim = source_claim or build_local_review_request_claim(
-        request_row=request, oauth=_oauth_metadata(store), store=store
+        request_row=persisted_request, oauth=_oauth_metadata(store), store=store
     )
-    advertisement = claim["exactReviewCapability"]
-    assert isinstance(advertisement, dict)
+    advertisement = claim.get("exactReviewCapability")
     issued_at = issued_at or datetime.now(timezone.utc).replace(microsecond=0)
     expires_at = expires_at or issued_at + timedelta(minutes=5)
+    if authority == "workspace_admin_mfa":
+        capability_id = "ab" * 32
+    elif isinstance(advertisement, dict):
+        capability_id = advertisement["capabilityId"]
+    else:
+        # The claim only advertises a capability whose window is still open,
+        # but the Cloud issues a receipt while that window is open and the
+        # local clock may have passed it by the time a test builds one. Bind
+        # the receipt to the stored capability itself so the expiry is judged
+        # where it belongs, in the write transaction. The digest the apply path
+        # compares against is taken over the verified capability, which is the
+        # stored payload without its signature.
+        capability_id = _capability_digest(
+            _verify(store, store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY))
+        )
     envelope: dict[str, object] = {
         "actionEnvelopeHash": claim["actionEnvelopeHash"],
         "approvalId": claim["approvalId"],
-        "capabilityId": advertisement["capabilityId"],
+        "capabilityId": capability_id,
         "capabilityCategory": claim["capabilityCategory"],
         "contractVersion": "guard.remote-approval.v1",
         "decision": decision,
@@ -135,18 +159,24 @@ def remote_approval(
         "policyVersion": claim["policyVersion"],
         "projectIdentity": claim["projectIdentity"],
         "receiptId": receipt_id,
-        "reviewerRole": "owner",
+        "reviewerRole": reviewer_role,
         "reviewerUserId": "user-1",
         "riskCategory": claim["riskCategory"],
         "runtimeGrantId": "00000000-0000-4000-8000-000000000002",
         "runtimeId": claim["runtimeId"],
         "scope": "artifact",
         "sourceClaimHash": claim["claimHash"],
-        "stepUpChallengeId": None,
+        "stepUpChallengeId": step_up_challenge_id,
         "verificationKeys": review_verification_keys(),
         "signatureAlgorithm": "rsa-pss-sha256",
         "workspaceId": claim["workspaceId"],
     }
+    if authority is not None:
+        envelope["authority"] = authority
+    if isinstance(claim.get("nativeBindingVersion"), str):
+        envelope["nativeBindingVersion"] = claim["nativeBindingVersion"]
+        if isinstance(claim.get("nativeBindingDigest"), str):
+            envelope["nativeBindingDigest"] = claim["nativeBindingDigest"]
     envelope["payloadHash"] = payload_hash_for_remote_approval_envelope(envelope)
     envelope["signature"] = sign_review_payload(envelope)
     return envelope
@@ -162,8 +192,7 @@ def exact_review_job(
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
     capability = store.get_sync_payload("guard_exact_cloud_review_capability")
-    assert isinstance(capability, dict)
-    device_id = capability.get("deviceId")
+    device_id = capability.get("deviceId") if isinstance(capability, dict) else credentials.get("device_id")
     assert isinstance(device_id, str) and device_id
     return {
         "id": "exact-job-1",
@@ -206,3 +235,13 @@ __all__ = [
     "remote_approval",
     "review_request",
 ]
+
+
+def exact_result(job: dict[str, object], execution: dict[str, object]) -> dict[str, object]:
+    """The exact Review result the runtime posts for ``job``, which must be valid."""
+
+    payload = result_payload(exact_transport_job(job), execution)
+    assert payload["status"] == "succeeded", payload
+    result = payload["result"]
+    assert isinstance(result, dict)
+    return result

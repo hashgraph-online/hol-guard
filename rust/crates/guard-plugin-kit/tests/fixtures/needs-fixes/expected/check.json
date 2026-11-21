@@ -1,0 +1,189 @@
+{
+  "diagnostics": [
+    {
+      "code": "name_not_kebab",
+      "level": "error",
+      "message": "Claude Code requires a kebab-case plugin name (lowercase letters, digits and hyphens).",
+      "path": ".claude-plugin/plugin.json"
+    },
+    {
+      "code": "mcp_server_incomplete",
+      "level": "error",
+      "message": "An MCP server needs a command or a url.",
+      "path": "mcpServers.empty"
+    },
+    {
+      "code": "skill_frontmatter_missing",
+      "level": "error",
+      "message": "SKILL.md needs YAML frontmatter with name and description.",
+      "path": "skills/Bad Skill/SKILL.md"
+    },
+    {
+      "code": "skill_description_missing",
+      "level": "error",
+      "message": "The skill frontmatter has no description; agents choose skills by it.",
+      "path": "skills/helper/SKILL.md"
+    },
+    {
+      "code": "license_missing",
+      "level": "warning",
+      "message": "Add a license; most marketplaces will not list a plugin without one.",
+      "path": ".claude-plugin/plugin.json"
+    },
+    {
+      "code": "repository_missing",
+      "level": "warning",
+      "message": "Add a repository URL so users and registries can trace the source.",
+      "path": ".claude-plugin/plugin.json"
+    },
+    {
+      "code": "version_missing",
+      "level": "warning",
+      "message": "Add a version so installs and updates can be told apart.",
+      "path": ".claude-plugin/plugin.json"
+    },
+    {
+      "code": "mcp_env_literal_not_carried",
+      "level": "warning",
+      "message": "Packages never carry literal values, so they read LOG_LEVEL from the user's environment. Document it, or set the default in the server.",
+      "path": "mcpServers.api.env.LOG_LEVEL"
+    },
+    {
+      "code": "mcp_env_literal_secret",
+      "level": "warning",
+      "message": "This variable holds a literal value. Reference it from the user's environment instead of shipping it.",
+      "path": "mcpServers.api.env.SERVICE_API_KEY"
+    }
+  ],
+  "passed": false,
+  "plugin": {
+    "agents": [],
+    "author": null,
+    "base": "",
+    "commands": [],
+    "context_file": null,
+    "description": "Does things.",
+    "homepage": null,
+    "hooks": null,
+    "keywords": [],
+    "license": null,
+    "marketplaces": [],
+    "mcp_servers": {
+      "api": {
+        "args": [
+          "server.js"
+        ],
+        "command": "node",
+        "env": {
+          "LOG_LEVEL": "LOG_LEVEL",
+          "SERVICE_API_KEY": "SERVICE_API_KEY"
+        }
+      },
+      "empty": {}
+    },
+    "name": "My Plugin",
+    "repository": null,
+    "skills": [
+      {
+        "description": null,
+        "dir": "skills/Bad Skill",
+        "name": null
+      },
+      {
+        "description": null,
+        "dir": "skills/helper",
+        "name": "helper"
+      }
+    ],
+    "version": null
+  },
+  "runtimes": [
+    {
+      "dropped": [],
+      "runtime": "claude-code",
+      "supported": false
+    },
+    {
+      "dropped": [],
+      "runtime": "codex",
+      "supported": false
+    },
+    {
+      "dropped": [
+        "skills"
+      ],
+      "runtime": "gemini-cli",
+      "supported": false
+    },
+    {
+      "dropped": [
+        "skills"
+      ],
+      "runtime": "cursor",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "skills"
+      ],
+      "runtime": "vscode",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "skills"
+      ],
+      "runtime": "opencode",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "skills"
+      ],
+      "runtime": "mcp-registry",
+      "supported": false
+    },
+    {
+      "dropped": [
+        "mcp_servers"
+      ],
+      "runtime": "agent-skills",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "skills_not_portable",
+        "mcp_servers_not_portable",
+        "mcp_env"
+      ],
+      "runtime": "agent-plugins",
+      "supported": false
+    }
+  ],
+  "sources": [
+    {
+      "kind": "claude-plugin",
+      "path": ".claude-plugin/plugin.json"
+    },
+    {
+      "kind": "mcp-config",
+      "path": ".mcp.json"
+    },
+    {
+      "kind": "agent-skill",
+      "path": "skills/Bad Skill/SKILL.md"
+    },
+    {
+      "kind": "agent-skill",
+      "path": "skills/helper/SKILL.md"
+    }
+  ],
+  "summary": {
+    "agents": 0,
+    "commands": 0,
+    "errors": 4,
+    "mcp_servers": 2,
+    "skills": 2,
+    "warnings": 5
+  }
+}

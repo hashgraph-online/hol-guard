@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
-from datetime import datetime, timezone
-from typing import Protocol
+from typing import Any, Protocol
 
-from .approval_resolution import require_resolvable_approval_request
 from .dpop_key_binding import verified_dpop_jwk_thumbprint
-from .runtime.time_support import parse_utc_timestamp
-from .store_approvals import get_approval_request as load_approval_request
-from .store_approvals import resolve_one_request_only as persist_one_resolution
-from .store_approvals import resolve_request_with_queue_result as persist_queue_resolution
-from .store_local_once_authority import persist_local_once_approval
+from .native_store_policy import encode_key
 
 _CAPABILITY_KEY = "guard_exact_cloud_review_capability"
 _OAUTH_KEY = "oauth_local_credentials"
@@ -28,6 +24,8 @@ class _ConnectionOwner(Protocol):
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]: ...
 
+    def _native_store_call(self, method: str, args: Mapping[str, object]) -> Any: ...
+
     def _load_oauth_secret_payload(
         self,
         payload: dict[str, object],
@@ -37,11 +35,44 @@ class _ConnectionOwner(Protocol):
     ) -> dict[str, object] | None: ...
 
 
-class StoreExactCloudReviewMixin:
-    @staticmethod
-    def _exact_transaction_now() -> str:
-        return datetime.now(timezone.utc).isoformat()
+def _process_cwd() -> str | None:
+    """This process's directory, as the approval queue reads pass it."""
 
+    try:
+        return os.getcwd()
+    except OSError:
+        return None
+
+
+def _exact_dpop_thumbprint(owner: _ConnectionOwner) -> str | None:
+    """The DPoP thumbprint this install's stored OAuth secret actually proves.
+
+    The secret store and the key check stay here, where the keychain lives.
+    The resident takes the verified thumbprint and rebuilds the binding from
+    the credential row it reads inside the write transaction, so a
+    credential that rotates in between cannot match what the cloud signed.
+    """
+
+    with owner._connect() as connection:
+        oauth_state = StoreExactCloudReviewMixin._load_exact_state(connection, _OAUTH_KEY)
+    if not isinstance(oauth_state, dict):
+        return None
+    oauth_secret = owner._load_oauth_secret_payload(oauth_state, promote=False, allow_primary=False)
+    if not isinstance(oauth_secret, dict):
+        return None
+    try:
+        thumbprint = verified_dpop_jwk_thumbprint(
+            private_key_pem=oauth_secret.get("dpop_private_key_pem"),
+            public_jwk=oauth_secret.get("dpop_public_jwk"),
+        )
+    except ValueError:
+        return None
+    if oauth_secret.get("dpop_public_jwk_thumbprint") != thumbprint:
+        return None
+    return thumbprint
+
+
+class StoreExactCloudReviewMixin:
     @staticmethod
     def _load_exact_state(connection: sqlite3.Connection, state_key: str) -> object:
         row = connection.execute(
@@ -123,76 +154,6 @@ class StoreExactCloudReviewMixin:
             ).fetchone()
         return row is not None
 
-    def resolve_request_with_signed_remote_compat_result(
-        self: _ConnectionOwner,
-        request_id: str,
-        *,
-        receipt_id: str,
-        resolution_action: str,
-        resolution_scope: str,
-        reason: str,
-        resolved_at: str,
-    ) -> dict[str, object]:
-        """Atomically claim a durable compatibility receipt and resolve its queue item.
-
-        A worker may retry after losing the first response. The same receipt and
-        identical terminal decision therefore returns the persisted resolution;
-        reuse for any other request or decision remains a replay failure.
-        """
-
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            claimed = connection.execute(
-                "select request_id from guard_exact_cloud_review_receipts where receipt_id = ?",
-                (receipt_id,),
-            ).fetchone()
-            current = load_approval_request(connection, request_id)
-            if claimed is not None:
-                same_request = str(claimed["request_id"]) == request_id
-                same_decision = (
-                    current is not None
-                    and current.get("status") == "resolved"
-                    and current.get("resolution_action") == resolution_action
-                    and current.get("resolution_scope") == resolution_scope
-                )
-                if same_request and same_decision:
-                    return {
-                        "replayed": True,
-                        "resolved": True,
-                        "resolved_request": current,
-                        "resolved_duplicate_ids": [],
-                    }
-                return {
-                    "error": "remote_approval_replayed",
-                    "replayed": True,
-                    "resolved": False,
-                }
-            if current is None:
-                return {"error": "not_found", "replayed": False, "resolved": False}
-            require_resolvable_approval_request(current)
-            connection.execute(
-                """
-                insert into guard_exact_cloud_review_receipts (receipt_id, request_id, claimed_at)
-                values (?, ?, ?)
-                """,
-                (receipt_id, request_id, resolved_at),
-            )
-            result = persist_queue_resolution(
-                connection,
-                request_id,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
-            )
-            if result.get("resolved") is not True:
-                connection.execute(
-                    "delete from guard_exact_cloud_review_receipts where receipt_id = ?",
-                    (receipt_id,),
-                )
-            result["replayed"] = False
-            return result
-
     def resolve_one_request_with_signed_remote_exact_result(
         self: _ConnectionOwner,
         request_id: str,
@@ -201,198 +162,50 @@ class StoreExactCloudReviewMixin:
         resolution_action: str,
         resolution_scope: str,
         reason: str,
-        expected_capability: dict[str, object],
+        expected_capability: dict[str, object] | None,
         expected_oauth_binding: dict[str, object],
         expected_request: dict[str, object],
+        expected_raw_request: dict[str, object],
         receipt_expires_at: str,
+        skip_exact_capability: bool = False,
     ) -> dict[str, object]:
         """Claim and apply an exact receipt after rechecking all mutable state."""
 
-        local_integrity_key: bytes | None = None
-        local_integrity_key_id: str | None = None
+        integrity_key_b64: str | None = None
+        integrity_key_id: str | None = None
         if resolution_action == "allow":
-            local_integrity_key, local_integrity_key_id = self._policy_integrity_secret_material(create=True)
-            if local_integrity_key is None or local_integrity_key_id is None:
-                return _exact_error(
-                    "remote_exact_local_authority_unavailable",
-                    now=StoreExactCloudReviewMixin._exact_transaction_now(),
-                )
-        with self.hold_oauth_credential_lock(), self._connect() as connection:
-            connection.execute("begin immediate")
-            resolved_at = StoreExactCloudReviewMixin._exact_transaction_now()
-            capability = StoreExactCloudReviewMixin._load_exact_state(connection, _CAPABILITY_KEY)
-            if capability != expected_capability:
-                return _exact_error("remote_exact_capability_changed", now=resolved_at)
-            if StoreExactCloudReviewMixin._load_exact_state(connection, _REVOCATION_KEY) is not None:
-                return _exact_error("cloud_review_capability_revoked", now=resolved_at)
-            oauth_state = StoreExactCloudReviewMixin._load_exact_state(connection, _OAUTH_KEY)
-            oauth_secret = (
-                self._load_oauth_secret_payload(oauth_state, promote=False, allow_primary=False)
-                if isinstance(oauth_state, dict)
-                else None
-            )
-            oauth_binding = _oauth_binding_from_state(connection, oauth_state, oauth_secret)
-            if oauth_binding != expected_oauth_binding:
-                return _exact_error("remote_exact_oauth_changed", now=resolved_at)
-            if not _capability_matches_oauth_binding(capability, oauth_binding):
-                return _exact_error("cloud_review_capability_binding_mismatch", now=resolved_at)
-            current = parse_utc_timestamp(resolved_at)
-            capability_expires_at = (
-                parse_utc_timestamp(capability.get("expiresAt")) if isinstance(capability, dict) else None
-            )
-            if current is None or capability_expires_at is None or capability_expires_at <= current:
-                return _exact_error("cloud_review_capability_expired", now=resolved_at)
-            expires_at = parse_utc_timestamp(receipt_expires_at)
-            if expires_at is None or expires_at <= current:
-                return _exact_error("remote_approval_expired", now=resolved_at)
-            request = load_approval_request(connection, request_id)
-            if request is None or request.get("status") != "pending":
-                return _exact_error("remote_exact_request_not_pending", now=resolved_at)
-            changed_request_fields = _changed_request_fields(request, expected_request)
-            if changed_request_fields:
-                StoreExactCloudReviewMixin._record_exact_event(
-                    connection,
-                    "cloud_review.exact_request_stale",
-                    {
-                        "changed_fields": changed_request_fields,
-                        "request_id": request_id,
-                    },
-                    now=resolved_at,
-                )
-                return _exact_error("remote_exact_request_stale", now=resolved_at)
-            try:
-                connection.execute(
-                    """
-                    insert into guard_exact_cloud_review_receipts (receipt_id, request_id, claimed_at)
-                    values (?, ?, ?)
-                    """,
-                    (receipt_id, request_id, resolved_at),
-                )
-            except sqlite3.IntegrityError:
-                return {"checked_at": resolved_at, "replayed": True, "resolved": False}
-            require_resolvable_approval_request(request)
-            resolved = persist_one_resolution(
-                connection,
-                request_id,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
-            )
-            if not resolved:
-                connection.execute(
-                    "delete from guard_exact_cloud_review_receipts where receipt_id = ?",
-                    (receipt_id,),
-                )
-                return _exact_error("remote_exact_apply_failed", now=resolved_at)
-            if resolution_action == "allow":
-                assert local_integrity_key is not None
-                assert local_integrity_key_id is not None
-                authority_id = persist_local_once_approval(
-                    connection,
-                    request_id=request_id,
-                    harness=str(request["harness"]),
-                    artifact_id=_optional_text(request.get("artifact_id")),
-                    artifact_hash=_optional_text(request.get("artifact_hash")),
-                    workspace=_optional_text(request.get("workspace")),
-                    publisher=_optional_text(request.get("publisher")),
-                    action="allow",
-                    created_at=resolved_at,
-                    expires_at=min(capability_expires_at, expires_at).isoformat(),
-                    integrity_key=local_integrity_key,
-                    integrity_key_id=local_integrity_key_id,
-                )
-                if authority_id is None:
-                    raise RuntimeError("exact Cloud Review request has no exact local authority target")
-            resolved_request = load_approval_request(connection, request_id)
-            StoreExactCloudReviewMixin._record_exact_event(
-                connection,
-                "cloud_review.exact_applied",
+            integrity_key, integrity_key_id = self._policy_integrity_secret_material(create=True)
+            integrity_key_b64 = encode_key(integrity_key)
+        with self.hold_oauth_credential_lock():
+            # The resident holds one transaction across the consent recheck, the
+            # receipt claim, the resolution and the local authority it writes, so
+            # a verdict the cloud signed earlier cannot land on an install that
+            # has moved since.
+            payload = self._native_store_call(
+                "apply_signed_remote_exact_result",
                 {
-                    "receipt_id": receipt_id,
                     "request_id": request_id,
+                    "receipt_id": receipt_id,
                     "resolution_action": resolution_action,
                     "resolution_scope": resolution_scope,
+                    "reason": reason,
+                    "receipt_expires_at": receipt_expires_at,
+                    "skip_exact_capability": skip_exact_capability,
+                    "expected_capability": expected_capability,
+                    "expected_oauth_binding": expected_oauth_binding,
+                    "expected_request": expected_request,
+                    "expected_raw_request": expected_raw_request,
+                    "dpop_thumbprint": _exact_dpop_thumbprint(self),
+                    # The expected snapshot was read with this process's
+                    # directory, which is what resolves a relative config path
+                    # into a workspace scope. The recheck reads the request
+                    # again, so it resolves from the same place or an unchanged
+                    # request reads as stale.
+                    "cwd": _process_cwd(),
+                    "integrity_key_b64": integrity_key_b64,
+                    "integrity_key_id": integrity_key_id,
                 },
-                now=resolved_at,
             )
-            return {
-                "replayed": False,
-                "resolved": True,
-                "resolved_at": resolved_at,
-                "resolved_request": resolved_request,
-                "resolved_duplicate_ids": [],
-            }
-
-
-def _request_snapshot(request: dict[str, object]) -> str:
-    """Compare every persisted request input with canonical JSON semantics."""
-
-    return json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-
-
-def _changed_request_fields(
-    current: dict[str, object],
-    expected: dict[str, object],
-) -> list[str]:
-    """Return field names only so stale-request diagnostics cannot leak values."""
-
-    keys = sorted(set(current) | set(expected))
-    return [
-        key for key in keys if _request_snapshot({key: current.get(key)}) != _request_snapshot({key: expected.get(key)})
-    ]
-
-
-def _exact_error(code: str, *, now: str) -> dict[str, object]:
-    return {"checked_at": now, "error": code, "replayed": False, "resolved": False}
-
-
-def _optional_text(value: object) -> str | None:
-    return value if isinstance(value, str) and value else None
-
-
-def _oauth_binding_from_state(
-    connection: sqlite3.Connection,
-    oauth_state: object,
-    oauth_secret: object,
-) -> dict[str, object] | None:
-    if not isinstance(oauth_state, dict) or not isinstance(oauth_secret, dict):
-        return None
-    device = connection.execute(
-        "select installation_id from guard_devices where device_key = ?",
-        ("local-device",),
-    ).fetchone()
-    installation_id = str(device["installation_id"]) if device is not None else None
-    machine_id = oauth_state.get("machine_id")
-    device_id = oauth_state.get("device_id")
-    try:
-        dpop_thumbprint = verified_dpop_jwk_thumbprint(
-            private_key_pem=oauth_secret.get("dpop_private_key_pem"),
-            public_jwk=oauth_secret.get("dpop_public_jwk"),
-        )
-    except ValueError:
-        return None
-    if (
-        not isinstance(device_id, str)
-        or not device_id.strip()
-        or device_id != dpop_thumbprint
-        or oauth_secret.get("dpop_public_jwk_thumbprint") != dpop_thumbprint
-    ):
-        return None
-    return {
-        "deviceId": device_id,
-        "dpopThumbprint": dpop_thumbprint,
-        "grantId": oauth_state.get("grant_id"),
-        "installationId": installation_id,
-        "machineId": machine_id,
-        "runtimeId": oauth_state.get("runtime_id"),
-        "workspaceId": oauth_state.get("workspace_id"),
-    }
-
-
-def _capability_matches_oauth_binding(capability: object, oauth_binding: dict[str, object] | None) -> bool:
-    """Recheck the signed capability's local target inside the write transaction."""
-
-    if not isinstance(capability, dict) or oauth_binding is None:
-        return False
-    return all(capability.get(key) == value for key, value in oauth_binding.items())
+        if not isinstance(payload, dict):
+            raise RuntimeError("Guard exact Cloud Review result was not applied.")
+        return payload

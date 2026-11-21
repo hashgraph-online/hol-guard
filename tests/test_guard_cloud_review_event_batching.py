@@ -8,18 +8,27 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_event_wake import review_event_wake_signal
-from codex_plugin_scanner.guard.runtime import cloud_review_event_delivery, cloud_review_sync, cloud_review_sync_worker
+from codex_plugin_scanner.guard.runtime import (
+    cloud_review_event_delivery,
+    cloud_review_sync,
+    cloud_review_sync_worker,
+)
 from codex_plugin_scanner.guard.runtime.cloud_review_batching import (
     CLOUD_REVIEW_DEFAULT_BATCH_EVENTS,
     CLOUD_REVIEW_MAX_BATCH_BYTES,
     CLOUD_REVIEW_MAX_BATCH_EVENTS,
     CloudReviewBatchLimits,
+    CloudReviewEventTooLargeError,
     next_review_batch_limits,
     select_review_event_batch,
 )
-from codex_plugin_scanner.guard.runtime.cloud_review_event_delivery import encoded_review_events_payload
+from codex_plugin_scanner.guard.runtime.cloud_review_event_delivery import (
+    CloudReviewEventProtocolError,
+    encoded_review_events_payload,
+)
 from tests.guard_exact_cloud_review_support import connected_exact_review_store
 
 
@@ -179,14 +188,12 @@ def test_oversized_oldest_event_is_quarantined_without_starving_following_event(
     binding_key = cloud_review_sync._batch_binding_key(
         {key: value for key, value in binding.items() if key != "oauth_source"}
     )
-    cloud_review_sync._save_sync_state(
+    cloud_review_sync._transition_sync_state(
         store,
-        {
-            "batch_binding_key": binding_key,
-            "batch_events": 50,
-            "batch_max_bytes": 400,
-            "batch_event_cap": CLOUD_REVIEW_MAX_BATCH_EVENTS,
-        },
+        {},
+        "batch_limits",
+        binding_key=binding_key,
+        limits={"events": 50, "bytes": 400, "event_cap": CLOUD_REVIEW_MAX_BATCH_EVENTS},
     )
     posted_sequences: list[int] = []
 
@@ -359,6 +366,9 @@ def test_retry_deadline_bounds_healthy_worker_wait(tmp_path: Path, monkeypatch: 
     store = connected_exact_review_store(tmp_path)
     stop_event = threading.Event()
     waits: list[float] = []
+    # Start the native resident before the deadline clock so cold-start cost
+    # does not eat the one-second retry window under test.
+    store.get_review_event_oauth_binding()
 
     class RecordingSignal:
         def generation(self) -> int:
@@ -395,3 +405,57 @@ def test_error_backoff_jitter_is_exponential_and_bounded(monkeypatch: pytest.Mon
     assert cloud_review_sync_worker._bounded_error_wait(2.0, 30.0, 1) == 2.0
     assert cloud_review_sync_worker._bounded_error_wait(2.0, 30.0, 2) == 4.0
     assert cloud_review_sync_worker._bounded_error_wait(2.0, 30.0, 20) == 15.0
+
+
+def test_without_the_native_runtime_no_batch_is_prepared(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+
+    with pytest.raises(CloudReviewEventProtocolError, match="without the HOL Guard native runtime"):
+        select_review_event_batch([_event(1)], CloudReviewBatchLimits())
+    with pytest.raises(CloudReviewEventProtocolError, match="without the HOL Guard native runtime"):
+        next_review_batch_limits(CloudReviewBatchLimits(), {})
+
+
+def test_an_event_without_a_source_sequence_stops_the_batch() -> None:
+    with pytest.raises(CloudReviewEventProtocolError, match="no valid source sequence"):
+        select_review_event_batch([_event(1), {"localStreamSequence": True}], CloudReviewBatchLimits())
+
+
+def test_events_too_large_for_one_native_request_are_offered_in_halves(monkeypatch: pytest.MonkeyPatch) -> None:
+    offered: list[int] = []
+    refused_from = 2
+
+    def bounded(_kind: str, request: dict[str, object]) -> dict[str, object]:
+        events = request["events"]
+        assert isinstance(events, list)
+        offered.append(len(events))
+        if len(events) >= refused_from:
+            raise native_runner_authority.NativeRunnerAuthorityRefusalError("native_runner_authority_request_too_large")
+        return {"count": len(events)}
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", bounded)
+    events = [_event(index) for index in range(1, 6)]
+
+    assert select_review_event_batch(events, CloudReviewBatchLimits(events=4)) == events[:1]
+    assert offered == [4, 2, 1]
+
+    refused_from = 1
+    offered.clear()
+    with pytest.raises(CloudReviewEventTooLargeError):
+        select_review_event_batch(events, CloudReviewBatchLimits(events=4))
+    assert offered == [4, 2, 1]
+
+
+def test_a_window_too_large_only_once_escaped_is_offered_in_halves() -> None:
+    # Each event is 600 KB of UTF-8 but 1.8 MB once JSON escapes it: the window
+    # fits the UTF-8 envelope and only the canonical request bound refuses it.
+    events: list[dict[str, object]] = [
+        {"eventId": f"event-{index}", "localStreamSequence": index, "padding": "\u00e9" * 300_000}
+        for index in range(1, 4)
+    ]
+
+    with pytest.raises(CloudReviewEventTooLargeError):
+        select_review_event_batch(events, CloudReviewBatchLimits(events=3))

@@ -12,6 +12,8 @@ from codex_plugin_scanner.guard.runtime.decisions import (
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 
 def _signal() -> RiskSignalV2:
     return RiskSignalV2(
@@ -168,7 +170,7 @@ def test_decision_from_legacy_policy_action_maps_all_actions() -> None:
         "warn": ("warn", "HOL Guard noticed risk signals, but policy allows the harness to continue."),
         "review": ("ask", "HOL Guard needs your approval before this action can run."),
         "sandbox-required": ("ask", "HOL Guard wants this action reviewed and run in a sandboxed path."),
-        "require-reapproval": ("ask", "HOL Guard needs a fresh approval because this action changed."),
+        "require-reapproval": ("ask", "HOL Guard needs a fresh approval before this action can run."),
         "block": ("block", "HOL Guard blocked this action."),
     }
 

@@ -1,0 +1,134 @@
+use serde_json::json;
+
+use super::*;
+
+fn pairs(query: &str) -> Vec<(String, String)> {
+    query_pairs(query).unwrap()
+}
+
+fn cursor(query: &str, last_event_id: Option<&str>) -> Result<i64, &'static str> {
+    activity_cursor(query, &pairs(query), last_event_id)
+}
+
+#[test]
+fn activity_cursor_reads_the_header_before_the_query() {
+    assert_eq!(cursor("", None), Ok(0));
+    assert_eq!(cursor("cursor=7", None), Ok(7));
+    assert_eq!(cursor("cursor=7", Some(" 9 ")), Ok(9));
+    assert_eq!(cursor("cursor=7", Some("  ")), Ok(7));
+}
+
+#[test]
+fn activity_cursor_names_the_error_the_daemon_answers() {
+    assert_eq!(cursor("cursor=-1", None), Err("invalid_cursor"));
+    assert_eq!(cursor("cursor=", None), Err("invalid_query_parameter"));
+    assert_eq!(
+        cursor("cursor=1&cursor=2", None),
+        Err("invalid_query_parameter")
+    );
+    assert_eq!(cursor("other=1", None), Err("unknown_query_parameter"));
+    assert_eq!(
+        cursor("cursor=99999999999999999999", None),
+        Err("invalid_cursor")
+    );
+    assert_eq!(cursor(&"a".repeat(8_193), None), Err("query_too_long"));
+}
+
+#[test]
+fn event_frames_skip_rows_without_an_integer_id() {
+    let items = vec![
+        json!({"event_id": 3, "kind": "a"}),
+        json!({"event_id": "x"}),
+        json!({"event_id": 5, "text": "caf\u{e9}"}),
+    ];
+    let (frames, cursor) = event_frames(&items, 1);
+    assert_eq!(cursor, 5);
+    let text = String::from_utf8(frames).unwrap();
+    assert_eq!(text.matches("data: ").count(), 2);
+    assert!(text.contains("\"caf\\u00e9\""), "{text}");
+    assert!(text.ends_with("\n\n"));
+}
+
+#[test]
+fn activity_frames_reset_then_invalidate() {
+    let page = json!({
+        "reset_required": true,
+        "reset_cursor": 10,
+        "items": [
+            {"sequence": 11, "activity_id": "act-1"},
+            {"sequence": "12", "activity_id": "act-2"},
+        ],
+    });
+    let (frames, cursor) = activity_frames(&page, 40);
+    assert_eq!(cursor, 11);
+    let text = String::from_utf8(frames).unwrap();
+    assert!(text.starts_with(
+        "id: 10\nevent: command_activity_reset\ndata: {\"event\":\"command_activity_reset\",\"reset_required\":true}\n\n"
+    ));
+    assert!(text.contains("id: 11\ndata: {\"activity_id\":\"act-1\",\"event\":\"command_activity_invalidated\"}\n\n")
+        || text.contains("id: 11\ndata: {\"event\":\"command_activity_invalidated\",\"activity_id\":\"act-1\"}\n\n"));
+    assert!(!text.contains("act-2"));
+}
+
+#[test]
+fn python_json_matches_json_dumps() {
+    let value = json!({"a": [1, true, null], "b": "q\"\n\u{1f600}"});
+    assert_eq!(
+        python_json(&value),
+        "{\"a\": [1, true, null], \"b\": \"q\\\"\\n\\ud83d\\ude00\"}"
+    );
+}
+
+#[test]
+fn stream_head_names_the_origin_only_when_given() {
+    let plain = String::from_utf8(stream_head(None)).unwrap();
+    assert!(plain.starts_with("HTTP/1.0 200 OK\r\nContent-Type: text/event-stream\r\n"));
+    assert!(!plain.contains("Access-Control"));
+    let hosted = String::from_utf8(stream_head(Some("https://hol.org"))).unwrap();
+    assert!(hosted.contains("Access-Control-Allow-Origin: https://hol.org\r\n"));
+    assert!(hosted.ends_with("\r\n\r\n"));
+}
+
+#[test]
+fn activity_slots_stop_at_the_limit() {
+    let held: Vec<_> = std::iter::from_fn(ActivitySlot::claim)
+        .take(ACTIVITY_MAX_CLIENTS + 1)
+        .collect();
+    assert_eq!(held.len(), ACTIVITY_MAX_CLIENTS);
+    drop(held);
+    assert!(ActivitySlot::claim().is_some());
+}
+
+#[test]
+fn a_full_stream_answers_429_with_cors() {
+    let text = String::from_utf8(json_response(
+        429,
+        &json!({"error": "too_many_streams"}),
+        None,
+        Some("https://hol.org"),
+        false,
+    ))
+    .unwrap();
+    assert!(
+        text.starts_with("HTTP/1.0 429 Too Many Requests\r\n"),
+        "{text}"
+    );
+    assert!(text.contains("Access-Control-Allow-Origin: https://hol.org\r\n"));
+    assert!(text.ends_with("{\"error\":\"too_many_streams\"}"));
+}
+
+#[test]
+fn quiet_streams_send_a_keepalive_comment() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+    let (mut server_side, _) = listener.accept().unwrap();
+    let mut last_write = Instant::now();
+    assert!(write_frames(&client, b"", &mut last_write));
+    last_write = Instant::now() - KEEPALIVE_INTERVAL;
+    assert!(write_frames(&client, b"", &mut last_write));
+    assert!(last_write.elapsed() < KEEPALIVE_INTERVAL);
+    drop(client);
+    let mut received = Vec::new();
+    std::io::Read::read_to_end(&mut server_side, &mut received).unwrap();
+    assert_eq!(received, KEEPALIVE_FRAME);
+}

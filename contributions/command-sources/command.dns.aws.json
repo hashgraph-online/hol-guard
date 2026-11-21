@@ -1,0 +1,1540 @@
+{
+  "extension": {
+    "action_classes": [
+      "AWS DNS destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews AWS Route 53 hosted-zone, record, health-check, traffic-policy, DNSSEC, and Resolver deletions.",
+    "ecosystem_ids": [],
+    "executables": [
+      "aws"
+    ],
+    "extension_id": "command.dns.aws",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Amazon Route 53 command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies amazon route 53 dnssec disable operations.",
+        "example_command": "aws route53 disable-hosted-zone-dnssec --hosted-zone-id Z123",
+        "family": "aws-route53",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Amazon Route 53 DNSSEC disable",
+        "permission_id": "command.dns.aws.permission.dnssec-disable",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies amazon route 53 health-check deletion operations.",
+        "example_command": "aws route53 delete-health-check --health-check-id abc",
+        "family": "aws-route53",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Amazon Route 53 health-check deletion",
+        "permission_id": "command.dns.aws.permission.health-check-deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies amazon route 53 record change operations.",
+        "example_command": "aws route53 change-resource-record-sets --hosted-zone-id Z123 --change-batch file://change.json",
+        "family": "aws-route53",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Amazon Route 53 record change",
+        "permission_id": "command.dns.aws.permission.record-change",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Inspect the current record set and preview the intended change first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies amazon route 53 resolver deletion operations.",
+        "example_command": "aws route53resolver delete-resolver-endpoint --resolver-endpoint-id rslvr-in-123",
+        "family": "aws-route53",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Amazon Route 53 Resolver deletion",
+        "permission_id": "command.dns.aws.permission.resolver-deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies amazon route 53 traffic-policy deletion operations.",
+        "example_command": "aws route53 delete-traffic-policy --id policy123 --version 1",
+        "family": "aws-route53",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Amazon Route 53 traffic-policy deletion",
+        "permission_id": "command.dns.aws.permission.traffic-policy-deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies amazon route 53 hosted-zone deletion operations.",
+        "example_command": "aws route53 delete-hosted-zone --id Z123",
+        "family": "aws-route53",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Amazon Route 53 hosted-zone deletion",
+        "permission_id": "command.dns.aws.permission.zone-deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://docs.aws.amazon.com/cli/latest/reference/route53/index.html",
+      "https://docs.aws.amazon.com/cli/latest/reference/route53/delete-hosted-zone.html",
+      "https://docs.aws.amazon.com/cli/latest/reference/route53/change-resource-record-sets.html",
+      "https://docs.aws.amazon.com/cli/latest/reference/route53resolver/index.html"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies amazon route 53 hosted-zone deletion operations.",
+        "family": "aws-route53",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "route53",
+                    "delete-hosted-zone"
+                  ],
+                  [
+                    "route53",
+                    "delete-query-logging-config"
+                  ],
+                  [
+                    "route53",
+                    "delete-reusable-delegation-set"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.aws.permission.zone-deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.aws.zone-deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "route53",
+                        "delete-hosted-zone"
+                      ],
+                      [
+                        "route53",
+                        "delete-query-logging-config"
+                      ],
+                      [
+                        "route53",
+                        "delete-reusable-delegation-set"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Amazon Route 53 hosted-zone deletion help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "paths": [
+                      [
+                        "route53",
+                        "delete-hosted-zone"
+                      ],
+                      [
+                        "route53",
+                        "delete-query-logging-config"
+                      ],
+                      [
+                        "route53",
+                        "delete-reusable-delegation-set"
+                      ]
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ]
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "AWS request skeleton",
+            "variant_id": "generate-cli-skeleton"
+          }
+        ],
+        "safer_alternatives": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Amazon Route 53 hosted-zone deletion"
+      },
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies amazon route 53 record change operations.",
+        "family": "aws-route53",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "route53",
+                  "change-resource-record-sets"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.aws.permission.record-change",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.aws.record-change",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "route53",
+                      "change-resource-record-sets"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Amazon Route 53 record change help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "route53",
+                      "change-resource-record-sets"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "AWS request skeleton",
+            "variant_id": "generate-cli-skeleton"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the current record set and preview the intended change first."
+        ],
+        "severity": "critical",
+        "title": "Amazon Route 53 record change"
+      },
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies amazon route 53 health-check deletion operations.",
+        "family": "aws-route53",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "route53",
+                  "delete-health-check"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.aws.permission.health-check-deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.aws.health-check-deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "route53",
+                      "delete-health-check"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Amazon Route 53 health-check deletion help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "route53",
+                      "delete-health-check"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "AWS request skeleton",
+            "variant_id": "generate-cli-skeleton"
+          }
+        ],
+        "safer_alternatives": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Amazon Route 53 health-check deletion"
+      },
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies amazon route 53 traffic-policy deletion operations.",
+        "family": "aws-route53",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "route53",
+                    "delete-traffic-policy"
+                  ],
+                  [
+                    "route53",
+                    "delete-traffic-policy-instance"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.aws.permission.traffic-policy-deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.aws.traffic-policy-deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "route53",
+                        "delete-traffic-policy"
+                      ],
+                      [
+                        "route53",
+                        "delete-traffic-policy-instance"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Amazon Route 53 traffic-policy deletion help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "paths": [
+                      [
+                        "route53",
+                        "delete-traffic-policy"
+                      ],
+                      [
+                        "route53",
+                        "delete-traffic-policy-instance"
+                      ]
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ]
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "AWS request skeleton",
+            "variant_id": "generate-cli-skeleton"
+          }
+        ],
+        "safer_alternatives": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Amazon Route 53 traffic-policy deletion"
+      },
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies amazon route 53 dnssec disable operations.",
+        "family": "aws-route53",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "route53",
+                    "deactivate-key-signing-key"
+                  ],
+                  [
+                    "route53",
+                    "delete-key-signing-key"
+                  ],
+                  [
+                    "route53",
+                    "disable-hosted-zone-dnssec"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.aws.permission.dnssec-disable",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.aws.dnssec-disable",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "route53",
+                        "deactivate-key-signing-key"
+                      ],
+                      [
+                        "route53",
+                        "delete-key-signing-key"
+                      ],
+                      [
+                        "route53",
+                        "disable-hosted-zone-dnssec"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Amazon Route 53 DNSSEC disable help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "paths": [
+                      [
+                        "route53",
+                        "deactivate-key-signing-key"
+                      ],
+                      [
+                        "route53",
+                        "delete-key-signing-key"
+                      ],
+                      [
+                        "route53",
+                        "disable-hosted-zone-dnssec"
+                      ]
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ]
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "AWS request skeleton",
+            "variant_id": "generate-cli-skeleton"
+          }
+        ],
+        "safer_alternatives": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Amazon Route 53 DNSSEC disable"
+      },
+      {
+        "action_classes": [
+          "AWS DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies amazon route 53 resolver deletion operations.",
+        "family": "aws-route53",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "route53resolver",
+                    "delete-firewall-domain-list"
+                  ],
+                  [
+                    "route53resolver",
+                    "delete-firewall-rule"
+                  ],
+                  [
+                    "route53resolver",
+                    "delete-firewall-rule-group"
+                  ],
+                  [
+                    "route53resolver",
+                    "delete-outpost-resolver"
+                  ],
+                  [
+                    "route53resolver",
+                    "delete-resolver-endpoint"
+                  ],
+                  [
+                    "route53resolver",
+                    "delete-resolver-query-log-config"
+                  ],
+                  [
+                    "route53resolver",
+                    "delete-resolver-rule"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.aws.permission.resolver-deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.aws.resolver-deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "route53resolver",
+                        "delete-firewall-domain-list"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-firewall-rule"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-firewall-rule-group"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-outpost-resolver"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-resolver-endpoint"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-resolver-query-log-config"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-resolver-rule"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Amazon Route 53 Resolver deletion help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "paths": [
+                      [
+                        "route53resolver",
+                        "delete-firewall-domain-list"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-firewall-rule"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-firewall-rule-group"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-outpost-resolver"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-resolver-endpoint"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-resolver-query-log-config"
+                      ],
+                      [
+                        "route53resolver",
+                        "delete-resolver-rule"
+                      ]
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ]
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "AWS request skeleton",
+            "variant_id": "generate-cli-skeleton"
+          }
+        ],
+        "safer_alternatives": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Amazon Route 53 Resolver deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "Export zone records and inspect resolver associations before deletion."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

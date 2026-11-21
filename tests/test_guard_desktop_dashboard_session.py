@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from contextlib import nullcontext
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,23 +11,32 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from codex_plugin_scanner.guard import dashboard_launcher
-from codex_plugin_scanner.guard.cli import commands_dispatch_desktop
+from codex_plugin_scanner.guard.cli import commands_dispatch_desktop, update_desktop_core_start
+from codex_plugin_scanner.guard.native_daemon_manage import GuardDaemonStillStartingError
+from codex_plugin_scanner.version import __version__
 
 
-def test_desktop_dashboard_session_is_scoped_fragment_token(monkeypatch) -> None:
+def test_desktop_dashboard_session_is_scoped_fragment_token(monkeypatch, tmp_path: Path) -> None:
     raw_daemon_token = "daemon-secret-that-must-not-cross-the-desktop-boundary"
-    monkeypatch.setattr(
-        dashboard_launcher,
-        "ensure_guard_daemon",
-        lambda _guard_home: "http://127.0.0.1:43123/",
-    )
+    captured: dict[str, object] = {}
+    guard_home = tmp_path / "guard-home"
+
+    def fake_ensure_guard_daemon(received_home: Path, **kwargs: object) -> str:
+        captured["guard_home"] = received_home
+        captured.update(kwargs)
+        return "http://127.0.0.1:43123/"
+
+    monkeypatch.setattr(dashboard_launcher, "ensure_guard_daemon", fake_ensure_guard_daemon)
     monkeypatch.setattr(
         dashboard_launcher,
         "load_guard_daemon_auth_token",
         lambda _guard_home: raw_daemon_token,
     )
 
-    url = dashboard_launcher.build_desktop_dashboard_session_url(guard_home=__import__("pathlib").Path("/tmp/guard"))
+    url = dashboard_launcher.build_desktop_dashboard_session_url(guard_home=guard_home)
+    assert captured["guard_home"] == guard_home
+    assert captured["home_dir"] is None
+    assert "executable" in captured
     parsed = urlparse(url)
     fragment = parse_qs(parsed.fragment)
 
@@ -40,13 +50,15 @@ def test_desktop_dashboard_session_is_scoped_fragment_token(monkeypatch) -> None
 
 
 def test_desktop_bootstrap_uses_canonical_dashboard_session_builder() -> None:
-    source = __import__("inspect").getsource(commands_dispatch_desktop._run_guard_desktop_command)
-    assert "build_desktop_dashboard_session_url" in source
-    assert 'dashboard["sessionUrl"]' in source
-    assert 'dashboard["canonical"] = True' in source
-    assert "scan_installed_apps=False" in source
-    assert source.index("session_url = build_desktop_dashboard_session_url") < source.index(
-        "build_guard_status_payload"
+    inspect = __import__("inspect")
+    command = inspect.getsource(commands_dispatch_desktop._run_guard_desktop_command)
+    document = inspect.getsource(commands_dispatch_desktop.assemble_desktop_bootstrap_document)
+    assert "build_desktop_dashboard_session_url" in command
+    assert "session_url=session_url" in command
+    assert 'dashboard["canonical"] = True' in document
+    assert "scan_installed_apps=False" in document
+    assert command.index("session_url = build_desktop_dashboard_session_url") < command.index(
+        "assemble_desktop_bootstrap_document"
     )
 
 
@@ -55,8 +67,9 @@ def test_desktop_bootstrap_aligns_runtime_before_projecting_protection(monkeypat
     call_order: list[str] = []
     captured: dict[str, object] = {}
 
-    def fake_session_url(*, guard_home: Path) -> str:
+    def fake_session_url(*, guard_home: Path, home_dir: Path | None = None) -> str:
         del guard_home
+        captured["home_dir"] = home_dir
         call_order.append("session")
         runtime_ready["value"] = True
         return "http://127.0.0.1:43123/?desktop_embed=1#guard-token=gld1.test"
@@ -94,8 +107,9 @@ def test_desktop_bootstrap_aligns_runtime_before_projecting_protection(monkeypat
     result = commands_dispatch_desktop._run_guard_desktop_command(
         argparse.Namespace(desktop_command="bootstrap"),
         guard_home=tmp_path,
-        context=SimpleNamespace(guard_home=tmp_path),
+        context=SimpleNamespace(guard_home=tmp_path, home_dir=tmp_path / "home"),
         store=SimpleNamespace(
+            connection_scope=nullcontext,
             list_approval_requests=lambda **_kwargs: [],
             oldest_approval_request_created_at=lambda **_kwargs: None,
             count_approval_requests=lambda **_kwargs: 0,
@@ -114,6 +128,7 @@ def test_desktop_bootstrap_aligns_runtime_before_projecting_protection(monkeypat
     assert result == 0
     assert call_order == ["session", "status"]
     assert captured["scan_installed_apps"] is False
+    assert captured["home_dir"] == tmp_path / "home"
     assert payload["status"] == "ready"
     assert payload["protection"]["state"] == "protected"
     assert payload["apps"][0]["protection"] == "protected"
@@ -122,8 +137,8 @@ def test_desktop_bootstrap_aligns_runtime_before_projecting_protection(monkeypat
 
 
 def test_desktop_preflight_skips_daemon_session(monkeypatch, tmp_path: Path) -> None:
-    def fail_session(*, guard_home: Path) -> str:
-        del guard_home
+    def fail_session(*, guard_home: Path, home_dir: Path | None = None) -> str:
+        del guard_home, home_dir
         raise AssertionError("preflight must not start a daemon session")
 
     monkeypatch.setenv("HOL_GUARD_DESKTOP_PREFLIGHT", "1")
@@ -147,6 +162,7 @@ def test_desktop_preflight_skips_daemon_session(monkeypatch, tmp_path: Path) -> 
         guard_home=tmp_path,
         context=SimpleNamespace(guard_home=tmp_path),
         store=SimpleNamespace(
+            connection_scope=nullcontext,
             list_approval_requests=lambda **_kwargs: [],
             oldest_approval_request_created_at=lambda **_kwargs: None,
             count_approval_requests=lambda **_kwargs: 0,
@@ -173,10 +189,54 @@ def test_desktop_preflight_refuses_session_url_builder(monkeypatch, tmp_path: Pa
         dashboard_launcher.build_desktop_dashboard_session_url(guard_home=tmp_path)
 
 
+def _still_starting_ensure(_guard_home: Path, **_kwargs: object) -> str:
+    raise GuardDaemonStillStartingError("Guard daemon is still starting; retry shortly.")
+
+
+def _live_identities(monkeypatch, identities: list[dict[str, object] | None]) -> list[Path]:
+    """Serve one verified identity per poll, repeating the last, and record each polled home."""
+    polled: list[Path] = []
+
+    def identity(guard_home: Path) -> dict[str, object] | None:
+        polled.append(guard_home)
+        return identities[min(len(polled), len(identities)) - 1]
+
+    monkeypatch.setattr(update_desktop_core_start, "verified_live_guard_daemon_identity", identity)
+    monkeypatch.setattr(update_desktop_core_start, "CORE_START_POLL_SECONDS", 0.0)
+    return polled
+
+
+def test_desktop_session_waits_for_a_core_that_outlasts_the_start_window(monkeypatch, tmp_path: Path) -> None:
+    """A loaded machine keeps loading Core past the start window; bootstrap waits for it."""
+    monkeypatch.setattr(dashboard_launcher, "ensure_guard_daemon", _still_starting_ensure)
+    monkeypatch.setattr(dashboard_launcher, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
+    polled = _live_identities(
+        monkeypatch,
+        [None, {"daemon_url": "http://127.0.0.1:43124/", "package_version": __version__}],
+    )
+
+    url = dashboard_launcher.build_desktop_dashboard_session_url(guard_home=tmp_path)
+
+    assert polled == [tmp_path, tmp_path]
+    parsed = urlparse(url)
+    assert (parsed.hostname, parsed.port) == ("127.0.0.1", 43124)
+    assert parse_qs(parsed.fragment)["guard-token"][0].startswith("gld1.")
+
+
+def test_desktop_session_does_not_adopt_an_older_core_while_waiting(monkeypatch, tmp_path: Path) -> None:
+    """Only the Core Desktop activated (or newer) may answer for the still-starting launch."""
+    monkeypatch.setattr(dashboard_launcher, "ensure_guard_daemon", _still_starting_ensure)
+    monkeypatch.setattr(update_desktop_core_start, "CORE_START_WAIT_SECONDS", 0.0)
+    _live_identities(monkeypatch, [{"daemon_url": "http://127.0.0.1:43125/", "package_version": "0.0.1"}])
+
+    with pytest.raises(GuardDaemonStillStartingError):
+        dashboard_launcher.build_desktop_dashboard_session_url(guard_home=tmp_path)
+
+
 def test_status_payload_skips_installed_app_scan_when_requested(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = tmp_path / "home"
@@ -211,12 +271,83 @@ def test_status_payload_skips_installed_app_scan_when_requested(monkeypatch, tmp
     assert harnesses[0]["review_count"] == 0
     assert harnesses[0]["installed"] is True
     assert harnesses[0]["warning_count"] == 0
+    assert harnesses[0]["artifacts_scanned"] is False
+    assert payload["protection_in_effect"] is True
+
+
+def test_scanned_status_does_not_treat_a_host_artifact_as_guard_registration(monkeypatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.cli import product
+    from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
+    from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    guard_home = tmp_path / "guard-home"
+    home_dir.mkdir()
+    workspace.mkdir()
+    store = GuardStore(guard_home)
+    store.set_managed_install(
+        "claude-code",
+        True,
+        str(workspace),
+        {"shim_path": str(guard_home / "shims" / "claude-code")},
+        "2026-09-12T00:00:00+00:00",
+    )
+    context = HarnessContext(home_dir=home_dir, workspace_dir=workspace, guard_home=guard_home)
+    config = GuardConfig(guard_home=guard_home, workspace=workspace)
+    host_only = HarnessDetection(
+        harness="claude-code",
+        installed=True,
+        command_available=True,
+        config_paths=(str(home_dir / "settings.json"),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="skill",
+                name="notes",
+                harness="claude-code",
+                artifact_type="skill",
+                source_scope="user",
+                config_path=str(home_dir / "settings.json"),
+                command="claude",
+            ),
+        ),
+    )
+    registered = HarnessDetection(
+        harness="claude-code",
+        installed=True,
+        command_available=True,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hook",
+                name="guard",
+                harness="claude-code",
+                artifact_type="hook",
+                source_scope="user",
+                config_path=str(home_dir / "settings.json"),
+                command="hol-guard",
+            ),
+        ),
+    )
+
+    monkeypatch.setattr(product, "detect_all", lambda _context: [host_only])
+    unregistered = product.build_guard_status_payload(context, store, config)
+    assert unregistered["harnesses"][0]["artifact_count"] == 1
+    assert unregistered["harnesses"][0]["guard_registered"] is False
+    assert unregistered["protection_in_effect"] is False
+
+    monkeypatch.setattr(product, "detect_all", lambda _context: [registered])
+    protected = product.build_guard_status_payload(context, store, config)
+    assert protected["harnesses"][0]["guard_registered"] is True
+    assert protected["protection_in_effect"] is True
 
 
 def test_status_payload_marks_inactive_managed_installs_as_not_installed(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = tmp_path / "home"
@@ -249,9 +380,9 @@ def test_status_payload_marks_inactive_managed_installs_as_not_installed(monkeyp
 
 
 def test_status_payload_warns_when_a_managed_shim_is_missing(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = tmp_path / "home"
@@ -283,9 +414,9 @@ def test_status_payload_warns_when_a_managed_shim_is_missing(monkeypatch, tmp_pa
 
 
 def test_status_payload_counts_each_missing_managed_path(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = tmp_path / "home"
@@ -317,9 +448,9 @@ def test_status_payload_counts_each_missing_managed_path(monkeypatch, tmp_path: 
 
 
 def test_status_payload_warns_when_managed_opencode_config_is_missing(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = tmp_path / "home"
@@ -355,9 +486,9 @@ def test_status_payload_warns_when_managed_opencode_config_is_missing(monkeypatc
 
 
 def test_status_payload_still_scans_installed_apps_by_default(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.models import HarnessDetection
     from codex_plugin_scanner.guard.store import GuardStore
 

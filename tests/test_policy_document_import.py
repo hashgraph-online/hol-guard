@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from codex_plugin_scanner.guard.policy_document_io import (
     compile_policy_document,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_store_support import replace_remote_policies
 
 
 def _document(*, document_id: str = "policy-doc", rule_ids: tuple[str, ...] = ("rule-1",)) -> GuardPolicyDocument:
@@ -59,6 +61,53 @@ def _rows(store: GuardStore) -> list[sqlite3.Row]:
             from policy_decisions order by decision_id
             """
         ).fetchall()
+
+
+@pytest.mark.parametrize("entrypoint", ["import", "creation"])
+@pytest.mark.parametrize("mutation", ["action", "target", "provenance", "omission"])
+def test_import_rejects_rows_that_do_not_match_the_document(
+    tmp_path: Path,
+    entrypoint: str,
+    mutation: str,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    prior = _document(document_id="prior-doc", rule_ids=("prior-rule",))
+    store.import_policy_document(
+        prior,
+        compile_policy_document(prior),
+        mode="merge",
+        now="2026-07-16T12:00:00Z",
+        approval_gate_grant=None,
+    )
+    before = [dict(row) for row in _rows(store)]
+    document = _document()
+    if mutation == "action":
+        value = document.to_mapping()
+        value["spec"]["rules"][0]["effect"] = "block"
+        document = GuardPolicyDocument.from_mapping(value)
+    rows = compile_policy_document(document)
+    if mutation == "action":
+        rows = (replace(rows[0], decision=replace(rows[0].decision, action="allow")),)
+    elif mutation == "target":
+        rows = (replace(rows[0], decision=replace(rows[0].decision, artifact_id="skill:hol/other")),)
+    elif mutation == "provenance":
+        rows = (replace(rows[0], provenance_json='{"source":"forged"}'),)
+    else:
+        rows = ()
+    with pytest.raises(ValueError, match="policy_document_compilation_mismatch"):
+        if entrypoint == "import":
+            store.import_policy_document(
+                document, rows, mode="replace", now="2026-07-16T12:00:00Z", approval_gate_grant=None
+            )
+        else:
+            store.policy_creation_import_args(
+                document,
+                rows,
+                mode="replace",
+                now="2026-07-16T12:00:00Z",
+                approval_gate_grant=None,
+            )
+    assert [dict(row) for row in _rows(store)] == before
 
 
 def test_import_persists_document_identity_and_provenance(tmp_path: Path) -> None:
@@ -227,7 +276,8 @@ def test_replace_removes_only_prior_yaml_imports(tmp_path: Path) -> None:
 
 def test_merge_preserves_cloud_policy_with_the_same_selector(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard")
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",

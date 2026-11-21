@@ -1,0 +1,337 @@
+//! Proof for routine Oh My Pi hashline edits.
+//!
+//! Oh My Pi's `edit` tool takes one `input` string: an optional
+//! `*** Begin Patch` line, then one `[PATH#TAG]` header per file followed by
+//! `PUT`/`CUT` operations and `+` body rows, then `*** End Patch`. Models
+//! often add unified-diff `-old` rows under a `PUT`; Oh My Pi drops them or
+//! keeps them as body text, and never reads them as a header or operation.
+//! Models also drop the `+` and write a bare row under a `PUT`, and Oh My Pi
+//! keeps that as body text too. A bare row is file content only while it
+//! cannot be read as anything else: it is not an operation, a `***` envelope
+//! line, a legacy `¶` header, or anything that opens with a bracket.
+//! The body rows are file content, not commands, so the edit gets the same
+//! bounded proof as a Codex `apply_patch`: every header must name a file that
+//! the native file write proof accepts and that is not agent instruction or
+//! VCS metadata.
+//!
+//! Oh My Pi's own parser forgives a lot: it unquotes paths, strips
+//! `Update File:`-style noise and leading `***`, unwraps `*** Begin Patch`
+//! markers written inside a header's brackets, and recovers lowercase tags.
+//! This parser repeats the marker unwrapping and the noise strip exactly as
+//! Oh My Pi 18.8 and later do them, so every target it reports is the file
+//! Oh My Pi would open. Deletes (`REM`), moves (`MV`), quoted paths, `~`
+//! other than a leading `~/`, and anything else it does not recognize leave
+//! the edit unproven.
+
+use std::path::Path;
+
+use super::omp_hashline_recovery::strip_noise;
+
+const MAX_PATCH_TARGETS: usize = 64;
+const BEGIN_PATCH: &str = "*** Begin Patch";
+const END_PATCH: &str = "*** End Patch";
+const TAG_LENGTH: usize = 4;
+/// Oh My Pi's `ENVELOPE_MARKERS`: the markers it unwraps when a model writes
+/// them inside a header's brackets.
+const ENVELOPE_MARKERS: [&str; 3] = [BEGIN_PATCH, END_PATCH, "*** Abort"];
+
+/// Oh My Pi's `unbracket_envelope_markers`: drops leading bracketed patch
+/// markers from a row, so `[*** Begin Patch [src/a.ts#1A2B]` and
+/// `[*** Begin Patch] [src/a.ts#1A2B]` both read as `[src/a.ts#1A2B]`. A row
+/// that is nothing but a marker comes back as the bare marker.
+fn unbracket_envelope_markers(line: &str) -> &str {
+    let mut rest = line;
+    loop {
+        let Some(inner) = rest.strip_prefix('[').map(str::trim_start) else {
+            return rest;
+        };
+        let Some(marker) = ENVELOPE_MARKERS
+            .iter()
+            .find(|marker| inner.starts_with(**marker))
+        else {
+            return rest;
+        };
+        let tail = inner[marker.len()..].trim_start();
+        let tail = tail.strip_prefix(']').unwrap_or(tail).trim_start();
+        if tail.is_empty() {
+            return marker;
+        }
+        rest = tail;
+    }
+}
+
+/// What the proof concluded about a hashline edit.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum HashlineEdit {
+    /// Every target is an ordinary workspace or worktree file.
+    Routine,
+    /// Every target is ordinary or names a path that does not exist, and at
+    /// least one does not exist. The edit cannot apply, so the agent should
+    /// fix the path rather than wait on an approval. Holds the first missing
+    /// path as the header wrote it.
+    MissingTarget(String),
+}
+
+/// Files a hashline `input` edits, each with whether a header carried a
+/// snapshot tag, or `None` when the input is not a plain, well-formed
+/// hashline patch limited to `PUT` and `CUT` operations.
+pub(super) fn hashline_targets(input: &str) -> Option<Vec<(String, bool)>> {
+    // The generic extractor already rejects longer strings; keep the same cap.
+    if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
+        return None;
+    }
+    let mut lines = input.trim().lines().peekable();
+    while lines.peek().is_some_and(|line| {
+        let line = unbracket_envelope_markers(line.strip_suffix('\r').unwrap_or(line).trim_end());
+        line.trim() == BEGIN_PATCH
+    }) {
+        lines.next();
+    }
+    let mut targets: Vec<(String, bool)> = Vec::new();
+    let mut in_file = false;
+    let mut in_put = false;
+    let mut ended = false;
+    for line in lines {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if ended {
+            if line.trim().is_empty() {
+                continue;
+            }
+            return None;
+        }
+        if line.trim().is_empty() {
+            continue;
+        }
+        if line.trim() == END_PATCH {
+            ended = true;
+            continue;
+        }
+        if line.starts_with('[') {
+            let header = unbracket_envelope_markers(line.trim_end());
+            if !header.starts_with('[') {
+                return None;
+            }
+            let (path, tagged) = header_path(header)?;
+            if let Some(target) = targets.iter_mut().find(|(known, _)| known == path) {
+                target.1 |= tagged;
+            } else if targets.len() == MAX_PATCH_TARGETS {
+                return None;
+            } else {
+                targets.push((path.to_owned(), tagged));
+            }
+            in_file = true;
+            in_put = false;
+            continue;
+        }
+        let operation = line.starts_with("PUT ") || line.starts_with("CUT ");
+        if operation {
+            in_put = line.starts_with("PUT ");
+        }
+        let body = line.starts_with('+') || (in_put && line.starts_with('-'));
+        if !in_file {
+            return None;
+        }
+        if operation || body || (in_put && bare_body_row(line)) {
+            continue;
+        }
+        return None;
+    }
+    (!targets.is_empty()).then_some(targets)
+}
+
+/// A row under a `PUT` with no `+` that Oh My Pi keeps as file content: it
+/// does not read as an operation, an envelope line, a header or a legacy
+/// header, even after leading blanks. A row that opens with a bracket stays
+/// unproven, so an indented or decorated header can never pass as text.
+fn bare_body_row(line: &str) -> bool {
+    let row = line.trim_start();
+    let operation = ["PUT", "CUT", "REM", "MV"].iter().any(|name| {
+        row.strip_prefix(name).is_some_and(|rest| {
+            rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == ':')
+        })
+    });
+    !operation && !row.starts_with("***") && !row.starts_with(['¶', '['])
+}
+
+/// Every header path in order, repeats included, the way Oh My Pi lists them
+/// in the `path`/`paths` fields it adds to an edit's hook input. `None` when a
+/// header is not plain or a legacy `¶` header is present.
+pub(super) fn header_paths(input: &str) -> Option<Vec<&str>> {
+    let mut paths = Vec::new();
+    for line in input.split('\n') {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if line.trim_start().starts_with('¶') {
+            return None;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            let header = unbracket_envelope_markers(line);
+            if header.starts_with('[') {
+                paths.push(header_path(header)?.0);
+            }
+        }
+    }
+    Some(paths)
+}
+
+fn header_path(line: &str) -> Option<(&str, bool)> {
+    let body = line.strip_prefix('[')?.strip_suffix(']')?;
+    // Oh My Pi trims the whole header body with JavaScript's `trim` before it
+    // cuts the `#TAG`, so `[ notes.md#FB48 ]` names `notes.md`. Without
+    // control characters or a byte order mark, that trims exactly what
+    // `str::trim` does; with one, the header stays unproven.
+    if body.chars().any(|c| c.is_control() || c == '\u{feff}') {
+        return None;
+    }
+    let body = body.trim();
+    let (path, tagged) = match body.rsplit_once('#') {
+        Some((path, tag))
+            if tag.len() == TAG_LENGTH && tag.chars().all(|c| c.is_ascii_hexdigit()) =>
+        {
+            (path, true)
+        }
+        Some(_) => return None,
+        None => (body, false),
+    };
+    // A space written before `#` stays in Oh My Pi's copy of the path; the
+    // file it opens is the trimmed name, less the same `***` and
+    // `Update File:` noise Oh My Pi deletes.
+    let path = path.trim();
+    let path = strip_noise(path);
+    // Oh My Pi unquotes paths before opening them, and a scheme names another
+    // location, so only a path it would open as written is reported. It
+    // opens a leading `~/` under the home folder, and shows paths that way,
+    // so models copy it.
+    let home_relative = path
+        .strip_prefix('~')
+        .is_none_or(|rest| rest.starts_with('/'));
+    // A Windows drive path (`C:\Users\...` or `C:/Users/...`) is a host
+    // path: Oh My Pi only routes registered `scheme:/` names elsewhere, and
+    // no scheme is one letter. A drive-relative `C:name` stays unproven, and
+    // so does a backslash spelling off Windows, where it is one relative name.
+    let rest = match path.as_bytes() {
+        [drive, b':', b'/', ..] if drive.is_ascii_alphabetic() => &path[2..],
+        [drive, b':', b'\\', ..] if cfg!(windows) && drive.is_ascii_alphabetic() => &path[2..],
+        _ => path,
+    };
+    let plain = !path.is_empty()
+        && home_relative
+        && !path.starts_with(['"', '\'', '*'])
+        && !rest.contains(['#', ':']);
+    plain.then_some((path, tagged))
+}
+
+/// Judges an Oh My Pi hashline `edit` input against the session folder.
+pub(super) fn evaluate_hashline_edit(
+    input: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> Option<HashlineEdit> {
+    let workspace = cwd.and_then(|root| std::fs::canonicalize(root).ok())?;
+    let targets = hashline_targets(input)?;
+    let mut missing: Option<&str> = None;
+    for (written, tagged) in &targets {
+        let target = &match written.strip_prefix("~/") {
+            Some(rest) => Path::new(home_dir?).join(rest).to_str()?.to_owned(),
+            None => written.clone(),
+        };
+        // Only an ordinary name may say it is missing; a sensitive or
+        // protected one keeps its review. Oh My Pi resolves `..` before it
+        // opens a path, so `ghost/../src/a.ts` may name a file that exists
+        // even though `ghost` does not; such a path keeps its review.
+        let missing_target = || {
+            !Path::new(target)
+                .components()
+                .any(|part| part == std::path::Component::ParentDir)
+                && super::safe_reads::missing_read_target(target, home_dir, cwd, false)
+                && !super::sensitive_command(target)
+                && !super::apply_patch_writes::protected_name(Path::new(target))
+        };
+        // A tag is a snapshot of a file the agent read, so a tagged target
+        // that does not exist is a wrong path, not a new file.
+        if *tagged && missing_target() {
+            missing.get_or_insert(written);
+            continue;
+        }
+        if super::safe_writes::bounded_structured_file_write_target(target, home_dir, cwd)
+            && !super::apply_patch_writes::protected_target(target, &workspace, cwd)
+        {
+            continue;
+        }
+        if missing_target() {
+            missing.get_or_insert(written);
+            continue;
+        }
+        return None;
+    }
+    Some(match missing {
+        Some(path) => HashlineEdit::MissingTarget(path.to_owned()),
+        None => HashlineEdit::Routine,
+    })
+}
+
+/// The review reason for an edit with a line that opens with a bracket the
+/// way a header does but is not a plain `[PATH#TAG]` header, such as
+/// `[FILE: src/a.ts#0AC4]`. Guard cannot tell which file Oh My Pi would
+/// open, so the edit keeps its review and a person can still approve a path
+/// that really holds `#` or `:`; the reason shows the agent the header Guard
+/// can prove. A `REM` or `MV`, a stray row or anything else the proof does
+/// not read leaves this `None`, so those edits keep the usual reason.
+pub(super) fn unreadable_header_reason(input: &str) -> Option<String> {
+    let line = unreadable_header(input)?;
+    Some(format!(
+        "HOL Guard requires review for this edit because its file header `{line}` is not a plain `[PATH#TAG]` header, so Guard cannot tell which file it changes. To change the file without a review, write each header as just the path and the tag the read tool showed, for example `[src/app.py#1A2B]`, with nothing else inside the brackets."
+    ))
+}
+
+/// The first line that opens with a bracket but is not a plain header,
+/// shortened for a message.
+fn unreadable_header(input: &str) -> Option<String> {
+    const SHOWN_CHARS: usize = 120;
+    if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
+        return None;
+    }
+    let line = input
+        .lines()
+        .map(|line| line.strip_suffix('\r').unwrap_or(line).trim_end())
+        .find(|line| {
+            let header = unbracket_envelope_markers(line);
+            line.starts_with('[') && header.starts_with('[') && header_path(header).is_none()
+        })?;
+    let shown: String = line
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(SHOWN_CHARS)
+        .collect();
+    Some(if line.chars().count() > SHOWN_CHARS {
+        format!("{shown}...")
+    } else {
+        shown
+    })
+}
+
+/// Whether an Oh My Pi `edit` input is one plain line with no file header.
+///
+/// Every edit mode names its file in a `path` or `edits` field or in a header
+/// line: a `[PATH#TAG]` or legacy `¶` hashline header, or a `***` patch or
+/// sloppy-edit line. Oh My Pi refuses a hashline edit whose first line is not
+/// a header ("input must begin with \"[PATH#HASH]\""), and a single line has
+/// no room for both a header and content. Models send such calls when they
+/// mean another tool, such as a path they meant to read or a command they
+/// meant to run, so the call cannot change a file. Only `input` and a numeric
+/// `timeout` may be present.
+pub(super) fn headerless_edit(input: &serde_json::Map<String, serde_json::Value>) -> bool {
+    let keys = input.iter().all(|(key, value)| match key.as_str() {
+        "input" => value.is_string(),
+        "timeout" => value.is_number(),
+        _ => false,
+    });
+    let Some(line) = input.get("input").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    keys && line.len() <= crate::MAX_COMMAND_BYTES
+        && !line.contains(['\n', '\r', '\0', '[', ']', '*', '\u{b6}'])
+}
+
+#[cfg(test)]
+#[path = "omp_hashline_writes_tests.rs"]
+mod tests;

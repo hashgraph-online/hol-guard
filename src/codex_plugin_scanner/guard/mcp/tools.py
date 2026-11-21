@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from .adapters import fetch_inventory, fetch_receipt, get_status, search_inventory, search_receipts
-from .sanitizers import sanitize_fetch_result, sanitize_search_result, sanitize_status_result
-from .schemas import CONTRACT_VERSION, MAX_FETCH_TEXT_BYTES, MAX_SEARCH_LIMIT, SOURCE_LOCAL
+from .sanitizers import sanitize_fetch_result, sanitize_search_results, sanitize_status_result
+from .schemas import CONTRACT_VERSION, MAX_SEARCH_LIMIT, SOURCE_LOCAL
 
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.store import GuardStore
@@ -37,7 +37,7 @@ def execute_search(store: GuardStore, query: str) -> str:
     receipt_results = search_receipts(store, query, limit=MAX_SEARCH_LIMIT)
     inventory_results = search_inventory(store, query, limit=MAX_SEARCH_LIMIT)
     all_results = (receipt_results + inventory_results)[:MAX_SEARCH_LIMIT]
-    sanitized = [sanitize_search_result(r) for r in all_results]
+    sanitized = sanitize_search_results(all_results)
     return _envelope(
         {
             "results": sanitized,
@@ -61,10 +61,6 @@ def execute_fetch(store: GuardStore, item_id: str) -> str:
             }
         )
     sanitized = sanitize_fetch_result(result)
-    text_bytes = str(sanitized.get("text", "")).encode("utf-8")
-    if len(text_bytes) > MAX_FETCH_TEXT_BYTES:
-        sanitized["text"] = text_bytes[:MAX_FETCH_TEXT_BYTES].decode("utf-8", errors="ignore")
-        sanitized["truncated"] = True
     return _envelope(
         {
             "found": True,

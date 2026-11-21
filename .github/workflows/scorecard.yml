@@ -1,14 +1,16 @@
 name: OpenSSF Scorecard
 on:
+  # Not on every push: each analysis spends a few hundred calls of the
+  # repository GITHUB_TOKEN quota that release and feed workflows share.
   schedule:
-    - cron: '0 0 * * 0'
-  push:
-    branches: [main]
+    - cron: '17 3 * * *'
+  branch_protection_rule:
+  workflow_dispatch:
 permissions: {}
 
 jobs:
   scorecard:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
@@ -20,20 +22,20 @@ jobs:
         with:
           persist-credentials: false
       - name: Run analysis
-        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc
         with:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: SARIF file
           path: results.sarif
           retention-days: 5
         if: always()
       - name: Upload to code-scanning
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           sarif_file: results.sarif
         if: always()

@@ -148,8 +148,11 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   await page.goto(`/evidence?view=commands&${DAEMON}`);
   await expect(page.getByRole("heading", { name: "Commands" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Command" })).toBeVisible();
+  await expect(page.getByText("Run results recorded")).toBeVisible();
+  await expect(page.getByText("Allowed; result not recorded")).toBeVisible();
   await expect(page.getByRole("cell", { name: "git fetch origin main" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Allowed; execution not confirmed" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Run result" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Result not recorded" })).toBeVisible();
   const trend = page.getByRole("img", { name: /2026-07-18: 0; 2026-07-19: 1$/ });
   await expect(trend).toBeVisible();
   await expect.poll(() => trend.evaluate((element) => {
@@ -166,7 +169,15 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   const detail = page.getByRole("complementary", { name: "Command activity detail" });
   await expect(detail).toBeFocused();
   await expect(detail.getByText("git fetch origin main")).toBeVisible();
-  await expect(page.getByText("Other recorded reason")).toBeVisible();
+  await expect(detail.getByText(/Guard checked this command before the app could run it/)).toBeVisible();
+  const diagnostics = detail.getByText("How Guard checked it");
+  await diagnostics.focus();
+  await expect.poll(() => diagnostics.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
+  await diagnostics.click();
+  await expect(detail.getByText("Other recorded reason")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(detail.getByText(/Guard checked this command before the app could run it/)).toBeVisible();
+  await expect.poll(() => detail.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await expect(page.getByText(SECRET_SENTINEL)).toHaveCount(0);
   await page.getByRole("button", { name: "Should not have interrupted" }).click();
   await expect.poll(() => fixture.feedbackLabels).toEqual(["should_not_have_interrupted"]);
@@ -216,7 +227,7 @@ test("Commands deep links keep active filters visible outside aggregate options"
   await expect(page.getByRole("combobox", { name: "App", exact: true })).toHaveValue("cursor");
   await expect(page.getByRole("combobox", { name: "Extension", exact: true })).toHaveValue("command.custom");
   await expect(page.getByRole("combobox", { name: "Rule", exact: true })).toHaveValue("command.custom.read");
-  await expect(page.getByRole("combobox", { name: "Execution proof" })).toHaveValue("attempted");
+  await expect(page.getByRole("combobox", { name: "Run result" })).toHaveValue("attempted");
   await expect.poll(() => fixture.activityQueries.some((query) => {
     const params = new URLSearchParams(query);
     return params.get("harness") === "cursor"
@@ -234,7 +245,7 @@ test("App Commands view enforces exact harness scope", async ({ page }) => {
   await expect.poll(() => fixture.activityQueries.some((query) => new URLSearchParams(query).get("harness") === "codex")).toBe(true);
   await expect(page.getByRole("combobox", { name: "App", exact: true })).toHaveCount(0);
   fixture.setActivityDelay(250);
-  await page.getByRole("combobox", { name: "Execution proof" }).selectOption("confirmed_success");
+  await page.getByRole("combobox", { name: "Run result" }).selectOption("confirmed_success");
   await expect(page.getByLabel("Loading command activity", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Command activity records")).toHaveCount(0);
   await expect(page.getByText("Summary and trend totals do not include every active filter below.")).toBeVisible();

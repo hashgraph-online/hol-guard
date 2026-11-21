@@ -21,6 +21,8 @@ from codex_plugin_scanner.version import __version__
 
 _COMMANDS_HUB = "codex_plugin_scanner.guard.cli.commands"
 _CLI_MODULE = "codex_plugin_scanner.cli"
+_COMMANDS_PARSER = "codex_plugin_scanner.guard.cli.commands_parser"
+_COMMANDS_SUPPORT = "codex_plugin_scanner.guard.cli.commands_support"
 
 
 def _run_as_hol_guard(argv: list[str]) -> tuple[int, str]:
@@ -51,8 +53,236 @@ def test_hol_guard_version_answers_without_command_surface(monkeypatch: pytest.M
     assert _COMMANDS_HUB not in sys.modules
 
 
+def test_desktop_bootstrap_fast_path_argv_rejects_overrides() -> None:
+    from codex_plugin_scanner.guard.cli.desktop_bootstrap import is_desktop_bootstrap_fast_path_argv
+
+    assert is_desktop_bootstrap_fast_path_argv(["desktop", "bootstrap"]) is True
+    assert is_desktop_bootstrap_fast_path_argv(["desktop", "bootstrap", "--json"]) is True
+    assert is_desktop_bootstrap_fast_path_argv(["desktop", "bootstrap", "--help"]) is False
+    assert is_desktop_bootstrap_fast_path_argv(["desktop", "bootstrap", "--guard-home", "other"]) is False
+    assert is_desktop_bootstrap_fast_path_argv(["desktop", "dashboard-update"]) is False
+    assert is_desktop_bootstrap_fast_path_argv(["status"]) is False
+
+
+def test_daemon_serve_fast_path_argv_accepts_desktop_launch_shape() -> None:
+    from codex_plugin_scanner.guard.cli.daemon_serve import is_daemon_serve_fast_path_argv
+
+    assert is_daemon_serve_fast_path_argv(
+        ["daemon", "--serve", "--guard-home", "guard-home", "--home", "home", "--port", "5474"]
+    )
+    assert is_daemon_serve_fast_path_argv(
+        ["guard", "daemon", "--serve", "--guard-home", "guard-home", "--home", "home", "--port", "5474"]
+    )
+    assert is_daemon_serve_fast_path_argv(["daemon", "--serve"]) is True
+    assert is_daemon_serve_fast_path_argv(["daemon", "--serve", "--help"]) is False
+    assert is_daemon_serve_fast_path_argv(["daemon", "status"]) is False
+    assert is_daemon_serve_fast_path_argv(["daemon", "--serve", "--unknown"]) is False
+
+
+def test_daemon_serve_cli_treats_home_as_guard_home_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.cli import daemon_serve
+
+    captured: dict[str, object] = {}
+    explicit_home = tmp_path / "explicit-home"
+    explicit_home.mkdir()
+
+    def fake_exec(guard_home: Path, port: int, *, user_home: Path | None = None) -> None:
+        captured.update(guard_home=guard_home, port=port, user_home=user_home)
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.cli.daemon_serve.exec_native_daemon", fake_exec)
+
+    code = daemon_serve.run_daemon_serve_cli(["daemon", "--serve", "--home", str(explicit_home)])
+
+    # Returning from the hand-off means no native runtime: there is no Python server to fall back to.
+    assert code == 1
+    assert captured["guard_home"] == explicit_home.resolve()
+    assert captured["port"] == 0
+    assert captured["user_home"] == explicit_home.resolve()
+
+
+def test_hol_guard_desktop_bootstrap_json_skips_command_surface(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import json
+
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_PREFLIGHT", "1")
+    monkeypatch.delitem(sys.modules, _COMMANDS_HUB, raising=False)
+    monkeypatch.delitem(sys.modules, _COMMANDS_PARSER, raising=False)
+    monkeypatch.delitem(sys.modules, _COMMANDS_SUPPORT, raising=False)
+    monkeypatch.delitem(sys.modules, _CLI_MODULE, raising=False)
+    monkeypatch.delattr(codex_plugin_scanner, "cli", raising=False)
+
+    code, output = _run_as_hol_guard(["desktop", "bootstrap", "--json"])
+
+    payload = json.loads(output)
+    assert code == 0
+    assert payload["schema"] == "guard-desktop-bootstrap.v1"
+    assert _COMMANDS_HUB not in sys.modules
+    assert _COMMANDS_PARSER not in sys.modules
+    assert _COMMANDS_SUPPORT not in sys.modules
+
+
+def test_hol_guard_desktop_bootstrap_fast_path_maps_unexpected_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli import desktop_bootstrap
+
+    monkeypatch.setattr(
+        desktop_bootstrap,
+        "run_desktop_bootstrap_cli",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("desktop bootstrap failed")),
+    )
+    monkeypatch.delitem(sys.modules, _CLI_MODULE, raising=False)
+    monkeypatch.delattr(codex_plugin_scanner, "cli", raising=False)
+
+    previous_argv = sys.argv
+    sys.argv = ["hol-guard", "desktop", "bootstrap", "--json"]
+    try:
+        captured_err = io.StringIO()
+        with contextlib.redirect_stderr(captured_err), contextlib.redirect_stdout(io.StringIO()):
+            from codex_plugin_scanner.cli import main
+
+            code = main(["desktop", "bootstrap", "--json"])
+    finally:
+        sys.argv = previous_argv
+
+    assert code == 1
+    assert "desktop bootstrap failed" in captured_err.getvalue()
+
+
+def test_hol_guard_daemon_serve_skips_command_surface(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.cli import daemon_serve
+
+    served: list[int] = []
+
+    def fake_serve(argv: list[str]) -> int:
+        served.append(1)
+        assert argv[:2] == ["daemon", "--serve"]
+        return 0
+
+    monkeypatch.setattr(daemon_serve, "run_daemon_serve_cli", fake_serve)
+    monkeypatch.delitem(sys.modules, _COMMANDS_HUB, raising=False)
+    monkeypatch.delitem(sys.modules, _COMMANDS_PARSER, raising=False)
+    monkeypatch.delitem(sys.modules, _COMMANDS_SUPPORT, raising=False)
+    monkeypatch.delitem(sys.modules, _CLI_MODULE, raising=False)
+    monkeypatch.delattr(codex_plugin_scanner, "cli", raising=False)
+
+    previous_argv = sys.argv
+    sys.argv = [
+        "hol-guard",
+        "daemon",
+        "--serve",
+        "--guard-home",
+        str(tmp_path / "guard"),
+        "--home",
+        str(tmp_path / "home"),
+        "--port",
+        "5474",
+    ]
+    try:
+        from codex_plugin_scanner.cli import main
+
+        code = main(
+            [
+                "daemon",
+                "--serve",
+                "--guard-home",
+                str(tmp_path / "guard"),
+                "--home",
+                str(tmp_path / "home"),
+                "--port",
+                "5474",
+            ]
+        )
+    finally:
+        sys.argv = previous_argv
+
+    assert code == 0
+    assert served == [1]
+    assert _COMMANDS_HUB not in sys.modules
+    assert _COMMANDS_PARSER not in sys.modules
+    assert _COMMANDS_SUPPORT not in sys.modules
+
+
+_HELP_PATH_FORBIDDEN_MODULES = (
+    _COMMANDS_HUB,
+    _COMMANDS_SUPPORT,
+    "codex_plugin_scanner.guard.cli._commands_shared",
+    "codex_plugin_scanner.guard.store",
+    "codex_plugin_scanner.guard.native_context",
+    "codex_plugin_scanner.guard.hook_review.hook_worker",
+    "codex_plugin_scanner.guard.proxy",
+    "codex_plugin_scanner.guard.runtime.command_extensions",
+)
+_HELP_PATH_PROBE = """
+import contextlib, io, json, sys
+sys.argv = ["hol-guard", *sys.argv[1:]]
+from codex_plugin_scanner.cli import main
+with contextlib.redirect_stdout(io.StringIO()) as out:
+    try:
+        code = main()
+    except SystemExit as exc:
+        code = exc.code
+print(json.dumps({"code": code, "usage": out.getvalue().startswith("usage:"), "modules": sorted(sys.modules)}))
+"""
+
+
+@pytest.mark.parametrize("argv", [["--help"], ["status", "--help"]], ids=["root", "subcommand"])
+def test_hol_guard_help_skips_command_surface(argv: list[str]) -> None:
+    import json
+    import subprocess
+
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", _HELP_PATH_PROBE, *argv],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=60,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert result["code"] == 0
+    assert result["usage"] is True
+    loaded = set(result["modules"])
+    assert [name for name in _HELP_PATH_FORBIDDEN_MODULES if name in loaded] == []
+
+
+def test_worker_host_import_leaves_the_cryptography_backend_unloaded() -> None:
+    """The worker host imports the store; neither needs the cryptography backend to start."""
+
+    import json
+    import subprocess
+
+    probe = (
+        "import json, sys\n"
+        "import codex_plugin_scanner.guard.workers.host\n"
+        "print(json.dumps(sorted(name for name in sys.modules if name.split('.')[0] == 'cryptography')))\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", probe],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=60,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout.strip().splitlines()[-1]) == []
+
+
 def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home",
@@ -66,7 +296,7 @@ def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:
 
 
 def test_resolve_targets_keeps_single_harness_contract(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home",

@@ -33,6 +33,12 @@ def _load_json_or_jsonc(path: Path) -> tuple[dict[str, object], bool, str | None
         return {}, True, "permission-denied"
     except OSError:
         return {}, True, "read-error"
+    return _load_json_or_jsonc_text(path, text)
+
+
+def _load_json_or_jsonc_text(path: Path, text: str) -> tuple[dict[str, object], bool, str | None]:
+    """Parse one captured config generation without reading its path again."""
+
     has_comments = "//" in text or "/*" in text
     if path.suffix == ".jsonc" and has_comments:
         text = _strip_jsonc(text)

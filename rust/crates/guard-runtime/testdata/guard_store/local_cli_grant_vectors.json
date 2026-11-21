@@ -1,0 +1,399 @@
+{
+ "order_by": {
+  "local_cli_authority": "singleton",
+  "local_cli_command": "cli_id, command_id",
+  "local_cli_command_grant": "cli_id, command_id",
+  "local_cli_grant": "cli_id"
+ },
+ "scenarios": [
+  {
+   "name": "grants",
+   "seed": {
+    "local_cli_authority": [
+     {
+      "revision": 0,
+      "singleton": 1
+     }
+    ],
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_grant": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "invalid id",
+     "method": "read_local_cli_grant",
+     "native_payload": null,
+     "wire_args": {
+      "cli_id": "local-cli.Bad"
+     }
+    },
+    {
+     "error": null,
+     "label": "no grant",
+     "method": "read_local_cli_grant",
+     "native_payload": null,
+     "wire_args": {
+      "cli_id": "local-cli.alpha"
+     }
+    },
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "sql": [
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "allowed",
+        3,
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "allowed grant",
+     "method": "read_local_cli_grant",
+     "native_payload": {
+      "cli_id": "local-cli.alpha",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "revision": 3,
+      "state": "allowed",
+      "updated_at": "2026-10-01T00:00:00+00:00"
+     },
+     "wire_args": {
+      "cli_id": "local-cli.alpha"
+     }
+    },
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "sql": [
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.beta",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "blocked",
+        4,
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "blocked grant",
+     "method": "read_local_cli_grant",
+     "native_payload": {
+      "cli_id": "local-cli.beta",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "revision": 4,
+      "state": "blocked",
+      "updated_at": "2026-10-01T00:00:00+00:00"
+     },
+     "wire_args": {
+      "cli_id": "local-cli.beta"
+     }
+    },
+    {
+     "error": null,
+     "label": "other grants stay unread",
+     "method": "read_local_cli_grant",
+     "native_payload": {
+      "cli_id": "local-cli.alpha",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "revision": 3,
+      "state": "allowed",
+      "updated_at": "2026-10-01T00:00:00+00:00"
+     },
+     "wire_args": {
+      "cli_id": "local-cli.alpha"
+     }
+    }
+   ]
+  },
+  {
+   "name": "command_catalog_and_states",
+   "seed": {
+    "local_cli_authority": [
+     {
+      "revision": 0,
+      "singleton": 1
+     }
+    ],
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_grant": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "invalid id",
+     "method": "read_local_cli_command_catalog",
+     "native_payload": [],
+     "wire_args": {
+      "cli_id": "local-cli.Bad"
+     }
+    },
+    {
+     "error": null,
+     "label": "invalid id states",
+     "method": "read_local_cli_command_states",
+     "native_payload": {},
+     "wire_args": {
+      "cli_id": "local-cli.Bad"
+     }
+    },
+    {
+     "error": null,
+     "label": "empty catalog",
+     "method": "read_local_cli_command_catalog",
+     "native_payload": [],
+     "wire_args": {
+      "cli_id": "local-cli.alpha"
+     }
+    },
+    {
+     "error": null,
+     "label": "empty states",
+     "method": "read_local_cli_command_states",
+     "native_payload": {},
+     "wire_args": {
+      "cli_id": "local-cli.alpha"
+     }
+    },
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "sql": [
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values (?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "zeta",
+        "Zeta",
+        "zeta [args]",
+        "Run zeta",
+        null,
+        0
+       ]
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values (?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "beta",
+        "Beta",
+        "beta [args]",
+        "Run beta",
+        "zeta",
+        2
+       ]
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values (?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "alpha",
+        "Alpha",
+        "alpha [args]",
+        "Run alpha",
+        null,
+        2
+       ]
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values (?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "gamma",
+        "Gamma",
+        "gamma [args]",
+        "Run gamma",
+        null,
+        1
+       ]
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values (?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.other",
+        "omega",
+        "Omega",
+        "omega [args]",
+        "Run omega",
+        null,
+        0
+       ]
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values ('local-cli.alpha', 'blobname', x'00', 'u', 'd', null, 3)",
+       []
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values ('local-cli.alpha', 'blobparent', 'n', 'u', 'd', x'00', 4)",
+       []
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values ('local-cli.alpha', 'numeric', 7, 8, 9, 10, 5)",
+       []
+      ],
+      [
+       "insert into local_cli_command_grant (cli_id, command_id, state) values (?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "zeta",
+        "allow"
+       ]
+      ],
+      [
+       "insert into local_cli_command_grant (cli_id, command_id, state) values (?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "beta",
+        "review"
+       ]
+      ],
+      [
+       "insert into local_cli_command_grant (cli_id, command_id, state) values (?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "alpha",
+        "inherit"
+       ]
+      ],
+      [
+       "insert into local_cli_command_grant (cli_id, command_id, state) values (?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "gamma",
+        "block"
+       ]
+      ],
+      [
+       "insert into local_cli_command_grant (cli_id, command_id, state) values (?, ?, ?)",
+       [
+        "local-cli.other",
+        "omega",
+        "block"
+       ]
+      ],
+      [
+       "insert into local_cli_command_grant values ('local-cli.alpha', x'00', 'allow')",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "ordered catalog skips non-text cells",
+     "method": "read_local_cli_command_catalog",
+     "native_payload": [
+      {
+       "command_id": "zeta",
+       "description": "Run zeta",
+       "name": "Zeta",
+       "parent_id": null,
+       "usage": "zeta [args]"
+      },
+      {
+       "command_id": "gamma",
+       "description": "Run gamma",
+       "name": "Gamma",
+       "parent_id": null,
+       "usage": "gamma [args]"
+      },
+      {
+       "command_id": "alpha",
+       "description": "Run alpha",
+       "name": "Alpha",
+       "parent_id": null,
+       "usage": "alpha [args]"
+      },
+      {
+       "command_id": "beta",
+       "description": "Run beta",
+       "name": "Beta",
+       "parent_id": "zeta",
+       "usage": "beta [args]"
+      },
+      {
+       "command_id": "numeric",
+       "description": "9",
+       "name": "7",
+       "parent_id": "10",
+       "usage": "8"
+      }
+     ],
+     "wire_args": {
+      "cli_id": "local-cli.alpha"
+     }
+    },
+    {
+     "error": null,
+     "label": "states skip non-text ids",
+     "method": "read_local_cli_command_states",
+     "native_payload": {
+      "alpha": "inherit",
+      "beta": "review",
+      "gamma": "block",
+      "zeta": "allow"
+     },
+     "wire_args": {
+      "cli_id": "local-cli.alpha"
+     }
+    },
+    {
+     "error": null,
+     "label": "other extension",
+     "method": "read_local_cli_command_catalog",
+     "native_payload": [
+      {
+       "command_id": "omega",
+       "description": "Run omega",
+       "name": "Omega",
+       "parent_id": null,
+       "usage": "omega [args]"
+      }
+     ],
+     "wire_args": {
+      "cli_id": "local-cli.other"
+     }
+    },
+    {
+     "error": null,
+     "label": "other extension states",
+     "method": "read_local_cli_command_states",
+     "native_payload": {
+      "omega": "block"
+     },
+     "wire_args": {
+      "cli_id": "local-cli.other"
+     }
+    }
+   ]
+  }
+ ],
+ "schema": "guard-store-local-cli-grant-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE local_cli_grant (\n            cli_id text primary key,\n            identity_hash text not null,\n            state text not null check (state in ('allowed', 'blocked')),\n            revision integer not null check (revision >= 1),\n            updated_at text not null\n        )",
+  "CREATE TABLE local_cli_authority (\n            singleton integer primary key check (singleton = 1),\n            revision integer not null check (revision >= 0)\n        )",
+  "CREATE TABLE local_cli_command (\n            cli_id text not null,\n            command_id text not null,\n            name text not null,\n            usage text not null,\n            description text not null,\n            parent_id text,\n            sort_index integer not null check (sort_index >= 0),\n            primary key (cli_id, command_id)\n        )",
+  "CREATE TABLE local_cli_command_grant (\n            cli_id text not null,\n            command_id text not null,\n            state text not null check (state in ('inherit', 'allow', 'review', 'block')),\n            primary key (cli_id, command_id)\n        )"
+ ],
+ "source": "guard"
+}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .adapters.contracts import HARNESS_CONTRACTS, display_name_for
+from .setup_contracts import display_name_for, harness_names
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +65,8 @@ HARNESS_PROTECTION_CAPABILITIES: tuple[HarnessProtectionCapability, ...] = (
     HarnessProtectionCapability("pi", True, False, False, True),
     HarnessProtectionCapability("omp", True, False, False, True),
     HarnessProtectionCapability("zcode", True, False, False, True),
+    HarnessProtectionCapability("devin", True, False, False, True),
+    HarnessProtectionCapability("muse", True, True, False, False),
     HarnessProtectionCapability("paseo", True, False, False, True, True),
 )
 
@@ -76,5 +78,5 @@ def capability_for(harness: str) -> HarnessProtectionCapability | None:
 
 
 def protection_capability_payloads() -> list[dict[str, object]]:
-    known = {contract.harness for contract in HARNESS_CONTRACTS}
+    known = set(harness_names())
     return [item.to_dict() for item in HARNESS_PROTECTION_CAPABILITIES if item.harness in known]

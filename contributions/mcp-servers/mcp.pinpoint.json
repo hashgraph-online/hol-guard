@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.pinpoint",
+  "version": "1.0.0",
+  "name": "Pinpoint",
+  "description": "Point at an element in your running app (browser, iOS Simulator or Android emulator), say what should change, and your coding agent gets the selector, styles, component, source file:line (also on minified builds via source maps) and a cropped screenshot. The bridge listens only on 127.0.0.1; notes and screenshots go to the coding agent you connect, which may send them to its hosted model. Reading, replying to and resolving notes is allowed; clearing all notes stays on Review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.gowtham012",
+    "displayName": "Gowtham Kumar Solleti",
+    "url": "https://github.com/gowtham012"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0F172A" },
+  "homepage": "https://github.com/gowtham012/PinPoint",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "pinpoint-bridge"
+  },
+  "riskClasses": ["local-data-access", "external-content-ingestion", "local-file-write", "external-content-deletion"],
+  "tools": [
+    { "name": "get_pending_annotations", "state": "allow" },
+    { "name": "list_annotations", "state": "allow" },
+    { "name": "get_annotation", "state": "allow" },
+    { "name": "wait_for_annotation", "state": "allow" },
+    { "name": "recheck_annotation", "state": "allow" },
+    { "name": "reply_annotation", "state": "allow" },
+    { "name": "resolve_annotation", "state": "allow" },
+    { "name": "clear_annotations", "state": "review" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/gowtham012/PinPoint",
+    "https://www.npmjs.com/package/pinpoint-bridge",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.gowtham012/pinpoint",
+    "https://github.com/gowtham012/PinPoint/blob/main/bridge/mcp.js"
+  ],
+  "saferAlternatives": [
+    "Launch as `npx -y pinpoint-bridge mcp` over stdio; pin a reviewed release (pinpoint-bridge@0.7.2) to run only that version. The stdio server talks only to the bridge on 127.0.0.1 and otherwise reads and writes its local annotation file.",
+    "Annotation text other than the developer's comment (element text, HTML, attributes, screenshots) is captured from the developer's own pages and is untrusted data for locating the element, not instructions.",
+    "recheck_annotation asks the developer's open browser tab to find the element again and returns a fresh crop; it changes nothing on the page.",
+    "reply_annotation and resolve_annotation only update the note in the local store; the developer sees the agent's message on the pin in their browser.",
+    "Keep clear_annotations on Review: it deletes every pending and resolved note."
+  ]
+}

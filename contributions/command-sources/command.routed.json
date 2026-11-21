@@ -1,0 +1,1151 @@
+{
+  "extension": {
+    "action_classes": [
+      "Routed adapter mutation command",
+      "Routed doctor reconciliation command",
+      "Routed uninstall command",
+      "Routed update command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews host adapter changes, environment reconciliation, and updates through the Routed CLI.",
+    "ecosystem_ids": [
+      "routed"
+    ],
+    "executables": [
+      "routed"
+    ],
+    "extension_id": "command.routed",
+    "homepage": "https://github.com/bshea-1/routed",
+    "icon": {
+      "background": "#4F46E5",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": "MIT",
+    "name": "Routed command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Routed doctor reconciliation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Routed doctor reconciliation commands that modify host configuration or adapters.",
+        "example_command": "routed doctor --fix",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Routed doctor reconciliation",
+        "permission_id": "command.routed.permission.doctor-fix",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run routed doctor without --fix first to review diagnostics before repairing."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Routed adapter mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies host adapter installation or removal across AI coding environments.",
+        "example_command": "routed adapters install",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Routed adapter mutation",
+        "permission_id": "command.routed.permission.adapters",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Review detected environments with routed adapters before installing or removing adapters."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Routed uninstall command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies complete removal of Routed and its host environment adapters.",
+        "example_command": "routed uninstall",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Routed complete uninstallation",
+        "permission_id": "command.routed.permission.uninstall",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run routed uninstall --dry-run first to preview changes before removing Routed."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Routed update command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies in-place updates to the Routed CLI installation and binary.",
+        "example_command": "routed update",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Routed CLI update",
+        "permission_id": "command.routed.permission.update",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run routed update --check to preview available updates before installing."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "bshea-1",
+      "id": "community.bshea-1",
+      "url": "https://github.com/bshea-1"
+    },
+    "reference_urls": [
+      "https://github.com/bshea-1/routed#readme"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Routed doctor reconciliation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Routed doctor reconciliation commands that modify host configuration or adapters.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "routed",
+                  "routed.cmd",
+                  "routed.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_flags": [
+                  "--json",
+                  "-q",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--filter",
+                  "--host",
+                  "--workspace"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--fix"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "doctor"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.routed.permission.doctor-fix",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.routed.doctor-fix",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "doctor"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed doctor command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "doctor"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed doctor command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run routed doctor without --fix first to review diagnostics before repairing."
+        ],
+        "severity": "high",
+        "title": "Routed doctor reconciliation"
+      },
+      {
+        "action_classes": [
+          "Routed adapter mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies host adapter installation across AI coding environments.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "routed",
+                  "routed.cmd",
+                  "routed.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_flags": [
+                  "--json",
+                  "-q",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--filter",
+                  "--host",
+                  "--workspace"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "adapters",
+                  "install"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.routed.permission.adapters",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.routed.adapters-install",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "adapters",
+                      "install"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed adapters install command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "adapters",
+                      "install"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed adapters install command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Review detected environments with routed adapters before installing new adapters."
+        ],
+        "severity": "high",
+        "title": "Routed adapter installation"
+      },
+      {
+        "action_classes": [
+          "Routed adapter mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies host adapter removal from AI coding environments.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "routed",
+                  "routed.cmd",
+                  "routed.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_flags": [
+                  "--json",
+                  "-q",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--filter",
+                  "--host",
+                  "--workspace"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "adapters",
+                  "uninstall"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.routed.permission.adapters",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.routed.adapters-uninstall",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "adapters",
+                      "uninstall"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed adapters uninstall command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "adapters",
+                      "uninstall"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed adapters uninstall command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Check installed adapter status with routed adapters before uninstalling."
+        ],
+        "severity": "high",
+        "title": "Routed adapter removal"
+      },
+      {
+        "action_classes": [
+          "Routed uninstall command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies complete removal of Routed and its host environment adapters.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "routed",
+                  "routed.cmd",
+                  "routed.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--dry-run",
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_flags": [
+                  "--json",
+                  "-q",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--filter",
+                  "--host",
+                  "--workspace"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "uninstall"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.routed.permission.uninstall",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.routed.uninstall",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "uninstall"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed uninstall dry-run preview",
+            "variant_id": "dry-run"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "uninstall"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed uninstall command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "uninstall"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed uninstall command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run routed uninstall --dry-run first to preview changes before removing Routed."
+        ],
+        "severity": "high",
+        "title": "Routed complete uninstallation"
+      },
+      {
+        "action_classes": [
+          "Routed update command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies in-place updates to the Routed CLI installation and binary.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "routed",
+                  "routed.cmd",
+                  "routed.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--check",
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_flags": [
+                  "--json",
+                  "-q",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--filter",
+                  "--host",
+                  "--workspace"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "update"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "routed",
+                  "routed.cmd",
+                  "routed.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--check",
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_flags": [
+                  "--json",
+                  "-q",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--filter",
+                  "--host",
+                  "--workspace"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "upgrade"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.routed.permission.update",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.routed.update",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--check"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "update"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--check"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "upgrade"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed update check preview",
+            "variant_id": "check"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "update"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "upgrade"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed update command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "update"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "routed",
+                      "routed.cmd",
+                      "routed.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "-q",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--filter",
+                      "--host",
+                      "--workspace"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "upgrade"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Routed update command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run routed update --check to preview available updates before installing."
+        ],
+        "severity": "high",
+        "title": "Routed CLI update"
+      }
+    ],
+    "safer_alternatives": [
+      "Run routed doctor without --fix, routed uninstall with --dry-run, or routed update with --check to inspect state before applying changes."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

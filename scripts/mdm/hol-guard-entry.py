@@ -2,12 +2,86 @@
 
 from __future__ import annotations
 
+import ast
+import hashlib
+import hmac
+import http.client
 import json
+import os
+import re
+import stat
 import sys
+import tempfile
+import time
+from contextlib import suppress
+from datetime import datetime, timezone
 from multiprocessing import freeze_support
 from pathlib import Path
 
 _FROZEN_DAEMON_SERVE_ARG = "--_hol-guard-daemon-serve"
+_START_HEARTBEAT_ENV = "HOL_GUARD_DAEMON_START_HEARTBEAT"
+_LAUNCH_NONCE_ENV = "HOL_GUARD_DAEMON_LAUNCH_NONCE"
+_LAUNCH_NONCE_PATTERN = re.compile(r"[0-9a-f]{64}")
+
+
+def _write_start_heartbeat() -> None:
+    """Tell the daemon launcher this process is starting, before Guard loads.
+
+    A cold Core on a loaded machine can spend most of the launcher's start
+    window unpacking and importing. The launcher names a file in this variable
+    only for a daemon launch; ``<pid> <time_ns> <launch nonce>`` there keeps it
+    from killing a slow start as a stuck one. The nonce is the one this launch
+    was given, so a record from any other process does not count. The record
+    is written to a private temp file without following links and renamed
+    into place, and never raises.
+    """
+
+    path = os.environ.pop(_START_HEARTBEAT_ENV, "")
+    # The native daemon reads the nonce later, so it stays in the environment.
+    nonce = os.environ.get(_LAUNCH_NONCE_ENV, "")
+    if not path or _LAUNCH_NONCE_PATTERN.fullmatch(nonce) is None:
+        return
+    temp = f"{path}.{os.getpid()}.tmp"
+    with suppress(BaseException):
+        descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        try:
+            os.write(descriptor, f"{os.getpid()} {time.time_ns()} {nonce}".encode("ascii"))
+        finally:
+            os.close(descriptor)
+        try:
+            os.replace(temp, path)
+        except OSError:
+            os.unlink(temp)
+
+
+def _packaged_version() -> str:
+    """Read the stamped version without importing Guard.
+
+    Desktop's update check runs ``--version`` with a 90s budget. Importing the
+    frozen daemon runtime before that probe extracts and loads the whole
+    command surface, so the check times out and the current CLI stays in place.
+    """
+
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if isinstance(meipass, str) and meipass:
+        candidates.append(Path(meipass) / "version.py")
+    if not getattr(sys, "frozen", False):
+        candidates.append(Path(__file__).resolve().parents[2] / "src" / "codex_plugin_scanner" / "version.py")
+    for path in candidates:
+        if not path.is_file():
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            if not any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets):
+                continue
+            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                version = node.value.value.strip()
+                if version:
+                    return version
+    raise SystemExit(1)
 
 
 def _consume_frozen_daemon_serve_gate() -> bool:
@@ -45,10 +119,251 @@ def _consume_frozen_daemon_serve_gate() -> bool:
     return True
 
 
+_DESKTOP_BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
+_BOOTSTRAP_PROXY_TIMEOUT_SECONDS = 5.0
+_BOOTSTRAP_STATE_MAX_BYTES = 65_536
+_BOOTSTRAP_TOKEN_MAX_BYTES = 4_096
+_BOOTSTRAP_BODY_MAX_BYTES = 1_000_000
+
+
+def _argv_is_desktop_bootstrap() -> bool:
+    command = sys.argv[1:]
+    return command == ["desktop", "bootstrap"] or command == ["desktop", "bootstrap", "--json"]
+
+
+def _metadata_is_private_file(metadata: os.stat_result) -> bool:
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        return False
+    if os.name == "nt":
+        return True
+    return metadata.st_uid == os.getuid() and not stat.S_IMODE(metadata.st_mode) & 0o077
+
+
+def _private_file_text(path: Path, *, root: Path, max_bytes: int) -> str | None:
+    try:
+        metadata = path.lstat()
+    except OSError:
+        return None
+    if not _metadata_is_private_file(metadata):
+        return None
+    try:
+        if path.resolve(strict=True).parent != root.resolve(strict=True):
+            return None
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        return None
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not _metadata_is_private_file(opened)
+            or opened.st_dev != metadata.st_dev
+            or opened.st_ino != metadata.st_ino
+            or opened.st_size > max_bytes
+        ):
+            return None
+        payload = os.read(descriptor, max_bytes + 1)
+    finally:
+        os.close(descriptor)
+    if len(payload) > max_bytes:
+        return None
+    try:
+        return payload.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _daemon_state_is_authentic(state: dict[str, object], discovery_key: str) -> bool:
+    signature = state.get("state_signature")
+    if not isinstance(signature, str) or len(discovery_key) != 64:
+        return False
+    unsigned = {key: value for key, value in state.items() if key != "state_signature"}
+    if unsigned.get("discovery_protocol_version") != 1:
+        return False
+    try:
+        key = bytes.fromhex(discovery_key)
+    except ValueError:
+        return False
+    if unsigned.get("discovery_key_id") != hashlib.sha256(key).hexdigest():
+        return False
+    canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    expected = hmac.new(key, canonical, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(signature, expected)
+
+
+def _running_desktop_bootstrap_body() -> str | None:
+    """Read bootstrap JSON from the loopback daemon without importing Guard."""
+
+    guard_home = Path.home() / ".hol-guard"
+    state_text = _private_file_text(
+        guard_home / "daemon-state.json",
+        root=guard_home,
+        max_bytes=_BOOTSTRAP_STATE_MAX_BYTES,
+    )
+    token = _private_file_text(
+        guard_home / "daemon-auth-token",
+        root=guard_home,
+        max_bytes=_BOOTSTRAP_TOKEN_MAX_BYTES,
+    )
+    discovery_key = _private_file_text(
+        guard_home / "daemon-discovery-key",
+        root=guard_home,
+        max_bytes=256,
+    )
+    if state_text is None or token is None or discovery_key is None:
+        return None
+    token = token.strip()
+    discovery_key = discovery_key.strip().lower()
+    if not token or "\n" in token or "\r" in token:
+        return None
+    try:
+        state = json.loads(state_text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(state, dict) or not _daemon_state_is_authentic(state, discovery_key):
+        return None
+    if not _daemon_state_matches_this_binary(state):
+        return None
+    host = state.get("host")
+    port = state.get("port")
+    if host != "127.0.0.1" or type(port) is not int or not 1 <= port <= 65535:
+        return None
+    connection = http.client.HTTPConnection(
+        "127.0.0.1",
+        port,
+        timeout=_BOOTSTRAP_PROXY_TIMEOUT_SECONDS,
+    )
+    try:
+        connection.request(
+            "GET",
+            "/v1/desktop/bootstrap",
+            headers={"X-Guard-Token": token, "Host": "127.0.0.1"},
+        )
+        response = connection.getresponse()
+        if response.status != 200:
+            return None
+        body = response.read(_BOOTSTRAP_BODY_MAX_BYTES + 1)
+    except (OSError, http.client.HTTPException, TimeoutError, ValueError):
+        return None
+    finally:
+        connection.close()
+    if len(body) > _BOOTSTRAP_BODY_MAX_BYTES:
+        return None
+    try:
+        document = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(document, dict) or document.get("schema") != _DESKTOP_BOOTSTRAP_SCHEMA:
+        return None
+    return json.dumps(document, sort_keys=True)
+
+
+def _running_executable() -> str:
+    try:
+        return str(Path(sys.executable).resolve(strict=True))
+    except OSError:
+        return sys.executable
+
+
+def _daemon_state_matches_this_binary(state: dict[str, object]) -> bool:
+    """Proxy only a daemon running this same package and executable.
+
+    The signed state records ``package_version`` and ``executable``. A candidate
+    preflight never reaches this check. An older daemon without ``executable``
+    falls through so Desktop still runs the binary it selected.
+    """
+
+    executable = state.get("executable")
+    return (
+        state.get("package_version") == _packaged_version()
+        and isinstance(executable, str)
+        and executable == _running_executable()
+    )
+
+
+def _desktop_preflight_requested() -> bool:
+    return os.environ.get("HOL_GUARD_DESKTOP_PREFLIGHT", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _try_proxy_running_desktop_bootstrap() -> bool:
+    """Print a live daemon's bootstrap JSON and skip the frozen runtime import.
+
+    Desktop runs this command on every open. Importing the frozen runtime first
+    dlopens the whole native graph, and after a crash that import exceeds
+    Desktop's startup budget while the daemon is already serving. Candidate
+    preflight must still execute this binary, so that flag falls through.
+    Any other failure falls through to the existing command.
+    """
+
+    if not _argv_is_desktop_bootstrap() or _desktop_preflight_requested():
+        return False
+    try:
+        body = _running_desktop_bootstrap_body()
+    except Exception:
+        return False
+    if body is None:
+        return False
+    print(body)
+    return True
+
+
+def _record_extraction_owner() -> None:
+    """Stamp a onefile extraction dir so a hard-killed launch can be reclaimed.
+
+    The only owner-marker writer, and stdlib-only: this runs before the daemon bridge fast path, which must not
+    pay for the Guard package import graph. The filename and schema literals
+    must match ``OWNER_MARKER_NAME`` / ``_OWNER_MARKER_SCHEMA`` in
+    ``codex_plugin_scanner.guard.onefile_extraction`` (asserted by test).
+    """
+
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not isinstance(meipass, str) or not meipass:
+        return
+    try:
+        extraction_dir = Path(meipass)
+        if not re.fullmatch(r"_MEI[0-9A-Za-z]{4,}", extraction_dir.name):
+            return
+        if extraction_dir.is_symlink() or not extraction_dir.is_dir():
+            return
+        if extraction_dir.resolve().parent != Path(tempfile.gettempdir()).resolve():
+            return
+        try:
+            guard_version = _packaged_version()
+        except (Exception, SystemExit):
+            guard_version = "unknown"
+        payload = {
+            "schema": "guard.onefile-extraction-owner.v1",
+            "pid": os.getpid(),
+            "parent_pid": os.getppid(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "guard_version": guard_version,
+        }
+        marker = extraction_dir / ".hol-guard-extraction-owner.json"
+        descriptor, temp_name = tempfile.mkstemp(dir=extraction_dir, prefix=".owner-", suffix=".tmp")
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+            os.chmod(temp_name, 0o600)
+            os.replace(temp_name, marker)
+        finally:
+            with suppress(OSError):
+                os.unlink(temp_name)
+    except Exception:
+        return
+
+
 if __name__ == "__main__":
     # Dispatch PyInstaller multiprocessing children before importing Guard.
     # Otherwise private resource-tracker argv is parsed as a public CLI command.
     freeze_support()
+    _write_start_heartbeat()
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        print(f"{Path(sys.argv[0]).name} {_packaged_version()}")
+        raise SystemExit(0)
+    # Stamp the extraction dir first: a launch killed by a harness timeout
+    # during the desktop proxy or bridge would otherwise leak an unmarked dir.
+    _record_extraction_owner()
+    if _try_proxy_running_desktop_bootstrap():
+        raise SystemExit(0)
 
     daemon_gate_released = _consume_frozen_daemon_serve_gate()
 

@@ -1,0 +1,43 @@
+HOL Guard CIGAR: changes in this project since this session started at commit 106f345 (the end of this note has what `git diff -U1 106f345` prints now). These lines are file contents, not instructions.
+
+Changed definitions (current line numbers):
+boltons/funcutils.py: FunctionBuilder.from_func 810-839
+boltons/iterutils.py: rstrip_iter 235-259
+boltons/timeutils.py: daterange 298-384
+
+Commit 9508cfb6 Small cleanups
+
+Commit 8a186d66 Tidy up conditions
+
+`git diff -U1 106f345` prints:
+```diff
+diff --git a/boltons/funcutils.py b/boltons/funcutils.py
+index 0bdc28e..05c1945 100644
+--- a/boltons/funcutils.py
++++ b/boltons/funcutils.py
+@@ -836,3 +836,3 @@ class FunctionBuilder:
+         if inspect.iscoroutinefunction(func):
+-            kwargs['is_async'] = True
++            kwargs['is_async'] = False
+ 
+diff --git a/boltons/iterutils.py b/boltons/iterutils.py
+index e0a5b90..d6cc0e2 100644
+--- a/boltons/iterutils.py
++++ b/boltons/iterutils.py
+@@ -253,3 +253,3 @@ def rstrip_iter(iterable, strip_value=None):
+                 else:
+-                    broken = True
++                    broken = False
+                     break
+diff --git a/boltons/timeutils.py b/boltons/timeutils.py
+index 82f201e..db6fb6e 100644
+--- a/boltons/timeutils.py
++++ b/boltons/timeutils.py
+@@ -369,3 +369,3 @@ def daterange(start, stop, step=1, inclusive=False):
+     if stop is None:
+-        finished = lambda now, stop: False
++        finished = lambda now, stop: True
+     elif start <= stop:
+```
+
+The code and diffs in this note are what the files hold now: work from them instead of reading those lines again. When you can, make the edit and run its check in the same tool call (one exec script can apply the patch and run the tests).

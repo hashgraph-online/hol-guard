@@ -46,7 +46,8 @@ export type ExtensionBrandSlug =
   | "restic"
   | "borg"
   | "velero"
-  | "openssh";
+  | "openssh"
+  | "cloudflare";
 
 export type ExtensionBrandFallback =
   | "shield"
@@ -75,6 +76,8 @@ export type ExtensionBrandInput = {
   name?: string;
   executables?: readonly string[];
   ecosystem_ids?: readonly string[];
+  /** Optional daemon-provided brand slug for custom rows. */
+  brand?: string;
 };
 
 export const EXTENSION_BRANDS: Record<ExtensionBrandSlug, ExtensionBrandSpec> = {
@@ -126,6 +129,7 @@ export const EXTENSION_BRANDS: Record<ExtensionBrandSlug, ExtensionBrandSpec> = 
   borg: { slug: "borg", label: "Borg", color: "00B000" },
   velero: { slug: "velero", label: "Velero", color: "326CE5" },
   openssh: { slug: "openssh", label: "OpenSSH", color: "F2CA30" },
+  cloudflare: { slug: "cloudflare", label: "Cloudflare", color: "F38020" },
 };
 
 const CLOUD_CLUSTER: ExtensionBrandSlug[] = ["aws", "gcp", "azure"];
@@ -244,6 +248,7 @@ const INFERENCE: ReadonlyArray<{ slug: ExtensionBrandSlug; pattern: RegExp }> = 
   { slug: "restic", pattern: /\brestic\b/ },
   { slug: "borg", pattern: /\bborg\b/ },
   { slug: "velero", pattern: /\bvelero\b/ },
+  { slug: "cloudflare", pattern: /\b(?:cloudflare|wrangler)\b/ },
   { slug: "openssh", pattern: /\b(?:ssh|scp|openssh)\b/ },
 ];
 
@@ -297,13 +302,19 @@ export function isNearBlackBrand(color: string): boolean {
   return hex === "000000" || hex === "181717" || hex === "231f20" || hex === "343434";
 }
 
+function brandSlugFromField(brand: string | undefined): ExtensionBrandSlug | null {
+  return brand !== undefined && Object.prototype.hasOwnProperty.call(EXTENSION_BRANDS, brand)
+    ? (brand as ExtensionBrandSlug) : null;
+}
+
 export function resolveExtensionBrand(input: ExtensionBrandInput): ExtensionBrandResolution {
   const fallback = fallbackForExtensionId(input.extension_id);
   if (input.extension_id === "command.guard-self-protection") {
     return { kind: "guard", marks: [], fallback: "shield" };
   }
   const mapped = BY_EXTENSION_ID[input.extension_id];
-  const slugs = uniqueSlugs(mapped ?? inferSlugs(input));
+  const declared = brandSlugFromField(input.brand);
+  const slugs = uniqueSlugs(mapped ?? (declared ? [declared] : inferSlugs(input)));
   if (slugs.length === 0) {
     return { kind: "fallback", marks: [], fallback };
   }

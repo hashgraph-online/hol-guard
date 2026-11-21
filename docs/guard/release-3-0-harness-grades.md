@@ -1,6 +1,6 @@
 # `release/3.0` harness ownership grades
 
-Status: wave-zero baseline. Audience: execution-assurance gate reviewers. Source evidence snapshot: `origin/release/3.1` at `10348fd40fa53ef60d9363bb6c37591b8bb60a61`; release identity migrated to 3.0 and revalidated in PR #1901.
+Status: archived wave-zero baseline; **not a current support or certification matrix**. Audience: execution-assurance gate reviewers. Source evidence snapshot: `origin/release/3.1` at `10348fd40fa53ef60d9363bb6c37591b8bb60a61`; release identity migrated to 3.0 and revalidated in PR #1901. Later releases added Pi and Cline runtime integrations. Use the current [harness support contract](harness-support.md) and release-bound live host evidence when assessing present coverage.
 
 Every supported harness classified by execution-ownership grade: `guard_owned_local`, `host_decision_only`, `observe_only_degraded`, or `unsupported`. `delegable_remote` is a post-MVP capability and no harness is graded for it in this baseline. Grade is derived from the adapter's `approval_tier` and the presence of an enforceable local hook surface.
 

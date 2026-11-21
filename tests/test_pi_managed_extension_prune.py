@@ -5,10 +5,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.pi_support import enable_managed_extension
+import pytest
+
+from codex_plugin_scanner.guard import native_harness_install_ops as harness_install_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests.pi_managed_extension_client import enable_managed_extension
 
 
-def test_enable_managed_extension_prunes_stale_hol_guard_extensions(tmp_path: Path) -> None:
+def test_install_prunes_stale_hol_guard_extensions(tmp_path: Path) -> None:
     settings_path = tmp_path / ".pi" / "agent" / "settings.json"
     current_extension = tmp_path / ".pi" / "agent" / "extensions" / "hol-guard.ts"
     stale_global_extension = tmp_path / ".pi" / "old" / "extensions" / "hol-guard.ts"
@@ -22,13 +26,33 @@ def test_enable_managed_extension_prunes_stale_hol_guard_extensions(tmp_path: Pa
                     str(stale_global_extension),
                     str(custom_extension),
                     str(stale_project_extension),
+                    "npm:hol-guard.ts",
                 ],
             }
         ),
         encoding="utf-8",
     )
+    context = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "guard-home")
 
-    enable_managed_extension(settings_path=settings_path, extension_path=current_extension)
+    prepared = harness_install_ops.prepare_install("pi", context)
 
-    extensions = json.loads(settings_path.read_text(encoding="utf-8"))["extensions"]
-    assert extensions == [str(custom_extension), str(current_extension)]
+    planned = next(change for change in prepared.files if change.path == settings_path.resolve())
+    extensions = json.loads(planned.after or b"{}")["extensions"]
+    assert extensions == [str(custom_extension), "npm:hol-guard.ts", str(current_extension)]
+
+
+def test_enable_managed_extension_rejects_symlink_and_foreign_name(tmp_path: Path) -> None:
+    settings_path = tmp_path / ".pi" / "agent" / "settings.json"
+    other = tmp_path / "elsewhere.json"
+    settings_path.parent.mkdir(parents=True)
+    other.write_text("{}", encoding="utf-8")
+    settings_path.symlink_to(other)
+    extension = tmp_path / "hol-guard.ts"
+    with pytest.raises(ValueError, match="settings path"):
+        enable_managed_extension(settings_path=settings_path, extension_path=extension)
+    assert other.read_text(encoding="utf-8") == "{}"
+
+    foreign = tmp_path / "notes.txt"
+    with pytest.raises(ValueError, match="settings path"):
+        enable_managed_extension(settings_path=foreign, extension_path=extension)
+    assert not foreign.exists()

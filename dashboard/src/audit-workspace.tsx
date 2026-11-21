@@ -34,8 +34,11 @@ import {
   resolveManagerCoverageStatus,
 } from "./supply-chain-protection-stats";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
+import { listSupplyChainAuditWorkspaceChoices } from "./supply-chain-audit-workspace";
 import type { SupplyChainAuditSession } from "./use-supply-chain-audit-session";
 import { isBlockedGuardAction } from "./guard-action";
+import { auditPriorityBadgeLabel } from "./audit-priority-badge";
+import { AuditCodebaseChecks } from "./audit-codebase-checks";
 
 export type AuditSeverity = "critical" | "high" | "medium" | "low" | "info";
 
@@ -427,9 +430,10 @@ type AuditWorkspaceProps = {
   receipts: GuardReceipt[];
   approvalGate: GuardApprovalGatePublicConfig | null;
   auditSession: SupplyChainAuditSession;
+  onOpenWorkspaces?: () => void;
 };
 
-export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession }: AuditWorkspaceProps) {
+export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession, onOpenWorkspaces }: AuditWorkspaceProps) {
   const [filter, setFilter] = useState<AuditFilterState>({
     severityFilter: "all",
     harnessFilter: "",
@@ -551,14 +555,13 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession 
     [baseResults, resolvedIds],
   );
 
-  const criticalCount = useMemo(
-    () =>
-      baseResults.filter(
-        (r) =>
-          (r.severity === "critical" || r.severity === "high") &&
-          !r.resolved &&
-          !resolvedIds.has(r.id),
-      ).length,
+  const workspaceChoices = useMemo(
+    () => listSupplyChainAuditWorkspaceChoices(snapshot.managed_installs ?? []),
+    [snapshot.managed_installs],
+  );
+
+  const priorityBadge = useMemo(
+    () => auditPriorityBadgeLabel(baseResults, resolvedIds),
     [baseResults, resolvedIds],
   );
 
@@ -568,10 +571,17 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession 
         auditConnectGate={auditSession.auditConnectGate}
         auditError={auditSession.auditError}
         auditSnapshot={auditSession.auditSnapshot}
+        auditWorkspaceDir={auditSession.auditWorkspaceDir}
+        auditWorkspaceChoices={workspaceChoices}
+        auditWorkspaceSelectionRequired={auditSession.auditWorkspaceSelectionRequired}
+        folderPickerBusy={auditSession.folderPickerBusy}
+        folderPickerError={auditSession.folderPickerError}
         auditRunning={auditSession.auditRunning}
         auditPhase={auditSession.auditPhase}
         cloudState={snapshot.cloud_state}
         onRunAudit={auditSession.handleRunAudit}
+        onChooseAuditWorkspace={auditSession.handleChooseAuditWorkspace}
+        onAuditWorkspaceDirChange={auditSession.setAuditWorkspaceDir}
       />
 
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -581,8 +591,8 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession 
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {criticalCount > 0 && (
-            <Badge tone="destructive">{criticalCount} critical</Badge>
+          {priorityBadge && (
+            <Badge tone="destructive">{priorityBadge}</Badge>
           )}
           {openCount > 0 ? (
             <Badge tone="attention">{openCount} open</Badge>
@@ -591,6 +601,8 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession 
           )}
         </div>
       </div>
+
+      <AuditCodebaseChecks onOpenWorkspaces={onOpenWorkspaces} />
 
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3 space-y-3">

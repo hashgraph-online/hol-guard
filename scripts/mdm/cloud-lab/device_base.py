@@ -7,12 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from device_support import response_error_code
-from lab_common import atomic, decode_json_object, http_request, json_bytes
-
-from codex_plugin_scanner.guard.mdm.cloud_control import (
+from cloud_control import (
     ENROLL_SCHEMA,
     ContractError,
     iso,
@@ -20,6 +15,10 @@ from codex_plugin_scanner.guard.mdm.cloud_control import (
     sign_proof,
     utcnow,
 )
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from device_support import response_error_code
+from lab_common import atomic, decode_json_object, http_request, json_bytes
 
 
 class DeviceBase:

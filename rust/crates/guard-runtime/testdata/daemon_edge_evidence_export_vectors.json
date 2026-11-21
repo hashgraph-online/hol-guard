@@ -1,0 +1,51 @@
+{
+ "exported_at": "2026-01-02T03:04:05.000006Z",
+ "items": [
+  {
+   "evidence_id": "ev-1",
+   "action_id": "a",
+   "request_id": "r",
+   "harness": "codex",
+   "workspace": "/work",
+   "signal_id": "s",
+   "category": "secrets",
+   "severity": "high",
+   "confidence": 0.75,
+   "summary": "=SUM(A1), \"quoted\"\nnext",
+   "action_identity": null,
+   "created_at": "t1"
+  },
+  {
+   "evidence_id": "ev-2",
+   "action_id": "-x",
+   "request_id": "",
+   "harness": "cursor",
+   "workspace": "@w",
+   "signal_id": "\tsig",
+   "category": "c",
+   "severity": "low",
+   "confidence": 1.0,
+   "summary": "plain",
+   "action_identity": "id-1",
+   "created_at": "t2"
+  },
+  {
+   "evidence_id": "ev-3",
+   "action_id": "+a",
+   "request_id": "r3",
+   "harness": "h",
+   "workspace": "w",
+   "signal_id": "s",
+   "category": "c",
+   "severity": "s",
+   "confidence": 0.0,
+   "summary": "back\\slash\rcr",
+   "action_identity": "",
+   "created_at": "t3"
+  }
+ ],
+ "json": "{\n  \"exported_at\": \"2026-01-02T03:04:05.000006Z\",\n  \"privacy_warning\": \"Evidence exports redact detector details, local user paths, and token-like values. Review the file before sharing it outside your team.\",\n  \"redaction\": {\n    \"details\": \"omitted\",\n    \"local_paths\": \"redacted\",\n    \"token_like_values\": \"redacted\"\n  },\n  \"total_rows\": 3,\n  \"items\": [\n    {\n      \"evidence_id\": \"ev-1\",\n      \"action_id\": \"a\",\n      \"request_id\": \"r\",\n      \"harness\": \"codex\",\n      \"workspace\": \"/work\",\n      \"signal_id\": \"s\",\n      \"category\": \"secrets\",\n      \"severity\": \"high\",\n      \"confidence\": 0.75,\n      \"summary\": \"=SUM(A1), \\\"quoted\\\"\\nnext\",\n      \"action_identity\": null,\n      \"created_at\": \"t1\"\n    },\n    {\n      \"evidence_id\": \"ev-2\",\n      \"action_id\": \"-x\",\n      \"request_id\": \"\",\n      \"harness\": \"cursor\",\n      \"workspace\": \"@w\",\n      \"signal_id\": \"\\tsig\",\n      \"category\": \"c\",\n      \"severity\": \"low\",\n      \"confidence\": 1.0,\n      \"summary\": \"plain\",\n      \"action_identity\": \"id-1\",\n      \"created_at\": \"t2\"\n    },\n    {\n      \"evidence_id\": \"ev-3\",\n      \"action_id\": \"+a\",\n      \"request_id\": \"r3\",\n      \"harness\": \"h\",\n      \"workspace\": \"w\",\n      \"signal_id\": \"s\",\n      \"category\": \"c\",\n      \"severity\": \"s\",\n      \"confidence\": 0.0,\n      \"summary\": \"back\\\\slash\\rcr\",\n      \"action_identity\": \"\",\n      \"created_at\": \"t3\"\n    }\n  ]\n}",
+ "csv": "privacy_warning,\"Evidence exports redact detector details, local user paths, and token-like values. Review the file before sharing it outside your team.\"\r\nexported_at,2026-01-02T03:04:05.000006Z\r\ntotal_rows,3\r\n\r\nevidence_id,action_id,request_id,harness,workspace,signal_id,category,severity,confidence,summary,action_identity,created_at\r\nev-1,a,r,codex,/work,s,secrets,high,0.75,\"'=SUM(A1), \"\"quoted\"\"\nnext\",,t1\r\nev-2,'-x,,cursor,'@w,'\tsig,c,low,1.0,plain,id-1,t2\r\nev-3,'+a,r3,h,w,s,c,s,0.0,\"back\\slash\rcr\",,t3\r\n",
+ "empty_json": "{\n  \"exported_at\": \"2026-01-02T03:04:05.000006Z\",\n  \"privacy_warning\": \"Evidence exports redact detector details, local user paths, and token-like values. Review the file before sharing it outside your team.\",\n  \"redaction\": {\n    \"details\": \"omitted\",\n    \"local_paths\": \"redacted\",\n    \"token_like_values\": \"redacted\"\n  },\n  \"total_rows\": 0,\n  \"items\": []\n}",
+ "empty_csv": "privacy_warning,\"Evidence exports redact detector details, local user paths, and token-like values. Review the file before sharing it outside your team.\"\r\nexported_at,2026-01-02T03:04:05.000006Z\r\ntotal_rows,0\r\n\r\nevidence_id,action_id,request_id,harness,workspace,signal_id,category,severity,confidence,summary,action_identity,created_at\r\n"
+}

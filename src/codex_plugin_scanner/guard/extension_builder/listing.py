@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 from functools import lru_cache
 from importlib.resources import files
-from pathlib import Path
 from typing import cast
 from urllib.parse import urlsplit
 
@@ -14,10 +14,12 @@ from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError
 
 from .errors import BuilderError
-from .io import canonical_json, checked_path, parse_json, read_bytes
+from .io import canonical_json
 from .models import Metadata
 
-LISTING_SCHEMA = "guard.extension-listing.v1"
+LISTING_SCHEMA_V1 = "guard.extension-listing.v1"
+LISTING_SCHEMA_V2 = "guard.extension-listing.v2"
+LISTING_SCHEMA = LISTING_SCHEMA_V2
 MAX_LISTING_BYTES = 16_384
 MAX_TAGLINE_LENGTH = 140
 CATEGORY_LABELS = {
@@ -34,12 +36,54 @@ DEFAULT_LIMITATIONS = (
     "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
     "A maintainer profile is not a security certification or an official upstream endorsement.",
 )
+LINKEDIN_RE = re.compile(r"^https://(?:www\.)?linkedin\.com/(?:in|company)/[A-Za-z0-9][A-Za-z0-9-]{1,99}/?$")
+X_RE = re.compile(r"^https://(?:www\.)?(?:x\.com|twitter\.com)/[A-Za-z0-9_]{1,15}/?$")
 
 
-@lru_cache(maxsize=1)
-def listing_schema() -> dict[str, object]:
-    payload = files("codex_plugin_scanner.guard.extension_builder").joinpath("listing.v1.schema.json")
+@lru_cache(maxsize=2)
+def listing_schema(schema_version: str = LISTING_SCHEMA) -> dict[str, object]:
+    filename = {
+        LISTING_SCHEMA_V1: "listing.v1.schema.json",
+        LISTING_SCHEMA_V2: "listing.v2.schema.json",
+    }.get(schema_version)
+    if filename is None:
+        raise BuilderError("listing_schema", "Listing uses an unsupported metadata schema version.")
+    payload = files("codex_plugin_scanner.guard.extension_builder").joinpath(filename)
     return cast(dict[str, object], json.loads(payload.read_text(encoding="utf-8")))
+
+
+def _plain_listing_text(value: object) -> None:
+    if (
+        not isinstance(value, str)
+        or value != value.strip()
+        or any(ord(char) < 32 or ord(char) == 127 for char in value)
+    ):
+        raise BuilderError("listing_text", "Listing text must be trimmed, single-line plain text.")
+
+
+def _contributor_profile(profile: object) -> None:
+    """Public presentation only. A profile never selects a claimant."""
+
+    if not isinstance(profile, dict) or not profile:
+        raise BuilderError("listing_profile", "A contributor profile must name at least one public field.")
+    for field in ("description", "organization"):
+        if field in profile:
+            _plain_listing_text(profile[field])
+    website = profile.get("website")
+    if isinstance(website, str):
+        _public_https(website)
+    linkedin = profile.get("linkedin")
+    if linkedin is not None:
+        if not isinstance(linkedin, str) or LINKEDIN_RE.fullmatch(linkedin) is None:
+            raise BuilderError(
+                "listing_url", "Contributor LinkedIn links must use a public LinkedIn profile or company URL."
+            )
+        _public_https(linkedin)
+    x_url = profile.get("x")
+    if x_url is not None:
+        if not isinstance(x_url, str) or X_RE.fullmatch(x_url) is None:
+            raise BuilderError("listing_url", "Contributor X links must use a public x.com or twitter.com profile URL.")
+        _public_https(x_url)
 
 
 def _public_https(value: str) -> None:
@@ -72,7 +116,10 @@ def _public_https(value: str) -> None:
 def validate_listing(payload: object, *, expected_id: str | None = None) -> dict[str, object]:
     """Validate bounded listing metadata without resolving links or performing a claim grant."""
 
-    validator = Draft202012Validator(listing_schema(), format_checker=FormatChecker())
+    schema_version = payload.get("schemaVersion") if isinstance(payload, dict) else None
+    if not isinstance(schema_version, str) or schema_version not in {LISTING_SCHEMA_V1, LISTING_SCHEMA_V2}:
+        raise BuilderError("listing_schema", "Listing uses an unsupported metadata schema version.")
+    validator = Draft202012Validator(listing_schema(cast(str, schema_version)), format_checker=FormatChecker())
     try:
         validator.validate(payload)
     except (ValidationError, RecursionError) as exc:
@@ -80,26 +127,39 @@ def validate_listing(payload: object, *, expected_id: str | None = None) -> dict
     row = cast(dict[str, object], payload)
     if expected_id is not None and row["extensionId"] != expected_id:
         raise BuilderError("listing_identity", "Listing identity must match its native contribution and filename.")
-    for value in [row["tagline"], *cast(list[str], row["limitations"])]:
-        if (
-            not isinstance(value, str)
-            or value != value.strip()
-            or any(ord(char) < 32 or ord(char) == 127 for char in value)
-        ):
-            raise BuilderError("listing_text", "Listing text must be trimmed, single-line plain text.")
+    text_values = [row["tagline"], *cast(list[str], row["limitations"])]
+    upstream: dict[str, object] | None = None
+    if schema_version == LISTING_SCHEMA_V2:
+        text_values.append(row["summary"])
+        raw_upstream = row["upstream"]
+        if raw_upstream is not None:
+            upstream = cast(dict[str, object], raw_upstream)
+            text_values.append(cast(str, cast(dict[str, object], upstream)["name"]))
+    for value in text_values:
+        _plain_listing_text(value)
     reference = row.get("documentationUrl")
     if isinstance(reference, str):
         _public_https(reference)
+    if schema_version == LISTING_SCHEMA_V2:
+        contributors = cast(list[dict[str, object]], row["contributors"])
+        if len({str(item["githubId"]) for item in contributors}) != len(contributors):
+            raise BuilderError("listing_contributors", "Contributor GitHub identities must be unique.")
+        for contributor in contributors:
+            roles = cast(list[str], contributor["roles"])
+            if len(set(roles)) != len(roles):
+                raise BuilderError("listing_contributors", "Contributor credit roles must be unique.")
+            if "profile" in contributor:
+                _contributor_profile(contributor["profile"])
+        references = cast(list[dict[str, object]], row["originalContributions"])
+        if len({str(item["url"]) for item in references}) != len(references):
+            raise BuilderError("listing_references", "Original contribution references must be unique.")
+        for item in references:
+            _public_https(cast(str, item["url"]))
+        if upstream is not None:
+            _public_https(cast(str, cast(dict[str, object], upstream)["url"]))
     if len(canonical_json(row).encode("utf-8")) > MAX_LISTING_BYTES:
         raise BuilderError("listing_limit", "Listing exceeds its byte budget.")
     return row
-
-
-def load_listing(path: Path, *, expected_id: str) -> dict[str, object]:
-    path = checked_path(path)
-    if path.name != f"{expected_id}.json":
-        raise BuilderError("listing_identity", "Listing filename must match the native contribution ID.")
-    return validate_listing(parse_json(read_bytes(path, limit=MAX_LISTING_BYTES)), expected_id=expected_id)
 
 
 def listing_template(metadata: Metadata) -> str:
@@ -111,6 +171,10 @@ def listing_template(metadata: Metadata) -> str:
         "tagline": f"Reviewed operation coverage for {metadata.name}."[:MAX_TAGLINE_LENGTH].rstrip(),
         "category": "specialized-tools" if metadata.kind == "mcp" else "other",
         "limitations": list(DEFAULT_LIMITATIONS),
+        "summary": f"Reviewed operation coverage for {metadata.name} through the native Guard contract.",
+        "contributors": [],
+        "originalContributions": [],
+        "upstream": None,
     }
     try:
         _public_https(metadata.homepage)
@@ -158,6 +222,8 @@ def category_for_extension(extension_id: str) -> str:
         return "managed-services"
     if extension_id.startswith("command.package."):
         return "package-supply-chain"
-    if extension_id == "command.skill-sunset" or extension_id.startswith(("command.mcp-", "mcp.")):
+    if extension_id in {"command.skill-sunset", "command.tui-runner"} or extension_id.startswith(
+        ("command.mcp-", "mcp.")
+    ):
         return "specialized-tools"
     return "other"

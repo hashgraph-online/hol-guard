@@ -40,11 +40,10 @@ export function resolveSettingsSaveProofKind(input: {
   if (input.changingPassword && input.wasConfigured) {
     return "change-password";
   }
-  if (!input.wasConfigured && input.draftGateEnabled) {
+  if (input.draftGateEnabled && !input.savedGateEnabled) {
+    // Enabling a disabled gate requires new_password and confirmation, even
+    // when a password verifier and authenticator were retained while off.
     return "setup-gate";
-  }
-  if (input.wasConfigured && input.draftGateEnabled && !input.savedGateEnabled) {
-    return "verify-save";
   }
   if (input.savedGateEnabled) {
     return "verify-save";
@@ -144,11 +143,27 @@ export function resolveSettingsSaveProofModalCopy(input: {
   };
 }
 
+/**
+ * With Yanez Pulse on, saving or a cleanup asks for no password or code: Guard
+ * sends the approval to the YID app after the user continues. Setting up the
+ * gate or changing the password still uses the password fields.
+ */
+export function settingsSaveProofUsesPulse(
+  gate: GuardApprovalGatePublicConfig | null,
+  mode: SettingsSaveProofMode,
+): boolean {
+  return gate?.pulse_enabled === true && (mode === "verify-save" || mode === "maintenance");
+}
+
 export function isSettingsSaveProofSubmitDisabled(
   mode: SettingsSaveProofMode,
   credentials: SettingsSaveProofCredentials,
   totpRequired: boolean,
+  pulseRequired = false,
 ): boolean {
+  if (pulseRequired) {
+    return false;
+  }
   const current = credentials.currentPassword?.trim() ?? "";
   const next = credentials.newPassword?.trim() ?? "";
   const confirm = credentials.confirmPassword?.trim() ?? "";
@@ -170,7 +185,7 @@ export function isSettingsSaveProofSubmitDisabled(
 }
 
 export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const totpRef = useRef<HTMLInputElement>(null);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -218,9 +233,11 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
     return undefined;
   }, [props.open]);
 
-  const totpRequired = props.gate?.totp_enabled === true
+  const pulseRequired = settingsSaveProofUsesPulse(props.gate, props.mode);
+  const totpRequired = !pulseRequired
+    && props.gate?.totp_enabled === true
     && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance");
-  const needsCurrentPassword = props.mode !== "setup-gate" && !totpRequired;
+  const needsCurrentPassword = props.mode !== "setup-gate" && !totpRequired && !pulseRequired;
 
   const handleCurrentPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setCurrentPassword(event.target.value);
@@ -247,14 +264,31 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
     [props.onCancel, props.pending],
   );
 
-  const handleConfirm = useCallback(() => {
+  const handleConfirm = useCallback((event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (
+      props.pending
+      || isSettingsSaveProofSubmitDisabled(
+        props.mode,
+        { currentPassword, newPassword, confirmPassword, totpCode },
+        totpRequired,
+        pulseRequired,
+      )
+    ) {
+      return;
+    }
+    if (pulseRequired) {
+      // The YID app is the proof; no password or code is sent.
+      props.onConfirm({});
+      return;
+    }
     props.onConfirm({
       ...(currentPassword.trim().length > 0 ? { currentPassword } : {}),
       ...(newPassword.trim().length > 0 ? { newPassword } : {}),
       ...(confirmPassword.trim().length > 0 ? { confirmPassword } : {}),
       ...(totpCode.trim().length > 0 ? { totpCode } : {}),
     });
-  }, [confirmPassword, currentPassword, newPassword, props, totpCode]);
+  }, [confirmPassword, currentPassword, newPassword, props, pulseRequired, totpCode, totpRequired]);
 
   const credentials: SettingsSaveProofCredentials = {
     currentPassword,
@@ -262,7 +296,7 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
     confirmPassword,
     totpCode,
   };
-  const confirmDisabled = isSettingsSaveProofSubmitDisabled(props.mode, credentials, totpRequired);
+  const confirmDisabled = isSettingsSaveProofSubmitDisabled(props.mode, credentials, totpRequired, pulseRequired);
 
   if (!props.open) {
     return null;
@@ -276,9 +310,10 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
       aria-modal="true"
       aria-labelledby="settings-save-proof-title"
     >
-      <div
+      <form
         ref={dialogRef}
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+        onSubmit={handleConfirm}
       >
         <div className="flex items-center gap-3">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10">
@@ -294,6 +329,11 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
         </div>
 
         <div className="mt-5 space-y-3">
+          {pulseRequired ? (
+            <p className="rounded-lg border border-brand-blue/20 bg-brand-blue/5 px-3 py-2 text-sm text-brand-dark">
+              You will approve this in the YID app with a face scan.
+            </p>
+          ) : null}
           {needsCurrentPassword ? (
             <label className="block">
               <span className="text-sm font-semibold text-brand-dark">Approval password</span>
@@ -368,11 +408,11 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
           >
             Go back
           </button>
-          <ActionButton onClick={handleConfirm} disabled={props.pending || confirmDisabled}>
+          <ActionButton type="submit" disabled={props.pending || confirmDisabled}>
             {props.pending ? "Working…" : props.confirmLabel}
           </ActionButton>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

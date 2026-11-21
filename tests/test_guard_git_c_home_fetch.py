@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.live_hook_review_support import live_shell_review, quietly_allowed
 
 
 @pytest.fixture(autouse=True)
@@ -71,39 +71,30 @@ def test_home_git_c_fetch_accepts_quoted_or_escaped_tilde_path(
     workspace.mkdir()
     command = f"git -C {repository_operand} fetch origin release/3.0"
 
-    assert extract_sensitive_tool_action_request(
-        "Bash",
-        {"command": command},
-        cwd=workspace,
-        home_dir=home,
-    ) is None
+    assert (
+        extract_sensitive_tool_action_request(
+            "Bash",
+            {"command": command},
+            cwd=workspace,
+            home_dir=home,
+        )
+        is None
+    )
 
 
-def test_home_git_c_fetch_accepts_absolute_path_from_sibling_workspace(tmp_path: Path) -> None:
-    home, repository = _repository(tmp_path)
+def test_home_git_c_fetch_accepts_absolute_path_from_sibling_workspace(live_hook_root: Path) -> None:
+    home, repository = _repository(live_hook_root)
     workspace = home / "workspace"
     workspace.mkdir()
     command = f"git -C {repository} fetch origin release/3.0"
 
-    assert extract_sensitive_tool_action_request(
-        "Bash",
-        {"command": command},
-        cwd=workspace,
-        home_dir=home,
-    ) is None
     assert (
-        _hook_runtime_artifact(
-            harness="codex",
-            payload={
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Bash",
-                "tool_input": {"command": command},
-                "cwd": str(workspace),
-            },
-            action_envelope=None,
+        extract_sensitive_tool_action_request(
+            "Bash",
+            {"command": command},
+            cwd=workspace,
             home_dir=home,
-            guard_home=home / ".guard",
-            workspace=workspace,
         )
         is None
     )
+    assert quietly_allowed(live_shell_review(command, home_dir=home, cwd=workspace))

@@ -7,32 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli import commands_hook_runtime_eval as runtime_eval_module
-from codex_plugin_scanner.guard.cli.commands_support_codex_reads import (
-    _codex_command_is_read_only_source_inspection,
-)
-from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output import (
-    _codex_sensitive_local_source_matches,
-)
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
-    _codex_post_tool_output_artifact,
-)
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
-    _runtime_hook_approval_context_token,
-)
-from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.consumer import artifact_hash
-from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
-from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    build_package_request_artifact,
-    parse_package_intent,
-)
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
 )
-from codex_plugin_scanner.guard.runtime.shell_execution_context import (
+from tests.live_hook_review_support import live_post_tool_flag
+from tests.request_context_support import (
     SHELL_CWD_AMBIGUOUS_STACK,
     SHELL_CWD_MISSING_DIRECTORY,
     SHELL_CWD_PATH_CHANGED,
@@ -44,9 +24,17 @@ from codex_plugin_scanner.guard.runtime.shell_execution_context import (
     SHELL_CWD_UNRESOLVED_PARENT_SHELL,
     SHELL_CWD_WORKSPACE_ESCAPE,
     model_shell_execution_context,
-    validate_shell_execution_segment,
 )
-from codex_plugin_scanner.guard.runtime.signals import GuardRiskSignalV3
+from tests.resident_probe_support import validate_shell_execution_segment
+
+_FLOW_OPERATORS = frozenset({"&&", "||", ";", "\n", "|", "|&", "&"})
+
+
+def _last_flow_operator(controls: tuple[str, ...]) -> str | None:
+    return next((control for control in reversed(controls) if control in _FLOW_OPERATORS), None)
+
+
+pytestmark = pytest.mark.usefixtures("package_intent_native")
 
 
 def _write(path: Path, text: str) -> Path:
@@ -59,25 +47,6 @@ def _write_executable(path: Path) -> Path:
     _write(path, "#!/bin/sh\nexit 0\n")
     path.chmod(0o755)
     return path
-
-
-def _approval_token(artifact: GuardArtifact, *, workspace: Path, config: GuardConfig) -> str:
-    return _runtime_hook_approval_context_token(
-        artifact=artifact,
-        content_hash=artifact_hash(artifact),
-        runtime_workspace=workspace,
-        action_envelope=None,
-        config=config,
-        current_config_action="review",
-        trusted_cli_action=None,
-        untrusted_payload_action=None,
-        package_action=None,
-        data_flow_action=None,
-        scanner_action=None,
-        current_action="review",
-        data_flow_signals=(),
-        scanner_evidence=(),
-    )
 
 
 @pytest.mark.parametrize(
@@ -191,7 +160,7 @@ def test_fd_duplication_is_preserved_as_a_redirection_not_background_control(tmp
     context = model_shell_execution_context("cd project-b 2>&1 && pytest -q", cwd=tmp_path)
 
     assert context.complete
-    assert context.segments[0].control_operator == "&&"
+    assert _last_flow_operator(context.segments[0].control_after) == "&&"
     assert context.segments[1].effective_cwd == destination.resolve()
 
 
@@ -211,7 +180,7 @@ def test_pipeline_directory_change_does_not_leak_from_its_subprocess(tmp_path: P
     context = model_shell_execution_context("cd project-b | pytest -q", cwd=tmp_path)
 
     assert context.complete
-    assert context.segments[0].control_operator == "|"
+    assert _last_flow_operator(context.segments[0].control_after) == "|"
     assert context.segments[1].effective_cwd == tmp_path.resolve()
 
     right_hand_change = model_shell_execution_context("echo ready | cd project-b && pytest -q", cwd=tmp_path)
@@ -470,17 +439,12 @@ def test_source_inspection_and_package_evidence_use_project_b(
     _write(project_a / "package.json", '{"devDependencies":{"vitest":"^3.0.0"}}\n')
     _write(project_a / "package-lock.json", '{"packages":{"node_modules/vitest":{"version":"3.0.0"}}}\n')
     project_a_runner = _write_executable(project_a / "node_modules" / ".bin" / "vitest")
-    _write(project_b / "src" / "safe.py", "SAFE = True\n")
     _write(project_b / "package.json", '{"devDependencies":{"vitest":"^4.0.0"}}\n')
     _write(project_b / "package-lock.json", '{"packages":{"node_modules/vitest":{"version":"4.0.0"}}}\n')
     local_runner = _write_executable(project_b / "node_modules" / ".bin" / "vitest")
     manager = _write_executable(tmp_path / "bin" / "npx")
     monkeypatch.setenv("PATH", str(manager.parent))
 
-    assert _codex_command_is_read_only_source_inspection(
-        "cd project-b && sed -n '1,20p' src/safe.py",
-        cwd=project_a,
-    )
     intent = parse_package_intent(
         "cd project-b && npx --no-install vitest --help",
         workspace=project_a,
@@ -495,241 +459,22 @@ def test_source_inspection_and_package_evidence_use_project_b(
     assert intent.manifest_paths == ("project-b/package.json",)
 
 
-def test_secret_source_output_artifact_uses_the_effective_project(tmp_path: Path) -> None:
-    project_a = tmp_path / "project-a"
+def test_secret_source_output_artifact_uses_the_effective_project(live_hook_root: Path) -> None:
+    project_a = live_hook_root / "project-a"
     project_b = project_a / "project-b"
     _write(project_b / ".env", "API_KEY=project-b-secret\n")
     command = "cd project-b && cat .env"
 
-    matches = _codex_sensitive_local_source_matches(command, cwd=project_a)
-    artifact = _codex_post_tool_output_artifact(
+    artifact = live_post_tool_flag(
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
             "tool_response": {"stdout": "API_KEY=project-b-secret\n"},
         },
-        config_path=str(project_a / ".codex" / "config.toml"),
-        source_scope="project",
         cwd=project_a,
     )
 
-    assert matches
-    assert matches[0].normalized_path == str((project_b / ".env").resolve())
     assert artifact is not None
-    assert artifact.metadata["effective_cwd"] == str(project_b.resolve())
-
-
-def test_approval_tokens_are_partitioned_by_effective_project(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    project_a = workspace / "project-a"
-    project_b = workspace / "project-b"
-    _write(project_a / "package.json", '{"dependencies":{"left-pad":"1.3.0"}}\n')
-    _write(project_b / "package.json", '{"dependencies":{"left-pad":"1.1.0"}}\n')
-    _write(project_a / "conftest.py", "PROJECT = 'a'\n")
-    _write(project_b / "conftest.py", "PROJECT = 'b'\n")
-    _write(project_a / "pyproject.toml", '[tool.pytest.ini_options]\naddopts = "-q"\n')
-    _write(project_b / "pyproject.toml", '[tool.pytest.ini_options]\naddopts = "-ra"\n')
-    config = GuardConfig(guard_home=tmp_path / "home", workspace=workspace)
-
-    def token(project: str) -> str:
-        intent = parse_package_intent(f"cd {project} && npm install left-pad", workspace=workspace)
-        assert intent is not None
-        artifact = build_package_request_artifact(
-            "codex",
-            intent,
-            config_path=str(workspace / ".codex" / "config.toml"),
-            source_scope="project",
-        )
-        return _approval_token(artifact, workspace=workspace, config=config)
-
-    assert token("project-a") != token("project-b")
-
-
-def test_approval_token_binds_executables_from_every_effective_project(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    project_a = workspace / "project-a"
-    project_b = workspace / "project-b"
-    runner_a = _write_executable(project_a / "runner")
-    _write_executable(project_b / "runner")
-    config = GuardConfig(guard_home=tmp_path / "home", workspace=workspace)
-    artifact = GuardArtifact(
-        artifact_id="codex:project:multi-cwd-runner",
-        name="multi-cwd runner",
-        harness="codex",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path=str(workspace / ".codex" / "config.toml"),
-        command="./runner",
-        metadata={
-            "shell_execution_context_hash": "stable-command-context",
-            "shell_execution_context_complete": True,
-            "shell_execution_effective_cwds": [str(project_a), str(project_b)],
-        },
-    )
-
-    first = _approval_token(artifact, workspace=workspace, config=config)
-    _write(runner_a, "#!/bin/sh\nexit 7\n")
-    runner_a.chmod(0o755)
-    second = _approval_token(artifact, workspace=workspace, config=config)
-
-    assert first != second
-
-
-def test_cisco_preflight_scans_every_distinct_effective_project(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project_a = tmp_path / "project-a"
-    project_b = tmp_path / "project-b"
-    project_a.mkdir()
-    project_b.mkdir()
-    calls: list[tuple[Path | None, tuple[Path, ...]]] = []
-    signal = GuardRiskSignalV3(
-        signal_id="cisco:test",
-        source="cisco_skill",
-        source_version="test",
-        category="skill",
-        severity="high",
-        confidence="strong",
-        title="fixture",
-        plain_language_summary="fixture",
-        technical_detail=None,
-        evidence_ref=None,
-        scanner_name="fixture",
-        scanner_status="enabled",
-        scanner_rule_id="fixture",
-        redaction_level="summary",
-        source_path=None,
-        source_line=None,
-        data_source=None,
-        data_sink=None,
-        recommended_action=None,
-    )
-    action = GuardActionEnvelope(
-        schema_version=1,
-        action_id="fixture",
-        harness="codex",
-        event_name="PreToolUse",
-        action_type="file_write",
-        workspace=str(tmp_path),
-        workspace_hash="fixture",
-        tool_name="Write",
-        command=None,
-        prompt_excerpt=None,
-        prompt_text=None,
-        target_paths=("skills/demo/SKILL.md",),
-        network_hosts=(),
-        mcp_server=None,
-        mcp_tool=None,
-        package_manager=None,
-        package_name=None,
-        script_name=None,
-        raw_payload_redacted={},
-    )
-
-    def fake_scan(
-        _action: GuardActionEnvelope,
-        *,
-        workspace: Path | str | None,
-        approved_scan_roots: tuple[Path, ...],
-    ) -> tuple[GuardRiskSignalV3, ...]:
-        calls.append(
-            (
-                Path(workspace) if workspace is not None else None,
-                approved_scan_roots,
-            )
-        )
-        return (signal,)
-
-    monkeypatch.setattr(runtime_eval_module, "scan_action_for_cisco_evidence", fake_scan)
-
-    evidence = runtime_eval_module._runtime_cisco_scanner_evidence(
-        action,
-        runtime_workspace=project_a,
-        raw_shell_cwds=[str(project_a), str(project_b), str(project_a), ""],
-    )
-
-    assert calls == [
-        (project_a.resolve(), (project_a.resolve(), project_b.resolve())),
-        (project_b.resolve(), (project_a.resolve(), project_b.resolve())),
-    ]
-    assert evidence == (signal,)
-
-
-def test_unresolved_execution_context_cannot_reuse_an_approval_token(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    config = GuardConfig(guard_home=tmp_path / "home", workspace=workspace)
-    intent = parse_package_intent("cd $PROJECT && npm install left-pad", workspace=workspace)
-    assert intent is not None
-    artifact = build_package_request_artifact(
-        "codex",
-        intent,
-        config_path=str(workspace / ".codex" / "config.toml"),
-        source_scope="project",
-    )
-
-    first = _approval_token(artifact, workspace=workspace, config=config)
-    second = _approval_token(artifact, workspace=workspace, config=config)
-
-    assert artifact.metadata["shell_execution_context_complete"] is False
-    assert first != second
-
-
-def test_missing_explicit_execution_context_completeness_cannot_reuse_token(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    config = GuardConfig(guard_home=tmp_path / "home", workspace=workspace)
-    artifact = GuardArtifact(
-        artifact_id="codex:project:legacy-shell-context",
-        name="legacy shell context",
-        harness="codex",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path=str(workspace / ".codex" / "config.toml"),
-        command="rm marker",
-        metadata={
-            "shell_execution_context_hash": "legacy-context-without-completeness",
-            "shell_execution_effective_cwds": [str(workspace)],
-        },
-    )
-
-    first = _approval_token(artifact, workspace=workspace, config=config)
-    second = _approval_token(artifact, workspace=workspace, config=config)
-
-    assert first != second
-
-
-def test_destructive_shell_request_models_each_command_context_once(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = tmp_path / "project"
-    project.mkdir()
-    original_model = secret_file_requests_module.model_shell_execution_context
-    calls: list[str] = []
-
-    def counting_model(
-        command_text: str,
-        *,
-        cwd: Path | None = None,
-        workspace_root: Path | None = None,
-        home_dir: Path | None = None,
-    ):
-        calls.append(command_text)
-        return original_model(command_text, cwd=cwd, workspace_root=workspace_root, home_dir=home_dir)
-
-    monkeypatch.setattr(secret_file_requests_module, "model_shell_execution_context", counting_model)
-
-    request = extract_sensitive_tool_action_request(
-        "Bash",
-        {"command": "cd project && rm marker"},
-        cwd=tmp_path,
-    )
-
-    assert request is not None
-    assert request.action_class == "destructive shell command"
-    assert calls == ["cd project && rm marker"]
 
 
 def test_path_hash_changes_when_effective_directory_identity_changes(tmp_path: Path) -> None:

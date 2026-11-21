@@ -6,6 +6,8 @@ import logging
 import os
 import random
 import threading
+import urllib.error
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,12 +15,16 @@ from datetime import datetime, timezone
 from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_event_wake import ReviewEventWake, ReviewEventWakeSignal, review_event_wake_signal
 from ..store import GuardStore
+from .cloud_review_retry_recovery import prepare_retry_identity_replay
+from .native_workspace_review_replay import prepare_native_workspace_review_replay
 
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SAFETY_POLL_SECONDS = 30.0
 DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 DEFAULT_ERROR_BACKOFF_BASE_SECONDS = 1.0
+STALLED_BACKOFF_BASE_SECONDS = 5.0
+STALLED_BACKOFF_MAX_SECONDS = 180.0
 
 
 @dataclass
@@ -34,6 +40,7 @@ def start_cloud_sync_sync_worker(
     store: GuardStore,
     existing: CloudReviewSyncWorker | None = None,
     *,
+    on_authority_changed: Callable[[], bool] | None = None,
     poll_interval: float | None = None,
     error_backoff: float | None = None,
 ) -> CloudReviewSyncWorker | None:
@@ -66,6 +73,7 @@ def start_cloud_sync_sync_worker(
             "poll_interval": safety_poll,
             "error_backoff": maximum_backoff,
             "error_backoff_base": initial_backoff,
+            "on_authority_changed": on_authority_changed,
         },
         daemon=True,
         name="hol-guard-cloud-review-sync",
@@ -87,11 +95,15 @@ def stop_cloud_sync_sync_worker(
 
 
 def refresh_cloud_review_sync_worker(
-    store: GuardStore, worker: CloudReviewSyncWorker | None, *, shutting_down: bool
+    store: GuardStore,
+    worker: CloudReviewSyncWorker | None,
+    *,
+    shutting_down: bool,
+    on_authority_changed: Callable[[], bool] | None = None,
 ) -> tuple[CloudReviewSyncWorker | None, bool]:
     if shutting_down:
         return worker, False
-    worker = start_cloud_sync_sync_worker(store, worker)
+    worker = start_cloud_sync_sync_worker(store, worker, on_authority_changed=on_authority_changed)
     if worker is None:
         return None, False
     worker.wake_signal.notify()
@@ -101,6 +113,17 @@ def refresh_cloud_review_sync_worker(
 def _bounded_error_wait(initial: float, maximum: float, streak: int) -> float:
     exponential = min(maximum, initial * (2 ** min(streak, 10)))
     return exponential * random.uniform(0.5, 1.0)
+
+
+def _stalled_wait(streak: int, retry_after_ms: object) -> float:
+    """Queue-wide wait after Cloud answered a whole batch without progress.
+
+    Honors the server's retry hint, grows exponentially with each consecutive
+    stalled run, and never exceeds a few minutes.
+    """
+    exponential = STALLED_BACKOFF_BASE_SECONDS * (2 ** min(max(streak - 1, 0), 10))
+    hint = retry_after_ms / 1000.0 if type(retry_after_ms) is int and retry_after_ms > 0 else 0.0
+    return min(STALLED_BACKOFF_MAX_SECONDS, max(exponential, hint))
 
 
 def _seconds_until(timestamp: object) -> float | None:
@@ -115,6 +138,25 @@ def _seconds_until(timestamp: object) -> float | None:
     return max(0.0, (due_at - datetime.now(timezone.utc)).total_seconds())
 
 
+def _record_loop_failure(
+    store: GuardStore,
+    error: BaseException,
+    error_code: str,
+    *,
+    keep_auth_code: bool = False,
+) -> None:
+    from . import cloud_review_sync as sync
+
+    sync._transition_sync_state(
+        store,
+        {},
+        "failed",
+        error=sync._redacted_error(error),
+        error_code=error_code,
+        keep_auth_code=keep_auth_code,
+    )
+
+
 def _cloud_sync_sync_loop(
     store: GuardStore,
     stop_event: threading.Event,
@@ -123,12 +165,17 @@ def _cloud_sync_sync_loop(
     poll_interval: float,
     error_backoff: float,
     error_backoff_base: float = DEFAULT_ERROR_BACKOFF_BASE_SECONDS,
+    on_authority_changed: Callable[[], bool] | None = None,
 ) -> None:
     """Drain immediately after commits and poll durably if a hint is lost."""
     from . import cloud_review_sync as sync
+    from .native_workspace_review_enrollment import refresh_native_workspace_review_authority
     from .runner import GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError
 
     error_streak = 0
+    stalled_streak = 0
+    prepared_binding: dict[str, str] | None = None
+    queue_refresh_pending = False
     while not stop_event.is_set():
         observed_generation = wake_signal.generation()
         result: dict[str, object] = {}
@@ -141,11 +188,38 @@ def _cloud_sync_sync_loop(
                 wake_signal.wait(observed_generation, poll_interval)
                 continue
             auth_context = sync._resolve_cloud_review_sync_auth_context(store)
+            authority_changed = refresh_native_workspace_review_authority(store, auth_context)
+            queue_refresh_pending = queue_refresh_pending or authority_changed
+            if queue_refresh_pending and on_authority_changed is not None:
+                queue_refresh_pending = not on_authority_changed()
+            binding = store.get_review_event_oauth_binding()
+            binding_changed = isinstance(binding, dict) and binding != prepared_binding
+            if isinstance(binding, dict) and binding != prepared_binding:
+                _ = prepare_retry_identity_replay(store, binding=binding)
+                prepared_binding = binding
+            if isinstance(binding, dict):
+                _ = prepare_native_workspace_review_replay(
+                    store, binding=binding, force_probe=binding_changed or authority_changed
+                )
             result = sync.sync_cloud_review_events_once(store, auth_context)
             error_streak = 0
             with suppress(OSError, PermissionError, RuntimeError, ValueError):
                 if user_health_report_due(store.guard_home):
                     run_user_health_cadence(store.guard_home)
+            if result.get("stalled") is True:
+                stalled_streak += 1
+                # The retry bookkeeping of this run bumped the wake generation.
+                # Re-read it so that self-inflicted wake does not cancel the
+                # queue-wide backoff and resend the next due batch at once. A
+                # stop request sets the event before it notifies, so check it
+                # after the re-read: a notification the re-read absorbed is
+                # then still visible instead of sleeping through shutdown.
+                stalled_generation = wake_signal.generation()
+                if stop_event.is_set():
+                    break
+                wake_signal.wait(stalled_generation, _stalled_wait(stalled_streak, result.get("retry_after_ms")))
+                continue
+            stalled_streak = 0
             synced = result.get("synced", 0)
             if isinstance(synced, int) and synced > 0:
                 continue
@@ -156,27 +230,25 @@ def _cloud_sync_sync_loop(
                     continue
         except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
             error_streak += 1
-            state = sync._load_sync_state(store)
-            state.update(
-                {
-                    "state": "error",
-                    "last_error": sync._redacted_error(error),
-                    "last_error_at": sync._now(),
-                }
+            stalled_streak = 0
+            auth_code = (
+                "cloud_auth_expired"
+                if isinstance(error, GuardSyncAuthorizationExpiredError)
+                else "cloud_connect_required"
             )
-            sync._save_sync_state(store, state)
+            _record_loop_failure(store, error, auth_code)
         except Exception as error:
             error_streak += 1
+            stalled_streak = 0
             _LOGGER.exception("Unexpected error in Cloud Review sync loop")
-            state = sync._load_sync_state(store)
-            state.update(
-                {
-                    "state": "error",
-                    "last_error": sync._redacted_error(error),
-                    "last_error_at": sync._now(),
-                }
-            )
-            sync._save_sync_state(store, state)
+            # A sync attempt clears the stored code when it starts, so a surviving
+            # auth code means authentication has not succeeded since it was recorded.
+            # The store keeps it when a transient failure (for example a token
+            # refresh timeout) would otherwise hide that sign-in is still required.
+            if isinstance(error, urllib.error.HTTPError) and error.code == 401:
+                _record_loop_failure(store, error, "cloud_auth_expired")
+            else:
+                _record_loop_failure(store, error, "cloud_delivery_error", keep_auth_code=True)
 
         wait = _bounded_error_wait(error_backoff_base, error_backoff, error_streak) if error_streak else poll_interval
         if not error_streak:

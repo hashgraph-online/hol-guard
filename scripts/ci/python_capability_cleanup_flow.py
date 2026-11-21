@@ -222,18 +222,22 @@ class _ScopeBindingFlow(ast.NodeVisitor):
         for alias in node.names:
             bound = alias.asname or alias.name.split(".", 1)[0]
             self._forget_names((bound,))
-            if alias.name == "importlib":
+            # An unaliased dotted import binds the top-level package, not
+            # the submodule. An explicit alias instead binds that submodule.
+            target = alias.name if alias.asname else alias.name.split(".", 1)[0]
+            if target in {"importlib", "builtins"}:
                 self.importlib_aliases.add(bound)
             else:
-                self.module_bindings[bound] = alias.name
+                self.module_bindings[bound] = target
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         target_module = resolve_import(self._analysis.module, node.level, node.module)
         for alias in node.names:
             bound = alias.asname or alias.name
             self._forget_names((bound,))
-            if node.module == "importlib":
-                if alias.name == "import_module":
+            if node.module in {"importlib", "builtins"}:
+                expected = "import_module" if node.module == "importlib" else "__import__"
+                if alias.name == expected:
                     self.import_aliases.add(bound)
             else:
                 function = self._analysis.function_exports.get(target_module, {}).get(alias.name)

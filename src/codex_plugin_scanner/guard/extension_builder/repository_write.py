@@ -95,8 +95,9 @@ def _write_plan(plan: IntegrationPlan) -> None:
             target = checked_path(plan.root / change.path)
             mode = stat.S_IMODE(target.stat().st_mode) if change.before is not None else 0o644
             modes[change.path] = mode
-            staged[change.path] = staging / str(index)
-            _stage_file(staged[change.path], change.after, mode)
+            if change.after is not None:
+                staged[change.path] = staging / str(index)
+                _stage_file(staged[change.path], change.after, mode)
         # Publish the ownership record last. This improves crash recovery without
         # claiming that multiple filesystem replacements form one atomic commit.
         ordered = sorted(changes, key=lambda change: (change.path.endswith("/record.json"), change.path))
@@ -104,7 +105,10 @@ def _write_plan(plan: IntegrationPlan) -> None:
             target = plan.root / change.path
             _create_parents(plan.root, target.parent, created)
             _check_before(plan.root, change)
-            os.replace(staged[change.path], checked_path(target))
+            if change.after is None:
+                checked_path(target).unlink()
+            else:
+                os.replace(staged[change.path], checked_path(target))
             completed.append(change)
     except (OSError, BuilderError, KeyboardInterrupt) as exc:
         restored = _rollback(plan, completed, staging, modes, created)

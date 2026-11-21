@@ -1,0 +1,75 @@
+{
+  "schema": "guard.cloud-action-binding-set.v1",
+  "bindings": [
+    {
+      "schema": "guard.cloud-action-binding.v1",
+      "action_id": "slack.channels.list",
+      "adapter": {
+        "kind": "native-connector",
+        "identity": "connector:slack-synthetic",
+        "provider": "slack",
+        "input_schema": {"type": "object", "additionalProperties": false}
+      },
+      "effect": "read",
+      "resource": null,
+      "remote_mcp": null,
+      "required_capabilities": ["egress-pinned", "bounded-output"]
+    },
+    {
+      "schema": "guard.cloud-action-binding.v1",
+      "action_id": "slack.chat.post_message",
+      "adapter": {
+        "kind": "native-connector",
+        "identity": "connector:slack-synthetic",
+        "provider": "slack",
+        "input_schema": {"type": "object", "required": ["channel", "text"]}
+      },
+      "effect": "write",
+      "resource": {"kind": "channel", "argument": "channel"},
+      "remote_mcp": null,
+      "required_capabilities": ["egress-pinned", "bounded-output", "resource-allowlist"]
+    },
+    {
+      "schema": "guard.cloud-action-binding.v1",
+      "action_id": "slack.channels.archive",
+      "adapter": {
+        "kind": "native-connector",
+        "identity": "connector:slack-synthetic",
+        "provider": "slack",
+        "input_schema": {"type": "object", "required": ["channel"]}
+      },
+      "effect": "destructive",
+      "resource": {"kind": "channel", "argument": "channel"},
+      "remote_mcp": null,
+      "required_capabilities": ["egress-pinned", "bounded-output", "resource-allowlist"]
+    },
+    {
+      "schema": "guard.cloud-action-binding.v1",
+      "action_id": "slack.workspace.transfer_ownership",
+      "adapter": {
+        "kind": "native-connector",
+        "identity": "connector:slack-synthetic",
+        "provider": "slack",
+        "input_schema": {"type": "object", "required": ["user"]}
+      },
+      "effect": "admin",
+      "resource": null,
+      "remote_mcp": null,
+      "required_capabilities": ["egress-pinned", "bounded-output"]
+    },
+    {
+      "schema": "guard.cloud-action-binding.v1",
+      "action_id": "example.docs.search",
+      "adapter": {
+        "kind": "remote-mcp",
+        "identity": "mcp:example-docs-synthetic",
+        "provider": "example",
+        "input_schema": {"type": "object", "required": ["query"]}
+      },
+      "effect": "read",
+      "resource": null,
+      "remote_mcp": {"url": "https://mcp.example.invalid/v1", "tool_name": "search_docs"},
+      "required_capabilities": ["egress-pinned", "bounded-output", "no-filesystem", "no-subprocess"]
+    }
+  ]
+}

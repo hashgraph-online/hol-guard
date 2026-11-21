@@ -35,7 +35,7 @@ def test_receipt_sync_without_live_runtime_persists_delivery_and_typed_rejection
     store._bootstrap_extension_control_authority(registry.catalog_digest, key=None)
     authority = store.read_extension_control_authority_for_registry(registry)
     wire_digest = runner.build_builtin_extension_catalog_wire(
-        guard_version="test", generated_at="2026-08-25T12:00:00Z"
+        guard_version="test", generated_at="2026-08-25T12:00:00Z", guard_home=store.guard_home
     )["catalogDigest"]
     device_id, _device_name = runner._guard_device_metadata(store)
     effective_digest = effective_projection_digest(authority)

@@ -14,17 +14,19 @@ from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMA
 from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
     EXTENSION_CATALOG_SCHEMA_VERSION,
     MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
+    ExtensionCatalogLimitError,
     build_extension_catalog_wire,
     build_managed_controls_runtime_posture,
-    canonical_extension_catalog_json,
-    catalog_digest_for_extensions,
-    validate_extension_catalog_wire,
+    native_wire_call,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityView,
 )
+from codex_plugin_scanner.guard.runtime.extension_control_limits import CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_cloud_helpers import native_bridge as native_bridge
+from tests.native_cloud_helpers import prepare_native
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_ROOT = ROOT / "contracts" / "managed-controls" / "v1"
@@ -67,11 +69,33 @@ class FakeRegistry:
 class FakePostureStore:
     authority: ExtensionControlAuthorityView
     reads: int = 0
+    guard_home: Path = Path("/synthetic-guard-home")
 
-    def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
+    def read_extension_control_authority_for_registry(
+        self, registry: object, **_kwargs
+    ) -> ExtensionControlAuthorityView:
         assert registry is BUILT_IN_COMMAND_EXTENSION_REGISTRY
         self.reads += 1
         return self.authority
+
+
+@pytest.fixture
+def prepared_posture_catalog(monkeypatch: pytest.MonkeyPatch, native_bridge) -> None:
+    from codex_plugin_scanner.guard.runtime import extension_catalog_pages as pages
+    from codex_plugin_scanner.guard.runtime import managed_controls_sync as controls
+
+    # Synthetic active-authority adapter for these catalog/session wire units.
+    monkeypatch.setattr(controls, "current_catalog_registry", lambda _: BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+
+    def prepared(_home, *, registry, guard_version, generated_at):
+        return prepare_native(
+            values=[pages._raw_extension(item) for item in registry.extensions],
+            enforcement_digest=registry.catalog_digest,
+            guard_version=guard_version,
+            generated_at=generated_at,
+        )
+
+    monkeypatch.setattr(pages, "prepare_installed_catalog_view", prepared)
 
 
 def registry(*, reverse: bool = False) -> FakeRegistry:
@@ -116,62 +140,70 @@ def registry(*, reverse: bool = False) -> FakeRegistry:
     return FakeRegistry(tuple(reversed(values)) if reverse else values)
 
 
-def test_wire_projection_is_order_independent_and_cross_language_canonical() -> None:
+# Pure projection, canonicalization, and refusal cases live with the native
+# owner in rust/crates/guard-command/src/cloud_catalog_wire_v1_tests.rs.
+# These tests pin the Python glue: transport, field order, and error classes.
+_REGISTRY_CATALOG_DIGEST = "a7caf8d1c4eba405cece0b9ad78ad43b85458b5bb0f78855b42a0919655c3d1a"
+
+
+def test_native_wire_projection_keeps_digest_and_field_order(tmp_path: Path) -> None:
+    home = GuardStore(tmp_path / "guard-home").guard_home
     first = build_extension_catalog_wire(
         registry(),
         guard_version="3.0.0a1",
         generated_at="2026-08-23T12:00:00Z",
+        guard_home=home,
     )
     second = build_extension_catalog_wire(
         registry(reverse=True),
         guard_version="3.0.0a1",
         generated_at="2026-08-23T12:00:01Z",
+        guard_home=home,
     )
-    assert first["catalogDigest"] == second["catalogDigest"]
-    assert [item["id"] for item in first["extensions"]] == [
-        "command.package-manager",
-        "command.shell",
+    assert first["catalogDigest"] == second["catalogDigest"] == _REGISTRY_CATALOG_DIGEST
+    assert first["schemaVersion"] == EXTENSION_CATALOG_SCHEMA_VERSION
+    assert list(first) == [
+        "schemaVersion",
+        "catalogDigest",
+        "guardVersion",
+        "controlSchemaVersion",
+        "generatedAt",
+        "limits",
+        "extensions",
     ]
-    canonical = json.dumps(first["extensions"], sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    assert first["catalogDigest"] == hashlib.sha256(canonical.encode()).hexdigest()
-
-
-def test_wire_projection_contains_only_privacy_safe_catalog_metadata() -> None:
-    payload = build_extension_catalog_wire(
-        registry(),
-        guard_version="3.0.0a1",
-        generated_at="2026-08-23T12:00:00Z",
-    )
-    encoded = json.dumps(payload)
-    for forbidden in (
-        "description",
-        "rules",
-        "ruleIds",
-        "exampleCommand",
-        "projectMarkers",
-        "referenceUrls",
-        "sourcePath",
-        "workingDirectory",
-        "environment",
-        "secrets",
-    ):
-        assert forbidden not in encoded
-    assert payload["schemaVersion"] == EXTENSION_CATALOG_SCHEMA_VERSION
-    assert payload["extensions"][0]["delegatedProtection"] == "package-firewall"
-
-
-def test_wire_projection_sorts_set_like_fields_and_preserves_fixed_floors() -> None:
-    payload = build_extension_catalog_wire(
-        registry(),
-        guard_version="3.0.0a1",
-        generated_at="2026-08-23T12:00:00Z",
-    )
-    shell = payload["extensions"][1]
+    assert list(first["limits"]) == [
+        "maxExtensions",
+        "maxPermissionsPerExtension",
+        "maxPayloadBytes",
+        "maxStringLength",
+    ]
+    shell = first["extensions"][1]
+    assert list(shell)[:4] == ["id", "version", "name", "source"]
     assert shell["executables"] == ["bash", "zsh"]
-    assert shell["riskClasses"] == ["destructive", "execution"]
-    permission = shell["permissions"][0]
-    assert permission["required"] is True
-    assert permission["typedCapabilities"] == ["process.exec", "process.spawn"]
+    assert list(shell["permissions"][0]) == [
+        "id",
+        "name",
+        "configurable",
+        "required",
+        "riskClasses",
+        "typedCapabilities",
+    ]
+    canonical = json.dumps(first["extensions"], sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    assert hashlib.sha256(canonical.encode()).hexdigest() == first["catalogDigest"]
+
+
+def test_native_wire_refusals_keep_their_exception_classes(tmp_path: Path) -> None:
+    home = GuardStore(tmp_path / "guard-home").guard_home
+    payload = deepcopy(_shared_catalog_fixture()["valid"])
+    payload["generatedAt"] = "not-a-date"
+    with pytest.raises(ValueError, match=r"^Invalid Extension catalog generatedAt$") as refused:
+        native_wire_call("v1_validate", guard_home=home, payload=payload)
+    assert not isinstance(refused.value, ExtensionCatalogLimitError)
+    payload["unexpected"] = "x" * (CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES + 1)
+    with pytest.raises(ExtensionCatalogLimitError, match=r"^Extension catalog payload limit exceeded$"):
+        native_wire_call("v1_validate", guard_home=home, payload=payload)
+    with pytest.raises(ValueError, match=r"^guard_version and generated_at are required$"):
+        build_extension_catalog_wire(registry(), guard_version=" ", generated_at="2026-08-23T12:00:00Z")
 
 
 def test_runtime_posture_uses_cloud_capabilities_and_bounded_digests() -> None:
@@ -206,12 +238,12 @@ def test_runtime_posture_rejects_invalid_evidence(
         )
 
 
-def test_shared_catalog_fixture_is_schema_valid_and_canonically_executable() -> None:
+def test_shared_catalog_fixture_is_schema_valid_and_canonically_executable(tmp_path: Path) -> None:
     fixtures = _shared_catalog_fixture()
     schema = json.loads((CONTRACT_ROOT / "extension-catalog.schema.json").read_text(encoding="utf-8"))
     valid = fixtures["valid"]
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(valid)
-    parsed = validate_extension_catalog_wire(valid)
+    parsed = valid
     canonical = json.dumps(
         parsed["extensions"],
         sort_keys=True,
@@ -268,104 +300,17 @@ def test_shared_catalog_schema_rejects_empty_permission_capability_values(field:
         Draft202012Validator(schema, format_checker=FormatChecker()).validate(invalid)
 
 
-def test_shared_catalog_unicode_uses_utf8_canonical_bytes() -> None:
-    fixtures = _shared_catalog_fixture()
-    valid = deepcopy(fixtures["valid"])
-    assert isinstance(valid, dict)
-    extensions = valid["extensions"]
-    assert isinstance(extensions, list)
-    extension = extensions[0]
-    assert isinstance(extension, dict)
-    extension["name"] = "Git protection — café"
-    valid["catalogDigest"] = catalog_digest_for_extensions(extensions)
-    parsed = validate_extension_catalog_wire(valid)
-    assert "café" in json.dumps(parsed, ensure_ascii=False)
-
-
-def test_shared_cross_language_canonicalization_vector_is_exact() -> None:
-    vector = _shared_catalog_fixture()["canonicalizationVectors"][0]
-    extensions = vector["extensions"]
-    assert canonical_extension_catalog_json(extensions) == vector["canonicalJson"]
-    assert catalog_digest_for_extensions(extensions) == vector["catalogDigest"]
-
-
-def test_shared_invalid_generated_at_mutation_fails() -> None:
-    fixture = _shared_catalog_fixture()
-    mutation = fixture["invalidMutations"][0]
-    payload = deepcopy(fixture["valid"])
-    payload[mutation["field"]] = mutation["value"]
-    with pytest.raises(ValueError, match="generatedAt"):
-        validate_extension_catalog_wire(payload)
-
-
-@pytest.mark.parametrize(
-    "case",
-    ("duplicateExtension", "duplicatePermission", "unknownField", "oversized", "privateField"),
-)
-def test_shared_invalid_catalog_cases_fail_behaviorally(case: str) -> None:
-    fixtures = _shared_catalog_fixture()
-    invalid = fixtures["invalid"]
-    assert isinstance(invalid, dict)
-    assert case in invalid
-    payload = deepcopy(fixtures["valid"])
-    assert isinstance(payload, dict)
-    extensions = payload["extensions"]
-    assert isinstance(extensions, list)
-    extension = extensions[0]
-    assert isinstance(extension, dict)
-    permissions = extension["permissions"]
-    assert isinstance(permissions, list)
-    if case == "duplicateExtension":
-        extensions.append(deepcopy(extension))
-        payload["catalogDigest"] = catalog_digest_for_extensions(extensions)
-    elif case == "duplicatePermission":
-        permissions.append(deepcopy(permissions[0]))
-        payload["catalogDigest"] = catalog_digest_for_extensions(extensions)
-    elif case == "unknownField":
-        payload["unexpected"] = True
-    elif case == "oversized":
-        payload["unexpected"] = "x" * 1_000_001
-    else:
-        payload["sourcePath"] = "/private/workspace"
-    with pytest.raises(ValueError):
-        validate_extension_catalog_wire(payload)
-
-
-@pytest.mark.parametrize(
-    ("field", "oversized_id"),
-    (
-        ("extension", "command." + ("a" * 300)),
-        ("permission", "command.git.permission." + ("a" * 300)),
-    ),
-)
-def test_catalog_validator_rejects_ids_over_shared_schema_limit(
-    field: str,
-    oversized_id: str,
-) -> None:
-    payload = deepcopy(_shared_catalog_fixture()["valid"])
-    extensions = payload["extensions"]
-    extension = extensions[0]
-    if field == "extension":
-        extension["id"] = oversized_id
-        extension["permissions"][0]["id"] = f"{oversized_id}.permission.push"
-    else:
-        extension["permissions"][0]["id"] = oversized_id
-    payload["catalogDigest"] = catalog_digest_for_extensions(extensions)
-    with pytest.raises(ValueError, match="identity"):
-        validate_extension_catalog_wire(payload)
-
-
-def test_production_runtime_session_defaults_to_legacy_without_touching_local_authority(
+def test_runtime_session_catalog_opt_out_does_not_touch_local_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for name in (
-        "GUARD_EXTENSION_CATALOG_SYNC_V1",
         "GUARD_POLICY_EXTENSION_TARGETS_V1",
         "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
         "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
         "GUARD_EXTENSION_FIRST_CONTROLS_UI",
     ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "false")
     store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "a" * 64, ()))
     assert (
         guard_runner_module._managed_controls_runtime_sync_posture(
@@ -380,8 +325,12 @@ def test_production_runtime_session_defaults_to_legacy_without_touching_local_au
 def test_cloud_runtime_session_payload_carries_catalog_posture_on_real_sync_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    prepared_posture_catalog: None,
 ) -> None:
     monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "true")
+    # This is a session/catalog wire test; native package-manager inventory is
+    # qualified separately and is not required by the synthetic sender fixture.
+    monkeypatch.setattr(guard_runner_module, "_cloud_package_manager_coverage", lambda *args, **kwargs: {})
     payload = guard_runner_module._cloud_runtime_session_payload(
         GuardStore(tmp_path / "guard-home"),
         {
@@ -391,12 +340,15 @@ def test_cloud_runtime_session_payload_carries_catalog_posture_on_real_sync_path
         },
     )
     assert payload["extensionCatalogDigest"]
+    # A complete transport alone does not qualify native policy application.
     assert payload["extensionControlSchemaVersions"] == ["guard.extension-controls.v1"]
-    assert payload["managedControlsCapabilities"] == ["extension-catalog.v1"]
+    assert payload["extensionCatalogViewDigest"] != payload["extensionCatalogDigest"]
+    assert payload["managedControlsCapabilities"] == ["extension-catalog.v2"]
 
 
-def test_production_runtime_session_advertises_only_enabled_protected_capabilities(
+def test_production_runtime_session_requires_completed_native_policy_observation(
     monkeypatch: pytest.MonkeyPatch,
+    prepared_posture_catalog: None,
 ) -> None:
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
@@ -411,10 +363,10 @@ def test_production_runtime_session_advertises_only_enabled_protected_capabiliti
         store,
         generated_at="2026-08-25T00:00:00Z",
     )
-    assert posture["extensionAuthorityRevision"] == 7
-    assert posture["effectiveProjectionDigest"] is not None
-    assert posture["managedControlsCapabilities"] == list(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
-    assert store.reads == 1
+    assert "extensionAuthorityRevision" not in posture
+    assert "effectiveProjectionDigest" not in posture
+    assert posture["managedControlsCapabilities"] == ["extension-catalog.v2"]
+    assert store.reads == 0
 
 
 @pytest.mark.parametrize(
@@ -447,6 +399,7 @@ def test_production_runtime_session_downgrades_each_capability_independently(
     monkeypatch: pytest.MonkeyPatch,
     disabled_flag: str,
     missing_capabilities: set[str],
+    prepared_posture_catalog: None,
 ) -> None:
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
@@ -463,11 +416,13 @@ def test_production_runtime_session_downgrades_each_capability_independently(
         generated_at="2026-08-25T00:00:00Z",
     )
     advertised = set(posture["managedControlsCapabilities"])
-    assert advertised == set(MANAGED_CONTROLS_RUNTIME_CAPABILITIES) - missing_capabilities
+    # Individual opt-ins cannot override a missing authenticated native view.
+    assert advertised == {"extension-catalog.v2"}
 
 
 def test_production_runtime_session_downgrades_degraded_authority_to_catalog_only(
     monkeypatch: pytest.MonkeyPatch,
+    prepared_posture_catalog: None,
 ) -> None:
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
@@ -481,6 +436,21 @@ def test_production_runtime_session_downgrades_degraded_authority_to_catalog_onl
         store,
         generated_at="2026-08-25T00:00:00Z",
     )
-    assert posture["extensionAuthorityRevision"] is None
-    assert posture["effectiveProjectionDigest"] is None
-    assert posture["managedControlsCapabilities"] == ["extension-catalog.v1"]
+    assert posture.get("extensionAuthorityRevision") is None
+    assert posture.get("effectiveProjectionDigest") is None
+    assert posture["managedControlsCapabilities"] == ["extension-catalog.v2"]
+
+
+def test_oversized_native_request_is_a_catalog_limit_before_any_resident_call(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.runtime import extension_catalog_pages, extension_catalog_sync
+
+    monkeypatch.setattr(
+        extension_catalog_pages, "native_call", lambda *_args, **_kwargs: pytest.fail("oversized request was sent")
+    )
+    with pytest.raises(ExtensionCatalogLimitError, match="native wire limits"):
+        extension_catalog_sync.native_wire_call("build", guard_home=tmp_path, raw_extensions=["x" * (4 * 1024 * 1024)])
+    # Non-ASCII text grows to six-byte escapes on the transport, so it counts that way too.
+    with pytest.raises(ExtensionCatalogLimitError, match="native wire limits"):
+        extension_catalog_sync.native_wire_call("build", guard_home=tmp_path, raw_extensions=["\u00e9" * (1024 * 1024)])

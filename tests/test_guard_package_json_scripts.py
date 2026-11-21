@@ -2,19 +2,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
-from codex_plugin_scanner.guard.local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
+import pytest
+
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
-from codex_plugin_scanner.guard.runtime.local_cli_commands import resolve_command_id_for_text
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.runtime.package_json_script_memory import (
     refresh_package_script_catalogs,
 )
 from codex_plugin_scanner.guard.runtime.package_json_scripts import (
-    command_id_for_script,
-    commands_from_package_scripts,
     recognize_package_json_scripts,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.local_cli_command_id_client import package_script_command_tokens, resolve_command_id_for_text
+from tests.runtime_wrapper_support import local_cli_grant_action, native_local_cli_hook
+
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 
 
 def _write_package(
@@ -89,51 +91,51 @@ def test_directory_and_prefix_pastes_use_that_package_json(tmp_path: Path) -> No
     assert from_prefix.focused_script == "guard:reddit-targeting:audit"
 
 
-def test_focused_nested_script_sorts_first() -> None:
-    commands = commands_from_package_scripts(
-        {
+def test_focused_nested_script_sorts_first(tmp_path: Path) -> None:
+    project = _write_package(
+        tmp_path / "app",
+        scripts={
             "build": "vite build",
             "guard:reddit-targeting:audit": "tsx audit.ts",
             "guard": "tsx guard.ts",
         },
-        runner="npm",
-        focused_script="guard:reddit-targeting:audit",
+        lock=None,
     )
-    script_names = [command.name for command in commands if command.command_id not in {"root", "other"}]
+    discovery = recognize_package_json_scripts("npm run guard:reddit-targeting:audit", cwd=project, home_dir=tmp_path)
+    assert discovery is not None
+    script_names = [command.name for command in discovery.commands if command.command_id not in {"root", "other"}]
     assert script_names[0] == "guard:reddit-targeting:audit"
+    assert discovery.summary.endswith(" guard:reddit-targeting:audit is listed first.")
 
 
-def test_command_id_splits_colon_namespaces() -> None:
-    assert command_id_for_script("guard:reddit-targeting:audit") == "guard.reddit-targeting.audit"
+def test_command_id_splits_colon_namespaces(tmp_path: Path) -> None:
+    project = _write_package(tmp_path / "app", scripts={"guard:reddit-targeting:audit": "tsx audit.ts"})
+    tokens = package_script_command_tokens("npm run guard:reddit-targeting:audit", cwd=project, home_dir=tmp_path)
+    assert tokens == ("guard", "reddit-targeting", "audit")
 
 
-def test_reserved_script_names_do_not_alias_synthetic_commands() -> None:
-    commands = commands_from_package_scripts(
-        {"root": "echo root", "other": "echo other"},
-        runner="npm",
-        focused_script=None,
-    )
-    named = {command.name: command.command_id for command in commands}
+def test_reserved_script_names_do_not_alias_synthetic_commands(tmp_path: Path) -> None:
+    project = _write_package(tmp_path / "app", scripts={"root": "echo root", "other": "echo other"}, lock=None)
+    discovery = recognize_package_json_scripts("npm run", cwd=project, home_dir=tmp_path)
+    assert discovery is not None
+    named = {command.name: command.command_id for command in discovery.commands}
     assert named["root"] != "root"
     assert named["other"] != "other"
 
 
 def test_dotted_script_live_tokens_match_catalog(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.package_json_scripts import package_script_command_tokens
-
     project = _write_package(tmp_path / "app", scripts={"db.migrate": "prisma migrate deploy"})
     discovery = recognize_package_json_scripts("npm run db.migrate", cwd=project, home_dir=tmp_path)
     assert discovery is not None
-    command_id = command_id_for_script("db.migrate")
+    tokens = package_script_command_tokens("npm run db.migrate", cwd=project, home_dir=tmp_path)
+    assert tokens
+    command_id = ".".join(tokens)
     assert command_id != "other"
     assert any(command.command_id == command_id for command in discovery.commands)
-    tokens = package_script_command_tokens("npm run db.migrate", cwd=project, home_dir=tmp_path)
-    assert tokens is not None
-    assert ".".join(tokens) == command_id
 
 
 def test_recognize_explains_missing_package_json(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError
 
     empty = tmp_path / "empty"
     empty.mkdir()
@@ -211,34 +213,37 @@ def test_allowed_nested_script_grant_matches_live_command(tmp_path: Path) -> Non
         )
         == "guard.reddit-targeting.audit"
     )
-    observe_unlisted_cli(store=store, command=live, cwd=project, home_dir=home)
+    native_local_cli_hook(store, command=live, cwd=project, home_dir=home, current_action="allow", grant_allowed=False)
     assert (
-        apply_local_cli_grant(
+        local_cli_grant_action(
             store=store,
             command=live,
             cwd=project,
             home_dir=home,
             current_action="review",
+            grant_allowed=True,
         )
         == "allow"
     )
     assert (
-        apply_local_cli_grant(
+        local_cli_grant_action(
             store=store,
             command="pnpm run guard",
             cwd=project,
             home_dir=home,
             current_action="review",
+            grant_allowed=True,
         )
         == "allow"
     )
     assert (
-        apply_local_cli_grant(
+        local_cli_grant_action(
             store=store,
             command="pnpm run not-a-script",
             cwd=project,
             home_dir=home,
             current_action="review",
+            grant_allowed=True,
         )
         == "review"
     )
@@ -249,11 +254,13 @@ def test_hook_remembers_real_package_json_path(tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()
     store = GuardStore(home)
-    observe_unlisted_cli(
-        store=store,
+    native_local_cli_hook(
+        store,
         command="pnpm run guard:audit",
         cwd=project,
         home_dir=home,
+        current_action="allow",
+        grant_allowed=False,
     )
     stored = store.list_local_cli_items()[0]
     assert stored["surface"] == "package-scripts"
@@ -269,7 +276,7 @@ def test_list_items_does_not_scan_cwd_as_a_package_project(
     home.mkdir()
     monkeypatch.chdir(project)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     payload = LocalCliApiService(store=GuardStore(home)).list_items()
@@ -348,7 +355,7 @@ def test_refresh_includes_workspace_packages(tmp_path: Path) -> None:
 
 
 def test_remembered_script_requires_a_unique_project(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError
 
     first = _write_package(tmp_path / "one", scripts={"build": "echo one"}, name="one")
     second = _write_package(tmp_path / "two", scripts={"build": "echo two"}, name="two")
@@ -407,3 +414,60 @@ def test_missing_package_json_is_hidden_from_public_list(tmp_path: Path) -> None
         if isinstance(item, dict) and item.get("surface") == "package-scripts"
     }
     assert "gone" not in labels
+
+
+def test_native_failure_is_reported_so_grant_callers_fail_closed(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.native_local_cli_identity import track_local_cli_identity_failures
+    from codex_plugin_scanner.guard.runtime import package_json_scripts
+
+    project = _write_package(tmp_path / "app", scripts={"build": "vite build"})
+    replies: list[object] = [
+        None,
+        {"status": "ok", "package_json_scripts": {"runner": "npm"}},
+        {"status": "ok"},
+    ]
+    monkeypatch.setattr(package_json_scripts, "native_context_digest", lambda *_args, **_kwargs: replies.pop(0))
+    with track_local_cli_identity_failures() as failures:
+        for _ in range(3):
+            assert package_json_scripts._native_package_scripts("npm run build", cwd=project, home_dir=tmp_path) is None
+    assert failures == ["native_package_json_scripts_unavailable", "native_package_json_scripts_malformed"]
+
+
+def test_command_tokens_raise_on_native_failure_instead_of_generic_argv(tmp_path: Path, monkeypatch) -> None:
+
+    from codex_plugin_scanner.guard.native_local_cli_identity import track_local_cli_identity_failures
+    from codex_plugin_scanner.guard.runtime import package_json_scripts
+    from tests.local_cli_command_id_client import LocalCliIdentityUnavailableError
+
+    project = _write_package(tmp_path / "app", scripts={"build": "vite build"})
+    replies: list[object] = [None, {"status": "ok", "package_json_scripts": {"runner": "npm"}}, {"status": "ok"}]
+    monkeypatch.setattr(package_json_scripts, "native_context_digest", lambda *_args, **_kwargs: replies.pop(0))
+    with track_local_cli_identity_failures() as failures:
+        for _ in range(2):
+            with pytest.raises(LocalCliIdentityUnavailableError):
+                package_script_command_tokens("npm run build", cwd=project, home_dir=tmp_path)
+        assert package_script_command_tokens("npm run build", cwd=project, home_dir=tmp_path) is None
+    assert failures == ["native_package_json_scripts_unavailable", "native_package_json_scripts_malformed"]
+
+
+def test_availability_asks_only_about_package_items_in_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import package_json_script_memory as memory
+
+    sizes: list[int] = []
+
+    def fake(op: str, **fields: object) -> dict[str, object]:
+        entries = fields["entries"]
+        assert op == "available" and isinstance(entries, list)
+        sizes.append(len(entries))
+        return {"available": [entry["source_path"] != "/gone" for entry in entries]}
+
+    monkeypatch.setattr(memory, "_ask", fake)
+    assert memory.package_items_available([{"surface": "mcp"}]) == [True]
+    assert sizes == []
+    items: list[dict[str, object]] = [
+        {"surface": "package-scripts", "source_path": "/gone" if index == 299 else f"/p{index}"} for index in range(300)
+    ]
+    items.insert(1, {"surface": "mcp"})
+    shown = memory.package_items_available(items)
+    assert sizes == [256, 44]
+    assert shown[1] is True and shown[-1] is False and shown.count(False) == 1

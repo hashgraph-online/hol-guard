@@ -8,16 +8,16 @@ from typing import cast
 
 import pytest
 
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.cli import commands_dispatch_local, network_status_command
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_parser
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.client import (
+from codex_plugin_scanner.guard.native_daemon_client import (
     GuardDaemonRequestError,
     GuardDaemonResponseSchemaError,
     GuardDaemonTimeoutError,
     GuardDaemonTransportError,
 )
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.network_capability_contract import default_platform_profiles
 from codex_plugin_scanner.guard.runtime.network_policy_contract import EnforcementGrade
 from codex_plugin_scanner.guard.runtime.network_status import (
@@ -25,9 +25,34 @@ from codex_plugin_scanner.guard.runtime.network_status import (
     build_network_status,
     validate_network_status,
 )
-from codex_plugin_scanner.guard.runtime.network_supervisor import NetworkSupervisor, NetworkSupervisorHealth
-from codex_plugin_scanner.guard.runtime.provider_recovery import RecoveryPhase
 from codex_plugin_scanner.guard.store import GuardStore
+
+# What the daemon's supervisor reports: it never receives a backend advertisement.
+_UNAVAILABLE_SUPERVISOR: dict[str, object] = {
+    "phase": "unavailable",
+    "backend_id": None,
+    "backend_digest": None,
+    "effective_grade": "unavailable",
+    "healthy_until_epoch_ms": None,
+    "retry_attempt": 0,
+    "next_retry_seconds": 0.0,
+    "permits_enforcement": False,
+    "independently_observed": False,
+}
+
+
+def _healthy_supervisor(backend_id: str, grade: EnforcementGrade) -> dict[str, object]:
+    return {
+        "phase": "healthy",
+        "backend_id": backend_id,
+        "backend_digest": "a" * 64,
+        "effective_grade": grade.value,
+        "healthy_until_epoch_ms": 4_000_000_000_000,
+        "retry_attempt": 0,
+        "next_retry_seconds": 0.0,
+        "permits_enforcement": grade not in {EnforcementGrade.UNAVAILABLE, EnforcementGrade.OBSERVE},
+        "independently_observed": False,
+    }
 
 
 def _parse(arguments: list[str]) -> argparse.Namespace:
@@ -103,8 +128,15 @@ def test_network_status_reads_live_authenticated_daemon(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    from codex_plugin_scanner.guard import native_daemon_client as client
+    from codex_plugin_scanner.guard.cli import network_status_command
+
+    # This checks authenticated response content. Shared CI load must not turn
+    # its quarter-second production deadline into a scheduling assertion.
+    monkeypatch.setattr(client, "_STATUS_REQUEST_TIMEOUT_S", 2.0)
+    monkeypatch.setattr(network_status_command, "_NETWORK_STATUS_DAEMON_IDENTITY_TIMEOUT_S", 2.0)
     guard_home = tmp_path / "guard-home"
-    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon = NativeGuardDaemon(GuardStore(guard_home), home_dir=tmp_path)
     emitted: list[dict[str, object]] = []
     monkeypatch.setattr(
         commands_dispatch_local,
@@ -192,7 +224,7 @@ def test_network_status_validator_rejects_enum_nested_and_invariant_corruption(
 ) -> None:
     status = build_network_status(
         platform_name="darwin",
-        supervisor_health=NetworkSupervisor().health(now_epoch_ms=1),
+        supervisor=_UNAVAILABLE_SUPERVISOR,
     )
     mutate(status)
 
@@ -204,7 +236,7 @@ def test_network_status_validator_projects_only_privacy_safe_v1_fields() -> None
     status = build_network_status(
         platform_name="darwin",
         legacy_domain_action="warn",
-        supervisor_health=NetworkSupervisor().health(now_epoch_ms=1),
+        supervisor=_UNAVAILABLE_SUPERVISOR,
     )
     status["secret_token"] = "must-not-escape"
     cast(list[dict[str, object]], status["backends"])[0]["local_path"] = "/private/user"
@@ -316,18 +348,10 @@ def test_producer_and_validator_agree_on_backend_readiness(
     expected_active: bool,
 ) -> None:
     profile = replace(default_platform_profiles()[0], production_ready=production_ready)
-    health = NetworkSupervisorHealth(
-        phase=RecoveryPhase.HEALTHY,
-        backend_id=profile.backend_id,
-        backend_digest="a" * 64,
-        effective_grade=profile.maximum_grade,
-        healthy_until_epoch_ms=4_000_000_000_000,
-        retry_attempt=0,
-        next_retry_seconds=0.0,
-    )
+    health = _healthy_supervisor(profile.backend_id, profile.maximum_grade)
 
     projected = validate_network_status(
-        build_network_status(profiles=(profile,), supervisor_health=health, platform_name="linux")
+        build_network_status(profiles=(profile,), supervisor=health, platform_name="linux")
     )
 
     assert projected["protection_active"] is expected_active
@@ -336,18 +360,10 @@ def test_producer_and_validator_agree_on_backend_readiness(
 
 def test_backend_health_above_profile_maximum_fails_closed() -> None:
     profile = replace(default_platform_profiles()[0], production_ready=True)
-    health = NetworkSupervisorHealth(
-        phase=RecoveryPhase.HEALTHY,
-        backend_id=profile.backend_id,
-        backend_digest="a" * 64,
-        effective_grade=EnforcementGrade.DESTINATION_ENFORCED,
-        healthy_until_epoch_ms=4_000_000_000_000,
-        retry_attempt=0,
-        next_retry_seconds=0.0,
-    )
+    health = _healthy_supervisor(profile.backend_id, EnforcementGrade.DESTINATION_ENFORCED)
 
     projected = validate_network_status(
-        build_network_status(profiles=(profile,), supervisor_health=health, platform_name="linux")
+        build_network_status(profiles=(profile,), supervisor=health, platform_name="linux")
     )
 
     assert projected["protection_active"] is False
@@ -435,3 +451,41 @@ def test_network_parser_defaults_to_status(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert commands_dispatch_local._run_guard_network_command(args) == 0
     assert emitted[0][0] == "network"
+
+
+def test_no_runtime_never_presents_network_truth(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *args, **kwargs: None)
+
+    with pytest.raises(NetworkStatusSchemaError, match="native runtime"):
+        validate_network_status(build_network_status(platform_name="linux"))
+
+
+def test_no_runtime_falls_back_with_its_own_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *args, **kwargs: None)
+
+    payload = _run_network_status(monkeypatch, response=build_network_status(platform_name="darwin"))
+
+    assert payload["status_source"] == "fallback"
+    assert payload["reason_code"] == "native-runtime-unavailable"
+    assert payload["protection_active"] is False
+    assert payload["backends"] == []
+
+
+def test_a_native_outage_reports_no_protection(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    def unavailable(*_: object, **__: object) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    status = build_network_status(platform_name="linux", legacy_domain_action="sandbox-required")
+
+    assert status["protection_active"] is False
+    assert status["effective_grade"] == "unavailable"
+    assert status["reason_code"] == "native-runtime-unavailable"
+    assert status["backends"] == []
+    assert isinstance(status["legacy_domain_policy"], dict)

@@ -1,0 +1,5 @@
+{
+  "extension": "command.mcp-aletheia-mem",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "external"
+}

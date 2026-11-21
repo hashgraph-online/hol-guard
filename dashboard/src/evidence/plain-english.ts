@@ -5,7 +5,10 @@ import type {
 } from "../guard-types";
 import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, resolveActionEnvelopeDetailText } from "../approval-center-utils";
+import { explainMcpCall } from "../mcp-call/explain-mcp-call";
+import { listedMcpRef } from "../mcp-call/mcp-queue-name";
 import { detectCategory, type ReceiptCategory } from "./categories";
+import { approvalLeftActionStopped } from "./approval-outcome";
 import {
   guardActionActivityCopy,
   guardActionPresentation,
@@ -96,16 +99,24 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
     return mcpTool;
   }
 
-  // Package: show package name
-  const packageName = envelope?.package_name?.trim();
-  if (type === "Package" && packageName && packageName.length > 0) {
-    return packageName;
-  }
-
   // Scanner evidence title is usually more descriptive than raw artifact_name
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   if (signals.length > 0 && signals[0]?.title) {
     return signals[0].title;
+  }
+
+  // Some receipts retain the raw command while the typed envelope has
+  // no command field. Keep the risk title above this fallback, then show the
+  // command instead of the executable name alone.
+  const rawCommand = receipt.raw_command_text?.trim();
+  if (rawCommand) {
+    return truncate(rawCommand, 80);
+  }
+
+  // Package: show package name
+  const packageName = envelope?.package_name?.trim();
+  if (type === "Package" && packageName && packageName.length > 0) {
+    return packageName;
   }
 
   // provenance_summary for hook events is more descriptive than a generic tool name like "Bash"
@@ -143,6 +154,20 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
   return type;
 }
 
+/** Return the untruncated command when the action title is command-derived. */
+export function resolveActionTitleTooltip(receipt: GuardReceipt): string {
+  const title = resolveActionTitle(receipt);
+  const envelopeCommand = getEnvelope(receipt)?.command?.trim();
+  if (resolveActionType(receipt) === "Shell command" && envelopeCommand) {
+    return envelopeCommand;
+  }
+  const rawCommand = receipt.raw_command_text?.trim();
+  if (rawCommand && title === truncate(rawCommand, 80)) {
+    return rawCommand;
+  }
+  return title;
+}
+
 export function resolveActionSubtitle(receipt: GuardReceipt): string | null {
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   const firstSignal = signals[0];
@@ -174,10 +199,15 @@ export function resolveActionSubtitle(receipt: GuardReceipt): string | null {
   const provenance = receipt.provenance_summary?.trim();
   const isCapsUseful = caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed");
   const isProvenanceUseful = provenance && provenance !== "hook artifact · codex" && !provenance.toLowerCase().startsWith("guard local daemon completed");
+  const actionTitle = resolveActionTitle(receipt);
+  const fullActionTitle = resolveActionTitleTooltip(receipt);
+  const rawCommand = receipt.raw_command_text?.trim();
+  // A capability summary that repeats the command adds no context to the row.
+  const capsRepeatsRawCommand = Boolean(rawCommand && caps?.toLowerCase() === rawCommand.toLowerCase());
 
-  if (isCapsUseful) {
+  if (isCapsUseful && caps?.toLowerCase() !== actionTitle.toLowerCase() && caps?.toLowerCase() !== fullActionTitle.toLowerCase() && !capsRepeatsRawCommand) {
     parts.push(caps);
-  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== resolveActionTitle(receipt)) {
+  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== actionTitle) {
     parts.push(provenance);
   }
 
@@ -209,6 +239,13 @@ export function plainEnglishDescription(receipt: GuardReceipt): string {
   const type = resolveActionType(receipt);
   const title = resolveActionTitle(receipt);
   const subtitle = resolveActionSubtitle(receipt);
+
+  if (approvalLeftActionStopped(receipt)) {
+    const outcome = `You approved it once, but a one-time approval could not let ${app} run it, so it stayed stopped.`;
+    return subtitle
+      ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${formatSubtitle(subtitle)}${outcome}`
+      : `${app} tried to ${infinitiveVerb(type)} ${title}. ${outcome}`;
+  }
 
   const action = guardActionPresentation(receipt.policy_decision);
   if (action.disposition === "allowed") {
@@ -342,6 +379,13 @@ function isPackageDependencyMutationRequest(request: GuardApprovalRequest): bool
 }
 
 export function plainEnglishRequestTitle(request: GuardApprovalRequest): string {
+  if (request.artifact_type === "native_bash_request") {
+    return "Run this script?";
+  }
+  const mcpCall = explainMcpCall(request);
+  if (mcpCall !== null) {
+    return mcpCall.headline;
+  }
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,
@@ -372,7 +416,11 @@ export function plainEnglishRequestTitle(request: GuardApprovalRequest): string 
   }
 }
 
+export const UNREVIEWED_MCP_TOOL ="Guard asks before a tool it has not reviewed runs.";
+
 export function whyPaused(request: GuardApprovalRequest): string {
+  // A list row arrives without its envelope but still names the tool.
+  const mcpCall = explainMcpCall(request) !== null || listedMcpRef(request) !== null;
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,
@@ -390,10 +438,15 @@ export function whyPaused(request: GuardApprovalRequest): string {
     case "hidden":
       return "This code is hidden or encoded. Guard stops this by default.";
     case "file-write":
-      return "This writes to a file on your computer. Guard stops this by default.";
+      return "Guard could not verify this file change as routine under the current policy. Review the target and changes before approving.";
     case "tool-call":
-      return "This uses an outside tool. Guard stops new tools by default.";
+      if ((request.artifact_name ?? "").startsWith("chrome-devtools:")
+        || (request.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {
+        return "This uses the browser. Confirm it if you meant to.";
+      }
+      return mcpCall ? UNREVIEWED_MCP_TOOL : "This uses an outside tool. Guard stops new tools by default.";
     default:
+      if (mcpCall) return UNREVIEWED_MCP_TOOL;
       if (isPackageDependencyMutationRequest(request)) {
         return "This package install mutates project dependencies and installed packages. Guard pauses dependency changes so you can review them before running.";
       }

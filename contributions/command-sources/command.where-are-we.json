@@ -1,0 +1,3880 @@
+{
+  "extension": {
+    "action_classes": [
+      "where-are-we repository file write command",
+      "where-are-we agent hook installation command",
+      "where-are-we tracker fetch command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews where-are-we invocations whose flags write into the mapped repository, install agent hooks, or fetch from ticket trackers; the read surface stays quiet.",
+    "ecosystem_ids": [
+      "where-are-we"
+    ],
+    "executables": [
+      "where-are-we",
+      "where-are-we.cmd",
+      "where-are-we.exe"
+    ],
+    "extension_id": "command.where-are-we",
+    "homepage": "https://pypi.org/project/where-are-we/",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "name": "where-are-we repository write, hook and tracker protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "where-are-we repository file write command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies the where-are-we flags that write into the repository being mapped rather than into the map directory: --agent-file writes the brief into an agent file such as AGENTS.md or CLAUDE.md, --init writes a starter .framework-map.json, --docs write creates the READMEs, manifest and architecture page a repository lacks, and --export and --affected-out each write one file wherever the caller named.",
+        "example_command": "where-are-we --repo . --agent-file AGENTS.md",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "where-are-we repository file write",
+        "permission_id": "command.where-are-we.permission.repository-write",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run the same command line with --dry-run first and read the paths it prints.",
+          "Confirm which agent file is being written before writing it; the map lands between markers and the rest of the file survives, but the target is chosen by the caller.",
+          "Use --docs without an argument, which only reports what it would write.",
+          "Confirm the --export and --affected-out destinations, which are whatever path the caller named rather than a path under --out."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "where-are-we agent hook installation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `where-are-we --install-hook`, which writes where a tool other than this one reads: git hooks (post-checkout, post-merge, post-commit), ~/.claude/settings.json, ~/.codex/config.toml, a Cursor rule or a Gemini setting. After it runs, a checkout or a session start re-runs the tool.",
+        "example_command": "where-are-we --repo . --install-hook git",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "where-are-we agent hook installation",
+        "permission_id": "command.where-are-we.permission.install-hook",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run the same command line with --dry-run first; it prints every hook or config path it would write.",
+          "Confirm the hook target, because git installs into the repository while claude, codex, cursor and gemini write user-level configuration outside it.",
+          "Review the existing hook or configuration file before letting the tool wire itself into it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "where-are-we tracker fetch command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies the where-are-we flags that leave the machine: --specs walks a ticket tracker into a specification map, --spec-source selects github or linear, --spec-cmd supplies the command line run once per ticket to fetch it, and --runs-api reads a runs database endpoint.",
+        "example_command": "where-are-we --repo . --specs ABC-1 --spec-source github",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "where-are-we tracker fetch",
+        "permission_id": "command.where-are-we.permission.tracker-fetch",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Confirm the ticket keys and the fetch depth before a walk; a tracker is a graph and will hand over far more than the roots named.",
+          "Read the --spec-cmd command line before it runs, because it executes once per ticket.",
+          "Prefer a tracker endpoint and credentials scoped to the project being mapped."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.where-are-we",
+      "url": "https://github.com/ngavrish/where-are-we"
+    },
+    "reference_urls": [
+      "https://pypi.org/project/where-are-we/",
+      "https://github.com/ngavrish/where-are-we"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "where-are-we repository file write command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies the where-are-we flags that write into the repository being mapped rather than into the map directory: --agent-file writes the brief into an agent file such as AGENTS.md or CLAUDE.md, --init writes a starter .framework-map.json, --docs write creates the READMEs, manifest and architecture page a repository lacks, and --export and --affected-out each write one file wherever the caller named.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "where-are-we",
+                  "where-are-we.cmd",
+                  "where-are-we.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "options_with_values": [
+                  "--affected",
+                  "--affected-depth",
+                  "--affected-format",
+                  "--affected-out",
+                  "--agent-file",
+                  "--also",
+                  "--ask",
+                  "--at",
+                  "--callees",
+                  "--callers",
+                  "--context",
+                  "--corpus",
+                  "--defines",
+                  "--export",
+                  "--files",
+                  "--for",
+                  "--impact",
+                  "--impact-depth",
+                  "--install-hook",
+                  "--limit",
+                  "--max-lines",
+                  "--more",
+                  "--only",
+                  "--out",
+                  "--path",
+                  "--path-depth",
+                  "--product",
+                  "--range",
+                  "--reaches",
+                  "--repo",
+                  "--rules",
+                  "--runs-api",
+                  "--skip",
+                  "--spec-cmd",
+                  "--spec-depth",
+                  "--spec-limit",
+                  "--spec-source",
+                  "--specs",
+                  "--watch"
+                ],
+                "required_flags": [
+                  "--agent-file"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "where-are-we",
+                  "where-are-we.cmd",
+                  "where-are-we.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "options_with_values": [
+                  "--affected",
+                  "--affected-depth",
+                  "--affected-format",
+                  "--affected-out",
+                  "--agent-file",
+                  "--also",
+                  "--ask",
+                  "--at",
+                  "--callees",
+                  "--callers",
+                  "--context",
+                  "--corpus",
+                  "--defines",
+                  "--export",
+                  "--files",
+                  "--for",
+                  "--impact",
+                  "--impact-depth",
+                  "--install-hook",
+                  "--limit",
+                  "--max-lines",
+                  "--more",
+                  "--only",
+                  "--out",
+                  "--path",
+                  "--path-depth",
+                  "--product",
+                  "--range",
+                  "--reaches",
+                  "--repo",
+                  "--rules",
+                  "--runs-api",
+                  "--skip",
+                  "--spec-cmd",
+                  "--spec-depth",
+                  "--spec-limit",
+                  "--spec-source",
+                  "--specs",
+                  "--watch"
+                ],
+                "required_flags": [
+                  "--init"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "where-are-we",
+                  "where-are-we.cmd",
+                  "where-are-we.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "options_with_values": [
+                  "--affected",
+                  "--affected-depth",
+                  "--affected-format",
+                  "--affected-out",
+                  "--agent-file",
+                  "--also",
+                  "--ask",
+                  "--at",
+                  "--callees",
+                  "--callers",
+                  "--context",
+                  "--corpus",
+                  "--defines",
+                  "--export",
+                  "--files",
+                  "--for",
+                  "--impact",
+                  "--impact-depth",
+                  "--install-hook",
+                  "--limit",
+                  "--max-lines",
+                  "--more",
+                  "--only",
+                  "--out",
+                  "--path",
+                  "--path-depth",
+                  "--product",
+                  "--range",
+                  "--reaches",
+                  "--repo",
+                  "--rules",
+                  "--runs-api",
+                  "--skip",
+                  "--spec-cmd",
+                  "--spec-depth",
+                  "--spec-limit",
+                  "--spec-source",
+                  "--specs",
+                  "--watch"
+                ],
+                "required_flags": [
+                  "--export"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "where-are-we",
+                  "where-are-we.cmd",
+                  "where-are-we.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "options_with_values": [
+                  "--affected",
+                  "--affected-depth",
+                  "--affected-format",
+                  "--affected-out",
+                  "--agent-file",
+                  "--also",
+                  "--ask",
+                  "--at",
+                  "--callees",
+                  "--callers",
+                  "--context",
+                  "--corpus",
+                  "--defines",
+                  "--export",
+                  "--files",
+                  "--for",
+                  "--impact",
+                  "--impact-depth",
+                  "--install-hook",
+                  "--limit",
+                  "--max-lines",
+                  "--more",
+                  "--only",
+                  "--out",
+                  "--path",
+                  "--path-depth",
+                  "--product",
+                  "--range",
+                  "--reaches",
+                  "--repo",
+                  "--rules",
+                  "--runs-api",
+                  "--skip",
+                  "--spec-cmd",
+                  "--spec-depth",
+                  "--spec-limit",
+                  "--spec-source",
+                  "--specs",
+                  "--watch"
+                ],
+                "required_flags": [
+                  "--affected-out"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "where-are-we",
+                  "where-are-we.cmd",
+                  "where-are-we.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "options_with_values": [
+                  "--affected",
+                  "--affected-depth",
+                  "--affected-format",
+                  "--affected-out",
+                  "--agent-file",
+                  "--also",
+                  "--ask",
+                  "--at",
+                  "--callees",
+                  "--callers",
+                  "--context",
+                  "--corpus",
+                  "--defines",
+                  "--docs",
+                  "--export",
+                  "--files",
+                  "--for",
+                  "--impact",
+                  "--impact-depth",
+                  "--install-hook",
+                  "--limit",
+                  "--max-lines",
+                  "--more",
+                  "--only",
+                  "--out",
+                  "--path",
+                  "--path-depth",
+                  "--product",
+                  "--range",
+                  "--reaches",
+                  "--repo",
+                  "--rules",
+                  "--runs-api",
+                  "--skip",
+                  "--spec-cmd",
+                  "--spec-depth",
+                  "--spec-limit",
+                  "--spec-source",
+                  "--specs",
+                  "--watch"
+                ],
+                "required_flags": [
+                  "--docs"
+                ],
+                "required_option_values": [
+                  [
+                    "--docs",
+                    [
+                      "write"
+                    ]
+                  ]
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.where-are-we.permission.repository-write",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.where-are-we.repository-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--agent-file"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--init"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--export"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--affected-out"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--docs",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--docs"
+                        ],
+                        "required_option_values": [
+                          [
+                            "--docs",
+                            [
+                              "write"
+                            ]
+                          ]
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--agent-file"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--init"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--export"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--affected-out"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--docs",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--docs"
+                        ],
+                        "required_option_values": [
+                          [
+                            "--docs",
+                            [
+                              "write"
+                            ]
+                          ]
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--agent-file"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--init"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--export"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--affected-out"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--docs",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--docs"
+                        ],
+                        "required_option_values": [
+                          [
+                            "--docs",
+                            [
+                              "write"
+                            ]
+                          ]
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "--effects"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "effects"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--agent-file"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--init"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--export"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--affected-out"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--docs",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--docs"
+                        ],
+                        "required_option_values": [
+                          [
+                            "--docs",
+                            [
+                              "write"
+                            ]
+                          ]
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Run the same command line with --dry-run first and read the paths it prints.",
+          "Confirm which agent file is being written before writing it; the map lands between markers and the rest of the file survives, but the target is chosen by the caller.",
+          "Use --docs without an argument, which only reports what it would write.",
+          "Confirm the --export and --affected-out destinations, which are whatever path the caller named rather than a path under --out."
+        ],
+        "severity": "medium",
+        "title": "where-are-we repository file write"
+      },
+      {
+        "action_classes": [
+          "where-are-we agent hook installation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `where-are-we --install-hook`, which writes where a tool other than this one reads: git hooks (post-checkout, post-merge, post-commit), ~/.claude/settings.json, ~/.codex/config.toml, a Cursor rule or a Gemini setting. After it runs, a checkout or a session start re-runs the tool.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "where-are-we",
+                  "where-are-we.cmd",
+                  "where-are-we.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "options_with_values": [
+                  "--affected",
+                  "--affected-depth",
+                  "--affected-format",
+                  "--affected-out",
+                  "--agent-file",
+                  "--also",
+                  "--ask",
+                  "--at",
+                  "--callees",
+                  "--callers",
+                  "--context",
+                  "--corpus",
+                  "--defines",
+                  "--export",
+                  "--files",
+                  "--for",
+                  "--impact",
+                  "--impact-depth",
+                  "--install-hook",
+                  "--limit",
+                  "--max-lines",
+                  "--more",
+                  "--only",
+                  "--out",
+                  "--path",
+                  "--path-depth",
+                  "--product",
+                  "--range",
+                  "--reaches",
+                  "--repo",
+                  "--rules",
+                  "--runs-api",
+                  "--skip",
+                  "--spec-cmd",
+                  "--spec-depth",
+                  "--spec-limit",
+                  "--spec-source",
+                  "--specs",
+                  "--watch"
+                ],
+                "required_flags": [
+                  "--install-hook"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.where-are-we.permission.install-hook",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.where-are-we.install-hook",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--install-hook"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--install-hook"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--install-hook"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "--effects"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "effects"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--install-hook"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Run the same command line with --dry-run first; it prints every hook or config path it would write.",
+          "Confirm the hook target, because git installs into the repository while claude, codex, cursor and gemini write user-level configuration outside it.",
+          "Review the existing hook or configuration file before letting the tool wire itself into it."
+        ],
+        "severity": "high",
+        "title": "where-are-we agent hook installation"
+      },
+      {
+        "action_classes": [
+          "where-are-we tracker fetch command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies the where-are-we flags that leave the machine: --specs walks a ticket tracker into a specification map, --spec-source selects github or linear, --spec-cmd supplies the command line run once per ticket to fetch it, and --runs-api reads a runs database endpoint.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "where-are-we",
+                  "where-are-we.cmd",
+                  "where-are-we.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "options_with_values": [
+                  "--affected",
+                  "--affected-depth",
+                  "--affected-format",
+                  "--affected-out",
+                  "--agent-file",
+                  "--also",
+                  "--ask",
+                  "--at",
+                  "--callees",
+                  "--callers",
+                  "--context",
+                  "--corpus",
+                  "--defines",
+                  "--export",
+                  "--files",
+                  "--for",
+                  "--impact",
+                  "--impact-depth",
+                  "--install-hook",
+                  "--limit",
+                  "--max-lines",
+                  "--more",
+                  "--only",
+                  "--out",
+                  "--path",
+                  "--path-depth",
+                  "--product",
+                  "--range",
+                  "--reaches",
+                  "--repo",
+                  "--rules",
+                  "--runs-api",
+                  "--skip",
+                  "--spec-cmd",
+                  "--spec-depth",
+                  "--spec-limit",
+                  "--spec-source",
+                  "--specs",
+                  "--watch"
+                ],
+                "required_flags": [
+                  "--specs"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "where-are-we",
+                  "where-are-we.cmd",
+                  "where-are-we.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "options_with_values": [
+                  "--affected",
+                  "--affected-depth",
+                  "--affected-format",
+                  "--affected-out",
+                  "--agent-file",
+                  "--also",
+                  "--ask",
+                  "--at",
+                  "--callees",
+                  "--callers",
+                  "--context",
+                  "--corpus",
+                  "--defines",
+                  "--export",
+                  "--files",
+                  "--for",
+                  "--impact",
+                  "--impact-depth",
+                  "--install-hook",
+                  "--limit",
+                  "--max-lines",
+                  "--more",
+                  "--only",
+                  "--out",
+                  "--path",
+                  "--path-depth",
+                  "--product",
+                  "--range",
+                  "--reaches",
+                  "--repo",
+                  "--rules",
+                  "--runs-api",
+                  "--skip",
+                  "--spec-cmd",
+                  "--spec-depth",
+                  "--spec-limit",
+                  "--spec-source",
+                  "--specs",
+                  "--watch"
+                ],
+                "required_flags": [
+                  "--spec-cmd"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "where-are-we",
+                  "where-are-we.cmd",
+                  "where-are-we.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "options_with_values": [
+                  "--affected",
+                  "--affected-depth",
+                  "--affected-format",
+                  "--affected-out",
+                  "--agent-file",
+                  "--also",
+                  "--ask",
+                  "--at",
+                  "--callees",
+                  "--callers",
+                  "--context",
+                  "--corpus",
+                  "--defines",
+                  "--export",
+                  "--files",
+                  "--for",
+                  "--impact",
+                  "--impact-depth",
+                  "--install-hook",
+                  "--limit",
+                  "--max-lines",
+                  "--more",
+                  "--only",
+                  "--out",
+                  "--path",
+                  "--path-depth",
+                  "--product",
+                  "--range",
+                  "--reaches",
+                  "--repo",
+                  "--rules",
+                  "--runs-api",
+                  "--skip",
+                  "--spec-cmd",
+                  "--spec-depth",
+                  "--spec-limit",
+                  "--spec-source",
+                  "--specs",
+                  "--watch"
+                ],
+                "required_flags": [
+                  "--spec-source"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "where-are-we",
+                  "where-are-we.cmd",
+                  "where-are-we.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "options_with_values": [
+                  "--affected",
+                  "--affected-depth",
+                  "--affected-format",
+                  "--affected-out",
+                  "--agent-file",
+                  "--also",
+                  "--ask",
+                  "--at",
+                  "--callees",
+                  "--callers",
+                  "--context",
+                  "--corpus",
+                  "--defines",
+                  "--export",
+                  "--files",
+                  "--for",
+                  "--impact",
+                  "--impact-depth",
+                  "--install-hook",
+                  "--limit",
+                  "--max-lines",
+                  "--more",
+                  "--only",
+                  "--out",
+                  "--path",
+                  "--path-depth",
+                  "--product",
+                  "--range",
+                  "--reaches",
+                  "--repo",
+                  "--rules",
+                  "--runs-api",
+                  "--skip",
+                  "--spec-cmd",
+                  "--spec-depth",
+                  "--spec-limit",
+                  "--spec-source",
+                  "--specs",
+                  "--watch"
+                ],
+                "required_flags": [
+                  "--runs-api"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.where-are-we.permission.tracker-fetch",
+        "risk_classes": [
+          "network_egress",
+          "execution"
+        ],
+        "rule_id": "command.where-are-we.tracker-fetch",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--specs"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--spec-cmd"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--spec-source"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--runs-api"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--specs"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--spec-cmd"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--spec-source"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--runs-api"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--specs"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--spec-cmd"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--spec-source"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--runs-api"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "--effects"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "effects"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {},
+                  "matchers": [
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--specs"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--spec-cmd"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--spec-source"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    },
+                    {
+                      "config": {
+                        "executables": [
+                          "where-are-we",
+                          "where-are-we.cmd",
+                          "where-are-we.exe"
+                        ],
+                        "fail_secure_unknown_options": true,
+                        "options_with_values": [
+                          "--affected",
+                          "--affected-depth",
+                          "--affected-format",
+                          "--affected-out",
+                          "--agent-file",
+                          "--also",
+                          "--ask",
+                          "--at",
+                          "--callees",
+                          "--callers",
+                          "--context",
+                          "--corpus",
+                          "--defines",
+                          "--export",
+                          "--files",
+                          "--for",
+                          "--impact",
+                          "--impact-depth",
+                          "--install-hook",
+                          "--limit",
+                          "--max-lines",
+                          "--more",
+                          "--only",
+                          "--out",
+                          "--path",
+                          "--path-depth",
+                          "--product",
+                          "--range",
+                          "--reaches",
+                          "--repo",
+                          "--rules",
+                          "--runs-api",
+                          "--skip",
+                          "--spec-cmd",
+                          "--spec-depth",
+                          "--spec-limit",
+                          "--spec-source",
+                          "--specs",
+                          "--watch"
+                        ],
+                        "required_flags": [
+                          "--runs-api"
+                        ]
+                      },
+                      "op": "executable.v1"
+                    }
+                  ],
+                  "op": "any.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "where-are-we",
+                      "where-are-we.cmd",
+                      "where-are-we.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "options_with_values": [
+                      "--affected",
+                      "--affected-depth",
+                      "--affected-format",
+                      "--affected-out",
+                      "--agent-file",
+                      "--also",
+                      "--ask",
+                      "--at",
+                      "--callees",
+                      "--callers",
+                      "--context",
+                      "--corpus",
+                      "--defines",
+                      "--export",
+                      "--files",
+                      "--for",
+                      "--impact",
+                      "--impact-depth",
+                      "--install-hook",
+                      "--limit",
+                      "--max-lines",
+                      "--more",
+                      "--only",
+                      "--out",
+                      "--path",
+                      "--path-depth",
+                      "--product",
+                      "--range",
+                      "--reaches",
+                      "--repo",
+                      "--rules",
+                      "--runs-api",
+                      "--skip",
+                      "--spec-cmd",
+                      "--spec-depth",
+                      "--spec-limit",
+                      "--spec-source",
+                      "--specs",
+                      "--watch"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "all.v1"
+            },
+            "title": "where-are-we side-effect-free invocation",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Confirm the ticket keys and the fetch depth before a walk; a tracker is a graph and will hand over far more than the roots named.",
+          "Read the --spec-cmd command line before it runs, because it executes once per ticket.",
+          "Prefer a tracker endpoint and credentials scoped to the project being mapped."
+        ],
+        "severity": "medium",
+        "title": "where-are-we tracker fetch"
+      }
+    ],
+    "safer_alternatives": [
+      "Run the same command line with --dry-run first and read the paths it prints.",
+      "Prefer the read-only surface (--ask, --callers, --impact, --docs) for routine inspection."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

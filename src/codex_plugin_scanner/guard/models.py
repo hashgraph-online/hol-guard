@@ -137,34 +137,6 @@ class PolicyDecision:
         return asdict(self)
 
 
-CloudExceptionEffect = Literal["allow"]
-CloudExceptionScope = Literal["artifact", "publisher", "harness", "workspace", "global"]
-CloudExceptionAckStatus = Literal["pending", "synced", "failed", "offline"]
-CloudExceptionProvenance = Literal["receipt-sync", "policy-bundle"]
-
-
-@dataclass(frozen=True, slots=True)
-class CloudException:
-    """Governed Cloud risk acceptance synced from Guard Cloud."""
-
-    id: str
-    effect: CloudExceptionEffect
-    scope: CloudExceptionScope
-    harness: str | None
-    owner: str
-    approver: str | None
-    expiry: str
-    source_receipt_id: str | None
-    bundle_hash: str | None
-    ack_status: CloudExceptionAckStatus | None
-    last_used_at: str | None
-    rejection_reason: str | None
-    provenance: CloudExceptionProvenance = "receipt-sync"
-
-    def to_dict(self) -> dict[str, object]:
-        return asdict(self)
-
-
 @dataclass(frozen=True, slots=True)
 class GuardReceipt:
     """Runtime receipt recorded after a Guard evaluation."""
@@ -238,6 +210,7 @@ class GuardApprovalRequest:
     first_seen_guard_version: str | None = None
     last_seen_guard_version: str | None = None
     continuation_snapshot: dict[str, object] | None = None
+    extension_allow_hint: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -245,6 +218,15 @@ class GuardApprovalRequest:
         payload["risk_signals"] = list(self.risk_signals)
         payload["scanner_evidence"] = [dict(item) for item in self.scanner_evidence]
         return payload
+
+
+@dataclass(frozen=True, slots=True)
+class GuardRuntimeRegistration:
+    """Identity a serving daemon uses to recreate its runtime row after store loss."""
+
+    daemon_host: str
+    daemon_port: int
+    started_at: str
 
 
 @dataclass(frozen=True, slots=True)

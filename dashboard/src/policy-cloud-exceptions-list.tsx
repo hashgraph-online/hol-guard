@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, type ChangeEvent } from "react";
+import { StyledSelect } from "./styled-select";
 import {
   HiMiniCheckCircle,
   HiMiniChevronDown,
@@ -260,10 +261,10 @@ function ExceptionFilters({
         />
       </div>
       <div className="flex flex-wrap gap-2">
-        <select
+        <StyledSelect
           value={scopeFilter}
           onChange={handleScopeChange}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark"
+          className="min-h-10"
           aria-label="All scopes"
         >
           <option value="all">All scopes</option>
@@ -272,16 +273,16 @@ function ExceptionFilters({
           <option value="workspace">This project</option>
           <option value="harness">This harness</option>
           <option value="global">Team policy</option>
-        </select>
-        <select
+        </StyledSelect>
+        <StyledSelect
           value={actionFilter}
           onChange={handleActionChange}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark"
+          className="min-h-10"
           aria-label="All actions"
         >
           <option value="all">All actions</option>
           <option value="allow">Allow</option>
-        </select>
+        </StyledSelect>
       </div>
     </div>
   );

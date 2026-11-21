@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -183,7 +187,6 @@ def test_non_mapping_or_unreadable_workflow_fails_closed(tmp_path: Path, text: s
 @pytest.mark.parametrize(
     ("filename", "job", "permissions"),
     [
-        ("finish-extension-authority-stability.yml", "finish", {"contents": "write"}),
         (
             "guarded-repository.yml",
             "scan",
@@ -195,7 +198,21 @@ def test_non_mapping_or_unreadable_workflow_fails_closed(tmp_path: Path, text: s
                 "security-events": "write",
             },
         ),
+        (
+            "plugin-release.yml",
+            "release",
+            {
+                "contents": "read",
+                "id-token": "write",
+                "attestations": "write",
+                "artifact-metadata": "write",
+                "security-events": "write",
+            },
+        ),
         ("extension-claim-notice.yml", "notify", {"contents": "read", "pull-requests": "write"}),
+        ("gitar-fork-access-notice.yml", "notify", {"pull-requests": "write"}),
+        ("release-please.yml", "release-please", {"contents": "write", "pull-requests": "write"}),
+        ("release-please.yml", "dispatch-stable-publish", {"actions": "write", "contents": "read"}),
         ("publish-mcp-registry.yml", "publish", {"contents": "read", "id-token": "write"}),
         (
             "scorecard.yml",
@@ -216,20 +233,161 @@ def test_writer_workflows_start_empty_and_preserve_needed_job_grants(
         publish = workflow["jobs"][job]
         assert publish["needs"] == "verify"
         assert workflow["jobs"]["verify"]["permissions"] == {"actions": "read", "contents": "read"}
+        workflow_run_guard = " && ".join(
+            (
+                "github.event.workflow_run.conclusion == 'success'",
+                'contains(fromJSON(\'["push", "workflow_dispatch"]\'), github.event.workflow_run.event)',
+                "github.event.workflow_run.run_attempt == 1",
+                "github.event.workflow_run.head_repository.full_name == github.repository",
+                "( "
+                'contains(fromJSON(\'["main", "release/3.0"]\'), github.event.workflow_run.head_branch) || '
+                "(github.event.workflow_run.event == 'workflow_dispatch' && "
+                "startsWith(github.event.workflow_run.head_branch, 'v')) )",
+                "!contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')",
+            )
+        )
         expected_guard = " && ".join(
             (
                 "needs.verify.outputs.sha != ''",
                 "needs.verify.outputs.branch != ''",
                 "vars.RELEASE_PUBLISHING_ENABLED == 'true'",
-                "github.event.workflow_run.conclusion == 'success'",
-                'contains(fromJSON(\'["push", "workflow_dispatch"]\'), github.event.workflow_run.event)',
-                "github.event.workflow_run.run_attempt == 1",
-                "github.event.workflow_run.head_repository.full_name == github.repository",
-                'contains(fromJSON(\'["main", "release/3.0"]\'), github.event.workflow_run.head_branch)',
-                "!contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')",
+                "( (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || "
+                f"( {workflow_run_guard} ) )",
             )
         )
         assert " ".join(publish["if"].split()) == expected_guard
+
+
+def test_gitar_fork_access_notice_only_handles_verified_push_denials() -> None:
+    """Live comments and manual backfills require Gitar's verified denial evidence."""
+
+    workflow = (ROOT / ".github/workflows/gitar-fork-access-notice.yml").read_text(encoding="utf-8")
+    parsed = yaml.safe_load(workflow)
+    assert "permissions: {}" in workflow
+    assert "pull-requests: write" in workflow
+    assert parsed[True]["workflow_dispatch"]["inputs"]["pr_number"]["required"] is True
+    assert "github.event.issue.pull_request != null" in workflow
+    assert "github.event.comment.user.login == 'gitar-bot[bot]'" in workflow
+    assert "github.event.comment.user.type == 'Bot'" in workflow
+    assert "github.event_name == 'workflow_dispatch'" in workflow
+    assert "Gitar is not allowed to push to this forked PR." in workflow
+    assert '0* | *[!0-9]* | "")' in workflow
+    assert "pr_state" in workflow
+    assert "head_is_fork" in workflow
+    assert "gitar_denial_ids" in workflow
+    assert "actions/checkout" not in workflow
+    assert "github-actions[bot]" in workflow
+
+
+def _run_gitar_fork_access_notice(
+    tmp_path: Path,
+    *,
+    state: str = "open",
+    head_is_fork: bool = True,
+    has_trusted_denial: bool = True,
+) -> tuple[subprocess.CompletedProcess[str], list[list[str]]]:
+    """Run the notification shell with a deterministic GitHub CLI substitute."""
+
+    workflow = yaml.safe_load((ROOT / ".github/workflows/gitar-fork-access-notice.yml").read_text(encoding="utf-8"))
+    notice_shell = workflow["jobs"]["notify"]["steps"][0]["run"]
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls_path = tmp_path / "gh-calls.jsonl"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env python3
+            import json
+            import os
+            from pathlib import Path
+            import sys
+
+            args = sys.argv[1:]
+            with Path(os.environ["GH_CALLS_PATH"]).open("a", encoding="utf-8") as calls:
+                print(json.dumps(args), file=calls)
+
+            endpoint = next((arg for arg in args if arg.startswith("repos/")), "")
+            method = args[args.index("--method") + 1] if "--method" in args else "GET"
+            query = args[args.index("--jq") + 1] if "--jq" in args else ""
+
+            if method == "POST" and endpoint.endswith("/issues/42/comments"):
+                print("{}")
+            elif endpoint.endswith("/pulls/42"):
+                if query == ".state":
+                    print(os.environ["FAKE_PR_STATE"])
+                elif query == ".head.repo.fork // false":
+                    print(os.environ["FAKE_HEAD_IS_FORK"])
+                else:
+                    sys.exit(f"unexpected pull request query: {query}")
+            elif endpoint.endswith("/issues/42/comments?per_page=100"):
+                if 'gitar-bot[bot]' in query and os.environ["FAKE_TRUSTED_DENIAL"] == "true":
+                    print("987654321")
+                elif 'gitar-bot[bot]' not in query and 'github-actions[bot]' not in query:
+                    sys.exit(f"unexpected comments query: {query}")
+            else:
+                sys.exit(f"unexpected GitHub CLI invocation: {args}")
+            """
+        ),
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+
+    environment = os.environ | {
+        "GH_CALLS_PATH": str(calls_path),
+        "FAKE_PR_STATE": state,
+        "FAKE_HEAD_IS_FORK": str(head_is_fork).lower(),
+        "FAKE_TRUSTED_DENIAL": str(has_trusted_denial).lower(),
+        "GH_TOKEN": "test-token",
+        "PR_NUMBER": "42",
+        "REPOSITORY": "example/repository",
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+    }
+    completed = subprocess.run(
+        ["bash", "-c", notice_shell],
+        capture_output=True,
+        check=False,
+        env=environment,
+        text=True,
+    )
+    calls = [json.loads(line) for line in calls_path.read_text(encoding="utf-8").splitlines()]
+    return completed, calls
+
+
+@pytest.mark.parametrize(
+    ("state", "head_is_fork", "has_trusted_denial", "should_post"),
+    [
+        ("open", True, True, True),
+        ("closed", True, True, False),
+        ("open", False, True, False),
+        ("open", True, False, False),
+    ],
+)
+def test_gitar_fork_access_notice_dispatch_posts_only_for_verified_open_forks(
+    tmp_path: Path,
+    state: str,
+    head_is_fork: bool,
+    has_trusted_denial: bool,
+    should_post: bool,
+) -> None:
+    """The write-capable manual path fails closed before it posts a contributor notice."""
+
+    completed, calls = _run_gitar_fork_access_notice(
+        tmp_path,
+        state=state,
+        head_is_fork=head_is_fork,
+        has_trusted_denial=has_trusted_denial,
+    )
+    posts = [
+        args
+        for args in calls
+        if "--method" in args
+        and args[args.index("--method") + 1] == "POST"
+        and any(arg.endswith("/issues/42/comments") for arg in args)
+    ]
+
+    assert bool(posts) is should_post
+    assert completed.returncode == (0 if should_post else 1)
 
 
 def test_security_gate_runs_permission_policy_on_pull_requests() -> None:

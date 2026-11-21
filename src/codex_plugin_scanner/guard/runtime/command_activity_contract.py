@@ -6,11 +6,12 @@ import re
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from enum import Enum
+from functools import lru_cache
 from typing import Final, cast
 
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity, is_guard_action
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.setup_contract_registry import harness_names
 
 from .effect_contract import EffectKind, UncertaintyKind
 from .extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
@@ -18,7 +19,13 @@ from .extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
 COMMAND_ACTIVITY_SCHEMA_VERSION: Final = "1.0.0"
 _OPAQUE_ID: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}")
 _STABLE_ID: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
-COMMAND_ACTIVITY_HARNESSES: Final = frozenset(contract.harness for contract in HARNESS_CONTRACTS)
+
+
+@lru_cache(maxsize=1)
+def command_activity_harnesses() -> frozenset[str]:
+    """The harness names command activity accepts, read from the runtime on first use."""
+
+    return frozenset(harness_names())
 
 
 class CommandHookPhase(str, Enum):
@@ -233,52 +240,6 @@ COMMAND_ACTIVITY_FIELDS: Final = tuple(field.name for field in fields(CommandAct
 COMMAND_ACTIVITY_MATCH_FIELDS: Final = tuple(field.name for field in fields(CommandActivityMatch))
 
 
-def validate_activity_transition(previous: CommandActivity, current: CommandActivity) -> None:
-    """Reject out-of-order, conflicting, or fact-changing lifecycle updates."""
-
-    if not isinstance(cast(object, previous), CommandActivity) or not isinstance(
-        cast(object, current), CommandActivity
-    ):
-        raise ValueError("activity transitions require exact CommandActivity values")
-    immutable_fields = (
-        "activity_id",
-        "occurred_at",
-        "harness",
-        "policy_action",
-        "decision_reason_code",
-        "controlling_rule_id",
-        "parse_confidence",
-        "uncertainty_class",
-        "match_count",
-        "prompted",
-        "approval_reuse_status",
-        "request_correlation",
-        "session_correlation",
-        "receipt_link_status",
-        "receipt_id",
-        "evaluation_latency_bucket",
-        "schema_version",
-    )
-    if any(getattr(previous, name) != getattr(current, name) for name in immutable_fields):
-        raise ValueError("activity transitions cannot change decision, identity, proof, or match facts")
-    if previous.execution_status is current.execution_status:
-        if previous != current:
-            raise ValueError("idempotent activity replay cannot change persisted fields")
-        return
-    allowed = {
-        CommandExecutionStatus.ATTEMPTED: {
-            CommandExecutionStatus.PREVENTED,
-            CommandExecutionStatus.ALLOWED_UNCONFIRMED,
-        },
-        CommandExecutionStatus.ALLOWED_UNCONFIRMED: {
-            CommandExecutionStatus.CONFIRMED_SUCCESS,
-            CommandExecutionStatus.CONFIRMED_FAILURE,
-        },
-    }
-    if current.execution_status not in allowed.get(previous.execution_status, set()):
-        raise ValueError("invalid or conflicting command activity lifecycle transition")
-
-
 def _validate_activity_state(activity: CommandActivity) -> None:
     pre_statuses = {
         CommandExecutionStatus.ATTEMPTED,
@@ -331,7 +292,10 @@ def _validate_activity_state(activity: CommandActivity) -> None:
     if activity.execution_status is not CommandExecutionStatus.UNPAIRED_POST and (
         activity.policy_action is None
         or activity.decision_reason_code is None
-        or (activity.parse_confidence is None and activity.decision_reason_code is not ActivityDecisionReason.POLICY)
+        or (
+            activity.parse_confidence is None
+            and activity.decision_reason_code not in {ActivityDecisionReason.POLICY, ActivityDecisionReason.CAPABILITY}
+        )
     ):
         raise ValueError("pre and confirmed activity requires complete bounded decision facts")
     if activity.match_count == 0 and activity.controlling_rule_id is not None:
@@ -384,7 +348,7 @@ def _require_stable_id(value: object, label: str) -> None:
         not isinstance(value, str)
         or len(value) > 128
         or _STABLE_ID.fullmatch(value) is None
-        or (label == "harness" and value not in COMMAND_ACTIVITY_HARNESSES)
+        or (label == "harness" and value not in command_activity_harnesses())
     ):
         raise ValueError(f"{label} must be a stable lowercase identifier")
 

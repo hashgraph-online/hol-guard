@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import time
 from pathlib import Path
 from types import ModuleType
@@ -11,142 +10,9 @@ from typing import Any, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.cisco_evidence import (
-    cisco_finding_to_risk_signal,
-    scanner_cache_key,
-)
-from codex_plugin_scanner.guard.runtime.signals import GuardRiskSignalV3
-from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.integrations import cisco_mcp_scanner, cisco_skill_scanner
 from codex_plugin_scanner.integrations.cisco_skill_scanner import CiscoIntegrationStatus
 from codex_plugin_scanner.integrations.scanner_subprocess import ScannerProcessResult
-from codex_plugin_scanner.models import Finding, Severity
-
-
-def test_cisco_finding_becomes_v3_signal_with_first_class_scanner_fields() -> None:
-    finding = Finding(
-        rule_id="CISCO-MCP-TOOL-POISONING",
-        severity=Severity.HIGH,
-        category="security",
-        title="Tool poisoning detected",
-        description="MCP config exposes a risky tool description.",
-        remediation="Review the MCP server before enabling it.",
-        file_path=".mcp.json",
-        line_number=12,
-        source="cisco-mcp-scanner",
-    )
-
-    signal = cisco_finding_to_risk_signal(
-        finding,
-        scanner_status=CiscoIntegrationStatus.ENABLED,
-        scanner_name="Cisco MCP scanner",
-        source_version="4.6.2",
-    )
-
-    assert signal == GuardRiskSignalV3(
-        signal_id="cisco-mcp-scanner:CISCO-MCP-TOOL-POISONING:.mcp.json:12",
-        source="cisco_mcp",
-        source_version="4.6.2",
-        category="mcp",
-        severity="high",
-        confidence="strong",
-        title="Tool poisoning detected",
-        plain_language_summary="MCP config exposes a risky tool description.",
-        technical_detail="Cisco MCP scanner rule CISCO-MCP-TOOL-POISONING reported security evidence.",
-        evidence_ref=".mcp.json:12",
-        scanner_name="Cisco MCP scanner",
-        scanner_status="enabled",
-        scanner_rule_id="CISCO-MCP-TOOL-POISONING",
-        redaction_level="summary",
-        source_path=".mcp.json",
-        source_line=12,
-        data_source=None,
-        data_sink=None,
-        recommended_action="Review the MCP server before enabling it.",
-    )
-    assert signal.to_dict()["scanner_status"] == "enabled"
-    assert GuardRiskSignalV3.from_dict(signal.to_dict()) == signal
-
-
-def test_scanner_cache_key_changes_with_content_hash_or_version() -> None:
-    base_key = scanner_cache_key(
-        scanner_name="cisco-mcp-scanner",
-        input_content_hash="content-a",
-        scanner_version="4.6.2",
-    )
-
-    assert (
-        scanner_cache_key(
-            scanner_name="cisco-mcp-scanner",
-            input_content_hash="content-b",
-            scanner_version="4.6.2",
-        )
-        != base_key
-    )
-    assert (
-        scanner_cache_key(
-            scanner_name="cisco-mcp-scanner",
-            input_content_hash="content-a",
-            scanner_version="4.7.0",
-        )
-        != base_key
-    )
-
-
-def test_guard_store_invalidates_scanner_cache_when_hash_or_version_changes(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    payload = cast(dict[str, object], {"signals": [{"signal_id": "signal-1"}]})
-
-    store.save_scanner_cache(
-        scanner_name="cisco-mcp-scanner",
-        target_id="workspace/.mcp.json",
-        input_content_hash="hash-a",
-        scanner_version="4.6.2",
-        payload=payload,
-        now="2026-05-08T00:00:00+00:00",
-    )
-
-    assert (
-        store.get_scanner_cache(
-            scanner_name="cisco-mcp-scanner",
-            target_id="workspace/.mcp.json",
-            input_content_hash="hash-a",
-            scanner_version="4.6.2",
-        )
-        == payload
-    )
-    assert (
-        store.get_scanner_cache(
-            scanner_name="cisco-mcp-scanner",
-            target_id="workspace/.mcp.json",
-            input_content_hash="hash-b",
-            scanner_version="4.6.2",
-        )
-        is None
-    )
-    assert (
-        store.get_scanner_cache(
-            scanner_name="cisco-mcp-scanner",
-            target_id="workspace/.mcp.json",
-            input_content_hash="hash-a",
-            scanner_version="4.7.0",
-        )
-        is None
-    )
-
-    with sqlite3.connect(store.path) as connection:
-        row = connection.execute(
-            "select cache_key, payload_json from scanner_cache where scanner_name = ? and target_id = ?",
-            ("cisco-mcp-scanner", "workspace/.mcp.json"),
-        ).fetchone()
-
-    assert row is not None
-    assert str(row[0]) == scanner_cache_key(
-        scanner_name="cisco-mcp-scanner",
-        input_content_hash="hash-a",
-        scanner_version="4.6.2",
-    )
-    assert json.loads(str(row[1])) == payload
 
 
 def test_skill_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, tmp_path: Path) -> None:
@@ -242,6 +108,7 @@ def test_skill_scanner_none_timeout_still_uses_isolated_default(monkeypatch, tmp
 
 def test_mcp_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, tmp_path: Path) -> None:
     (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(cisco_mcp_scanner, "_cisco_mcp_scanner_runnable", lambda: True)
 
     monkeypatch.setattr(
         cisco_mcp_scanner,
@@ -257,6 +124,7 @@ def test_mcp_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, tm
 
 def test_mcp_scanner_none_timeout_still_uses_isolated_default(monkeypatch, tmp_path: Path) -> None:
     (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(cisco_mcp_scanner, "_cisco_mcp_scanner_runnable", lambda: True)
     observed_timeouts: list[float] = []
 
     def fake_run(*_args: object, **kwargs: object) -> ScannerProcessResult:
@@ -269,3 +137,64 @@ def test_mcp_scanner_none_timeout_still_uses_isolated_default(monkeypatch, tmp_p
 
     assert summary.status is CiscoIntegrationStatus.TIMED_OUT
     assert observed_timeouts == [cisco_mcp_scanner.DEFAULT_CISCO_MCP_TIMEOUT_SECONDS]
+
+
+def _refuse_scanner_child(*_args: object, **_kwargs: object) -> ScannerProcessResult:
+    raise AssertionError("the scan started a child process it could not use")
+
+
+def test_mcp_scanner_skips_without_a_child_when_there_is_no_mcp_configuration(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(cisco_mcp_scanner, "run_bounded_scanner_process", _refuse_scanner_child)
+
+    summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path, mode="on")
+
+    assert summary.status is CiscoIntegrationStatus.SKIPPED
+    assert summary.message == "No MCP configuration found; Cisco MCP scan skipped."
+
+
+@pytest.mark.parametrize(
+    ("mode", "message"),
+    [
+        ("auto", "Cisco MCP scanner not installed; deep MCP scan skipped."),
+        ("on", "Cisco MCP scanner is required but not installed. Ensure package dependencies are installed."),
+    ],
+)
+def test_mcp_scanner_reports_a_missing_scanner_without_a_child(
+    monkeypatch, tmp_path: Path, mode: str, message: str
+) -> None:
+    (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(cisco_mcp_scanner, "run_bounded_scanner_process", _refuse_scanner_child)
+
+    def missing(name: str) -> object:
+        raise cisco_mcp_scanner.importlib_metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(cisco_mcp_scanner.importlib_metadata, "distribution", missing)
+
+    summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path, mode=mode)
+
+    assert summary.status is CiscoIntegrationStatus.UNAVAILABLE
+    assert summary.message == message
+
+
+def test_a_metadata_lookup_failure_leaves_the_scan_to_the_child(monkeypatch) -> None:
+    """Only a missing distribution settles the scan in the parent; other errors must not escape."""
+
+    def broken(name: str) -> object:
+        raise OSError("metadata finder failed")
+
+    monkeypatch.setattr(cisco_mcp_scanner.importlib_metadata, "distribution", broken)
+
+    assert cisco_mcp_scanner._cisco_mcp_scanner_runnable() is True
+
+
+def test_packaged_guard_reports_the_mcp_scanner_unavailable_without_a_child(monkeypatch, tmp_path: Path) -> None:
+    """A onefile Guard cannot run ``-c`` code; each child re-extracted the runtime only to fail."""
+
+    (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(cisco_mcp_scanner, "run_bounded_scanner_process", _refuse_scanner_child)
+    monkeypatch.setattr(cisco_mcp_scanner.importlib_metadata, "distribution", lambda name: object())
+    monkeypatch.setattr(cisco_mcp_scanner.sys, "frozen", True, raising=False)
+
+    summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path)
+
+    assert summary.status is CiscoIntegrationStatus.UNAVAILABLE

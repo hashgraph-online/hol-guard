@@ -9,8 +9,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from codex_plugin_scanner.guard.store import GuardStore
 
 # These imports will fail until the MCP module is implemented.
 # That is the intended initial failure proving the feature is missing.
@@ -39,6 +43,51 @@ class TestMCPModuleImport:
 
         assert HarnessName.OMP.value == "omp"
         assert "omp" in VALID_HARNESSES
+
+    def test_devin_is_an_allowed_harness(self):
+        from codex_plugin_scanner.guard.mcp.sanitizers import sanitize_search_result
+        from codex_plugin_scanner.guard.mcp.schemas import VALID_HARNESSES, HarnessName
+
+        assert HarnessName.DEVIN.value == "devin"
+        assert "devin" in VALID_HARNESSES
+        result = sanitize_search_result(
+            {"id": "r1", "title": "t", "kind": "receipt", "harness": "devin", "decision": "allow"}
+        )
+        assert result["harness"] == "devin"
+
+    def test_sanitized_output_keeps_only_allowlisted_fields(self):
+        from codex_plugin_scanner.guard.mcp.sanitizers import sanitize_fetch_result
+
+        result = sanitize_fetch_result(
+            {"id": "r1", "title": "\uff54\x1b", "kind": "secret", "text": "\u00e9" * 20000, "path": "/private"}
+        )
+        assert result == {
+            "id": "r1",
+            "title": "t",
+            "kind": "receipt",
+            "harness": "",
+            "decision": "unknown",
+            "text": "\u00e9" * 16384,
+            "truncated": True,
+        }
+
+    def test_text_cut_before_the_runtime_is_still_marked_truncated(self):
+        from codex_plugin_scanner.guard.mcp.sanitizers import sanitize_fetch_result
+        from codex_plugin_scanner.guard.mcp.schemas import MAX_FETCH_TEXT_BYTES
+
+        result = sanitize_fetch_result({"id": "r1", "text": "a" + "\x00" * (8 * MAX_FETCH_TEXT_BYTES)})
+        assert (result["text"], result["truncated"]) == ("a", True)
+
+    def test_sanitizers_fail_closed_without_the_native_runtime(self, monkeypatch: pytest.MonkeyPatch):
+        from codex_plugin_scanner.guard import native_runner_authority
+        from codex_plugin_scanner.guard.mcp import sanitizers
+
+        def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+            raise native_runner_authority.NativeRunnerAuthorityError("unavailable")
+
+        monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+        with pytest.raises(sanitizers.MCPOutputUnavailableError):
+            sanitizers.sanitize_search_results([{"id": "r1"}])
 
 
 class TestMCPServerInitialization:
@@ -321,12 +370,14 @@ def _seed_receipt(
     *,
     artifact_name: str = "test-artifact",
     large_text: str | None = None,
+    store: GuardStore | None = None,
 ) -> None:
     """Seed a test receipt into the Guard store."""
     from codex_plugin_scanner.guard.models import GuardReceipt
     from codex_plugin_scanner.guard.store import GuardStore
 
-    store = GuardStore(tmp_path)
+    if store is None:
+        store = GuardStore(tmp_path)
     receipt = GuardReceipt(
         receipt_id=f"rcpt-{artifact_name}-001",
         timestamp="2026-07-10T12:00:00Z",
@@ -361,23 +412,29 @@ class TestReceiptPagination:
 
         return GuardMCPServer(guard_home=tmp_path)
 
-    def test_search_finds_older_receipt_beyond_page(self, server, tmp_path: Path):
+    @pytest.fixture()
+    def receipt_store(self, tmp_path: Path) -> GuardStore:
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        return GuardStore(tmp_path)
+
+    def test_search_finds_older_receipt_beyond_page(self, server, tmp_path: Path, receipt_store: GuardStore):
         for i in range(250):
-            _seed_receipt(tmp_path, server, artifact_name=f"noise-{i:04d}")
-        _seed_receipt(tmp_path, server, artifact_name="unique-target")
+            _seed_receipt(tmp_path, server, artifact_name=f"noise-{i:04d}", store=receipt_store)
+        _seed_receipt(tmp_path, server, artifact_name="unique-target", store=receipt_store)
         result = server.call_tool("search", {"query": "unique-target"})
         text = result.text if hasattr(result, "text") else str(result)
         data = json.loads(text)
         assert data["count"] >= 1
         assert any("unique-target" in r.get("title", "") for r in data["results"])
 
-    def test_fetch_finds_older_receipt_beyond_scan_limit(self, server, tmp_path: Path):
+    def test_fetch_finds_older_receipt_beyond_scan_limit(self, server, tmp_path: Path, receipt_store: GuardStore):
         from codex_plugin_scanner.guard.mcp.schemas import make_opaque_id
 
         oldest_receipt_id = "rcpt-oldest-target-001"
-        _seed_receipt(tmp_path, server, artifact_name="oldest-target")
+        _seed_receipt(tmp_path, server, artifact_name="oldest-target", store=receipt_store)
         for i in range(250):
-            _seed_receipt(tmp_path, server, artifact_name=f"newer-{i:04d}")
+            _seed_receipt(tmp_path, server, artifact_name=f"newer-{i:04d}", store=receipt_store)
         opaque_id = make_opaque_id("receipt", oldest_receipt_id)
         result = server.call_tool("fetch", {"id": opaque_id})
         text = result.text if hasattr(result, "text") else str(result)

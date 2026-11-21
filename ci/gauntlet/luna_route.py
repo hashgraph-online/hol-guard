@@ -1,0 +1,311 @@
+"""Run the pinned Oh My Pi ChatGPT Luna lane as a loopback Chat Completions transport.
+
+Oh My Pi's ``openai-codex`` Luna lane speaks the Responses API through the user's
+existing ChatGPT login. The Gauntlet relay speaks streaming Chat Completions. The
+adapter in ``luna_adapter.ts`` translates between them and nothing else: it never
+executes a tool, so every model-selected call still runs in the Gauntlet agent
+through the installed Guard extension. Credentials are resolved inside the adapter
+process by Oh My Pi's normal auth storage and are never passed through this module.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import queue
+import re
+import secrets
+import shutil
+import signal
+import subprocess
+import threading
+from collections import deque
+from contextlib import suppress
+from pathlib import Path
+from typing import Any
+
+ADAPTER = Path(__file__).with_name("luna_adapter.ts")
+PINNED_PACKAGE = Path(__file__).resolve().parents[1] / "pi-exact-continuation" / "package.json"
+ADAPTER_ID = "pinned-omp-native-luna-stream-v3"
+REQUEST_MODEL = "native-luna"
+BACKEND = ("openai-codex", "gpt-6-luna")
+# Medium is the default: it qualifies the same catalog faster and at lower cost than high.
+# Low is accepted only as an explicit opt-in for A/B cost comparisons.
+EFFORTS = ("medium", "high", "low")
+DEFAULT_EFFORT = "medium"
+# Each native backend the adapter may load, with the efforts its pinned catalog entry accepts.
+# Devin SWE-2 runs through the same Oh My Pi login store; it has no low effort.
+BACKENDS: dict[tuple[str, str], tuple[str, ...]] = {
+    BACKEND: EFFORTS,
+    ("openai-codex", "gpt-6.1-sol"): EFFORTS,
+    ("devin", "swe-2"): ("medium", "high"),
+}
+
+
+def parse_backend(value: str) -> tuple[str, str]:
+    """Accept only a known provider/model pair spelled the way Oh My Pi names it."""
+    provider, _, model = value.partition("/")
+    if (provider, model) not in BACKENDS:
+        raise ValueError("--native-route supports " + ", ".join("/".join(pair) for pair in BACKENDS))
+    return provider, model
+
+
+STARTUP_SECONDS = 60.0
+STDERR_LINES = 20
+STDERR_LINE_CHARS = 1024
+# Long opaque runs (tokens, keys, JWTs) and bearer values never reach an error message.
+_SECRET = re.compile(r"(?i)bearer\s+\S+|[A-Za-z0-9_\-+=]{24,}")
+STOP_SECONDS = 5.0
+# Only what Bun and Oh My Pi's auth discovery need. Provider keys are not forwarded.
+_ENVIRONMENT_KEYS = ("PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "XDG_CONFIG_HOME", "XDG_DATA_HOME")
+# Windows needs these to start Bun, resolve the user profile and find Oh My Pi's login store.
+_WINDOWS_ENVIRONMENT_KEYS = (
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "PATHEXT",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "TEMP",
+    "TMP",
+    "USERNAME",
+)
+
+
+def identity(effort: str, backend: tuple[str, str] = BACKEND) -> str:
+    """Provider identity recorded in evidence, naming the backend, its effort and the adapter."""
+    wire = "Responses" if backend[0] == "openai-codex" else "native " + backend[0]
+    return f"{backend[0]}/{backend[1]}/{effort} via {ADAPTER_ID} (loopback Chat Completions to {wire})"
+
+
+def sdk_root_for(omp: str | None, override: Path | None = None) -> Path:
+    """Locate the dependency tree that holds the exact pinned Oh My Pi packages."""
+    if override is not None:
+        root = override.resolve()
+    else:
+        executable = omp or shutil.which("omp")
+        if not executable:
+            raise RuntimeError("install the repository-pinned Oh My Pi CLI or pass --sdk-root")
+        # <root>/node_modules/.bin/omp
+        root = Path(executable).absolute().parents[2]
+    package = root / "node_modules" / "@oh-my-pi" / "pi-coding-agent" / "package.json"
+    if not (root / "node_modules" / "@oh-my-pi" / "pi-agent-core").is_dir() or not package.is_file():
+        raise RuntimeError("the SDK root does not contain the pinned Oh My Pi packages; pass --sdk-root")
+    pinned = json.loads(PINNED_PACKAGE.read_text())["dependencies"]["@oh-my-pi/pi-coding-agent"]
+    if json.loads(package.read_text()).get("version") != pinned:
+        raise RuntimeError("the SDK root is not the repository-pinned Oh My Pi version")
+    return root
+
+
+def validate_ready(line: str, effort: str = DEFAULT_EFFORT, backend: tuple[str, str] = BACKEND) -> dict[str, Any]:
+    """Accept only the adapter's own loopback readiness record for the expected backend and effort."""
+    try:
+        ready = json.loads(line)
+    except ValueError as exc:
+        raise RuntimeError("Luna adapter did not report readiness") from exc
+    if not isinstance(ready, dict):
+        raise RuntimeError("Luna adapter did not report readiness")
+    if isinstance(ready.get("error"), str):
+        raise RuntimeError("Luna adapter failed to start: " + ready["error"][:200])
+    port = ready.get("port")
+    if (
+        ready.get("adapter") != ADAPTER_ID
+        or (ready.get("provider"), ready.get("model")) != backend
+        or ready.get("thinking") != effort
+        or type(port) is not int
+        or not 1024 <= port <= 65535
+    ):
+        raise RuntimeError("Luna adapter reported an unexpected backend identity")
+    return ready
+
+
+def _drain(stream: Any, sink: deque[str], done: threading.Event) -> None:
+    """Keep the last lines of a stream until it closes, each cut to a bounded length."""
+    with suppress(OSError, ValueError):
+        partial = False
+        while chunk := stream.readline(STDERR_LINE_CHARS):
+            # A short chunk without a newline is the end of the stream, not a cut.
+            cut = len(chunk) >= STDERR_LINE_CHARS and not chunk.endswith("\n")
+            if not partial:
+                # Drop the word a cut line ends on: it may be the start of a secret
+                # too short for redaction to recognize.
+                sink.append(chunk.rpartition(" ")[0] + " ..." if cut else chunk)
+            partial = cut
+    with suppress(OSError):
+        stream.close()
+    done.set()
+
+
+class NativeLunaRoute:
+    """Own one adapter process in its own process group and always reap it."""
+
+    def __init__(
+        self,
+        *,
+        omp: str | None = None,
+        sdk_root: Path | None = None,
+        effort: str = DEFAULT_EFFORT,
+        backend: tuple[str, str] = BACKEND,
+    ):
+        """Resolve the SDK root and the Bun executable without starting anything."""
+        if effort not in BACKENDS.get(backend, ()):
+            raise ValueError(f"{'/'.join(backend)} supports " + " or ".join(BACKENDS.get(backend, ())))
+        self.effort = effort
+        self.backend = backend
+        self.sdk_root = sdk_root_for(omp, sdk_root)
+        found = shutil.which("bun")
+        if not found:
+            raise RuntimeError("Gauntlet prerequisite is missing: bun")
+        self.bun = Path(found).absolute()
+        self._token = secrets.token_urlsafe(32)
+        self.process: subprocess.Popen[str] | None = None
+        self._job: Any = None
+        self._stderr: deque[str] = deque(maxlen=STDERR_LINES)
+        self._stderr_done = threading.Event()
+        self.port = 0
+
+    def provider(self, *, max_rounds: int, timeout: float) -> dict[str, Any]:
+        """Relay settings for run_suite; the identity names both the adapter and the backend."""
+        return {
+            "base_url": f"http://127.0.0.1:{self.port}/v1",
+            "model": REQUEST_MODEL,
+            "api_key": self._token,
+            "identity": identity(self.effort, self.backend),
+            "allow_loopback": True,
+            "max_rounds": max_rounds,
+            "timeout": timeout,
+            "reasoning_effort": self.effort,
+        }
+
+    def __enter__(self) -> NativeLunaRoute:
+        """Start the adapter and wait for its loopback readiness record."""
+        keys = _ENVIRONMENT_KEYS + (_WINDOWS_ENVIRONMENT_KEYS if os.name == "nt" else ())
+        environment = {key: os.environ[key] for key in keys if key in os.environ}
+        environment["GUARD_GAUNTLET_ROUTE_TOKEN"] = self._token
+        environment["GUARD_GAUNTLET_LUNA_THINKING"] = self.effort
+        environment["GUARD_GAUNTLET_NATIVE_BACKEND"] = "/".join(self.backend)
+        command = [str(self.bun), "run", str(ADAPTER), str(self.sdk_root)]
+        streams = {
+            "stdin": subprocess.PIPE,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "env": environment,
+            "cwd": self.sdk_root,
+            "text": True,
+            # A byte the locale cannot decode must not end the stderr drain early.
+            "encoding": "utf-8",
+            "errors": "replace",
+        }
+        if os.name == "nt":
+            from . import windows_job
+
+            # A kill-on-close job owns the adapter and every descendant, and nothing else.
+            self._job = windows_job.KillOnCloseJob()
+            self._job.__enter__()
+            try:
+                # Start suspended so no descendant exists before job assignment.
+                self.process = subprocess.Popen(
+                    command,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | windows_job.CREATE_SUSPENDED,
+                    **streams,
+                )
+                self._job.assign_and_resume(self.process)
+            except BaseException:
+                self.stop()
+                raise
+        else:
+            self.process = subprocess.Popen(command, start_new_session=True, **streams)
+        try:
+            lines: queue.Queue[str] = queue.Queue()
+            assert self.process.stdout is not None and self.process.stderr is not None
+            # Drain stderr for the adapter's whole life so it never blocks on a full pipe.
+            drain = (self.process.stderr, self._stderr, self._stderr_done)
+            threading.Thread(target=_drain, args=drain, daemon=True).start()
+            threading.Thread(target=lambda: lines.put(self.process.stdout.readline()), daemon=True).start()
+            try:
+                line = lines.get(timeout=STARTUP_SECONDS)
+            except queue.Empty as exc:
+                raise RuntimeError("Luna adapter did not start in time" + self._stderr_tail()) from exc
+            if not line:
+                with suppress(subprocess.TimeoutExpired):
+                    self.process.wait(timeout=STOP_SECONDS)
+                raise RuntimeError(
+                    "Luna adapter exited before it was ready; check the Oh My Pi ChatGPT login" + self._stderr_tail()
+                )
+            self.port = validate_ready(line, self.effort, self.backend)["port"]
+        except BaseException:
+            self.stop()
+            raise
+        return self
+
+    def health(self) -> str | None:
+        """Why the adapter has stopped serving, or ``None`` while it is still alive.
+
+        A relay round that cannot connect records only ``URLError`` and zero bytes,
+        which says nothing about why. The adapter's exit code and its last stderr are
+        the only record of a death inside a run, and nothing else prints them:
+        ``_stderr_tail`` is otherwise reached only from a startup failure, so an
+        adapter that dies after a successful start throws its stderr away.
+        """
+        process = self.process
+        if process is None or process.poll() is None:
+            return None
+        return f"the Luna adapter exited with code {process.returncode} during the run" + self._stderr_tail()
+
+    def _stderr_tail(self) -> str:
+        """The adapter's last stderr lines, redacted, for a startup failure message."""
+        # Give the drain a moment to read what a just-exited adapter wrote.
+        self._stderr_done.wait(1.0)
+        lines = [_SECRET.sub("[redacted]", line.rstrip())[:300] for line in list(self._stderr)]
+        lines = [line for line in lines if line]
+        return "\nadapter stderr:\n" + "\n".join(lines) if lines else ""
+
+    def __exit__(self, *_args: object) -> None:
+        """Stop the adapter even after a failed or cancelled run."""
+        self.stop()
+
+    def stop(self) -> None:
+        """Terminate the owned process tree, escalate only if it survives, and reap it."""
+        process, self.process = self.process, None
+        job, self._job = self._job, None
+        if process is None:
+            if job is not None:
+                job.__exit__()
+            return
+        if process.stdin is not None:
+            with suppress(OSError):
+                process.stdin.close()
+        try:
+            if job is not None:
+                # The adapter stops itself when its stdin closes; the job reaps anything left.
+                with suppress(subprocess.TimeoutExpired):
+                    process.wait(timeout=STOP_SECONDS)
+                job.terminate()
+                try:
+                    process.wait(timeout=STOP_SECONDS)
+                except subprocess.TimeoutExpired:
+                    # Never assigned to the job (for example, assignment failed): kill it directly.
+                    process.kill()
+                    process.wait(timeout=STOP_SECONDS)
+            else:
+                group = process.pid
+                with suppress(ProcessLookupError, PermissionError):
+                    os.killpg(group, signal.SIGTERM)
+                try:
+                    process.wait(timeout=STOP_SECONDS)
+                except subprocess.TimeoutExpired:
+                    with suppress(ProcessLookupError, PermissionError):
+                        os.killpg(group, signal.SIGKILL)
+                    process.wait(timeout=STOP_SECONDS)
+        finally:
+            if job is not None:
+                job.__exit__()
+        # The stderr drain closes its own stream; closing it here could wait on that reader.
+        for stream in (process.stdin, process.stdout):
+            if stream is not None:
+                with suppress(OSError):
+                    stream.close()

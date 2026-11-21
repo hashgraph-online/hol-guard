@@ -5,17 +5,20 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
 from ..agent_safety_guidance import install_agent_safety_guidance
 from ..config import GuardConfig
-from ..daemon import ensure_guard_daemon
+from ..harness_context import HarnessContext
+from ..native_daemon_manage import ensure_guard_daemon
+from ..native_harness_client import canonical_harness
+from ..native_harness_install_ops import install
+from ..native_owned import codex_install_transaction, owner_request
+from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
+from .commands_parser_constants import DEFAULT_ALIAS_NAME
 from .install_commands import apply_managed_install
 from .product import build_guard_start_payload
 
 GUARD_COMMAND = "hol-guard"
-DEFAULT_ALIAS_NAME = "guardp"
 
 
 def build_guard_bootstrap_payload(
@@ -44,11 +47,16 @@ def build_guard_bootstrap_payload(
     payload["approval_center_reachable"] = True
     payload["bootstrap_install"] = bootstrap_install
     payload["shell_alias"] = alias
-    payload["next_steps"] = _build_bootstrap_steps(
-        harness=recommended_harness,
-        bootstrap_install=bootstrap_install,
-        alias=alias,
-    )
+    # An unavailable native runtime leaves only its repair step, which stays first.
+    repair_steps = payload.get("next_steps") if payload.get("runtime_status") == "unavailable" else None
+    payload["next_steps"] = [
+        *(repair_steps if isinstance(repair_steps, list) else []),
+        *_build_bootstrap_steps(
+            harness=recommended_harness,
+            bootstrap_install=bootstrap_install,
+            alias=alias,
+        ),
+    ]
     store.add_event(
         "bootstrap",
         {
@@ -77,19 +85,36 @@ def _build_bootstrap_install(
     context: HarnessContext,
     store: GuardStore,
 ) -> dict[str, object]:
+    if requested_harness is None or skip_install:
+        return _build_bootstrap_install_owned(
+            requested_harness=requested_harness, skip_install=skip_install, context=context, store=store
+        )
+    with codex_install_transaction(context.guard_home, context.guard_home / "managed", actor="bootstrap.install"):
+        assert_transition_mutation_allowed(context.guard_home)
+        return _build_bootstrap_install_owned(
+            requested_harness=requested_harness, skip_install=skip_install, context=context, store=store
+        )
+
+
+def _build_bootstrap_install_owned(
+    *,
+    requested_harness: str | None,
+    skip_install: bool,
+    context: HarnessContext,
+    store: GuardStore,
+) -> dict[str, object]:
     if requested_harness is None:
         return {
             "installed": False,
             "reason": "no_harness_detected",
         }
-    get_adapter(requested_harness)
+    canonical_harness(requested_harness)
     if skip_install:
         return {
             "installed": False,
             "harness": requested_harness,
             "reason": "skipped_by_flag",
         }
-    adapter = get_adapter(requested_harness)
     managed_install = store.get_managed_install(requested_harness)
     if requested_harness != "hermes" and managed_install is not None and bool(managed_install.get("active")):
         return {
@@ -100,7 +125,13 @@ def _build_bootstrap_install(
             "agent_safety_guidance": install_agent_safety_guidance(context.home_dir),
         }
     if requested_harness == "hermes":
-        manifest = adapter.install(context)
+        manifest = install(
+            requested_harness,
+            context,
+            owner=owner_request(
+                context.guard_home, actor=f"adapter.{canonical_harness(requested_harness)}.adapter_install"
+            ),
+        )
         agent_safety_guidance = install_agent_safety_guidance(context.home_dir)
         store.set_managed_install(
             requested_harness,

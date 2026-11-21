@@ -9,6 +9,28 @@ import webbrowser
 from collections.abc import Mapping
 
 
+def _test_env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
+
+
+def _browser_launch_suppressed_for_tests() -> bool:
+    """Keep pytest runs from opening real browser tabs on developer machines.
+
+    ``PYTEST_CURRENT_TEST`` covers the test call phase and is inherited by
+    subprocesses spawned from a test. ``HOL_GUARD_TEST_DISABLE_BROWSER_OPEN``
+    is set by ``tests/conftest.py`` at import time so session-scoped fixtures
+    and helpers spawned outside a test call stay suppressed as well. Tests
+    that exercise the real launch seams opt back in with
+    ``HOL_GUARD_TEST_ALLOW_BROWSER_OPEN``.
+    """
+
+    if _test_env_flag("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN"):
+        return False
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    return _test_env_flag("HOL_GUARD_TEST_DISABLE_BROWSER_OPEN")
+
+
 def open_browser_url(url: str) -> bool:
     """Open *url* and report whether a browser launch was accepted.
 
@@ -18,12 +40,50 @@ def open_browser_url(url: str) -> bool:
     Firefox and other configured handlers before ``xdg-open`` can select them.
     """
 
+    if _browser_launch_suppressed_for_tests():
+        return False
     if platform.system() == "Linux":
         return _open_linux_browser_url(url)
     try:
         return bool(webbrowser.open(url))
     except Exception:
         return False
+
+
+_APP_LINK_VERDICT_SECONDS = 1.5
+
+
+def open_app_url(url: str) -> bool:
+    """Open an app link such as ``hol-guard-desktop://...`` and report whether an app took it.
+
+    Unlike a web link, nothing may own the scheme. ``open`` and ``xdg-open`` then
+    exit non-zero, so the launcher is waited for a bounded time; one still running
+    at the deadline counts as accepted. Mirrors ``browser_open::open_app_url``.
+    """
+
+    if _browser_launch_suppressed_for_tests():
+        return False
+    system = platform.system()
+    if system == "Darwin":
+        command = ["/usr/bin/open", url]
+    elif system == "Linux" and _has_linux_graphical_session(os.environ):
+        command = ["xdg-open", url]
+    else:
+        return open_browser_url(url)
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        return False
+    try:
+        return process.wait(timeout=_APP_LINK_VERDICT_SECONDS) == 0
+    except subprocess.TimeoutExpired:
+        return True
 
 
 def _open_linux_browser_url(url: str, *, environ: Mapping[str, str] | None = None) -> bool:

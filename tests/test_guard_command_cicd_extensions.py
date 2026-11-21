@@ -7,8 +7,10 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
-from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.native_command_test_support import (
+    extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
+)
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 
 @pytest.mark.parametrize(
@@ -92,19 +94,28 @@ def test_cicd_help_preview_and_read_commands_remain_safe(command: str, tmp_path:
     )
 
 
-def test_github_workflow_mutation_trailing_help_does_not_suppress_review(tmp_path: Path) -> None:
+def test_github_workflow_mutation_trailing_help_reads_as_help(tmp_path: Path) -> None:
+    # `gh run cancel --help` prints the subcommand's help and cancels nothing,
+    # so the mutation screen has no run to review.
     payload = inspect_command("gh run cancel --help", cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "review"
-    assert payload["classification"]["action_class"] == "GitHub workflow mutation command"
+    assert payload["status"] == "no_match"
     runtime_match = extract_sensitive_tool_action_request(
         "Shell",
         {"command": "gh run cancel --help"},
         cwd=tmp_path,
         home_dir=tmp_path,
     )
-    assert runtime_match is not None
-    assert runtime_match.action_class == "GitHub workflow mutation command"
+    assert runtime_match is None
+
+
+def test_github_workflow_mutation_help_behind_an_option_still_reviews(tmp_path: Path) -> None:
+    # Here `--help` is the value `--job` takes, so gh reruns the run instead of
+    # printing help, and the mutation keeps its review.
+    payload = inspect_command("gh run rerun 42 --job --help", cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert payload["classification"]["action_class"] == "GitHub workflow mutation command"
 
 
 def test_cicd_safe_variant_does_not_hide_destructive_segment(tmp_path: Path) -> None:
@@ -114,7 +125,12 @@ def test_cicd_safe_variant_does_not_hide_destructive_segment(tmp_path: Path) -> 
         home_dir=tmp_path,
     )
 
-    assert [rule["rule_id"] for rule in payload["rules"]] == ["command.cicd.github.workflow-disable"]
+    # Both independently owned native capabilities remain visible. The glab
+    # preview cannot hide either review of the destructive GitHub segment.
+    assert [rule["rule_id"] for rule in payload["rules"]] == [
+        "command.cicd.github.workflow-disable",
+        "command.github.workflow",
+    ]
 
 
 def test_cicd_extensions_publish_primary_references() -> None:

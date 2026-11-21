@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -25,6 +24,9 @@ if TYPE_CHECKING:
 
 
 from ..aibom_cli import _AIBOM_CLOUD_SYNC_OPTIONS, AibomCliOptions, AibomExportFormat
+from ..native_aibom_summaries import NativeAibomSummariesError
+from ..native_inventory_url_redaction import NativeInventoryUrlRedactionError
+from ..policy_decision_explain import matched_rule_for_receipt
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -138,103 +140,34 @@ def _run_guard_receipts_command(
 def _embedded_scripts_for_receipt(match: dict[str, object]) -> list[dict[str, object]]:
     """Reconstruct heredoc script bodies recorded with a receipt.
 
-    Bodies are sliced out of the retained envelope command text using the
-    spans and hashes recorded in the receipt's ``embedded_script`` evidence.
+    The native runtime slices each body out of the retained command text using
+    the span and hash recorded in the receipt's ``embedded_script`` evidence.
     """
 
     evidence = match.get("scanner_evidence")
-    if not isinstance(evidence, list):
+    if not isinstance(evidence, list) or not any(
+        isinstance(item, dict) and item.get("source") == "embedded_script" and item.get("kind") == "heredoc"
+        for item in evidence
+    ):
         return []
-    markers = [
-        entry
-        for entry in evidence
-        if isinstance(entry, dict) and entry.get("source") == "embedded_script" and entry.get("kind") == "heredoc"
-    ]
-    if not markers:
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    envelope = match.get("action_envelope_json")
+    try:
+        answer = native_runner_authority(
+            "receipt_embedded_scripts",
+            {
+                "scanner_evidence": evidence,
+                "raw_command_text": match.get("raw_command_text"),
+                "envelope_command": envelope.get("command") if isinstance(envelope, dict) else None,
+            },
+        )
+    except NativeRunnerAuthorityError:
+        # Explaining a receipt must not need the resident; the receipt and its
+        # evidence still print without the reconstructed bodies.
         return []
-    command_text = match.get("raw_command_text")
-    if not isinstance(command_text, str) or not command_text:
-        envelope = match.get("action_envelope_json")
-        if isinstance(envelope, dict):
-            candidate = envelope.get("command")
-            command_text = candidate if isinstance(candidate, str) else None
-    if not isinstance(command_text, str) or not command_text:
-        command_text = None
-    scripts: list[dict[str, object]] = []
-    for marker in markers:
-        item: dict[str, object] = {
-            key: marker.get(key)
-            for key in (
-                "index",
-                "delimiter",
-                "quoted",
-                "executable",
-                "executed",
-                "execution_status",
-                "sha256",
-                "bytes",
-                "lines",
-                "span",
-            )
-        }
-        if command_text is not None:
-            body, verified = _recover_embedded_body(command_text, marker)
-            if body is not None:
-                item["sha256_verified"] = verified
-                item["body"] = body
-        scripts.append(item)
-    return scripts
-
-
-def _slice_by_utf8_length(text: str, start: int, byte_len: int) -> str | None:
-    """Return the str slice starting at ``start`` whose UTF-8 encoding is
-    exactly ``byte_len`` bytes, or None if no such slice exists."""
-
-    total = 0
-    for offset, char in enumerate(text[start:]):
-        char_len = len(char.encode("utf-8"))
-        if total + char_len > byte_len:
-            return None
-        total += char_len
-        if total == byte_len:
-            return text[start : start + offset + 1]
-    return None
-
-
-def _recover_embedded_body(command_text: str, marker: dict[str, object]) -> tuple[str | None, bool]:
-    """Recover a heredoc body from retained command text.
-
-    The recorded span was computed against the command text evaluated by the
-    hook, which can differ from the envelope's retained command by surrounding
-    whitespace. ``bytes`` is the authoritative body length; search the
-    neighborhood of the recorded span for the slice that hashes to the
-    recorded digest.
-    """
-
-    expected_sha = marker.get("sha256")
-    byte_len = marker.get("bytes")
-    if not isinstance(expected_sha, str) or not isinstance(byte_len, int) or byte_len < 0:
-        return None, False
-    span = marker.get("span")
-    recorded_start = span.get("start") if isinstance(span, dict) else None
-    if not isinstance(recorded_start, int):
-        return None, False
-    # Spans are Python string (code-point) indices; ``bytes`` is the UTF-8
-    # length of the body. Search the neighborhood of the recorded start in
-    # str space and hash-verify each candidate's UTF-8 encoding.
-    seen: set[int] = set()
-    for start in (recorded_start, recorded_start - 1, recorded_start + 1):
-        if start in seen or start < 0 or start > len(command_text):
-            continue
-        seen.add(start)
-        body = _slice_by_utf8_length(command_text, start, byte_len)
-        if body is not None and hashlib.sha256(body.encode("utf-8")).hexdigest() == expected_sha:
-            return body, True
-    end = span.get("end") if isinstance(span, dict) else None
-    if isinstance(end, int) and 0 <= recorded_start <= end <= len(command_text):
-        body = command_text[recorded_start:end]
-        return body, hashlib.sha256(body.encode("utf-8")).hexdigest() == expected_sha
-    return None, False
+    scripts = answer.get("scripts")
+    return [dict(item) for item in scripts if isinstance(item, dict)] if isinstance(scripts, list) else []
 
 
 def _run_guard_history_command(
@@ -274,6 +207,7 @@ def _run_guard_history_command(
             "receipt_id": receipt_id,
             "receipt": match,
             "embedded_scripts": embedded_scripts,
+            "matched_rule": matched_rule_for_receipt(store, match),
             "evidence": [
                 {
                     "evidence_id": e.get("evidence_id", ""),
@@ -307,16 +241,36 @@ def _run_guard_inventory_command(
     context = _require_guard_context(context)
     generated_at = _now()
     if getattr(args, "json", False):
-        payload: dict[str, object] = build_inventory_json_payload(
-            store,
-            context,
-            generated_at=generated_at,
-            options=_aibom_cli_options_from_args(args),
-        )
+        try:
+            payload: dict[str, object] = build_inventory_json_payload(
+                store,
+                context,
+                generated_at=generated_at,
+                options=_aibom_cli_options_from_args(args),
+            )
+        except NativeInventoryUrlRedactionError as error:
+            return _inventory_redaction_unavailable("inventory", args, error)
     else:
         payload = {"generated_at": generated_at, "items": store.list_inventory()}
+    if getattr(args, "sync", False):
+        from ..runtime.fleet_posture import request_full_inventory
+
+        request_full_inventory(store, source="cli", now=generated_at)
+        payload["fleet_posture"] = {"next_sync_inventory": "full"}
     _emit("inventory", payload, getattr(args, "json", False))
     return 0
+
+
+def _inventory_redaction_unavailable(
+    kind: str, args: argparse.Namespace, error: NativeInventoryUrlRedactionError
+) -> int:
+    """Refuse an export the resident could not redact, without a Python fallback."""
+
+    if getattr(args, "json", False) or kind in {"aibom", "inventory"}:
+        _emit(kind, {"error": str(error)}, True)
+    else:
+        print(f"Inventory URL redaction is unavailable: {error}", file=sys.stderr)
+    return 1
 
 
 def _run_guard_aibom_command(
@@ -336,12 +290,17 @@ def _run_guard_aibom_command(
     aibom_options = _aibom_cli_options_from_args(args)
     aibom_command = getattr(args, "aibom_command", None)
     if aibom_command == "status":
-        payload = build_aibom_status_payload(
-            store,
-            context,
-            generated_at=generated_at,
-            options=aibom_options,
-        )
+        try:
+            payload = build_aibom_status_payload(
+                store,
+                context,
+                generated_at=generated_at,
+                options=aibom_options,
+            )
+        except NativeInventoryUrlRedactionError as error:
+            return _inventory_redaction_unavailable("aibom.status", args, error)
+        except NativeAibomSummariesError as error:
+            return _aibom_summaries_unavailable("aibom.status", args, error)
         _emit("aibom.status", payload, getattr(args, "json", False))
         return 0
     if aibom_command == "sync":
@@ -389,18 +348,33 @@ def _run_guard_aibom_command(
         return 0
     export_format = getattr(args, "format", "json")
     resolved_format: AibomExportFormat = "markdown" if export_format == "markdown" else "json"
-    payload = build_aibom_export_payload(
-        store,
-        context,
-        generated_at=generated_at,
-        options=aibom_options,
-        export_format=resolved_format,
-    )
+    try:
+        payload = build_aibom_export_payload(
+            store,
+            context,
+            generated_at=generated_at,
+            options=aibom_options,
+            export_format=resolved_format,
+        )
+    except NativeInventoryUrlRedactionError as error:
+        return _inventory_redaction_unavailable("aibom", args, error)
+    except NativeAibomSummariesError as error:
+        return _aibom_summaries_unavailable("aibom", args, error)
     if resolved_format == "markdown" and not getattr(args, "json", False):
         print(str(payload.get("markdown", "")))
         return 0
     _emit("aibom", payload, True)
     return 0
+
+
+def _aibom_summaries_unavailable(kind: str, args: argparse.Namespace, error: NativeAibomSummariesError) -> int:
+    """Fail closed with the resident's code; the counts are never recomputed here."""
+
+    if getattr(args, "json", False) or kind == "aibom":
+        _emit(kind, {"error": str(error)}, True)
+    else:
+        print(f"AIBOM report summaries are unavailable: {error}", file=sys.stderr)
+    return 1
 
 
 def _run_guard_abom_command(
@@ -600,6 +574,50 @@ def _run_guard_policies_command(
     return 0
 
 
+def _run_fleet_posture_setting(
+    args: argparse.Namespace,
+    *,
+    config: GuardConfig,
+    store: GuardStore | None,
+    guard_home: Path,
+) -> int:
+    from ..runtime.fleet_posture import (
+        fleet_posture_managed,
+        fleet_posture_opted_out,
+        set_fleet_posture_reporting,
+    )
+
+    if store is None:
+        from ..store import GuardStore as _GuardStore
+
+        store = _GuardStore(guard_home)
+    enabled = getattr(args, "fleet_posture", "on") == "on"
+    as_json = getattr(args, "json", False)
+    if not enabled and fleet_posture_managed(config):
+        message = "Fleet posture reporting is required on managed installs and cannot be turned off."
+        if as_json:
+            _emit("settings.fleet-posture", {"fleet_posture": "on", "managed": True, "error": message}, True)
+        else:
+            print(message, file=sys.stderr)
+        return 2
+    set_fleet_posture_reporting(store, enabled=enabled, now=_now())
+    _emit(
+        "settings.fleet-posture",
+        {
+            "fleet_posture": "off" if fleet_posture_opted_out(store) else "on",
+            "managed": fleet_posture_managed(config),
+            "detail": (
+                "Guard still reports version, tool protection state and policy status; "
+                "it omits OS version, blind-spot detail and per-item inventory."
+                if not enabled
+                else "Guard reports full fleet posture detail."
+            ),
+        },
+        as_json,
+    )
+    return 0
+
+
 def _run_guard_settings_command(
     args: argparse.Namespace,
     *,
@@ -615,6 +633,8 @@ def _run_guard_settings_command(
         raise RuntimeError("Guard home is required")
     config = _require_guard_config(config)
     settings_sub = getattr(args, "settings_command", None)
+    if settings_sub == "set" and getattr(args, "settings_set_command", None) == "fleet-posture":
+        return _run_fleet_posture_setting(args, config=config, store=store, guard_home=guard_home)
     if settings_sub == "set":
         try:
             config = _update_guard_cli_settings(args=args, config=config, guard_home=guard_home)
@@ -640,6 +660,19 @@ def _run_guard_settings_command(
             print(str(error), file=sys.stderr)
             return 2
         _emit("settings.approval-password", payload, getattr(args, "json", False))
+        return 0
+    elif settings_sub == "approval-pulse":
+        from .approval_pulse_commands import run_approval_pulse_settings_command
+
+        try:
+            payload = run_approval_pulse_settings_command(args=args, guard_home=guard_home)
+        except ApprovalGateError as error:
+            _emit("settings.approval-pulse", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 4
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        _emit("settings.approval-pulse", payload, getattr(args, "json", False))
         return 0
     elif settings_sub == "approval-totp":
         try:

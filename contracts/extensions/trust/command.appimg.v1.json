@@ -1,0 +1,5 @@
+{
+  "extension": "command.appimg",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "external"
+}

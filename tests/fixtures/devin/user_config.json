@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": ["exec(ls*)"],
+    "deny": []
+  },
+  "read_config_from": {
+    "claude": true
+  },
+  "mcpServers": {
+    "legacy-inline": {
+      "command": "node",
+      "args": ["legacy-server.js"],
+      "env": {"LEGACY_FLAG": "1"}
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "exec",
+        "hooks": [
+          {"type": "command", "command": "echo user-pretool", "timeout": 10}
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {"type": "command", "command": "echo session-start"}
+        ]
+      }
+    ]
+  }
+}

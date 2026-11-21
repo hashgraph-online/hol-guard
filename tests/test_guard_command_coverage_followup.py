@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 
 @pytest.mark.parametrize("value", ["all", "local"])
@@ -18,9 +18,7 @@ def test_compose_rmi_accepts_documented_values(value: str, tmp_path: Path) -> No
     )
 
     assert payload["status"] == "review"
-    assert "command.container-runtime.compose-destructive-cleanup" in {
-        rule["rule_id"] for rule in payload["rules"]
-    }
+    assert "command.container-runtime.compose-destructive-cleanup" in {rule["rule_id"] for rule in payload["rules"]}
 
 
 @pytest.mark.parametrize(

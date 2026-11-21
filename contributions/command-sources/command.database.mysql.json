@@ -1,0 +1,236 @@
+{
+  "extension": {
+    "action_classes": [
+      "MySQL destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews mysqladmin database removal operations.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.database.mysql",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "MySQL command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "MySQL destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies mysqladmin drop operations that remove a database and its tables.",
+        "example_command": "mysqladmin drop production",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "MySQL database removal",
+        "permission_id": "command.database.mysql.permission.drop",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "List the target schema and verify a current backup before removal."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://dev.mysql.com/doc/refman/8.4/en/mysqladmin.html"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "MySQL destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies mysqladmin drop operations that remove a database and its tables.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "command_arities": [
+              [
+                "create",
+                1
+              ],
+              [
+                "debug",
+                0
+              ],
+              [
+                "drop",
+                1
+              ],
+              [
+                "extended-status",
+                0
+              ],
+              [
+                "flush-hosts",
+                0
+              ],
+              [
+                "flush-logs",
+                0
+              ],
+              [
+                "flush-privileges",
+                0
+              ],
+              [
+                "flush-status",
+                0
+              ],
+              [
+                "kill",
+                1
+              ],
+              [
+                "password",
+                1
+              ],
+              [
+                "ping",
+                0
+              ],
+              [
+                "processlist",
+                0
+              ],
+              [
+                "reload",
+                0
+              ],
+              [
+                "refresh",
+                0
+              ],
+              [
+                "shutdown",
+                0
+              ],
+              [
+                "start-replica",
+                0
+              ],
+              [
+                "start-slave",
+                0
+              ],
+              [
+                "status",
+                0
+              ],
+              [
+                "stop-replica",
+                0
+              ],
+              [
+                "stop-slave",
+                0
+              ],
+              [
+                "variables",
+                0
+              ],
+              [
+                "version",
+                0
+              ]
+            ],
+            "executables": [
+              "mysqladmin",
+              "mysqladmin.cmd",
+              "mysqladmin.exe"
+            ],
+            "forbidden_flags": [
+              "--help",
+              "--version",
+              "-?",
+              "-V"
+            ],
+            "options_with_values": [
+              "--bind-address",
+              "--character-sets-dir",
+              "--compression-algorithms",
+              "--connect-timeout",
+              "--count",
+              "--default-auth",
+              "--defaults-extra-file",
+              "--defaults-file",
+              "--host",
+              "--login-path",
+              "--max-allowed-packet",
+              "--plugin-dir",
+              "--port",
+              "--protocol",
+              "--server-public-key-path",
+              "--shared-memory-base-name",
+              "--shutdown-timeout",
+              "--sleep",
+              "--socket",
+              "--ssl-ca",
+              "--ssl-capath",
+              "--ssl-cert",
+              "--ssl-cipher",
+              "--ssl-crl",
+              "--ssl-crlpath",
+              "--ssl-key",
+              "--tls-ciphersuites",
+              "--tls-sni-servername",
+              "--tls-version",
+              "--user",
+              "--zstd-compression-level",
+              "-P",
+              "-S",
+              "-h",
+              "-i",
+              "-u"
+            ],
+            "target_commands": [
+              "drop"
+            ]
+          },
+          "op": "command-sequence.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.database.mysql.permission.drop",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.database.mysql.drop",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "List the target schema and verify a current backup before removal."
+        ],
+        "severity": "critical",
+        "title": "MySQL database removal"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect the target schema and backup state before removal."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

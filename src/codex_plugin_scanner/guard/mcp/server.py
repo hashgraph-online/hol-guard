@@ -12,6 +12,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from mcp.server.fastmcp import Context
+from mcp.server.session import ServerSession
+
 from .registry import (
     ToolDefinition,
     build_tool_registry,
@@ -47,6 +50,25 @@ def _create_annotations(read_only: bool = True, destructive: bool = False) -> An
     )
 
 
+def _native_tool(definition: dict[str, Any]) -> Any:
+    """An MCP tool built from the runtime's definition, unchanged."""
+    from mcp import types
+
+    hints = definition.get("annotations")
+    hints = hints if isinstance(hints, dict) else {}
+    return types.Tool(
+        name=str(definition.get("name")),
+        description=str(definition.get("description") or ""),
+        inputSchema=definition.get("input_schema") or {"type": "object"},
+        annotations=types.ToolAnnotations(
+            readOnlyHint=bool(hints.get("read_only")),
+            destructiveHint=bool(hints.get("destructive")),
+            idempotentHint=bool(hints.get("idempotent")),
+            openWorldHint=bool(hints.get("open_world")),
+        ),
+    )
+
+
 class GuardMCPServer:
     """Local MCP server implementing guard-mcp.v1 over stdio.
 
@@ -60,6 +82,9 @@ class GuardMCPServer:
     def __init__(self, guard_home: Path) -> None:
         self.guard_home = guard_home
         self._store: Any = None
+        from .native_tools import NativeToolSession
+
+        self._native = NativeToolSession(guard_home)
 
     @property
     def store(self) -> Any:
@@ -89,12 +114,15 @@ class GuardMCPServer:
                     annotations=annotations,
                 )
             )
+        tools.extend(_native_tool(tool) for tool in self._native.allowed())
         return tools
 
     def call_tool(self, name: str, arguments: dict[str, object]) -> Any:
         from mcp import types
 
         td = get_tool_definition(name)
+        if td is None and name in self._native.names():
+            return types.TextContent(type="text", text=self._native.call(name, arguments))
         if td is None:
             from .tools import _envelope
 
@@ -142,7 +170,8 @@ class GuardMCPServer:
         origin via the pure registry parser.
         """
         try:
-            from ..daemon.manager import read_approval_center_locator
+            from ..approval_hook_copy import live_approval_review_url
+            from ..native_daemon_manage import read_approval_center_locator
         except Exception:
             return None
 
@@ -154,7 +183,8 @@ class GuardMCPServer:
                 origin = parse_loopback_origin(locator.approval_url_base)
                 if origin is None:
                     return None
-                return f"{origin}/requests/{request_id}"
+                # The agent hands this link to the user, so it opens signed in.
+                return live_approval_review_url(f"{origin}/requests/{request_id}", guard_home=self.guard_home)
             except Exception:
                 logger.warning("Failed to build approval URL for request %s", request_id, exc_info=True)
                 return None
@@ -165,7 +195,42 @@ class GuardMCPServer:
         """Run the MCP server over stdio transport."""
         from mcp.server.fastmcp import FastMCP
 
-        mcp = FastMCP("hol-guard")
+        owner = self
+
+        class ScopedFastMCP(FastMCP):
+            async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+                import asyncio
+
+                if get_tool_definition(name) is None and name in await asyncio.to_thread(owner._native.names):
+                    from mcp import types
+
+                    # The runtime validates every caller argument itself.
+                    result = await asyncio.to_thread(owner._native.call, name, arguments)
+                    with contextlib.suppress(Exception):
+                        await self.get_context().session.send_tool_list_changed()
+                    return [types.TextContent(type="text", text=result)]
+                return await super().call_tool(name, arguments)
+
+            async def list_tools(self) -> list[Any]:
+                import asyncio
+
+                native = await asyncio.to_thread(owner._native.allowed)
+                return [*await super().list_tools(), *(_native_tool(tool) for tool in native)]
+
+            async def run_stdio_async(self) -> None:
+                from mcp.server.lowlevel import NotificationOptions
+                from mcp.server.stdio import stdio_server
+
+                async with stdio_server() as (read_stream, write_stream):
+                    await self._mcp_server.run(
+                        read_stream,
+                        write_stream,
+                        self._mcp_server.create_initialization_options(
+                            notification_options=NotificationOptions(tools_changed=True)
+                        ),
+                    )
+
+        mcp = ScopedFastMCP("hol-guard")
 
         for td in build_tool_registry():
             description = _ORIGINAL_TOOL_DESCRIPTIONS.get(td.name, td.description)
@@ -175,7 +240,10 @@ class GuardMCPServer:
             )
             self._register_fastmcp_tool(mcp, td, description, annotations)
 
-        mcp.run(transport="stdio")
+        try:
+            mcp.run(transport="stdio")
+        finally:
+            self._native.close()
         return 0
 
     def _register_fastmcp_tool(
@@ -214,9 +282,6 @@ class GuardMCPServer:
                 return execute_validate_policy(store, {"policyYaml": policyYaml, "mode": mode})
 
         elif td.name == "create_policy":
-            from mcp.server.fastmcp import Context
-            from mcp.server.session import ServerSession
-
             from .policy_tools import execute_create_policy
 
             approval_url_builder = self._build_approval_url_builder()

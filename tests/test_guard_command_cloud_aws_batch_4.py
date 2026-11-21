@@ -4,18 +4,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_cloud_aws_operation_matrix import (
+import pytest
+
+from tests.cloud_operation_fixtures import (
     AWS_DESTRUCTIVE_COMMAND_PATHS,
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1,
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4,
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5,
-    aws_destructive_command_matchers,
 )
 from tests.command_extension_contracts import (
     assert_review_required_cases,
     assert_reviewed_command_cases,
     assert_safe_command_cases,
 )
+from tests.native_command_test_support import real_native_command_evaluation
 
 _ACTION = "AWS destructive command"
 _RULE = "command.cloud.aws.resource-deletion"
@@ -61,6 +63,12 @@ AWS_BATCH_4_READ_ONLY_NEIGHBORS: tuple[str, ...] = (
 )
 
 
+# Only execution boundaries change. Keep all original safe requests, including
+# repeats, and let the complete-node planner distribute each 50-command slice.
+_SAFE_CASE_CHUNK_SIZE = 50
+_SAFE_CASE_STARTS = tuple(range(0, len(AWS_BATCH_4_SAFE_CASES), _SAFE_CASE_CHUNK_SIZE))
+
+
 def test_aws_batch_4_matrix_is_exactly_one_hundred_unique_operations() -> None:
     assert len(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4) == 100
     assert len(set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4)) == 100
@@ -85,22 +93,15 @@ def test_aws_combined_matrix_is_exactly_three_hundred_unique_operations() -> Non
     assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4).isdisjoint(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5)
 
 
-def test_aws_batch_4_compiles_into_the_combined_path_set_matcher() -> None:
-    matchers = aws_destructive_command_matchers(
-        global_options_with_values=frozenset({"--region"}),
-        global_flags=frozenset({"--debug"}),
-    )
-    assert len(matchers) == 1
-    assert matchers[0].paths == frozenset(AWS_DESTRUCTIVE_COMMAND_PATHS)
-    assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4).issubset(matchers[0].paths)
-
-
 def test_aws_batch_4_operations_feed_inspection_and_runtime_hooks(tmp_path: Path) -> None:
     assert_reviewed_command_cases(AWS_BATCH_4_REVIEW_CASES, tmp_path)
 
 
-def test_aws_batch_4_help_and_request_skeletons_remain_safe(tmp_path: Path) -> None:
-    assert_safe_command_cases(AWS_BATCH_4_SAFE_CASES, tmp_path)
+@pytest.mark.parametrize("case_start", _SAFE_CASE_STARTS, ids=lambda start: f"commands-{start:03d}")
+def test_aws_batch_4_help_and_request_skeletons_remain_safe(tmp_path: Path, case_start: int) -> None:
+    # Exercise every original command through the same real native security path.
+    # Bounded nodes can be scheduled across different CI shards and xdist workers.
+    assert_safe_command_cases(AWS_BATCH_4_SAFE_CASES[case_start : case_start + _SAFE_CASE_CHUNK_SIZE], tmp_path)
 
 
 def test_aws_batch_4_global_option_positions_and_native_launchers(tmp_path: Path) -> None:
@@ -186,10 +187,17 @@ def test_aws_batch_4_quoted_examples_remain_data(tmp_path: Path) -> None:
         (
             f"printf '%s\\n' 'aws {first}'",
             f"grep 'aws {second}' scripts/cloud-audit.sh",
-            f"python -c \"print('aws {first}')\"",
         ),
         tmp_path,
     )
+    # Literal Python output has no AWS or environment capability, but syntax
+    # alone does not attest the interpreter executable or its startup code.
+    reviewed = real_native_command_evaluation(f"python -c \"print('aws {first}')\"", cwd=tmp_path)
+    assert not reviewed.evaluation.extension_observations
+    assert reviewed.payload["minimum_action"] == "review"
+    assert reviewed.evaluation.minimum_action == "review"
+    assert reviewed.payload["explicitly_benign"] is False
+    assert not reviewed.evaluation.decision_plane.proof_routes
 
 
 def test_aws_batch_4_read_only_neighbors_remain_safe(tmp_path: Path) -> None:

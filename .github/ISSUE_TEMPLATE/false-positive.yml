@@ -1,0 +1,64 @@
+name: False positive
+description: Guard warned about, paused, or blocked something that is safe.
+title: "[false positive] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form when HOL Guard or the plugin scanner flagged a plugin, skill, MCP server, hook, or command that you believe is safe.
+        Do not paste secrets, tokens, private file contents, or internal hostnames. Redact paths that identify you or your organization.
+  - type: input
+    id: plugin
+    attributes:
+      label: Plugin or artifact
+      description: Plugin name, marketplace listing URL, or source repository. Leave blank if the flag was on a plain command.
+      placeholder: https://github.com/owner/plugin
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did you see it?
+      options:
+        - HOL Guard on my machine
+        - plugin-scanner CLI
+        - GitHub Action
+        - HOL plugin marketplace page
+    validations:
+      required: true
+  - type: dropdown
+    id: harness
+    attributes:
+      label: Harness
+      options:
+        - Claude Code
+        - Codex
+        - Gemini CLI
+        - Cursor
+        - Other or not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: What did Guard say?
+      description: The decision (warn, review, approval needed, block) and the reason or rule id it showed. Run `hol-guard receipts` for the latest entries.
+    validations:
+      required: true
+  - type: textarea
+    id: why-safe
+    attributes:
+      label: Why is this safe?
+      description: What the flagged behavior actually does, and how you checked.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Steps, a minimal command, or a public plugin version that reproduces the flag.
+  - type: input
+    id: version
+    attributes:
+      label: Guard version
+      description: Output of `hol-guard --version` (or `plugin-scanner --version`). Leave blank if you only saw the flag on the marketplace page.

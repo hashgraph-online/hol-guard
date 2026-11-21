@@ -1,0 +1,160 @@
+//! `bun -e/-p <program>` in the same read-only boundary as `node -e`.
+//!
+//! Bun reads files through the same syscalls as Node, so the Node evaluation
+//! profile applies unchanged: no workspace writes, no network, no process
+//! execution beyond the approved image, and credential-filtered reads. Only
+//! the image approval differs; Bun is not installed through nvm.
+use super::*;
+
+const INVALID: &str = "inline_eval_invalid_command";
+const NO_ENV_FILE: &str = "--no-env-file";
+
+/// A root- or user-owned native Bun image that no other account can replace,
+/// installed by the system, Homebrew, Bun's own installer in one of the
+/// caller's homes, or a version manager that installs Bun. A workspace copy
+/// is never approved: the repository could supply it.
+pub(super) fn approved_bun(executable: &Path, home: Option<&Path>) -> bool {
+    let Ok(metadata) = executable.metadata() else {
+        return false;
+    };
+    if ![0, nix::unistd::getuid().as_raw()].contains(&metadata.uid())
+        || metadata.mode() & 0o022 != 0
+        || executable.file_name() != Some(OsStr::new("bun"))
+    {
+        return false;
+    }
+    let trusted = [
+        Path::new("/usr/bin"),
+        Path::new("/usr/local"),
+        Path::new("/opt/homebrew"),
+    ]
+    .iter()
+    .any(|root| path_is_within(executable, root))
+        || managed_bun(executable, home);
+    trusted && native_image(executable)
+}
+
+/// The contained Bun command: the approved image, `--no-env-file`, then the
+/// caller's own arguments.
+///
+/// Bun loads `.env`, `.env.local` and the `NODE_ENV` variants from the working
+/// directory before it runs anything. The read-only profiles deny reading
+/// those credential files, and from Bun 1.4 a refused automatic load stops the
+/// whole run with `An internal error occurred (EPERM)` where earlier releases
+/// skipped it. Turning the automatic load off keeps the credential denial and
+/// gives every release the behaviour the boundary already enforced: the run
+/// sees no `.env` values. Releases before the flag existed ignore it.
+fn contained_command(executable: &Path, arguments: &[String]) -> Vec<String> {
+    let mut command = vec![
+        executable.to_string_lossy().into_owned(),
+        NO_ENV_FILE.to_owned(),
+    ];
+    command.extend_from_slice(arguments);
+    command
+}
+
+/// The argv a sink asks the resident about for a planned command: the plan's
+/// own argv, less the `--no-env-file` [`contained_command`] put in front of a
+/// Bun run.
+///
+/// A sink asks again for the argv a plan runs, so a planner that rewrote the
+/// call cannot run something its route never covered. The resident routes
+/// the caller's spelling, which never carried the flag, and the flag only
+/// turns Bun's automatic `.env` load off, so the argv without it is the one
+/// the route was earned for. Any other argv is returned unchanged.
+pub fn planned_route_argv(command: &[String]) -> Vec<String> {
+    match command {
+        [bun, flag, arguments @ ..]
+            if flag == NO_ENV_FILE && Path::new(bun).file_name() == Some(OsStr::new("bun")) =>
+        {
+            let mut argv = vec![bun.clone()];
+            argv.extend_from_slice(arguments);
+            argv
+        }
+        _ => command.to_vec(),
+    }
+}
+
+/// Plan for an `inline_eval` Bun argv: `[bun, -e|--eval|-p|--print, program]`.
+pub(super) fn prepare_eval(input: &Input, argv: &[String]) -> Result<Value, RestrictedPytestError> {
+    if argv.len() != 3 || !matches!(argv[1].as_str(), "-e" | "--eval" | "-p" | "--print") {
+        return Err(RestrictedPytestError::new(
+            INVALID,
+            "Protected Bun evaluation requires direct bun -e argv.",
+        ));
+    }
+    let (backend, backend_executable) = select_backend(
+        &input.platform,
+        input.backend_executable.as_deref(),
+        &input.search_path,
+    )?;
+    let workspace =
+        validation::resolve_workspace_with_home(&input.workspace, input.home.as_deref())?;
+    let cwd = resolve_cwd(&input.cwd, &workspace)?;
+    let executable = resolve_executable(&argv[0], &cwd, &input.search_path)?;
+    if !approved_bun(&executable, input.home.as_deref()) {
+        return Err(RestrictedPytestError::new(
+            INVALID,
+            "The Bun runtime does not resolve to an approved native executable.",
+        ));
+    }
+    let launcher = locate_executable(&argv[0], &cwd, &input.search_path)?;
+    let mut allowed = vec![launcher];
+    if !allowed.contains(&executable) {
+        allowed.push(executable.clone());
+    }
+    let command = contained_command(&executable, &argv[1..]);
+    Ok(
+        json!({"profile_version":"node-eval-readonly-v1","backend":backend,"backend_executable":backend_executable,
+        "workspace":workspace,"cwd":cwd,"executable":executable,"command":command,"allowed_executables":allowed,
+        "denied_capabilities":["host-home-read","host-secret-environment","network","docker-socket","workspace-write","workspace-credential-read","unapproved-process-exec","privileged-operation"]}),
+    )
+}
+
+/// Plan for a `bun test` argv: `[bun, test, ...]`, or for the single test
+/// file `bun` runs on its own: `[bun, math.test.ts]`.
+///
+/// The read-only Node test profile carries both. Bun's runner loads the
+/// workspace's own tests and writes nothing, so the boundary `node --test`
+/// runs under needs no widening; only the image approval differs.
+pub(super) fn prepare_test(input: &Input, argv: &[String]) -> Result<Value, RestrictedPytestError> {
+    let contained = matches!(argv, [_, test, args @ ..]
+        if test == "test" && crate::contained_argv::bun_test_runs_once(args))
+        || crate::contained_argv::bun_test_script_invocation(argv);
+    if !contained {
+        return Err(RestrictedPytestError::new(
+            INVALID,
+            "Protected Bun execution requires direct bun test argv.",
+        ));
+    }
+    let (backend, backend_executable) = select_backend(
+        &input.platform,
+        input.backend_executable.as_deref(),
+        &input.search_path,
+    )?;
+    let workspace =
+        validation::resolve_workspace_with_home(&input.workspace, input.home.as_deref())?;
+    let cwd = resolve_cwd(&input.cwd, &workspace)?;
+    let executable = resolve_executable(&argv[0], &cwd, &input.search_path)?;
+    if !approved_bun(&executable, input.home.as_deref()) {
+        return Err(RestrictedPytestError::new(
+            INVALID,
+            "The Bun runtime does not resolve to an approved native executable.",
+        ));
+    }
+    let launcher = locate_executable(&argv[0], &cwd, &input.search_path)?;
+    let mut allowed = vec![launcher];
+    if !allowed.contains(&executable) {
+        allowed.push(executable.clone());
+    }
+    let command = contained_command(&executable, &argv[1..]);
+    Ok(
+        json!({"profile_version":"node-test-readonly-v1","backend":backend,"backend_executable":backend_executable,
+        "workspace":workspace,"cwd":cwd,"executable":executable,"command":command,"allowed_executables":allowed,
+        "denied_capabilities":["host-home-read","host-secret-environment","network","docker-socket","workspace-write","workspace-credential-read","unapproved-process-exec","privileged-operation"]}),
+    )
+}
+
+#[cfg(test)]
+#[path = "contained_bun_tests.rs"]
+mod tests;

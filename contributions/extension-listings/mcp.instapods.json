@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "mcp.instapods",
+  "tagline": "Official InstaPods hosted MCP coverage for pod deletion, plan changes, command execution, and file writes.",
+  "category": "cloud-infrastructure",
+  "limitations": [
+    "Coverage is limited to the reviewed InstaPods MCP tools and the surrounding Guard policy.",
+    "Remote HTTP matching is bound to the official InstaPods endpoint when runtime configuration evidence is available; otherwise Guard uses the configured server name only for non-allowing review or block defaults.",
+    "A publisher profile or badge is not a security certification or an endorsement by HOL."
+  ],
+  "documentationUrl": "https://docs.instapods.com/mcp/overview",
+  "tags": ["mcp", "hosting", "pods"],
+  "maintainerGithubIds": ["1262327"]
+}

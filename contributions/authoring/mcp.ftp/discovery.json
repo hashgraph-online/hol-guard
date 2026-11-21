@@ -1,0 +1,126 @@
+{
+  "adapter": "mcp",
+  "digest": "45749e2424fb998141a62f51b76d35859f09a5d56463482172b7f4432bf748f9",
+  "limitations": [
+    "mcp-inventory-is-snapshot",
+    "mcp-schemas-fingerprinted-not-executed",
+    "mcp-tool-annotations-untrusted",
+    "metadata-is-not-semantics"
+  ],
+  "metadata": {
+    "executable": "",
+    "homepage": "https://github.com/alxspiker/mcp-server-ftp",
+    "kind": "mcp",
+    "launcher": "npx",
+    "name": "FTP MCP",
+    "package": "mcp-server-ftp",
+    "publisher": {
+      "displayName": "alxspiker",
+      "id": "community.alxspiker"
+    },
+    "slug": "ftp",
+    "upstreamVersion": "1.2.3"
+  },
+  "operations": [
+    {
+      "evidenceSha256": "01f55eaa7f2f4dbf68f9dde1498a2ac09d72d45659c104a97e9c45ed526d6501",
+      "flags": [],
+      "hints": [],
+      "id": "tool-cb3d2fdfccd8d57e",
+      "name": "append-file",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "bdb89f4263fcf430b3fda3faafd6ca3c6e817a5dc89e29aba28b8e4c7f534142",
+      "flags": [],
+      "hints": [],
+      "id": "tool-74ac9b77dafea3dc",
+      "name": "create-directory",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "537651fde4981dfa06fb333a06491a20db1e7f2316949a500ff7dc84cd0c52f4",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "destructive-name"
+      ],
+      "id": "tool-bcccebc0835cd2bf",
+      "name": "delete-directory",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "25060fe0139efa30615e90fcb49904897342743af9b17dd798a70d329e6361b8",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "destructive-name"
+      ],
+      "id": "tool-ed87721d7457b578",
+      "name": "delete-file",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "05cb376c6e0c119ec76c542efc921e0c9ac5df7a8b6f57c3099c715bd551b8c6",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-fea7b13f3a27a56c",
+      "name": "download-file",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "c909af5267664f566f2f385caaf1fd09f556aab57aca96147afeba7ea3b36ea2",
+      "flags": [],
+      "hints": [
+        "destructive-hint"
+      ],
+      "id": "tool-0459ac60b70fd95b",
+      "name": "edit-file",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "93a3c116b896480703463df36863a7b547a6dd98869545c4e8feab61332ea341",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-77a03e7ba341a31f",
+      "name": "list-directory",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "6d81bf08a490c8a5f5451c163e995dc876fb79795df7121fa221dfa7815230e9",
+      "flags": [],
+      "hints": [
+        "destructive-hint"
+      ],
+      "id": "tool-946e44311658b527",
+      "name": "rename-file",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "5710300165659ade4170b3a20a3ef3ce3b9570225988c092542e3dec111f2b9b",
+      "flags": [],
+      "hints": [
+        "destructive-hint"
+      ],
+      "id": "tool-c503ad6b4d293269",
+      "name": "upload-file",
+      "optionsWithValues": [],
+      "path": []
+    }
+  ],
+  "schemaVersion": "guard.extension-discovery.v1",
+  "sourceSha256": "39f2bff9db0cb05e93a95c581099773bf39e6da1c8f312bcef592fe4f3cff2fb"
+}

@@ -13,8 +13,8 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
     import tomli as tomllib
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.codex_config import dump_toml
-from codex_plugin_scanner.guard.codex_hook_inventory import (
+from tests.codex_toml_support import dump_toml
+from tests.python_oracles.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_UNSUPPORTED_EVENT,
     enumerate_codex_hooks,
 )
@@ -54,7 +54,10 @@ def test_guard_install_codex_preserves_codex_hook_state_metadata(
 
     assert rc == 0
     assert output["managed_install"]["active"] is True
-    assert installed["hooks"]["state"] == state
+    # Install records trust for the hooks it writes, so the table grows; what it
+    # must never do is rewrite or drop an entry Codex already owned.
+    installed_state = installed["hooks"]["state"]
+    assert installed_state["fixture:pre_tool_use:0:0"] == state["fixture:pre_tool_use:0:0"]
     assert isinstance(installed["hooks"]["PreToolUse"], list)
 
 

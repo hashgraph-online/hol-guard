@@ -8,7 +8,6 @@ must never leak into those subprocesses.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -61,51 +60,12 @@ class TestBuildScrubbedEnv:
         assert _GUARD_TOKEN_ENV_VARS == ("HERMES_GUARD_TOKEN",)
 
 
-class TestStdioProxyScrubbing:
-    """Integration test: StdioGuardProxy._start_process uses scrubbed env."""
-
-    def test_stdio_proxy_scrubs_hermes_guard_token(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """Verify that _start_process strips HERMES_GUARD_TOKEN from the child env."""
-        from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy
-
-        monkeypatch.setenv("HERMES_GUARD_TOKEN", "leak-me-please")
-        monkeypatch.setenv("PATH", "/usr/bin:/bin")
-
-        captured_env: dict[str, str] = {}
-
-        class FakePopen:
-            def __init__(self, *args: object, **kwargs: object) -> None:
-                captured_env.update(kwargs.get("env", {}))
-                self.stdin = None
-                self.stdout = None
-                self.returncode = 0
-
-            def poll(self) -> int:
-                return 0
-
-            def wait(self, timeout: float | None = None) -> int:
-                return 0
-
-            def terminate(self) -> None:
-                pass
-
-        with mock.patch("codex_plugin_scanner.guard.proxy.stdio.subprocess.Popen", FakePopen):
-            proxy = StdioGuardProxy(
-                command=["echo", "hello"],
-                cwd=tmp_path,
-            )
-            proxy._start_process()
-
-        assert "HERMES_GUARD_TOKEN" not in captured_env, "HERMES_GUARD_TOKEN leaked into stdio proxy subprocess env"
-        assert captured_env.get("PATH") == "/usr/bin:/bin"
-
-
 class TestRuntimeMcpProxyScrubbing:
     """Integration test: RuntimeMcpGuardProxy._start_process uses scrubbed env."""
 
     def test_runtime_mcp_proxy_scrubs_hermes_guard_token(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Verify that _start_process strips HERMES_GUARD_TOKEN from the child env."""
-        from codex_plugin_scanner.guard.adapters.base import HarnessContext
+        from codex_plugin_scanner.guard.harness_context import HarnessContext
         from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
 
         monkeypatch.setenv("HERMES_GUARD_TOKEN", "leak-me-please")
@@ -113,21 +73,11 @@ class TestRuntimeMcpProxyScrubbing:
 
         captured_env: dict[str, str] = {}
 
-        class FakePopen:
-            def __init__(self, *args: object, **kwargs: object) -> None:
-                captured_env.update(kwargs.get("env", {}))
-                self.stdin = None
-                self.stdout = None
-                self.returncode = 0
-
-            def poll(self) -> int:
-                return 0
-
-            def wait(self, timeout: float | None = None) -> int:
-                return 0
-
-            def terminate(self) -> None:
-                pass
+        def fake_open_native(argv: object, **kwargs: object) -> dict[str, object]:
+            extra_env = kwargs.get("extra_env")
+            if isinstance(extra_env, dict):
+                captured_env.update({str(k): str(v) for k, v in extra_env.items()})
+            return {"status": "opened", "session_id": "test-session"}
 
         context = HarnessContext(
             home_dir=tmp_path,
@@ -135,22 +85,46 @@ class TestRuntimeMcpProxyScrubbing:
             guard_home=tmp_path,
         )
 
-        # Build minimal mocks for required constructor args
-        store = type("MockStore", (), {"get_managed_install": lambda self, h: None})()
-        config = type("MockConfig", (), {})()
+        # `_start_process` provisions the native resident verifier key from the
+        # store's integrity secret material, so a bare mock raises
+        # `native_policy_snapshot_integrity_key_unavailable`.
+        from codex_plugin_scanner.guard.store import GuardStore
 
-        with mock.patch("codex_plugin_scanner.guard.proxy.runtime_mcp.subprocess.Popen", FakePopen):
-            proxy = RuntimeMcpGuardProxy(
-                harness="codex",
-                server_name="test",
-                command=["echo", "hello"],
-                context=context,
-                store=store,
-                config=config,
-                source_scope="project",
-                config_path=str(tmp_path / ".mcp.json"),
-            )
-            proxy._start_process()
+        store = GuardStore(tmp_path)
+        config = type(
+            "MockConfig",
+            (),
+            {
+                # The harness posture is resolved natively off these fields.
+                "protection_posture": "protected",
+                "mode": "enforce",
+                "security_level": "balanced",
+                "harness_postures": {},
+            },
+        )()
+
+        # RTM-023 moved child spawn to `mcp_stdio_session_open_native`; the
+        # scrubbed env is passed via `extra_env`. Stub the native opener and the
+        # hash seam so the proxy resolves to a deterministic session.
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.proxy.runtime_mcp.build_configured_environment_hash",
+            lambda *_args, **_kwargs: "0" * 64,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.proxy.runtime_mcp.mcp_stdio_session_open_native",
+            fake_open_native,
+        )
+        proxy = RuntimeMcpGuardProxy(
+            harness="codex",
+            server_name="test",
+            command=["echo", "hello"],
+            context=context,
+            store=store,
+            config=config,
+            source_scope="project",
+            config_path=str(tmp_path / ".mcp.json"),
+        )
+        proxy._start_process()
 
         assert "HERMES_GUARD_TOKEN" not in captured_env, (
             "HERMES_GUARD_TOKEN leaked into runtime_mcp proxy subprocess env"

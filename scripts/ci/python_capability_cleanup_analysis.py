@@ -21,6 +21,7 @@ from scripts.ci.python_capability_cleanup_static import (
 
 __all__ = [
     "DynamicImport",
+    "ImportGraphAnalysis",
     "dynamic_import_destinations",
     "module_imports",
     "module_name",
@@ -29,6 +30,8 @@ __all__ = [
     "resolve_import",
     "valid_import_destination",
 ]
+
+ImportGraphAnalysis = tuple[dict[str, set[str]], list[str], list[DynamicImport], list[str]]
 
 
 def _module_analyses(root: Path) -> dict[str, tuple[Path, ast.Module, _StaticScopeAnalysis]]:
@@ -130,7 +133,7 @@ def module_imports(root: Path) -> tuple[dict[str, set[str]], list[str]]:
     return import_graph, dynamic
 
 
-def _analyze_import_graph(root: Path) -> tuple[dict[str, set[str]], list[str], list[DynamicImport], list[str]]:
+def _analyze_import_graph(root: Path) -> ImportGraphAnalysis:
     analyses = _module_analyses(root)
     dynamic_evidence, dynamic_unbounded = _dynamic_import_analysis(analyses)
     import_graph, dynamic = _module_imports_from_analyses(analyses, dynamic_evidence)
@@ -149,8 +152,15 @@ def reachable(roots: tuple[str, ...], imports: dict[str, set[str]]) -> set[str]:
     return reached
 
 
-def production_importers(root: Path, candidate_module: str) -> list[str]:
-    import_graph, dynamic, _evidence, _unbounded = _analyze_import_graph(root)
+def production_importers(
+    root: Path,
+    candidate_module: str,
+    *,
+    analysis: ImportGraphAnalysis | None = None,
+) -> list[str]:
+    """Find importers, optionally reusing the current gate invocation's analysis."""
+
+    import_graph, dynamic, _evidence, _unbounded = analysis if analysis is not None else _analyze_import_graph(root)
     importers = sorted(module for module, targets in import_graph.items() if candidate_module in targets)
     importers.extend(item for item in dynamic if candidate_module in item)
     return importers

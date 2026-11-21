@@ -1,17 +1,50 @@
-import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
+import {
+  cloudPolicyRecoveryHint,
+  hasRepairableProtectionGap,
+  isUnsupportedPlatformCheck,
+} from "./fleet-protection-recovery";
 import { recoverySummary } from "./fleet-protection-recovery-copy";
 import { defaultConnectHarness } from "./apps/app-catalog";
 import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
 import { repairHarnessesFor } from "./fleet-workspace";
 import { resolveFleetHeroCopy } from "./fleet-hero-copy";
-import { isHarnessDetectedItems, resolveDetectedAppStatus, visibleHarnessesFor } from "./harness-detection";
+import {
+  inactiveInstallNeedsRepair,
+  isHarnessDetectedItems,
+  resolveDetectedAppStatus,
+  visibleHarnessesFor,
+} from "./harness-detection";
 import type { FleetHeroCopy } from "./fleet-hero-copy";
+import type { GuardProtectionCheck } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
     throw new Error(message);
   }
 }
+
+const unsupportedContainmentCheck: GuardProtectionCheck = {
+  check_id: "containment_compatibility",
+  status: "fail",
+  reason_code: "unsupported_platform",
+};
+const ordinaryContainmentFailure: GuardProtectionCheck = {
+  check_id: "containment_compatibility",
+  status: "fail",
+  reason_code: "containment_probe_failed",
+};
+assert(
+  isUnsupportedPlatformCheck(unsupportedContainmentCheck),
+  "unsupported containment is identified from its stable reason code",
+);
+assert(
+  !hasRepairableProtectionGap([unsupportedContainmentCheck]),
+  "unsupported-only protection gaps do not offer futile repair",
+);
+assert(
+  hasRepairableProtectionGap([unsupportedContainmentCheck, ordinaryContainmentFailure]),
+  "repair remains available when a supported protection gap also needs attention",
+);
 
 const targetedRepairError = new ProtectionRepairFlowError("App hooks need repair.", ["codex", "grok"]);
 assert(
@@ -58,6 +91,17 @@ const detectedApps = visibleHarnessesFor({
 assert(
   detectedApps.join(",") === "codex,omp,zcode",
   "Protect includes locally detected OMP and ZCode without requiring prior activity",
+);
+const museCoverageApps = visibleHarnessesFor({
+  managed: [],
+  observed: [],
+  inventory: ["muse"],
+  detected: ["muse"],
+  policies: [],
+});
+assert(
+  museCoverageApps.join(",") === "muse",
+  "App coverage includes Muse when the daemon detects it and inventory reports its artifacts",
 );
 assert(
   isHarnessDetectedItems([{ harness: "zcode", status: "found" }], "zcode"),
@@ -209,6 +253,12 @@ assert(
     "Repair App hooks here. Guard repairs and rechecks every local protection layer in one pass.",
   "a single failed local check is named instead of a generic count",
 );
+const mixedProtectionSummary = recoverySummary(1, 0, false, ["App hooks"], 3);
+assert(
+  mixedProtectionSummary.includes("Containment remains unavailable on this platform") &&
+    mixedProtectionSummary.includes("full protection cannot be reached here"),
+  "mixed repair copy distinguishes supported repairs from permanently unsupported containment",
+);
 
 const degradedWithApps = resolveFleetHeroCopy("paired_active", 2, "degraded", urls);
 assert(degradedWithApps.status === "degraded", "active installs cannot imply protected fleet health");
@@ -264,6 +314,65 @@ assert(
   "F8: fleet repair must reinstall inactive apps and active apps with failed hook proof",
 );
 
+// Disconnecting an app leaves its install record inactive. Once the daemon reports the app's
+// setup status, that status decides whether the inactive record still needs repair.
+const emptyFleetHealth = {
+  schema_version: "guard.protection-health.v1" as const,
+  state: "protected" as const,
+  label: "Protected",
+  detail: "",
+  evidence_gap: false,
+  checks: [],
+  reason_codes: [],
+  apps: [],
+};
+const disconnectedInstalls = [
+  { harness: "codex", active: false },
+  { harness: "grok", active: false },
+  { harness: "cursor", active: false },
+];
+const reportedStatus: Record<string, "found" | "not_found" | "needs_repair"> = {
+  codex: "found",
+  grok: "not_found",
+  cursor: "needs_repair",
+};
+const disconnectedRepairs = repairHarnessesFor(
+  disconnectedInstalls,
+  emptyFleetHealth,
+  (harness) => reportedStatus[harness],
+);
+assert(
+  disconnectedRepairs.length === 1 && disconnectedRepairs[0] === "cursor",
+  "fleet repair must not reinstall an app the user disconnected unless its setup check says it needs repair",
+);
+assert(
+  repairHarnessesFor(disconnectedInstalls, emptyFleetHealth).length === 3,
+  "without a reported setup status an inactive install record still counts as needing repair",
+);
+for (const status of ["found", "not_found"] as const) {
+  assert(!inactiveInstallNeedsRepair({ active: false }, status), `a disconnected app reported ${status} needs no repair`);
+}
+for (const status of ["needs_repair", "protected", undefined] as const) {
+  assert(inactiveInstallNeedsRepair({ active: false }, status), `an inactive record reported ${status} still needs repair`);
+}
+assert(
+  resolveDetectedAppStatus({ active: false }, noProtectionHealth, false, false, true, "protected") === "needs_repair",
+  "a stale protected status never makes a disconnected app look protected",
+);
+assert(!inactiveInstallNeedsRepair({ active: true }, undefined), "an active install is never repaired for being inactive");
+assert(
+  resolveDetectedAppStatus({ active: false }, noProtectionHealth, false, false, true, "found") === "found_unprotected",
+  "a disconnected app the daemon reports as found shows as observed, not Needs repair",
+);
+assert(
+  resolveDetectedAppStatus({ active: false }, noProtectionHealth, false, false, false, "not_found") === "not_found",
+  "a disconnected app the daemon no longer finds is not listed as needing repair",
+);
+assert(
+  resolveDetectedAppStatus({ active: false }, noProtectionHealth, false, false, true) === "needs_repair",
+  "without a reported setup status an inactive install record still shows Needs repair",
+);
+
 const watchModeCodexHealth = {
   harness: "codex",
   state: "degraded" as const,
@@ -276,6 +385,14 @@ const watchModeCodexHealth = {
 assert(
   resolveDetectedAppStatus({ active: true }, watchModeCodexHealth, true, true, true) === "partial",
   "active Codex with passing hooks is not a repair loop when global protection is Watch",
+);
+assert(
+  resolveDetectedAppStatus({ active: true }, watchModeCodexHealth, true, true, true, "needs_repair") === "needs_repair",
+  "an active install whose latest setup check failed needs repair, matching Guard Cloud",
+);
+assert(
+  resolveDetectedAppStatus(undefined, noProtectionHealth, false, false, true, "protected") === "protected",
+  "an app with Guard hooks but no install record is protected, matching Guard Cloud",
 );
 const missingHookProofHealth = { ...watchModeCodexHealth, checks: [] };
 assert(

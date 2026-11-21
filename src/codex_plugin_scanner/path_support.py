@@ -10,6 +10,13 @@ from urllib.parse import urlparse
 REMOTE_PREFIXES = ("https://", "git+", "github://")
 DEFAULT_SAFE_READ_LIMIT_BYTES = 1_048_576
 
+# Shared filename allowlist for license checks and safe autofix; no arbitrary suffixes.
+LICENSE_FILENAMES = tuple(
+    f"{stem}{suffix}"
+    for stem in ("LICENSE", "LICENCE", "COPYING", "license", "licence", "copying")
+    for suffix in ("", ".md", ".txt", ".rst")
+)
+
 
 def path_entry_exists(path: Path) -> bool:
     """Return whether a directory entry exists without following its final link."""
@@ -111,28 +118,6 @@ def iter_safe_matching_files(root: Path, base_dir: Path, pattern: str) -> tuple[
         for candidate in sorted(base_dir.glob(pattern))
         if candidate.is_file() and resolves_within_root(resolved_root, candidate, require_exists=True)
     )
-
-
-def resolve_path_within_allowed_roots(
-    value: str,
-    allowed_roots: tuple[Path, ...],
-    *,
-    require_exists: bool = False,
-) -> Path | None:
-    stripped = value.strip()
-    if not stripped or stripped.lower() in {"none", "null"}:
-        return None
-    try:
-        # codeql[py/path-injection] The resolved candidate is accepted only after an allowed-root containment check.
-        resolved = Path(stripped).expanduser().resolve()
-    except OSError:
-        return None
-    if require_exists and not resolved.is_dir():
-        return None
-    for root in allowed_roots:
-        if resolves_within_root(root, resolved, require_exists=require_exists):
-            return resolved
-    return None
 
 
 def normalize_codex_relative_path(value: str) -> str:

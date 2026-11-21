@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
+import re
 import ssl
 import sys
+import threading
+import time
 from contextlib import suppress
 from pathlib import Path
 
@@ -17,14 +20,48 @@ class ManagedTrustError(RuntimeError):
     """A managed TLS trust source is unavailable or invalid."""
 
 
+# Loading the platform and public roots costs tens of milliseconds, which every
+# Cloud request used to pay before it could connect. A built context is reused
+# while its trust sources are unchanged, and rebuilt at least this often so a
+# long-running daemon still picks up platform trust store updates.
+_DEFAULT_CONTEXT_MAX_AGE_SECONDS = 300.0
+_default_context_lock = threading.Lock()
+_default_context: tuple[tuple[object, ...], float, ssl.SSLContext] | None = None
+
+
 def build_default_ssl_context() -> ssl.SSLContext:
     """Keep platform trust and explicit CA overrides usable in bundled runtimes."""
-    context = ssl.create_default_context()
-    if not os.environ.get("SSL_CERT_FILE") and not os.environ.get("SSL_CERT_DIR"):
-        # Preserve platform trust; an empty context still fails TLS verification.
+    global _default_context
+    cert_file = os.environ.get("SSL_CERT_FILE")
+    cert_dir = os.environ.get("SSL_CERT_DIR")
+    bundle: Path | None = None
+    bundle_stat: tuple[int, int] | None = None
+    if not cert_file and not cert_dir:
         with suppress(ManagedTrustError, OSError):
-            context.load_verify_locations(cafile=str(_requests_ca_bundle()))
+            bundle = _requests_ca_bundle()
+            stat = bundle.stat()
+            bundle_stat = (stat.st_mtime_ns, stat.st_size)
+    key = (cert_file, cert_dir, str(bundle) if bundle is not None else None, bundle_stat)
+    now = time.monotonic()
+    with _default_context_lock:
+        cached = _default_context
+        if cached is not None and cached[0] == key and now - cached[1] < _DEFAULT_CONTEXT_MAX_AGE_SECONDS:
+            return cached[2]
+    context = ssl.create_default_context()
+    if bundle is not None:
+        # Preserve platform trust; an empty context still fails TLS verification.
+        with suppress(OSError, ssl.SSLError):
+            context.load_verify_locations(cafile=str(bundle))
+    with _default_context_lock:
+        _default_context = (key, now, context)
     return context
+
+
+def reset_default_ssl_context_cache() -> None:
+    """Forget the reused default context, so the next request rebuilds it."""
+    global _default_context
+    with _default_context_lock:
+        _default_context = None
 
 
 def _requests_ca_bundle() -> Path:
@@ -96,4 +133,35 @@ def build_managed_ssl_context(ca_bundle_path: str | None) -> ssl.SSLContext:
     return context
 
 
-__all__ = ["ManagedTrustError", "build_managed_ssl_context"]
+def export_managed_trust_roots(context: ssl.SSLContext) -> list[bytes]:
+    """Materialize platform capath roots before exporting trust to native TLS.
+
+    OpenSSL loads hashed-directory roots lazily. Use the same compiled default
+    directory as managed trust, ignoring shell CA overrides and unrelated files.
+    """
+    if sys.platform != "win32":
+        directory = ssl.get_default_verify_paths().openssl_capath
+        if directory and Path(directory).is_dir():
+            try:
+                with os.scandir(directory) as entries:
+                    for index, entry in enumerate(entries):
+                        if index >= 4096:
+                            raise ManagedTrustError("managed_system_trust_invalid")
+                        if re.fullmatch(r"[0-9a-fA-F]{8}\.[0-9]+", entry.name) is None:
+                            continue
+                        with open(entry.path, "rb") as certificate:
+                            data = certificate.read(128 * 1024 + 1)
+                        if len(data) > 128 * 1024:
+                            raise ManagedTrustError("managed_system_trust_invalid")
+                        context.load_verify_locations(
+                            cadata=data.decode("ascii") if b"-----BEGIN CERTIFICATE-----" in data else data
+                        )
+            except (OSError, ssl.SSLError, UnicodeError) as exc:
+                raise ManagedTrustError("managed_system_trust_invalid") from exc
+    roots = context.get_ca_certs(binary_form=True)
+    if len(roots) > 1024 or any(len(root) > 16 * 1024 for root in roots):
+        raise ManagedTrustError("managed_system_trust_invalid")
+    return roots
+
+
+__all__ = ["ManagedTrustError", "build_managed_ssl_context", "export_managed_trust_roots"]

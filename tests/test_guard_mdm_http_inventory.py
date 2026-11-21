@@ -25,15 +25,8 @@ _RAW_HTTP_CALLS = frozenset(
 _RAW_HTTP_BOUNDARIES = frozenset(
     {
         "mdm/network_transport.py",
-        "daemon/client.py",
-        "daemon/live_identity.py",
-        "daemon/manager.py",
+        "mdm/network_keepalive.py",
         "bridge/__init__.py",
-        "adapters/bounded_cli_hook_bridge.py",
-        "adapters/claude_daemon_hook_bridge.py",
-        "adapters/claude_daemon_hook_transport.py",
-        "adapters/cursor_hook_script_template_head.py",
-        "adapters/codex_daemon_hook_transport.py",
     }
 )
 
@@ -77,6 +70,15 @@ def test_raw_http_clients_are_confined_to_enterprise_transport_or_loopback_ipc()
             if call_name not in _RAW_HTTP_CALLS:
                 continue
             observed_boundaries.add(relative)
+            if relative == "evaluation_witness.py":
+                loopback_only = (
+                    call_name == "http.client.HTTPConnection"
+                    and bool(node.args)
+                    and isinstance(node.args[0], ast.Constant)
+                    and node.args[0].value == "127.0.0.1"
+                )
+                if loopback_only:
+                    continue
             if relative not in _RAW_HTTP_BOUNDARIES:
                 violations.append(f"{relative}:{node.lineno}:{call_name}")
 
@@ -90,11 +92,9 @@ def test_external_runtime_paths_import_the_managed_transport() -> None:
         "cli/connect_flow.py",
         "cli/remote_pair_flow.py",
         "cli/update_commands.py",
+        "catalog_delivery/transport.py",
         "local_supply_chain.py",
-        "provenance.py",
         "proxy/remote.py",
-        "runtime/runner.py",
-        "runtime/verified_github_reads.py",
     }
     missing: list[str] = []
     for relative in sorted(expected_managed_paths):
