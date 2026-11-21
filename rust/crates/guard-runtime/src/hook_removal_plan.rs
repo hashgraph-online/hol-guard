@@ -1,11 +1,12 @@
 //! Read-only plans and post-removal verification for the ordered harness roster.
 
 use std::collections::HashSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::{
-    absolute, inspect_symlinked, invalid, split_candidates, sweep_config_file, sweep_results,
-    Candidates, HarnessScope, MAX_CANDIDATES,
+    absolute, event_names, invalid, load, prune_guard_hooks, split_candidates, sweep_config_file,
+    sweep_results, Candidates, HarnessScope, SweepResult, MAX_CANDIDATES,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -174,6 +175,32 @@ pub(super) fn report(request: &ReportRequest) -> Result<Value, String> {
 
 fn unverified_scan() -> String {
     "hook_removal_report_scan_unavailable".to_owned()
+}
+
+pub(super) fn inspect_symlinked<'a>(
+    text: &'a str,
+    path: &Path,
+    dry_run: bool,
+) -> Result<Option<SweepResult<'a>>, &'static str> {
+    let target = match fs::canonicalize(path) {
+        Ok(target) => target,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("read_failed"),
+    };
+    let config = match load(&target) {
+        Ok(config) => config,
+        Err("not_regular_file") => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    Ok(
+        prune_guard_hooks(&config.payload()).map(|(_, removed)| SweepResult {
+            path: text,
+            removed: if dry_run { removed.len() } else { 0 },
+            wrote: false,
+            error: Some("symlink_not_followed"),
+            events: event_names(&removed),
+        }),
+    )
 }
 
 #[cfg(test)]

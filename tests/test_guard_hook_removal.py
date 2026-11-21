@@ -135,6 +135,23 @@ def test_native_report_refuses_to_verify_an_oversized_config(tmp_path: Path) -> 
         )
 
 
+@pytest.mark.parametrize("target_is_directory", [False, True])
+def test_native_report_ignores_links_without_a_config_file(tmp_path: Path, target_is_directory: bool) -> None:
+    context = _context(tmp_path)
+    settings = context.home_dir / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    target = context.home_dir / "settings-target"
+    if target_is_directory:
+        target.mkdir()
+    settings.symlink_to(target, target_is_directory=target_is_directory)
+
+    report = hook_removal_sweep.removal_report(
+        context, [{"harness": "claude-code", "hook_count": 0, "adapter_uninstall": "ok"}]
+    )
+    assert report["status"] == "removed"
+    assert report["remaining"] == []
+
+
 def test_remove_all_reports_hooks_behind_a_symlinked_config(tmp_path: Path) -> None:
     context = _context(tmp_path)
     dotfiles = context.home_dir / "dotfiles"

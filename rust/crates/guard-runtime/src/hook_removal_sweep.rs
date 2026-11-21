@@ -245,11 +245,9 @@ fn sweep_results<'a>(
     files
         .iter()
         .map(move |(text, path)| sweep_config_file(text, path, dry_run))
-        .chain(
-            links.iter().filter_map(move |(text, path)| {
-                inspect_symlinked(text, path, dry_run).ok().flatten()
-            }),
-        )
+        .chain(links.iter().filter_map(move |(text, path)| {
+            plan::inspect_symlinked(text, path, dry_run).ok().flatten()
+        }))
 }
 
 /// Existing candidates with a sweepable suffix, split into regular files
@@ -434,24 +432,6 @@ fn render(config: Config, pruned: &PyVal, removed: usize) -> Option<String> {
             same(&table_value(reparsed.as_table()), pruned).then_some(rendered)
         }
     }
-}
-
-fn inspect_symlinked<'a>(
-    text: &'a str,
-    path: &Path,
-    dry_run: bool,
-) -> Result<Option<SweepResult<'a>>, &'static str> {
-    let target = fs::canonicalize(path).map_err(|_| "read_failed")?;
-    let config = load(&target)?;
-    Ok(
-        prune_guard_hooks(&config.payload()).map(|(_, removed)| SweepResult {
-            path: text,
-            removed: if dry_run { removed.len() } else { 0 },
-            wrote: false,
-            error: Some("symlink_not_followed"),
-            events: event_names(&removed),
-        }),
-    )
 }
 
 /// Write `bytes` beside `path` and rename it over the original, keeping the
