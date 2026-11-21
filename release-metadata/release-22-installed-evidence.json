@@ -205,7 +205,7 @@
       "id": "CDX-068",
       "pull_request": 1763,
       "deliverables": [
-        "src/codex_plugin_scanner/guard/cli/commands_support_command_activity.py",
+        "rust/crates/guard-runtime/src/edge_receipt.rs",
         "src/codex_plugin_scanner/guard/runtime/command_activity_contract.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
         "tests/fixtures/guard-command-corpus/decision-diff-report.json",
