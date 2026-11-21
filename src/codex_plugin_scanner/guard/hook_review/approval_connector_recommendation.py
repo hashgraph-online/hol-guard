@@ -16,6 +16,7 @@ import sqlite3
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import cast
 from urllib.parse import urlencode
 
 from ..runtime.connector_setup_items import listed_public_items
@@ -66,7 +67,9 @@ def _group_risk_classes(
 
     classes = set(current)
     scan = getattr(store, "pending_connector_group_rows", None)
-    rows, complete = scan(identity_hash) if callable(scan) else ([], False)
+    rows, complete = (
+        cast("tuple[list[Mapping[str, object]], bool]", scan(identity_hash)) if callable(scan) else ([], False)
+    )
     # One budget for the whole scan: a slow resident cannot hold the approval
     # read for a check per sibling. Checks past it fail without a resident call.
     deadline = time.monotonic() + _SIBLING_SCAN_BUDGET_SECONDS
