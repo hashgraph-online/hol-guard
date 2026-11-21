@@ -156,7 +156,7 @@ fn a_missing_hint_is_stored_as_none() {
 
 #[test]
 fn a_review_without_extension_evidence_has_no_hint() {
-    let delegated = delegate(&args(json!({"hint": {"budget_ms": 2_000}}))).unwrap();
+    let delegated = delegate(&args(json!({"hint": {"deadline_left_ms": 2_350}}))).unwrap();
     assert_eq!(
         delegated.args["request"]["extension_allow_hint"],
         Value::Null
@@ -179,7 +179,7 @@ fn a_connector_review_queues_under_its_group_with_its_setup_hint() {
 
 #[test]
 fn the_hint_never_spends_the_time_the_write_needs() {
-    let call = unrecognised(json!({"hint": {"budget_ms": 2_000}}));
+    let call = unrecognised(json!({"hint": {"deadline_left_ms": 2_350}}));
     let delegated = looked_up(&call, 350, local_cli()).unwrap();
     assert_eq!(
         delegated.args["request"]["extension_allow_hint"],
@@ -196,7 +196,7 @@ fn the_hint_never_spends_the_time_the_write_needs() {
 fn a_launch_that_names_no_local_cli_stays_an_ordinary_review() {
     let mut mcp = local_cli();
     mcp["surface"] = json!("mcp");
-    let call = unrecognised(json!({"hint": {"budget_ms": 2_000}}));
+    let call = unrecognised(json!({"hint": {"deadline_left_ms": 2_350}}));
     let delegated = looked_up(&call, 10_000, mcp).unwrap();
     let request = &delegated.args["request"];
     assert_eq!(request["queue_group_id"], Value::Null);
@@ -322,12 +322,14 @@ fn malformed_calls_are_refused() {
     assert!(invalid(delegate(&args(json!({"review": unknown})))));
     assert!(invalid(delegate(&args(json!({"hint": "hint"})))));
     assert!(invalid(delegate(&args(
-        json!({"hint": {"budget_ms": 2_000, "paused": {}}})
+        json!({"hint": {"deadline_left_ms": 2_350, "paused": {}}})
     ))));
-    assert!(invalid(delegate(&args(json!({"hint": {"budget_ms": -1}})))));
+    assert!(invalid(delegate(&args(
+        json!({"hint": {"deadline_left_ms": -1}})
+    ))));
     assert!(invalid(delegate(&args(json!({"silent": "yes"})))));
     assert!(invalid(delegate(&args(
-        json!({"hint": {"budget_ms": 2_000, "connector": local_cli()}})
+        json!({"hint": {"deadline_left_ms": 2_350, "connector": local_cli()}})
     ))));
     assert!(invalid(delegate(&args(
         json!({"connector_lookup": "acme"})

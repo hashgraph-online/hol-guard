@@ -9,24 +9,23 @@ use crate::guard_store_db::StoreResult;
 const DEFAULT_HINT_BUDGET_MS: u64 = 5_000;
 const MAX_HINT_BUDGET_MS: u64 = 10_000;
 
-/// The hint a call asks for: how long the daemon can wait for it.
+/// The hook's remaining time, with null selecting the resident default.
 #[derive(Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(super) enum HintAsk {
-    /// Older callers have already reserved time for the write.
-    BudgetMs(u32),
-    DeadlineLeftMs(Option<u64>),
+#[serde(deny_unknown_fields)]
+pub(super) struct HintAsk {
+    #[serde(deserialize_with = "Option::deserialize")]
+    deadline_left_ms: Option<u64>,
 }
 
 impl HintAsk {
     pub(super) fn budget_ms(self, call_budget_ms: u64, spent: u64) -> u64 {
-        let hook_budget_ms = match self {
-            Self::BudgetMs(budget_ms) => u64::from(budget_ms),
-            Self::DeadlineLeftMs(None) => DEFAULT_HINT_BUDGET_MS,
-            Self::DeadlineLeftMs(Some(remaining_ms)) => remaining_ms
-                .saturating_sub(WRITE_RESERVE_MS)
-                .min(MAX_HINT_BUDGET_MS),
-        };
+        let hook_budget_ms = self
+            .deadline_left_ms
+            .map_or(DEFAULT_HINT_BUDGET_MS, |remaining_ms| {
+                remaining_ms
+                    .saturating_sub(WRITE_RESERVE_MS)
+                    .min(MAX_HINT_BUDGET_MS)
+            });
         hook_budget_ms
             .min(call_budget_ms.saturating_sub(WRITE_RESERVE_MS))
             .saturating_sub(spent)
@@ -89,11 +88,6 @@ mod tests {
                 serde_json::from_value(json!({"deadline_left_ms": deadline})).unwrap();
             assert_eq!(ask.budget_ms(call_budget, spent), expected);
         }
-        let legacy: HintAsk = serde_json::from_value(json!({"budget_ms": 2_000})).unwrap();
-        assert_eq!(legacy.budget_ms(20_000, 12), 1_988);
-        assert!(serde_json::from_value::<HintAsk>(
-            json!({"budget_ms": 2_000, "deadline_left_ms": 750})
-        )
-        .is_err());
+        assert!(serde_json::from_value::<HintAsk>(json!({})).is_err());
     }
 }
