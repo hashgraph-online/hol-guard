@@ -504,6 +504,32 @@
    "status": "native_behavior_ported_requires_ci"
   },
   {
+   "old_node": "tests/test_hook_claude_question_save.py::test_the_step_is_registered",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The daemon saves Claude approval plans through the Rust authority operation. It no longer dispatches the library save method."
+  },
+  {
+   "old_node": "tests/test_hook_claude_question_save.py::test_a_malformed_plan_is_refused_without_a_write",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_authority_state_question_settle_tests.rs::question_save_rejects_a_plan_without_its_required_event_sequence"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_claude_question_save.py::test_a_missing_field_is_refused",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_hook_lifecycle_tests.rs::the_reply_is_read_as_the_python_settlement_read_it"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_claude_question_save.py::test_locked_integrity_finalize_uses_the_lock_owning_finalize_path",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The lock-owner alias has no caller in the native daemon. The active finalization call and its failed-write test remain."
+  },
+  {
    "old_node": "tests/test_guard_command_backup_extensions.py::test_backup_option_parse_limit_fails_secure",
    "source_sha256": "0b192edbae47d6dcc96aa9d27e9ad516b5b62be81239fd1b445a58ef3b31fc12",
    "replacement_nodes": [
