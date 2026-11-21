@@ -192,6 +192,7 @@ class DiagnosticsCache:
             return None
         summary = _summarize_diagnostics(diagnostics) if isinstance(diagnostics, Mapping) else None
         if summary is not None and self._ttl > 0:
+            self._cached[harness] = summary
             self._probed[harness] = summary
         return summary
 

@@ -54,7 +54,9 @@ def test_the_cache_probes_only_missing_tools_and_saves_what_it_probed(
     monkeypatch.setattr(native_harness_ops, "diagnostics", probe)
     cache = DiagnosticsCache(store, now=_NOW + timedelta(minutes=1))
     assert cache.lookup("codex", None) == _summary("active")
-    assert cache.lookup("cursor", None) == {"setup_status": "broken", "has_config_paths": False, "tool_version": None}
+    probed_summary = {"setup_status": "broken", "has_config_paths": False, "tool_version": None}
+    assert cache.lookup("cursor", None) == probed_summary
+    assert cache.lookup("cursor", None) == probed_summary
     cache.save()
 
     assert probed == ["cursor"]
