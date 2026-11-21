@@ -10908,6 +10908,10 @@ def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(
         "codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request",
         lambda **_kwargs: None,
     )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_hook_render._render_payload",
+        lambda *_args, **_kwargs: None,
+    )
     notification_rc, notification_output = _run_guard_hook(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
