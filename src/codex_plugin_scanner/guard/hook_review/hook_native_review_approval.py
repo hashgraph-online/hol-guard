@@ -27,7 +27,6 @@ from .hook_fail_closed import (
 from .hook_native_exact_action import review_evidence_parts
 from .hook_native_package_review import native_package_review_response
 from .hook_native_review_binding import admit_accepted_call, native_review_policy_binding, native_review_settle
-from .native_review_allow_hint import native_review_hint_ask
 from .native_review_connector import raise_connector_setup_notice
 from .native_review_records import native_review_approval_center_url
 
@@ -359,12 +358,14 @@ def queue_native_pre_tool_review(
         # in one store call. A waiting Codex hook's operation and resume
         # record, a prompted Claude review's permission notice, and a
         # connector-setup review's context are written with it.
+        claude_key = _claude_notice_key(store, deadline) if claude_notice else None
+        remaining_ms = None if deadline is None else max(0, int((deadline - time.monotonic()) * 1000))
         stored = queue(
             query,
             now,
-            hint=native_review_hint_ask(deadline),
+            hint={"deadline_left_ms": remaining_ms},
             silent=silent,
-            claude_key=_claude_notice_key(store, deadline) if claude_notice else None,
+            claude_key=claude_key,
             codex_live_wait=live_wait,
             respond=respond,
             connector_lookup=connector_lookup,

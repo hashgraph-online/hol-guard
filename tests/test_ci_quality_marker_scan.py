@@ -30,7 +30,6 @@ def test_quality_preserves_existing_paths_and_checks_cleanup_diagnostics(name):
         "tests/test_frozen_windows_daemon_bootstrap.py",
         "tests/test_frozen_windows_daemon_cleanup_diagnostics.py",
         "tests/test_native_approval_gate_bridge.py",
-        "tests/test_native_review_allow_hint.py",
         "tests/test_ci_quality_marker_scan.py",
     } <= paths
 

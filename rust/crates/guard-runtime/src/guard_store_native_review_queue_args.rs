@@ -1,9 +1,37 @@
 //! Argument readers for `queue_native_review` calls.
 
+use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use super::INVALID;
+use super::{INVALID, WRITE_RESERVE_MS};
 use crate::guard_store_db::StoreResult;
+
+const DEFAULT_HINT_BUDGET_MS: u64 = 5_000;
+const MAX_HINT_BUDGET_MS: u64 = 10_000;
+
+/// The hint a call asks for: how long the daemon can wait for it.
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum HintAsk {
+    /// Older callers have already reserved time for the write.
+    BudgetMs(u32),
+    DeadlineLeftMs(Option<u64>),
+}
+
+impl HintAsk {
+    pub(super) fn budget_ms(self, call_budget_ms: u64, spent: u64) -> u64 {
+        let hook_budget_ms = match self {
+            Self::BudgetMs(budget_ms) => u64::from(budget_ms),
+            Self::DeadlineLeftMs(None) => DEFAULT_HINT_BUDGET_MS,
+            Self::DeadlineLeftMs(Some(remaining_ms)) => remaining_ms
+                .saturating_sub(WRITE_RESERVE_MS)
+                .min(MAX_HINT_BUDGET_MS),
+        };
+        hook_budget_ms
+            .min(call_budget_ms.saturating_sub(WRITE_RESERVE_MS))
+            .saturating_sub(spent)
+    }
+}
 
 /// `text` unless it repeats an argument of `command` (`_without_operands`).
 /// Arguments split as Python's `str.split()` does.
@@ -38,5 +66,34 @@ pub(super) fn take_flag(args: &mut Map<String, Value>, key: &str) -> StoreResult
         None | Some(Value::Null) => Ok(false),
         Some(Value::Bool(flag)) => Ok(flag),
         Some(_) => Err(INVALID),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::HintAsk;
+
+    #[test]
+    fn the_hook_hint_budget_reserves_time_for_the_write() {
+        for (deadline, call_budget, spent, expected) in [
+            (None, 20_000, 0, 5_000),
+            (Some(750), 20_000, 12, 388),
+            (Some(350), 20_000, 0, 0),
+            (Some(100), 20_000, 0, 0),
+            (Some(20_000), 20_000, 0, 10_000),
+            (Some(20_000), 2_000, 5, 1_645),
+        ] {
+            let ask: HintAsk =
+                serde_json::from_value(json!({"deadline_left_ms": deadline})).unwrap();
+            assert_eq!(ask.budget_ms(call_budget, spent), expected);
+        }
+        let legacy: HintAsk = serde_json::from_value(json!({"budget_ms": 2_000})).unwrap();
+        assert_eq!(legacy.budget_ms(20_000, 12), 1_988);
+        assert!(serde_json::from_value::<HintAsk>(
+            json!({"budget_ms": 2_000, "deadline_left_ms": 750})
+        )
+        .is_err());
     }
 }

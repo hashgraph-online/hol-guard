@@ -78,7 +78,7 @@ pub(super) fn local_detail(
     let Some(view) = control_view(config) else {
         return Some(approval);
     };
-    let hint = recovered(stored, &approval, &view, config);
+    let hint = recovered(stored, || live_hint(&approval, &view, config));
     if shape(&hint, "connector").is_some() {
         return None;
     }
@@ -112,17 +112,12 @@ pub(super) fn shape(value: &Value, key: &str) -> Option<Value> {
 /// read-time review can still recover. A row carrying coverage alone has to
 /// re-review exactly as a row carrying nothing does, or it loses the Always
 /// allow offer it used to get back here.
-fn recovered(
-    stored: Value,
-    approval: &Map<String, Value>,
-    view: &ApprovalExtensionControlViewV1,
-    config: &ReadConfig,
-) -> Value {
+fn recovered(stored: Value, recover_live: impl FnOnce() -> Option<Value>) -> Value {
     let coverage = shape(&stored, "coverage");
     if !stored.is_null() && (coverage.is_none() || shape(&stored, "allow").is_some()) {
         return stored;
     }
-    let live = live_hint(approval, view, config);
+    let live = recover_live();
     let Some(coverage) = coverage else {
         return live.unwrap_or(stored);
     };

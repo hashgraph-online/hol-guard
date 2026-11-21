@@ -165,7 +165,7 @@ fn a_review_without_extension_evidence_has_no_hint() {
 
 #[test]
 fn a_connector_review_queues_under_its_group_with_its_setup_hint() {
-    let call = unrecognised(json!({"hint": {"budget_ms": 2_000}}));
+    let call = unrecognised(json!({"hint": {"deadline_left_ms": 2_350}}));
     let delegated = looked_up(&call, 10_000, local_cli()).unwrap();
     assert!(!delegated.args.contains_key("connector_lookup"));
     let request = &delegated.args["request"];
