@@ -1,4 +1,4 @@
-//! Hook payload facts normalized by the resident.
+//! Hook payload facts normalized by the native runtime.
 
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -7,6 +7,8 @@ use crate::claude_hook_bridge_render::py_strip;
 use crate::resident_protocol::encode_response;
 
 pub(crate) const HOOK_PAYLOAD_FACTS_FEATURE: &str = "hook-payload-facts-v1";
+pub(crate) const CLI_ADMISSION_FEATURE: &str = "native-hook-cli-admission-v1";
+pub(crate) const CLI_ADMISSION_COMMAND: &str = "hook-cli-admission";
 const REQUEST_SCHEMA: &str = "guard-hook-payload-facts-request.v1";
 const RESULT_SCHEMA: &str = "guard-hook-payload-facts-result.v1";
 const COMMAND_ONLY_KEYS: [&str; 14] = [
@@ -32,6 +34,48 @@ pub(crate) struct HookPayloadFactsRequestV1 {
     pub(crate) schema: String,
     pub(crate) request_id: String,
     pub(crate) payload: Value,
+}
+
+const HINT_SECONDS: &str = "guard_remaining_seconds";
+const HINT_MILLISECONDS: &str = "guard_remaining_ms";
+const MIN_HOOK_BUDGET_SECONDS: f64 = 0.1;
+const HOOK_TRANSPORT_RESERVE_SECONDS: f64 = 0.25;
+const MAX_CLI_HOOK_BUDGET_SECONDS: f64 = 10.0;
+
+pub(crate) fn remaining_hint(payload: &Map<String, Value>, allow_negative: bool) -> Option<f64> {
+    [(HINT_SECONDS, 1.0), (HINT_MILLISECONDS, 1000.0)]
+        .into_iter()
+        .find_map(|(key, scale)| {
+            payload
+                .get(key)
+                .and_then(Value::as_f64)
+                .filter(|value| value.is_finite() && (allow_negative || *value >= 0.0))
+                .map(|value| value / scale)
+        })
+}
+
+pub(crate) fn take_remaining_hint(payload: &mut Map<String, Value>) -> (Option<f64>, bool) {
+    let hint = remaining_hint(payload, true);
+    let has_seconds = payload.remove(HINT_SECONDS).is_some();
+    let has_milliseconds = payload.remove(HINT_MILLISECONDS).is_some();
+    (hint, !has_seconds && !has_milliseconds)
+}
+
+pub(crate) fn hook_budget_seconds(value: f64, maximum: f64) -> f64 {
+    (value.clamp(MIN_HOOK_BUDGET_SECONDS, maximum) - HOOK_TRANSPORT_RESERVE_SECONDS)
+        .max(MIN_HOOK_BUDGET_SECONDS)
+}
+
+pub(crate) fn cli_admission(input: &[u8]) -> Result<Value, String> {
+    const MAX_INPUT_BYTES: usize = 64 * 1024;
+    if input.len() > MAX_INPUT_BYTES {
+        return Err("hook_cli_admission_request_too_large".to_owned());
+    }
+    let payload: Map<String, Value> = serde_json::from_slice(input)
+        .map_err(|_| "hook_cli_admission_request_invalid".to_owned())?;
+    let maximum = MAX_CLI_HOOK_BUDGET_SECONDS;
+    let budget = hook_budget_seconds(remaining_hint(&payload, false).unwrap_or(maximum), maximum);
+    Ok(json!({"event_name": runtime_event(&payload), "budget_seconds": budget}))
 }
 
 pub(crate) fn runtime_event(payload: &Map<String, Value>) -> String {

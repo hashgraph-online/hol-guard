@@ -162,7 +162,15 @@ def _native_cli_graph_failures(root: Path) -> list[str]:
             failures.append(f"CLI native route still calls retired Python route {retired}")
     if "_native_mode_requires_rust" in function_calls(native_route):
         failures.append("CLI native route still consults a retired native-mode predicate")
-    if not _has_typed_fail_safe(native_route):
+    unavailable_response = _function_node_or_none(native_cli, "_unavailable_cli_response")
+    if not (
+        _has_typed_fail_safe(native_route)
+        or (
+            "_unavailable_cli_response" in function_calls(native_route)
+            and unavailable_response is not None
+            and _has_typed_fail_safe(unavailable_response)
+        )
+    ):
         failures.append("CLI native route has no fail-safe native terminal")
     return failures
 

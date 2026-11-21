@@ -6,6 +6,7 @@ resident already normalizes. It does not classify or reinterpret the reply.
 
 from __future__ import annotations
 
+import math
 import os
 import time
 import uuid
@@ -13,6 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from .mdm.runtime_request import runtime_answer
 from .native_execution import _resident_request
 from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
@@ -21,6 +23,9 @@ _FEATURE = "hook-payload-facts-v1"
 _REQUEST_SCHEMA = "guard-hook-payload-facts-request.v1"
 _RESULT_SCHEMA = "guard-hook-payload-facts-result.v1"
 _PAYLOAD_FACTS_MAX_REQUEST_BYTES = 6 * 1024 * 1024
+_HOOK_EVENT_KEYS = ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
+_HOOK_BUDGET_SCALES = (("guard_remaining_seconds", 1.0), ("guard_remaining_ms", 1000.0))
+_CLI_ADMISSION_LOOKUP_LIMIT_SECONDS = 10.0
 _CONNECTOR_FEATURE = "hook-connector-facts-v1"
 _CONNECTOR_REQUEST_SCHEMA = "guard-hook-connector-facts-request.v1"
 _CONNECTOR_RESULT_SCHEMA = "guard-hook-connector-facts-result.v1"
@@ -52,12 +57,7 @@ def native_hook_facts(
     event_payload: dict[str, object] = {
         key: payload[key]
         for key in (
-            "event",
-            "eventName",
-            "hook_event_name",
-            "hookEventName",
-            "hook_name",
-            "hookName",
+            *_HOOK_EVENT_KEYS,
             "tool_input",
             "toolInput",
             "arguments",
@@ -131,13 +131,47 @@ def native_hook_facts(
 def native_hook_event(payload: Mapping[str, object], guard_home: Path, *, deadline: float | None = None) -> str | None:
     # Event identity does not depend on tool input. Keep this request small so
     # a large action payload cannot turn event lookup into an outage.
-    event_payload = {
-        key: payload[key]
-        for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
-        if key in payload
-    }
+    event_payload = {key: payload[key] for key in _HOOK_EVENT_KEYS if key in payload}
     facts = native_hook_facts(event_payload, guard_home, deadline=deadline)
     return facts.event_name if facts is not None else None
+
+
+def native_cli_hook_admission(payload: Mapping[str, object], *, started_at: float) -> tuple[str | None, float]:
+    """Read CLI admission facts before a resident is necessarily available."""
+    wire: dict[str, object] = {key: value for key in _HOOK_EVENT_KEYS if isinstance(value := payload.get(key), str)}
+    transport_seconds = None
+    for key, scale in _HOOK_BUDGET_SCALES:
+        value = payload.get(key)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or (isinstance(value, float) and not math.isfinite(value))
+        ):
+            continue
+        wire[key] = value
+        # Bound the lookup by the caller's raw time. Rust sets the review budget.
+        if transport_seconds is None and value >= 0:
+            transport_seconds = min(scale * _CLI_ADMISSION_LOOKUP_LIMIT_SECONDS, value) / scale
+    if transport_seconds is None:
+        transport_seconds = _CLI_ADMISSION_LOOKUP_LIMIT_SECONDS
+    facts = runtime_answer(
+        "native-hook-cli-admission-v1",
+        "hook-cli-admission",
+        wire,
+        output_limit=64 * 1024,
+        deadline=started_at + transport_seconds,
+    )
+    if facts is None:
+        return None, started_at
+    event, budget = facts.get("event_name"), facts.get("budget_seconds")
+    if (
+        isinstance(event, str)
+        and isinstance(budget, (int, float))
+        and not isinstance(budget, bool)
+        and 0 < budget <= 10
+    ):
+        return event, started_at + budget
+    return None, started_at
 
 
 def native_connector_lookup(
@@ -237,4 +271,10 @@ def native_connector_lookup(
     return dict(lookup)
 
 
-__all__ = ["NativePayloadFacts", "native_connector_lookup", "native_hook_event", "native_hook_facts"]
+__all__ = [
+    "NativePayloadFacts",
+    "native_cli_hook_admission",
+    "native_connector_lookup",
+    "native_hook_event",
+    "native_hook_facts",
+]

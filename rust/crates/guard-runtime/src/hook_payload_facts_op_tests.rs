@@ -13,6 +13,35 @@ fn event_aliases_are_normalized_by_the_resident() {
 }
 
 #[test]
+fn cli_admission_uses_a_bounded_seconds_or_milliseconds_hint() {
+    for (payload, budget) in [
+        (json!({}), 9.75),
+        (json!({"guard_remaining_seconds": 99.0}), 9.75),
+        (json!({"guard_remaining_seconds": 0.2}), 0.1),
+        (
+            json!({"guard_remaining_seconds": 2, "guard_remaining_ms": 100}),
+            1.75,
+        ),
+        (
+            json!({"guard_remaining_seconds": -5, "guard_remaining_ms": 2000}),
+            1.75,
+        ),
+        (
+            json!({"guard_remaining_seconds": true, "guard_remaining_ms": 2000}),
+            1.75,
+        ),
+        (
+            json!({"guard_remaining_seconds": null, "guard_remaining_ms": 2000}),
+            1.75,
+        ),
+    ] {
+        let output = cli_admission(payload.to_string().as_bytes()).unwrap();
+        assert_eq!(output["budget_seconds"], budget);
+        assert_eq!(output["event_name"], "PreToolUse");
+    }
+}
+
+#[test]
 fn copilot_permission_alias_preserves_the_raw_event_name() {
     let request = HookPayloadFactsRequestV1 {
         schema: "guard-hook-payload-facts-request.v1".to_owned(),
