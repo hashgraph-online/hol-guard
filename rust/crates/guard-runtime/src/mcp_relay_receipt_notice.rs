@@ -51,7 +51,7 @@ pub(super) fn schedule(guard_home: &str, requests: Vec<String>) {
     );
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use crate::guard_store_approval_reads::tests::seed;

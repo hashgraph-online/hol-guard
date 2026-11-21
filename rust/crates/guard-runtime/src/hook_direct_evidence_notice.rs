@@ -161,7 +161,7 @@ fn notify(guard_home: &str, source: &str, notice: Notice) {
     );
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn notify_stored_for_test(
     guard_home: &str,
     source: &str,
