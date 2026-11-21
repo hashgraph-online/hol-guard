@@ -7171,6 +7171,22 @@
       "expect": "allow"
     },
     {
+      "id": "read-linked-worktree-gitdir-pointer",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${PARENT}/.git/worktrees/parent-repo-feature/gitdir"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "read-hidden-project-script-in-sibling-checkout",
       "fix_area": "read",
       "harnesses": [
@@ -7262,6 +7278,38 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "write-metric-window-names",
+      "fix_area": "write",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/connectors/metrics.ts",
+        "content": "export const metrics = [\n  {\n    metricKey: 'downloads_30d',\n    windowKey: 'window_7d',\n    bucketKey: 'top_100_items',\n  },\n];\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-write-lowercase-api-key-literal",
+      "fix_area": "secrets",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/connectors/metrics.ts",
+        "content": "export const client = { apiKey: 'k7m2q9x4vb3n' };\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "write-dollar-route-file",
@@ -10622,6 +10670,40 @@
       "tool": "shell",
       "tool_input": {
         "command": "bun node_modules/vitest/vitest.mjs run"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-vitest-summary-line-countless-head",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest run --reporter=dot --silent 2>&1 | grep -E \"Tests \" | head"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-vitest-last-lines-countless-tail",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "node node_modules/.bin/vitest run 2>&1 | tail"
       },
       "cwd": "worktree",
       "expect": "allow",

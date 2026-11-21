@@ -8,10 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_claude_guard_question
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-from codex_plugin_scanner.guard.native_claude_guard_question import (
-    claude_guard_question_request,
-    settle_claude_guard_question,
-)
+from codex_plugin_scanner.guard.native_claude_guard_question import settle_claude_guard_question
 
 _VECTORS = (
     Path(__file__).resolve().parents[1]
@@ -39,13 +36,31 @@ def _could_be_question(case: dict, event: str | None) -> bool:
 
 
 @pytest.mark.parametrize("case", _CASES, ids=[case["name"] for case in _CASES])
-def test_transport_projects_the_recorded_request(case: dict) -> None:
+def test_transport_forwards_the_recorded_hook(
+    case: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
     event = guard_commands_module._hook_event_name(case["payload"])
-    expected = {key: value for key, value in case["request"].items() if key != "pending"}
-
-    projected = claude_guard_question_request(case["payload"], event=event)
-
-    assert projected == (expected if _could_be_question(case, event) else None)
+    payloads: list[str] = []
+    monkeypatch.setattr(
+        native_claude_guard_question,
+        "hook_authority_state",
+        lambda _store, _op, **fields: payloads.append(fields["payload"]),
+    )
+    settle_claude_guard_question(
+        object(), session_id="session-1", payload=case["payload"], event=event, now="2026-10-26T00:00:00+00:00"
+    )
+    if not _could_be_question(case, event):
+        assert payloads == []
+        return
+    (raw,) = payloads
+    forwarded = json.loads(raw)
+    assert forwarded == {
+        "event": event,
+        **{name: case["payload"].get(name) for name in ("tool_name", "tool_input", "tool_response")},
+    }
+    response = forwarded["tool_response"]
+    if isinstance(response, dict) and isinstance(response.get("answers"), dict):
+        assert list(response["answers"]) == list(case["payload"]["tool_response"]["answers"])
 
 
 def _settle(monkeypatch: pytest.MonkeyPatch, reply: object, payload: dict) -> tuple[object, dict]:
@@ -106,10 +121,9 @@ def test_a_saved_answer_carries_its_plan(monkeypatch: pytest.MonkeyPatch) -> Non
     settled, call = _settle(monkeypatch, _SAVE, case["payload"])
 
     assert settled == _SAVE
-    assert call["op"] == "claude_question_settle"
+    assert call["op"] == "claude_question_settle_hook"
     assert call["session_id"] == "session-1"
-    expected = {key: value for key, value in case["request"].items() if key != "pending"}
-    assert call["payload"] == expected
+    assert json.loads(call["payload"])["tool_response"] == case["payload"]["tool_response"]
 
 
 def test_a_saved_answer_may_carry_the_pending_identifier(monkeypatch: pytest.MonkeyPatch) -> None:

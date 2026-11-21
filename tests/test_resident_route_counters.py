@@ -50,11 +50,10 @@ class _Host:
 
 def _page(*, counters: object | None = None) -> bytes:
     page: dict[str, object] = {
-        "schema": "guard-hook-direct-evidence.v1",
+        "schema": "guard-hook-direct-evidence-commit.v1",
         "epoch": EPOCH,
-        "records": [],
+        "record_count": 0,
         "remaining": 0,
-        "through": None,
     }
     if counters is not None:
         page["counters"] = counters
@@ -173,11 +172,10 @@ def test_a_new_daemon_drains_an_old_resident_page(tmp_path: Path) -> None:
     assert sink.lines == []
 
 
-def test_an_old_shaped_decoder_reads_a_new_page_unchanged() -> None:
-    # The transport decoder keeps only the page count and cursor metadata.
-    assert _decode_page(_page(counters=RESIDENT)) == _decode_page(_page()) == ([], 0, None)
+def test_the_page_counts_are_independent_of_optional_counters() -> None:
+    assert _decode_page(_page(counters=RESIDENT)) == _decode_page(_page()) == (0, 0)
     log = RouteCounterLog()
-    assert _decode_page(_page(counters={"by_harness": "bad"}), log) == ([], 0, None)
+    assert _decode_page(_page(counters={"by_harness": "bad"}), log) == (0, 0)
     assert log.snapshot()["resident"] == {}
 
 

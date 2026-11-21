@@ -104,6 +104,29 @@ pub fn normalize_policy_integrity_control_state(payload: &Value) -> Option<Value
     }))
 }
 
+/// Adopt a prepared generation only if it leaves the trusted generation and
+/// any pending advance intact. The caller holds the generation lock across
+/// reading the current state, making this decision, and saving the answer.
+pub(crate) fn finalization_state(current: Option<&Value>, proposed: &Value) -> Option<Value> {
+    let next = normalize_policy_integrity_control_state(proposed)?;
+    if let Some(current) = current {
+        let current = normalize_policy_integrity_control_state(current)?;
+        let generation = next["generation"].as_i64()?;
+        let current_generation = current["generation"].as_i64()?;
+        let pending = next["pending_generation"].as_i64();
+        let current_pending = current["pending_generation"].as_i64();
+        if generation < current_generation
+            || (generation == current_generation && pending != current_pending)
+            || pending
+                .zip(current_pending)
+                .is_some_and(|(new, old)| new < old)
+        {
+            return None;
+        }
+    }
+    Some(next)
+}
+
 /// `_load_policy_integrity_control_state` (:506-531), `create=False` path.
 /// Reads `control_ref` secret, parses + normalizes; `None` when absent or
 /// malformed (Python returns `None`, never a default, when `create=False`).

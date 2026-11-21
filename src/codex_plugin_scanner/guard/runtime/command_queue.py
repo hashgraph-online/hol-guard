@@ -28,16 +28,9 @@ from .command_capability import (
     consume_local_command_approval,
     register_pending_command,
 )
-from .command_executors import (
-    COMMAND_OPERATION_SCHEMA_VERSIONS,
-    execute_guard_command_job,
-)
-from .command_queue_activation import (
-    command_queue_is_enabled,
-)
-from .command_queue_activation import (
-    command_queue_lease_wait_ms as _command_queue_lease_wait_ms,
-)
+from .command_executors import COMMAND_OPERATION_SCHEMA_VERSIONS, execute_guard_command_job
+from .command_queue_activation import command_queue_is_enabled
+from .command_queue_activation import command_queue_lease_wait_ms as _command_queue_lease_wait_ms
 from .command_queue_auth import reuse_command_queue_auth_context
 from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
 from .command_queue_authority import command_queue_oauth_target
@@ -60,6 +53,7 @@ from .command_queue_protocol import lease_id as _lease_id
 from .command_queue_protocol import result_payload as _result_payload
 from .command_queue_protocol import retry_wait_seconds as _retry_wait_seconds  # noqa: F401
 from .command_queue_results import drop_refused_result, post_result_unless_refused
+from .command_queue_settle import SettleCalls, settle_authorized_job
 from .command_queue_settle_slots import settle_slots
 from .command_queue_state import (
     COMMAND_QUEUE_ENABLED_ENV,
@@ -68,6 +62,7 @@ from .command_queue_state import (
     command_queue_brief_status,
     default_command_context,  # noqa: F401 - public compatibility export
     lane_exact_lease_batch_limit,
+    record_command_queue_failure,
     record_exact_lease_batch_limit,
     repair_command_queue_state,  # noqa: F401 - public compatibility export
 )
@@ -75,9 +70,8 @@ from .command_queue_state import clear_exact_route_failure as _clear_exact_route
 from .command_queue_state import command_queue_now as _now
 from .command_queue_state import command_queue_status as _state_command_queue_status
 from .command_queue_state import current_command_queue_lane as _current_lane
-from .command_queue_state import load_command_queue_state as _load_state
 from .command_queue_state import record_exact_route_failure as _record_exact_route_failure
-from .command_queue_state import save_command_queue_state as _save_state
+from .command_queue_state import transition_command_queue_state as _transition
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
     exact_cloud_review_operations,
@@ -244,31 +238,14 @@ def _native_lease(store: GuardStore, auth_context: dict[str, object], call: Leas
     )
 
 
-def _retry_pending_result(
-    store: GuardStore,
-    auth_context: dict[str, object],
-    state: dict[str, object],
-) -> bool:
+def _retry_pending_result(store: GuardStore, auth_context: dict[str, object], state: dict[str, object]) -> bool:
     return retry_pending_result(
-        store,
-        auth_context,
-        state,
-        post_result=_post_result,
-        resolve_auth=_resolve_command_queue_auth_context,
-        save_state=_save_state,
+        store, auth_context, state, post_result=_post_result, resolve_auth=_resolve_command_queue_auth_context
     )
 
 
 def _record_leased_job(store: GuardStore, state: dict[str, object], item: dict[str, object]) -> None:
-    state.update(
-        {
-            "state": "leased",
-            "last_lease_at": _now(),
-            "active_job": item,
-            "last_poll_was_empty": False,
-        }
-    )
-    _save_state(store, state)
+    _transition(store, state, "leased", at=_now(), carry_route_error=True, job=item)
 
 
 def _lease_job_with_401_retry(
@@ -301,75 +278,15 @@ def _settle_authorized_job(
     item: dict[str, object],
     authorized: AuthorizedCommandJob,
 ) -> dict[str, object]:
-    execution: dict[str, object]
-    # The job is leased by this point and the lease only closes on a posted
-    # result. Matching the approval grant, recording the replay row and
-    # registering a pending approval all ask the runtime for a signature or
-    # a digest, so each of them can refuse. A refusal is this job's failure
-    # and has to reach the posted result; letting it escape the poll would
-    # leave the lease open with nothing posted and nothing recorded.
-    try:
-        # Spending the grant and recording the replay row both name this
-        # job by the runtime's digest. Ask for it once, before the grant
-        # is deleted: a resident that stopped answering in between would
-        # otherwise fail the job with the user's approval already gone.
-        needs_replay_row = not is_native_workspace_review_job(item)
-        identity_digest = (
-            command_identity_digest(store, authorized)
-            if authorized.requires_local_approval or needs_replay_row
-            else None
-        )
-        if not consume_local_command_approval(
-            store,
-            authorized,
-            identity_digest=identity_digest,
-            record_replay=needs_replay_row,
-        ):
-            pending = register_pending_command(store, authorized, item)
-            execution = {
-                "waitingLocalConfirm": True,
-                "operation": authorized.operation,
-                "jobId": authorized.identity["id"],
-                "approveCommand": pending["approveCommand"],
-            }
-            audit_command_decision(
-                store,
-                "cloud_command.waiting_local_approval",
-                job=item,
-                reason="local_approval_required",
-            )
-        else:
-            audit_command_decision(
-                store,
-                "cloud_command.accepted",
-                job=item,
-                reason="capability_and_job_valid",
-            )
-            try:
-                _LOGGER.info("Guard command leased.")
-                execution = _execute_job(item, context, store)
-            except Exception as error:
-                _LOGGER.warning(
-                    "Guard command execution failed: error=%s",
-                    _redacted_error(error),
-                )
-                execution = {
-                    "failureCode": "execution_error",
-                    "failureMessage": _redacted_error(error),
-                }
-    except (CommandCapabilityError, CommandCapabilityUnavailableError) as error:
-        reason = error.code if isinstance(error, CommandCapabilityError) else error.reason
-        audit_command_decision(
-            store,
-            "cloud_command.rejected",
-            job=item,
-            reason=reason,
-        )
-        execution = {
-            "failureCode": reason,
-            "failureMessage": "The local Guard command capability could not settle this job.",
-        }
-    return execution
+    calls = SettleCalls(
+        identity_digest=command_identity_digest,
+        consume=consume_local_command_approval,
+        register=register_pending_command,
+        audit=audit_command_decision,
+        native_review=is_native_workspace_review_job,
+        execute=_execute_job,
+    )
+    return settle_authorized_job(store, context, item, authorized, calls)
 
 
 def poll_command_queue_once(
@@ -394,15 +311,7 @@ def poll_command_queue_once(
     # and its lease scope already requires a ready Review keyring.
     ready = command_environment_allows_queue() if _current_lane().is_drain else command_queue_should_poll(store)
     if not ready:
-        state = _load_state(store)
-        state.update(
-            {
-                "state": "disabled",
-                "last_error": None,
-                "active_job": None,
-            }
-        )
-        _save_state(store, state)
+        _transition(store, {}, "disabled")
         return status(store)
     extras: list[dict[str, object]] = []
     batch_size = 1
@@ -414,22 +323,13 @@ def poll_command_queue_once(
         # connection, which holds the storage gate, is opened.
         auth_context = _resolve_command_queue_auth_context(store)
         with _review_connection_scope(store, leased_item):
-            state = _load_state(store)
-            state.update({"last_poll_at": _now(), "last_error": None})
-            _record_leased_job(store, state, leased_item)
+            state = dict[str, object]()
+            _transition(store, state, "handed_over", at=_now(), job=leased_item)
         item = leased_item
     else:
         auth_context = _resolve_command_queue_auth_context(store)
-        state = _load_state(store)
-        state.update(
-            {
-                "state": "polling",
-                "last_poll_at": _now(),
-                "last_error": None,
-                "last_poll_was_empty": False,
-            }
-        )
-        _save_state(store, state)
+        state = dict[str, object]()
+        _transition(store, state, "polling", at=_now())
         if _retry_pending_result(store, auth_context, state):
             return status(store)
         batch_size = (
@@ -443,16 +343,7 @@ def poll_command_queue_once(
             on_extra_jobs=extras.extend if batch_size > 1 else None,
         )
         if item is None:
-            empty_at = _now()
-            state.update(
-                {
-                    "state": "idle",
-                    "last_empty_poll_at": empty_at,
-                    "last_poll_at": empty_at,
-                    "last_poll_was_empty": True,
-                }
-            )
-            _save_state(store, state)
+            _transition(store, state, "empty_poll", at=_now(), carry_route_error=True)
             if not _current_lane().is_drain:
                 maybe_auto_update(store, context)
             return status(store)
@@ -485,19 +376,14 @@ def poll_command_queue_once(
             raise
         _LOGGER.warning("Guard heartbeat 401, attempting OAuth refresh retry.")
         auth_context = _resolve_command_queue_auth_context(store, force_refresh=True)
-        state["state"] = "auth_expired"
-        _save_state(store, state)
+        _transition(store, state, "auth_expired")
         try:
             _heartbeat(auth_context, item)
         except Exception:
-            state.pop("active_job", None)
-            state.update({"state": "error", "last_error": "Guard command heartbeat failed."})
-            _save_state(store, state)
+            _transition(store, state, "heartbeat_failed")
             raise
     except Exception:
-        state.pop("active_job", None)
-        state.update({"state": "error", "last_error": "Guard command heartbeat failed."})
-        _save_state(store, state)
+        _transition(store, state, "heartbeat_failed")
         raise
     try:
         authorized = authorization()
@@ -545,8 +431,7 @@ def poll_command_queue_once(
             raise
         _LOGGER.warning("Guard result 401, attempting OAuth refresh retry.")
         auth_context = _resolve_command_queue_auth_context(store, force_refresh=True)
-        state["state"] = "auth_expired"
-        _save_state(store, state)
+        _transition(store, state, "auth_expired")
         try:
             refused = post_result_unless_refused(partial(_post_result, auth_context, item, payload))
         except Exception:
@@ -556,12 +441,9 @@ def poll_command_queue_once(
         _hold_pending_result(store, state, item, payload)
         raise
     if refused is not None:
-        drop_refused_result(store, state, item, refused, save_state=_save_state)
+        drop_refused_result(store, state, item, refused)
         return status(store)
-    state.pop("active_job", None)
-    state.pop("pending_result", None)
-    state.update({"state": "idle", "last_result_at": _now(), "last_poll_was_empty": False})
-    _save_state(store, state)
+    _transition(store, state, "settled", at=_now())
     audit_command_decision(
         store,
         "cloud_command.result",
@@ -590,8 +472,6 @@ def command_queue_loop(
             poll_once=partial(poll_command_queue_once, brief_status=True),
             format_error=_redacted_error,
         ),
-        load_state=_load_state,
-        save_state=_save_state,
+        record_failure=record_command_queue_failure,
         format_error=_redacted_error,
-        now=_now,
     )

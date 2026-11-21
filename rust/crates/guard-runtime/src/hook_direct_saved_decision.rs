@@ -10,7 +10,7 @@
 //!
 //! - `native_review_policy_binding` (`hook_native_review_binding.py`) on the
 //!   edge's own receipt;
-//! - `native_exact_action` (`hook_native_exact_action.py`) with the process
+//! - `native_exact_action_op` with the process
 //!   environment and extension-control digest the daemon published;
 //! - the decision probe and the non-consuming `resolve_policy_decision_lookup`
 //!   against the integrity state the daemon published, which must still be
@@ -272,7 +272,7 @@ pub(super) fn exact_command_block_response(
 /// `native_saved_decision_response` after its lookup: the verdict to render
 /// and its reuse status for a qualifying decision, `None` for every other
 /// outcome.
-fn saved_verdict(
+pub(crate) fn saved_verdict(
     result: &Object,
     lookup: &Value,
     artifact_id: &str,
@@ -341,9 +341,15 @@ pub(crate) fn render(harness: &str, verdict: &Object, status: &str) -> Option<Va
     if encoded * ESCAPE_FACTOR + ENVELOPE_BYTES > HOOK_RENDER_MAX_BYTES {
         return None;
     }
+    Some(render_approval(harness, verdict, status))
+}
+
+/// Render a verdict already held by the resident, without budgeting for an
+/// extra serialized request to the daemon.
+pub(crate) fn render_approval(harness: &str, verdict: &Object, status: &str) -> Value {
     let mut response = pre_tool(harness, verdict);
     response.insert("approval_reuse_status".to_owned(), json!(status));
-    Some(Value::Object(response))
+    Value::Object(response)
 }
 
 /// `_native_review_is_approvable`: a review the user answers. The user's own

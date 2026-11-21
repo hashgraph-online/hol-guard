@@ -22,6 +22,7 @@ const INVALID: &str = "native_policy_bundle_authority_invalid";
 const UNKNOWN_KIND: &str = "native_policy_bundle_authority_unknown_kind";
 
 /// Why a handler produced no verdict document.
+#[derive(Debug)]
 pub(crate) enum Fail {
     /// The request itself is malformed: an error result.
     Invalid,
@@ -191,7 +192,7 @@ fn with_evidence(kind: &str, input: &Obj, hasher: PayloadHasher) -> Option<Handl
 }
 
 fn needs_evidence(kind: &str, input: &Obj, outcome: &Option<Handled>) -> bool {
-    matches!(kind, "validate_synced" | "validate_v2")
+    matches!(kind, "validate_synced" | "validate_cached" | "validate_v2")
         && input.get("evidence").is_none_or(Value::is_null)
         && matches!(outcome, Some(Ok(value)) if *value == json!({ "needs_evidence": true }))
 }

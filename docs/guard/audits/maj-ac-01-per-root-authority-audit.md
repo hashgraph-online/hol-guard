@@ -109,17 +109,15 @@ renderer took over and has been removed. Grok's envelopes come from
 ## The findings
 
 Two sites settled a verdict in Python that the resident did not give. Both are
-closed. PR #6320 deleted the second, and its row is gone from the baseline. The
-first now renders the resident's `review_settlement`, so its row reads
-`renders-native`. They are written up below because how each was closed is the
-useful part.
+closed. PR #6320 deleted the second. The resident now settles and renders the
+first. Both rows are gone from the Python baseline.
 
 ### `_script_free_watch`
 
-`src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py` settles a
-package review in Python in one case the resident did not settle.
+`hook_native_package_review.py` used to settle a package review in Python in
+one case the resident had left for review.
 
-Its main path is clean: the resident plans the review (`package_review_plan`),
+On the main path, the resident planned the review (`package_review_plan`),
 says whether a verdict may let the command continue at all (`may_allow`), and
 evaluates the request artifact (`evaluate_package_request_artifact`, which is a
 thin call onto `evaluate_package_request_native`). An `allow` verdict renders an
@@ -177,8 +175,8 @@ was written to catch.
 **Fix for `_script_free_watch`:** have the resident carry the answer. The
 resident's package evaluation now returns a `review_settlement` (`allow`,
 `review`, `block` or `guide`, with its reason) that already folds in the
-script-free watch, and `native_package_review_response` renders it the way it
-renders `decision`. `_script_free_watch` is deleted.
+script-free watch. `hook_package_review_settlement.rs` renders the verdict and
+the Python implementation is deleted.
 
 **Fix for the protect resume: delete it.** This audit assumed the shim's inline
 approval left no decision row for the resident to read, so the rewrite had to be

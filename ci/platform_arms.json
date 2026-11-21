@@ -1,6 +1,6 @@
 {
  "schema_version": 1,
- "comment": "Every non-Unix behaviour arm in rust/crates/*/src — `#[cfg(..)]` attribute or `cfg!(..)` expression — with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
+ "comment": "Every non-Unix behaviour arm in rust/crates/*/src \u2014 `#[cfg(..)]` attribute or `cfg!(..)` expression \u2014 with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
  "arms": [
   {
    "file": "rust/crates/guard-command/src/adapters/hook/hook_adapter_paths.rs",
@@ -347,6 +347,14 @@
    "body": "a7b8cd6c3dcf"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "The same rule as `bounded_read_target_with_brackets`: off Unix a rooted spelling holding `..` is refused outright, because Windows normalizes `..` lexically before the filesystem sees it, so the canonicalized path is not the proof of the spelling that it is on Unix. The non-Unix arm is the stricter one.",
+   "file": "rust/crates/guard-command/src/pretool/listing_metadata.rs",
+   "item": "fn plain_operand -- cfg! expression",
+   "cfg": "unix",
+   "body": "9f8991e701d1"
+  },
+  {
    "verdict": "windows-permissive",
    "note": "The Unix arm reads the mode bits and returns `true` for a world-writable directory, which makes the caller keep a glob below it reviewed: anyone can plant a matching link between the screen and the shell's expansion. The non-Unix stub returns `false`, so that check never fires on Windows and a glob under a shared writable root such as `C:\\Windows\\Temp` can be admitted where Unix reviews it. Nothing exercises the stub off Unix. Closing it means reading the directory's DACL for a write grant to a group wider than the owner, next to the ownership queries `guard-runtime-windows-process` already makes.",
    "file": "rust/crates/guard-command/src/pretool/listing_temporary.rs",
@@ -409,14 +417,6 @@
    "item": "fn bounded_read_target_with_brackets -- cfg! expression",
    "cfg": "unix",
    "body": "bf52ad176880"
-  },
-  {
-   "verdict": "windows-equivalent",
-   "note": "The same rule as `bounded_read_target_with_brackets`: off Unix a rooted spelling holding `..` is refused outright, because Windows normalizes `..` lexically before the filesystem sees it, so the canonicalized path is not the proof of the spelling that it is on Unix. The non-Unix arm is the stricter one.",
-   "file": "rust/crates/guard-command/src/pretool/listing_metadata.rs",
-   "item": "fn plain_operand -- cfg! expression",
-   "cfg": "unix",
-   "body": "9f8991e701d1"
   },
   {
    "verdict": "windows-equivalent",
@@ -1481,6 +1481,14 @@
    "item": "fn runtime -- cfg! expression",
    "cfg": "unix",
    "body": "a20adc987e28"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no inode, so the usage meter tells a replaced session file from one that only grew by its creation time. A replaced file gets a new creation time and is read again from the start, as the Unix arm does for a new inode. If the creation time is unavailable the identity is 0 and the size check still rereads a file that shrank.",
+   "file": "rust/crates/guard-runtime/src/context_usage_meter.rs",
+   "item": "fn identity -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "48836ee057f1"
   },
   {
    "verdict": "windows-unsupported",
@@ -2644,19 +2652,19 @@
   },
   {
    "verdict": "windows-equivalent",
-   "note": "Windows has no POSIX mode bits, owner uid or `openat`, so this arm only refuses a cache path that is not a directory and then reads the file through `read_private_bytes`. That opens it via `open_private_read` with `FILE_FLAG_OPEN_REPARSE_POINT` and verifies the handle: its owner must be the current user, SYSTEM or Administrators, and its protected DACL may grant full access only to the current user and SYSTEM. `store` creates the directory through `ensure_private_directory_under`, which applies that private ACL. A cache file owned by or shared with any other user is therefore refused on Windows; a refused cache only costs the content hash.",
-   "file": "rust/crates/guard-runtime/src/runtime_fingerprint_cache.rs",
-   "item": "fn read_cache(directory: &Path, path: &Path, private_root: &Path) -> Option<Vec<u8>>",
-   "cfg": "not(unix)",
-   "body": "cc0cd9a26f33"
-  },
-  {
-   "verdict": "windows-equivalent",
    "note": "Windows has no `st_mtime_nsec`; the arm reads the modification time `Metadata::modified` reports, in nanoseconds from the epoch, as `os.stat().st_mtime_ns` gives it on Windows. The value only feeds the cache key, so a coarser clock can at worst recompute the content fingerprint. `the_fingerprint_ignores_mtime_and_tracks_content` is not Unix-only, so any Windows run of the crate's tests exercises this arm.",
    "file": "rust/crates/guard-runtime/src/runtime_fingerprint.rs",
    "item": "fn modified_ns(metadata: &fs::Metadata) -> i128",
    "cfg": "not(unix)",
    "body": "341845dc6c3c"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no POSIX mode bits, owner uid or `openat`, so this arm only refuses a cache path that is not a directory and then reads the file through `read_private_bytes`. That opens it via `open_private_read` with `FILE_FLAG_OPEN_REPARSE_POINT` and verifies the handle: its owner must be the current user, SYSTEM or Administrators, and its protected DACL may grant full access only to the current user and SYSTEM. `store` creates the directory through `ensure_private_directory_under`, which applies that private ACL. A cache file owned by or shared with any other user is therefore refused on Windows; a refused cache only costs the content hash.",
+   "file": "rust/crates/guard-runtime/src/runtime_fingerprint_cache.rs",
+   "item": "fn read_cache(directory: &Path, path: &Path, private_root: &Path) -> Option<Vec<u8>>",
+   "cfg": "not(unix)",
+   "body": "cc0cd9a26f33"
   },
   {
    "verdict": "other-platform",

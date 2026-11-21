@@ -2,9 +2,12 @@
 //! wrote. The daemon admits that exact command itself; a probe still takes
 //! the library's edge review, and any other call the ordinary review.
 
+use std::path::Path;
+
 use serde_json::{json, Map, Value};
 
 use super::Hook;
+use crate::harness_adapter::frozen_sink_launcher;
 
 const SOURCE_HOOK_FIELD: &str = "cursor_source_hook_event";
 const BEFORE_SHELL: &str = "beforeShellExecution";
@@ -13,6 +16,29 @@ const SINK_VERB: &str = "execute-contained-test";
 /// The runtime's own workspace sandbox sink, which a probe may name instead.
 const NATIVE_SINK_VERB: &str = "contained-workspace-sink";
 const EXECUTION_ENVIRONMENT_KEY: &str = "guard_execution_environment";
+
+/// Recover the sink prefix from the daemon's trusted launch command.
+fn sink_prefix(command: &[String]) -> Option<Vec<String>> {
+    let executable = Path::new(command.first()?);
+    if !executable.is_absolute() {
+        return None;
+    }
+    match command {
+        [_] => Some(vec![frozen_sink_launcher(executable).to_str()?.to_owned()]),
+        [_, isolate, code, bootstrap, guard]
+            if isolate == "-I"
+                && code == "-c"
+                && guard == "guard"
+                && bootstrap.starts_with("import sys;sys.path.insert(0, ")
+                && bootstrap.ends_with(
+                    ");from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))",
+                ) =>
+        {
+            Some(command[..4].to_vec())
+        }
+        _ => None,
+    }
+}
 
 /// Whether `payload` is a sink call the daemon admits here.
 pub(super) fn names_sink(harness: &str, event: &str, payload: &Map<String, Value>) -> bool {
@@ -73,18 +99,15 @@ impl Hook<'_> {
         event: &str,
         payload: &Map<String, Value>,
         directories: (Option<&str>, Option<&str>, Option<&str>),
-        expires: f64,
     ) -> Option<Value> {
         let (workspace, home_dir, guard_home) = directories;
         let (workspace, home_dir, guard_home) = (workspace?, home_dir?, guard_home?);
         if !names_sink(harness, event, payload) {
             return None;
         }
-        let prefix = self.call_by("hook.sink_command", json!({}), expires)?;
-        let sink_command = prefix
-            .get("sink_command")
-            .filter(|value| value.is_array())?;
-        let params = params(payload, workspace, home_dir, guard_home, sink_command);
+        let (cli, _, _) = self.config.cli()?;
+        let sink_command = json!(sink_prefix(cli)?);
+        let params = params(payload, workspace, home_dir, guard_home, &sink_command);
         crate::hook_direct::cursor::daemon_answer(&params)
             .ok()
             .flatten()

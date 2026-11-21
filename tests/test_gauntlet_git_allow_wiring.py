@@ -22,7 +22,9 @@ from ci.gauntlet.git_allow_fixtures import (
     GIT_ALLOW_CASES,
     GIT_ALLOW_ECHO_WORKTREE_CASE,
     GIT_ALLOW_PLUMBING_CASE,
+    GIT_ALLOW_READ_NEW_CHECKOUT_CASE,
     GIT_ORIGIN_SHAPE_CASES,
+    READ_WORKTREE,
 )
 
 
@@ -43,6 +45,15 @@ def test_the_echo_case_checks_the_worktree_its_command_creates() -> None:
     (command,) = case["commands"]
     assert f"../{ECHO_WORKTREE} " in command
     assert f"cd ../{ECHO_WORKTREE} " in command
+
+
+def test_the_new_checkout_case_reads_the_worktree_its_command_creates() -> None:
+    """The read has to open the checkout the add makes, which is the whole point of the case."""
+    (case,) = [case for case in scenarios() if case["id"] == GIT_ALLOW_READ_NEW_CHECKOUT_CASE]
+    (command,) = case["commands"]
+    assert "git fetch origin main &&" in command
+    assert f"../{READ_WORKTREE} HEAD &&" in command
+    assert command.endswith(f"ls ../{READ_WORKTREE}")
 
 
 def test_the_plumbing_case_chain_runs_under_the_host_git(tmp_path: Path) -> None:

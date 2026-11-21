@@ -233,24 +233,30 @@ fn decide(
         ApprovalExtensionRecommendationQueryV1::ControlView {} => {
             Ok(ApprovalExtensionRecommendationPayloadV1::ControlView { view })
         }
-        ApprovalExtensionRecommendationQueryV1::CautionRiskClasses { risk_classes } => {
-            if risk_classes.len() > APPROVAL_EXTENSION_RECOMMENDATION_MAX_RISK_CLASSES {
-                return Err(TOO_MANY_RISK_CLASSES.to_owned());
-            }
-            let mut cautioned: Vec<String> = risk_classes
-                .iter()
-                .filter(|class| CAUTION_RISK_CLASSES.contains(&class.as_str()))
-                .cloned()
-                .collect();
-            cautioned.sort();
-            cautioned.dedup();
-            Ok(
-                ApprovalExtensionRecommendationPayloadV1::CautionRiskClasses {
-                    risk_classes: cautioned,
-                },
-            )
-        }
+        ApprovalExtensionRecommendationQueryV1::CautionRiskClasses { risk_classes } => Ok(
+            ApprovalExtensionRecommendationPayloadV1::CautionRiskClasses {
+                risk_classes: caution_risk_classes(risk_classes)?,
+            },
+        ),
     }
+}
+
+fn caution_risk_classes(risk_classes: &[String]) -> Result<Vec<String>, String> {
+    if risk_classes.len() > APPROVAL_EXTENSION_RECOMMENDATION_MAX_RISK_CLASSES {
+        return Err(TOO_MANY_RISK_CLASSES.to_owned());
+    }
+    let mut cautioned: Vec<String> = risk_classes
+        .iter()
+        .filter(|class| is_caution_risk_class(class))
+        .cloned()
+        .collect();
+    cautioned.sort();
+    cautioned.dedup();
+    Ok(cautioned)
+}
+
+pub(crate) fn is_caution_risk_class(class: &str) -> bool {
+    CAUTION_RISK_CLASSES.contains(&class)
 }
 
 fn recommend(

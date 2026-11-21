@@ -24,6 +24,7 @@
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use guard_contracts::{
+    PolicyIntegrityFinalizeOutcomeV1, PolicyIntegrityFinalizeRequestV1,
     PolicyIntegrityGenerationRequestV1, PolicyIntegrityReconcileRequestV1,
     PolicyIntegrityRowsPayloadV1, PolicyIntegrityRowsRequestV1, PolicyIntegrityRowsResultV1,
     PolicyIntegritySignItemV1, PolicyIntegritySignatureV1, PolicyIntegrityVerifyItemV1,
@@ -74,6 +75,8 @@ pub(crate) struct KeyRedactedRequest<'a> {
     generation: Option<&'a PolicyIntegrityGenerationRequestV1>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reconcile: Option<&'a PolicyIntegrityReconcileRequestV1>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finalize: Option<&'a PolicyIntegrityFinalizeRequestV1>,
 }
 
 impl<'a> From<&'a PolicyIntegrityRowsRequestV1> for KeyRedactedRequest<'a> {
@@ -86,6 +89,7 @@ impl<'a> From<&'a PolicyIntegrityRowsRequestV1> for KeyRedactedRequest<'a> {
             sign: &request.sign,
             generation: request.generation.as_ref(),
             reconcile: request.reconcile.as_ref(),
+            finalize: request.finalize.as_ref(),
         }
     }
 }
@@ -149,6 +153,15 @@ pub(crate) fn evaluate(
         sign,
         generation,
         reconcile,
+        finalize: request
+            .finalize
+            .as_ref()
+            .map(|finalize| PolicyIntegrityFinalizeOutcomeV1 {
+                next_state: crate::policy_integrity_resolver::finalization_state(
+                    finalize.current_state.as_ref(),
+                    &finalize.next_state,
+                ),
+            }),
     })
 }
 

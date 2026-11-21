@@ -65,6 +65,26 @@ def _native_error_code(payload: object) -> str | None:
     return resident_refusal_code(payload)
 
 
+def review_evidence_parts(
+    evidence: Mapping[str, object] | None,
+) -> tuple[bool, str | None, str | None, str | None] | None:
+    """Decode the policy binding, retry binding and identity checked by the edge."""
+
+    if evidence is None or set(evidence) != _REVIEW_EVIDENCE_KEYS:
+        return None
+    valid = evidence["policy_binding_valid"]
+    binding, token, reason = evidence["binding"], evidence["token"], evidence["once_only_reason"]
+    if (
+        not isinstance(valid, bool)
+        or not isinstance(binding, str | None)
+        or not isinstance(token, str | None)
+        or not isinstance(reason, str | None)
+        or (token is None) == (reason is None)
+    ):
+        return None
+    return valid, binding, token, reason
+
+
 def _decode_edge(payload: object) -> dict[str, Any] | None:
     required = {
         "schema",
@@ -130,15 +150,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
     ):
         return None
     evidence = payload.get("review_evidence")
-    if evidence is not None and (
-        not isinstance(evidence, dict)
-        or set(evidence) != _REVIEW_EVIDENCE_KEYS
-        or not isinstance(evidence["policy_binding_valid"], bool)
-        or any(
-            evidence[key] is not None and not isinstance(evidence[key], str)
-            for key in _REVIEW_EVIDENCE_KEYS - {"policy_binding_valid"}
-        )
-    ):
+    if evidence is not None and (not isinstance(evidence, dict) or review_evidence_parts(evidence) is None):
         return None
     return payload
 

@@ -344,17 +344,11 @@ def test_signed_receipt_redaction_authority_can_clear_and_relax_again(
     assert store.get_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER) is None
 
 
-def test_cloud_receipt_redaction_relaxation_resets_receipt_cursor_before_storing_level(tmp_path) -> None:
+def test_cloud_receipt_redaction_relaxation_resets_receipt_cursor_with_the_level(tmp_path) -> None:
+    # The native store writes the cursor, the level and the resync marker in
+    # one transaction, so only the committed rows are observable.
     store = GuardStore(tmp_path)
-    writes: list[tuple[str, dict[str, object], str]] = []
-    original_set_sync_payload = store.set_sync_payload
-
-    def record_set_sync_payload(state_key: str, payload: dict[str, object], now: str) -> None:
-        writes.append((state_key, payload, now))
-        original_set_sync_payload(state_key, payload, now)
-
-    store.set_sync_payload = record_set_sync_payload  # type: ignore[method-assign]
-    original_set_sync_payload(
+    store.set_sync_payload(
         "receipt_sync_cursor",
         {"last_rowid": 17, "synced_at": "2026-04-15T00:00:00Z"},
         "2026-04-15T00:00:00Z",
@@ -366,11 +360,6 @@ def test_cloud_receipt_redaction_relaxation_resets_receipt_cursor_before_storing
         synced_at="2026-04-15T00:01:00Z",
     )
 
-    assert [write[0] for write in writes] == [
-        "receipt_sync_cursor",
-        "cloud_receipt_redaction_level",
-        _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
-    ]
     assert store.get_sync_payload("cloud_receipt_redaction_level") == {
         "level": "none",
         "updated_at": "2026-04-15T00:01:00Z",

@@ -5,7 +5,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.guard.hook_review import hook_native_exact_action
 from codex_plugin_scanner.guard.native_daemon_route import _decide
 from tests import native_review_evidence_support as review_support
 
@@ -47,7 +46,7 @@ def native_launch_evidence(
         )
         return reply["evidence"], reply["unavailable_reason"]
     except (review_support.NativeExactActionError, OSError, RuntimeError, TypeError, ValueError):
-        return None, hook_native_exact_action.UNPROVEN_LAUNCH
+        return None, review_support.UNPROVEN_LAUNCH
 
 
 def validate_launch_evidence(payload: dict[str, Any]) -> None:
@@ -55,7 +54,7 @@ def validate_launch_evidence(payload: dict[str, Any]) -> None:
     invalid = review_support.NativeExactActionError(review_support._OPERATION.invalid)
     evidence, reason = payload["evidence"], payload["unavailable_reason"]
     if evidence is None:
-        if reason not in hook_native_exact_action._ONCE_ONLY_REASONS:
+        if reason not in review_support.DIAGNOSTIC_UNAVAILABLE_REASONS:
             raise invalid
         return
     expected = {

@@ -346,8 +346,7 @@
           "src/codex_plugin_scanner/guard/cli/commands_support_service.py",
           "src/codex_plugin_scanner/guard/cli/approval_commands.py",
           "src/codex_plugin_scanner/guard/cli/inventory_list_commands.py",
-          "src/codex_plugin_scanner/guard/cli/context_assistance_commands.py",
-          "src/codex_plugin_scanner/guard/cli/context_assistance_versions_commands.py",
+          "src/codex_plugin_scanner/guard/cli/runtime_forward.py",
           "src/codex_plugin_scanner/guard/cli/codebase_commands.py"
         ]
       },
@@ -380,8 +379,6 @@
           "src/codex_plugin_scanner/guard/runtime/managed_policy_delivery.py",
           "src/codex_plugin_scanner/guard/policy_authority_api.py",
           "src/codex_plugin_scanner/guard/runtime_health/diagnostics.py",
-          "src/codex_plugin_scanner/guard/hook_review/approval_extension_recommendation.py",
-          "src/codex_plugin_scanner/guard/hook_review/approval_connector_recommendation.py",
           "src/codex_plugin_scanner/guard/local_clis/local_cli_connector_group.py",
           "src/codex_plugin_scanner/guard/local_clis/local_cli_reallow.py",
           "src/codex_plugin_scanner/guard/local_clis/local_cli_capability_api.py"
@@ -503,7 +500,6 @@
           "src/codex_plugin_scanner/guard/route_metrics.py",
           "src/codex_plugin_scanner/guard/resident_evidence_drain.py",
           "src/codex_plugin_scanner/guard/resident_evidence_dispatch.py",
-          "src/codex_plugin_scanner/guard/evidence_drains/__init__.py",
           "src/codex_plugin_scanner/guard/resident_route_counters.py"
         ],
         "reason": "Reviewed generic evidence adapters: the resident owns evidence persistence and native route decisions, while these callers carry bounded requests, acknowledgements, counters, and sanitized route dimensions. Count the complete adapters in runtime scope rather than treating their Python transport code as a decision implementation."
@@ -555,7 +551,6 @@
           "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
           "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
           "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
-          "src/codex_plugin_scanner/guard/muse_hook_render.py",
           "src/codex_plugin_scanner/guard/native_hook_bridge.py",
           "src/codex_plugin_scanner/guard/native_*.py",
           "src/codex_plugin_scanner/guard/proxy/*",
@@ -576,14 +571,6 @@
           "src/codex_plugin_scanner/guard/protect.py"
         ],
         "reason": "Reviewed: module is a decision, parser/scanner, transport, process-dispatch or containment component invoked by a runtime route."
-      },
-      {
-        "path": "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_evidence_drain.py",
-        "reason": "Reviewed and retained in runtime scope: the direct-evidence drain hands each MCP tool call the native relay decided to the receipt writers the Python MCP proxy calls. It validates the queued record, records a forward or block exactly as the resident decided it, and drops any record it cannot validate; it never recomputes a verdict."
-      },
-      {
-        "path": "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_package_evidence_drain.py",
-        "reason": "Reviewed and retained in runtime scope: the package half of the same drain. It writes the receipt the proxy's package lane writes, against the package request's own artifact, rebuilding that artifact from the parser input the resident read and dropping any record whose rebuilt artifact is not the one the resident decided; it never recomputes a verdict."
       },
       {
         "path": [
@@ -627,10 +614,13 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
           "src/codex_plugin_scanner/guard/hook_review/policy_authority_client.py"
         ],
-        "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; policy_authority_client is called from local_supply_chain; cursor_shell_route is called from hook_worker for Cursor's silent shell probe and its sink admission."
+        "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; policy_authority_client is called from local_supply_chain."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/store_policy_decision.py",
+        "reason": "Reviewed: reads a saved policy record by id and adds its integrity and source metadata for Guard's policy presentation."
       },
       {
         "path": [

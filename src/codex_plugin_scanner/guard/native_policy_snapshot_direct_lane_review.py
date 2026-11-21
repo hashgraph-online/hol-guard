@@ -15,6 +15,8 @@ import os
 import sqlite3
 from collections.abc import Mapping
 
+from .store_approval_queries import read_hook_approval_center_origin
+
 # Mirrors the resident limits in guard-policy-snapshot's direct_lane module.
 _MAX_REVIEW_FACT_BYTES = 256
 _MAX_PATH_BYTES = 4096
@@ -31,44 +33,17 @@ def _text_fact(value: object, limit: int) -> str | None:
     return value if length <= limit else None
 
 
-class _ReadState:
-    """A store whose runtime state was already read once."""
-
-    def __init__(self, state: object) -> None:
-        self._state = state
-
-    def get_runtime_state(self) -> object:
-        return self._state
-
-
-def _records_listen_origin(state: object) -> bool:
-    if not isinstance(state, dict):
-        return False
-    center = state.get("approval_center_url")
-    if isinstance(center, str) and center.strip():
-        return True
-    port = state.get("daemon_port")
-    return isinstance(state.get("daemon_host"), str) and isinstance(port, int) and port > 0
-
-
 def _read_origin(store: object) -> tuple[bool, str | None]:
     # The daemon falls back to the default origin until its runtime state
     # records where it listens, and when that state is unreadable. That
     # fallback is not the origin the daemon links once the state lands, so
     # neither case binds an origin; an unreadable state reports itself as
     # unknown so a transient lock reads as no change.
-    from .hook_review.native_review_records import native_review_approval_center_url
-
-    getter = getattr(store, "get_runtime_state", None)
-    if not callable(getter):
-        return True, None
     try:
-        state = getter()
+        origin = read_hook_approval_center_origin(store)
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
         return False, None
-    if not _records_listen_origin(state):
-        return True, None
-    return True, _text_fact(native_review_approval_center_url(_ReadState(state)), _MAX_REVIEW_FACT_BYTES)
+    return True, _text_fact(origin, _MAX_REVIEW_FACT_BYTES)
 
 
 def approval_center_origin(store: object) -> str | None:

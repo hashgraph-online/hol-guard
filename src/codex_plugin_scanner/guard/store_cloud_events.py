@@ -194,6 +194,115 @@ class StoreCloudEventsMixin:
             return payload
         return None
 
+    def record_command_queue_lease_limit(self, state_key: str, limit: int, *, now: str) -> bool:
+        """Merge a queue lane's exact Review lease batch limit into its stored row.
+
+        Only the limit is written; every other field keeps its stored value.
+        Returns whether the row changed.
+        """
+
+        answer = self._native_store_call(
+            "record_command_queue_lease_limit", {"state_key": state_key, "limit": limit, "now": now}
+        )
+        return isinstance(answer, dict) and answer.get("saved") is True
+
+    def transition_command_queue_state(
+        self,
+        state_key: str,
+        transition: str,
+        *,
+        now: str,
+        at: str | None = None,
+        pending: dict[str, object] | None = None,
+        **detail: object,
+    ) -> dict[str, object]:
+        """Move a queue lane's stored row through one named job step.
+
+        The native store owns which fields each step sets and removes, and
+        merges them into the stored row so every other field keeps its stored
+        value. ``at`` is the time the step records, ``now`` the row's write
+        time. ``detail`` carries a step's other inputs (``job``,
+        ``failed_state``, ``error``) and ``route_error``, which is sent as
+        given: ``None`` clears the stored route error. Returns the merged row.
+        """
+
+        args: dict[str, object] = {"state_key": state_key, "transition": transition, "now": now, **detail}
+        if at is not None:
+            args["at"] = at
+        if pending is not None:
+            args["pending"] = pending
+        answer = self._native_store_call("transition_command_queue_state", args)
+        state = answer.get("state") if isinstance(answer, dict) else None
+        if not isinstance(state, dict):
+            raise RuntimeError("native queue state transition returned no state")
+        return dict(state)
+
+    def transition_cloud_review_sync_state(
+        self,
+        state_key: str,
+        transition: str,
+        *,
+        now: str,
+        **detail: object,
+    ) -> dict[str, object]:
+        """Move the Cloud Review sync state row through one named sync step.
+
+        The native store owns which fields each step sets and merges them into
+        the stored row, so every other field keeps its stored value. ``detail``
+        carries the step's inputs (``binding_key``, ``limits``, ``counts``,
+        ``outbox``, ``delivery_binding``, ``error``, ``error_code``,
+        ``keep_auth_code``). Returns the merged row.
+        """
+
+        answer = self._native_store_call(
+            "transition_cloud_review_sync_state",
+            {"state_key": state_key, "transition": transition, "now": now, **detail},
+        )
+        state = answer.get("state") if isinstance(answer, dict) else None
+        if not isinstance(state, dict):
+            raise RuntimeError("native review sync state transition returned no state")
+        return dict(state)
+
+    def workspace_review_enrollment_due(self, auth: dict[str, object], *, now: str) -> list[str] | None:
+        """The binding for ``auth`` when a workspace enrollment check is due.
+
+        The native store builds the binding from the connection fields and
+        reads the schedule row. ``None`` means no check is due, either because
+        the connection is incomplete or the last check is still fresh.
+        """
+
+        answer = self._native_store_call("workspace_review_enrollment_due", {"auth": auth, "now": now})
+        if not isinstance(answer, dict) or answer.get("due") is not True:
+            return None
+        binding = answer.get("binding")
+        if not isinstance(binding, list) or not all(isinstance(field, str) for field in binding):
+            raise RuntimeError("native workspace enrollment check returned no binding")
+        return [str(field) for field in binding]
+
+    def record_workspace_review_enrollment(
+        self,
+        binding: list[str],
+        *,
+        outcome: str,
+        now: str,
+        **detail: object,
+    ) -> dict[str, object]:
+        """Record one workspace enrollment check and schedule the next.
+
+        ``outcome`` is ``enrolled`` (with ``record``, the installed authority
+        text) or ``unavailable`` (with ``http_status``, or ``error_type`` and
+        an optional ``error_code``). Returns the stored row.
+        """
+
+        answer = self._native_store_call(
+            "record_workspace_review_enrollment",
+            {"binding": binding, "outcome": outcome, "now": now, **detail},
+        )
+        state = answer.get("state") if isinstance(answer, dict) else None
+        if not isinstance(state, dict):
+            raise RuntimeError("native workspace enrollment record returned no state")
+        return dict(state)
+
     def list_cloud_exceptions(self, harness: str | None = None) -> list[dict[str, object]]:
         from .native_runner_authority import NativeRunnerAuthorityError
         from .runtime.runner_native_sync import cloud_exceptions

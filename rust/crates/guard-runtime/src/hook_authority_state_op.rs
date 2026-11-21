@@ -112,7 +112,14 @@ const DIRECT_BUSY_TIMEOUT_MS: u64 = 250;
 pub(crate) fn evaluate_hook_authority_state_request(
     request: &HookAuthorityStateRequestV1,
 ) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest_with_limit(request, HOOK_AUTHORITY_STATE_MAX_BYTES)
+    // A local question carries JSON text to preserve answer order. Allow its
+    // escaping overhead here. The projected question still uses the usual bound.
+    let limit = if request.op == "claude_question_settle_hook" {
+        HOOK_AUTHORITY_STATE_MAX_BYTES * 2
+    } else {
+        HOOK_AUTHORITY_STATE_MAX_BYTES
+    };
+    let request_sha256 = request_digest_with_limit(request, limit)
         .map_err(|_| "native_hook_authority_state_too_large".to_owned())?;
     let (status, code, payload) = match evaluate(request) {
         Ok(payload) => ("ok", "ok".to_owned(), Some(payload)),

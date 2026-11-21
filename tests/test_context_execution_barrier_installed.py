@@ -12,12 +12,11 @@ import pytest
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.native_bash_protocol import runtime_status
-from codex_plugin_scanner.guard.native_context_assistance import control
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.runtime.bound_bash_sink import run_bound_bash
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.context_execution_barrier import NativeEffectBarrier
-from tests.context_persistence_installed_support import operator
+from tests.context_persistence_installed_support import context_status, operator
 
 
 @pytest.mark.integration
@@ -98,6 +97,6 @@ def test_supported_http_barrier_requires_native_consent_and_delivers(native_cont
             assert result == 0, error
             assert barrier.entered.is_set()
             assert (home / "execution-report.txt").read_text() == "installed-cigar-owner\nnative-effect-completed\n"
-            assert control("status", guard_home=guard)["runtime"] is None
+            assert context_status(guard).get("runtime") is None
         finally:
             assert close_native_residents(guard)

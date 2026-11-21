@@ -1,6 +1,6 @@
 use serde_json::{json, Map, Value};
 
-use super::{names_sink, params};
+use super::{names_sink, params, sink_prefix};
 
 fn payload(value: Value) -> Map<String, Value> {
     match value {
@@ -73,6 +73,42 @@ fn params_carry_the_sink_prefix_and_an_unstamped_caller() {
         built["payload"]["guard_execution_environment"]["pager"],
         "less"
     );
+}
+
+#[test]
+fn sink_prefix_uses_the_daemons_exact_isolated_bootstrap() {
+    let directory = tempfile::tempdir().unwrap();
+    let python = directory.path().join("python");
+    let cli = crate::hook_process_spawn::isolated_guard_cli_command(
+        python.to_str().unwrap(),
+        directory.path(),
+        &["guard".to_owned()],
+    );
+    assert_eq!(sink_prefix(&cli).as_deref(), Some(&cli[..4]));
+    let mut malformed = cli;
+    malformed[3] = "print('unrelated bootstrap')".to_owned();
+    assert!(sink_prefix(&malformed).is_none());
+    assert!(sink_prefix(&["hol-guard".to_owned()]).is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_frozen_desktop_sink_uses_the_executable_stable_launcher() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("versions/1/bundle/hol-guard");
+    let shim = directory.path().join("current-hol-guard");
+    std::fs::write(&shim, b"").unwrap();
+    std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(
+        sink_prefix(&[executable.to_str().unwrap().to_owned()]),
+        Some(vec![shim.to_str().unwrap().to_owned()])
+    );
+
+    let standalone = directory.path().join("standalone/hol-guard");
+    let command = vec![standalone.to_str().unwrap().to_owned()];
+    assert_eq!(sink_prefix(&command), Some(command.clone()));
 }
 
 #[test]

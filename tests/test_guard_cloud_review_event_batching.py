@@ -188,14 +188,12 @@ def test_oversized_oldest_event_is_quarantined_without_starving_following_event(
     binding_key = cloud_review_sync._batch_binding_key(
         {key: value for key, value in binding.items() if key != "oauth_source"}
     )
-    cloud_review_sync._save_sync_state(
+    cloud_review_sync._transition_sync_state(
         store,
-        {
-            "batch_binding_key": binding_key,
-            "batch_events": 50,
-            "batch_max_bytes": 400,
-            "batch_event_cap": CLOUD_REVIEW_MAX_BATCH_EVENTS,
-        },
+        {},
+        "batch_limits",
+        binding_key=binding_key,
+        limits={"events": 50, "bytes": 400, "event_cap": CLOUD_REVIEW_MAX_BATCH_EVENTS},
     )
     posted_sequences: list[int] = []
 

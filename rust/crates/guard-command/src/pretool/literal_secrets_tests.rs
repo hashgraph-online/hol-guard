@@ -357,3 +357,52 @@ fn a_quoted_sql_password_holding_the_other_quote_is_a_secret() {
         assert!(!holds_literal_secret(text), "{text}");
     }
 }
+
+#[test]
+fn a_metric_name_carrying_a_window_is_not_a_secret() {
+    for text in [
+        "      metricKey: 'downloads_30d',",
+        "      windowKey: 'window_7d',",
+        "      bucketKey: 'top_100_items',",
+        "const cacheKey = 'repository_90d';",
+        // The same window written without a separator: one word, one
+        // count and its unit still read as an identifier.
+        "      metricKey: 'downloads30d',",
+        "const cacheKey = 'retention90d';",
+    ] {
+        assert!(!holds_literal_secret(text), "{text}");
+    }
+    // A readable run of letters is not on its own an identifier: these reach
+    // the digit-ratio check and have to stay secrets. The first pair opens
+    // with a word and then carries the generated part; the rest are random
+    // throughout.
+    for text in [
+        format!("      apiKey: '{}',", joined(&["prod4930", "17582"])),
+        format!("const token = '{}';", joined(&["stage", "86249713055"])),
+        format!("      apiKey: '{}',", joined(&["k7m2q9", "x4vb3n"])),
+        format!("const token = '{}';", joined(&["qf4zr8", "wn2kd6"])),
+        // Single digits spread through a value whose tail is generated: the
+        // digits read like a count, so only the unreadable tail tells them
+        // apart from an identifier.
+        format!("      apiKey: '{}',", joined(&["sessionkey1x", "2y3z4w5v"])),
+        format!("const token = '{}';", joined(&["requestkey4", "h1t9p3qz"])),
+        // A short word followed by digits that break up one- and two-letter
+        // fragments: no piece of it reads as a count or a window, so the
+        // value stays under the randomness check.
+        format!("      apiKey: '{}',", joined(&["sum", "mer7k2x9"])),
+        format!("const token = '{}';", joined(&["rele", "ase9a3b7c"])),
+        // A word followed by more than one group of digits, with short letter
+        // fragments between them: an identifier carries one count, so a value
+        // that repeats the shape stays under the randomness check.
+        format!(
+            "      apiKey: '{}',",
+            joined(&["winter_4821", "_qk_7193_zt"])
+        ),
+        format!(
+            "const token = '{}';",
+            joined(&["harbor-2074", "-vn-8316-pd"])
+        ),
+    ] {
+        assert!(holds_literal_secret(&text), "{text}");
+    }
+}

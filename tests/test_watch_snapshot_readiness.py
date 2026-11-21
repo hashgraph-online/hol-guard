@@ -96,6 +96,9 @@ def test_publish_command_control_race_follows_posture(
     clock = _DeterministicClock()
     publisher = _publisher(tmp_path, clock)
     publisher._retry_not_before_monotonic = clock.monotonic - 1.0
+    # This test supplies a synthetic ACK. Keep the origin read on the same
+    # fixture boundary so it cannot start a live resident with its own generation.
+    monkeypatch.setattr(publisher.store, "get_hook_approval_center_origin", lambda: None)
     monkeypatch.setattr(
         publisher,
         "_publication_context",

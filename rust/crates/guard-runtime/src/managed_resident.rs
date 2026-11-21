@@ -26,8 +26,8 @@ mod handoff_record;
 mod lease;
 #[path = "managed_resident_stop_snapshot.rs"]
 mod stop_snapshot;
-pub(crate) use lease::client_request;
 use lease::client_request_with_lease;
+pub(crate) use lease::{client_request, HeldLease};
 #[path = "managed_resident_client_request.rs"]
 mod client_request_flow;
 #[path = "managed_resident_transport.rs"]

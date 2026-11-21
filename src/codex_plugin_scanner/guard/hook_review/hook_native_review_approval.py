@@ -15,21 +15,19 @@ from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, CODEX_BROWSE
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_adapter import NativeHookAdapterError, native_review_query
 from ..native_hook_authority_state import hook_authority_integrity_key
+from ..native_hook_edge import review_evidence_parts
+from ..native_hook_render import native_exact_command_block_response, native_render_cli, native_saved_decision_response
+from ..native_package_review_plan import native_package_review_response
 from ..native_payload_facts import native_connector_lookup, native_hook_facts
+from ..store_approval_queries import hook_approval_center_url as native_review_approval_center_url
 from .hook_fail_closed import (
     canonical_harness,
-    render_accepted_allow,
+    fail_closed_pre_tool,
     render_pre_tool,
     render_pre_tool_review,
     render_silent_review_block,
 )
-from .hook_native_exact_action import review_evidence_parts
-from .hook_native_package_review import native_package_review_response
 from .hook_native_review_binding import admit_accepted_call, native_review_policy_binding, native_review_settle
-from .hook_native_saved_approval import native_exact_command_block_response, native_saved_decision_response
-from .native_review_allow_hint import native_review_hint_ask
-from .native_review_connector import raise_connector_setup_notice
-from .native_review_records import native_review_approval_center_url
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -98,6 +96,7 @@ def pause_native_pre_tool_for_approval(
         native_result=native_result,
         workspace=workspace,
         edge_hint=exact_command_block,
+        deadline=deadline,
     )
     if command_block is not None:
         return command_block
@@ -108,6 +107,7 @@ def pause_native_pre_tool_for_approval(
         artifact_id=_native_review_artifact_id(harness, tool_name),
         native_result=native_result,
         workspace=workspace,
+        deadline=deadline,
     )
     if saved is not None:
         return admit_accepted_call(store, harness=harness, payload=payload, response=saved)
@@ -127,28 +127,18 @@ def pause_native_pre_tool_for_approval(
         claimed_saved_allow_hash=claimed_saved_allow_hash,
         claimed_approval_request_id=claimed_approval_request_id,
     )
-    if reuse == "blocked":
-        blocked = dict(native_result)
-        blocked.update(
-            decision="deny",
-            minimum_action="block",
-            policy_action="block",
-            reason_code="native_review_user_block",
-            reason=(
-                "The user chose Keep blocked for this action. Do not retry it; continue with a permitted alternative."
-            ),
+    if reuse is not None:
+        rendered = native_render_cli(
+            "review_reuse",
+            harness,
+            {"outcome": reuse, "verdict": dict(native_result)},
+            guard_home=guard_home,
+            deadline=deadline,
         )
-        response = render_pre_tool(harness, blocked, guard_home=guard_home, deadline=deadline)
-        response["prompted"] = False
-        response["approval_reuse_status"] = "blocked"
-        return response
-    if reuse == "allowed":
-        allowed = dict(native_result)
-        allowed["decision"] = "allow"
-        allowed["minimum_action"] = "allow"
-        allowed["policy_action"] = "allow"
-        accepted = render_accepted_allow(harness, allowed, guard_home=guard_home, deadline=deadline)
-        return admit_accepted_call(store, harness=harness, payload=payload, response=accepted)
+        response = rendered[1] if rendered is not None and rendered[0] == "document" else None
+        return admit_accepted_call(
+            store, harness=harness, payload=payload, response=response or fail_closed_pre_tool(harness)
+        )
     package_review = native_package_review_response(
         store,
         harness=harness,
@@ -357,12 +347,14 @@ def queue_native_pre_tool_review(
         # in one store call. A waiting Codex hook's operation and resume
         # record, a prompted Claude review's permission notice, and a
         # connector-setup review's context are written with it.
+        claude_key = _claude_notice_key(store, deadline) if claude_notice else None
+        remaining_ms = None if deadline is None else max(0, int((deadline - time.monotonic()) * 1000))
         stored = queue(
             query,
             now,
-            hint=native_review_hint_ask(deadline),
+            hint={"deadline_left_ms": remaining_ms},
             silent=silent,
-            claude_key=_claude_notice_key(store, deadline) if claude_notice else None,
+            claude_key=claude_key,
             codex_live_wait=live_wait,
             respond=respond,
             connector_lookup=connector_lookup,
@@ -374,7 +366,6 @@ def queue_native_pre_tool_review(
         reason = error.reason if isinstance(error, NativeGuardStoreUnavailable) else type(error).__name__
         _LOGGER.warning("Native review queue failed for %s (%s)", request_id, reason)
         return None
-    raise_connector_setup_notice(store, stored)
     return stored if isinstance(stored, dict) else None
 
 

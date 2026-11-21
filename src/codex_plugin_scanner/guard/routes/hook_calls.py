@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
+from ..library_call_deadline import LIBRARY_CALL_DEADLINE
 from ..store import GuardStore
 
 _SERVERS: dict[str, Any] = {}
@@ -184,110 +185,19 @@ def hook_integrity_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str
 def hook_integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Finalize Rust's policy-integrity generation in the secret store."""
 
+    deadline = LIBRARY_CALL_DEADLINE.get()
+    if deadline is None or time.monotonic() >= deadline:
+        return {"finalized": False}
     next_control_state = args.get("next_control_state")
     if next_control_state is None:
         return {"finalized": True}
     if not isinstance(next_control_state, dict):
         return {"finalized": False}
     try:
-        stored = store._finalize_policy_integrity_control_state(next_control_state)
+        stored = store._finalize_policy_integrity_control_state(next_control_state, deadline=deadline)
     except (OSError, RuntimeError, TypeError, ValueError):
         return {"finalized": False}
     return {"finalized": stored is True}
-
-
-def hook_integrity_finalize_locked(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Compatibility alias for the lock-owning finalize operation.
-
-    The old callback could outlive the coordinator lock after a timed-out
-    resident request. Finalization now always reacquires and validates its
-    own lock before writing the secret-backed generation.
-    """
-
-    return hook_integrity_finalize(store, args)
-
-
-def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """The argv prefix of the contained sink, for the daemon's Cursor sink admission."""
-
-    from ..contained_sink_command import contained_sink_command_prefix
-
-    return {"sink_command": list(contained_sink_command_prefix())}
-
-
-def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Transport a settled Claude approval plan to the Rust authority op."""
-
-    from ..cli._commands_shared import _now
-    from ..native_hook_authority_state import (
-        HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
-        hook_authority_state,
-    )
-
-    session_id = _text(args.get("session_id"))
-    artifact_id = _text(args.get("artifact_id"))
-    pending_artifact_hash = _text(args.get("pending_artifact_hash"))
-    reason = _text(args.get("reason"))
-    source = _text(args.get("source"))
-    if not (session_id and artifact_id and pending_artifact_hash and reason and source):
-        return {"valid": False}
-
-    def save_under_lock() -> dict[str, object] | None:
-        try:
-            integrity = hook_integrity_begin(store, {"now": _now(), "sign": True})
-        except Exception:
-            return None
-        payload = {
-            "artifact_id": artifact_id,
-            "pending_artifact_hash": pending_artifact_hash,
-            "reason": reason,
-            "source": source,
-            "plan": args.get("plan"),
-        }
-        if isinstance(integrity.get("current_generation"), int):
-            payload["current_generation"] = integrity["current_generation"]
-        integrity_fields: dict[str, object] = (
-            {
-                "integrity_key_b64": integrity["integrity_key_b64"],
-                "integrity_key_id": integrity["integrity_key_id"],
-            }
-            if isinstance(integrity.get("current_generation"), int)
-            and isinstance(integrity.get("integrity_key_b64"), str)
-            and isinstance(integrity.get("integrity_key_id"), str)
-            else {}
-        )
-        return hook_authority_state(
-            store,
-            "claude_question_save",
-            now=_now(),
-            required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
-            integrity=integrity_fields,
-            session_id=session_id,
-            payload=payload,
-        )
-
-    with store.hold_policy_integrity_generation_lock():
-        reply = save_under_lock()
-    if not isinstance(reply, dict) or reply.get("saved") is not True:
-        return {"valid": False}
-    finalized = hook_integrity_finalize(store, {"next_control_state": reply.get("next_control_state")})
-    if finalized.get("finalized") is not True:
-        return {"valid": False}
-    consumed = hook_authority_state(
-        store,
-        "claude_question_consume",
-        now=_now(),
-        required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
-        session_id=session_id,
-        payload={
-            "artifact_id": artifact_id,
-            "pending_artifact_hash": pending_artifact_hash,
-            **({"pending_id": args["pending_id"]} if isinstance(args.get("pending_id"), str) else {}),
-        },
-    )
-    if not isinstance(consumed, dict) or consumed.get("consumed") is not True:
-        return {"valid": False}
-    return reply
 
 
 _LIVE_DECISION_REVIEW_SECONDS = 1.45
@@ -360,13 +270,10 @@ def codex_live_decision(store: GuardStore, args: Mapping[str, Any]) -> dict[str,
 
 
 HOOK_CALLS = {
-    "hook.claude_question_save": hook_claude_question_save,
     "hook.codex_live_decision": codex_live_decision,
     "hook.integrity_key": hook_integrity_key,
     "hook.integrity_begin": hook_integrity_begin,
     "hook.integrity_finalize": hook_integrity_finalize,
-    "hook.integrity_finalize_locked": hook_integrity_finalize_locked,
-    "hook.sink_command": hook_sink_command,
     "hook.prepare": hook_prepare,
     "hook.ready": hook_ready,
     "hook.warm": hook_warm,

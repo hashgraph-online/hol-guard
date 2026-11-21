@@ -1,6 +1,9 @@
 use serde_json::{json, Value};
 
-use super::{approval_notice, approval_notices, message, pending, raise_approvals, Shown};
+use super::{
+    approval_notice, approval_notices, message, pending, pending_connector_row, raise_approvals,
+    Shown,
+};
 
 #[test]
 fn a_connector_notice_reads_as_the_daemon_writes_it() {
@@ -106,4 +109,87 @@ fn a_call_raises_all_its_notices_in_order_or_none() {
     assert_eq!(approval_notices(&mixed), None);
     assert!(!raise_approvals("/nonexistent-guard-home", "test", &mixed));
     assert_eq!(approval_notices(&[]), Some(Vec::new()));
+}
+
+#[test]
+fn a_connector_notice_requires_the_matching_pending_grouped_row() {
+    let mut row = notice(json!({"status": "pending", "queue_group_id": "connector:example"}));
+    let shown = pending_connector_row(&row, "req-1", "Example CLI".to_owned()).unwrap();
+    assert!(shown.connector);
+    assert_eq!(shown.subject, "Example CLI");
+    assert!(pending_connector_row(&row, "req-2", "Example CLI".to_owned()).is_none());
+    row["status"] = json!("resolved");
+    assert!(pending_connector_row(&row, "req-1", "Example CLI".to_owned()).is_none());
+    row["status"] = json!("pending");
+    row["queue_group_id"] = json!("unrelated");
+    assert!(pending_connector_row(&row, "req-1", "Example CLI".to_owned()).is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_connector_review_notifies_only_once_per_pending_group() {
+    use super::{notify_with, Notice, TITLE};
+    use crate::guard_store_approval_reads::tests::seed;
+
+    let home = tempfile::tempdir().unwrap();
+    let guard_home = home.path().to_str().unwrap();
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../testdata/guard_store/approval_metadata_vectors.json"
+    ))
+    .unwrap();
+    let ids = ["connector-notice-first", "connector-notice-sibling"];
+    let rows: Vec<_> = ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| {
+            let mut row = fixture["scenarios"][0]["rows"][0].clone();
+            row["request_id"] = json!(id);
+            row["queue_group_id"] = json!(format!("connector:example:{index:016x}"));
+            row["harness"] = json!("codex");
+            row["workspace"] = Value::Null;
+            row["approval_url"] = json!(format!("http://127.0.0.1:4781/requests/{id}"));
+            row
+        })
+        .collect();
+    seed(
+        &home.path().join("guard.db"),
+        &fixture,
+        &json!({"rows": rows}),
+    );
+
+    let mut sent = Vec::new();
+    for request_id in ids {
+        notify_with(
+            guard_home,
+            "guard",
+            Notice::Connector {
+                request_id: request_id.to_owned(),
+                connector_name: "lanectl".to_owned(),
+            },
+            |id, title, text, url| {
+                assert_eq!(title, TITLE);
+                assert_eq!(
+                    text,
+                    "Codex is waiting on a connector Guard has not set up yet: lanectl"
+                );
+                assert_eq!(url, format!("http://127.0.0.1:4781/requests/{id}"));
+                sent.push(id.to_owned());
+                true
+            },
+        );
+    }
+    assert_eq!(sent, [ids[0]]);
+}
+
+#[test]
+fn the_drain_only_reconstructs_notices_from_the_matching_pending_row() {
+    let pending = notice(json!({"status": "pending"}));
+    let shown = super::pending_approval_row(&pending, "req-1").unwrap();
+    assert_eq!(
+        shown.approval_url,
+        pending["approval_url"].as_str().unwrap()
+    );
+    assert!(super::pending_approval_row(&pending, "req-2").is_none());
+    let resolved = notice(json!({"status": "resolved"}));
+    assert!(super::pending_approval_row(&resolved, "req-1").is_none());
 }

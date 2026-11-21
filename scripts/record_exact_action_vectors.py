@@ -19,6 +19,7 @@ same deterministic fakes the Rust test installs.
 from __future__ import annotations
 
 import argparse
+import base64
 import gzip
 import hashlib
 import json
@@ -34,7 +35,11 @@ from unittest import mock
 from exact_action_vector_cases import all_cases
 
 BASE_COMMIT = "8927f7bf57"
-FAKE_TOKEN = "guard-approval-context:v1:AAAA"
+FAKE_TOKEN = "guard-approval-context:v1:" + base64.urlsafe_b64encode(
+    json.dumps(
+        {"version": 1, **dict.fromkeys(("identity", "content", "capabilities", "policy", "sandbox"), "0" * 64)}
+    ).encode()
+).decode().rstrip("=")
 GIT_DIGEST_MARK = "{GIT_CONFIG_DIGEST}"
 FILE_MARK = "{FILE_SHA}"
 
@@ -138,8 +143,12 @@ def _replace_digests(value, preimages: dict):
 
 
 def _run_exact(case: dict, root: Path) -> dict:
-    from codex_plugin_scanner.guard.hook_review import hook_native_saved_approval
-    from codex_plugin_scanner.guard.native_daemon_manage import hook_native_exact_identity, hook_native_launch_identity
+    # These modules come from BASE_COMMIT, before the daemon package split.
+    from codex_plugin_scanner.guard.daemon import (
+        hook_native_exact_identity,
+        hook_native_launch_identity,
+        hook_native_saved_approval,
+    )
     from codex_plugin_scanner.guard.runtime import package_intent_parser
 
     query = case["request"]["query"]
@@ -230,7 +239,7 @@ def _run_exact(case: dict, root: Path) -> dict:
 
 
 def _run_binding(case: dict) -> dict:
-    from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
+    from codex_plugin_scanner.guard.daemon import hook_native_review_approval
 
     query = case["request"]["query"]
     payload = {"tool_input": {"command": query["command"]}} if query["command"] is not None else {}

@@ -25,6 +25,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from ..library_call_deadline import LIBRARY_CALL_DEADLINE
+
 # The native daemon sends at most this much: a request body plus its routing.
 _REQUEST_LIMIT_BYTES = 2_200_000
 # How many resident calls may run at once; the rest wait in order for a worker.
@@ -140,6 +142,7 @@ def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callabl
             _taken(len(request))
             if expires_at is not None and time.monotonic() >= expires_at:
                 continue
+            token = LIBRARY_CALL_DEADLINE.set(expires_at)
             try:
                 line = answer_line(guard_home, request)
                 with write_lock:
@@ -158,6 +161,8 @@ def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callabl
                         write(_worker_failure_line(request))
                 except BaseException:
                     pass
+            finally:
+                LIBRARY_CALL_DEADLINE.reset(token)
 
     def _taken(size: int) -> None:
         nonlocal queued_bytes

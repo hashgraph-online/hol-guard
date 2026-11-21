@@ -97,6 +97,19 @@ impl Env<'_> {
                 request.payload.as_ref(),
                 request.tilde_home.as_deref(),
             ),
+            "claude_question_settle_hook" => {
+                let raw = request
+                    .payload
+                    .as_ref()
+                    .and_then(Value::as_str)
+                    .ok_or(ERROR_INVALID)?;
+                let session = required(&request.session_id)?;
+                let Some(question) = crate::claude_guard_question::project_hook_question(raw)
+                else {
+                    return Ok(json!({"outcome": "none"}));
+                };
+                self.claude_question_settle(session, Some(&question), request.tilde_home.as_deref())
+            }
             "claude_question_save" => {
                 self.claude_question_save(required(&request.session_id)?, hook_payload(request)?)
             }

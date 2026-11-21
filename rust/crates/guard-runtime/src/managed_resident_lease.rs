@@ -182,6 +182,27 @@ pub(super) fn client_request_with_lease(
     super::client_request_with_deadline(state_base, payload, overall_deadline, client_lease)
 }
 
+/// A client lease kept across many requests, so the resident stays up while a
+/// long-lived client is open, as `resident-client-stream` does for its stream.
+/// The lease file goes when this is dropped.
+pub(crate) struct HeldLease {
+    state_base: PathBuf,
+    lease: ClientLease,
+}
+
+impl HeldLease {
+    pub(crate) fn acquire(state_base: &Path) -> Result<Self, String> {
+        Ok(Self {
+            state_base: state_base.to_path_buf(),
+            lease: acquire(state_base)?,
+        })
+    }
+
+    pub(crate) fn request(&self, payload: &[u8], timeout: Duration) -> Result<Vec<u8>, String> {
+        client_request_with_lease(&self.state_base, payload, timeout, &self.lease)
+    }
+}
+
 fn acquire_with_lock<F>(state_base: &Path, acquire_lock: F) -> Result<ClientLease, String>
 where
     F: FnOnce(&Path, &Path) -> Result<LeaseDirectoryLock, String>,

@@ -8,7 +8,6 @@ the route, the caller check and the body read.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -51,46 +50,6 @@ def settings_response_payload(guard_home: Path, settings: dict[str, object]) -> 
         "settings": settings,
         "protection_capabilities": protection_capability_payloads(),
     }
-
-
-def _hand_settings_to_cigar(guard_home: Path) -> None:
-    """Give saved CIGAR settings to the native service right away.
-
-    Prompt hooks read the native copy, which otherwise refreshes only on the
-    next context call. Without this, turning project context back on leaves
-    every prompt without context until something asks for CIGAR's status.
-    """
-
-    from .. import native_context_assistance
-    from ..native_context_assistance import ContextAssistanceError
-
-    with suppress(ContextAssistanceError):
-        native_context_assistance.control("status", guard_home=guard_home)
-
-
-def codex_short_replies_ensure(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Turning CIGAR on also asks Codex for short replies, unless the user turned that off.
-
-    The daemon calls this after it saved a settings change that turns CIGAR on. Measured
-    on top of CIGAR it cut the Codex bill by 5-14% with no task lost. A Codex config Guard
-    cannot change leaves the saved CIGAR setting as it is.
-    """
-
-    del args
-    guard_home = store.guard_home
-    # A Guard home outside the home folder belongs to a test or a sandbox; the Codex
-    # config in the home folder is not its to change.
-    if guard_home.resolve().parent != Path.home().resolve():
-        return _reply({"state": "skipped"})
-    import os
-
-    from ..codex_lean_sessions import LeanSessionsError
-    from ..codex_short_replies import ensure
-
-    with suppress(LeanSessionsError, OSError, RuntimeError, TimeoutError, ValueError):
-        ensure(Path.home(), guard_home, os.environ)
-        return _reply({"state": "asked"})
-    return _reply({"state": "failed"})
 
 
 def _requeue_privacy_projection(store: GuardStore, level: str) -> None:
@@ -148,8 +107,6 @@ def _apply_settings(store: GuardStore, payload: dict[str, object], *, missing_er
         return _reply(error.to_payload(), error.status)
     except ValueError as error:
         return _reply({"error": "invalid_settings", "message": str(error)}, 400)
-    if "context_assistance" in config_settings:
-        _hand_settings_to_cigar(guard_home)
     return _reply(settings_response_payload(guard_home, editable_guard_settings(config)))
 
 
@@ -209,5 +166,4 @@ def update_channel(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
 SETTINGS_CALLS = {
     "route.approval_gate_setup": approval_gate_setup,
     "route.update_channel": update_channel,
-    "route.codex_short_replies_ensure": codex_short_replies_ensure,
 }

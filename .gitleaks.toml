@@ -44,6 +44,15 @@ regexes = [
 id = "generic-api-key"
 
 [[rules.allowlists]]
+description = "Synthetic API-key literal in the benign-gate negative case for the literal-secret write screen, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/fixtures/benign_false_positive_gate\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"content":\ "export\ const\ client\ =\ \{\ apiKey:\ 'k7m2q9x4vb3n'\ \};\\n"[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
 description = "CIGAR verification manifests record SHA-256 source digests, not credentials"
 condition = "AND"
 regexTarget = "line"
