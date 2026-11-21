@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::time::{Duration, Instant};
 
 use super::super::super::HANDSHAKE_SCHEMA;
 use super::*;
