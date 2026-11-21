@@ -28,16 +28,9 @@ from .command_capability import (
     consume_local_command_approval,
     register_pending_command,
 )
-from .command_executors import (
-    COMMAND_OPERATION_SCHEMA_VERSIONS,
-    execute_guard_command_job,
-)
-from .command_queue_activation import (
-    command_queue_is_enabled,
-)
-from .command_queue_activation import (
-    command_queue_lease_wait_ms as _command_queue_lease_wait_ms,
-)
+from .command_executors import COMMAND_OPERATION_SCHEMA_VERSIONS, execute_guard_command_job
+from .command_queue_activation import command_queue_is_enabled
+from .command_queue_activation import command_queue_lease_wait_ms as _command_queue_lease_wait_ms
 from .command_queue_auth import reuse_command_queue_auth_context
 from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
 from .command_queue_authority import command_queue_oauth_target
@@ -60,6 +53,7 @@ from .command_queue_protocol import lease_id as _lease_id
 from .command_queue_protocol import result_payload as _result_payload
 from .command_queue_protocol import retry_wait_seconds as _retry_wait_seconds  # noqa: F401
 from .command_queue_results import drop_refused_result, post_result_unless_refused
+from .command_queue_settle import SettleCalls, settle_authorized_job
 from .command_queue_settle_slots import settle_slots
 from .command_queue_state import (
     COMMAND_QUEUE_ENABLED_ENV,
@@ -245,29 +239,14 @@ def _native_lease(store: GuardStore, auth_context: dict[str, object], call: Leas
     )
 
 
-def _retry_pending_result(
-    store: GuardStore,
-    auth_context: dict[str, object],
-    state: dict[str, object],
-) -> bool:
+def _retry_pending_result(store: GuardStore, auth_context: dict[str, object], state: dict[str, object]) -> bool:
     return retry_pending_result(
-        store,
-        auth_context,
-        state,
-        post_result=_post_result,
-        resolve_auth=_resolve_command_queue_auth_context,
+        store, auth_context, state, post_result=_post_result, resolve_auth=_resolve_command_queue_auth_context
     )
 
 
 def _record_leased_job(store: GuardStore, state: dict[str, object], item: dict[str, object]) -> None:
-    state.update(
-        {
-            "state": "leased",
-            "last_lease_at": _now(),
-            "active_job": item,
-            "last_poll_was_empty": False,
-        }
-    )
+    state.update({"state": "leased", "last_lease_at": _now(), "active_job": item, "last_poll_was_empty": False})
     _save_state(store, state)
 
 
@@ -301,75 +280,15 @@ def _settle_authorized_job(
     item: dict[str, object],
     authorized: AuthorizedCommandJob,
 ) -> dict[str, object]:
-    execution: dict[str, object]
-    # The job is leased by this point and the lease only closes on a posted
-    # result. Matching the approval grant, recording the replay row and
-    # registering a pending approval all ask the runtime for a signature or
-    # a digest, so each of them can refuse. A refusal is this job's failure
-    # and has to reach the posted result; letting it escape the poll would
-    # leave the lease open with nothing posted and nothing recorded.
-    try:
-        # Spending the grant and recording the replay row both name this
-        # job by the runtime's digest. Ask for it once, before the grant
-        # is deleted: a resident that stopped answering in between would
-        # otherwise fail the job with the user's approval already gone.
-        needs_replay_row = not is_native_workspace_review_job(item)
-        identity_digest = (
-            command_identity_digest(store, authorized)
-            if authorized.requires_local_approval or needs_replay_row
-            else None
-        )
-        if not consume_local_command_approval(
-            store,
-            authorized,
-            identity_digest=identity_digest,
-            record_replay=needs_replay_row,
-        ):
-            pending = register_pending_command(store, authorized, item)
-            execution = {
-                "waitingLocalConfirm": True,
-                "operation": authorized.operation,
-                "jobId": authorized.identity["id"],
-                "approveCommand": pending["approveCommand"],
-            }
-            audit_command_decision(
-                store,
-                "cloud_command.waiting_local_approval",
-                job=item,
-                reason="local_approval_required",
-            )
-        else:
-            audit_command_decision(
-                store,
-                "cloud_command.accepted",
-                job=item,
-                reason="capability_and_job_valid",
-            )
-            try:
-                _LOGGER.info("Guard command leased.")
-                execution = _execute_job(item, context, store)
-            except Exception as error:
-                _LOGGER.warning(
-                    "Guard command execution failed: error=%s",
-                    _redacted_error(error),
-                )
-                execution = {
-                    "failureCode": "execution_error",
-                    "failureMessage": _redacted_error(error),
-                }
-    except (CommandCapabilityError, CommandCapabilityUnavailableError) as error:
-        reason = error.code if isinstance(error, CommandCapabilityError) else error.reason
-        audit_command_decision(
-            store,
-            "cloud_command.rejected",
-            job=item,
-            reason=reason,
-        )
-        execution = {
-            "failureCode": reason,
-            "failureMessage": "The local Guard command capability could not settle this job.",
-        }
-    return execution
+    calls = SettleCalls(
+        identity_digest=command_identity_digest,
+        consume=consume_local_command_approval,
+        register=register_pending_command,
+        audit=audit_command_decision,
+        native_review=is_native_workspace_review_job,
+        execute=_execute_job,
+    )
+    return settle_authorized_job(store, context, item, authorized, calls)
 
 
 def poll_command_queue_once(
