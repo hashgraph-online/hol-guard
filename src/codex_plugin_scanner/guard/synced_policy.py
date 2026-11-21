@@ -4,14 +4,9 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from .native_policy_bundle import PolicyBundleNativeError, native_rejection_code
-from .policy_bundle_parser import (
-    policy_bundle_is_enforceable,
-    policy_bundle_is_version_downgrade,
-)
 from .policy_bundle_trusted_keys import (
     MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
-    validate_synced_policy_bundle,
+    validate_cached_policy_bundle,
 )
 
 
@@ -39,29 +34,16 @@ def cached_policy_bundle_validation(
         return None, None
     if not isinstance(cached_policy_bundle, dict):
         return None, "invalid_policy_bundle"
-    policy_bundle, _rejection_reason, _trusted_keys = validate_synced_policy_bundle(
+    policy_bundle, rejection_reason = validate_cached_policy_bundle(
         cached_policy_bundle,
         stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
-        supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
+        acceptance_checkpoint=store.get_sync_payload("policy_bundle_acceptance_checkpoint"),
         managed_keyring_provenance=store.get_sync_payload(MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY),
         expected_workspace_id=store.get_cloud_workspace_id(),
         now=now,
     )
     if policy_bundle is None:
-        return None, _rejection_reason or "invalid_policy_bundle"
-    try:
-        if not policy_bundle_is_enforceable(policy_bundle):
-            return None, "inactive_rollout_state"
-        acceptance_checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
-        if isinstance(acceptance_checkpoint, dict) and policy_bundle_is_version_downgrade(
-            acceptance_checkpoint,
-            policy_bundle,
-        ):
-            return None, "bundle_version_downgrade"
-    except PolicyBundleNativeError as error:
-        # No verdict is not a verdict: the cached bundle stays unusable until the
-        # resident can decide, and callers see a distinct outage code.
-        return None, native_rejection_code(error)
+        return None, rejection_reason or "invalid_policy_bundle"
     return policy_bundle, None
 
 

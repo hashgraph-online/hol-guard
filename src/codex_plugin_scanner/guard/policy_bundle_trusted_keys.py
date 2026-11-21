@@ -284,6 +284,68 @@ def validate_synced_policy_bundle(
     now: float | None = None,
 ) -> tuple[dict[str, object] | None, str | None, tuple[PolicyBundleVerificationKey, ...]]:
     del supply_chain_keyring
+    return _native_synced_validation(
+        "validate_synced",
+        policy_bundle,
+        {},
+        stored_keyring=stored_keyring,
+        sync_payload=sync_payload,
+        managed_keyring_provenance=managed_keyring_provenance,
+        expected_workspace_id=expected_workspace_id,
+        now=now,
+    )
+
+
+def validate_cached_policy_bundle(
+    policy_bundle: dict[str, object],
+    *,
+    stored_keyring: object,
+    acceptance_checkpoint: object,
+    managed_keyring_provenance: object = None,
+    expected_workspace_id: str | None = None,
+    now: float | None = None,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Validate a stored bundle as live authority in one native call.
+
+    Rust checks the signature and trust root, that the rollout is enforceable,
+    and that the bundle is not older than the acceptance checkpoint.
+    """
+
+    from . import policy_bundle_parser
+
+    # Only the ordering fields reach the downgrade check, so a stored field Rust
+    # never reads cannot make the checkpoint unencodable.
+    checkpoint = policy_bundle_parser.policy_bundle_ordering_view(acceptance_checkpoint)
+    try:
+        checkpoint_chunks = policy_bundle_chunks(checkpoint) if isinstance(checkpoint, dict) else None
+    except ValueError:
+        # An ordering field that cannot be encoded leaves no comparable order;
+        # the checkpoint fails closed as it did before the check moved to Rust.
+        return None, "bundle_version_downgrade"
+    validated, reason, _keys = _native_synced_validation(
+        "validate_cached",
+        policy_bundle,
+        {"acceptance_checkpoint_chunks": checkpoint_chunks},
+        stored_keyring=stored_keyring,
+        sync_payload=None,
+        managed_keyring_provenance=managed_keyring_provenance,
+        expected_workspace_id=expected_workspace_id,
+        now=now,
+    )
+    return validated, reason
+
+
+def _native_synced_validation(
+    kind: str,
+    policy_bundle: dict[str, object],
+    extra: dict[str, object],
+    *,
+    stored_keyring: object,
+    sync_payload: dict[str, object] | None,
+    managed_keyring_provenance: object,
+    expected_workspace_id: str | None,
+    now: float | None,
+) -> tuple[dict[str, object] | None, str | None, tuple[PolicyBundleVerificationKey, ...]]:
     v2_module = _policy_bundle_v2_module()
     from . import policy_bundle_parser
 
@@ -299,7 +361,8 @@ def validate_synced_policy_bundle(
         request["now_micros"] = v2_module.policy_bundle_v2_now_micros(None)
         request["daemon_version"] = policy_bundle_parser.__version__
         request["bundle_chunks"] = policy_bundle_chunks(policy_bundle)
-        result = native_policy_bundle("validate_synced", request)
+        request.update(extra)
+        result = native_policy_bundle(kind, request)
         anchored = policy_bundle_keys_from_wire(result.get("anchored_keys"))
     except PolicyBundleNativeError as error:
         return None, _synced_rejection_code(policy_bundle, error), ()
