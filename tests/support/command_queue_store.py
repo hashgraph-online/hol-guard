@@ -50,6 +50,7 @@ class FakeStore:
         now: str,
         at: str | None = None,
         pending: dict[str, object] | None = None,
+        **detail: object,
     ) -> dict[str, object]:
         # Mirrors the native step table: each step removes, then sets, its own
         # fields in the stored row and keeps every other field.
@@ -85,6 +86,26 @@ class FakeStore:
                     "pending_result": {"job": pending["job"], "payload": pending["payload"], "recorded_at": at},
                 },
             )
+        job = detail.get("job")
+        if transition in {"leased", "handed_over"}:
+            if not isinstance(job, dict):
+                raise ValueError("invalid_job")
+            lease = {"state": "leased", "last_lease_at": at, "active_job": job, "last_poll_was_empty": False}
+            restart = {"last_poll_at": at, "last_error": None} if transition == "handed_over" else {}
+            steps[transition] = ((), {**restart, **lease})
+        steps["empty_poll"] = (
+            (),
+            {"state": "idle", "last_empty_poll_at": at, "last_poll_at": at, "last_poll_was_empty": True},
+        )
+        if transition == "poll_failed":
+            if detail.get("failed_state") not in {"auth_expired", "not_configured", "error"}:
+                raise ValueError("invalid_failed_state")
+            if not isinstance(detail.get("error"), str):
+                raise ValueError("invalid_error")
+            steps[transition] = (
+                (),
+                {"state": detail["failed_state"], "last_error": detail["error"], "last_poll_at": at},
+            )
         if transition not in steps:
             raise ValueError("invalid_transition")
         remove, fields = steps[transition]
@@ -93,6 +114,12 @@ class FakeStore:
         for key in remove:
             row.pop(key, None)
         row.update(fields)
+        if "route_error" in detail:
+            route = detail["route_error"]
+            row.pop("exact_review_route_error", None)
+            row.pop("exact_review_route_error_at", None)
+            if isinstance(route, dict):
+                row.update({"exact_review_route_error": route["error"], "exact_review_route_error_at": route["at"]})
         self.payloads[state_key] = row
         return dict(row)
 
