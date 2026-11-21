@@ -304,8 +304,7 @@
    "paths": [
     "src/codex_plugin_scanner/guard/routes/request_handler.py",
     "src/codex_plugin_scanner/guard/routes/hook_calls.py",
-    "src/codex_plugin_scanner/guard/native_payload_facts.py",
-    "src/codex_plugin_scanner/guard/hook_deadline.py"
+    "src/codex_plugin_scanner/guard/native_payload_facts.py"
    ],
    "current": "HTTP authentication and resident request transport with response-shape validation",
    "target": "authentication and byte transport only"

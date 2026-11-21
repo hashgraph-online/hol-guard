@@ -143,16 +143,29 @@ def test_cli_native_unavailable_withholds_managed_posttool_destination(
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
-def test_cli_worker_construction_failure_withholds_posttool_destination(
+@pytest.mark.parametrize(
+    ("failure", "reason_code"),
+    [
+        ("worker_construction", "native_hook_worker_exception"),
+        ("admission_unavailable", "native_hook_worker_unavailable"),
+        ("admission_expired", "native_hook_worker_unavailable"),
+    ],
+)
+def test_cli_without_a_worker_withholds_posttool_destination(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     harness: str,
+    failure: str,
+    reason_code: str,
 ) -> None:
     def broken_worker(**_kwargs: object) -> None:
         raise RuntimeError("injected worker construction failure")
 
     monkeypatch.setattr(authority, "ResidentEvidenceClient", lambda **_kwargs: None)
     monkeypatch.setattr(authority, "HookWorker", broken_worker)
+    if failure != "worker_construction":
+        event = "PostToolUse" if failure == "admission_expired" else None
+        monkeypatch.setattr(authority, "native_cli_hook_admission", lambda _payload, *, started_at: (event, started_at))
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=tmp_path / "workspace",
@@ -170,7 +183,7 @@ def test_cli_worker_construction_failure_withholds_posttool_destination(
     response = json.loads(output.getvalue())
 
     assert rc == 0
-    assert response["reason_code"] == "native_hook_worker_exception"
+    assert response["reason_code"] == reason_code
     assert response["structured_content_mediation"] == {
         "schema": "guard-structured-content-mediation.v1",
         "action": "withhold",

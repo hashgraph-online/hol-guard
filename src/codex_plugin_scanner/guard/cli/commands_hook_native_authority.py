@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from ..harness_context import HarnessContext
-from ..hook_deadline import RuntimeHookDeadline
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
 from ..hook_failure_bridge import RUNTIME_MISSING, native_hook_failure, native_stderr_hook_failure
 from ..hook_review.hook_availability_policy import (
@@ -24,7 +23,7 @@ from ..hook_review.hook_fail_closed import fail_closed_response
 from ..hook_review.hook_worker import HookWorker
 from ..hook_review.hook_worker_unavailable import withhold_structured_destination, withholds_structured_destination
 from ..native_hook_render import native_cli_hook_emit
-from ..native_payload_facts import native_hook_event
+from ..native_payload_facts import native_cli_hook_admission
 from ..resident_evidence_client import ResidentEvidenceClient
 from ..runtime_health.diagnostics import DaemonDiagnostics
 from ..store import GuardStore
@@ -126,6 +125,21 @@ def _record_native_hook_exception(guard_home: Path, *, harness: str, event_name:
             diagnostics.close(timeout_seconds=_DIAGNOSTIC_DRAIN_TIMEOUT_SECONDS)
 
 
+def _unavailable_cli_response(
+    harness: str, event_name: str, reason_code: str, *, worker_available: bool = False
+) -> dict[str, object]:
+    response = availability_harness_response(
+        harness=harness,
+        event_name=event_name,
+        reason_code=reason_code,
+        reason="HOL Guard could not complete the native hook decision safely.",
+    )
+    # Without a worker the managed destination cannot be resolved.
+    if not worker_available and withholds_structured_destination(harness=harness, event_name=event_name):
+        return withhold_structured_destination(response)
+    return response
+
+
 def try_native_hook_authority(
     *,
     payload: dict[str, object],
@@ -168,17 +182,10 @@ def try_native_hook_authority(
         )
         _log_worker_exception(error, harness=harness)
         event_name = event_name or canonical_hook_event_name(payload, guard_home=guard_home, deadline=deadline)
-        response = availability_harness_response(
-            harness=harness,
-            event_name=event_name,
-            reason_code="native_hook_worker_exception",
-            reason="HOL Guard could not complete the native hook decision safely.",
+        response = _unavailable_cli_response(
+            harness, event_name, "native_hook_worker_exception", worker_available=worker is not None
         )
         if worker is None:
-            # Without a worker the managed destination cannot be resolved, so a
-            # Pi or OMP post-tool result is withheld rather than passed through.
-            if withholds_structured_destination(harness=harness, event_name=event_name):
-                return withhold_structured_destination(response)
             return response
         # The worker withholds a managed structured destination on its own
         # unavailable answers; an answer it never returned stays withheld too.
@@ -226,19 +233,6 @@ def _payload_workspace(payload: dict[str, object]) -> Path | None:
     if isinstance(cwd, str) and cwd.strip() and Path(cwd).is_absolute():
         return Path(cwd)
     return None
-
-
-def _cli_review_deadline(payload: dict[str, object]) -> float:
-    """The absolute deadline a one-shot CLI review runs under.
-
-    A harness hint is already absolute. Without one, the CLI's explicit
-    maximum bounds the review; the edge's own default is far shorter.
-    """
-
-    timing = RuntimeHookDeadline.cli_edge_kwargs(payload)
-    if "deadline" in timing:
-        return timing["deadline"]
-    return time.monotonic() + timing["edge_budget_seconds"]
 
 
 def emit_hook_review(
@@ -324,33 +318,28 @@ def route_native_hook(
     deadline: float | None = None
     event_name: str | None = None
     try:
-        deadline = _cli_review_deadline(payload)
-        event_name = native_hook_event(payload, context.guard_home, deadline=deadline)
-        payload = dict(payload)
-        # This process runs in the shell the command is about to run in, so its
-        # environment is the caller context the daemon would get from a bridge.
-        if HOOK_EXECUTION_ENVIRONMENT_KEY not in payload:
-            payload[HOOK_EXECUTION_ENVIRONMENT_KEY] = collect_hook_execution_environment()
-        response = try_native_hook_authority(
-            payload=payload,
-            harness=args.harness,
-            home_dir=context.home_dir,
-            guard_home=context.guard_home,
-            workspace=runtime_workspace or _payload_workspace(payload),
-            store=store,
-            deadline=deadline,
-            event_name=event_name,
-        )
+        event_name, deadline = native_cli_hook_admission(payload, started_at=time.monotonic())
+        response = None
+        if time.monotonic() < deadline:
+            payload = dict(payload)
+            # Capture the caller's context from the shell the command would run in.
+            if HOOK_EXECUTION_ENVIRONMENT_KEY not in payload:
+                payload[HOOK_EXECUTION_ENVIRONMENT_KEY] = collect_hook_execution_environment()
+            response = try_native_hook_authority(
+                payload=payload,
+                harness=args.harness,
+                home_dir=context.home_dir,
+                guard_home=context.guard_home,
+                workspace=runtime_workspace or _payload_workspace(payload),
+                store=store,
+                deadline=deadline,
+                event_name=event_name,
+            )
         if not isinstance(response, dict):
             event_name = event_name or canonical_hook_event_name(
                 payload, guard_home=context.guard_home, deadline=deadline
             )
-            response = availability_harness_response(
-                harness=args.harness,
-                event_name=event_name,
-                reason_code="native_hook_worker_unavailable",
-                reason="HOL Guard could not complete the native hook decision safely.",
-            )
+            response = _unavailable_cli_response(args.harness, event_name, "native_hook_worker_unavailable")
         event_name = event_name or canonical_hook_event_name(payload, guard_home=context.guard_home, deadline=deadline)
         return emit_hook_review(
             args.harness,
@@ -364,12 +353,7 @@ def route_native_hook(
         event_name = event_name or canonical_hook_event_name(payload, guard_home=context.guard_home, deadline=deadline)
         _record_native_hook_exception(context.guard_home, harness=args.harness, event_name=event_name)
         _log_worker_exception(error, harness=args.harness)
-        response = availability_harness_response(
-            harness=args.harness,
-            event_name=event_name,
-            reason_code="native_hook_worker_exception",
-            reason="HOL Guard could not complete the native hook decision safely.",
-        )
+        response = _unavailable_cli_response(args.harness, event_name, "native_hook_worker_exception")
         return emit_hook_review(
             args.harness,
             response,

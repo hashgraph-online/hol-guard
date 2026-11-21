@@ -9,14 +9,13 @@ use crate::claude_hook_bridge_render::py_strip;
 use crate::directory_trust::{
     evaluate, DirectoryTrustCandidateV1, DirectoryTrustRequestV1, DIRECTORY_TRUST_REQUEST_SCHEMA,
 };
+use crate::hook_payload_facts_op::hook_budget_seconds;
 
 /// A tool hook's admission window, and the longer one a prompt gets: the
 /// first prompt in a new workspace waits for its policy overlay to publish.
 const TOOL_ADMISSION_SECONDS: f64 = 3.0;
 const PROMPT_ADMISSION_SECONDS: f64 = 10.0;
-const MIN_BUDGET_SECONDS: f64 = 0.1;
 const MAX_TOOL_BUDGET_SECONDS: f64 = 4.0;
-const TRANSPORT_RESERVE_SECONDS: f64 = 0.25;
 /// `native_directory_trust.UNAVAILABLE_REASON`.
 const DIRECTORY_TRUST_UNAVAILABLE: &str = "native_directory_trust_unavailable";
 
@@ -58,19 +57,7 @@ pub(super) fn lane(event: &str) -> &'static str {
 /// hint, else the milliseconds one. Booleans and non-finite numbers are not
 /// hints. The flag says whether the payload carried either key at all.
 pub(super) fn take_hint(payload: &mut Map<String, Value>) -> (Option<f64>, bool) {
-    let missing = !payload.contains_key("guard_remaining_seconds")
-        && !payload.contains_key("guard_remaining_ms");
-    let seconds = payload.remove("guard_remaining_seconds");
-    let millis = payload.remove("guard_remaining_ms");
-    let hint = [(seconds, 1.0), (millis, 1000.0)]
-        .into_iter()
-        .find_map(|(raw, scale)| {
-            raw.as_ref()
-                .and_then(Value::as_f64)
-                .filter(|value| value.is_finite())
-                .map(|value| value / scale)
-        });
-    (hint, missing)
+    crate::hook_payload_facts_op::take_remaining_hint(payload)
 }
 
 /// `RuntimeHookDeadline.for_admission`: the hint bounded to the event's
@@ -87,8 +74,7 @@ pub(super) fn expires_at(now: f64, hint: Option<f64>, missing: bool, prompt: boo
     } else {
         (TOOL_ADMISSION_SECONDS, hinted, MAX_TOOL_BUDGET_SECONDS)
     };
-    let budget = (value.clamp(MIN_BUDGET_SECONDS, maximum) - TRANSPORT_RESERVE_SECONDS)
-        .max(MIN_BUDGET_SECONDS);
+    let budget = hook_budget_seconds(value, maximum);
     (now + budget).min(now + admission)
 }
 

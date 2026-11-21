@@ -194,6 +194,16 @@ def test_pretool_graph_gate_covers_server_entrypoint_and_cli() -> None:
     assert MODULE._graph_failures(ROOT) == []
 
 
+def test_pretool_graph_gate_requires_typed_terminal_in_cli_unavailable_helper(tmp_path: Path) -> None:
+    _copy_pretool_graph_sources(tmp_path)
+    cli = tmp_path / "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py"
+    source = cli.read_text(encoding="utf-8")
+    assert "response = availability_harness_response(" in source
+    cli.write_text(source.replace("response = availability_harness_response(", "response = dict("), encoding="utf-8")
+
+    assert "CLI native route has no fail-safe native terminal" in MODULE._graph_failures(tmp_path)
+
+
 def test_pretool_graph_gate_rejects_cli_normalization_before_native(tmp_path: Path) -> None:
     _copy_pretool_graph_sources(tmp_path)
     cli = tmp_path / "src/codex_plugin_scanner/guard/cli/commands_hook.py"
