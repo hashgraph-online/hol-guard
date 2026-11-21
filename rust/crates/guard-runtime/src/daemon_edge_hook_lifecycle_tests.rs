@@ -44,6 +44,10 @@ fn an_unanswered_op_falls_back_as_the_python_worker_did() {
         notice["systemMessage"],
         notice["hookSpecificOutput"]["additionalContext"]
     );
+    assert_eq!(
+        notice["systemMessage"],
+        "HOL Guard is holding this Claude request for review. The HOL Guard runtime could not render the full notice, so nothing in this prompt should be read as HOL Guard allowing the action."
+    );
 }
 
 #[test]
