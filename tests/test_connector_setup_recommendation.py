@@ -13,8 +13,10 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import (
     CONNECTOR_SETUP_HINT_SCHEMA,
+    EXTENSION_ALLOW_HINT_SCHEMA,
     connector_setup_deep_link,
     validated_connector_setup_hint,
     validated_extension_allow_hint,
@@ -107,7 +109,7 @@ def test_store_keeps_the_connector_hint_private(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(os.name != "posix", reason="piped daemon readiness uses POSIX select")
 @pytest.mark.usefixtures("native_context_digest")
-def test_local_daemon_details_return_connector_advice(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_local_daemon_details_return_native_approval_advice(monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.cli.daemon_serve import launch_configuration
     from codex_plugin_scanner.guard.native_daemon_client import load_running_guard_surface_daemon_client
     from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
@@ -146,6 +148,28 @@ def test_local_daemon_details_return_connector_advice(monkeypatch: pytest.Monkey
                 ),
                 timestamp,
             )
+            registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
+            permission = registry.permission("command.git.permission.add")
+            assert permission is not None
+            store.add_approval_request(
+                replace(
+                    request,
+                    request_id="req-extension",
+                    artifact_id="codex:native-pretool:git",
+                    artifact_hash="extension-binding",
+                    approval_url="http://127.0.0.1/requests/req-extension",
+                    launch_target="git add src/app.py",
+                    queue_group_id=None,
+                    extension_allow_hint={
+                        "schema": EXTENSION_ALLOW_HINT_SCHEMA,
+                        "permission_ids": [permission.permission_id],
+                        "rule_ids": [permission.rule_ids[0]],
+                        "extension_ids": [permission.extension_id],
+                        "catalog_digest": registry.catalog_digest,
+                    },
+                ),
+                timestamp,
+            )
             admit_mcp_policy_home(guard)
             config = launch_configuration(guard, 0, user_home=home)
             config["workers"] = False
@@ -179,6 +203,11 @@ def test_local_daemon_details_return_connector_advice(monkeypatch: pytest.Monkey
                 assert advice["setup_href"] == f"/extensions/local-cli/{_CLI_ID}?setup=req-connector&identity={_HASH}"
                 assert "extension_allow_hint" not in detail
                 assert store.read_local_cli_grant(_CLI_ID) is None
+
+                detail = client._get("/v1/requests/req-extension", timeout=5)
+                extension = detail["extension_recommendation"]
+                assert [entry["permission_id"] for entry in extension["permissions"]] == [permission.permission_id]
+                assert "extension_allow_hint" not in detail
         finally:
             if child is not None:
                 if child.poll() is None:
