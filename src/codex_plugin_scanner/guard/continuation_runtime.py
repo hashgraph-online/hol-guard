@@ -10,7 +10,6 @@ from hashlib import sha256
 from typing import Final, NamedTuple, cast
 
 from .codex_app_server_target import codex_app_server_target_reachable
-from .codex_live_hook_target import codex_live_hook_process_is_unavailable, codex_live_hook_wait_deadline
 from .continuation_contract import (
     ContinuationAction,
     ContinuationCoordinator,
@@ -46,6 +45,7 @@ from .continuation_worker import (
     settle_without_harness,
 )
 from .desktop_notifications import DesktopApprovalNotification, notify_pending_approval_once
+from .native_codex_live_hook_target import native_live_hook_target
 from .native_continuation_authority import offer_wire, result_wire
 from .setup_contracts import contract_for
 from .store import GuardStore
@@ -218,13 +218,13 @@ def continuation_offer_facts(
 ) -> ContinuationOfferFacts:
     canonical = _canonical_harness(harness)
     metadata: Mapping[str, object] = _mapping(operation.get("metadata")) if isinstance(operation, Mapping) else {}
-    deadline = codex_live_hook_wait_deadline(store, operation=operation, metadata=metadata) if operation else None
+    deadline, process_unavailable = native_live_hook_target(store.guard_home, operation=operation, metadata=metadata)
     original_hook_attached = canonical == "codex" and deadline is not None and deadline > observed_at
     raw_target = _first_text(metadata, _SESSION_KEYS)
     session_target_verified = (
         canonical == "codex"
         and not original_hook_attached
-        and not codex_live_hook_process_is_unavailable(metadata)
+        and not process_unavailable
         and raw_target is not None
         and codex_app_server_target_reachable(metadata)
     )

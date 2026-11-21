@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
-from .codex_live_hook_target import codex_live_hook_process_is_unavailable
 from .codex_resume import ResumeUnavailableError, defer_request_resume_to_live_hook, retry_request_resume
 from .codex_resume_response import project_codex_resume_response
 from .continuation_runtime import continue_request_after_application
+from .native_codex_live_hook_target import native_live_hook_target
 from .store import GuardStore
 
 
@@ -83,7 +83,10 @@ def _codex_continuation(
         return codex_resume
     operation = store.get_guard_operation_for_approval_request(request_id)
     metadata = operation.get("metadata") if isinstance(operation, dict) else None
-    if isinstance(metadata, Mapping) and codex_live_hook_process_is_unavailable(metadata):
+    if (
+        isinstance(metadata, Mapping)
+        and native_live_hook_target(store.guard_home, metadata=metadata).process_unavailable
+    ):
         continuation = continue_request_after_application(
             store,
             request_row=request,
