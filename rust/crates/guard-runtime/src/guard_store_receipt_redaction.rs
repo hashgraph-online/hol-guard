@@ -268,6 +268,10 @@ pub(crate) fn method(connection: &Connection, source: &str, args: &Args<'_>) -> 
     Ok(Value::Null)
 }
 
+/// Activation bookkeeping shares this module's store and level rules.
+#[path = "guard_store_policy_bundle_activated.rs"]
+pub(crate) mod policy_bundle_activated;
+
 #[cfg(test)]
 #[path = "guard_store_receipt_redaction_tests.rs"]
 pub(crate) mod tests;

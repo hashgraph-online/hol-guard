@@ -663,7 +663,6 @@ mod guard_store_outbox_reads;
 mod guard_store_outbox_reads_tests;
 mod guard_store_outbox_recover;
 mod guard_store_outbox_requeue;
-mod guard_store_policy_bundle_activated;
 mod guard_store_policy_clear;
 mod guard_store_policy_import;
 mod guard_store_policy_source_context;

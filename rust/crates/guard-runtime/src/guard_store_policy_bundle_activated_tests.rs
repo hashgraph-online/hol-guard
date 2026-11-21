@@ -100,3 +100,46 @@ fn the_method_rejects_a_missing_bundle_and_an_invalid_local_level() {
     assert!(run(json!({"local_level": "full", "now": T1})).is_err());
     assert!(run(json!({"bundle": {}, "local_level": "loose", "now": T1})).is_err());
 }
+
+#[test]
+fn a_failed_level_change_rolls_back_the_bundle_and_rollback_event() {
+    // Without the Review outbox tables the projection requeue fails after the
+    // last-good copy and the rollback event are written; the store
+    // transaction must undo both.
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "create table sync_state (state_key text primary key,
+               payload_json text not null, updated_at text not null);
+             create table guard_events (id integer primary key,
+               event_name text not null, payload_json text not null,
+               occurred_at text not null);
+             insert into sync_state values
+               ('cloud_receipt_redaction_level', '{\"level\": \"full\"}', 't0');",
+        )
+        .unwrap();
+    connection.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let Value::Object(args) = json!({
+        "bundle": v2("h", Some("none")),
+        "rollback_reason": "invalid_signature",
+        "local_level": "full",
+        "now": T1,
+    }) else {
+        unreachable!()
+    };
+    assert!(method(&connection, "hol-guard", &Args(&args)).is_err());
+    connection.execute_batch("ROLLBACK").unwrap();
+    let count = |sql: &str| -> i64 { connection.query_row(sql, [], |row| row.get(0)).unwrap() };
+    assert_eq!(count("select count(*) from guard_events"), 0);
+    assert_eq!(
+        count("select count(*) from sync_state where state_key like 'policy_bundle_%'"),
+        0
+    );
+    assert_eq!(
+        count(
+            "select count(*) from sync_state where state_key = 'cloud_receipt_redaction_level' \
+             and payload_json = '{\"level\": \"full\"}'"
+        ),
+        1
+    );
+}
