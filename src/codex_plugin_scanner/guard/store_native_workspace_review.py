@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX = "native_workspace_review.receipt:"
@@ -160,6 +160,55 @@ class StoreNativeWorkspaceReviewMixin:
         )
         if not isinstance(answer, dict):
             raise RuntimeError("native replay marker transition returned no answer")
+        return dict(answer)
+
+    def native_workspace_review_replay_scan(
+        self: _NativeReplayStore, *, binding: Mapping[str, str]
+    ) -> tuple[str | None, str | None]:
+        """Return where the next replay batch starts: ``(cursor, through_request_id)``.
+
+        ``through_request_id`` is ``None`` when a new snapshot of pending
+        requests should be taken.
+        """
+
+        answer = self._native_store_call(
+            "native_workspace_review_replay_scan",
+            {"source": self.guard_source, "binding": dict(binding)},
+        )
+        if not isinstance(answer, dict):
+            raise RuntimeError("native replay scan read returned no answer")
+        cursor = answer.get("cursor")
+        through = answer.get("through_request_id")
+        return (cursor if isinstance(cursor, str) else None), (through if isinstance(through, str) else None)
+
+    def record_native_workspace_review_replay_scan(
+        self: _NativeReplayStore,
+        *,
+        binding: Mapping[str, str],
+        request_ids: Sequence[str],
+        limit: int,
+        through_request_id: str | None,
+        changed_at: str,
+    ) -> dict[str, object]:
+        """Save replay scan progress once a batch of ``request_ids`` has completed.
+
+        The native store decides the next cursor, so an empty or short batch,
+        or one that reached ``through_request_id``, finishes the snapshot.
+        """
+
+        answer = self._native_store_call(
+            "record_native_workspace_review_replay_scan",
+            {
+                "source": self.guard_source,
+                "binding": dict(binding),
+                "request_ids": list(request_ids),
+                "limit": limit,
+                "through_request_id": through_request_id,
+                "changed_at": changed_at,
+            },
+        )
+        if not isinstance(answer, dict):
+            raise RuntimeError("native replay scan record returned no answer")
         return dict(answer)
 
 

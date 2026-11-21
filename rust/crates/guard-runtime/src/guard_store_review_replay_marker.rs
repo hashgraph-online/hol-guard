@@ -284,6 +284,9 @@ pub(crate) fn read_method(connection: &Connection, args: &Args<'_>) -> StoreResu
 #[path = "guard_store_review_replay_step.rs"]
 pub(crate) mod step;
 
+#[path = "guard_store_review_replay_scan.rs"]
+pub(crate) mod scan;
+
 #[cfg(test)]
 #[path = "guard_store_review_replay_marker_tests.rs"]
 mod tests;

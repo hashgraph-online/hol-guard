@@ -27,6 +27,12 @@ def replay_binding() -> dict[str, str]:
     }
 
 
+def scan_key(source: str = "default") -> str:
+    """The replay scan row the native store keeps for ``source``."""
+
+    return f"{replay._REPLAY_MARKER}:scan:{source}"
+
+
 class ReplayStore:
     guard_home: Path
     guard_source = "default"
@@ -55,23 +61,37 @@ class ReplayStore:
             raise OSError("marker update failed")
         self.payloads[key] = payload
 
+    def _sync_native_row(self, key: str) -> None:
+        """Make scratch native storage hold this fake's current row for ``key``."""
+
+        with self.native._connect() as connection:
+            connection.execute("delete from sync_state where state_key = ?", (key,))
+            connection.commit()
+        if key in self.payloads:
+            self.native.set_sync_payload(key, self.payloads[key], _NOW)
+
     def _native_marker_call(
         self, request_id: str, call: Callable[[GuardStore], dict[str, object]]
     ) -> dict[str, object]:
         """Run a native marker method on scratch storage holding this fake's marker row."""
 
         key = replay._marker_key(cast(replay._NativeWorkspaceReplayStore, cast(object, self)), request_id)
-        with self.native._connect() as connection:
-            connection.execute("delete from sync_state where state_key = ?", (key,))
-            connection.commit()
-        if key in self.payloads:
-            self.native.set_sync_payload(key, self.payloads[key], _NOW)
+        self._sync_native_row(key)
         answer = call(self.native)
         if "marker" in answer and answer.get("key") is None:
             if self.fail_marker_update:
                 raise OSError("marker update failed")
             self.payloads[key] = answer["marker"]
         return answer
+
+    def native_workspace_review_replay_scan(self, *, binding: dict[str, str]) -> tuple[str | None, str | None]:
+        self._sync_native_row(scan_key())
+        return self.native.native_workspace_review_replay_scan(binding=binding)
+
+    def record_native_workspace_review_replay_scan(self, **kwargs: Any) -> dict[str, object]:
+        state = self.native.record_native_workspace_review_replay_scan(**kwargs)
+        self.payloads[scan_key()] = state
+        return state
 
     def native_workspace_review_replay_marker(
         self, request_id: str, *, binding: dict[str, str], now: str, force_probe: bool = False

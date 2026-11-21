@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol, cast
@@ -12,7 +12,6 @@ from ..store import GuardStore
 from .native_workspace_review_context import build_native_workspace_review_context  # noqa: F401
 
 _REPLAY_MARKER = "guard_cloud_review_native_workspace_review_replay"
-_SCAN_STATE_MARKER = f"{_REPLAY_MARKER}:scan"
 _MAX_CONTEXT_PROBES = 2
 _DIGEST_LENGTH = 64
 _PROBE_STATE_ATTRIBUTE = "_guard_native_workspace_review_probe_state"
@@ -66,6 +65,18 @@ class _NativeWorkspaceReplayStore(Protocol):
         **detail: object,
     ) -> dict[str, object]: ...
 
+    def native_workspace_review_replay_scan(self, *, binding: Mapping[str, str]) -> tuple[str | None, str | None]: ...
+
+    def record_native_workspace_review_replay_scan(
+        self,
+        *,
+        binding: Mapping[str, str],
+        request_ids: Sequence[str],
+        limit: int,
+        through_request_id: str | None,
+        changed_at: str,
+    ) -> dict[str, object]: ...
+
     def requeue_pending_review_events_with_marker(
         self,
         *,
@@ -99,43 +110,9 @@ def _marker_key(store: _NativeWorkspaceReplayStore, request_id: str) -> str:
     return f"{_REPLAY_MARKER}:{store.guard_source}:request:{request_digest}"
 
 
-def _scan_key(store: _NativeWorkspaceReplayStore) -> str:
-    return f"{_SCAN_STATE_MARKER}:{store.guard_source}"
-
-
 def _binding_matches(store: _NativeWorkspaceReplayStore, binding: Mapping[str, str]) -> bool:
     current = store.get_review_event_oauth_binding()
     return isinstance(current, dict) and dict(current) == dict(binding)
-
-
-def _scan_bounds(store: _NativeWorkspaceReplayStore, binding: Mapping[str, str]) -> tuple[str | None, str | None]:
-    state = store.get_sync_payload(_scan_key(store))
-    if not isinstance(state, dict) or state.get("binding") != dict(binding):
-        return None, None
-    cursor = state.get("cursor")
-    upper = state.get("through_request_id")
-    if not isinstance(upper, str) or not upper:
-        return None, None
-    return (cursor if isinstance(cursor, str) and cursor else None), upper
-
-
-def _save_scan_cursor(
-    store: _NativeWorkspaceReplayStore,
-    binding: Mapping[str, str],
-    cursor: str | None,
-    changed_at: str,
-    through_request_id: str | None,
-) -> None:
-    store.set_sync_payload(
-        _scan_key(store),
-        {
-            "schema": "guard-cloud-review-native-workspace-review-scan.v1",
-            "binding": dict(binding),
-            "cursor": cursor,
-            "through_request_id": through_request_id,
-        },
-        changed_at,
-    )
 
 
 def _request_marker(

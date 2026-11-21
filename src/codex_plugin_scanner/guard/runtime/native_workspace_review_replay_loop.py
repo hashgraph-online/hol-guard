@@ -54,7 +54,7 @@ def prepare_native_workspace_review_replay(
     setattr(replay_store, replay._PROBE_STATE_ATTRIBUTE, probe_state)
     if not replay._binding_matches(replay_store, binding):
         return 0
-    cursor, upper = replay._scan_bounds(replay_store, binding)
+    cursor, upper = replay_store.native_workspace_review_replay_scan(binding=binding)
     try:
         if upper is None:
             tail = replay_store.list_pending_review_request_ids(binding=binding, limit=1, descending=True)
@@ -71,7 +71,13 @@ def prepare_native_workspace_review_replay(
         return 0
     changed_at = replay._timestamp(replay._now())
     if not request_ids:
-        replay._save_scan_cursor(replay_store, binding, None, changed_at, None)
+        replay_store.record_native_workspace_review_replay_scan(
+            binding=binding,
+            request_ids=request_ids,
+            limit=replay._MAX_CONTEXT_PROBES,
+            through_request_id=upper,
+            changed_at=changed_at,
+        )
         return 0
 
     replayed = 0
@@ -166,10 +172,13 @@ def prepare_native_workspace_review_replay(
                 count=count,
             )
         replayed += count
-    # Finish a finite snapshot before accepting a higher watermark. Do not
-    # advance durable progress until the batch has completed.
-    next_cursor = (
-        request_ids[-1] if len(request_ids) == replay._MAX_CONTEXT_PROBES and request_ids[-1] < upper else None
+    # The native store finishes a finite snapshot before accepting a higher
+    # watermark. Durable progress moves only once the batch has completed.
+    replay_store.record_native_workspace_review_replay_scan(
+        binding=binding,
+        request_ids=request_ids,
+        limit=replay._MAX_CONTEXT_PROBES,
+        through_request_id=upper,
+        changed_at=changed_at,
     )
-    replay._save_scan_cursor(replay_store, binding, next_cursor, changed_at, upper if next_cursor else None)
     return replayed
