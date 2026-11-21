@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -15,10 +15,6 @@ _REPLAY_MARKER = "guard_cloud_review_native_workspace_review_replay"
 _SCAN_STATE_MARKER = f"{_REPLAY_MARKER}:scan"
 _MAX_CONTEXT_PROBES = 2
 _DIGEST_LENGTH = 64
-_RETRY_BASE_SECONDS = 60
-_RETRY_MAX_SECONDS = 15 * 60
-_PROBE_INTERVAL_SECONDS = 5 * 60
-_REPLAY_DELAYS_SECONDS = (5 * 60, 15 * 60, 60 * 60, 6 * 60 * 60)
 _PROBE_STATE_ATTRIBUTE = "_guard_native_workspace_review_probe_state"
 _COMMIT_STATE_SUFFIX = ":commit"
 _NATIVE_CLAIM_BINDINGS = (
@@ -50,6 +46,26 @@ class _NativeWorkspaceReplayStore(Protocol):
 
     def list_review_event_snapshots(self, request_id: str) -> list[dict[str, object]]: ...
 
+    def native_workspace_review_replay_marker(
+        self,
+        request_id: str,
+        *,
+        binding: Mapping[str, str],
+        now: str,
+        force_probe: bool = False,
+    ) -> dict[str, object]: ...
+
+    def transition_native_workspace_review_replay_marker(
+        self,
+        request_id: str,
+        step: str,
+        *,
+        binding: Mapping[str, str],
+        now: str,
+        changed_at: str | None = None,
+        **detail: object,
+    ) -> dict[str, object]: ...
+
     def requeue_pending_review_events_with_marker(
         self,
         *,
@@ -76,16 +92,6 @@ def _now() -> datetime:
 
 def _timestamp(value: datetime) -> str:
     return value.isoformat()
-
-
-def _parse_timestamp(value: object) -> datetime | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else None
 
 
 def _marker_key(store: _NativeWorkspaceReplayStore, request_id: str) -> str:
@@ -145,77 +151,16 @@ def _same_binding(marker: Mapping[str, object] | None, binding: Mapping[str, str
     return isinstance(marker, dict) and marker.get("binding") == dict(binding)
 
 
-def _retry_delay(attempts: int) -> int:
-    return min(_RETRY_MAX_SECONDS, _RETRY_BASE_SECONDS * (2 ** min(attempts, 4)))
+def _authority_fields(context: object) -> dict[str, object] | None:
+    """The authority fields of a probed context, typed for the native store."""
 
-
-def _replay_delay(attempts: int) -> int:
-    index = max(0, min(len(_REPLAY_DELAYS_SECONDS) - 1, attempts - 1))
-    return _REPLAY_DELAYS_SECONDS[index]
-
-
-def _probe_due(
-    marker: Mapping[str, object] | None,
-    *,
-    binding: Mapping[str, str],
-    now: datetime,
-    force_probe: bool,
-) -> bool:
-    if force_probe or marker is None or not _same_binding(marker, binding):
-        return True
-    retry_at = _parse_timestamp(marker.get("next_probe_at"))
-    return retry_at is None or retry_at <= now
-
-
-def _failure_marker(
-    marker: Mapping[str, object] | None,
-    *,
-    request_id: str,
-    binding: Mapping[str, str],
-    now: datetime,
-) -> dict[str, object]:
-    previous_attempts = marker.get("attempts", 0) if marker is not None else 0
-    attempts = previous_attempts + 1 if type(previous_attempts) is int and previous_attempts >= 0 else 1
-    result: dict[str, object] = {
-        "schema": "guard-cloud-review-native-workspace-review-request.v1",
-        "request_id": request_id,
-        "binding": dict(binding),
-        "attempts": attempts,
-        "next_probe_at": _timestamp(now + timedelta(seconds=_retry_delay(attempts))),
-    }
-    if marker is not None:
-        for field in (
-            "authority_generation",
-            "authority_record_digest",
-            "requeued",
-            "replay_attempts",
-            "accepted",
-            "accepted_at",
-            "request_snapshot",
-        ):
-            if field in {"accepted", "accepted_at"} and not _same_binding(marker, binding):
-                continue
-            if field in marker:
-                result[field] = marker[field]
-    return result
-
-
-def _authority_marker(
-    context: Mapping[str, object],
-    *,
-    request_id: str,
-    binding: Mapping[str, str],
-) -> dict[str, object] | None:
-    generation = context.get("authority_generation")
-    authority_digest = context.get("authority_record_digest")
-    if type(generation) is not int or generation <= 0 or not _valid_digest(authority_digest):
+    if not isinstance(context, Mapping):
         return None
+    generation = context.get("authority_generation")
+    digest = context.get("authority_record_digest")
     return {
-        "schema": "guard-cloud-review-native-workspace-review-request.v1",
-        "request_id": request_id,
-        "binding": dict(binding),
-        "authority_generation": generation,
-        "authority_record_digest": authority_digest,
+        "authority_generation": generation if type(generation) is int else None,
+        "authority_record_digest": digest if isinstance(digest, str) else None,
     }
 
 
@@ -227,15 +172,6 @@ def _authority_is_replayed(marker: Mapping[str, object] | None, authority: Mappi
         and marker.get("authority_generation") == authority.get("authority_generation")
         and marker.get("authority_record_digest") == authority.get("authority_record_digest")
         and ((type(requeued) is int and requeued > 0) or (type(replay_attempts) is int and replay_attempts > 0))
-    )
-
-
-def _authority_is_accepted(marker: Mapping[str, object] | None, authority: Mapping[str, object]) -> bool:
-    return (
-        isinstance(marker, dict)
-        and marker.get("accepted") is True
-        and marker.get("authority_generation") == authority.get("authority_generation")
-        and marker.get("authority_record_digest") == authority.get("authority_record_digest")
     )
 
 

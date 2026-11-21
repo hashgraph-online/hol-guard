@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -50,16 +50,16 @@ def test_accepted_server_result_completes_replay_marker(
         ).fetchone()
     assert marker_row is not None
     marker_key = str(marker_row["state_key"])
-    original_set_sync_payload = store.set_sync_payload
+    original_transition = store.transition_native_workspace_review_replay_marker
 
     if marker_write_fails:
 
-        def fail_accepted_marker(key: str, payload: object, now: str) -> None:
-            if key == marker_key and isinstance(payload, dict) and payload.get("accepted") is True:
+        def fail_accepted_marker(request_id: str, step: str, **kwargs: Any) -> dict[str, object]:
+            if step == "accepted":
                 raise OSError("marker write failed")
-            original_set_sync_payload(key, cast(dict[str, object], payload), now)
+            return original_transition(request_id, step, **kwargs)
 
-        monkeypatch.setattr(store, "set_sync_payload", fail_accepted_marker)
+        monkeypatch.setattr(store, "transition_native_workspace_review_replay_marker", fail_accepted_marker)
 
     marker_states_at_ack: list[object] = []
     original_acknowledge = store.acknowledge_review_events
@@ -144,17 +144,17 @@ def test_marker_write_failure_recovers_from_authenticated_duplicate_without_flag
         ).fetchone()
     assert marker_row is not None
     marker_key = str(marker_row["state_key"])
-    original_set_sync_payload = store.set_sync_payload
+    original_transition = store.transition_native_workspace_review_replay_marker
     fail_once = True
 
-    def fail_first_accepted_marker(key: str, payload: object, now: str) -> None:
+    def fail_first_accepted_marker(request_id: str, step: str, **kwargs: Any) -> dict[str, object]:
         nonlocal fail_once
-        if fail_once and key == marker_key and isinstance(payload, dict) and payload.get("accepted") is True:
+        if fail_once and step == "accepted":
             fail_once = False
             raise OSError("marker write failed")
-        original_set_sync_payload(key, cast(dict[str, object], payload), now)
+        return original_transition(request_id, step, **kwargs)
 
-    monkeypatch.setattr(store, "set_sync_payload", fail_first_accepted_marker)
+    monkeypatch.setattr(store, "transition_native_workspace_review_replay_marker", fail_first_accepted_marker)
 
     def projected(
         _store: object,

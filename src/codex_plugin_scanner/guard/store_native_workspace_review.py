@@ -43,6 +43,15 @@ class _NativeStore(Protocol):
     def _native_approval_read(self, method: str, args: dict[str, object]) -> Any: ...
 
 
+class _NativeReplayStore(Protocol):
+    @property
+    def guard_source(self) -> str: ...
+
+    def _native_store_call(
+        self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
+    ) -> Any: ...
+
+
 def _request_snapshot(request: Mapping[str, object]) -> str:
     return json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
@@ -87,6 +96,71 @@ class StoreNativeWorkspaceReviewMixin:
                 "native_receipt_json": receipt_json,
             },
         )
+
+    def native_workspace_review_replay_marker(
+        self: _NativeReplayStore,
+        request_id: str,
+        *,
+        binding: Mapping[str, str],
+        now: str,
+        force_probe: bool = False,
+    ) -> dict[str, object]:
+        """Read a pending request's replay marker and whether it is due for a probe.
+
+        Returns ``key`` (the marker row), ``marker`` (the stored object or
+        ``None``) and ``due``.
+        """
+
+        answer = self._native_store_call(
+            "native_workspace_review_replay_marker",
+            {
+                "source": self.guard_source,
+                "request_id": request_id,
+                "binding": dict(binding),
+                "now": now,
+                "force_probe": force_probe,
+            },
+        )
+        if not isinstance(answer, dict):
+            raise RuntimeError("native replay marker read returned no answer")
+        return dict(answer)
+
+    def transition_native_workspace_review_replay_marker(
+        self: _NativeReplayStore,
+        request_id: str,
+        step: str,
+        *,
+        binding: Mapping[str, str],
+        now: str,
+        changed_at: str | None = None,
+        **detail: object,
+    ) -> dict[str, object]:
+        """Move a pending request's replay marker through one named step.
+
+        The native store owns the marker rules. ``probed`` takes the probe's
+        ``authority`` and returns ``action``: ``failed`` and ``accepted`` wrote
+        the marker, ``requeue`` returns the ``seed`` to requeue events with.
+        ``requeued`` takes that ``seed`` and the requeue ``count``.
+        ``accepted`` takes the ``authority`` and an optional ``fallback``
+        marker and returns ``result``: ``accepted``, ``already`` or
+        ``unmatched``.
+        """
+
+        answer = self._native_store_call(
+            "transition_native_workspace_review_replay_marker",
+            {
+                "source": self.guard_source,
+                "request_id": request_id,
+                "step": step,
+                "binding": dict(binding),
+                "now": now,
+                "changed_at": changed_at,
+                **detail,
+            },
+        )
+        if not isinstance(answer, dict):
+            raise RuntimeError("native replay marker transition returned no answer")
+        return dict(answer)
 
 
 __all__ = ["NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX", "StoreNativeWorkspaceReviewMixin"]
