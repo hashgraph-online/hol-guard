@@ -24121,7 +24121,11 @@ function AlphaChannelDialog({
   const description = useAlpha ? "Stable updates receive the most thoroughly tested Guard releases. You can enable alpha updates again whenever you need early access." : "Alpha releases arrive before stable builds. They can include unfinished changes and may require a restart.";
   const confirmLabel = useAlpha ? "Use stable updates" : "Enable alpha updates";
   const confirmDisabled = pending || approvalGate?.enabled === true && isApprovalProofSubmitDisabled(approvalGate, { approvalPassword, approvalTotpCode }, false);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-white shadow-xl", children: [
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!confirmDisabled) onConfirm();
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { onSubmit: handleSubmit, className: "rounded-lg bg-white shadow-xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: title }),
@@ -24170,8 +24174,7 @@ function AlphaChannelDialog({
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
-          type: "button",
-          onClick: onConfirm,
+          type: "submit",
           disabled: confirmDisabled,
           className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60",
           children: pending ? "Saving…" : confirmLabel
