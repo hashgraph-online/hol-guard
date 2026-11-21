@@ -349,6 +349,7 @@ pub(crate) fn dispatch(
         "pending_connector_group_rows" => {
             approval_metadata::pending_connector_group_rows(connection, args)
         }
+        "connector_setup_advice" => approval_metadata::connector_setup_advice(connection, args),
         "approval_desktop_notified_at" => {
             approval_metadata::approval_desktop_notified_at(connection, args)
         }
@@ -432,6 +433,9 @@ pub(crate) fn dispatch(
         }
         "transition_command_queue_state" => {
             crate::guard_store_sync_state::queue_transition::method(connection, args)
+        }
+        "transition_cloud_review_sync_state" => {
+            crate::guard_store_sync_state::review_sync_transition::method(connection, args)
         }
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),

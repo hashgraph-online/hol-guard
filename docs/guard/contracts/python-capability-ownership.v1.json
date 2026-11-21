@@ -2122,6 +2122,19 @@
    ]
   },
   {
+   "path": "src/codex_plugin_scanner/guard/hook_review/approval_connector_recommendation.py",
+   "module": "codex_plugin_scanner.guard.hook_review.approval_connector_recommendation",
+   "source_sha256": "cc970f2b5b05fa2a3e06e18faebbfa23014e1ca6c1f3a540348f3e2dc1d4de0a",
+   "forbidden_symbols": [
+    "build_approval_connector_recommendation",
+    "safe_connector_recommendation"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/daemon_edge_connector_recommend.rs",
+    "rust/crates/guard-runtime/src/guard_store_local_cli_inventory.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_exact_action.py",
    "module": "codex_plugin_scanner.guard.hook_review.hook_native_exact_action",
    "source_sha256": "78e8f6f9e1f897226bb38babd20de55d3c38e131317cae058480feae110e422d",
@@ -2131,6 +2144,17 @@
    "native_replacements": [
     "rust/crates/guard-runtime/src/native_exact_action_op/reasons.rs",
     "rust/crates/guard-runtime/src/edge_review_evidence.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/hook_review/native_review_records.py",
+   "module": "codex_plugin_scanner.guard.hook_review.native_review_records",
+   "source_sha256": "194bbce31d7c9b2d55f246108a424f3780fff52b15a139e1bc8c2888e457eac6",
+   "forbidden_symbols": [
+    "_DEFAULT_APPROVAL_CENTER_PORT"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/guard_store_state_ops.rs"
    ]
   },
   {

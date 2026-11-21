@@ -14,6 +14,7 @@ from .temporary_mcp_approvals import temporary_mcp_approval_payloads
 from .trusted_local_tools import local_tool_approval_payload
 
 _NO_ANSWER = "native_guard_store_unavailable"
+_DEFAULT_APPROVAL_CENTER_URL = "http://127.0.0.1:4781"
 _RETRYABLE_READS = frozenset(
     {
         "approval_desktop_notified_at",
@@ -21,12 +22,28 @@ _RETRYABLE_READS = frozenset(
         "get_approval_extension_allow_hint",
         "get_approval_request",
         "get_next_pending_request",
+        "hook_approval_center_origin",
         "list_approval_request_page",
         "list_approval_requests",
         "oldest_approval_request_created_at",
         "pending_connector_group_rows",
     }
 )
+
+
+def read_hook_approval_center_origin(store: object) -> str | None:
+    """Read the recorded native approval origin, propagating storage errors."""
+    getter = getattr(store, "get_hook_approval_center_origin", None)
+    result = getter() if callable(getter) else None
+    return result if isinstance(result, str) else None
+
+
+def hook_approval_center_url(store: object) -> str:
+    """Send the fixed loopback address if the native store cannot identify the inbox."""
+    try:
+        return read_hook_approval_center_origin(store) or _DEFAULT_APPROVAL_CENTER_URL
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+        return _DEFAULT_APPROVAL_CENTER_URL
 
 
 def _with_approval_hints(payloads: list[dict[str, object]], guard_home: Path) -> list[dict[str, object]]:
@@ -55,6 +72,9 @@ def _cursor_marker(cursor: str | None) -> list[str] | None:
 
 
 class StoreApprovalQueriesMixin:
+    def get_hook_approval_center_origin(self) -> str | None:
+        return self._native_approval_read("hook_approval_center_origin", {})
+
     def pending_connector_group_rows(self, identity_hash: str) -> tuple[list[Mapping[str, object]], bool]:
         scan = self._native_approval_read("pending_connector_group_rows", {"identity_hash": identity_hash})
         return scan["rows"], scan["complete"]

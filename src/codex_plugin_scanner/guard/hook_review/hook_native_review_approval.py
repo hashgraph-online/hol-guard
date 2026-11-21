@@ -19,6 +19,7 @@ from ..native_hook_edge import review_evidence_parts
 from ..native_hook_render import native_exact_command_block_response, native_render_cli, native_saved_decision_response
 from ..native_package_review_plan import native_package_review_response
 from ..native_payload_facts import native_connector_lookup, native_hook_facts
+from ..store_approval_queries import hook_approval_center_url as native_review_approval_center_url
 from .hook_fail_closed import (
     canonical_harness,
     fail_closed_pre_tool,
@@ -28,7 +29,6 @@ from .hook_fail_closed import (
 )
 from .hook_native_review_binding import admit_accepted_call, native_review_policy_binding, native_review_settle
 from .native_review_connector import raise_connector_setup_notice
-from .native_review_records import native_review_approval_center_url
 
 if TYPE_CHECKING:
     from ..store import GuardStore
