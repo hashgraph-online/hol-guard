@@ -55,7 +55,11 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
         outbox_unavailable = error.reason
         held_events = 0
     profile = store.get_cloud_sync_profile()
-    rows = store.cloud_review_settings_state(binding=binding)
+    try:
+        rows = store.cloud_review_settings_state(binding=binding)
+    except NativeGuardStoreUnavailable as error:
+        rows = {"sync": {}, "sync_reconnect_required": False, "recovery_error": None}
+        outbox_unavailable = outbox_unavailable or error.reason
     sync = rows["sync"]
     connected = profile is not None and binding is not None
     return {
