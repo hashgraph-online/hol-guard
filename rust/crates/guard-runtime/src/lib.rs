@@ -651,6 +651,8 @@ mod guard_store_native_review_consume_tests;
 mod guard_store_native_review_queue;
 mod guard_store_observed_mcp;
 mod guard_store_op;
+mod guard_store_op_dispatch;
+mod guard_store_op_kind;
 mod guard_store_outbox_append;
 mod guard_store_outbox_binding;
 mod guard_store_outbox_decode;
