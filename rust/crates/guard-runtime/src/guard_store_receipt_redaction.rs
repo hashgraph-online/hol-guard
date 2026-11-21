@@ -206,11 +206,12 @@ pub(crate) fn ensure_resync(
     store.write(RELAXED_RESYNC_MARKER, &level_marker(level, now), now)
 }
 
-/// A `ensure_projection` or `ensure_resync` call that would change nothing:
-/// the store runs it as a read so a no-op sync check takes no write lock. The
-/// action repeats its own check, so a call that does change rows still writes.
+/// A `ensure_projection` or `ensure_resync` call that would change nothing.
+/// The store answers it from this read alone, without a write lock or a
+/// dispatch. Any other call, including one with an invalid level that must
+/// fail, goes to the write transaction, which repeats the check.
 pub(crate) fn is_noop(connection: &Connection, args: &Args<'_>) -> StoreResult<bool> {
-    let Some(level) = args.opt_str("level")? else {
+    let Some(level) = args.opt_str("level")?.filter(|level| valid_level(level)) else {
         return Ok(false);
     };
     let marker = match args.opt_str("action")? {

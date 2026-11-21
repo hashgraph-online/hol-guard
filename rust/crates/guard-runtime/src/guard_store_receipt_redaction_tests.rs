@@ -214,6 +214,9 @@ fn a_matching_or_full_ensure_check_is_a_no_op_read() {
     assert!(!noop(
         json!({"action": "persist", "level": "none", "local_level": "none", "now": T1})
     ));
+    assert!(!noop(
+        json!({"action": "ensure_resync", "level": "loose", "now": T1})
+    ));
     write_encoded(
         &connection,
         PRIVACY_PROJECTION_MARKER,

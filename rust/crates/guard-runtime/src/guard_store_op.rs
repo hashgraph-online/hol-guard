@@ -178,10 +178,12 @@ fn evaluate_tracked(
     // A retry's block check alone writes nothing: it keeps the lock-free read
     // the separate block lookup had. A receipt redaction check that would
     // change nothing is also a read.
-    let kind = if (method == "settle_native_review_reuse" && !args.flag("spend")?)
-        || (method == "receipt_redaction_bookkeeping"
-            && crate::guard_store_receipt_redaction::is_noop(&connection, &args)?)
-    {
+    // The no-op check is the whole call: it is not dispatched, so a marker a
+    // concurrent writer changes in between is left to the next sync's check
+    // rather than written outside a transaction.
+    let skipped = method == "receipt_redaction_bookkeeping"
+        && crate::guard_store_receipt_redaction::is_noop(&connection, &args)?;
+    let kind = if (method == "settle_native_review_reuse" && !args.flag("spend")?) || skipped {
         Kind::Read
     } else if (method == "count_receipts"
         && kind == Kind::Read
@@ -199,14 +201,18 @@ fn evaluate_tracked(
         Kind::Snapshot => connection.execute_batch("BEGIN")?,
         Kind::Read => {}
     }
-    let outcome = dispatch(
-        &connection,
-        &request.source,
-        &request.guard_home,
-        method,
-        &args,
-        owner,
-    );
+    let outcome = if skipped {
+        Ok(Value::Null)
+    } else {
+        dispatch(
+            &connection,
+            &request.source,
+            &request.guard_home,
+            method,
+            &args,
+            owner,
+        )
+    };
     let mut payload = match outcome {
         Ok(payload) => payload,
         Err(error) => {
