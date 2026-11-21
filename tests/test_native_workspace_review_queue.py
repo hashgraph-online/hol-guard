@@ -46,6 +46,7 @@ def test_native_transport_hint_requires_installed_file_and_preserves_revocation(
     monkeypatch.setattr(command_queue, "review_verification_keyring_ready", lambda _store: False)
     authority = store.guard_home / "native-runtime" / "workspace-review-authority.v1.json"
     authority.parent.mkdir(parents=True, exist_ok=True)
+    authority.parent.chmod(0o700)
     if kind == "directory":
         authority.mkdir()
     elif kind == "symlink":

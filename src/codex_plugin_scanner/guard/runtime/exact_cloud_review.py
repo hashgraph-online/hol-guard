@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, cast
 
+from ..native_guard_store import NativeGuardStoreUnavailable
 from ..review_contracts import (
     GuardReviewContractError,
     GuardReviewOAuthMetadata,
@@ -340,6 +341,15 @@ def _revoke_binding_drift(store: GuardStore, capability_digest: str, *, now: dat
 
 
 def exact_cloud_review_operations(store: GuardStore, *, now: str | None = None) -> tuple[str, ...]:
+    """The exact operations to advertise; none while the consent rows cannot be read."""
+
+    try:
+        return _advertised_operations(store, now=now)
+    except NativeGuardStoreUnavailable:
+        return ()
+
+
+def _advertised_operations(store: GuardStore, *, now: str | None) -> tuple[str, ...]:
     if _consent_row(store, "revocation") is not None:
         return ()
     try:
