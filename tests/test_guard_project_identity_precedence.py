@@ -39,18 +39,20 @@ def test_portable_block_keeps_a_saved_hook_allow_pending(tmp_path: Path) -> None
         _NOW,
     )
 
-    def lookup():
+    def lookup(root: Path = workspace):
         return native_saved_decision_response(
             store,
             harness="codex",
             token=token,
             artifact_id=artifact,
             native_result={"decision": "deny", "policy_action": "review", "minimum_action": "review"},
-            workspace=workspace,
+            workspace=root,
         )
 
     allowed = lookup()
     assert allowed is not None and allowed["approval_reuse_status"] == "accepted"
+    unresolved = tmp_path / "gone" / ".." / "app"
+    assert lookup(unresolved) is None
     store.upsert_policy(
         PolicyDecision(harness="codex", scope="workspace", action="block", workspace=project_identity),
         _NOW,

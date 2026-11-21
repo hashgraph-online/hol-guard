@@ -77,21 +77,26 @@ pub(super) fn answer(
     else {
         return Ok(unreadable(harness, verdict, &check));
     };
-    match lookup.workspace.as_deref().map(portable_workspace) {
+    let unresolved_project = match lookup.workspace.as_deref().map(portable_workspace) {
         Some(PortableIdentity::Identity(project)) => {
             lookup.portable_workspace = Some(project);
+            false
         }
-        // A local result cannot prove what applies in a project whose
-        // identity was unavailable. Leave any pending approval unspent.
-        Some(PortableIdentity::Unknown) => return Ok(unreadable(harness, verdict, &check)),
-        _ => {}
-    }
+        Some(PortableIdentity::Unknown) => true,
+        _ => false,
+    };
     let found = match check {
         Check::Action { artifact, token } => {
             lookup.artifact_id = Some(artifact.to_owned());
             lookup.artifact_hash = Some(token.to_owned());
-            evaluate_lookup(&lookup).map(|lookup| saved_verdict(verdict, &lookup, artifact, token))
+            evaluate_lookup(&lookup).map(|lookup| {
+                // An inconclusive project lookup keeps local blocks. Any
+                // saved allow leaves the original review pending.
+                saved_verdict(verdict, &lookup, artifact, token)
+                    .filter(|(_, status)| !unresolved_project || *status == "blocked")
+            })
         }
+        Check::Command(_) if unresolved_project => return Ok(unreadable(harness, verdict, &check)),
         Check::Command(command) => command_block(harness, verdict, command, lookup),
     };
     match found {
