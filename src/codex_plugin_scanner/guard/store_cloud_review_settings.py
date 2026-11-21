@@ -7,7 +7,8 @@ from typing import Any, Protocol
 
 
 class _NativeStore(Protocol):
-    guard_source: str
+    @property
+    def guard_source(self) -> str: ...
 
     def _native_store_call(
         self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
