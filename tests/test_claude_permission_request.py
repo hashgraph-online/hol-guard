@@ -51,7 +51,7 @@ def test_rust_direct_lifecycle_answer_precedes_python_compatibility_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     answer = {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
-    monkeypatch.setattr(native_hook_direct, "native_hook_direct", lambda **_kwargs: answer)
+    monkeypatch.setattr(native_hook_direct, "native_hook_direct", lambda **_kwargs: {"harness_response": answer})
 
     def unexpected_python_fallback(*_args: object, **_kwargs: object) -> dict[str, object]:
         raise AssertionError("Python lifecycle fallback was consulted after Rust answered")
@@ -65,6 +65,22 @@ def test_rust_direct_lifecycle_answer_precedes_python_compatibility_fallback(
         worker.close()
 
     assert response == answer
+
+
+def test_rust_direct_lifecycle_defer_uses_python_compatibility_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _resident(monkeypatch, None)
+    monkeypatch.setattr(native_hook_direct, "native_hook_direct", lambda **_kwargs: {"outcome": "defer"})
+    store = GuardStore(tmp_path / "guard-home")
+    worker = HookWorker(store=store, wait_for_native_policy=False)
+    try:
+        response = _review(worker, tmp_path, dict(_PAYLOAD))
+    finally:
+        worker.close()
+
+    assert response["guard_permission_passthrough"] is True
+    assert [op for op, _fields in calls] == ["claude_lifecycle"]
 
 
 @pytest.mark.parametrize("native_mode", ["auto", "force", "off"])

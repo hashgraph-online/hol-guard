@@ -340,21 +340,30 @@ class HookWorker(HookWorkerNativeMixin):
                 deadline=deadline,
             )
         if harness.strip().lower().replace("_", "-") == "claude-code":
+            lifecycle = event_name in {"PermissionRequest", "Stop"} or (
+                event_name == "Notification" and str(payload.get("notification_type") or "") == "permission_prompt"
+            )
             # Rust owns Claude lifecycle semantics. The Python implementation
             # remains only as a compatibility fallback for an unavailable
             # resident, where it preserves the established fail-safe reply.
             from ..native_hook_direct import native_hook_direct
+            from .hook_worker_native import _edge_harness_response
 
-            native_answer = native_hook_direct(
-                harness=harness,
-                guard_home=guard_home,
-                payload=payload,
-                workspace=workspace,
-                home_dir=home_dir,
-                deadline=deadline,
+            native_answer = (
+                native_hook_direct(
+                    harness=harness,
+                    guard_home=guard_home,
+                    payload=payload,
+                    workspace=workspace,
+                    home_dir=home_dir,
+                    deadline=deadline,
+                )
+                if lifecycle and claim_saved_approval
+                else None
             )
             if native_answer is not None and native_answer.get("outcome") != "defer":
-                return native_answer
+                self._record_native_decision_receipt(native_answer.get("receipt"))
+                return _edge_harness_response(native_answer)
             answered = self._claude_lifecycle_response(event_name, payload, deadline=deadline)
             if answered is not None:
                 return answered
