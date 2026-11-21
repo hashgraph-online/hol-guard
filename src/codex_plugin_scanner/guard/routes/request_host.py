@@ -126,10 +126,7 @@ def _replay_server_class() -> type:
             self.command_queue_lifecycle = DurableWorkerRefresh(store)
             self.package_firewall_connect_state_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
             self.onefile_extraction_status = None
-            from ..workers.host import REPAIR_SELF_CHECK_KEY
-
-            repair_status = store.get_sync_payload(REPAIR_SELF_CHECK_KEY)
-            self.repair_self_check_status = repair_status if isinstance(repair_status, dict) else None
+            self.repair_self_check_status = store.repair_self_check_status()
             self.guard_cloud_connect_state_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
             self.guard_cloud_browser_session_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
             self.package_firewall_session_nonces = _PersistedMapping(

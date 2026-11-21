@@ -103,6 +103,9 @@ pub(crate) mod sync_delivery_rows;
 #[path = "guard_store_exact_cloud_state.rs"]
 pub(crate) mod exact_cloud_state;
 
+#[path = "guard_store_worker_host.rs"]
+pub(crate) mod worker_host;
+
 #[cfg(test)]
 #[path = "guard_store_sync_state_tests.rs"]
 mod tests;
