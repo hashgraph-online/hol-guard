@@ -38,7 +38,7 @@
       "required_tools": [
         "write"
       ],
-      "prompt": "In this disposable project, use the native write tool exactly once to create src/connectors/metrics.ts. Its content is the single line \"export const metrics = [{ metricKey: 'downloads_30d' }];\" followed by a newline. The quoted value is a metric name carrying a time window, not a credential. Do not use shell, do not read other files, and do not request an approval or change policy. Stop after that one write call."
+      "prompt": "In this project, use the native write tool exactly once to create src/connectors/metrics.ts. Its content is the single line \"export const metrics = [{ metricKey: 'downloads_30d' }];\" followed by a newline. The quoted value is a metric name carrying a time window, not a credential. Do not use shell, do not read other files, and do not request an approval or change policy. Stop after that one write call."
     },
     {
       "id": "native-sibling-project",
