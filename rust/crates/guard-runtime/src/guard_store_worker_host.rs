@@ -107,37 +107,16 @@ fn write(
 }
 
 /// `queue_approval_attention`: an operation waiting on approval, for the
-/// worker host's attention loop. Each request keeps only what the attention
-/// coordinator reads, so the row stays small however large the approval
-/// records are: the request id, approval address and workspace, and the
-/// severity of each decision signal. Entries that are not objects are dropped.
-/// Requests that would take the row past [`ATTENTION_BATCH_BYTES`] are left
-/// off the end, so every queued row fits one take's answer and queueing never
-/// fails after the caller has saved its approvals.
+/// worker host's attention loop. The row is a compact handoff holding only
+/// what the attention coordinator reads, so it stays small however large the
+/// approval records are, and queueing never fails after the caller has saved
+/// its approvals. See [`attention_requests`].
 fn queue_attention(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
     let operation_id = text_arg(args, "operation_id", "invalid_operation_id")?;
-    let Some(requests) = args.raw("requests").filter(|value| value.is_array()) else {
+    let Some(requests) = args.raw("requests").and_then(Value::as_array) else {
         return value_error("invalid_requests");
     };
-    let mut used = json!({ "operation_id": operation_id, "requests": [] })
-        .to_string()
-        .len();
-    let mut kept = Vec::new();
-    for request in requests
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_object)
-    {
-        let request = attention_request(request);
-        let size = request.to_string().len() + 1;
-        if used + size > ATTENTION_BATCH_BYTES {
-            break;
-        }
-        used += size;
-        kept.push(request);
-    }
-    let row = json!({ "operation_id": operation_id, "requests": kept });
+    let row = json!({ "operation_id": operation_id, "requests": attention_requests(requests) });
     write(
         connection,
         &format!("{ATTENTION_PREFIX}{operation_id}"),
@@ -146,30 +125,56 @@ fn queue_attention(connection: &Connection, args: &Args<'_>) -> StoreResult<Valu
     )
 }
 
-/// The parts of one approval request the attention coordinator reads.
-fn attention_request(request: &Map<String, Value>) -> Value {
-    let mut kept = Map::new();
-    for key in ["request_id", "approval_url", "workspace"] {
-        if let Some(value) = request.get(key).filter(|value| value.is_string()) {
-            kept.insert(key.to_owned(), value.clone());
+/// Every approval request, cut to what the attention coordinator reads. Each
+/// keeps its request id, so the coordinator still sees every request it must
+/// wait on. The first approval address and the first workspace are kept once,
+/// and the distinct severities of every request's decision signals ride on
+/// the first request, so the most severe signal still decides whether the
+/// browser opens at once. Entries that are not objects are dropped.
+fn attention_requests(requests: &[Value]) -> Vec<Value> {
+    let mut kept: Vec<Map<String, Value>> = Vec::new();
+    let mut severities: Vec<Value> = Vec::new();
+    let mut have_url = false;
+    let mut have_workspace = false;
+    for request in requests.iter().filter_map(Value::as_object) {
+        let mut entry = Map::new();
+        let mut keep = |key: &str| match request.get(key).filter(|value| value.is_string()) {
+            Some(value) => {
+                entry.insert(key.to_owned(), value.clone());
+                true
+            }
+            None => false,
+        };
+        keep("request_id");
+        if !have_url {
+            have_url = keep("approval_url");
+        }
+        if !have_workspace {
+            have_workspace = keep("workspace");
+        }
+        let signals = request
+            .get("decision_v2_json")
+            .and_then(|decision| decision.get("signals"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten();
+        for severity in signals.filter_map(|signal| signal.get("severity")) {
+            if severity.is_string() && !severities.contains(severity) {
+                severities.push(severity.clone());
+            }
+        }
+        kept.push(entry);
+    }
+    if let Some(first) = kept.first_mut() {
+        if !severities.is_empty() {
+            let signals: Vec<Value> = severities
+                .into_iter()
+                .map(|severity| json!({ "severity": severity }))
+                .collect();
+            first.insert("decision_v2_json".to_owned(), json!({ "signals": signals }));
         }
     }
-    let signals = request
-        .get("decision_v2_json")
-        .and_then(|decision| decision.get("signals"))
-        .and_then(Value::as_array);
-    if let Some(signals) = signals {
-        let severities: Vec<Value> = signals
-            .iter()
-            .filter_map(|signal| signal.get("severity").filter(|value| value.is_string()))
-            .map(|severity| json!({ "severity": severity }))
-            .collect();
-        kept.insert(
-            "decision_v2_json".to_owned(),
-            json!({ "signals": severities }),
-        );
-    }
-    Value::Object(kept)
+    kept.into_iter().map(Value::Object).collect()
 }
 
 /// `_take_attention`: queued attention rows in operation-id order, removed in
