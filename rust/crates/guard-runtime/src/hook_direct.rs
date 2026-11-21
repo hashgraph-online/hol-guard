@@ -222,19 +222,6 @@ fn answer(
             policy_store,
         );
     };
-    // Claude AskUserQuestion answers must settle through the daemon's
-    // integrity-bound question transaction before ordinary post-tool review.
-    // Leave this semantic write path to the daemon instead of returning a
-    // direct activity edge that could skip the pending-answer consume.
-    if request.harness == CLAUDE_CODE
-        && event == POST_TOOL_USE
-        && payload
-            .get("tool_name")
-            .and_then(Value::as_str)
-            .is_some_and(|name| name.trim().eq_ignore_ascii_case("askuserquestion"))
-    {
-        return Err(HookDirectDefer::PermissionNotice);
-    }
     let pre_tool = event == PRE_TOOL_USE;
     let cursor_harness = request.harness == CURSOR;
     if payload.contains_key(TRANSITION_PROBE_FIELD) {

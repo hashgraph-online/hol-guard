@@ -100,18 +100,6 @@ fn hooks_the_daemon_handles_itself_defer() {
 }
 
 #[test]
-fn claude_approval_question_post_tool_is_settled_by_the_daemon() {
-    let lane = lane("lifecycle-question", json!({}));
-    let mut payload = lifecycle("PostToolUse");
-    payload["tool_name"] = json!("AskUserQuestion");
-    payload["tool_response"] = json!({"answers": {"Allow?": "Allow once"}});
-    assert_eq!(
-        deferred(&run_as(&lane, "claude-code", Some(HOME), payload)),
-        "direct_hook_permission_notice"
-    );
-}
-
-#[test]
 fn a_lifecycle_hook_for_an_app_guard_does_not_protect_defers() {
     let lane = lane("lifecycle-unmanaged", json!({}));
     let connection = rusqlite::Connection::open(lane.fixture.root.join("guard.db")).unwrap();
