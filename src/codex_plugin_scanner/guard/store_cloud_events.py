@@ -237,6 +237,32 @@ class StoreCloudEventsMixin:
             raise RuntimeError("native queue state transition returned no state")
         return dict(state)
 
+    def transition_cloud_review_sync_state(
+        self,
+        state_key: str,
+        transition: str,
+        *,
+        now: str,
+        **detail: object,
+    ) -> dict[str, object]:
+        """Move the Cloud Review sync state row through one named sync step.
+
+        The native store owns which fields each step sets and merges them into
+        the stored row, so every other field keeps its stored value. ``detail``
+        carries the step's inputs (``binding_key``, ``limits``, ``counts``,
+        ``outbox``, ``delivery_binding``, ``error``, ``error_code``,
+        ``keep_auth_code``). Returns the merged row.
+        """
+
+        answer = self._native_store_call(
+            "transition_cloud_review_sync_state",
+            {"state_key": state_key, "transition": transition, "now": now, **detail},
+        )
+        state = answer.get("state") if isinstance(answer, dict) else None
+        if not isinstance(state, dict):
+            raise RuntimeError("native review sync state transition returned no state")
+        return dict(state)
+
     def list_cloud_exceptions(self, harness: str | None = None) -> list[dict[str, object]]:
         from .native_runner_authority import NativeRunnerAuthorityError
         from .runtime.runner_native_sync import cloud_exceptions

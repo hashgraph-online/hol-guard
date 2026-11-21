@@ -433,6 +433,9 @@ pub(crate) fn dispatch(
         "transition_command_queue_state" => {
             crate::guard_store_sync_state::queue_transition::method(connection, args)
         }
+        "transition_cloud_review_sync_state" => {
+            crate::guard_store_sync_state::review_sync_transition::method(connection, args)
+        }
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
         "set_managed_install" => crate::guard_store_managed_installs::set(connection, args),
