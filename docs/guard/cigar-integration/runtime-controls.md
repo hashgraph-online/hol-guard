@@ -1,6 +1,6 @@
 # Development runtime controls
 
-The optional native service has configuration, local candidate enrollment, runtime controls and explicit workspace/source grants. The Protection panel and public CLI project those APIs. The full integration remains under implementation. See the [execution log](EXECUTION_LOG.md) for exact qualification scope and outstanding checks.
+The optional native service has configuration, the built-in engine, runtime controls and explicit workspace/source grants. The Protection panel and public CLI project those APIs. The full integration remains under implementation. See the [execution log](EXECUTION_LOG.md) for exact qualification scope and outstanding checks.
 
 ## End-user controls
 
@@ -10,11 +10,11 @@ CIGAR stands for **Context Intelligence Graph Agentic Runtime**, displayed in th
 
 **How it works** includes an interactive conceptual flow: admitted sources, a scoped graph, compilation within a context budget, and delivery to Guard or authorized apps. It explains citations, source freshness, effective questions, storage choices, and the difference between context and command authorization. The execution lesson retains this candidate's external-app delivery qualification limits.
 
-In **Runtime & preferences**, choose an enrolled runtime, select preferences and save through Guard's existing settings/proof flow. A saved on preference displays **Not started** until you click **Start CIGAR**, prominently available at the top of every CIGAR section. Starting performs native process verification in the background; the UI reports **Ready** only after it succeeds. The primary action then becomes **Use CIGAR**, which opens **Sources & AI apps** for explicit workspace access. An idle runtime displays **Paused** and can be started again. Unsaved changes, a pending operation, missing selection, or policy restrictions prevent activation. The workspace's **Turn off CIGAR** action cancels work, closes the active capability and persists opt-out without clearing Guard approvals or other preferences.
+In **Runtime & preferences**, select preferences and save through Guard's existing settings/proof flow. A saved on preference displays **Not started** until you click **Start CIGAR**, prominently available at the top of every CIGAR section. Starting performs native process verification in the background; the UI reports **Ready** only after it succeeds. The primary action then becomes **Use CIGAR**, which opens **Sources & AI apps** for explicit workspace access. An idle runtime displays **Paused** and can be started again. Unsaved changes, a pending operation, missing selection, or policy restrictions prevent activation. The workspace's **Turn off CIGAR** action cancels work, closes the active capability and persists opt-out without clearing Guard approvals or other preferences.
 
 **Sources & AI apps** contains workspace grants, selected documents, app pairing, and separately authorized sharing. **Data & privacy** provides context cleanup and diagnostics. The former Protection settings entry links to the CIGAR workspace; review and Evidence links open its relevant section directly.
 
-Opening CIGAR reads native status and registered runtime metadata only. It never scans PATH, probes Python, installs packages, or starts a runtime. An empty runtime list means this Guard profile has no registered CIGAR bundle; it does not mean Python 3.14 is absent or incompatible. Final CPython 3.14.7 qualifies, including in a separate selected environment while Guard uses another supported Python.
+Opening CIGAR reads native status and registered runtime metadata only. It never scans PATH, probes Python, installs packages, or starts a runtime. The built-in engine is always listed; it needs no download and no Python.
 
 Home also shows a CIGAR card with the same headline and sentence as the CIGAR page, **Open CIGAR**, and **Turn off CIGAR** when an enabled preference or pending job is known. **Try again** appears only when the status read fails. Opening Home reads status only; it does not start or probe a runtime. Context status failures are separate from Guard protection and approval controls.
 
@@ -23,7 +23,7 @@ These CLI commands reach the same resident-owned service:
 | Command | Behavior |
 | --- | --- |
 | `hol-guard context status --json` | Read native state; no CIGAR probe, import or installation |
-| `hol-guard context runtimes --json` | Explicit metadata-only listing of enrolled local candidates |
+| `hol-guard context runtimes --json` | Metadata-only listing of the available engine |
 | `hol-guard context check --json` | Schedule selected-runtime verification; an off preference stays off |
 | `hol-guard context start --json` | Verify and activate only an already saved, enabled selection |
 | `hol-guard context off --json` | Cancel/stop optional work and persist opt-out |
@@ -49,24 +49,6 @@ Keep Guard's desktop app or daemon running for `check`, `start` and context tool
 ## Runtime requirement
 
 CIGAR runs on its built-in engine: the official `hol-cigar` Rust crate, compiled into Guard's native runtime. There is no separate CIGAR download, Python package or Python process, so the machine's Python installations do not affect it, and it runs wherever Guard's native runtime runs. The dashboard reports the Guard host's state, including when viewed from another device.
-
-## Local candidate enrollment
-
-Public package installation and its product setup experience remain pending. Development tests use the explicitly staged, independently approved local candidate described in the [runtime receipt](evidence/receipts.json). No system Python or live Guard installation is changed by those tests.
-
-The native operator command is `context-assistance-enroll-local --stdin` on the matching `hol-guard-runtime` binary. Its JSON request has these fields:
-
-| Field | Meaning |
-| --- | --- |
-| `schema` | `guard-cigar-enroll-local.v1` |
-| `guard_home` | Private installation state directory |
-| `runtime_id` | Bounded opaque local selection ID |
-| `local_candidate_approved` | Explicit operator acceptance of this candidate |
-| `source_revision` | Exact 40-character candidate source revision |
-| `selection` | Private selected executable, site-packages and work-directory paths |
-| `approval` | Independently reviewed bundle/platform/file fingerprints |
-
-This is an operator enrollment interface, not an HTTP/MCP request body. A browser or agent cannot approve its own arbitrary expected bytes. Enrollment verifies actual executable/package identity, Python facts, worker handshake and synthetic compilation, then retains the record privately. The result explicitly has `activation_granted: false`. The real settings writer requires an enrolled selection with matching current bytes for a first opt-in; activation repeats actual process verification.
 
 ## State and privacy
 

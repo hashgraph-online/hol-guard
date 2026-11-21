@@ -21,6 +21,24 @@ pub(crate) enum LaneMiss {
 const CHOSEN_WAIT: Duration = Duration::from_millis(40);
 /// How long a prompt waits for settings saved since the last one to load.
 const FOLLOW_WAIT: Duration = Duration::from_millis(250);
+/// Largest settings file a prompt reads to see whether it changed.
+const FOLLOW_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
+/// The saved settings file's bytes, or `None` when it is missing, not a
+/// regular file or larger than [`FOLLOW_MAX_BYTES`].
+fn read_saved_settings(path: &std::path::Path) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).ok()?;
+    let metadata = file.metadata().ok()?;
+    if !metadata.is_file() || metadata.len() > FOLLOW_MAX_BYTES {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    file.take(FOLLOW_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    (bytes.len() as u64 <= FOLLOW_MAX_BYTES).then_some(bytes)
+}
 
 pub(super) fn chosen(settings: &AssistanceSettings) -> bool {
     settings.requested.enabled
@@ -40,7 +58,7 @@ impl Service {
     pub(crate) fn follow_saved_settings(&self, guard_home: &std::path::Path) {
         use std::hash::{DefaultHasher, Hash, Hasher};
         let path = guard_home.join(crate::package_authority_config::HOME_CONFIG_FILENAME);
-        let Ok(bytes) = std::fs::read(path) else {
+        let Some(bytes) = read_saved_settings(&path) else {
             return;
         };
         let mut hasher = DefaultHasher::new();
@@ -62,8 +80,9 @@ impl Service {
                     let settings = crate::guard_config_load::context_assistance_config(&home)?;
                     configure(&state, settings, Some(generation))
                 });
-                // A change that raced this load is read again by the next prompt.
-                if loaded.is_err_and(|code| code == "native_context_assistance_context_stale") {
+                // A load that failed, or raced another change, is tried again
+                // by the next prompt even when the file is unchanged.
+                if loaded.is_err() {
                     forget(&followed, stamp);
                 }
                 let _ = done.send(());
