@@ -924,6 +924,9 @@ def sync_receipts(
         if review_verification_keys_payload is not None
         else None
     )
+    if upload_answer.answers_error is not None:
+        # Raised once the policy bundle the same answer carried has been handled.
+        raise RuntimeError(upload_answer.answers_error)
     try:
         pain_signals_uploaded = sync_pain_signals(store, auth_context=resolved_auth_context)
     except RuntimeError as pain_signal_error:

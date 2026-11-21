@@ -226,3 +226,18 @@ def test_advisory_alerts_turned_off_record_no_events(tmp_path, cloud_url) -> Non
 
     assert _advisory_events(store) == []
     assert store.get_sync_payload("alert_preferences") == {"advisoriesEnabled": False}
+
+
+def test_a_failed_answer_write_is_raised_after_the_answer_is_handled(tmp_path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
+
+    store = GuardStore(tmp_path / "home")
+    answer = {
+        "now": "2026-11-19T00:00:00+00:00",
+        "receipts_stored": 0,
+        "answers_error": "native_advisory_cache_invalid",
+    }
+    monkeypatch.setattr(cloud_bundle_sync, "cloud_receipt_upload", lambda *_args, **_kwargs: answer)
+
+    with pytest.raises(RuntimeError, match="native_advisory_cache_invalid"):
+        _sync(store, "https://hol.org/api/guard/receipts/sync")

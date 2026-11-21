@@ -16,6 +16,9 @@ use crate::guard_store_json::{dumps_default, dumps_sorted, py_strip};
 /// `store_base` sync-state key of the workspace's alert preferences.
 pub(crate) const ALERT_PREFERENCES_KEY: &str = "alert_preferences";
 const ADVISORY_EVENT: &str = "premium_advisory";
+/// Escaped payload bytes per `cache_advisories` call, well under the store's
+/// request limit (`store_advisory_cache._advisory_batches`).
+const CACHE_BATCH_BYTES: usize = 1024 * 1024;
 
 /// A Guard store method call, as [`crate::cloud_event_sync::EventStore::call`].
 pub(crate) type StoreCall<'a> = &'a dyn Fn(&str, Value) -> Result<Value, SyncError>;
@@ -39,13 +42,12 @@ pub(crate) fn apply(
             .iter()
             .map(|advisory| dumps_default(advisory).ok_or_else(invalid))
             .collect::<Result<Vec<_>, _>>()?;
-        let answer = call(
-            "cache_advisories",
-            json!({"payloads": payloads, "now": now}),
-        )?;
-        stored = answer
-            .as_i64()
-            .ok_or_else(|| SyncError::Failed("native_advisory_cache_invalid".to_owned()))?;
+        for batch in batches(payloads)? {
+            let answer = call("cache_advisories", json!({"payloads": batch, "now": now}))?;
+            stored += answer
+                .as_i64()
+                .ok_or_else(|| SyncError::Failed("native_advisory_cache_invalid".to_owned()))?;
+        }
     }
     let preferences = preferences
         .filter(|value| value.is_object())
@@ -64,6 +66,28 @@ pub(crate) fn apply(
         }
     }
     Ok(stored)
+}
+
+/// `payloads` split so each batch's payloads, escaped again as request
+/// strings, stay under [`CACHE_BATCH_BYTES`]. A payload larger than the
+/// budget goes alone.
+fn batches(payloads: Vec<String>) -> Result<Vec<Vec<String>>, SyncError> {
+    let mut out: Vec<Vec<String>> = vec![Vec::new()];
+    let mut used = 0;
+    for payload in payloads {
+        let size = dumps_default(&Value::from(payload.as_str()))
+            .ok_or_else(invalid)?
+            .len();
+        if used + size > CACHE_BATCH_BYTES && out.last().is_some_and(|batch| !batch.is_empty()) {
+            out.push(Vec::new());
+            used = 0;
+        }
+        used += size;
+        if let Some(batch) = out.last_mut() {
+            batch.push(payload);
+        }
+    }
+    Ok(out)
 }
 
 /// The advisory objects in answer order, each kept once: Python's

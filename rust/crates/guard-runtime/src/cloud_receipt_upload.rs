@@ -441,18 +441,29 @@ fn finish(
         )?;
     }
     // The policy acknowledgement follow-up ignores what Cloud answers it.
+    // A failed write is reported beside the answer, not in place of it: the
+    // cursor has already moved, so the bundle the answer carries must still
+    // reach its signature check. The caller raises it after the bundle.
+    let mut answers_error = Value::Null;
     let advisories_stored = if request.context_only {
         0
     } else {
         let call = |method: &str, args: Value| store.call(method, args);
         let save = |key: &str, payload: &Value, at: &str| store.save(key, payload, at);
-        apply_answers(
+        match apply_answers(
             &call,
             &save,
             &tally.advisories,
             tally.alert_preferences.as_ref(),
             &now,
-        )?
+        ) {
+            Ok(stored) => stored,
+            Err(SyncError::Pending) => return Err(SyncError::Pending),
+            Err(failure) => {
+                answers_error = Value::from(failure.message());
+                0
+            }
+        }
     };
     // The answer that carried the bundle is returned whole, for its
     // signature check; the bundle is its `policyBundle`.
@@ -464,6 +475,7 @@ fn finish(
         "receipts_skipped": plan.projected.iter().filter(|payload| payload.is_none()).count(),
         "receipts_stored": tally.receipts_stored,
         "advisories_stored": advisories_stored,
+        "answers_error": answers_error,
         "policy_bundle": {
             "provided": tally.bundle_provided,
             "malformed": tally.bundle_malformed,

@@ -388,14 +388,19 @@ def upload_receipts(
     cursor = latest if latest is not None else prior_cursor
     _save_cursor(store, cursor, now)
     advisories_stored = 0
+    answers_error: str | None = None
     if upload.get("contextOnly") is not True:
-        advisories_stored = _apply_answers(store, tally["advisories"], preferences, now)
+        try:
+            advisories_stored = _apply_answers(store, tally["advisories"], preferences, now)
+        except Exception as error:
+            answers_error = str(error)
     return {
         "synced_at": payload.get("syncedAt"),
         "now": now,
         "receipts": len(receipts),
         "receipts_stored": tally["stored"],
         "advisories_stored": advisories_stored,
+        "answers_error": answers_error,
         "policy_bundle": {**flags, "sync_payload": tally["sync_payload"], "delivery": delivery},
         "review_verification_keys": review_keys,
         "receipt_cursor_rowid": cursor,

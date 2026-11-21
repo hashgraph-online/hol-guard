@@ -347,6 +347,8 @@ class ReceiptUploadAnswer:
     receipt_cursor_rowid: int | None
     receipt_cursor_backfill: bool
     receipts_skipped: int = 0
+    # Why caching the advisories or storing the alert preferences failed.
+    answers_error: str | None = None
 
     @classmethod
     def from_native(cls, answer: Mapping[str, object]) -> ReceiptUploadAnswer:
@@ -375,6 +377,7 @@ class ReceiptUploadAnswer:
             receipt_cursor_rowid=cursor if isinstance(cursor, int) and not isinstance(cursor, bool) else None,
             receipt_cursor_backfill=answer.get("receipt_cursor_backfill") is True,
             receipts_skipped=_count(answer.get("receipts_skipped")),
+            answers_error=answers_error if isinstance(answers_error := answer.get("answers_error"), str) else None,
         )
 
 

@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use serde_json::{json, Value};
 
-use super::{apply, ALERT_PREFERENCES_KEY};
+use super::{apply, ALERT_PREFERENCES_KEY, CACHE_BATCH_BYTES};
 use crate::cloud_bundle_fetch::SyncError;
 
 #[derive(Default)]
@@ -121,4 +121,35 @@ fn an_invalid_cache_answer_fails_the_sync() {
     assert!(
         matches!(failed, Err(SyncError::Failed(reason)) if reason == "native_advisory_cache_invalid")
     );
+}
+
+#[test]
+fn a_large_answer_is_cached_in_batches_under_the_request_budget() {
+    let recorder = Recorder::default();
+    let reason = "x".repeat(CACHE_BATCH_BYTES / 4);
+    let advisories: Vec<Value> = (0..10)
+        .map(|index| json!({"artifactId": format!("pkg:{index}"), "reason": reason}))
+        .collect();
+    assert_eq!(recorder.run(&advisories, None).expect("applied"), 10);
+    let calls = recorder.calls.borrow();
+    let batches: Vec<&Value> = calls
+        .iter()
+        .filter(|(method, _)| method == "cache_advisories")
+        .map(|(_, args)| &args["payloads"])
+        .collect();
+    assert!(batches.len() > 1);
+    for batch in &batches {
+        let size: usize = batch
+            .as_array()
+            .expect("payloads")
+            .iter()
+            .map(|payload| payload.to_string().len())
+            .sum();
+        assert!(size <= CACHE_BATCH_BYTES);
+    }
+    let total: usize = batches
+        .iter()
+        .map(|batch| batch.as_array().map_or(0, Vec::len))
+        .sum();
+    assert_eq!(total, 10);
 }
