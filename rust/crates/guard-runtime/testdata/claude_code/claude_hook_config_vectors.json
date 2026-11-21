@@ -1331,7 +1331,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -1362,7 +1362,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -1373,7 +1373,7 @@
        ]
       },
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -1395,7 +1395,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -1416,7 +1416,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -1453,7 +1453,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -1479,7 +1479,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -1495,7 +1495,7 @@
        ]
       },
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -1522,7 +1522,7 @@
        ]
       },
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -2139,7 +2139,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -2176,7 +2176,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -2399,7 +2399,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -2448,7 +2448,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -2474,7 +2474,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -2498,7 +2498,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -2516,7 +2516,7 @@
      ],
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -2591,7 +2591,7 @@
      [],
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -2643,7 +2643,7 @@
     "lists": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -2703,7 +2703,7 @@
       "entries": [],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -2736,7 +2736,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -2751,7 +2751,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -2784,7 +2784,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -3370,7 +3370,7 @@
       "entries": [],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -3389,7 +3389,7 @@
          "command": "/opt/guard/native claude-hook-bridge HOL_GUARD_CLAUDE_DAEMON_HOOK {\"query\":\"guard-home=x\"}"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -3404,7 +3404,7 @@
       "entries": [],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -3435,7 +3435,7 @@
          "timeout": 10
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -3520,7 +3520,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -3538,7 +3538,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -3558,7 +3558,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -3585,7 +3585,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -3603,7 +3603,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -3636,7 +3636,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -3650,7 +3650,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -3661,7 +3661,7 @@
         ]
        },
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -3679,7 +3679,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -3699,7 +3699,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -3721,7 +3721,7 @@
        ]
       },
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -3748,7 +3748,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -3759,7 +3759,7 @@
         ]
        },
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -3777,7 +3777,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -3797,7 +3797,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -3830,7 +3830,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -3863,7 +3863,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -3883,7 +3883,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -3936,7 +3936,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -3969,7 +3969,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -3989,7 +3989,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -4027,7 +4027,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -4043,7 +4043,7 @@
         ]
        },
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -4070,7 +4070,7 @@
         ]
        },
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -4087,7 +4087,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -4107,7 +4107,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -4123,7 +4123,7 @@
        ]
       },
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -4150,7 +4150,7 @@
        ]
       },
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -4176,7 +4176,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -4192,7 +4192,7 @@
         ]
        },
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -4219,7 +4219,7 @@
         ]
        },
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -4236,7 +4236,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -4269,7 +4269,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -4316,7 +4316,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -4380,7 +4380,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -4427,7 +4427,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -4471,7 +4471,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -4509,7 +4509,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -4564,7 +4564,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -4602,7 +4602,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -4652,7 +4652,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -4689,7 +4689,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -4743,7 +4743,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -4780,7 +4780,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -4824,7 +4824,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -4868,7 +4868,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -4929,7 +4929,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -4973,7 +4973,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -5016,7 +5016,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -5065,7 +5065,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -5114,7 +5114,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -5163,7 +5163,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -5196,7 +5196,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -6213,7 +6213,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -6248,7 +6248,7 @@
          "command": "/opt/guard/native claude-hook-bridge HOL_GUARD_CLAUDE_DAEMON_HOOK {\"query\":\"guard-home=x\"}"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -6297,7 +6297,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -6344,7 +6344,7 @@
          "timeout": 10
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -6586,7 +6586,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -6656,7 +6656,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -6709,7 +6709,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -6764,7 +6764,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -8039,7 +8039,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -8095,7 +8095,7 @@
          "command": "/opt/guard/native claude-hook-bridge HOL_GUARD_CLAUDE_DAEMON_HOOK {\"query\":\"guard-home=x\"}"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -8148,7 +8148,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -8216,7 +8216,7 @@
          "timeout": 10
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -8533,7 +8533,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -8645,7 +8645,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -8740,7 +8740,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -8836,7 +8836,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -10875,7 +10875,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -10973,7 +10973,7 @@
          "command": "/opt/guard/native claude-hook-bridge HOL_GUARD_CLAUDE_DAEMON_HOOK {\"query\":\"guard-home=x\"}"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -11068,7 +11068,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -11178,7 +11178,7 @@
          "timeout": 10
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -11618,7 +11618,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -11685,7 +11685,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -11735,7 +11735,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -11791,7 +11791,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -11805,7 +11805,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -11838,7 +11838,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -11858,7 +11858,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -11911,7 +11911,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -11944,7 +11944,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -11964,7 +11964,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -12057,7 +12057,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -12147,7 +12147,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -12220,7 +12220,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -12274,7 +12274,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -13823,7 +13823,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -13899,7 +13899,7 @@
          "command": "/opt/guard/native claude-hook-bridge HOL_GUARD_CLAUDE_DAEMON_HOOK {\"query\":\"guard-home=x\"}"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -13972,7 +13972,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -14060,7 +14060,7 @@
          "timeout": 10
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -14395,7 +14395,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -14445,7 +14445,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -14478,7 +14478,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -14530,7 +14530,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -14585,7 +14585,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -14623,7 +14623,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -14682,7 +14682,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -14744,7 +14744,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -14789,7 +14789,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -14817,7 +14817,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -14862,7 +14862,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -14882,7 +14882,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -14936,7 +14936,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -14981,7 +14981,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -15001,7 +15001,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -15039,7 +15039,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -15104,7 +15104,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -15158,7 +15158,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -15223,7 +15223,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -15277,7 +15277,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -15342,7 +15342,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -15411,7 +15411,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -15476,7 +15476,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -15545,7 +15545,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -15610,7 +15610,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -15679,7 +15679,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -15747,7 +15747,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -15865,7 +15865,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -15933,7 +15933,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -16024,7 +16024,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -16093,7 +16093,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -16211,7 +16211,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -16270,7 +16270,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -16329,7 +16329,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -16374,7 +16374,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -16387,7 +16387,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -16445,7 +16445,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -16490,7 +16490,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -16509,7 +16509,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -16573,7 +16573,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -16635,7 +16635,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -16702,7 +16702,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -16765,7 +16765,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -16819,7 +16819,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -16830,7 +16830,7 @@
       ],
       "prune": false,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -16850,7 +16850,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -16881,7 +16881,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -16892,7 +16892,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -16925,7 +16925,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ]
     ]
@@ -16940,7 +16940,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -16958,7 +16958,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -16976,7 +16976,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -17059,7 +17059,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -17077,7 +17077,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -17094,7 +17094,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -17158,7 +17158,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -17176,7 +17176,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -17194,7 +17194,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -17277,7 +17277,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -17295,7 +17295,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -17312,7 +17312,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -17385,7 +17385,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -17408,7 +17408,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -17426,7 +17426,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -17444,7 +17444,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -17550,7 +17550,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -17587,7 +17587,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -17604,7 +17604,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -17673,7 +17673,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -17696,7 +17696,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -17714,7 +17714,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -17732,7 +17732,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -17838,7 +17838,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -17875,7 +17875,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -17892,7 +17892,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -17971,7 +17971,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -17995,7 +17995,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -18025,12 +18025,12 @@
           "statusMessage": "HOL Guard is reviewing this approval prompt"
          }
         ],
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
        }
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -18059,12 +18059,12 @@
           "timeout": 30
          }
         ],
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
        }
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -18186,7 +18186,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -18223,7 +18223,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -18240,7 +18240,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -18309,7 +18309,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -18333,7 +18333,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -18363,12 +18363,12 @@
           "statusMessage": "HOL Guard is reviewing this approval prompt"
          }
         ],
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
        }
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -18397,12 +18397,12 @@
           "timeout": 30
          }
         ],
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
        }
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -18524,7 +18524,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -18561,7 +18561,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -18578,7 +18578,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -18669,7 +18669,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -18698,7 +18698,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -18716,7 +18716,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -18799,7 +18799,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -18817,7 +18817,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -18834,7 +18834,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -18909,7 +18909,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -18938,7 +18938,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -18956,7 +18956,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -19039,7 +19039,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -19057,7 +19057,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -19074,7 +19074,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -19161,7 +19161,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -19172,7 +19172,7 @@
         ]
        },
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -19190,7 +19190,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -19208,7 +19208,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -19225,7 +19225,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -19258,7 +19258,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -19480,7 +19480,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -19517,12 +19517,12 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -19550,7 +19550,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -19694,7 +19694,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -19705,7 +19705,7 @@
         ]
        },
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -19723,7 +19723,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -19741,7 +19741,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -19758,7 +19758,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -19791,7 +19791,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -20013,7 +20013,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -20050,12 +20050,12 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -20083,7 +20083,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -20274,7 +20274,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -20292,7 +20292,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -20310,7 +20310,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -20393,7 +20393,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -20411,7 +20411,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -20428,7 +20428,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -20492,7 +20492,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -20510,7 +20510,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -20528,7 +20528,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -20611,7 +20611,7 @@
          "statusMessage": "HOL Guard is checking this tool use"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -20629,7 +20629,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -20646,7 +20646,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -20719,7 +20719,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -20752,7 +20752,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -20770,7 +20770,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -20788,7 +20788,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -20893,7 +20893,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -20931,7 +20931,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -20948,7 +20948,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -21034,7 +21034,7 @@
      {
       "entries": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -21067,7 +21067,7 @@
       ],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -21085,7 +21085,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -21103,7 +21103,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -21208,7 +21208,7 @@
     "jobs": [
      [
       {
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
        "hooks": [
         {
          "type": "command",
@@ -21246,7 +21246,7 @@
          "statusMessage": "HOL Guard is reviewing this approval prompt"
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       }
      ],
      [
@@ -21263,7 +21263,7 @@
          "timeout": 30
         }
        ],
-       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       }
      ],
      [
@@ -21360,7 +21360,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -21378,7 +21378,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -21396,7 +21396,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -21493,7 +21493,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -21511,7 +21511,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+       "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
       ],
       "handler": {
        "type": "command",
@@ -21529,7 +21529,7 @@
       "entries": [],
       "prune": true,
       "matchers": [
-       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+       "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
       ],
       "handler": {
        "type": "command",
@@ -21636,7 +21636,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -21655,7 +21655,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -21694,7 +21694,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -21715,7 +21715,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -21756,7 +21756,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -21777,7 +21777,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -21815,7 +21815,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -21839,7 +21839,7 @@
       ],
       "PermissionRequest": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -21867,7 +21867,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": []
@@ -21881,7 +21881,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -21905,7 +21905,7 @@
       ],
       "PermissionRequest": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -21934,7 +21934,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -21950,7 +21950,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -21974,7 +21974,7 @@
       ],
       "PermissionRequest": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -22016,7 +22016,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -22044,7 +22044,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -22060,7 +22060,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -22089,7 +22089,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -22105,7 +22105,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -22167,7 +22167,7 @@
       ],
       "PermissionRequest": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|Extra",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|Extra",
         "hooks": [
          {
           "type": "http",
@@ -22183,7 +22183,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -22217,7 +22217,7 @@
       ],
       "PermissionRequest": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|Extra",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|Extra",
         "hooks": [
          {
           "type": "http",
@@ -22234,7 +22234,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -22270,7 +22270,7 @@
       ],
       "PermissionRequest": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|Extra",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|Extra",
         "hooks": [
          {
           "type": "http",
@@ -22337,7 +22337,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": []
@@ -22389,7 +22389,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -22456,7 +22456,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash | PowerShell | Read | Grep | Write | Edit | MultiEdit | WebFetch | WebSearch | mcp__.* |",
+        "matcher": "Bash | PowerShell | Read | Grep | Glob | Write | Edit | MultiEdit | WebFetch | WebSearch | Agent | Task | mcp__.* |",
         "hooks": [
          {
           "type": "command",
@@ -22496,7 +22496,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -22512,7 +22512,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash | PowerShell | Read | Grep | Write | Edit | MultiEdit | WebFetch | WebSearch | mcp__.* |",
+        "matcher": "Bash | PowerShell | Read | Grep | Glob | Write | Edit | MultiEdit | WebFetch | WebSearch | Agent | Task | mcp__.* |",
         "hooks": [
          {
           "type": "command",
@@ -22553,7 +22553,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -22569,7 +22569,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash | PowerShell | Read | Grep | Write | Edit | MultiEdit | WebFetch | WebSearch | mcp__.* |",
+        "matcher": "Bash | PowerShell | Read | Grep | Glob | Write | Edit | MultiEdit | WebFetch | WebSearch | Agent | Task | mcp__.* |",
         "hooks": [
          {
           "type": "command",
@@ -22633,7 +22633,7 @@
          "{}"
         ],
         "timeout": 5,
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
        }
       ],
       "PermissionRequest": [
@@ -22654,7 +22654,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": []
@@ -22676,7 +22676,7 @@
          "{}"
         ],
         "timeout": 5,
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
        }
       ],
       "PermissionRequest": [
@@ -22698,7 +22698,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -22722,7 +22722,7 @@
          "{}"
         ],
         "timeout": 5,
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
        }
       ],
       "PermissionRequest": [
@@ -22757,7 +22757,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -22775,7 +22775,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -22792,7 +22792,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -22811,7 +22811,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -22829,7 +22829,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -22866,7 +22866,7 @@
        "x",
        null,
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -22891,7 +22891,7 @@
       "PermissionRequest": [
        [
         {
-         "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+         "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
          "hooks": [
           {
            "type": "command",
@@ -22920,7 +22920,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -22938,7 +22938,7 @@
        "x",
        null,
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -22963,7 +22963,7 @@
       "PermissionRequest": [
        [
         {
-         "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+         "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
          "hooks": [
           {
            "type": "command",
@@ -22993,7 +22993,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -23011,7 +23011,7 @@
        "x",
        null,
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -23036,7 +23036,7 @@
       "PermissionRequest": [
        [
         {
-         "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+         "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
          "hooks": [
           {
            "type": "command",
@@ -23081,7 +23081,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": {
@@ -23109,7 +23109,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "error": "claude_hook_handler_type_unhashable"
@@ -23123,7 +23123,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": {
@@ -23152,7 +23152,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "error": "claude_hook_handler_type_unhashable"
@@ -23166,7 +23166,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": {
@@ -23208,7 +23208,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -23242,7 +23242,7 @@
       ],
       "PermissionRequest": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -23270,7 +23270,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": []
@@ -23284,7 +23284,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -23318,7 +23318,7 @@
       ],
       "PermissionRequest": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -23347,7 +23347,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -23363,7 +23363,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -23397,7 +23397,7 @@
       ],
       "PermissionRequest": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
         "hooks": [
          {
           "type": "command",
@@ -23450,7 +23450,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "error": "claude_hook_handler_type_unhashable"
@@ -23476,7 +23476,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "error": "claude_hook_handler_type_unhashable"
@@ -23515,7 +23515,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|Lesen☃",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|Lesen☃",
         "hooks": [
          {
           "type": "command",
@@ -23562,7 +23562,7 @@
      "PreToolUse",
      "PermissionRequest"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -23578,7 +23578,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|Lesen☃",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|Lesen☃",
         "hooks": [
          {
           "type": "command",
@@ -23626,7 +23626,7 @@
      "PreToolUse",
      "Stop"
     ],
-    "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
    },
    "expect": {
     "missing": [
@@ -23642,7 +23642,7 @@
      "hooks": {
       "PreToolUse": [
        {
-        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|Lesen☃",
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|Lesen☃",
         "hooks": [
          {
           "type": "command",

@@ -36,6 +36,9 @@ pub const HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE: &str = "hook-authority-state
 /// the HOL Guard approval question.
 pub const HOOK_AUTHORITY_STATE_QUESTION_SETTLE_FEATURE: &str =
     "hook-authority-state-question-settle-v1";
+/// Capability for settling a Claude hook with its original answer order.
+pub const HOOK_AUTHORITY_STATE_QUESTION_PAYLOAD_FEATURE: &str =
+    "hook-authority-state-question-payload-v1";
 /// Capability for `claude_permission_request`, `claude_permission_prompt` and
 /// `claude_turn_stop`: the daemon's Claude Code lifecycle answers, each in one
 /// transaction.
@@ -55,6 +58,8 @@ pub struct HookAuthorityStateRequestV1 {
     /// Absolute path to the resolved guard home.
     pub guard_home: String,
     /// One of the `claude_*` / `cursor_*` operations or `state_is_fresh`.
+    /// `claude_lifecycle` selects the Claude hook operation from `payload`.
+    /// `claude_question_save` persists a settled Claude approval plan.
     pub op: String,
     /// Wall-clock timestamp (`datetime.isoformat()`), used for signing,
     /// freshness and the audit rows.

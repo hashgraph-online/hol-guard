@@ -320,3 +320,7 @@ pub(super) fn declares_dependencies(path: &Path) -> bool {
 #[cfg(test)]
 #[path = "workspace_contained_python_tests.rs"]
 mod python_tests;
+
+#[cfg(test)]
+#[path = "workspace_contained_reach_tests.rs"]
+mod reach_tests;

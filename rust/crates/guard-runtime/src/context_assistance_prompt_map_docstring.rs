@@ -5,6 +5,14 @@
 //! to write a backslash twice. The map names the command that runs just that
 //! function's doctest: shown none, agents guessed a pytest node id, then ran
 //! the whole module, its tests, and read the file again after the edit.
+//! An agent wrote the expected output from memory, saw the run fail, then
+//! called the function again or read the file to find the value; the failed
+//! run already printed it under `Got:`, so the note says to copy that. It does
+//! not say to copy it unchanged: a backslash still goes in twice when the
+//! docstring is not raw. It names only an example the agent added: an example
+//! already there states what the function should return, and a failure there
+//! is the code's to fix. A default `repr` holds a memory address, which
+//! differs on the next run, so copying it would fail that run.
 //! `python -m doctest` loads a file outside its package, so a module with
 //! relative imports fails there.
 use super::super::seen::Span;
@@ -30,8 +38,11 @@ const NOT_RAW: &str = "\nIts docstring is not a raw string: write a backslash in
 twice (`\\\\n` shows as `\\n`).";
 const DOCTESTS: &str = "\nRun its doctests with `python -m pytest --doctest-modules {path}`: \
 `python -m doctest` loads the file outside its package, so its relative imports fail.";
-const DOCTEST: &str = "\nRun just its doctest with `{command}`. That run is the check an added \
-example needs, and the edit's own reply confirms the edit, so the file need not be read again.";
+const DOCTEST: &str = "\nRun just its doctest with `{command}`. If an example you added fails, \
+write the value it prints under `Got:` into that example and run it again: it stops at the first \
+failure. A memory address such as `0x7f3a` in that value changes every run, so show a value without \
+one. A passing run is the check an added example needs, and the edit's own reply confirms \
+the edit, so the file need not be read again.";
 const DOCTEST_AGAIN: &str = "\nRun just its doctest with `{command}`.";
 const OUTSIDE: &str = " `python -m doctest` would load the file outside its package, where its \
 relative imports fail.";
@@ -41,10 +52,29 @@ relative imports fail.";
 /// it for what the code should do ("implement it so it does what its
 /// docstring says" asks for the code). An example alone is not one: "fix
 /// example.py" or "the examples folder" name no docstring.
+#[cfg(test)]
 pub(super) fn asks_for_docstring(prompt: &str) -> bool {
+    asks(prompt).any
+}
+
+/// What a prompt asks of docstrings.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Asks {
+    /// To write a docstring or doctest.
+    pub(crate) any: bool,
+    /// For an example: the prompt names one or shows a `>>>` line.
+    pub(crate) examples: bool,
+}
+
+/// What `prompt` asks of docstrings.
+pub(super) fn asks(prompt: &str) -> Asks {
     let words: Vec<String> = prompt_words(prompt).collect();
     let has = |list: &[&str]| words.iter().any(|word| list.contains(&word.as_str()));
-    prompt.contains(">>>") || (has(&WORDS) && (has(&EXAMPLES) || !has(&BEHAVIOR)))
+    let examples = prompt.contains(">>>") || has(&EXAMPLES);
+    Asks {
+        any: prompt.contains(">>>") || (has(&WORDS) && (has(&EXAMPLES) || !has(&BEHAVIOR))),
+        examples,
+    }
 }
 
 /// The notes given beside a function shown earlier: each is said in full
@@ -76,13 +106,17 @@ pub(super) fn shown(
     asked: &Asked,
     said: Said,
 ) -> Option<(Span, String, String)> {
-    let python = asked.docstring && file.path.ends_with(".py") && !file.container(at);
+    let python = asked.docstring.any && file.path.ends_with(".py") && !file.container(at);
     let head = python.then(|| head(file, at)).flatten();
+    // How to write a backslash and run a doctest matter only to an example:
+    // one the docstring holds or the prompt asks for. Named for a docstring
+    // with none, the command finds no test and the agent tries others.
+    let examples = python && (asked.docstring.examples || holds_example(file, at));
     let mut note = String::new();
-    if !said.raw && head.is_some_and(|(_, raw)| raw == Some(false)) {
+    if examples && !said.raw && head.is_some_and(|(_, raw)| raw == Some(false)) {
         note.push_str(NOT_RAW);
     }
-    match python.then(|| command(file, at, &asked.root)).flatten() {
+    match examples.then(|| command(file, at, &asked.root)).flatten() {
         Some(command) if said.run => {
             note.push_str(&DOCTEST_AGAIN.replace("{command}", &command));
         }
@@ -92,7 +126,7 @@ pub(super) fn shown(
                 note.push_str(OUTSIDE);
             }
         }
-        None if python && !said.run && plain(file.path) && relative(file) => {
+        None if examples && !said.run && plain(file.path) && relative(file) => {
             note.push_str(&DOCTESTS.replace("{path}", file.path));
         }
         None => {}
@@ -246,6 +280,21 @@ fn command(file: &File, at: usize, root: &Path) -> Option<String> {
     })
 }
 
+/// Whether the docstring of the function at `at` holds a doctest example.
+/// Only its own: an example in a nested helper's docstring is not its
+/// doctest.
+fn holds_example(file: &File, at: usize) -> bool {
+    let start = file.sections[at].start;
+    head(file, at).is_some_and(|(last, raw)| {
+        raw.is_some()
+            && (file.lines.get(start - 1..start + last)).is_some_and(|lines| {
+                lines
+                    .iter()
+                    .any(|line| line.trim_start().starts_with(">>>"))
+            })
+    })
+}
+
 /// Whether a path can be named in a command as it is.
 fn plain(path: &str) -> bool {
     !path.starts_with('-') && (path.chars()).all(|c| c.is_alphanumeric() || "/._-".contains(c))
@@ -254,4 +303,20 @@ fn plain(path: &str) -> bool {
 /// Whether a Python file imports from its own package by a relative import.
 fn relative(file: &File) -> bool {
     (file.lines.iter()).any(|line| line.trim_start().starts_with("from ."))
+}
+
+/// Whether a named definition is shown whole after another was. Claude Code
+/// reads a file before editing it, so there only the first is, and a short
+/// constructor, whose fields the other methods use, named on the first line
+/// after any decorators, attributes or doc comments. A long one would push
+/// the rest of the note past the hook's size limit.
+pub(super) fn whole_here(asked: &Asked, shown_any: bool, code: &str) -> bool {
+    const SHORT_BUILD_CHARS: usize = 600;
+    let head = (code.lines())
+        .find(|line| !line.trim_start().starts_with(['@', '#', '/', '*']))
+        .unwrap_or_default();
+    let builds = ["__init__(", "__new__(", "constructor(", "fn new("];
+    let short_build =
+        code.len() <= SHORT_BUILD_CHARS && builds.iter().any(|name| head.contains(name));
+    !shown_any || asked.lookup || !asked.reads_first || short_build
 }

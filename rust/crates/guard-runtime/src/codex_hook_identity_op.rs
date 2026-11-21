@@ -141,6 +141,36 @@ fn handler_identity(
     ]))
 }
 
+/// One matcher group's identity and its handlers' conflict keys, as the
+/// `group` and `conflict` questions answer them, for a caller in this process.
+pub(crate) fn group_digests(
+    source_scope: &str,
+    source_hooks_enabled: bool,
+    event_name: &str,
+    group: &Map<String, Value>,
+    tokens: &BTreeMap<String, Value>,
+) -> (String, Vec<String>) {
+    let entry = CodexHookIdentityEntryV1 {
+        kind: "group".to_owned(),
+        source_scope: source_scope.to_owned(),
+        source_hooks_enabled,
+        event_name: event_name.to_owned(),
+        group: Some(Value::Object(group.clone())),
+        handler: None,
+        command: None,
+        source_format: None,
+        events: None,
+        authenticated_bindings: Vec::new(),
+        legacy_bindings: Vec::new(),
+        self_bindings: Vec::new(),
+    };
+    let empty = Map::new();
+    (
+        group_identity(&entry, &empty, tokens),
+        conflict_keys(&entry, &empty, tokens),
+    )
+}
+
 /// A canonical identity for one complete matcher group.
 fn group_identity(
     entry: &CodexHookIdentityEntryV1,

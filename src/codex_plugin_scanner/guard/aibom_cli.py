@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from ..version import __version__ as __version__
-from .adapters.base import HarnessContext as HarnessContext
 from .aibom_cloud_contract import cloud_syncable_snapshots as cloud_syncable_snapshots
 from .aibom_cloud_contract import inventory_snapshot_event as _inventory_snapshot_event
 from .aibom_collection import _resolve_trust_attestation_context as _resolve_trust_attestation_context
@@ -50,6 +49,7 @@ from .aibom_sync import _inventory_events_request_body as _inventory_events_requ
 from .aibom_sync import _sync_summary as _sync_summary
 from .aibom_sync import _sync_timestamp_from_payload as _sync_timestamp_from_payload
 from .aibom_trust_metadata import apply_local_trust_metadata as apply_local_trust_metadata
+from .harness_context import HarnessContext as HarnessContext
 from .inventory_cisco import run_cisco_inventory_scans as run_cisco_inventory_scans
 from .inventory_contract import GuardAgentInventorySnapshot as GuardAgentInventorySnapshot
 from .inventory_contract import cloud_inventory_artifacts_from_detection as cloud_inventory_artifacts_from_detection
@@ -146,6 +146,8 @@ def sync_aibom_snapshots(
 ) -> dict[str, object]:
     """Sync compatible snapshots and upload content only after cloud acknowledgment."""
     runner = _runner_module()
+    from .runtime import cloud_bundle_sync
+
     runner_native_sync = importlib.import_module(".runtime.runner_native_sync", __package__)
     guard_sync_not_configured_error = runner.GuardSyncNotConfiguredError
 
@@ -251,17 +253,12 @@ def sync_aibom_snapshots(
 
     for batch in event_batches:
         body = _inventory_events_request_body(batch)
-        request = runner._guard_sync_request(
-            resolved_auth_context,
-            request_url=sync_url,
-            method="POST",
-            data=body,
-            extra_headers=None,
-        )
         auth_refresh_retried = False
         try:
-            payload = runner._urlopen_json_with_timeout_retry(
-                request=request,
+            payload = cloud_bundle_sync.cloud_json_request(
+                resolved_auth_context,
+                url=sync_url,
+                body=body,
                 timeout_seconds=90,
                 retry_timeout_seconds=120,
             )
@@ -269,15 +266,10 @@ def sync_aibom_snapshots(
             if error.code == 401 and not auth_refresh_retried:
                 auth_refresh_retried = True
                 resolved_auth_context = runner._resolve_guard_sync_auth_context(store, force_refresh=True)
-                request = runner._guard_sync_request(
+                payload = cloud_bundle_sync.cloud_json_request(
                     resolved_auth_context,
-                    request_url=sync_url,
-                    method="POST",
-                    data=body,
-                    extra_headers=None,
-                )
-                payload = runner._urlopen_json_with_timeout_retry(
-                    request=request,
+                    url=sync_url,
+                    body=body,
                     timeout_seconds=90,
                     retry_timeout_seconds=120,
                 )
@@ -324,7 +316,12 @@ def sync_aibom_snapshots(
             }
             store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
             raise RuntimeError("Guard Cloud AIBOM sync failed due to an HTTP error.") from error
-        except OSError as error:
+        except (OSError, RuntimeError) as error:
+            failure_message = (
+                str(error) or "Guard Cloud AIBOM sync failed."
+                if isinstance(error, RuntimeError)
+                else "Guard Cloud AIBOM sync failed due to a network error."
+            )
             failure_summary = {
                 "synced": False,
                 "synced_at": synced_at,
@@ -333,10 +330,12 @@ def sync_aibom_snapshots(
                 "rejected": total_rejected,
                 "statuses": all_statuses,
                 "partial": batches_sent > 0 or bool(oversized_events),
-                "error": "Guard Cloud AIBOM sync failed due to a network error.",
+                "error": failure_message,
                 "content_upload": content_upload_summary,
             }
             store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
+            if isinstance(error, RuntimeError):
+                raise
             raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
         batches_sent += 1
         events_sent += len(batch)

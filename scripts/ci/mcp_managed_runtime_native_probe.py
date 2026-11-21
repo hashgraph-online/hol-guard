@@ -80,7 +80,7 @@ if '--fixture-server' in sys.argv:
 
 if '--exercise' in sys.argv:
 
-    from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer, proxy_cli_args
+    from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer, proxy_cli_args
 
     from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 
@@ -1010,9 +1010,13 @@ if Path('/candidate-wheel').is_dir():
 
     with zipfile.ZipFile(candidate) as archive:
 
-        relatives = ['codex_plugin_scanner/guard/adapters/' + name + '.py'
+        relatives = ['codex_plugin_scanner/guard/mcp_server_client.py']
 
-                     for name in ('managed_mcp_upstream', 'mcp_servers', 'cursor', 'cline_mcp')]
+        relatives += ['codex_plugin_scanner/guard/' + name + '.py'
+
+                      for name in ('native_harness_client', 'native_harness_ops')]
+
+        relatives += ['codex_plugin_scanner/guard/cursor_hook_ops.py']
 
         if os.environ.get('VERIFY_NATIVE_VALUES') == '1':
 

@@ -19,13 +19,30 @@ const CREDENTIAL_WORDS: &[&str] = &[
     "token",
 ];
 
+/// Ordinary English qualifiers a fixture puts in front of the field name, as
+/// in `new_password="correct-password"` or `token="old-token"`. They describe
+/// which stand-in a test means, so they add no secret of their own. Words that
+/// could name a real account or environment (`admin`, `root`, `prod`) are
+/// deliberately absent, a qualifier only leads, and no qualifier may sit
+/// beside a counter: `MyPassword1` is a chosen password, not a field name.
+const QUALIFIER_WORDS: &[&str] = &[
+    "a", "actual", "an", "another", "bad", "changed", "correct", "current", "expected", "first",
+    "good", "initial", "invalid", "my", "new", "old", "original", "other", "previous", "second",
+    "that", "the", "their", "this", "updated", "valid", "wrong", "your",
+];
+
+/// Most qualifier words one value may carry. Two cover `the-old-password`;
+/// more words than that stop looking like a field name with a qualifier.
+const MAX_QUALIFIER_WORDS: usize = 2;
+
 /// Longest value considered, so a long literal never qualifies by luck.
 const MAX_VALUE_CHARS: usize = 64;
 
 /// Whether a credential assignment match assigns a value whose words are all
 /// words of the field name, including a credential word, with at most one
-/// short numeric counter besides. `tail` is the text after the match: a match
-/// the value runs on past (`TOKEN=token"$more"`) is not the whole value.
+/// short numeric counter and two ordinary qualifiers besides. `tail` is the
+/// text after the match: a match the value runs on past (`TOKEN=token"$more"`)
+/// is not the whole value.
 pub(crate) fn is_self_named(matched: &str, tail: &str) -> bool {
     let Some(index) = matched.find([':', '=']) else {
         return false;
@@ -46,17 +63,31 @@ pub(crate) fn is_self_named(matched: &str, tail: &str) -> bool {
     let name_words = words(&matched[..index]);
     let mut credential_word = false;
     let mut counters = 0_usize;
+    let mut qualifiers = 0_usize;
+    let mut named = false;
     for word in words(value) {
         if word.chars().all(|character| character.is_ascii_digit()) {
             counters += 1;
-            if word.len() > 4 || counters > 1 {
+            // A counter beside a qualifier is how a chosen password reads
+            // (`MyPassword1`), not how a field name does.
+            if word.len() > 4 || counters > 1 || qualifiers > 0 {
                 return false;
             }
             continue;
         }
         if !name_words.contains(&word) {
-            return false;
+            // Qualifiers lead: `correct-password` describes which stand-in a
+            // test means, while `password-old` carries a word of its own.
+            if named || !QUALIFIER_WORDS.contains(&word.as_str()) {
+                return false;
+            }
+            qualifiers += 1;
+            if qualifiers > MAX_QUALIFIER_WORDS || counters > 0 {
+                return false;
+            }
+            continue;
         }
+        named = true;
         credential_word |= CREDENTIAL_WORDS.contains(&word.as_str());
     }
     credential_word
@@ -143,6 +174,45 @@ mod tests {
         assert!(is_self_named(r#""password":"password""#, r#","user":"u"}"#));
         assert!(is_self_named("password: password", "}\n"));
         assert!(is_self_named("SECRET=secret", ";"));
+    }
+
+    #[test]
+    fn a_qualifier_in_front_of_the_field_name_is_still_a_stand_in() {
+        assert!(is_self_named(
+            r#"'new_password': 'correct-password'"#,
+            r#", 'confirm_password': 'x'}"#
+        ));
+        assert!(is_self_named(r#"password="wrong-password""#, ""));
+        assert!(is_self_named(r#"token="the-old-token""#, ""));
+    }
+
+    #[test]
+    fn a_word_that_could_name_a_real_account_is_not_a_qualifier() {
+        assert!(!is_self_named(r#"password="admin-password""#, ""));
+        assert!(!is_self_named(r#"password="prod-password""#, ""));
+        assert!(!is_self_named(r#"token="the-old-stale-worn-token""#, ""));
+        assert!(!is_self_named(r#"username="new-user""#, ""));
+    }
+
+    /// Qualifiers describe which stand-in a test means. Past a couple of them
+    /// the value stops reading as a field name and starts reading as a phrase
+    /// someone chose, so the allowance has a ceiling of its own.
+    #[test]
+    fn more_than_two_allowed_qualifiers_is_no_longer_a_field_name() {
+        assert!(is_self_named(r#"token="the-old-token""#, ""));
+        assert!(!is_self_named(r#"token="the-old-correct-token""#, ""));
+    }
+
+    /// A chosen password often reads as a word in front of the field name with
+    /// a number after it. The counter and the trailing position are what tell
+    /// it apart from a stand-in.
+    #[test]
+    fn a_qualifier_with_a_counter_or_after_the_field_name_is_not() {
+        assert!(!is_self_named(r#"DB_PASSWORD=MyPassword1"#, ""));
+        assert!(!is_self_named(r#"password="NewPassword2024""#, ""));
+        assert!(!is_self_named(r#"token=TheToken12"#, ""));
+        assert!(!is_self_named(r#"password="password-old""#, ""));
+        assert!(!is_self_named(r#"token="token-the-old""#, ""));
     }
 
     #[test]

@@ -1,11 +1,7 @@
 use crate::process::{self, JsonProcess};
 use crate::release::RuntimeRelease;
-use crate::{
-    check_interpreter, BundleApproval, InterpreterFacts, RuntimeSelection, UnavailableReason,
-};
-#[cfg(test)]
-use crate::{CIGAR_PROTOCOL, CIGAR_VERSION};
-use guard_cigar_release::{ReleaseBinding, ResolvedRelease};
+use crate::{BundleApproval, InterpreterFacts, RuntimeSelection};
+use guard_cigar_release::ReleaseBinding;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::sync::{
@@ -14,35 +10,23 @@ use std::sync::{
 };
 use std::time::Duration;
 
-#[path = "release_verification.rs"]
-mod release_verification;
+#[path = "runtime_builtin.rs"]
+mod builtin;
+pub(crate) use builtin::BUILTIN_ADAPTER;
+pub use builtin::{
+    builtin_approval, builtin_interpreter, builtin_platform, builtin_selection,
+    BUILTIN_APPROVAL_SCHEMA,
+};
 
-/// The first reply includes interpreter start-up and the SDK import. A cold
+/// The first reply includes the engine's synthetic compile check. A cold
 /// start on a slow host (x64 under ARM64 emulation, or a fresh install that
-/// antivirus is still scanning) takes several seconds, so this matches the
-/// interpreter probe's budget. It never runs on the synchronous hook path.
+/// antivirus is still scanning) takes several seconds. It never runs on the
+/// synchronous hook path.
 const STARTUP_RPC_TIMEOUT: Duration = process::PROBE_TIMEOUT;
 
 fn startup_doctor(process: &mut JsonProcess) -> Result<Value, RuntimeError> {
     process.rpc(json!({"op": "doctor"}), STARTUP_RPC_TIMEOUT)
 }
-
-// Windows reports the host processor from `platform.machine()`, so an x64
-// interpreter emulated on an ARM64 PC would claim arm64; the build tag names
-// the interpreter itself.
-pub(crate) const PROBE: &str = r#"
-import json,platform,sys,sysconfig
-machine={"aarch64":"arm64","amd64":"x64","x86_64":"x64"}.get(platform.machine().lower(),platform.machine().lower())
-system={"Darwin":"darwin","Linux":"linux","Windows":"win32"}.get(platform.system(),"unknown")
-if system=="win32":
-    machine={"win-amd64":"x64","win-arm64":"arm64"}.get(sysconfig.get_platform(),machine)
-target=system+"-"+machine
-if system=="linux":
-    abi=" ".join(str(sysconfig.get_config_var(key) or "") for key in ("MULTIARCH","HOST_GNU_TYPE","SOABI"))
-    libc=platform.libc_ver()[0].lower()
-    target+="-musl" if libc=="musl" or "musl" in abi else "-gnu" if libc=="glibc" else "-unknown"
-print(json.dumps({"schema":"guard-cigar-interpreter.v1","implementation":sys.implementation.name,"version":list(sys.version_info[:3]),"release_level":sys.version_info.releaselevel,"free_threaded":bool(sysconfig.get_config_var("Py_GIL_DISABLED")),"debug_build":bool(sysconfig.get_config_var("Py_DEBUG")),"abi":sysconfig.get_config_var("SOABI") or "","platform":target}))
-"#;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -54,7 +38,6 @@ pub enum RuntimeError {
     PackageMismatch,
     ApprovalMismatch,
     ReleaseUnqualified,
-    Interpreter(UnavailableReason),
     PlatformUnqualified,
     LaunchFailed,
     DeadlineExceeded,
@@ -85,16 +68,6 @@ impl RuntimeError {
             Self::PackageMismatch => "runtime_package_mismatch",
             Self::ApprovalMismatch => "runtime_approval_mismatch",
             Self::ReleaseUnqualified => "runtime_release_unqualified",
-            Self::Interpreter(reason) => match reason {
-                UnavailableReason::PythonReportInvalid => "python_report_invalid",
-                UnavailableReason::PythonImplementationUnsupported => {
-                    "python_implementation_unsupported"
-                }
-                UnavailableReason::PythonVersionUnsupported => "python_version_unsupported",
-                UnavailableReason::PythonBuildUnqualified => "python_build_unqualified",
-                UnavailableReason::PythonReleaseIncompatible => "python_release_incompatible",
-                UnavailableReason::PlatformUnsupported => "platform_unsupported",
-            },
             Self::PlatformUnqualified => "platform_unqualified",
             Self::LaunchFailed => "runtime_launch_failed",
             Self::DeadlineExceeded => "runtime_deadline_exceeded",
@@ -159,132 +132,6 @@ pub struct VerifiedRuntime {
 }
 
 impl VerifiedRuntime {
-    pub fn start(
-        selection: RuntimeSelection,
-        approval: &BundleApproval,
-    ) -> Result<Self, RuntimeError> {
-        Self::start_cancellable(selection, approval, Arc::new(AtomicBool::new(false)))
-    }
-
-    pub fn start_cancellable(
-        selection: RuntimeSelection,
-        approval: &BundleApproval,
-        cancel: Arc<AtomicBool>,
-    ) -> Result<Self, RuntimeError> {
-        Self::start_bound(selection, approval, RuntimeRelease::legacy()?, cancel)
-    }
-
-    /// Normal activation requires trusted Guard qualification, then repeats
-    /// actual protected-byte, interpreter and synthetic compilation checks.
-    pub fn start_release_cancellable(
-        selection: RuntimeSelection,
-        approval: &BundleApproval,
-        release: &ResolvedRelease,
-        cancel: Arc<AtomicBool>,
-    ) -> Result<Self, RuntimeError> {
-        if !release.activation_qualified() {
-            return Err(RuntimeError::ReleaseUnqualified);
-        }
-        Self::start_bound(
-            selection,
-            approval,
-            RuntimeRelease::catalog(release)?,
-            cancel,
-        )
-    }
-
-    /// Explicit setup returns a stopped synthetic-doctor result. It never
-    /// returns a usable runtime or authorizes workspace/source access.
-    pub fn verify_release_candidate(
-        selection: RuntimeSelection,
-        approval: &BundleApproval,
-        release: &ResolvedRelease,
-    ) -> Result<RuntimeStatus, RuntimeError> {
-        let mut runtime = Self::start_bound(
-            selection,
-            approval,
-            RuntimeRelease::catalog(release)?,
-            Arc::new(AtomicBool::new(false)),
-        )?;
-        runtime.close();
-        Ok(runtime.status().clone())
-    }
-
-    fn start_bound(
-        mut selection: RuntimeSelection,
-        approval: &BundleApproval,
-        expected: RuntimeRelease,
-        cancel: Arc<AtomicBool>,
-    ) -> Result<Self, RuntimeError> {
-        if cancel.load(Ordering::Acquire) {
-            return Err(RuntimeError::Cancelled);
-        }
-        if !expected.matches(approval) {
-            return Err(RuntimeError::ApprovalMismatch);
-        }
-        selection.verify_private_python(Some(&cancel))?;
-        // Check expected bytes before executing even the interpreter probe.
-        if crate::artifacts::inspect_cancellable(
-            &selection,
-            &approval.platform,
-            &expected,
-            &cancel,
-        )? != *approval
-        {
-            return Err(RuntimeError::ApprovalMismatch);
-        }
-        let facts: InterpreterFacts =
-            serde_json::from_value(process::probe(&selection, PROBE, &cancel)?)
-                .map_err(|_| RuntimeError::Interpreter(UnavailableReason::PythonReportInvalid))?;
-        check_interpreter(&facts).map_err(RuntimeError::Interpreter)?;
-        expected.check_python_version(facts.version)?;
-        if facts.platform != approval.platform {
-            return Err(RuntimeError::ApprovalMismatch);
-        }
-        let mut process =
-            JsonProcess::spawn_cancellable(&selection, expected.bridge()?, Arc::clone(&cancel))?;
-        let doctor = startup_doctor(&mut process)?;
-        let features = verify_doctor_for(&doctor, &expected)?;
-        // Detect package or executable replacement during handshake/import.
-        if crate::artifacts::inspect_cancellable(
-            &selection,
-            &approval.platform,
-            &expected,
-            &cancel,
-        )? != *approval
-        {
-            return Err(RuntimeError::ApprovalMismatch);
-        }
-        let status = RuntimeStatus {
-            schema: "guard-cigar-runtime-status.v1",
-            interpreter: facts,
-            package_version: expected.sdk_version.clone(),
-            core_version: expected.core_version.clone(),
-            protocol: expected.worker_protocol.clone(),
-            adapter_id: expected.adapter_id.clone(),
-            adapter_revision: expected.adapter_revision,
-            release: expected.binding.clone(),
-            package_fingerprint: approval.package_tree_sha256.clone(),
-            worker_fingerprint: approval.worker_sha256.clone(),
-            features,
-            compile_verified: true,
-            shared_compile_verified: false,
-            persistence_compile_verified: false,
-            execution_handoff_verified: false,
-            active: true,
-        };
-        Ok(Self {
-            process,
-            selection,
-            approval: approval.clone(),
-            release: expected,
-            status,
-            graphs: crate::graph::GraphRegistry::default(),
-            brokers: crate::broker::Registry::default(),
-            cancel,
-        })
-    }
-
     pub(crate) fn broker_protocol(&self) -> &str {
         &self.release.broker_protocol
     }
@@ -339,22 +186,17 @@ impl VerifiedRuntime {
     /// Revalidation belongs to explicit setup/recheck and graph activation,
     /// never the synchronous hook decision or approval path.
     pub fn recheck_artifacts(&mut self) -> Result<(), RuntimeError> {
-        match crate::artifacts::inspect_cancellable(
-            &self.selection,
-            &self.approval.platform,
-            &self.release,
-            &self.cancel,
-        ) {
-            Ok(observed) if observed == self.approval => Ok(()),
-            Ok(_) => {
-                self.close();
-                Err(RuntimeError::ApprovalMismatch)
-            }
-            Err(error) => {
-                self.close();
-                Err(error)
-            }
+        // The built-in engine is part of the running executable; there are
+        // no separate bytes to change underneath it.
+        if self.is_builtin() {
+            return if self.status.active {
+                Ok(())
+            } else {
+                Err(RuntimeError::RuntimeClosed)
+            };
         }
+        self.close();
+        Err(RuntimeError::ApprovalMismatch)
     }
 
     pub fn close(&mut self) {
@@ -364,18 +206,15 @@ impl VerifiedRuntime {
         self.status.active = false;
     }
 
-    pub(crate) fn spawn_private_client(
-        &mut self,
-        script: &str,
-    ) -> Result<JsonProcess, RuntimeError> {
+    pub(crate) fn spawn_private_client(&mut self) -> Result<JsonProcess, RuntimeError> {
         self.recheck_artifacts()?;
-        JsonProcess::spawn_cancellable(&self.selection, script, Arc::clone(&self.cancel))
+        self.spawn_builtin_client()
     }
 }
 
 #[cfg(test)]
 fn verify_doctor(doctor: &Value) -> Result<Vec<String>, RuntimeError> {
-    verify_doctor_for(doctor, &RuntimeRelease::legacy()?)
+    verify_doctor_for(doctor, &RuntimeRelease::builtin())
 }
 
 fn verify_doctor_for(

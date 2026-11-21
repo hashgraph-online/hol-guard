@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from codex_plugin_scanner.guard.native_daemon_manage import GUARD_DAEMON_COMPATIBILITY_VERSION
 from tests.pi_continuation_support import (
     _decode_json_object,
     _run_child,
 )
+from tests.pi_extension_support import managed_extension_source
 
 
 def test_actual_omp_runner_executes_original_once_and_blocks_late_continuation(tmp_path: Path) -> None:

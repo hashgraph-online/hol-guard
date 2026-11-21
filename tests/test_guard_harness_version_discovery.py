@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.harness_versions import service
 from codex_plugin_scanner.guard.harness_versions.compatibility import STATE_UNTESTED, STATE_VERSION_UNKNOWN
 from codex_plugin_scanner.guard.harness_versions.discovery import (
@@ -328,6 +328,9 @@ def test_enforcement_never_reads_version_compatibility() -> None:
         PROJECT_SRC / "routes" / "calls.py",
         PROJECT_SRC / "routes" / "reads.py",
         PROJECT_SRC / "control_route_calls.py",
+        # `doctor --harness` shows the per-event proof states. It reports them
+        # and never decides an action.
+        PROJECT_SRC / "cli" / "commands_dispatch_admin.py",
     }
     readers = {
         path

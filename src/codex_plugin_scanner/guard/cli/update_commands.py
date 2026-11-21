@@ -27,13 +27,10 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from ... import version as package_version
-from ..adapters.base import HarnessContext
-from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
-from ..adapters.cursor_hooks import cursor_native_hook_state
-from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_managed_extension_is_verified
-from ..adapters.pi_extension_source import managed_extension_source
-from ..adapters.pi_support import json_payload
+from ..codex_harness_client import codex_native_hook_state, codex_paths
 from ..config import load_guard_config, resolve_guard_home
+from ..cursor_hook_ops import cursor_native_hook_state
+from ..harness_context import HarnessContext
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
@@ -42,6 +39,7 @@ from ..native_daemon_peer import (
 )
 from ..native_daemon_peer import retained_desktop_owner_note, retained_desktop_owner_payload
 from ..native_daemon_peer import retained_newer_runtime_payload as _verified_newer_guard_daemon
+from ..native_extension import extension_is_current, legacy_omp_extension_is_verified
 from ..native_resident_update_lock import (
     NativeResidentUpdateLock,
     NativeResidentUpdateLockError,
@@ -195,7 +193,7 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.shims import package_shim_status, repair_package_shims
 
 
@@ -301,7 +299,7 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.cli.update_commands import _repair_supported_harnesses_in_process
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -2974,7 +2972,9 @@ def _repair_supported_harnesses_in_process(
     if cursor_warning is not None:
         repair_notes.append(cursor_warning)
     append_grok_repair(repaired_installs, repair_notes, context=context, store=store, workspace=workspace, now=now)
-    refreshed_clients, refresh_warnings = refresh_bounded_hook_clients(context=context, store=store)
+    refreshed_clients, refresh_warnings = refresh_bounded_hook_clients(
+        context=context, store=store, workspace=workspace, now=now
+    )
     repaired_installs.extend(refreshed_clients)
     repair_notes.extend(refresh_warnings)
     legacy_omp_migration, legacy_omp_warning = _migrate_legacy_omp_install(
@@ -3024,7 +3024,11 @@ def _migrate_legacy_omp_install(
         return None, None
     if omp_install is not None or pi_install is None:
         return None, None
-    if not legacy_omp_managed_extension_is_verified(context, pi_install):
+    try:
+        verified = legacy_omp_extension_is_verified(context, pi_install)
+    except (OSError, RuntimeError, ValueError) as error:
+        return None, f"Could not verify legacy Oh My Pi protection during update: {error}"
+    if not verified:
         return None, None
     try:
         repair_context, repair_workspace = _repair_context_from_managed_install(context, pi_install)
@@ -3086,36 +3090,9 @@ def _repair_pi_family_install(
 def _pi_family_extension_is_current(*, harness: str, context: HarnessContext) -> bool:
     """Return whether the managed Pi/OMP extension already matches this package."""
 
-    adapter: PiHarnessAdapter | OmpHarnessAdapter
-    if harness == "pi":
-        adapter = PiHarnessAdapter()
-    elif harness == "omp":
-        adapter = OmpHarnessAdapter()
-    else:
+    if harness not in {"pi", "omp"}:
         return False
-    extension_path = adapter._managed_extension_path(context)
-    settings_path = adapter._managed_settings_path(context)
-    if not extension_path.is_file():
-        return False
-    expected_source = managed_extension_source(
-        guard_home=context.guard_home,
-        home_dir=context.home_dir,
-        settings_path=settings_path,
-        harness=adapter.harness,
-        display_name=adapter.display_name,
-    )
-    try:
-        current_source = extension_path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    if current_source != expected_source:
-        return False
-    settings = json_payload(settings_path) if settings_path.is_file() else {}
-    raw_extensions = settings.get("extensions")
-    if not isinstance(raw_extensions, list):
-        return False
-    extension_value = str(extension_path)
-    return any(isinstance(item, str) and item == extension_value for item in raw_extensions)
+    return extension_is_current(harness, context)
 
 
 def _repair_cursor_install(
@@ -3226,7 +3203,7 @@ def _codex_repair_target(context: HarnessContext, store: GuardStore) -> tuple[Ha
 
 def _codex_backup_repair_target(context: HarnessContext) -> tuple[HarnessContext, str | None] | None:
     for repair_context in _codex_backup_repair_contexts(context):
-        if not CodexHarnessAdapter._backup_path(repair_context).is_file():
+        if not codex_paths(repair_context).backup.is_file():
             continue
         repair_workspace = str(repair_context.workspace_dir) if repair_context.workspace_dir is not None else None
         return repair_context, repair_workspace
@@ -3239,7 +3216,9 @@ def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessConte
 
 def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict[str, object]:
     resolved_guard_home = guard_home or resolve_guard_home()
-    update_channel = load_guard_config(resolved_guard_home).update_channel
+    guard_config = load_guard_config(resolved_guard_home)
+    update_channel = guard_config.update_channel
+    update_mode = getattr(guard_config, "update_mode", "automatic")
     include_alpha = update_channel == "alpha"
     install_surface = build_guard_install_surface_payload()
     installer = str(install_surface.get("installer") or "")
@@ -3380,6 +3359,7 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
         "recovery_reinstall_available": recovery_reinstall_available,
         "recovery_reinstall_command": recovery_reinstall_command,
         "release_channel": "alpha" if include_alpha else update_channel,
+        "update_mode": update_mode,
     }
     if trusted_failure_reason is not None:
         payload["reason_code"] = trusted_failure_reason

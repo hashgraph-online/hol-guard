@@ -88,3 +88,70 @@ fn maintenance_passes_python_isoformat_instants_and_cutoffs() {
     assert_eq!(storage["cloud_cutoff"], "2026-11-03T12:00:00.500000+00:00");
     assert_eq!(storage["batch_size"], 500);
 }
+
+fn reconcile_started(age: Duration) -> (Reconcile, mpsc::Sender<()>) {
+    let (done, finished) = mpsc::channel();
+    let started = Instant::now().checked_sub(age).expect("instant in range");
+    (
+        Reconcile {
+            done: finished,
+            started,
+        },
+        done,
+    )
+}
+
+#[test]
+fn a_reconcile_that_never_finishes_does_not_hold_the_daemon_past_its_budget() {
+    let (reconcile, _held) = reconcile_started(Duration::ZERO);
+    let waited = Instant::now();
+    let pending = reconcile.wait_until(Duration::from_millis(50));
+    assert!(pending.is_some());
+    assert!(waited.elapsed() < Duration::from_secs(5));
+}
+
+#[test]
+fn the_reconcile_budget_counts_from_when_the_reconcile_started() {
+    let (reconcile, _held) = reconcile_started(Duration::from_secs(60));
+    let waited = Instant::now();
+    assert!(reconcile.wait_until(RECONCILE_READY_WAIT).is_some());
+    assert!(waited.elapsed() < Duration::from_secs(5));
+}
+
+#[test]
+fn a_reconcile_that_finishes_within_its_budget_is_waited_for() {
+    let (reconcile, done) = reconcile_started(Duration::ZERO);
+    let signal = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(50));
+        done.send(()).expect("waiter listening");
+    });
+    assert!(reconcile.wait_until(RECONCILE_READY_WAIT).is_none());
+    signal.join().expect("signal thread");
+}
+
+#[test]
+fn a_reconcile_thread_that_ends_without_a_signal_counts_as_finished() {
+    let (reconcile, done) = reconcile_started(Duration::ZERO);
+    drop(done);
+    assert!(reconcile.wait_until(RECONCILE_READY_WAIT).is_none());
+}
+
+#[test]
+fn the_reconcile_call_gives_up_before_the_library_would_stop_its_resident() {
+    assert!(RECONCILE_CALL_WAIT < Duration::from_secs(120));
+    assert!(RECONCILE_CALL_WAIT > RECONCILE_READY_WAIT);
+}
+
+#[test]
+fn the_reconcile_names_the_daemon_it_runs_inside() {
+    // The daemon has not reported ready while the reconcile runs, so a hook
+    // install that records the daemon URL must not have to ask it.
+    assert_eq!(
+        reconcile_args(Some("/home/user"), 4781),
+        json!({"home": "/home/user", "daemon_url": "http://127.0.0.1:4781"})
+    );
+    assert_eq!(
+        reconcile_args(None, 1)["daemon_url"],
+        json!("http://127.0.0.1:1")
+    );
+}

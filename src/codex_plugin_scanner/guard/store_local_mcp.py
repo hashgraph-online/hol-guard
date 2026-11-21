@@ -18,9 +18,11 @@ if TYPE_CHECKING:
 
 _OBSERVED_MCP_ACTIONS = frozenset({"allow", "review", "block"})
 _CONNECTOR_KEYS = frozenset({"harness", "namespace", "server_name", "seen_at", "tools"})
+_TOOL_KEYS = frozenset({"command_id", "name", "qualified_name"})
 
 
 class ObservedMcpConnectorTool(TypedDict):
+    command_id: str
     name: str
     qualified_name: str
 
@@ -33,6 +35,13 @@ class ObservedMcpConnector(TypedDict):
     tools: list[ObservedMcpConnectorTool]
 
 
+def _valid_connector_tool(item: object) -> bool:
+    if not isinstance(item, dict) or set(item) != _TOOL_KEYS:
+        return False
+    # The resident owns the id format; this checks only the answer's shape.
+    return all(isinstance(value, str) and value for value in cast("dict[str, object]", item).values())
+
+
 def _valid_connector(item: object) -> bool:
     if not isinstance(item, dict) or set(item) != _CONNECTOR_KEYS:
         return False
@@ -42,12 +51,7 @@ def _valid_connector(item: object) -> bool:
         all(isinstance(connector[key], str) for key in ("harness", "namespace", "server_name"))
         and (connector["seen_at"] is None or isinstance(connector["seen_at"], str))
         and isinstance(tools, list)
-        and all(
-            isinstance(tool, dict)
-            and set(tool) == {"name", "qualified_name"}
-            and all(isinstance(value, str) for value in cast("dict[str, object]", tool).values())
-            for tool in cast("list[object]", tools)
-        )
+        and all(_valid_connector_tool(tool) for tool in cast("list[object]", tools))
     )
 
 

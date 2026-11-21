@@ -413,3 +413,21 @@ fn a_manager_is_still_read_as_a_package_tool() {
         );
     }
 }
+
+#[test]
+fn grok_mcp_dispatcher_calls_are_mcp_tool_calls() {
+    let inner = serde_json::json!({"tool_name": "ads_api__list_ads", "tool_input": {"limit": 5}});
+    for tool in ["use_tool", "CallMcpTool"] {
+        let result = crate::pretool::evaluate_pre_tool_envelope(
+            "grok",
+            "PreToolUse",
+            &serde_json::json!({"toolName": tool, "toolInput": inner, "tool_input": inner}),
+        );
+        assert_eq!(
+            result.action.action_type,
+            PreToolActionTypeV1::McpTool,
+            "{tool}"
+        );
+        assert_eq!(result.reason_code, "native_mcp_tool_review", "{tool}");
+    }
+}

@@ -45,7 +45,7 @@ const RELAY_COMMAND: &str = "mcp-relay";
 const MODULE_PREFIX: [&str; 3] = ["-m", "codex_plugin_scanner.cli", "guard"];
 /// `PROXY_LAUNCHER_ENV_KEYS`: the launcher persists these from the
 /// installer's env, so a server's env never injects them.
-const LAUNCHER_ENV_KEYS: [&str; 9] = [
+pub(super) const LAUNCHER_ENV_KEYS: [&str; 9] = [
     "PYTHONPATH",
     "PYTHONHOME",
     "PYTHONSTARTUP",

@@ -33,6 +33,12 @@ def render(path: Path) -> list[str]:
             f"each replay case run {evidence.get('repeat', '?')} times."
         )
         lines.append("")
+        restore = evidence.get("uninstall_restore")
+        if isinstance(restore, dict):
+            rows = [row for row in restore.get("files") or [] if isinstance(row, dict)]
+            kept = sum(1 for row in rows if row.get("bytes_identical"))
+            lines.append(f"Uninstall restore: {kept} of {len(rows)} seeded user files came back byte-identical.")
+            lines.append("")
         failures = evidence.get("failures") or []
         if not failures:
             lines.append("Nothing to report.")

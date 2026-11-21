@@ -216,6 +216,14 @@ pub(in crate::pretool) fn linked_worktree_admin(
     admin.starts_with(common.join("worktrees")).then_some(admin)
 }
 
+/// A linked worktree of some checkout on this host. Its `.git` file names an
+/// administrative directory under a main checkout's `.git/worktrees`, and that
+/// directory's own `commondir` and `gitdir` point back at the pair, so the
+/// marker alone cannot name an unrelated directory.
+pub(in crate::pretool) fn linked_worktree(root: &std::path::Path) -> bool {
+    linked_worktree_of_repository(root, &|_| true)
+}
+
 fn linked_worktree_of_repository(
     root: &std::path::Path,
     repository_root: &dyn Fn(&std::path::Path) -> bool,

@@ -5,7 +5,10 @@
 //! harness keep their review.
 #![cfg(unix)]
 
-use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
+use guard_command::pretool::{
+    evaluate_pre_tool_envelope_with_context, evaluate_pre_tool_envelope_with_execution_context,
+    PathContext,
+};
 use guard_contracts::PreToolResultV1;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -99,6 +102,34 @@ impl Fixture {
             None,
             home.to_str(),
             self.workspace.to_str(),
+        )
+    }
+}
+
+impl Fixture {
+    /// A Cursor shell call whose execution environment is verified, so a
+    /// leading `cd` is followed rather than reviewed.
+    fn in_shell_environment(&self, payload: &Value) -> PreToolResultV1 {
+        let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+            path: std::env::var("PATH").unwrap(),
+            environment_names: vec!["GIT_CONFIG_NOSYSTEM".to_owned()],
+            environment_digest: "0".repeat(64),
+            home: self.home.to_str().map(str::to_owned),
+            git_config_no_system: true,
+            ..Default::default()
+        };
+        evaluate_pre_tool_envelope_with_execution_context(
+            "cursor",
+            "PreToolUse",
+            payload,
+            None,
+            None,
+            PathContext {
+                home_dir: self.home.to_str(),
+                cwd: self.workspace.to_str(),
+                ..PathContext::default()
+            },
+            Some(&environment),
         )
     }
 }
@@ -219,11 +250,14 @@ fn cursor_project_state_outside_the_workspace_leaves_keeps_review() {
         fixture.own("worker.log"),
         fixture.own("terminals/.state.txt"),
         fixture.own("terminals/linked.txt"),
-        traversal,
     ] {
         let result = fixture.read("cursor", &path, Some(OWN_CONVERSATION));
         assert!(!allowed(&result), "{path}: {}", result.reason_code);
     }
+    // A `..` spelling that resolves back to the session's own saved output
+    // reads the same file as the plain path, so it takes the same answer.
+    let result = fixture.read("cursor", &traversal, Some(OWN_CONVERSATION));
+    assert!(allowed(&result), "{traversal}: {}", result.reason_code);
     for harness in ["claude-code", "zcode", "codex"] {
         let result = fixture.read(harness, &own_terminal, None);
         assert!(
@@ -231,5 +265,70 @@ fn cursor_project_state_outside_the_workspace_leaves_keeps_review() {
             "{harness}: {own_terminal}: {}",
             result.reason_code
         );
+    }
+}
+
+fn shell(harness: &str, command: &str) -> Value {
+    let tool = if harness == "cursor" { "Shell" } else { "Bash" };
+    json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool,
+        "tool_input": {"command": command},
+    })
+}
+
+#[test]
+fn cursor_shell_reads_back_its_own_saved_output() {
+    let fixture = Fixture::new("shell-outputs");
+    let tool = fixture.own("agent-tools/0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d.txt");
+    let terminal = fixture.own("terminals/120467.txt");
+    let reads = [
+        format!("cat {tool}"),
+        format!("jq '.checks' {tool}"),
+        format!("head -40 {terminal}"),
+        format!("grep -n FAIL {terminal}"),
+    ];
+    for command in &reads {
+        let result = fixture.evaluate("cursor", &shell("cursor", command), &fixture.home);
+        assert!(allowed(&result), "{command}: {}", result.reason_code);
+        for harness in ["codex", "claude-code"] {
+            let result = fixture.evaluate(harness, &shell(harness, command), &fixture.home);
+            assert!(!allowed(&result), "{harness} {command}");
+        }
+    }
+
+    let other_workspace = fixture.workspace.with_file_name("billing-api");
+    std::fs::create_dir_all(&other_workspace).unwrap();
+    std::fs::create_dir_all(fixture.workspace.join("src")).unwrap();
+    let other = fixture
+        .project_dir(&other_workspace)
+        .join("terminals/120467.txt");
+    // The workspace is the session's, so a `cd` into a subdirectory still
+    // reads its own output, and a `cd` into another workspace does not make
+    // that workspace's output the session's own.
+    let into_src = format!("cd src && cat {terminal}");
+    let result = fixture.in_shell_environment(&shell("cursor", &into_src));
+    assert!(allowed(&result), "{into_src}: {}", result.reason_code);
+    let into_other = format!(
+        "cd {} && cat {}",
+        other_workspace.display(),
+        other.display()
+    );
+    let result = fixture.in_shell_environment(&shell("cursor", &into_other));
+    assert!(!allowed(&result), "{into_other}");
+    // The same `cd` with the read of a file the target workspace may read
+    // is allowed, so the review above is the saved-output rule's answer.
+    let control = format!("cd {} && cat {terminal}", other_workspace.display());
+    let result = fixture.in_shell_environment(&shell("cursor", &control));
+    assert!(allowed(&result), "{control}: {}", result.reason_code);
+    for command in [
+        format!("cat {}", other.display()),
+        format!("cat {}", fixture.own("terminals/.state.txt")),
+        format!("cat {}", fixture.own("terminals/linked.txt")),
+        format!("cat {}", fixture.own("mcp-auth.json")),
+        format!("cat {}", fixture.own("worker.log")),
+    ] {
+        let result = fixture.evaluate("cursor", &shell("cursor", &command), &fixture.home);
+        assert!(!allowed(&result), "{command}");
     }
 }

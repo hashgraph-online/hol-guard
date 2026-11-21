@@ -112,9 +112,9 @@ fn unmodeled_commands_with_literal_redirects_are_reviewable() {
 fn quoted_regex_alternation_does_not_synthesize_a_program() {
     let controls = controls(github("enabled", None), false);
     let command = "diff -u a/README.md b/README.md | grep -E \"^@@|^[+-]\" | grep -vE \"^(\\+\\+\\+|---)\" | sed -n '190,260p'; echo \"=== other files ===\"; for f in a b; do echo \"--- $f\"; diff a/$f b/$f | head -8; done";
+    // Every step only reads, and the loop is written out where it stands.
     let (action, reason) = decision(&controls, command);
-    assert_eq!(action, "review", "{reason}");
-    assert_ne!(reason, "native_command_extension_evaluation_failed");
+    assert_eq!(action, "allow", "{reason}");
     // A quoted expansion in command position still synthesizes a program.
     assert_eq!(
         decision(&controls, "for f in a b; do \"$f|x\" y; done").1,
@@ -703,6 +703,10 @@ fn a_case_label_and_an_empty_prefix_keep_their_approval() {
         // own arguments, so the pattern among them starts nothing and the
         // command reaches the review an ordinary print reaches.
         "echo case in /bin/b?sh -c id )",
+        // Nor does the `)` a comment holds end a label, so the glob naming the
+        // program of the step behind them is still there, and that step gets
+        // the review the same glob gets without the comment.
+        "echo case in; /usr/bin/pyth?n3 -c 'import os' # )",
     ] {
         let (action, reason) = decision(&controls, command);
         if reason == FAILED || action != "review" {
@@ -730,10 +734,6 @@ fn a_case_clause_that_can_start_a_program_keeps_the_failure() {
         "case $MODE in `echo a`) $CMD;; esac",
         // An assignment that carries a value is still data movement.
         "while IFS=: read -r name rest; do echo one; done < list.txt",
-        // `case` and `in` written as arguments open no construct, and the `)`
-        // a comment holds ends no label, so the glob naming the program of the
-        // command behind them is still there to be refused.
-        "echo case in; /usr/bin/pyth?n3 -c 'import os' # )",
     ] {
         let (action, reason) = decision(&controls, command);
         if reason != FAILED {

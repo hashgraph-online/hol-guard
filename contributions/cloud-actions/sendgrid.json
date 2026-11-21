@@ -1,0 +1,295 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "sendgrid",
+    "name": "Twilio SendGrid",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.sendgrid.com"
+  ],
+  "auth": {
+    "mode": "api-key",
+    "scopes": [
+      "mail.send"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "sendgrid.mail.send",
+      "title": "Send an email",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.sendgrid.com",
+          "path": "/v3/mail/send",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "personalizations",
+                "value": {
+                  "array": [
+                    {
+                      "object": [
+                        {
+                          "name": "to",
+                          "value": {
+                            "each": {
+                              "arg": "to",
+                              "item": {
+                                "object": [
+                                  {
+                                    "name": "email",
+                                    "value": {
+                                      "element": true
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "from",
+                "value": {
+                  "object": [
+                    {
+                      "name": "email",
+                      "value": {
+                        "arg": "from"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "subject",
+                "value": {
+                  "arg": "subject"
+                }
+              },
+              {
+                "name": "content",
+                "value": {
+                  "array": [
+                    {
+                      "object": [
+                        {
+                          "name": "type",
+                          "value": {
+                            "const": "text/plain"
+                          }
+                        },
+                        {
+                          "name": "value",
+                          "value": {
+                            "arg": "text"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "from": {
+          "maxLength": 320,
+          "pattern": "^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9.-]{1,253}$",
+          "type": "string",
+          "required": true
+        },
+        "to": {
+          "type": "array",
+          "required": true,
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "maxLength": 320,
+            "pattern": "^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9.-]{1,253}$"
+          }
+        },
+        "subject": {
+          "type": "string",
+          "required": true,
+          "maxLength": 998,
+          "pattern": "^[^\\r\\n]*$"
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "maxLength": 65536
+        }
+      },
+      "facts": {
+        "class": "send",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "audienceKind": {
+          "const": "named"
+        },
+        "recipientCount": {
+          "count": {
+            "arguments": [
+              "to"
+            ]
+          }
+        },
+        "recipientDomains": {
+          "domains": {
+            "arguments": [
+              "to"
+            ]
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "errors",
+            "value": {
+              "list": {
+                "from": "errors",
+                "maxItems": 20,
+                "fields": [
+                  {
+                    "name": "field",
+                    "value": {
+                      "from": "field"
+                    }
+                  },
+                  {
+                    "name": "message",
+                    "value": {
+                      "from": "message"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "mail.send"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "sends one message to a colleague",
+          "kind": "safe",
+          "arguments": {
+            "from": "ops@example.com",
+            "to": [
+              "sam@example.com"
+            ],
+            "subject": "Deploy notes",
+            "text": "Rolled out at 10:00."
+          },
+          "expect": {
+            "facts": {
+              "class": "send",
+              "recipient_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "request": {
+              "body": "{\"personalizations\":[{\"to\":[{\"email\":\"sam@example.com\"}]}],\"from\":{\"email\":\"ops@example.com\"},\"subject\":\"Deploy notes\",\"content\":[{\"type\":\"text/plain\",\"value\":\"Rolled out at 10:00.\"}]}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.sendgrid.com/v3/mail/send"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "review",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a recipient with a display name",
+          "kind": "risky",
+          "arguments": {
+            "from": "ops@example.com",
+            "to": [
+              "Sam <sam@example.com>"
+            ],
+            "subject": "x",
+            "text": "y"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses a subject that adds a header",
+          "kind": "risky",
+          "arguments": {
+            "from": "ops@example.com",
+            "to": [
+              "sam@example.com"
+            ],
+            "subject": "hi\r\nBcc: all@example.org",
+            "text": "y"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

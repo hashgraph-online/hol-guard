@@ -402,3 +402,6 @@ fn binding_mutations_are_rejected_even_when_resigned() {
 
 #[path = "approval_v3_lifecycle_tests.rs"]
 mod lifecycle_tests;
+
+#[path = "approval_v3_tuple_tests.rs"]
+mod tuple_tests;

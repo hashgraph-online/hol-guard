@@ -83,6 +83,10 @@ struct State {
     epoch: guard_context_assistance::ContextEpoch,
     observations: Arc<crate::context_assistance_execution::Observations>,
     execution_ready: Arc<AtomicBool>,
+    /// Whether project context is on, readable without the lock. Kept equal
+    /// to `settings` and `closed` by [`publish_chosen`] before every unlock
+    /// that changes them.
+    chosen: Arc<AtomicBool>,
 }
 impl Default for State {
     fn default() -> Self {
@@ -106,6 +110,7 @@ impl Default for State {
             epoch: Default::default(),
             observations: Default::default(),
             execution_ready: Default::default(),
+            chosen: Default::default(),
         }
     }
 }
@@ -129,7 +134,16 @@ impl Drop for State {
     }
 }
 
+/// Copies whether project context is on into the lock-free flag a prompt
+/// falls back to when the lock is busy. Call after changing `settings` or
+/// `closed`, while still holding the lock.
+fn publish_chosen(state: &State) {
+    let on = !state.closed && prompt::chosen(&state.settings);
+    state.chosen.store(on, Ordering::Release);
+}
+
 fn revoke_runtime(state: &mut State) -> Option<Arc<RuntimeActor<Engine>>> {
+    publish_chosen(state);
     if let Some(upgrade) = &state.upgrade {
         upgrade.revoke();
     }
@@ -149,13 +163,29 @@ fn revoke_runtime(state: &mut State) -> Option<Arc<RuntimeActor<Engine>>> {
 #[cfg(all(test, target_os = "macos"))]
 type ExecutionTestHook = Box<dyn FnOnce(&crate::policy_store::PolicySnapshotStore) + Send>;
 
-#[derive(Default)]
 pub(crate) struct Service {
     state: Arc<Mutex<State>>,
-    updates: crate::policy_store::context_assistance_registry::Jobs,
+    /// The same flag as `State::chosen`, read when the lock is busy.
+    chosen: Arc<AtomicBool>,
+    /// Hash of the saved `config.toml` the prompt lane last followed.
+    followed: Arc<Mutex<Option<u64>>>,
     switches: upgrade::Jobs,
     #[cfg(all(test, target_os = "macos"))]
     execution_test_hook: Mutex<Option<ExecutionTestHook>>,
+}
+
+impl Default for Service {
+    fn default() -> Self {
+        let state = State::default();
+        Self {
+            chosen: Arc::clone(&state.chosen),
+            state: Arc::new(Mutex::new(state)),
+            followed: Default::default(),
+            switches: Default::default(),
+            #[cfg(all(test, target_os = "macos"))]
+            execution_test_hook: Default::default(),
+        }
+    }
 }
 
 fn lock(state: &Mutex<State>) -> Result<std::sync::MutexGuard<'_, State>, String> {

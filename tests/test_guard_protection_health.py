@@ -182,35 +182,28 @@ def test_stale_and_repeated_installs_stay_within_the_request_limit(
     ]
 
 
-def test_canonical_managed_install_supersedes_legacy_alias() -> None:
-    installs = [
-        {"harness": "claude", "active": True, "manifest": {}},
-        {"harness": "claude-code", "active": True, "manifest": {"canonical": True}},
-    ]
-
-    assert approvals_module._canonical_managed_installs_for_health(installs) == [
-        {"harness": "claude-code", "active": True, "manifest": {"canonical": True}}
-    ]
-
-    active_alias = [
-        {"harness": "claude", "active": True, "manifest": {"alias": True}},
-        {"harness": "claude-code", "active": False, "manifest": {"canonical": True}},
-    ]
-    assert approvals_module._canonical_managed_installs_for_health(active_alias) == [
-        {"harness": "claude-code", "active": True, "manifest": {"alias": True}}
-    ]
-
-
-def test_cursor_attestation_unavailable_is_unproven_not_inactive(
+def test_unproven_live_hooks_are_left_out_not_reported_inactive(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     installs = [{"harness": "cursor", "active": True, "manifest": {}}]
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cursor_hook_health.cursor_runtime_hooks_verified",
-        lambda _context: None,
-    )
+    asked: list[dict[str, object]] = []
+
+    def fake_ask(op: str, _context: object, **fields: object) -> dict[str, object]:
+        asked.append({"op": op, **fields})
+        return {"verified": {"cursor": None, "grok": True, "codex": "yes"}}
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_harness_client.ask", fake_ask)
+    assert approvals_module._live_hook_verification(installs, store) == {"grok": True}
+    assert asked[0]["op"] == "live_hook_verification"
+    assert asked[0]["managed_installs"] == [{"harness": "cursor", "active": True, "manifest": {}}]
+    assert "codex" not in asked[0]
+
+    def refusing_ask(*_args: object, **_fields: object) -> dict[str, object]:
+        raise RuntimeError("runtime unavailable")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_harness_client.ask", refusing_ask)
     assert approvals_module._live_hook_verification(installs, store) == {}
 
 

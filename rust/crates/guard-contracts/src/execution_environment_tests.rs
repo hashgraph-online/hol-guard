@@ -100,3 +100,119 @@ fn the_cargo_home_flag_is_omitted_when_false() {
     let read: GuardExecutionEnvironmentV1 = serde_json::from_str(&text).unwrap();
     assert!(read.cargo_home_default, "{text}");
 }
+
+fn git_config_inert(entries: &[(&str, &str)]) -> bool {
+    let map: BTreeMap<String, String> = entries
+        .iter()
+        .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
+        .collect();
+    git_config_environment_inert(|name| map.get(name).map(String::as_str))
+}
+
+#[test]
+fn an_editor_quote_path_entry_is_inert() {
+    // The exact entry Cursor and VS Code export in their terminals.
+    assert!(git_config_inert(&[
+        ("GIT_CONFIG_COUNT", "1"),
+        ("GIT_CONFIG_KEY_0", "core.quotePath"),
+        ("GIT_CONFIG_VALUE_0", "false"),
+    ]));
+    assert!(git_config_inert(&[
+        ("GIT_CONFIG_COUNT", "2"),
+        ("GIT_CONFIG_KEY_0", "core.quotepath"),
+        ("GIT_CONFIG_VALUE_0", "off"),
+        ("GIT_CONFIG_KEY_1", "CORE.QUOTEPATH"),
+        ("GIT_CONFIG_VALUE_1", "true"),
+    ]));
+    // Entries past the count are never read by Git.
+    assert!(git_config_inert(&[
+        ("GIT_CONFIG_COUNT", "1"),
+        ("GIT_CONFIG_KEY_0", "core.quotePath"),
+        ("GIT_CONFIG_VALUE_0", "false"),
+        ("GIT_CONFIG_KEY_1", "core.pager"),
+        ("GIT_CONFIG_VALUE_1", "sh -c id"),
+    ]));
+}
+
+#[test]
+fn other_git_config_entries_are_not_inert() {
+    for entries in [
+        &[][..],
+        &[("GIT_CONFIG_COUNT", "1")][..],
+        &[
+            ("GIT_CONFIG_COUNT", "1"),
+            ("GIT_CONFIG_KEY_0", "core.quotePath"),
+        ][..],
+        &[
+            ("GIT_CONFIG_COUNT", "1"),
+            ("GIT_CONFIG_KEY_0", "core.pager"),
+            ("GIT_CONFIG_VALUE_0", "less"),
+        ][..],
+        &[
+            ("GIT_CONFIG_COUNT", "1"),
+            ("GIT_CONFIG_KEY_0", "core.fsmonitor"),
+            ("GIT_CONFIG_VALUE_0", "./x"),
+        ][..],
+        &[
+            ("GIT_CONFIG_COUNT", "2"),
+            ("GIT_CONFIG_KEY_0", "core.quotePath"),
+            ("GIT_CONFIG_VALUE_0", "false"),
+            ("GIT_CONFIG_KEY_1", "include.path"),
+            ("GIT_CONFIG_VALUE_1", "/tmp/x"),
+        ][..],
+        &[
+            ("GIT_CONFIG_COUNT", " core.quotePath"),
+            ("GIT_CONFIG_KEY_0", "core.quotePath"),
+            ("GIT_CONFIG_VALUE_0", "false"),
+        ][..],
+        // Git reads `1k` as 1024 entries.
+        &[
+            ("GIT_CONFIG_COUNT", "1k"),
+            ("GIT_CONFIG_KEY_0", "core.quotePath"),
+            ("GIT_CONFIG_VALUE_0", "false"),
+        ][..],
+        &[("GIT_CONFIG_COUNT", "9")][..],
+        &[("GIT_CONFIG_COUNT", "")][..],
+        &[("GIT_CONFIG_COUNT", "+1")][..],
+    ] {
+        assert!(!git_config_inert(entries), "{entries:?}");
+    }
+}
+
+#[test]
+fn git_config_count_entries_are_recognized() {
+    for name in [
+        "GIT_CONFIG_COUNT",
+        "GIT_CONFIG_KEY_0",
+        "GIT_CONFIG_VALUE_12",
+        "git_config_key_3",
+    ] {
+        assert!(git_config_count_entry(name), "{name}");
+    }
+    for name in [
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_CONFIG",
+        "GIT_CONFIG_KEY_",
+        "GIT_CONFIG_KEY_x",
+        "GIT_CONFIG_VALUE_0x",
+    ] {
+        assert!(!git_config_count_entry(name), "{name}");
+    }
+}
+
+#[test]
+fn the_git_config_flag_is_omitted_when_false() {
+    let stamp = GuardExecutionEnvironmentV1::unavailable();
+    let text = serde_json::to_string(&stamp).unwrap();
+    assert!(!text.contains("git_config_environment_inert"), "{text}");
+    let stamp = GuardExecutionEnvironmentV1 {
+        git_config_environment_inert: true,
+        ..stamp
+    };
+    let text = serde_json::to_string(&stamp).unwrap();
+    let read: GuardExecutionEnvironmentV1 = serde_json::from_str(&text).unwrap();
+    assert!(read.git_config_environment_inert, "{text}");
+}

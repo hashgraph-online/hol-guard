@@ -7,7 +7,7 @@ use serde_json::Value;
 /// literals, reading them as `null`. The flag says one was present: Python
 /// refused to re-encode such a record for its signature check, so the
 /// caller must refuse to authenticate it rather than check the `null` form.
-pub(super) fn parse_python_json(raw: &str) -> Result<(Value, bool), serde_json::Error> {
+pub(crate) fn parse_python_json(raw: &str) -> Result<(Value, bool), serde_json::Error> {
     match serde_json::from_str(raw) {
         Ok(value) => Ok((value, false)),
         Err(error) => match without_nonfinite(raw) {
@@ -50,7 +50,7 @@ fn without_nonfinite(raw: &str) -> Option<String> {
 }
 
 /// `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)`.
-pub(super) fn python_canonical_json(value: &Value) -> Option<String> {
+pub(crate) fn python_canonical_json(value: &Value) -> Option<String> {
     let mut output = Vec::new();
     guard_contracts::write_canonical_json(value, &mut output).ok()?;
     String::from_utf8(output).ok()

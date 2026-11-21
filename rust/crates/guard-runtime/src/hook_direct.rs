@@ -33,10 +33,10 @@
 //! The daemon also records evidence after it answers. An answer is returned
 //! only once that evidence is queued for the daemon to drain.
 
-use crate::policy_store::policy_store_direct_lane::DirectLaneDefer;
 use crate::policy_store::PolicySnapshotStore;
 use edge::{
-    direct_event, post_tool_answer, pre_tool_answer, prompt_answer, reviewed_edge, shell_action,
+    budget_bound_review, direct_event, post_tool_answer, pre_tool_answer, prompt_answer,
+    reviewed_edge, shell_action,
 };
 use guard_contracts::{
     GuardExecutionEnvironmentV1, GuardHookEnvelopeV2, GuardHookSourceMetadataV2,
@@ -160,73 +160,6 @@ pub(crate) struct HookDirectRequestV1 {
     #[serde(default)]
     pub(crate) emergency_safe_only: bool,
     pub(crate) payload: Value,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HookDirectDefer {
-    HarnessUnsupported,
-    HarnessUnmanaged,
-    EventUnsupported,
-    PayloadUnsupported,
-    TransitionProbe,
-    WorkspaceMissing,
-    WorkspaceInvalid,
-    Lane(DirectLaneDefer),
-    Cursor(cursor::CursorDefer),
-    BindingIncomplete,
-    HomeMismatch,
-    LocalCliRules,
-    PromptNotice,
-    PermissionNotice,
-    ExecutionEnvironmentInvalid,
-    EvidenceUndrained,
-    EvidenceFull,
-    ContainedRouteFailed,
-    EdgeFailed,
-    NotAllow,
-    SavedDecision,
-    ReviewQueue,
-    RuntimeSuperseded,
-    /// An Oh My Pi `PostToolUse` whose managed-policy view the binding does
-    /// not carry, or does not carry readably: only the daemon can resolve
-    /// what its structured output requires.
-    StructuredMediation,
-    /// A hook the bridge asked about under the emergency-safe profile that
-    /// the profile does not continue, so the bridge pauses it as it would
-    /// have without asking.
-    EmergencySafeProfile,
-}
-
-impl HookDirectDefer {
-    pub(crate) fn code(self) -> &'static str {
-        match self {
-            Self::HarnessUnsupported => "direct_hook_harness_unsupported",
-            Self::HarnessUnmanaged => "direct_hook_harness_unmanaged",
-            Self::EventUnsupported => "direct_hook_event_unsupported",
-            Self::PayloadUnsupported => "direct_hook_payload_unsupported",
-            Self::TransitionProbe => "direct_hook_transition_probe",
-            Self::WorkspaceMissing => "direct_hook_workspace_missing",
-            Self::WorkspaceInvalid => "direct_hook_workspace_invalid",
-            Self::Lane(defer) => defer.code(),
-            Self::Cursor(defer) => defer.code(),
-            Self::BindingIncomplete => "direct_hook_binding_incomplete",
-            Self::HomeMismatch => "direct_hook_home_mismatch",
-            Self::LocalCliRules => "direct_hook_local_cli_rules",
-            Self::PromptNotice => "direct_hook_prompt_notice",
-            Self::PermissionNotice => "direct_hook_permission_notice",
-            Self::ExecutionEnvironmentInvalid => "direct_hook_execution_environment_invalid",
-            Self::EvidenceUndrained => "direct_hook_evidence_undrained",
-            Self::EvidenceFull => "direct_hook_evidence_full",
-            Self::ContainedRouteFailed => "direct_hook_contained_route_failed",
-            Self::EdgeFailed => "direct_hook_edge_failed",
-            Self::NotAllow => "direct_hook_not_allow",
-            Self::SavedDecision => "direct_hook_saved_decision",
-            Self::ReviewQueue => "direct_hook_review_queue",
-            Self::RuntimeSuperseded => "direct_hook_runtime_superseded",
-            Self::StructuredMediation => "direct_hook_structured_mediation",
-            Self::EmergencySafeProfile => "direct_hook_emergency_safe_profile",
-        }
-    }
 }
 
 pub(crate) fn evaluate(
@@ -426,6 +359,13 @@ fn answer(
     if binding.evidence_drain != Some(true) {
         return Err(HookDirectDefer::EvidenceUndrained);
     }
+    // The resident owns the direct evidence write. A binding that advertises
+    // a drain without the daemon's store source would hand records back to a
+    // Python fallback, so refuse the lane until the native writer contract is
+    // complete.
+    if policy_store.direct_lane_writer_source().is_none() {
+        return Err(HookDirectDefer::EvidenceUndrained);
+    }
     // Cursor's route probe and the sink it rewrote a call into are answered
     // without evidence: the daemon records neither.
     let cursor_probe = match cursor_route {
@@ -461,6 +401,7 @@ fn answer(
     // decisions the user saved once no custom grant applies to its command,
     // which the saved-decision read checks against the store it reads.
     let saved_payload = (pre_tool && !recording_only).then(|| payload.clone());
+    let saved_decision_payload = payload.clone();
     let deadline_budget_ms = request
         .deadline_budget_ms
         .unwrap_or(DEFAULT_DEADLINE_BUDGET_MS)
@@ -495,14 +436,39 @@ fn answer(
         containment_sink: None,
     };
     let (edge, fence_wait) = fence::evaluate(envelope, policy_store)?;
-    // Only a shell action runs the blocked command; another tool that carries
-    // the same text keeps the direct answer, as the daemon would give it.
-    if exact_command_block && shell_action(&edge) {
-        return Err(HookDirectDefer::SavedDecision);
-    }
     if let Some(scope) = cursor_probe {
         return Ok(cursor::probe_answer(&edge, &evidence_payload, &scope));
     }
+    // The bridge gives the resident about a second. A Git read probe or an
+    // extension check that runs out of it holds the command for review. The
+    // daemon reaches the same review when the checkout really runs a helper,
+    // but with several times the budget it settles what a busy host only made
+    // slow.
+    if event == PRE_TOOL_USE && !recording_only {
+        if let Some(defer) = budget_bound_review(&edge) {
+            return Err(defer);
+        }
+    }
+    let exact_command_response = if exact_command_block && shell_action(&edge) {
+        let edge_answer = reviewed_edge(&edge, PRE_TOOL_USE)?;
+        let result = edge_answer
+            .get("result")
+            .and_then(Value::as_object)
+            .ok_or(HookDirectDefer::SavedDecision)?;
+        let context = saved_decision::Context {
+            harness: &request.harness,
+            payload: &saved_decision_payload,
+            recorded_payload: &evidence_payload,
+            workspace: &workspace,
+            home_dir: &request_home,
+            guard_home: &guard_home,
+            binding: &binding,
+            hint: None,
+        };
+        saved_decision::exact_command_block_response(&context, result)?
+    } else {
+        None
+    };
     // Removed again unless the answer that runs it is returned.
     let mut snapshot = None;
     let mut answered = match event {
@@ -517,6 +483,11 @@ fn answer(
             },
             saved_payload.as_ref(),
         ) {
+            (Err(HookDirectDefer::NotAllow), Some(_)) if exact_command_response.is_some() => {
+                let mut answer = reviewed_edge(&edge, PRE_TOOL_USE)?;
+                answer["harness_response"] = exact_command_response.clone().unwrap();
+                answer
+            }
             // The daemon returns a saved decision's response as is.
             (Err(HookDirectDefer::NotAllow), Some(payload)) => {
                 let hint = saved_decision::HintScope {
@@ -537,7 +508,9 @@ fn answer(
             }
             (passed, _) => {
                 let mut answered = passed?;
-                if let Some(command) = sink_command.as_deref() {
+                if let Some(response) = exact_command_response.clone() {
+                    answered["harness_response"] = response;
+                } else if let Some(command) = sink_command.as_deref() {
                     let target = contained::SinkTarget {
                         command,
                         harness: &request.harness,
@@ -683,6 +656,11 @@ pub(crate) mod claude_prompt_text;
 pub(crate) mod contained;
 #[path = "hook_direct_cursor.rs"]
 pub(crate) mod cursor;
+#[path = "hook_direct_cursor_route.rs"]
+pub(crate) mod cursor_route;
+#[path = "hook_direct_defer.rs"]
+mod defer;
+pub(crate) use defer::HookDirectDefer;
 #[path = "hook_direct_edge.rs"]
 mod edge;
 #[path = "hook_direct_emergency_safe.rs"]

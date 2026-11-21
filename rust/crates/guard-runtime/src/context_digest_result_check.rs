@@ -37,6 +37,8 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
         Kind::McpRedactJson { .. } => "mcp_redact_json",
         Kind::NativeBashReplyValidation { .. } => "native_bash_reply_validation",
         Kind::NativeDecisionReceiptValidation { .. } => "native_decision_receipt_validation",
+        Kind::TransitionHookObservation { .. } => "transition_hook_observation",
+        Kind::PublicationInverseClaim { .. } => "publication_inverse_claim",
         Kind::McpLaunchEnvironment { .. } => "mcp_launch_environment",
         Kind::PackageExecutionContextFromEvidence { .. } => {
             "package_execution_context_from_evidence"
@@ -105,7 +107,7 @@ fn nullable_output(kind: &str) -> Option<&'static str> {
 }
 
 /// Fields that only make sense for exactly one request kind.
-const KIND_GATED_FIELDS: [(&str, &str); 12] = [
+const KIND_GATED_FIELDS: [(&str, &str); 14] = [
     ("native_bash_reply_valid", "native_bash_reply_validation"),
     (
         "native_decision_receipt_valid",
@@ -127,6 +129,8 @@ const KIND_GATED_FIELDS: [(&str, &str); 12] = [
     ("claude_guard_question", "claude_guard_question"),
     ("memory_pattern", "memory_pattern"),
     ("package_runner_target", "package_runner_target"),
+    ("transition_hook_observation", "transition_hook_observation"),
+    ("publication_inverse_claim", "publication_inverse_claim"),
 ];
 
 fn is_sha256(value: &Value) -> bool {

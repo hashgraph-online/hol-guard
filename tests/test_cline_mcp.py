@@ -7,13 +7,15 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cline_mcp import (
-    install_cline_mcp_proxies,
-    restore_cline_mcp_proxies,
-)
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.cli.commands_router import _COMMON_HANDLERS, _resolve_guard_handler
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
+from tests.cline_test_support import uninstall
+
+
+def restore_cline_mcp_proxies(context: HarnessContext) -> dict[str, object]:
+    return uninstall(context, "all")["mcp"]
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -40,7 +42,7 @@ def test_cline_mcp_proxy_install_preserves_remote_and_restores_exact_text(tmp_pa
 
     servers = [
         artifact
-        for artifact in ClineHarnessAdapter().detect(context).artifacts
+        for artifact in harness_ops.detect("cline", context).artifacts
         if artifact.artifact_type == "mcp_server"
     ]
     assert {artifact.name for artifact in servers} == {"local", "remote"}
@@ -60,7 +62,7 @@ def test_cline_mcp_proxy_install_preserves_remote_and_restores_exact_text(tmp_pa
     assert "secret" not in evidence_text
     assert "TOKEN" in evidence_text
 
-    result = install_cline_mcp_proxies(context)
+    result = ask("mcp_install", context, harness="cline")
     assert result["managed_servers"] == ["local"]
     assert result["skipped_remote_servers"] == ["remote"]
     managed = json.loads(settings.read_text(encoding="utf-8"))
@@ -81,7 +83,7 @@ def test_cline_mcp_restore_never_clobbers_user_edits(tmp_path: Path) -> None:
         json.dumps({"mcpServers": {"local": {"command": "node", "args": ["server.js"]}}}),
         encoding="utf-8",
     )
-    install_cline_mcp_proxies(context)
+    ask("mcp_install", context, harness="cline")
     managed = json.loads(settings.read_text(encoding="utf-8"))
     managed["userChange"] = True
     settings.write_text(json.dumps(managed), encoding="utf-8")
@@ -99,7 +101,7 @@ def test_the_cline_proxy_argv_install_writes_reaches_a_handler(tmp_path: Path, p
     settings = context.home_dir / ".cline" / "data" / "settings" / "cline_mcp_settings.json"
     settings.parent.mkdir(parents=True)
     settings.write_text(json.dumps({"mcpServers": {"local": {"command": "node", "args": ["server.js"]}}}), "utf-8")
-    install_cline_mcp_proxies(context)
+    ask("mcp_install", context, harness="cline")
     written = json.loads(settings.read_text(encoding="utf-8"))["mcpServers"]["local"]["args"]
     tail = written[written.index("cline-mcp-proxy") + 1 :]
 

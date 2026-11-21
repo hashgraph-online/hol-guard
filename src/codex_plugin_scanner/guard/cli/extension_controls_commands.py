@@ -28,7 +28,7 @@ from ..runtime.extension_control_proof import (
     issue_extension_control_enrollment_proof,
 )
 from ..store import GuardStore
-from .approval_gate_prompt import prompt_for_approval_gate
+from .approval_gate_prompt import prompt_for_approval_gate, submit_with_pulse
 from .commands_support_prompts import _shell_join
 from .extension_catalog_reads import catalog_list, catalog_show, pattern_extensions
 
@@ -227,7 +227,8 @@ def _recover_authority(
         if gate_input is not None:
             payload["approval_password"] = gate_input.password
             payload["approval_totp_code"] = gate_input.totp_code
-        response = _client(guard_home).acknowledge_degraded_extension_controls(payload)
+        client = _client(guard_home)
+        response = submit_with_pulse(guard_home, client.acknowledge_degraded_extension_controls, payload, gate_input)
     _emit(response, output_stream)
     return 0
 
@@ -372,7 +373,9 @@ def run_extension_controls_command(
         if gate_input is not None:
             payload["approval_password"] = gate_input.password
             payload["approval_totp_code"] = gate_input.totp_code
-        preview = client.preview_extension_controls(payload)
+        # The approval is spent on the preview, which issues the proof the apply
+        # uses, so the apply payload carries no Pulse fields.
+        preview = submit_with_pulse(guard_home, client.preview_extension_controls, payload, gate_input)
         proof_id = preview.get("proof_id")
         if not isinstance(proof_id, str):
             raise ExtensionControlProofError("daemon did not issue a mutation proof")

@@ -15,13 +15,14 @@ import pytest
 
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
-from codex_plugin_scanner.guard.native_local_cli_help_parse import SourceRead
+from codex_plugin_scanner.guard.runtime.local_cli_commands import merge_discovered_commands
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_source_evidence import script_may_serve_mcp
 from codex_plugin_scanner.guard.store import GuardStore
 
 BRIDGE = "codex_plugin_scanner.guard.native_local_cli_help_parse"
 EVIDENCE = "codex_plugin_scanner.guard.runtime.local_mcp_source_evidence"
+API = "codex_plugin_scanner.guard.local_clis.local_cli_api"
 
 _FAKE_MCP = """import json
 import sys
@@ -70,13 +71,13 @@ def _resident(
         read.append(text)
         return not unreadable and text in serving
 
-    def _source(**_kwargs: object) -> SourceRead:
-        return SourceRead(rows=(), help_handler="none", imports=(), mcp_server=False, entry_point=None)
+    def _discover(identity: UnlistedCliIdentity, *_args: object, **_kwargs: object) -> object:
+        # A script that never looks for --help is read, not run
+        # (``rust/.../local_cli_discover.rs``); these tests cover the MCP launch.
+        return merge_discovered_commands(identity.name, ()), "empty"
 
     monkeypatch.setattr(f"{BRIDGE}.resident_reads_mcp_evidence", lambda: reads_evidence)
-    monkeypatch.setattr(f"{BRIDGE}.resident_reads_sources_first", lambda: True)
-    monkeypatch.setattr(f"{BRIDGE}.native_local_cli_source_read", _source)
-    monkeypatch.setattr(f"{BRIDGE}.native_local_cli_help_commands", lambda **_: ())
+    monkeypatch.setattr(f"{API}.discover_local_cli_commands", _discover)
     monkeypatch.setattr(f"{EVIDENCE}.script_serves_mcp", _serves_mcp)
     return read
 

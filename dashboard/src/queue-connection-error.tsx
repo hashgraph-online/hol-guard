@@ -3,6 +3,9 @@ import { ActionButton, Surface } from "./approval-center-primitives";
 import {
   QUEUE_CONNECTION_ERROR_HEADLINE,
   QUEUE_CONNECTION_ERROR_INSTRUCTION,
+  QUEUE_DESKTOP_HANDOFF_DETAIL,
+  QUEUE_DESKTOP_HANDOFF_HEADLINE,
+  QUEUE_DESKTOP_HANDOFF_INSTRUCTION,
   QUEUE_SESSION_COMMAND_INSTRUCTION,
   QUEUE_SESSION_ERROR_DETAIL,
   QUEUE_SESSION_ERROR_HEADLINE,
@@ -11,6 +14,7 @@ import {
   desktopRequestUrl,
   queueErrorIsUnauthorizedSession,
 } from "./queue-connection-copy";
+import { requestHandedOffToDesktop } from "./desktop-request-handoff";
 
 export function QueueConnectionError(props: {
   message: string;
@@ -18,11 +22,15 @@ export function QueueConnectionError(props: {
   requestId?: string | null;
   onRetry?: () => void;
   onRepair?: () => Promise<void>;
+  /** Whether this tab already opened the request in HOL Guard Desktop. */
+  handedOffToDesktop?: boolean;
 }) {
   const [repairing, setRepairing] = useState(false);
   const sessionMissing = queueErrorIsUnauthorizedSession(props.message);
   const desktopUrl = sessionMissing ? desktopRequestUrl(props.requestId ?? null) : null;
   const openCommand = sessionMissing ? approvalsOpenCommand(props.requestId ?? null) : null;
+  const handedOff =
+    desktopUrl !== null && (props.handedOffToDesktop ?? requestHandedOffToDesktop(props.requestId));
 
   const handleRepair = useCallback(async () => {
     if (props.onRepair === undefined) {
@@ -44,9 +52,14 @@ export function QueueConnectionError(props: {
     }
   }, [handleRepair, props.approvalUrl]);
 
-  const headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
-  const detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
-  const instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  let headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
+  let detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
+  let instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  if (handedOff) {
+    headline = QUEUE_DESKTOP_HANDOFF_HEADLINE;
+    detail = QUEUE_DESKTOP_HANDOFF_DETAIL;
+    instruction = QUEUE_DESKTOP_HANDOFF_INSTRUCTION;
+  }
   // The Desktop button leads when it shows, so Retry steps back beside it.
   let sessionRetryVariant: "outline" | undefined;
   if (desktopUrl !== null) {
@@ -55,14 +68,14 @@ export function QueueConnectionError(props: {
 
   return (
     <div className="space-y-4">
-      <Surface tone="danger">
+      <Surface tone={handedOff ? "default" : "danger"}>
         <p className="text-sm font-semibold text-brand-purple" role="alert">
           {headline}
         </p>
         <p className="mt-1 text-sm text-brand-purple/80">{detail}</p>
         <p className="mt-2 text-sm text-brand-purple/70">{instruction}</p>
         <div className="mt-4 flex flex-wrap gap-3">
-          {desktopUrl !== null && <ActionButton href={desktopUrl}>Open in HOL Guard Desktop</ActionButton>}
+          {desktopUrl !== null && <ActionButton href={desktopUrl}>{handedOff ? "Open in HOL Guard Desktop again" : "Open in HOL Guard Desktop"}</ActionButton>}
           {sessionMissing ? (
             props.onRetry !== undefined && (
               <ActionButton onClick={props.onRetry} variant={sessionRetryVariant}>

@@ -232,6 +232,12 @@ fn a_quoted_heredoc_read_by_cat_becomes_its_own_text() {
             "git commit -m \"$(cat <<'EOF'\nfix(x): drop the old path\n\nRefs: #12\nEOF\n)\"",
             "git commit -m \"fix(x): drop the old path\n\nRefs: #12\"",
         ),
+        // An apostrophe is literal inside the double quotes, so the message
+        // is the text the program receives.
+        (
+            "git commit -m \"$(cat <<'EOF'\nfix: keep 'in' checks\n\nit's the old path\nEOF\n)\"",
+            "git commit -m \"fix: keep 'in' checks\n\nit's the old path\"",
+        ),
     ] {
         assert_eq!(projected(command).as_deref(), Some(expected), "{command}");
     }
@@ -269,16 +275,40 @@ fn a_cat_that_reads_more_than_a_quoted_heredoc_stays_opaque() {
         // The word carries more than the substitution, so the value would be
         // spliced into text the shell quotes differently.
         "git commit -m x\"$(cat <<'EOF'\nsubject\nEOF\n)\"",
-        // A body that could reopen the shell is never spliced.
-        "git commit -m \"$(cat <<'EOF'\nuse `id` here\nEOF\n)\"",
-        "git commit -m \"$(cat <<'EOF'\ncost $(id)\nEOF\n)\"",
-        "git commit -m \"$(cat <<'EOF'\nsay \"hi\"\nEOF\n)\"",
-        "git commit -m \"$(cat <<'EOF'\nwipe *\nEOF\n)\"",
+        // Outside a commit message, a body that could reopen the shell is
+        // never spliced.
+        "echo \"$(cat <<'EOF'\nuse `id` here\nEOF\n)\"",
+        "echo \"$(cat <<'EOF'\ncost $(id)\nEOF\n)\"",
+        "echo \"$(cat <<'EOF'\nsay \"hi\"\nEOF\n)\"",
+        "echo \"$(cat <<'EOF'\nit's a \\ path\nEOF\n)\"",
+        // Outside a commit message the projection is ASCII only.
+        "echo \"$(cat <<'EOF'\nit's a caf\u{e9}\nEOF\n)\"",
+        "echo caf\u{e9} && git commit -m \"$(cat <<'EOF'\nsubject\nEOF\n)\"",
+        "echo \"$(cat <<'EOF'\nwipe *\nEOF\n)\"",
         // A pattern character is refused even though the double quotes keep
         // the shell from matching it: the screens downstream read the
         // projection as a command, and a bracket there is a glob.
-        "git commit -m \"$(cat <<'EOF'\ndrop [legacy]\nEOF\n)\"",
-        "git commit -m \"$(cat <<'EOF'\npath\\\\x\nEOF\n)\"",
+        "rm \"$(cat <<'EOF'\ndrop [legacy]\nEOF\n)\"",
+        "echo \"$(cat <<'EOF'\npath\\\\x\nEOF\n)\"",
+        // Only the value of `git commit -m` or `--message` is a message.
+        "git commit -F \"$(cat <<'EOF'\n[notes]\nEOF\n)\"",
+        "git commit --author \"$(cat <<'EOF'\nA \u{e9} <a@b>\nEOF\n)\"",
+        "git -c core.hooksPath=x commit -m \"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
+        "git tag -m \"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
+        "git commit --file=x -m \"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
+        // A flag before `-m` that takes a value, a repeated `-m` or `--`
+        // makes Git read the substitution as that value or as a path.
+        "git commit -m -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit -- -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit -F -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit --author -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit -t -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit -Sa -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit --trailer -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit -m\"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
+        "echo git commit -m && echo -m \"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
+        // An unquoted delimiter expands the body, so its text is not data.
+        "git commit -m \"$(cat <<EOF\nuse caf\u{e9}\nEOF\n)\"",
         // The quote in front of the substitution closes a quoted space
         // rather than opening the word, so the shell runs the substitution
         // unquoted and the value would be spliced in as code.
@@ -290,6 +320,46 @@ fn a_cat_that_reads_more_than_a_quoted_heredoc_stays_opaque() {
         "cat <<'PRE'\n\"\nPRE\ngit commit -m \" \"$(cat <<'EOF'\nx # EOF\nEOF\n)\" \" && id",
     ] {
         assert_eq!(projected(command), None, "{command}");
+    }
+}
+
+/// Agents write backticks, brackets, quotes and em dashes in commit
+/// messages. Git reads the value of `-m` only as the message, so there the
+/// projection keeps it and writes each character it may not carry as `_`.
+#[test]
+fn a_commit_message_writes_characters_it_cannot_carry_as_stand_ins() {
+    for (command, expected) in [
+        (
+            "git commit -m \"$(cat <<'EOF'\nuse `id` here\nEOF\n)\"",
+            "git commit -m \"use _id_ here\"",
+        ),
+        (
+            "git commit -m \"$(cat <<'EOF'\ncost $(id)\nEOF\n)\"",
+            "git commit -m \"cost _(id)\"",
+        ),
+        (
+            "git commit -m \"$(cat <<'EOF'\nsay \"hi\" or \"\\n\"\nEOF\n)\"",
+            "git commit -m \"say _hi_ or __n_\"",
+        ),
+        (
+            "git commit -m \"$(cat <<'EOF'\nit's a caf\u{e9}\nEOF\n)\"",
+            "git commit -m \"it's a caf_\"",
+        ),
+        (
+            "git commit -m \"$(cat <<'EOF'\nwipe * and ~ {a,b} [legacy]?\nEOF\n)\"",
+            "git commit -m \"wipe _ and _ _a,b_ _legacy__\"",
+        ),
+        // As Claude Code writes it, after `cd` and `git add`.
+        (
+            "cd /w && git add -A && git commit -m \"$(cat <<'EOF'\nFix x\n\nThe check was inverted\u{2014}it returned early.\nEOF\n)\"",
+            "cd /w && git add -A && git commit -m \"Fix x\n\nThe check was inverted_it returned early.\"",
+        ),
+        (
+            "git commit -a -s --message \"$(cat <<'EOF'\nuse a[key]\tnow\nEOF\n)\"",
+            "git commit -a -s --message \"use a_key__now\"",
+        ),
+    ] {
+        assert_eq!(projected(command).as_deref(), Some(expected), "{command}");
     }
 }
 

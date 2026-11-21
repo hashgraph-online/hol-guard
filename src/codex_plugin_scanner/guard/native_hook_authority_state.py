@@ -12,6 +12,7 @@ yields ``None`` and every caller fails closed (no state is trusted).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 HOOK_AUTHORITY_STATE_FEATURE = "hook-authority-state-v1"
-HOOK_AUTHORITY_STATE_QUESTION_SETTLE_FEATURE = "hook-authority-state-question-settle-v1"
+HOOK_AUTHORITY_STATE_QUESTION_PAYLOAD_FEATURE = "hook-authority-state-question-payload-v1"
 HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE = "hook-authority-state-claude-lifecycle-v1"
 _REQUEST_SCHEMA = "guard-hook-authority-state-request.v1"
 _RESULT_SCHEMA = "guard-hook-authority-state-result.v1"
@@ -52,6 +53,7 @@ def hook_authority_state(
     now: str,
     create_key: bool = False,
     required_feature: str = HOOK_AUTHORITY_STATE_FEATURE,
+    integrity: Mapping[str, object] | None = None,
     **fields: object,
 ) -> dict[str, object] | None:
     """The resident's ``ok`` payload for ``op``, or ``None`` when it cannot answer.
@@ -65,7 +67,6 @@ def hook_authority_state(
     try:
         if not ensure_resident_prerequisite(home):
             return None
-        key, key_id = store._policy_integrity_secret_material(create=create_key)
     except (OSError, RuntimeError, ValueError):
         return None
     wire: dict[str, object] = {
@@ -76,9 +77,24 @@ def hook_authority_state(
         "op": op,
         "now": now,
     }
-    if key is not None and key_id is not None:
-        wire["integrity_key_b64"] = encode_key(key)
-        wire["integrity_key_id"] = key_id
+    if integrity is not None:
+        encoded = integrity.get("integrity_key_b64")
+        supplied_id = integrity.get("integrity_key_id")
+        if encoded is None and supplied_id is None:
+            pass
+        elif not isinstance(encoded, str) or not isinstance(supplied_id, str):
+            return None
+        else:
+            wire["integrity_key_b64"] = encoded
+            wire["integrity_key_id"] = supplied_id
+    else:
+        try:
+            key, key_id = store._policy_integrity_secret_material(create=create_key)
+        except (OSError, RuntimeError, ValueError):
+            return None
+        if key is not None and key_id is not None:
+            wire["integrity_key_b64"] = encode_key(key)
+            wire["integrity_key_id"] = key_id
     wire.update({name: value for name, value in fields.items() if value is not None})
     try:
         response = _resident_request(
@@ -88,7 +104,7 @@ def hook_authority_state(
             timeout_seconds=_TIMEOUT_SECONDS,
             required_feature=required_feature,
             response_schema=_RESULT_SCHEMA,
-            max_request_bytes=_MAX_REQUEST_BYTES,
+            max_request_bytes=_MAX_REQUEST_BYTES * (2 if op == "claude_question_settle_hook" else 1),
             record_success=False,
         )
     except (TypeError, ValueError):

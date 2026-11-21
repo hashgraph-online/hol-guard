@@ -6,8 +6,9 @@
 //! name it can produce is a regular file that clears the literal read proof.
 //!
 //! The model is deliberately a superset of what a shell matches: only `*` and
-//! `?` are accepted, only in the last component (directory wildcards are
-//! modelled only inside the harness homes, see `harness_globs`), matching
+//! `?` are accepted, only in the last component (a reader also takes
+//! wildcard directories below a visible literal root, see `directory_globs`,
+//! and inside the harness homes only notes, see `harness_globs`), matching
 //! ignores ASCII case (`nocaseglob`), and a hidden entry the pattern would
 //! match under `dotglob` sends the read to review instead of relying on the
 //! shell default. Entries with non-ASCII names also send it to review,
@@ -35,6 +36,8 @@
 
 use std::path::{Path, PathBuf};
 
+#[path = "read_globs_directories.rs"]
+mod directory_globs;
 #[path = "read_globs_harness.rs"]
 mod harness_globs;
 
@@ -52,6 +55,11 @@ pub(super) fn bounded_glob_file_read_target(
     glob_words(value, context).is_some_and(|words| {
         !words.is_empty() || (context.creates_nothing && !value.starts_with('-'))
     })
+        // A reader prints each match; it does not place them anywhere, so a
+        // match from any directory reads like its literal word. A copy keeps
+        // the single-directory model, where every match lands under its own
+        // name.
+        || directory_globs::directory_glob_matches(value, context).is_some()
 }
 
 /// The words the shell passes on for `value` -- `<directory>/<name>`, or a
@@ -163,6 +171,13 @@ fn readable_match(
     base: &Path,
     context: super::super::PathContext<'_>,
 ) -> bool {
+    readable_name(name, base)
+        && super::bounded_read_target(word, context.home_dir, context.cwd, false)
+}
+
+/// A matched file name that is visible, not sensitive, not a directory, and
+/// reads the same after a second word split or expansion.
+fn readable_name(name: &str, base: &Path) -> bool {
     if name.starts_with('.') {
         return false;
     }
@@ -191,11 +206,10 @@ fn readable_match(
     !super::super::search::SECRET_EXTENSIONS.contains(&extension.as_str())
         && !guard_secure_fs::credential_named_path(Path::new(name))
         && std::fs::symlink_metadata(base.join(name)).is_ok_and(|metadata| !metadata.is_dir())
-        && super::bounded_read_target(word, context.home_dir, context.cwd, false)
 }
 
 /// `*` and `?` over ASCII names, ignoring case.
-fn wildcard_matches(pattern: &[u8], name: &[u8]) -> bool {
+pub(in crate::pretool) fn wildcard_matches(pattern: &[u8], name: &[u8]) -> bool {
     let mut previous = vec![false; name.len() + 1];
     previous[0] = true;
     for &token in pattern {
@@ -209,6 +223,38 @@ fn wildcard_matches(pattern: &[u8], name: &[u8]) -> bool {
             for index in 1..=name.len() {
                 current[index] = previous[index - 1]
                     && (token == b'?' || token.eq_ignore_ascii_case(&name[index - 1]));
+            }
+        }
+        previous = current;
+    }
+    previous[name.len()]
+}
+
+/// True when `*` and `?` could match `name` under any locale and case
+/// option: a superset of [`wildcard_matches`] for names that are not ASCII.
+///
+/// A UTF-8 shell's `?` takes a whole character and a C-locale one a single
+/// byte, so `?` is read as `*` here. Case folding outside ASCII can map a
+/// letter onto an ASCII one (the Kelvin sign onto `k`), so a non-ASCII
+/// character on either side matches any single character.
+pub(in crate::pretool) fn wildcard_may_match(pattern: &str, name: &str) -> bool {
+    let name: Vec<char> = name.chars().collect();
+    let mut previous = vec![false; name.len() + 1];
+    previous[0] = true;
+    for token in pattern.chars() {
+        let mut current = vec![false; name.len() + 1];
+        if token == '*' || token == '?' {
+            current[0] = previous[0];
+            for index in 1..=name.len() {
+                current[index] = previous[index] || current[index - 1];
+            }
+        } else {
+            for index in 1..=name.len() {
+                let other = name[index - 1];
+                current[index] = previous[index - 1]
+                    && (!token.is_ascii()
+                        || !other.is_ascii()
+                        || token.eq_ignore_ascii_case(&other));
             }
         }
         previous = current;

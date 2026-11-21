@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import shlex
@@ -11,14 +12,22 @@ import sys
 from pathlib import Path
 
 import pytest
+import tomllib
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.codex_config import dump_toml
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import codex_install_flow_support as flow
+from tests import codex_plan_segments as segments
+from tests import harness_ops_support as harness_support
+from tests.codex_publication_steps import use_stepwise_publication
+from tests.codex_toml_support import dump_toml, read_toml_payload
 from tests.conftest import guard_commands_module
+
+SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
+SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -52,9 +61,9 @@ def _install_codex(home_dir: Path, workspace_dir: Path, capsys: pytest.CaptureFi
 def _managed_shell_block(body: str) -> str:
     return "\n".join(
         (
-            codex_adapter._SHELL_GUARD_BEGIN,
+            SHELL_GUARD_BEGIN,
             body,
-            codex_adapter._SHELL_GUARD_END,
+            SHELL_GUARD_END,
         )
     )
 
@@ -97,15 +106,21 @@ def test_install_migrates_legacy_shell_controls_without_changing_user_bytes(tmp_
     )
 
 
-def test_legacy_shell_cleanup_preserves_crlf_non_utf8_and_unmatched_markers() -> None:
-    begin = codex_adapter._SHELL_GUARD_BEGIN.encode("ascii")
-    end = codex_adapter._SHELL_GUARD_END.encode("ascii")
-    original = b"\xffKEEP\r\n\r\n" + begin + b"\r\nlegacy\r\n" + end + b"\r\nAFTER\xfe\r\n"
-
-    assert codex_adapter._remove_managed_shell_guard_blocks(original) == b"\xffKEEP\r\nAFTER\xfe\r\n"
-    assert codex_adapter._remove_managed_shell_guard_blocks(b"KEEP\n" + begin + b"\nunterminated\n") == (
-        b"KEEP\n" + begin + b"\nunterminated\n"
+def test_legacy_shell_cleanup_preserves_crlf_non_utf8_and_unmatched_markers(tmp_path) -> None:
+    begin = SHELL_GUARD_BEGIN.encode("ascii")
+    end = SHELL_GUARD_END.encode("ascii")
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    context.home_dir.mkdir()
+    unterminated = b"KEEP\n" + begin + b"\nunterminated\n"
+    (context.home_dir / ".zshenv").write_bytes(
+        b"\xffKEEP\r\n\r\n" + begin + b"\r\nlegacy\r\n" + end + b"\r\nAFTER\xfe\r\n"
     )
+    (context.home_dir / ".bashrc").write_bytes(unterminated)
+
+    planned = {change.path.name: change.after for change in segments.prepare_codex_shell_cleanup(context)}
+
+    assert planned[".zshenv"] == b"\xffKEEP\r\nAFTER\xfe\r\n"
+    assert planned[".bashrc"] == unterminated
 
 
 def test_codex_launch_fails_closed_without_authoritative_native_hooks(tmp_path):
@@ -117,7 +132,7 @@ def test_codex_launch_fails_closed_without_authoritative_native_hooks(tmp_path):
     context.workspace_dir.mkdir(parents=True)
 
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
-        CodexHarnessAdapter().preview_launch_commands(context, ["Fix it."])
+        harness_ops.preview_launch_commands("codex", context, ["Fix it."])
 
 
 def test_codex_launch_fails_closed_when_native_hooks_are_disabled_after_install(tmp_path, capsys):
@@ -136,7 +151,7 @@ def test_codex_launch_fails_closed_when_native_hooks_are_disabled_after_install(
     )
 
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
-        CodexHarnessAdapter().launch_command(context, ["Fix it."])
+        harness_ops.launch_command("codex", context, ["Fix it."])
 
 
 @pytest.mark.parametrize("tamper_target", ("matcher", "command"))
@@ -149,7 +164,7 @@ def test_codex_launch_fails_closed_when_authoritative_hook_is_tampered(
     workspace_dir = tmp_path / "workspace"
     _install_codex(home_dir, workspace_dir, capsys)
     config_path = home_dir / ".codex" / "config.toml"
-    payload = codex_adapter._read_toml(config_path)
+    payload = read_toml_payload(config_path)
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)
     pre_tool_groups = hooks["PreToolUse"]
@@ -168,7 +183,7 @@ def test_codex_launch_fails_closed_when_authoritative_hook_is_tampered(
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
 
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
-        CodexHarnessAdapter().preview_launch_commands(context, ["Fix it."])
+        harness_ops.preview_launch_commands("codex", context, ["Fix it."])
 
 
 def test_codex_launch_rejects_hook_bound_to_opposite_home_mode(
@@ -186,7 +201,7 @@ def test_codex_launch_rejects_hook_bound_to_opposite_home_mode(
         home_override_explicit=True,
     )
     config_path = home_dir / ".codex" / "config.toml"
-    payload = codex_adapter._read_toml(config_path)
+    payload = read_toml_payload(config_path)
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)
     pre_tool_groups = hooks["PreToolUse"]
@@ -201,13 +216,12 @@ def test_codex_launch_rejects_hook_bound_to_opposite_home_mode(
     opposite_home_command = codex_adapter._hook_command_parts_for_home_mode(
         context,
         home_is_current=True,
-        python_executable=sys.executable,
     )
     entry["command"] = shlex.join(opposite_home_command)
     config_path.write_text(dump_toml(payload), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
-        CodexHarnessAdapter().preview_launch_commands(context, ["Fix it."])
+        harness_ops.preview_launch_commands("codex", context, ["Fix it."])
 
 
 def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable(
@@ -218,28 +232,36 @@ def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
-    monkeypatch.setattr(
-        CodexHarnessAdapter,
-        "_install_config_hooks",
-        staticmethod(lambda _payload, _context, **_kwargs: None),
-    )
+    real_ask = flow.ask
 
-    result = main(
-        [
-            "guard",
-            "install",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--json",
-        ]
-    )
-    captured = capsys.readouterr()
+    def _strip_hooks(encoded):
+        payload = tomllib.loads(base64.b64decode(encoded).decode("utf-8"))
+        payload.pop("hooks", None)
+        return base64.b64encode(dump_toml(payload).encode("utf-8")).decode("ascii")
 
-    assert result == 1
-    assert "codex_authoritative_hook_unavailable" in captured.err
+    def _without_hooks(op, *args, **kwargs):
+        # The planned config loses its Guard hooks, as if the native plan
+        # could not reconcile them; publication must refuse it.
+        answer = real_ask(op, *args, **kwargs)
+        if op == "install_plan" and "files" in answer:
+            # The plan leads with authority, manifest, receipt and config.
+            config = answer["files"][3]
+            config["after"] = _strip_hooks(config["after"])
+        return answer
+
+    # Publish stepwise so the plan answer reaches the publication.
+    use_stepwise_publication(monkeypatch)
+    monkeypatch.setattr(flow, "ask", _without_hooks)
+
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=home_dir,
+        home_override_explicit=True,
+    )
+    with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
+        harness_support.install("codex", context)
+
     assert (home_dir / "bin" / "guard-codex").exists() is False
 
 

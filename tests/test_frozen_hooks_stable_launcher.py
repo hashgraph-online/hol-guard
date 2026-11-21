@@ -7,18 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import stable_guard_cli
-from codex_plugin_scanner.guard.adapters import claude_hook_argv, cline_mcp, copilot, hermes
-from codex_plugin_scanner.guard.adapters._modules.claude.claude_frozen_hook import FROZEN_CLAUDE_HOOK_COMMAND
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.hook_python import guard_cli_command
-from codex_plugin_scanner.guard.adapters.mcp_servers import (
-    ManagedMcpServer,
-    is_guard_proxy_command,
-    proxy_cli_args,
-    proxy_launcher_entry,
-)
+from codex_plugin_scanner.guard import claude_hook_entry, native_caller, stable_guard_cli
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer, is_guard_proxy_command, proxy_cli_args
+from tests.mcp_proxy_launcher import python_proxy_launcher_entry
 
 
 def _write_launcher(path: Path) -> Path:
@@ -72,48 +64,33 @@ def test_claude_frozen_hooks_use_the_stable_launcher(
 ) -> None:
     _, launcher = versioned_core
 
-    def no_native_bridge(_guard_home: Path) -> None:
-        return None
-
-    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", no_native_bridge)
+    monkeypatch.setattr(native_caller, "_native_runtime", lambda: None)
+    monkeypatch.setattr(claude_hook_entry, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = _context(tmp_path)
+    hook = claude_hook_entry.claude_argv("hook", context)
+    session = claude_hook_entry.claude_argv("session_start", context)
 
-    hook = claude_hook_argv.guard_hook_command_parts(context)
-    daemon = claude_hook_argv.daemon_hook_command_parts(context, fallback_daemon_url="http://127.0.0.1:1")
-    session = claude_hook_argv._python_session_start_command_parts(context)  # pyright: ignore[reportPrivateUsage]
-
-    assert [hook[0], daemon[0], session[0]] == [launcher, launcher, launcher]
+    assert [hook[0], session[0]] == [launcher, launcher]
     assert hook[1] == "hook"
-    assert daemon[1] == session[1] == FROZEN_CLAUDE_HOOK_COMMAND
+    assert session[1] == "__guard-claude-hook"
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        claude_hook_entry.claude_argv("daemon", context)
 
 
 def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_core: tuple[Path, str]) -> None:
-    executable, launcher = versioned_core
+    _, launcher = versioned_core
     context = _context(tmp_path)
     server = _server(tmp_path)
     python_args = proxy_cli_args(proxy_command="cursor-mcp-proxy", guard_home=str(context.guard_home), server=server)
-    stale: dict[str, object] = {"command": str(executable), "args": python_args}
 
     commands = [
-        proxy_launcher_entry(proxy_command="cursor-mcp-proxy", context=context, server=server)["command"],
-        CursorHarnessAdapter()._proxy_server_entry(context, server)["command"],  # pyright: ignore[reportPrivateUsage]
-        CursorHarnessAdapter._refresh_guard_proxy_entry(stale)["command"],  # pyright: ignore[reportPrivateUsage]
-        copilot._refresh_guard_proxy_entry(stale, list(python_args), launcher_env={})["command"],  # pyright: ignore[reportPrivateUsage]
-        cline_mcp._proxy_entry(context, server)["command"],  # pyright: ignore[reportPrivateUsage]
-        hermes._overlay_servers(context=context, source_configs={"fixture": {"command": "node"}})["fixture"]["command"],  # pyright: ignore[reportPrivateUsage]
+        python_proxy_launcher_entry(proxy_command="cursor-mcp-proxy", context=context, server=server)["command"],
+        stable_guard_cli.guard_cli_launcher(),
     ]
 
     assert commands == [launcher] * len(commands)
     assert is_guard_proxy_command(launcher, tuple(python_args))
     assert not is_guard_proxy_command(str(tmp_path / "other-tool"), ("server.js",))
-
-
-def test_frozen_opencode_cli_command_uses_the_stable_launcher(tmp_path: Path, versioned_core: tuple[Path, str]) -> None:
-    _, launcher = versioned_core
-
-    command = guard_cli_command(_context(tmp_path), ["-m", "codex_plugin_scanner.cli", "guard", "opencode-mcp-proxy"])
-
-    assert command == [launcher, "opencode-mcp-proxy"]
 
 
 def test_transition_binding_keeps_the_exact_process(versioned_core: tuple[Path, str]) -> None:

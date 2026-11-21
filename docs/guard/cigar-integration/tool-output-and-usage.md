@@ -80,3 +80,23 @@ Each row comes from the app's own usage record, not from an estimate:
 The numbers count with CIGAR on or off, and Guard sends them nowhere. Guard keeps a local cache, `context-usage-meter.json` in the Guard home, holding for each session file of the last 7 days: its full path, how far Guard has read it, its per-day totals, its model and folder name, and, for Claude Code, the last 16 characters of up to 1024 reply ids so a reply written twice is counted once. Later counts then read only what was added. The first count reads every session from the last week and can take a minute on a long history.
 
 Guard does not read usage records from Copilot, Cursor, Gemini, OpenCode or Pi. Their usage is left out rather than guessed.
+
+## What CIGAR saved
+
+Below the usage numbers, `hol-guard context usage` and the **Usage** tab estimate how many tokens CIGAR saved over the last 7 days. The dashboard draws it as one bar: the solid part is what the helped sessions used, the striped part is the estimated saving.
+
+```text
+CIGAR saved about 3,100,000 tokens in the last 7 days. This is an estimate.
+  It handed 18 prompts about 14,300 tokens of code.
+  It showed 31 files; the agent opened 6 of them anyway.
+  How: the tokens those sessions used, and the share CIGAR saved on Guard's benchmark (Claude Code 61%, Codex 52%).
+```
+
+Guard cannot run the same work again without CIGAR, so the saving is an estimate, and every place that shows it says so. It is built from:
+
+- **Measured:** each session where CIGAR added project code to a Codex or Claude Code prompt, how many prompts it helped, how much code it added (counted as characters ÷ 4), which files that code came from, and which of those files a later tool call in the session named anyway. Tokens used come from the app's own session record, read the same way as the usage numbers above.
+- **Estimated:** saved = used × rate ÷ (1 − rate), where the rate is the share of tokens CIGAR saved on Guard's own benchmark for that app (Codex 52%, Claude Code 61%; other apps use the lower figure). Real savings vary with the task.
+
+Only sessions where CIGAR showed at least one project file count. Pi and Oh My Pi are left out because they can drop added context before the agent reads it. When Guard cannot read a helped session's own record, the session still counts toward the measured facts but not toward the estimate, and the dashboard says how many sessions the estimate covers.
+
+Guard keeps this record as `context-savings.json` in the Guard home: for each helped session from the last 7 days (at most 256), the app, the session id, the path to the app's own session record, the time of the first and last helped prompt, the prompt count, how much code was added and up to 64 file paths relative to the project. It reads a session record only when the path is a `.jsonl` file under the app's usual session folder, after following links. Nothing in it leaves this computer.

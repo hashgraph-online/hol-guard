@@ -142,3 +142,37 @@ fn a_null_native_hook_runtime_renders() {
     args["native_hook_runtime"] = Value::Null;
     assert!(source(&args).contains("const GUARD_NATIVE_HOOK_RUNTIME: string | null = null;"));
 }
+
+#[test]
+fn display_name_cannot_break_generated_javascript() {
+    let mut args = case_args("active_pi_posix");
+    args["display_name"] = json!("Pi'; throw new Error(\"injected\"); \" ` ${process.env.PWN}");
+    let rendered = source(&args);
+    assert!(!rendered.contains("Pi'; throw new Error"));
+    assert!(rendered.contains("Pi\\'"));
+    assert!(rendered.contains("\\\""));
+    assert!(rendered.contains("\\`"));
+    assert!(rendered.contains("\\${process.env.PWN}"));
+}
+
+#[test]
+fn watch_output_findings_are_record_only_and_monitor_failures_are_visible() {
+    let rendered = source(&case_args("active_omp_posix"));
+    assert!(rendered.contains("watchPostureActive && response.decision === \"deny\""));
+    assert!(rendered.contains(
+        "'output_secret_match', 'source_secret_match', 'sensitive_path', 'model_output_action'"
+    ));
+    let post_tool = &rendered[rendered
+        .find("pi.on(\"tool_result\", async (event, ctx) => {")
+        .expect("post-tool handler")..];
+    let monitor = post_tool
+        .find("response.observe_mode === true && response.reason_code === 'watch_monitor_unavailable'")
+        .expect("monitor fallback handler");
+    let deny = post_tool
+        .find("if (response.decision === \"deny\")")
+        .expect("generic denial handler");
+    assert!(
+        monitor < deny,
+        "monitor fallback must be handled before generic denial"
+    );
+}

@@ -66,22 +66,21 @@ def test_the_case_gets_an_offline_origin_without_joining_the_git_control_set() -
 def signing(monkeypatch) -> list[list[str]]:
     """Record each authorization and the extensions it signed, without a live daemon.
 
-    The permission ids come from the installed catalog, which only an
+    The permission ids come from the daemon's active catalog, which only an
     initialised runtime carries, so these checks measure the choice of
-    extensions rather than the catalog lookup the lane shares with the
-    cases that were already passing.
+    extensions rather than the catalog lookup.
     """
-    from ci.gauntlet import extension_adapters, extension_allow_fixtures
+    from ci.gauntlet import extension_adapters
 
     authorizations: list[list[str]] = []
 
-    def configure(_daemon, _guard_home, enabled_permissions):
-        assert all(enabled_permissions.values()), enabled_permissions
-        authorizations.append(list(enabled_permissions))
-        return {extension_id: index for index, extension_id in enumerate(enabled_permissions, start=1)}
+    def configure(_daemon, _guard_home, extension_ids, declared):
+        authorizations.append(list(extension_ids))
+        permissions = {extension_id: [f"{extension_id}.all"] for extension_id in extension_ids}
+        revisions = {extension_id: index for index, extension_id in enumerate(extension_ids, start=1)}
+        return permissions, revisions
 
-    monkeypatch.setattr(extension_allow_fixtures, "_declared_permissions", lambda extension_id: [f"{extension_id}.all"])
-    monkeypatch.setattr(extension_adapters, "configure_each_extension_controls", configure)
+    monkeypatch.setattr(extension_adapters, "configure_each_extension_with_declared_permissions", configure)
     return authorizations
 
 
@@ -170,3 +169,65 @@ def test_several_extensions_are_committed_in_one_layer(monkeypatch) -> None:
     assert all(control.state is ControlState.ENABLED for control in controls)
     # One layer, so one revision: every extension in it lands together.
     assert revisions == {GIT_EXTENSION_ID: 1, EXTENSION_ALLOW_ID: 1}
+
+
+def test_permissions_are_read_after_the_contributed_extension_is_enabled(monkeypatch) -> None:
+    """A contributed extension's permissions exist only in the live catalog once it is enabled.
+
+    The packaged built-in catalog never names an optional pack's permissions,
+    so looking them up there before enabling the extension found none and
+    every allow case aborted with `external_extension_permissions_missing`.
+    """
+    from ci.gauntlet import extension_adapters, extension_allow_fixtures
+    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlState, ControlTargetKind
+
+    allow_permission = f"{EXTENSION_ALLOW_ID}.permission.rm"
+    enabled: set[str] = set()
+    commits: list[tuple[object, ...]] = []
+
+    def catalog() -> SimpleNamespace:
+        """The daemon's active catalog: an optional extension appears only once enabled."""
+        permission = SimpleNamespace(permission_id=allow_permission)
+        extensions = [SimpleNamespace(extension_id=EXTENSION_ALLOW_ID, permissions=[permission])]
+        return SimpleNamespace(extensions=[extension for extension in extensions if extension.extension_id in enabled])
+
+    class ControlService:
+        """Reads the active catalog on every access, as the daemon's service does."""
+
+        @property
+        def _registry(self) -> SimpleNamespace:
+            return catalog()
+
+    api = ControlService()
+
+    def commit_controls(_service, _password, controls):
+        commits.append(controls)
+        enabled.update(
+            control.target.target_id
+            for control in controls
+            if control.target.kind is ControlTargetKind.EXTENSION and control.state is ControlState.ENABLED
+        )
+        return len(commits)
+
+    monkeypatch.setattr(extension_adapters, "_authorize_extension_controls", lambda _daemon, _home: "password")
+    monkeypatch.setattr(probe_installed_native_extensions, "commit_controls", commit_controls)
+    monkeypatch.setattr(extension_adapters, "_required_extension_ids", lambda: frozenset())
+
+    assert not any(
+        extension.extension_id == EXTENSION_ALLOW_ID for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+    )
+    record = extension_allow_fixtures.configure_extension_allow_controls(
+        SimpleNamespace(_server=SimpleNamespace(extension_control_api=api)),
+        Path("guard-home"),
+        "external-extension-allow-solo-action",
+    )
+
+    assert record["enabled_permissions"] == [allow_permission]
+    assert record["control_revision"] == 2
+    # The final layer replaces the first, so it carries the enable as well.
+    final = commits[-1]
+    assert [(control.target.kind, control.target.target_id) for control in final] == [
+        (ControlTargetKind.EXTENSION, EXTENSION_ALLOW_ID),
+        (ControlTargetKind.PERMISSION, allow_permission),
+    ]

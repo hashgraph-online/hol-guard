@@ -1,5 +1,7 @@
 #[path = "command_sequences.rs"]
 mod command_sequences;
+#[path = "safe_reads_jq.rs"]
+mod jq_arguments;
 #[path = "jq_filter.rs"]
 mod jq_filter;
 #[path = "read_globs.rs"]
@@ -22,9 +24,12 @@ pub(super) use super::safe_writes::{
 };
 pub(crate) use command_sequences::proven_created_file_removal;
 pub(super) use command_sequences::{exact_safe_sequence, leading_and_cd, leading_semicolon_cd};
+pub(super) use jq_arguments::{
+    jq_filter_position, safe_jq_file_arguments, safe_jq_piped_arguments, safe_jq_stdin_arguments,
+};
 pub(crate) use jq_filter::rendering_format as jq_rendering_format;
 pub(crate) use jq_filter::variables_bound as jq_variables_bound;
-pub(super) use read_globs::glob_file_matches;
+pub(super) use read_globs::{glob_file_matches, wildcard_matches, wildcard_may_match};
 pub(super) use sed_reads::{safe_sed_arguments, safe_sed_stdin_arguments};
 
 pub(super) fn safe_file_predicate_arguments(
@@ -48,7 +53,8 @@ pub(super) fn safe_file_predicate_arguments(
             context.home_dir,
             context.cwd,
             matches!(predicate.as_str(), "-d" | "-e" | "-x"),
-        ) || metadata_only_target(target, context))
+        ) || metadata_only_target(target, context)
+            || super::listing_reads::tested_glob_operand(target, context))
 }
 
 /// A target a read screen holds back although the predicate returns nothing
@@ -209,6 +215,9 @@ pub(super) fn safe_cat_stdin_arguments(arguments: &[String]) -> bool {
     })
 }
 
+/// `head -n 3 a b` prints what `head -n 3 a; head -n 3 b` prints, with a
+/// `==> a <==` line before each, so every operand gets the single-file proof
+/// that `cat a b` gives its operands, up to the same bound.
 pub(super) fn safe_head_tail_arguments(
     arguments: &[String],
     piped_input: bool,
@@ -431,94 +440,6 @@ fn safe_word_count_with_targets(
     saw_target || piped_input
 }
 
-/// `jq <filter> <file>` reads one bounded file through the same filter
-/// grammar the stdin form admits.
-pub(super) fn safe_jq_file_arguments(
-    arguments: &[String],
-    context: super::PathContext<'_>,
-) -> bool {
-    let Some((file, rest)) = arguments.split_last() else {
-        return false;
-    };
-    !file.starts_with('-')
-        && safe_jq_filter_arguments(rest)
-        && command_read_target(file, context, false)
-}
-
-/// Where a proven jq filter sits: last when jq reads stdin, before the file
-/// operand otherwise. The filter is a program over the value read, so a
-/// field such as `.key` is not a path to screen.
-pub(super) fn jq_filter_position(arguments: &[String], piped_input: bool) -> Option<usize> {
-    let last = arguments.len().checked_sub(1)?;
-    let index = if piped_input {
-        last
-    } else {
-        last.checked_sub(1)?
-    };
-    jq_filter::safe_filter(&arguments[index]).then_some(index)
-}
-
-/// `... | jq <filter>` reads the value the pipeline already produced.
-///
-/// Stdin may come from a network read the sandbox cannot contain, so the
-/// filter still has to clear the grammar in full. It no longer has to open
-/// with a projection: `length`, `map(.name)` and `select(.draft)` read the
-/// same value `.items | length` does, and the grammar — not the leading
-/// character — is what keeps a filter from reaching the environment, further
-/// input, files or modules.
-pub(super) fn safe_jq_stdin_arguments(arguments: &[String]) -> bool {
-    safe_jq_filter_arguments(arguments)
-}
-
-/// jq's options that only shape how the value read is parsed and printed.
-/// Every option that names a file, a module directory or a variable binding
-/// — `-f`, `--from-file`, `-L`, `--library-path`, `--argfile`, `--rawfile`,
-/// `--slurpfile`, `--arg`, `--args`, `--jsonargs` — is absent, so one of
-/// those is read as the filter instead and fails the grammar.
-const READ_ONLY_LONG_OPTIONS: &[&str] = &[
-    "--ascii-output",
-    "--compact-output",
-    "--exit-status",
-    "--join-output",
-    "--monochrome-output",
-    "--null-input",
-    "--raw-input",
-    "--raw-output",
-    "--slurp",
-    "--sort-keys",
-    "--tab",
-];
-
-/// The short spellings of those options. jq accepts them clustered, as in
-/// `jq -rc`, so each letter of a cluster is checked against this set.
-const READ_ONLY_SHORT_OPTIONS: &str = "acejMnrRsS";
-
-fn read_only_option(argument: &str) -> bool {
-    match argument.strip_prefix('-') {
-        Some(cluster) if !cluster.starts_with('-') => {
-            !cluster.is_empty()
-                && cluster
-                    .chars()
-                    .all(|flag| READ_ONLY_SHORT_OPTIONS.contains(flag))
-        }
-        _ => READ_ONLY_LONG_OPTIONS.contains(&argument),
-    }
-}
-
-fn safe_jq_filter_arguments(arguments: &[String]) -> bool {
-    let mut filter = None;
-    for argument in arguments {
-        if filter.is_none() && read_only_option(argument) {
-            continue;
-        }
-        if filter.replace(argument.as_str()).is_some() {
-            return false;
-        }
-    }
-    let Some(filter) = filter else { return false };
-    jq_filter::safe_filter(filter)
-}
-
 /// A head/tail count: `20`, or `+31` for "from line 31" (`tail -n +31`).
 fn head_tail_count(value: &str) -> bool {
     let digits = value.strip_prefix('+').unwrap_or(value);
@@ -531,7 +452,7 @@ fn safe_head_tail_with_targets(
     context: super::PathContext<'_>,
     allow_target: bool,
 ) -> bool {
-    let mut saw_target = false;
+    let mut targets = 0usize;
     let mut expect_count = false;
     let mut after_options = false;
     for argument in arguments {
@@ -543,14 +464,10 @@ fn safe_head_tail_with_targets(
             continue;
         }
         if after_options {
-            if !allow_target
-                || argument == "-"
-                || !command_read_target(argument, context, false)
-                || saw_target
-            {
+            if !allow_target || argument == "-" || !command_read_target(argument, context, false) {
                 return false;
             }
-            saw_target = true;
+            targets += 1;
             continue;
         }
         if argument == "--" {
@@ -578,20 +495,19 @@ fn safe_head_tail_with_targets(
                 continue;
             }
         }
-        // Bare `+N` is a filename on modern GNU head/tail. Never skip the
-        // read-target proof; `-n +N` remains an option/value pair above.
-        if argument.starts_with('-') {
+        // A bare `+N` before `--` is a file name to `head` but, with one
+        // file beside it, GNU `tail`'s old spelling of `-n +N`, which also
+        // takes a trailing `f` to follow. Neither reading is proven here;
+        // `-n +N` remains an option/value pair above.
+        if argument.starts_with(['-', '+']) {
             return false;
         }
         if !allow_target || !command_read_target(argument, context, false) {
             return false;
         }
-        if saw_target {
-            return false;
-        }
-        saw_target = true;
+        targets += 1;
     }
-    (saw_target || piped_input) && !expect_count
+    targets <= MAX_PLAIN_FILE_TARGETS && (targets > 0 || piped_input) && !expect_count
 }
 
 #[cfg(test)]
@@ -603,31 +519,5 @@ mod jq_stdin_boundary_tests;
 mod sed_context_address_read_tests;
 
 #[cfg(test)]
-mod head_tail_plus_filename_tests {
-    use super::*;
-
-    #[test]
-    fn a_bare_plus_number_is_a_file_operand_not_a_line_count() {
-        let root = env!("CARGO_MANIFEST_DIR");
-        let context = super::super::PathContext {
-            home_dir: Some(root),
-            cwd: Some(root),
-            ..Default::default()
-        };
-        assert!(!safe_head_tail_with_targets(
-            &["+31".to_owned(), "Cargo.toml".to_owned()],
-            false,
-            context,
-            true
-        ));
-        // A nonexistent +31 filename by itself can be a harmless proven
-        // missing-file read; the security invariant is that it still occupies
-        // the target slot and cannot hide an additional source operand.
-        assert!(safe_head_tail_with_targets(
-            &["-n".to_owned(), "+31".to_owned(), "Cargo.toml".to_owned()],
-            false,
-            context,
-            true
-        ));
-    }
-}
+#[path = "safe_reads_head_tail_tests.rs"]
+mod head_tail_tests;

@@ -7,23 +7,17 @@ import subprocess
 import sys
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import cline_hooks as cline_hooks_module
-from codex_plugin_scanner.guard.adapters import cline_state_paths as cline_state_paths_module
-from codex_plugin_scanner.guard.adapters import guard_cli_attestation
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_hooks import (
-    _claim_slot,
-    _hook_command,
-    cline_hook_roots,
-    cline_native_hook_state,
-    run_cline_hook_canary,
-    uninstall_cline_hooks,
-)
-from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, install_cline_plugin
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
+from tests.cline_test_support import hook_state, install_plugin, uninstall
+from tests.cline_test_support import plugin_source as _plugin_source
 from tests.cline_worker_config import worker_config as _worker_config
+from tests.native_bounded_runtime import BOUNDED_FEATURES
+from tests.native_runtime_stamp import stamp_native_runtime
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -92,11 +86,17 @@ def _run_plugin(source: str, tmp_path: Path, expression: str) -> subprocess.Comp
     )
 
 
-def test_native_hook_root_matches_vscode_and_core_global_directory(tmp_path: Path) -> None:
-    context = _context(tmp_path)
-    roots = cline_hook_roots(context)
-    assert roots[0] == context.home_dir / "Documents" / "Cline" / "Hooks"
-    assert roots[1] == context.home_dir / ".cline" / "hooks"
+def _install_hooks(
+    context: HarnessContext, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, runtime_script: str = ""
+) -> dict[str, Any]:
+    runtime = tmp_path / "native-runtime"
+    if runtime_script:
+        runtime.write_text(f"#!/bin/sh\n{runtime_script}\n", encoding="utf-8")
+        runtime.chmod(0o755)
+    else:
+        runtime.write_bytes(b"")
+    stamp_native_runtime(monkeypatch, runtime, (*BOUNDED_FEATURES, "cline-hook-worker-v1"))
+    return ask("install_transport", context, harness="cline", transport="hooks", frozen=False)
 
 
 def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, monkeypatch) -> None:
@@ -104,10 +104,10 @@ def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, 
     executable = tmp_path / "HOL Guard"
     executable.write_bytes(b"signed-frozen-core")
     executable.chmod(0o755)
-    monkeypatch.setattr(guard_cli_attestation.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(guard_cli_attestation.sys, "executable", str(executable))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(executable))
 
-    manifest = install_cline_plugin(context)
+    manifest = install_plugin(context)
     source = Path(str(manifest["managed_plugin_path"])).read_text(encoding="utf-8")
 
     assert f"const GUARD_CLI = {json.dumps([str(executable), 'hook'])};" in source
@@ -117,151 +117,43 @@ def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, 
     assert identity["command"] == [str(executable)]
 
 
-def test_native_hook_slots_are_non_destructive(tmp_path: Path) -> None:
-    root = tmp_path / "hooks"
-    root.mkdir()
-    assert _claim_slot(root, "PreToolUse.ps1", "PreToolUse") == root / "PreToolUse.ps1"
-    (root / "PreToolUse").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    with pytest.raises(RuntimeError, match="user-owned PreToolUse hook"):
-        _claim_slot(root, "PreToolUse", "PreToolUse")
-    (root / "PreToolUse").write_text("# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n", encoding="utf-8")
-    assert _claim_slot(root, "PreToolUse", "PreToolUse") == root / "PreToolUse"
-
-
-def test_cline_canary_uses_only_the_canonical_managed_slot(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.skipif(os.name == "nt", reason="the stand-in runtime is a POSIX shell script")
+def test_cline_canary_runs_only_the_canonical_managed_slot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     context = _context(tmp_path / "home parent with spaces")
-    hook = cline_hook_roots(context)[0] / ("PreToolUse.ps1" if os.name == "nt" else "PreToolUse")
-    hook.parent.mkdir(parents=True)
-    hook.write_text("# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n", encoding="utf-8")
-    if os.name != "nt":
-        hook.chmod(0o700)
-    state = context.guard_home / "managed" / "cline" / "native-hooks-state.json"
-    state.parent.mkdir(parents=True, exist_ok=True)
-    state.write_text(json.dumps({"paths": {"PreToolUse": str(hook)}}), encoding="utf-8")
-    observed: dict[str, object] = {}
+    log = tmp_path / "runtime.log"
+    script = f"printf '%s\\n' \"$@\" > '{log}'; cat >> '{log}'; printf '{{\"cancel\": false}}\\n'"
+    installed = _install_hooks(context, tmp_path, monkeypatch, runtime_script=script)
 
-    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        observed["command"] = command
-        observed["shell"] = kwargs.get("shell")
-        return subprocess.CompletedProcess(command, 0, stdout='{"cancel":false}\n', stderr="")
-
-    monkeypatch.setattr(cline_hooks_module.subprocess, "run", fake_run)
-    if os.name == "nt":
-        powershell = tmp_path / "PowerShell Dir" / "powershell.exe"
-        powershell.parent.mkdir()
-        powershell.write_bytes(b"")
-        monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", lambda *_parts: powershell)
-
-    assert run_cline_hook_canary(context) == {"ok": True}
-    observed_command = observed["command"]
-    assert isinstance(observed_command, list)
-    assert observed_command[-1] == str(hook.resolve())
-    assert observed["shell"] is False
-
-
-def test_cline_install_replaces_legacy_python_workers_and_reports_the_new_ones(tmp_path: Path, monkeypatch) -> None:
-    context = _context(tmp_path)
-    runtime = tmp_path / "native-runtime"
-    runtime.write_bytes(b"")
-    legacy = context.guard_home / "managed" / "cline" / "hook-workers" / "PreToolUse.py"
-    legacy.parent.mkdir(parents=True)
-    legacy.write_text("# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n", encoding="utf-8")
-    foreign = legacy.with_name("PostToolUse.py")
-    foreign.write_text("print('user file')\n", encoding="utf-8")
-    monkeypatch.setattr(cline_hooks_module, "native_hook_bridge_executable", lambda *_args, **_kwargs: runtime)
-    monkeypatch.setattr(cline_hooks_module, "_bounded_hook_argv", lambda *_args: ("guard", "hook"))
-    monkeypatch.setattr(cline_hooks_module, "run_cline_hook_canary", lambda _context: {"ok": True})
-
-    manifest = cline_hooks_module.install_cline_hooks(context)
-
-    assert not legacy.exists()
-    assert foreign.exists()
-    workers = manifest["managed_hook_workers"]
-    assert isinstance(workers, dict)
-    assert workers["PreToolUse"] == str(legacy.with_suffix(".json"))
-    assert Path(workers["PreToolUse"]).is_file()
-
-
-def test_cline_powershell_command_never_uses_ambient_path(tmp_path: Path, monkeypatch) -> None:
-    attacker_dir = tmp_path / "attacker-bin"
-    attacker_dir.mkdir()
-    attacker_shell = attacker_dir / "powershell.exe"
-    attacker_shell.write_bytes(b"")
-    monkeypatch.setenv("PATH", str(attacker_dir))
-
-    def unavailable_system_shell(*_parts: str) -> Path:
-        raise OSError("trusted Windows PowerShell unavailable")
-
-    monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", unavailable_system_shell)
-
-    assert _hook_command(tmp_path / "PreToolUse.ps1") == []
+    assert installed["probe"]["canary"] == {"returncode": 0, "stdout": '{"cancel": false}\n', "error": None}
+    worker = context.guard_home / "managed" / "cline" / "hook-workers" / "PreToolUse.json"
+    argv, _, payload = log.read_text(encoding="utf-8").partition("\n{")
+    assert argv.splitlines()[-1] == str(worker)
+    assert json.loads("{" + payload)["hookName"] == "PreToolUse"
 
 
 def test_cline_saved_custom_root_survives_environment_change(tmp_path: Path, monkeypatch) -> None:
     context = _context(tmp_path / "home parent")
-    custom_data = context.home_dir / "custom cline data"
-    custom_root = custom_data / "hooks"
-    monkeypatch.setenv("CLINE_DATA_DIR", str(custom_data))
-    paths: dict[str, str] = {}
-    digests: dict[str, str] = {}
-    workers: dict[str, str] = {}
-    worker_digests: dict[str, str] = {}
-    for event in cline_hooks_module._EVENTS:
-        hook = custom_root / f"{event}{'.ps1' if os.name == 'nt' else ''}"
-        hook.parent.mkdir(parents=True, exist_ok=True)
-        hook_content = "# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n"
-        hook.write_text(hook_content, encoding="utf-8")
-        worker = context.guard_home / "managed" / "cline" / "hook-workers" / f"{event}.py"
-        worker.parent.mkdir(parents=True, exist_ok=True)
-        worker_content = "# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n"
-        worker.write_text(worker_content, encoding="utf-8")
-        paths[event] = str(hook)
-        digests[event] = sha256(hook_content.encode()).hexdigest()
-        workers[event] = str(worker)
-        worker_digests[event] = sha256(worker_content.encode()).hexdigest()
-    state_path = context.guard_home / "managed" / "cline" / "native-hooks-state.json"
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(
-        json.dumps(
-            {
-                "root": str(custom_root),
-                "paths": paths,
-                "sha256": digests,
-                "workers": workers,
-                "worker_sha256": worker_digests,
-            }
-        ),
-        encoding="utf-8",
-    )
+    custom_root = context.home_dir / "custom cline data" / "hooks"
+    monkeypatch.setenv("CLINE_DATA_DIR", str(custom_root.parent))
+    installed = _install_hooks(context, tmp_path, monkeypatch)
+    assert installed["manifest"]["managed_hooks_root"] == str(custom_root)
     monkeypatch.delenv("CLINE_DATA_DIR")
 
-    def fake_run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(command, 0, stdout='{"cancel":false}\n', stderr="")
-
-    monkeypatch.setattr(cline_hooks_module.subprocess, "run", fake_run)
-    if os.name == "nt":
-        powershell = tmp_path / "trusted" / "powershell.exe"
-        powershell.parent.mkdir()
-        powershell.write_bytes(b"")
-        monkeypatch.setattr(cline_state_paths_module, "trusted_windows_system_executable", lambda *_parts: powershell)
-
-    health = cline_native_hook_state(context)
+    health = hook_state(context)
     assert health["installed"] is True
     assert health["integrity_ok"] is True
-    assert health["synthetic_canary_ok"] is True
-    uninstall = uninstall_cline_hooks(context)
-    assert uninstall["complete"] is True
-    assert len(uninstall["removed"]) == len(paths) + len(workers)
+    removed = uninstall(context, "hooks")["native_hooks"]
+    assert removed["complete"] is True
+    assert len(removed["removed"]) == 2 * len(installed["manifest"]["managed_hook_paths"])
     assert not custom_root.exists() or not any(custom_root.iterdir())
 
 
-def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_slots(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_slots(tmp_path: Path) -> None:
     context = _context(tmp_path)
     attacker_hook = tmp_path / "outside" / "PreToolUse"
     attacker_hook.parent.mkdir()
-    attacker_hook.write_text("# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n", encoding="utf-8")
+    executed = tmp_path / "executed"
+    attacker_hook.write_text(f"#!/bin/sh\n# HOL_GUARD_MANAGED_CLINE_HOOK_V1\ntouch '{executed}'\n", encoding="utf-8")
     attacker_hook.chmod(0o700)
     state = context.guard_home / "managed" / "cline" / "native-hooks-state.json"
     state.parent.mkdir(parents=True, exist_ok=True)
@@ -275,16 +167,11 @@ def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_sl
         encoding="utf-8",
     )
 
-    def fail_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise AssertionError("an unbound Cline state path must not be executed")
-
-    monkeypatch.setattr(cline_hooks_module.subprocess, "run", fail_run)
-
-    assert run_cline_hook_canary(context) == {"ok": False, "reason": "pretool_hook_missing"}
-    assert cline_native_hook_state(context)["installed"] is False
-    uninstall = uninstall_cline_hooks(context)
-    assert uninstall["complete"] is False
-    assert str(attacker_hook) in uninstall["retained_modified_or_unowned"]
+    assert hook_state(context)["installed"] is False
+    assert not executed.exists(), "an unbound Cline state path must not be executed"
+    removed = uninstall(context, "hooks")["native_hooks"]
+    assert removed["complete"] is False
+    assert str(attacker_hook) in removed["retained_modified_or_unowned"]
     assert attacker_hook.exists()
 
 

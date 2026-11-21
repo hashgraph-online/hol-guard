@@ -37,8 +37,10 @@ fn warnings_for(detection: Value, proves: bool, timed_out: bool) -> Vec<String> 
 fn probe(timed_out: bool, failed: bool, reported_no_artifacts: bool) -> Value {
     json!({
         "timed_out": timed_out,
-        "failed": failed,
-        "reported_no_artifacts": reported_no_artifacts,
+        "ok": !failed,
+        "reported_artifacts": if reported_no_artifacts { 0 } else { 1 },
+        "managed_install_present": false,
+        "runtime_hook_registered": false,
     })
 }
 
@@ -336,7 +338,7 @@ fn malformed_requests_are_refused() {
             "harness": "stubtool",
             "executable": "stubcli",
             "command_absence_proves_uninstalled": true,
-            "runtime_probe": { "timed_out": false },
+            "runtime_probe": "timed out",
             "detection": found.clone(),
         }),
         json!({
@@ -349,4 +351,55 @@ fn malformed_requests_are_refused() {
     ] {
         assert_eq!(dispatch(&request), Err(ERR_INVALID), "{request}");
     }
+}
+
+#[test]
+fn a_hermes_install_without_its_hook_reviews_launches_only() {
+    let warned = |registered: bool| {
+        let mut summary = probe(false, false, false);
+        summary["managed_install_present"] = json!(true);
+        summary["runtime_hook_registered"] = json!(registered);
+        probe_warnings("hermes", detection(&[], true, &[]), true, summary)
+    };
+    assert_eq!(
+        warned(false),
+        [
+            "Hermes runtime hook is not registered. Shell and tool calls are launch-review only. \
+          Run `hol-guard install hermes` to write a fail-closed hooks.pre_tool_call entry."
+        ]
+    );
+    assert!(warned(true).is_empty());
+    assert!(probe_warnings("hermes", detection(&[], true, &[]), true, Value::Null).is_empty());
+}
+
+#[test]
+fn a_probe_report_states_each_fact_as_the_adapter_wrote_it() {
+    let reported = |report: Value| {
+        probe_warnings(
+            "cursor",
+            detection(&[], true, &[artifact("mcp_server", Some("x"), &[])]),
+            true,
+            report,
+        )
+        .len()
+    };
+    assert_eq!(reported(json!({ "reported_artifacts": 0 })), 1);
+    assert_eq!(reported(json!({ "reported_artifacts": 0.0 })), 1);
+    assert_eq!(reported(json!({ "reported_artifacts": false })), 1);
+    assert_eq!(reported(json!({ "reported_artifacts": 2 })), 0);
+    assert_eq!(reported(json!({ "reported_artifacts": null })), 0);
+    assert_eq!(reported(json!({ "reported_artifacts": "0" })), 0);
+    assert_eq!(reported(json!({})), 0);
+    let timed_out = |value: Value| {
+        probe_warnings(
+            "stubtool",
+            detection(&[], true, &[]),
+            true,
+            json!({ "timed_out": value }),
+        )
+        .len()
+    };
+    assert_eq!(timed_out(json!(true)), 1);
+    assert_eq!(timed_out(json!(1)), 0);
+    assert_eq!(timed_out(json!("true")), 0);
 }

@@ -21,10 +21,12 @@ const MACHINE_ROOTS: &[&str] = &[
     "var",
     "workspaces",
 ];
-/// What a path can follow besides a space, such as the `=` of `out=/tmp/a.log`.
-const OPENERS: &[char] = &['=', '(', '[', '{', '<', '"', '\'', '`', ',', ':', ';'];
-/// What ends a path outside quotes, such as the `:` of `/tmp/a.py:parse`.
-const CLOSERS: &[char] = &[')', ']', '}', '>', '"', '\'', '`', ',', ';', ':'];
+/// What a path can follow besides a space, such as the `=` of `out=/tmp/a.log`
+/// or the `>` of `<output-file>/tmp/a.log</output-file>`.
+const OPENERS: &[char] = &['=', '(', '[', '{', '<', '>', '"', '\'', '`', ',', ':', ';'];
+/// What ends a path outside quotes, such as the `:` of `/tmp/a.py:parse` or
+/// the `<` of a closing tag.
+const CLOSERS: &[char] = &[')', ']', '}', '<', '>', '"', '\'', '`', ',', ';', ':'];
 
 /// `prompt` with each absolute machine path blanked: `/tmp/run-1/out.log`,
 /// `~/work`, `C:\Users\me`, `C:/Users/me` and `\\server\share`. A path inside

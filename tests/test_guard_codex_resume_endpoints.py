@@ -609,6 +609,9 @@ def test_codex_approve_returns_the_resident_resume_record(
 
     def _fake_resume_call(store: object, **kwargs: object) -> dict[str, object]:
         calls.append(kwargs)
+        if kwargs["call"] == "defer_live":
+            # The resident finds no hook still waiting, so the approval resumes the thread itself.
+            return {"resume": None}
         return {
             "resume": {
                 "request_id": kwargs["request_id"],
@@ -649,7 +652,7 @@ def test_codex_approve_returns_the_resident_resume_record(
 
     assert payload["codexResume"]["status"] == "sent"
     assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
-    assert [call["call"] for call in calls] == ["retry"]
+    assert [call["call"] for call in calls] == ["defer_live", "retry"]
 
 
 def test_codex_approve_returns_failed_resume_when_app_server_socket_missing(

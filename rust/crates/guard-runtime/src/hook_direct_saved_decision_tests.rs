@@ -1,20 +1,29 @@
 use super::*;
-use crate::local_store_read::schema_checksum;
+use crate::local_store_read::{schema_checksum, SUPPORTED_SCHEMA_VERSION};
 use crate::policy_decision_lookup_op::tests::{seed_store, tmp_store};
 use crate::policy_decision_lookup_op::{policy_row_to_json, POLICY_LOOKUP_COLUMNS};
 use crate::policy_store::policy_store_direct_lane::DirectLaneIntegrityKey;
 #[cfg(unix)]
 use guard_contracts::NativeExactActionQueryV1;
 use guard_policy_snapshot::{DirectLaneEnvironmentV1, DirectLanePolicyIntegrityStateV1};
-use rusqlite::params;
+use rusqlite::{params, Connection};
 use std::collections::BTreeMap;
+use zeroize::Zeroizing;
 
+#[cfg(unix)]
 pub(crate) use crate::cloud_exception_lift::VALIDATED_BUNDLE;
 
 const VECTORS: &str = include_str!("../tests/fixtures/hook_direct_saved_decision_vectors.json");
 pub(crate) const KEY: [u8; 32] = [7u8; 32];
 pub(crate) const KEY_ID: &str = "test-policy-key";
 pub(crate) const SIGNED_AT: &str = "2026-01-01T00:00:00+00:00";
+
+#[cfg(unix)]
+#[path = "hook_direct_saved_exact_command_tests.rs"]
+mod exact_command;
+
+#[path = "hook_direct_saved_decision_edge_tests.rs"]
+mod edge;
 
 pub(super) fn vectors() -> Value {
     serde_json::from_str(VECTORS).expect("saved-decision vectors parse")
@@ -34,32 +43,6 @@ fn verdicts_match_the_daemon_vectors() {
             .map(|(verdict, status)| json!({"verdict": Value::Object(verdict), "status": status}));
         assert_eq!(actual.unwrap_or(Value::Null), case["expected"], "{name}");
     }
-}
-
-#[test]
-fn truthy_follows_python() {
-    for value in [
-        json!(true),
-        json!(1),
-        json!(-0.5),
-        json!("x"),
-        json!([0]),
-        json!({"a": 0}),
-    ] {
-        assert!(truthy(Some(&value)), "{value}");
-    }
-    for value in [
-        json!(null),
-        json!(false),
-        json!(0),
-        json!(0.0),
-        json!(""),
-        json!([]),
-        json!({}),
-    ] {
-        assert!(!truthy(Some(&value)), "{value}");
-    }
-    assert!(!truthy(None));
 }
 
 #[test]
@@ -147,7 +130,7 @@ fn insert_decision(
     connection: &Connection,
     harness: &str,
     artifact_id: &str,
-    token: &str,
+    token: Option<&str>,
     action: &str,
     source: &str,
 ) -> i64 {
@@ -225,7 +208,7 @@ fn a_local_store_with_the_decision_is_read() {
         &connection,
         "claude-code",
         ARTIFACT,
-        TOKEN,
+        Some(TOKEN),
         "allow",
         "approval-gate",
     );
@@ -297,7 +280,7 @@ fn a_store_the_lookup_reads_differently_defers() {
             &connection,
             "claude-code",
             ARTIFACT,
-            TOKEN,
+            Some(TOKEN),
             "allow",
             "approval-gate",
         );
@@ -320,7 +303,7 @@ fn a_damaged_schema_marker_defers() {
         &connection,
         "claude-code",
         ARTIFACT,
-        TOKEN,
+        Some(TOKEN),
         "allow",
         "approval-gate",
     );
@@ -340,7 +323,7 @@ fn a_decision_for_another_token_defers() {
         &connection,
         "*",
         ARTIFACT,
-        "guard-exact-action:v1:other",
+        Some("guard-exact-action:v1:other"),
         "allow",
         "approval-gate",
     );
@@ -348,7 +331,14 @@ fn a_decision_for_another_token_defers() {
     assert!(!store.decided(Some(TOKEN)).unwrap());
     // A token the resident could not derive may be the other one.
     assert!(store.decided(None).unwrap());
-    insert_decision(&connection, "*", ARTIFACT, TOKEN, "block", "approval-gate");
+    insert_decision(
+        &connection,
+        "*",
+        ARTIFACT,
+        Some(TOKEN),
+        "block",
+        "approval-gate",
+    );
     assert!(store.decided(Some(TOKEN)).unwrap());
 }
 

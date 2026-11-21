@@ -415,6 +415,9 @@ pub struct ApprovalGateInputV1 {
     pub use_cooldown: Option<bool>,
     pub revoke_cooldown: bool,
     pub require_fresh_totp: bool,
+    pub pulse_request_id: Option<String>,
+    pub pulse_agent_key: Option<String>,
+    pub pulse_recovery_code: Option<String>,
 }
 
 /// `input_from_mapping` (:161-178) — daemon/dashboard payload -> gate input.
@@ -447,6 +450,12 @@ pub fn input_from_mapping(payload: Option<&Value>) -> Option<ApprovalGateInputV1
         use_cooldown,
         revoke_cooldown,
         require_fresh_totp: false,
+        pulse_request_id: payload
+            .get("approval_pulse_request_id")
+            .and_then(|v| optional_string(Some(v)))
+            .or_else(|| opt_str(&gate, "pulse_request_id")),
+        pulse_agent_key: None,
+        pulse_recovery_code: None,
     })
 }
 
@@ -478,6 +487,21 @@ pub(crate) fn verify_or_raise_locked(
             "Approval gate is enabled but no verifier is configured.",
             423,
         ));
+    }
+    if crate::approval_gate_pulse::pulse_enabled(state) {
+        return verify_pulse_or_raise_locked(
+            guard_home,
+            state,
+            grants,
+            purpose,
+            &gate_input,
+            strict,
+            action,
+            scope,
+            subject,
+            session_nonce,
+            now,
+        );
     }
     if !totp_enabled(state) && !strict && cooldown_active(state, now_epoch) {
         return register_grant(
@@ -583,6 +607,90 @@ pub(crate) fn verify_or_raise_locked(
         cooldown_expires_at,
         accepted_counter.is_none(),
         accepted_counter.is_some(),
+        now,
+    )
+}
+
+/// The Pulse arm of `verify_or_raise_locked`: an open, matching Pulse
+/// cooldown, or a verified and consumed receipt for this exact action.
+#[allow(clippy::too_many_arguments)]
+fn verify_pulse_or_raise_locked(
+    guard_home: &Path,
+    state: &mut Value,
+    grants: &ApprovalGateGrants,
+    purpose: &str,
+    gate_input: &ApprovalGateInputV1,
+    strict: bool,
+    action: Option<&str>,
+    scope: Option<&str>,
+    subject: Option<&str>,
+    session_nonce: Option<&str>,
+    now: Option<&str>,
+) -> Result<ApprovalGateGrantV1, ApprovalGateErrorV1> {
+    use crate::approval_gate_pulse as pulse;
+    let now_epoch = epoch(now);
+    let strict_all = state.get("strict_all_decisions") == Some(&Value::Bool(true));
+    if !strict && !strict_all && gate_input.pulse_request_id.is_none() {
+        let config = pulse::load_config(guard_home, state)?;
+        if pulse::pulse_cooldown_covers(state, &config.binding_key, purpose, scope, now_epoch) {
+            let expires = state
+                .get("pulse_cooldown")
+                .and_then(|c| c.get("expires_at"))
+                .and_then(|v| optional_string(Some(v)));
+            return register_grant(
+                guard_home,
+                state,
+                grants,
+                purpose,
+                action,
+                scope,
+                subject,
+                session_nonce,
+                vec!["cooldown".to_owned()],
+                false,
+                true,
+                expires,
+                false,
+                false,
+                now,
+            );
+        }
+    }
+    let cooldown_expires_at = pulse::verify_pulse_stage(
+        guard_home,
+        state,
+        gate_input,
+        purpose,
+        strict,
+        action,
+        scope,
+        subject,
+        session_nonce,
+        now_epoch,
+    )?;
+    reset_failed_attempts(state);
+    write_state(guard_home, state, now).map_err(|_| {
+        err(
+            "approval_gate_state_io",
+            "Could not persist approval gate state.",
+            500,
+        )
+    })?;
+    register_grant(
+        guard_home,
+        state,
+        grants,
+        purpose,
+        action,
+        scope,
+        subject,
+        session_nonce,
+        vec!["pulse".to_owned()],
+        strict,
+        false,
+        cooldown_expires_at,
+        false,
+        false,
         now,
     )
 }

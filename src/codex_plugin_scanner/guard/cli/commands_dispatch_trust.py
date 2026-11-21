@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import TextIO
 
 from ...version import __version__
-from ..adapters.base import HarnessContext
 from ..config import GuardConfig
+from ..harness_context import HarnessContext
 from ..local_trust_contract import TrustStatus
 from ..local_trust_controller import macos_native_backend_supported, resolve_passive_trust_state
 from ..native_daemon_manage import (

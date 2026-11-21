@@ -182,8 +182,7 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
     ) {
         return None;
     }
-    // An ask block whose desktop notice the resident raised; one still
-    // carrying a notice is the daemon's to raise.
+    // An ask block names the request and any notice left to the drain.
     let queued = match record.get(APPROVAL_KEY) {
         None => false,
         Some(approval) if approval_fits(approval) => true,
@@ -339,7 +338,7 @@ pub(super) fn review_fields(review: &Value) -> Option<(&str, &str)> {
     Some((level, center))
 }
 
-/// `_queued_approval`, with no desktop notice left to raise.
+/// `_queued_approval`, with at most one pending notice for its request.
 pub(super) fn approval_fits(approval: &Value) -> bool {
     let Some(approval) = exact_object(approval, &APPROVAL_KEYS) else {
         return false;
@@ -350,7 +349,7 @@ pub(super) fn approval_fits(approval: &Value) -> bool {
             .is_some_and(|text| !text.trim().is_empty())
     };
     (approval["workspace"].is_string() || approval["workspace"].is_null())
-        && approval["notices"].as_array().is_some_and(Vec::is_empty)
+        && super::notice::valid(&approval["notices"], 1, approval["request_id"].as_str())
         && ["approval_center_url", "review_url", "request_id"]
             .iter()
             .all(|key| filled(key))

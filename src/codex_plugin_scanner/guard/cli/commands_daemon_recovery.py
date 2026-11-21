@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 import uuid
 from collections.abc import Callable, Mapping
 from contextlib import suppress
@@ -90,8 +91,11 @@ def _protection_health(guard_home: Path, args: Mapping[str, object]) -> dict[str
     from ..runtime.protection_health_runtime import build_runtime_protection_health
     from ..store import GuardStore
 
+    deadline = time.monotonic() + float(remaining)
     store = GuardStore(guard_home, prime_policy_integrity=False)
-    managed_installs = _canonical_managed_installs_for_health(store.list_managed_installs())
+    managed_installs = _canonical_managed_installs_for_health(store, deadline_monotonic=deadline)
+    if time.monotonic() >= deadline:
+        return {"state": "unknown", "reason_code": "deadline_exceeded"}
     health = build_runtime_protection_health(
         store=store,
         guard_home=guard_home,

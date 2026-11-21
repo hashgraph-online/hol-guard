@@ -169,6 +169,9 @@ const UNMODELLED: &[&str] = &[
     // so the pair asked while the same pair spelled `ls-remote` did not.
     "git ls-tree -r --name-only HEAD && git archive --format=tar -o tree.tar HEAD",
     "git whatchanged -2 --format=%H && git archive --format=tar -o changes.tar HEAD",
+    // The Gauntlet plumbing case. Git 2.53 refuses `whatchanged` without
+    // `--i-still-use-this`, so the live chain spells the same read `diff-tree`.
+    "git diff-tree -r --name-only HEAD && git ls-tree -r --name-only HEAD && git archive --format=tar -o plumbing.tar HEAD",
 ];
 
 const HARNESSES: &[&str] = &["omp", "zcode", "codex", "claude-code"];

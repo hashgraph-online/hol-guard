@@ -3,7 +3,7 @@
 //! `testdata/guard_store/record_approval_metadata_vectors.py`). Seeds,
 //! results and changed markers all come from Python, never from Rust output.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -28,6 +28,132 @@ fn notified(path: &std::path::Path) -> BTreeMap<String, Value> {
         })
         .unwrap();
     rows.map(Result::unwrap).collect()
+}
+
+#[test]
+fn connector_scan_counts_other_pending_groups_toward_its_limit() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "create table approval_requests (
+                 request_id text, status text, queue_group_id text, last_seen_at integer
+             );
+             insert into approval_requests values
+                 ('first', 'pending', 'connector:example:one', 5),
+                 ('second', 'pending', 'connector:example:two', 5),
+                 ('neighbor', 'pending', 'connector:example-other:one', 4),
+                 ('oldest', 'pending', 'connector:example:three', 1),
+                 ('resolved', 'resolved', 'connector:example:one', 6);
+             with recursive numbers(n) as (
+                 select 1 union all select n + 1 from numbers where n < 1996
+             )
+             insert into approval_requests
+                 select 'other-' || n, 'pending', 'unrelated', 3 from numbers;",
+        )
+        .unwrap();
+    let request = json!({"identity_hash": "example"});
+    let args = super::Args(request.as_object().unwrap());
+    let scan = || super::pending_connector_group_rows(&connection, &args).unwrap();
+    let ids = |result: &Value| {
+        result["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["request_id"].clone())
+            .collect::<Vec<_>>()
+    };
+
+    let complete = scan();
+    assert_eq!(complete["complete"], true);
+    assert_eq!(ids(&complete), vec!["second", "first", "oldest"]);
+
+    connection
+        .execute(
+            "insert into approval_requests values ('unrelated-new', 'pending', 'unrelated', 2)",
+            [],
+        )
+        .unwrap();
+    let capped = scan();
+    assert_eq!(capped["complete"], false);
+    assert_eq!(ids(&capped), vec!["second", "first"]);
+}
+
+#[test]
+fn connector_risk_scan_preserves_a_caution_for_unchecked_hints() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "create table approval_requests (
+                 request_id text, status text, queue_group_id text, last_seen_at integer,
+                 extension_allow_hint_json text
+             );",
+        )
+        .unwrap();
+    let identity = "a".repeat(64);
+    let matching = json!({
+        "schema": "guard.connector-setup-hint.v1",
+        "identity_hash": identity,
+        "cli_id": "local-cli.lanectl-0123abcd",
+        "surface": "cli",
+        "display_name": "lanectl",
+        "deep_link": "/extensions/local-cli/local-cli.lanectl-0123abcd",
+        "card_recommendation": {"state": "allowed", "capabilities": []},
+        "risk_classes": ["destructive", "network_egress"]
+    });
+    let mut other = matching.clone();
+    other["identity_hash"] = json!("b".repeat(64));
+    other["risk_classes"] = json!(["financial_transaction"]);
+    let mut invalid = matching.clone();
+    invalid["display_name"] = Value::Null;
+    invalid["risk_classes"] = json!(["policy_bypass"]);
+    for (id, hint) in [
+        ("match", matching.clone()),
+        ("other", other),
+        ("invalid", invalid),
+    ] {
+        connection
+            .execute(
+                "insert into approval_requests values (?1, 'pending', ?2, 1, ?3)",
+                [id, &format!("connector:{identity}:{id}"), &hint.to_string()],
+            )
+            .unwrap();
+    }
+    let request = json!({"identity_hash": identity, "risk_classes": ["network_egress"]});
+    let args = super::Args(request.as_object().unwrap());
+    let scan = || super::connector_group_caution(&connection, &args).unwrap();
+    let expected = BTreeSet::from(["destructive".to_owned()]);
+    assert_eq!(scan(), (expected.clone(), true));
+
+    // More distinct ordinary classes than the generic caution wire accepts
+    // should not hide the one caution class on this connector.
+    for row in 0..257 {
+        let mut ordinary = matching.clone();
+        ordinary["risk_classes"] = json!((0..16)
+            .map(|column| format!("ordinary_{row}_{column}"))
+            .collect::<Vec<_>>());
+        connection
+            .execute(
+                "insert into approval_requests values (?1, 'pending', ?2, 1, ?3)",
+                [
+                    format!("row-{row}"),
+                    format!("connector:{identity}:{row}"),
+                    ordinary.to_string(),
+                ],
+            )
+            .unwrap();
+    }
+    assert_eq!(scan(), (expected.clone(), true));
+
+    connection
+        .execute(
+            "insert into approval_requests values ('oversized', 'pending', ?1, 1, ?2)",
+            [
+                format!("connector:{identity}:oversized"),
+                "x".repeat(super::RUNNER_AUTHORITY_MAX_BYTES + 1),
+            ],
+        )
+        .unwrap();
+    assert_eq!(scan(), (expected, false));
 }
 
 #[test]

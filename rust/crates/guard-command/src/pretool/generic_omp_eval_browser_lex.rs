@@ -117,6 +117,7 @@ pub(super) const RESERVED: &[&str] = &[
     "undefined",
     "var",
     "void",
+    "wait",
     "yield",
     "Bun",
     "Deno",
@@ -304,9 +305,9 @@ pub(super) const OPTION_KEYS: &[&str] = &[
     "waitUntil",
 ];
 
-/// `browser.open` keys that only shape a headless page. `app`, `cdp_url`,
-/// `init_scripts`, `downloads`, `allow_file_access`, `persist`,
-/// `user_agent`, `ignore_https_errors` and `allowed_domains` are absent.
+/// `browser.open` keys that only shape a headless page. `app:'own'`
+/// is handled separately; other browser attachments, scripts, profile and
+/// file-access options are not accepted.
 pub(super) const OPEN_KEYS: &[&str] = &[
     "dialogs",
     "headed",

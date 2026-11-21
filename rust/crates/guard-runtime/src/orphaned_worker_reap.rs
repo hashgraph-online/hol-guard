@@ -17,6 +17,10 @@
 //! the start token captured for that worker, so a reused pid is skipped. The
 //! answer lists the selected, signalled and forced pids. Off Unix the command
 //! answers `orphaned_worker_reap_unsupported`.
+//!
+//! The same pass also retires the Guard processes that serve nothing any
+//! more (`orphaned_worker_reap_stale.rs`): daemons whose Guard home is gone
+//! and host-less `mcp-relay` processes whose runtime was removed.
 
 // The selection and stop loop only run on Unix; their tests run everywhere.
 #![cfg_attr(not(unix), allow(dead_code))]
@@ -34,6 +38,12 @@ const MAX_BUDGET_MS: u64 = 60_000;
 const LISTING_TIMEOUT: Duration = Duration::from_secs(5);
 const GRACE: Duration = Duration::from_secs(1);
 const POLL: Duration = Duration::from_millis(50);
+/// Budget kept back from the grace wait so a process that ignored SIGTERM
+/// can still be killed in the same pass.
+const KILL_RESERVE: Duration = Duration::from_millis(250);
+/// What one identity check and signal may take: two command-line lookups
+/// and a start-time lookup, each bounded by the 500 ms command timeout.
+const SIGNAL_RESERVE: Duration = Duration::from_millis(1_500);
 const MAX_PARENT_HOPS: usize = 8;
 const HOOK_WORKER_COMMAND_MARKER: &str = "--hol-guard-hook-worker";
 const FORK_MARKER: &str = "--multiprocessing-fork";
@@ -78,6 +88,12 @@ pub(crate) trait Host {
     fn start_token(&self, pid: u32) -> Option<String>;
     /// Signal the pid's own process group, else the pid.
     fn signal(&self, pid: u32, stop: Stop);
+    /// Whether the pid belongs to the user this process runs as. A check
+    /// that cannot answer within `timeout` answers `false`.
+    fn owned_by_caller(&self, pid: u32, timeout: Duration) -> bool;
+    /// Whether reading `path` answers "not found". Any other failure, and a
+    /// link, count as present.
+    fn path_absent(&self, path: &str) -> bool;
     fn now(&self) -> Instant;
     fn sleep(&self, duration: Duration);
 }
@@ -136,9 +152,26 @@ pub(crate) fn reap<H: Host>(host: &H, excluded: &[u32], budget: Option<Duration>
     let Some(output) = host.listing(listing_timeout) else {
         return json!({ "listed": false, "selected": [], "signalled": [], "forced": [] });
     };
-    let workers = orphaned_daemon_workers(&parse_process_snapshot(&output), excluded);
+    let processes = parse_process_snapshot(&output);
+    let mut workers = orphaned_daemon_workers(&processes, excluded);
+    let deadline = budget.map(|budget| started + budget);
+    // Owner checks stop early enough that what they select can still be
+    // signalled: a pass whose checks spent the whole budget would select
+    // processes and then stop none of them, on every pass.
+    let selection_deadline = deadline.map(|deadline| {
+        deadline
+            .checked_sub(SIGNAL_RESERVE)
+            .filter(|end| *end > started)
+            .unwrap_or(started)
+    });
+    for process in stale::stale_guard_processes(host, &processes, excluded, selection_deadline) {
+        if !workers.iter().any(|worker| worker.pid == process.pid) {
+            workers.push(process);
+        }
+    }
+    workers.sort_by_key(|process| process.pid);
     let grace = remaining(host).map_or(GRACE, |left| left.min(GRACE));
-    let (signalled, forced) = terminate(host, &workers, excluded, grace);
+    let (signalled, forced) = terminate(host, &workers, excluded, grace, deadline);
     json!({
         "listed": true,
         "selected": workers.iter().map(|worker| worker.pid).collect::<Vec<_>>(),
@@ -228,9 +261,16 @@ pub(crate) fn terminate<H: Host>(
     workers: &[ProcessSnapshot],
     excluded: &[u32],
     grace: Duration,
+    deadline: Option<Instant>,
 ) -> (Vec<u32>, Vec<u32>) {
+    // Every identity check runs `ps`, so none starts once the pass deadline
+    // is spent. A process not reached is left for the next pass.
+    let open = |host: &H| deadline.is_none_or(|deadline| host.now() < deadline);
     let mut armed: Vec<(&ProcessSnapshot, String)> = Vec::new();
     for worker in workers {
+        if !open(host) {
+            break;
+        }
         if worker.pid <= 1 || excluded.contains(&worker.pid) {
             continue;
         }
@@ -239,16 +279,22 @@ pub(crate) fn terminate<H: Host>(
         }
     }
     let signalled = armed.iter().map(|(worker, _)| worker.pid).collect();
-    let deadline = host.now() + grace;
+    let mut grace_end = host.now() + grace;
+    if let Some(kill_by) = deadline.and_then(|deadline| deadline.checked_sub(KILL_RESERVE)) {
+        grace_end = grace_end.min(kill_by);
+    }
     let mut pending = armed;
-    while !pending.is_empty() && host.now() < deadline {
-        host.sleep(POLL.min(deadline.saturating_duration_since(host.now())));
+    while !pending.is_empty() && host.now() < grace_end {
+        host.sleep(POLL.min(grace_end.saturating_duration_since(host.now())));
         pending.retain(|(worker, token)| {
             worker_identity_matches(host, worker, Some(token.as_str())).is_some()
         });
     }
     let mut forced = Vec::new();
     for (worker, token) in &pending {
+        if !open(host) {
+            break;
+        }
         if signal_matching_worker(host, worker, Stop::Kill, Some(token.as_str())).is_some() {
             forced.push(worker.pid);
         }
@@ -438,9 +484,25 @@ pub(crate) fn deliver(
     signal_pid();
 }
 
+/// Run one bounded reaping pass from inside the daemon `own_pid`, so
+/// leftovers are retired on the daemon's maintenance tick and not only when
+/// a launcher asks for background maintenance.
+#[cfg(unix)]
+pub(crate) fn reap_from_daemon(own_pid: u32, budget: Duration) -> Value {
+    reap(&system::SystemHost, &[own_pid], Some(budget))
+}
+
+#[cfg(not(unix))]
+pub(crate) fn reap_from_daemon(_own_pid: u32, _budget: Duration) -> Value {
+    json!({ "error": "orphaned_worker_reap_unsupported" })
+}
+
 #[cfg(unix)]
 #[path = "orphaned_worker_reap_system.rs"]
 mod system;
+
+#[path = "orphaned_worker_reap_stale.rs"]
+mod stale;
 
 #[cfg(test)]
 #[path = "orphaned_worker_reap_tests.rs"]

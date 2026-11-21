@@ -45,9 +45,12 @@ pub(super) fn segment_without_patterns(segment: &CommandSegmentV1) -> Option<Str
     if !maskable_filter_segment(segment) {
         return None;
     }
+    let words = super::listing_reads::literal_words(&segment.text);
     let stdin_only = match super::executable_basename(executable) {
-        "grep" | "egrep" | "fgrep" => super::search::safe_grep_stdin_arguments(&segment.arguments),
-        "rg" => super::search::safe_rg_stdin_arguments(&segment.arguments),
+        "grep" | "egrep" | "fgrep" => {
+            super::search::safe_grep_stdin_arguments(&segment.arguments, &words)
+        }
+        "rg" => super::search::safe_rg_stdin_arguments(&segment.arguments, &words),
         _ => false,
     };
     stdin_only.then(|| segment.tokens[0].clone())

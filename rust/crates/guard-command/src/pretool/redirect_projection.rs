@@ -13,10 +13,13 @@ use targets::{
 
 #[path = "redirect_git_chain.rs"]
 pub(super) mod git_chain;
+#[path = "redirect_input.rs"]
+mod input;
 #[path = "redirect_leading_chain.rs"]
 mod leading_chain;
 #[path = "redirect_stdin.rs"]
 mod stdin;
+pub(super) use stdin::{heredoc_records_commit_message, heredoc_segment, skip_bodies};
 #[path = "redirect_targets.rs"]
 mod targets;
 
@@ -39,6 +42,11 @@ pub(super) struct RedirectProjection {
     init_chain: bool,
     /// The literal targets the removed redirects write.
     written: Vec<String>,
+    /// Every redirect removed was an inert sink: a descriptor copy (`2>&1`)
+    /// or a write to `/dev/null`. No file is opened and no standard input is
+    /// supplied, so the projected text runs exactly the programs the raw text
+    /// runs.
+    pub(super) inert_sinks: bool,
 }
 
 impl RedirectProjection {
@@ -76,8 +84,10 @@ pub(super) fn project(
     // Whether a separator came after the literal standard input, so which
     // command the shell hands those bytes to is no longer in the text.
     let mut stdin_separated = false;
-    // The single file a plain `< path` redirect feeds the first command.
-    let mut input_source: Option<String> = None;
+    // The single file a plain `< path` redirect reads, and where the command
+    // it feeds starts in `out`.
+    let mut input_source: Option<(String, usize)> = None;
+    let mut input_site = input::InputSite::new();
     let mut removed = false;
     let mut targets: Vec<String> = Vec::new();
     let mut bounded_writes = true;
@@ -87,6 +97,8 @@ pub(super) fn project(
     // so another step could run before the shell opens the file.
     let mut separated = false;
     let mut late_write = false;
+    // Set once the text is not one pipeline whose last command alone writes.
+    let mut beyond_pipeline = false;
     let mut index = 0usize;
     while index < chars.len() {
         let current = chars[index];
@@ -111,7 +123,12 @@ pub(super) fn project(
                 } else if current == '\\' {
                     escaped = true;
                 }
-                separated |= substitution(&chars, index);
+                let opens = substitution(&chars, index);
+                separated |= opens;
+                if opens {
+                    input_site.opaque();
+                }
+                beyond_pipeline |= opens;
                 out.push(current);
                 index += 1;
                 continue;
@@ -127,7 +144,12 @@ pub(super) fn project(
                 || (current == '&' && chars.get(index + 1) != Some(&'>'))
                 || substitution(&chars, index));
         separated |= separates;
+        if separates {
+            input_site.separator(&chars, index, &out);
+        }
         stdin_separated |= saw_stdin_data && separates;
+        beyond_pipeline |= separates
+            && (!targets.is_empty() || !super::super::chain_temporary::plain_pipe(&chars, index));
         match current {
             '\'' => quote = Quote::Single,
             '"' => quote = Quote::Double,
@@ -143,6 +165,7 @@ pub(super) fn project(
                 if chars[index..].iter().any(|value| !value.is_whitespace()) {
                     separated = true;
                     stdin_separated = true;
+                    beyond_pipeline = true;
                 }
                 continue;
             }
@@ -168,13 +191,15 @@ pub(super) fn project(
                 continue;
             }
             '<' if chars.get(index + 1) == Some(&'<') => {
+                heredoc_segment(&out)?;
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
                 saw_stdin_data = true;
                 removed = true;
                 continue;
             }
             '<' => {
-                index = remove_input_redirect(&chars, index, &out, separated, &mut input_source)?;
+                let site = (&input_site, separated, saw_stdin_data);
+                index = input::remove(&chars, index, &out, site, &mut input_source)?;
                 removed = true;
                 continue;
             }
@@ -208,12 +233,9 @@ pub(super) fn project(
     } else {
         command
     };
-    // `cmd < file` reads `file` and hands its bytes to `cmd` on standard
-    // input, which is what `cat file | cmd` does. Modelling it that way keeps
-    // the read under the proof `cat` already gets and leaves `cmd` an
-    // operand-free filter, the shape it actually runs in.
+    // `cmd < file` is `cat file | cmd`; see [`input`].
     let command = match &input_source {
-        Some(source) => format!("cat {source} | {command}"),
+        Some((source, at)) => input::splice(&out, command, source, *at)?,
         None => command,
     };
     let command = relative_saved_reads(command, &targets, context.cwd);
@@ -228,6 +250,13 @@ pub(super) fn project(
     // so a write that follows one still opens the file the target check
     // proved: `cp /tmp/a.ts /tmp/b.ts && cat /tmp/a.ts > src/c.ts`.
     let peer_write = chain && bounded_writes && super::super::chain_temporary::peers_only(&model);
+    // `gh api ... | base64 -d > /tmp/a.json` saves a pipeline's output the
+    // way the same redirect on one command does. See `final_pipeline_write`.
+    let pipe_write = chain
+        && bounded_writes
+        && temporary_writes
+        && !beyond_pipeline
+        && super::super::chain_temporary::final_pipeline_write(&model);
     scratch_writes &= targets.iter().all(|target| {
         crate::pretool::curl_reads::output_targets::scratch_output_target(target, context)
     });
@@ -238,7 +267,12 @@ pub(super) fn project(
     if model.confidence != "exact"
         || model.uncertainty_reason.is_some()
         || model.segments.is_empty()
-        || (chain && git_chain.is_none() && !leading_write && !init_chain && !peer_write)
+        || (chain
+            && git_chain.is_none()
+            && !leading_write
+            && !init_chain
+            && !peer_write
+            && !pipe_write)
     {
         return None;
     }
@@ -265,6 +299,7 @@ pub(super) fn project(
     };
     Some(RedirectProjection {
         command,
+        inert_sinks: !writes_file && !saw_stdin_data && input_source.is_none(),
         writes_file,
         bounded_writes,
         git_chain,
@@ -397,9 +432,16 @@ pub(super) fn join(
     // discharges that route the same way it discharges the generic review.
     let contained_fallback =
         bounded_writes && raw.reason_code == "native_workspace_containment_required";
+    // Removing an inert sink -- `2>&1`, `2>/dev/null`, `>/dev/null` -- leaves
+    // the same programs with the same arguments and opens no file, so the
+    // projection is the whole command. The raw pass beside it is evaluated
+    // without the caller's command extensions and fails closed on the redirect
+    // text the parser leaves in place, so letting it outrank the projection
+    // cost a Git step the Allow it keeps when the quiet redirect is absent.
     if raw.reason_code != "native_command_review_required"
         && raw.reason_code != "native_command_extension_evaluation_failed"
         && !contained_fallback
+        && !projection.inert_sinks
         && rank(&raw.minimum_action) > rank(&projected.minimum_action)
     {
         projected.minimum_action = raw.minimum_action;
@@ -553,54 +595,6 @@ fn remove_output_redirect(
     );
     targets.push(target);
     out.push(' ');
-    Some(index)
-}
-
-/// Remove a plain `< path` input redirect, recording the file it reads.
-///
-/// Only the first command's own redirect is modelled: once a separator,
-/// pipe, group or substitution has been seen, the redirect belongs to a
-/// later command and prefixing a reader would misplace the read. `<<`,
-/// `<<<`, `<&` and `<>` are other forms and keep the fail-closed path, as
-/// does a second redirect or a target the shell would expand.
-fn remove_input_redirect(
-    chars: &[char],
-    start: usize,
-    out: &str,
-    separated: bool,
-    input_source: &mut Option<String>,
-) -> Option<usize> {
-    if separated
-        || input_source.is_some()
-        || matches!(chars.get(start + 1), Some('&' | '>'))
-        || !trailing_word(out).is_empty()
-    {
-        return None;
-    }
-    let mut index = start + 1;
-    while matches!(chars.get(index), Some(' ' | '\t')) {
-        index += 1;
-    }
-    let target_start = index;
-    while chars
-        .get(index)
-        .is_some_and(|value| !value.is_whitespace() && !matches!(value, ';' | '|' | '&' | ')'))
-    {
-        index += 1;
-    }
-    let target: String = chars[target_start..index].iter().collect();
-    if target.is_empty()
-        || target.len() > 4096
-        || target.starts_with('-')
-        || !target
-            .chars()
-            .all(|value| value.is_ascii_alphanumeric() || "._-/+@%,=:~".contains(value))
-    {
-        return None;
-    }
-    // The guard above leaves `out` empty or ended by its own separator, so
-    // the removed redirect needs none of its own.
-    *input_source = Some(target);
     Some(index)
 }
 

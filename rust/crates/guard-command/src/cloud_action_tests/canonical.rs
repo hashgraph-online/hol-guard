@@ -128,7 +128,7 @@ fn every_error_result_blocks_and_never_permits_dispatch() {
         ),
         (|r| r["extra"] = 1.into(), "invalid_request"),
         (
-            |r| r["schema"] = "guard.cloud-action-evaluation.v2".into(),
+            |r| r["schema"] = "guard.cloud-action-evaluation.v3".into(),
             "unsupported_version",
         ),
         (

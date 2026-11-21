@@ -22,8 +22,8 @@ from codex_plugin_scanner.guard.inventory_contract import (
     serialize_inventory_snapshot,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.models import Finding, Severity
+from tests.python_oracles.evidence_hash import guard_evidence_hash
 
 
 class _Detection:

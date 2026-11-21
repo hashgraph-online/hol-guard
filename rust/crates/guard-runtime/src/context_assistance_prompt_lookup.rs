@@ -8,7 +8,10 @@ use crate::context_assistance_service::{LaneMiss, LaneWatch, PromptLane, Service
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Condvar, Mutex, OnceLock,
+};
 use std::time::{Duration, Instant};
 
 /// How long a warm-up waits for a starting worker before giving up.
@@ -16,6 +19,55 @@ const WARM_WAIT: Duration = Duration::from_secs(60);
 /// What a prompt keeps of its wait, at most, to read the matched files
 /// itself when CIGAR is starting, busy or late.
 const READ_RESERVE: Duration = Duration::from_millis(300);
+/// CIGAR is advisory work. Cap prompt threads globally so many distinct
+/// workspaces cannot consume the daemon's thread budget.
+const MAX_PROMPT_THREADS: usize = 32;
+
+struct PromptThreadBudget {
+    active: AtomicUsize,
+    limit: usize,
+}
+
+impl PromptThreadBudget {
+    const fn new(limit: usize) -> Self {
+        Self {
+            active: AtomicUsize::new(0),
+            limit,
+        }
+    }
+
+    fn try_acquire(&'static self) -> Option<PromptThreadPermit> {
+        let mut active = self.active.load(Ordering::Acquire);
+        while active < self.limit {
+            match self.active.compare_exchange_weak(
+                active,
+                active + 1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return Some(PromptThreadPermit { budget: self }),
+                Err(observed) => active = observed,
+            }
+        }
+        None
+    }
+}
+
+static PROMPT_THREADS: PromptThreadBudget = PromptThreadBudget::new(MAX_PROMPT_THREADS);
+
+pub(super) struct PromptThreadPermit {
+    budget: &'static PromptThreadBudget,
+}
+
+impl Drop for PromptThreadPermit {
+    fn drop(&mut self) {
+        self.budget.active.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+pub(super) fn try_prompt_thread() -> Option<PromptThreadPermit> {
+    PROMPT_THREADS.try_acquire()
+}
 
 /// Why CIGAR gave a prompt no answer.
 #[derive(Debug, PartialEq, Eq)]
@@ -105,22 +157,28 @@ pub(super) fn lookup(
     if let Some(flight) = flight {
         return rendered(&flight);
     }
+    // Reserve advisory capacity before waiting for CIGAR's lane. When the
+    // global budget is full, return immediately so a hook never spends its
+    // response budget waiting for work that cannot start.
+    let Some(permit) = try_prompt_thread() else {
+        return Err(Miss::Pending);
+    };
     let lane = match service.prompt_lane(guard_home, cutoff) {
         Ok(lane) => lane,
         Err(LaneMiss::Starting) => {
-            warm_when_ready(service.lane_watch(), key, request);
+            warm_when_ready(service.lane_watch(), key, request, permit);
             return Err(Miss::Starting);
         }
         Err(LaneMiss::Off) => return Ok(None),
     };
-    let flight = launch(key, prompt, lane, request).ok_or(Miss::Pending)?;
+    let flight = launch(key, prompt, lane, request, permit).ok_or(Miss::Pending)?;
     rendered(&flight)
 }
 
 /// Waits on its own thread for a worker that is still starting, then runs
 /// the prompt's lookup so the project is loaded before the next prompt. Its
 /// answer reaches no one; only a repeat of the same prompt may join it.
-fn warm_when_ready(watch: LaneWatch, key: Key, request: Request) {
+fn warm_when_ready(watch: LaneWatch, key: Key, request: Request, permit: PromptThreadPermit) {
     let Ok(mut waiting) = warming().lock() else {
         return;
     };
@@ -134,7 +192,9 @@ fn warm_when_ready(watch: LaneWatch, key: Key, request: Request) {
         .spawn(move || {
             if let Ok(lane) = watch.wait(Instant::now() + WARM_WAIT) {
                 let prompt = hashed(&request.query);
-                let _ = launch(warm_key.clone(), prompt, lane, request);
+                if let Some(flight) = launch(warm_key.clone(), prompt, lane, request, permit) {
+                    let _ = wait_for(&flight, Instant::now() + WARM_WAIT);
+                }
             }
             done_warming(&warm_key);
         });
@@ -151,7 +211,13 @@ fn done_warming(key: &Key) {
 
 /// Starts CIGAR's lookup for `request` on its own thread. `None` when
 /// another lookup for the project got there first or no thread started.
-fn launch(key: Key, prompt: u64, lane: PromptLane, request: Request) -> Option<Arc<Flight>> {
+fn launch(
+    key: Key,
+    prompt: u64,
+    lane: PromptLane,
+    request: Request,
+    permit: PromptThreadPermit,
+) -> Option<Arc<Flight>> {
     let flight = Arc::new(Flight {
         prompt,
         lane,
@@ -170,6 +236,7 @@ fn launch(key: Key, prompt: u64, lane: PromptLane, request: Request) -> Option<A
     let spawned = std::thread::Builder::new()
         .name("guard-cigar-prompt".into())
         .spawn(move || {
+            let permit = permit;
             let Request {
                 root,
                 app,
@@ -189,6 +256,7 @@ fn launch(key: Key, prompt: u64, lane: PromptLane, request: Request) -> Option<A
             if let Ok(mut done) = worker.done.lock() {
                 *done = Some(picked);
             }
+            drop(permit);
             worker.ready.notify_all();
             if let Ok(mut running) = flights().lock() {
                 if running
@@ -235,6 +303,23 @@ fn hashed(text: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
     text.hash(&mut hasher);
     hasher.finish()
+}
+
+/// Whether the prompt points at code itself: a quoted phrase, a file it
+/// names, or a name written as code (`parse_basic_str`, `IntRange`).
+pub(super) fn anchored(prompt: &str) -> bool {
+    use crate::context_assistance_prompt_files::{named, phrases};
+    !(phrases(prompt).is_empty()
+        && named(prompt).is_empty()
+        && crate::context_assistance_prompt_words::spellings(prompt).is_empty())
+}
+
+pub(super) fn truncated(text: &str, max_bytes: usize) -> String {
+    let mut end = text.len().min(max_bytes);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].to_owned()
 }
 
 #[cfg(test)]

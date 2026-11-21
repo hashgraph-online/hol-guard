@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from ...version import __version__
 from ..harness_tool_version import tool_version_from_artifacts
-from .fleet_posture_common import DIAGNOSTICS_STATE_KEY, clip, iso, keyed_digest, parse_timestamp
+from .fleet_posture_common import clip, iso, keyed_digest
 
 if TYPE_CHECKING:
     from ..config import GuardConfig
@@ -106,9 +106,11 @@ def _latest_activity(store: GuardStore, harness: str) -> str | None:
     return timestamp if isinstance(timestamp, str) else None
 
 
-def _coverage(adapter: Any) -> dict[str, object]:
+def _coverage(harness: str) -> dict[str, object]:
     try:
-        coverage = adapter.setup_contract().coverage
+        from ..native_harness_ops import setup_contract
+
+        coverage = setup_contract(harness).coverage
     except Exception:
         return {}
     return {
@@ -122,13 +124,12 @@ def _coverage(adapter: Any) -> dict[str, object]:
 
 def tool_row(
     *,
-    adapter: Any,
+    harness: str,
     diagnostics: Mapping[str, object],
     store: GuardStore,
     config: GuardConfig | None,
 ) -> dict[str, object]:
     """One AI tool's collected facts; the native build derives its protection state and shapes its row."""
-    harness = str(adapter.harness)
     override: str | None = None
     if config is not None:
         from ..harness_posture import harness_posture_override
@@ -139,7 +140,7 @@ def tool_row(
         "setupStatus": str(diagnostics.get("setup_status")),
         "hasConfigPaths": diagnostics.get("has_config_paths") is True,
         "toolVersion": diagnostics.get("tool_version"),
-        "coverage": _coverage(adapter),
+        "coverage": _coverage(harness),
         "lastActivityAt": _latest_activity(store, harness),
         "paused": _effectively_paused(config, harness),
         "configured": config is not None,
@@ -165,40 +166,40 @@ def _summarize_diagnostics(diagnostics: Mapping[str, object]) -> dict[str, objec
 class DiagnosticsCache:
     """Short-lived cache of per-tool diagnostics.
 
-    ``adapter.diagnostics`` can launch the tool's CLI to probe it, which is too slow
+    The harness diagnostics can launch the tool's CLI to probe it, which is too slow
     to repeat on every receipt sync (and again on the policy follow-up).
     """
 
     def __init__(self, store: GuardStore, *, now: datetime, ttl_seconds: int = DIAGNOSTICS_TTL_SECONDS) -> None:
         self._store = store
-        self._now = now
+        self._now = iso(now)
         self._ttl = ttl_seconds
-        raw = store.get_sync_payload(DIAGNOSTICS_STATE_KEY) if ttl_seconds > 0 else None
-        self._entries: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
-        self._dirty = False
+        self._cached = (
+            store.fleet_posture_cached_diagnostics(now=self._now, ttl_seconds=ttl_seconds) if ttl_seconds > 0 else {}
+        )
+        self._probed: dict[str, dict[str, object]] = {}
 
-    def lookup(self, adapter: Any, context: Any) -> dict[str, object] | None:
-        harness = str(adapter.harness)
-        entry = self._entries.get(harness)
-        if isinstance(entry, dict) and isinstance(entry.get("diagnostics"), dict):
-            fetched = parse_timestamp(entry.get("at"))
-            if fetched is not None and 0 <= (self._now - fetched).total_seconds() < self._ttl:
-                return entry["diagnostics"]
+    def lookup(self, harness: str, context: Any) -> dict[str, object] | None:
+        cached = self._cached.get(harness)
+        if cached is not None:
+            return cached
         try:
-            diagnostics = adapter.diagnostics(context)
+            from ..native_harness_ops import diagnostics as harness_diagnostics
+
+            diagnostics = harness_diagnostics(harness, context)
         except Exception:
             _LOGGER.debug("fleet posture: diagnostics failed for %s", harness, exc_info=True)
             return None
         summary = _summarize_diagnostics(diagnostics) if isinstance(diagnostics, Mapping) else None
         if summary is not None and self._ttl > 0:
-            self._entries[harness] = {"at": iso(self._now), "diagnostics": summary}
-            self._dirty = True
+            self._cached[harness] = summary
+            self._probed[harness] = summary
         return summary
 
     def save(self) -> None:
-        if not self._dirty:
+        if not self._probed:
             return
         try:
-            self._store.set_sync_payload(DIAGNOSTICS_STATE_KEY, self._entries, iso(self._now))
+            self._store.record_fleet_posture_diagnostics(entries=self._probed, now=self._now)
         except Exception:
             _LOGGER.debug("fleet posture: diagnostics cache could not be saved", exc_info=True)

@@ -16,8 +16,6 @@ mod agents;
 mod config_snapshot;
 #[path = "context_assistance_history_installed_tests.rs"]
 mod history;
-#[path = "context_assistance_installed_tests.rs"]
-mod installed;
 #[cfg(unix)]
 #[path = "context_assistance_persistent_installed_tests.rs"]
 mod persistent;
@@ -139,6 +137,39 @@ fn a_session_start_warm_leaves_project_context_off_when_nobody_chose_it() {
 }
 
 #[test]
+fn a_warm_for_a_compacted_session_forgets_the_code_it_was_shown() {
+    let fixture = Fixture::new();
+    let session = "warm-restarted-session";
+    crate::context_assistance_prompt::seen::shown_for_test("claude-code", session);
+    assert!(crate::context_assistance_prompt::seen::holds_for_test(
+        "claude-code",
+        session
+    ));
+    for bad in [
+        json!({"restarted_session": ""}),
+        json!({"restarted_session": "a b"}),
+        json!({"restarted_session": session, "harness": "codex"}),
+    ] {
+        assert_eq!(
+            fixture.ask_input("warm", bad)["code"],
+            "native_context_assistance_control_input_invalid"
+        );
+    }
+    assert!(crate::context_assistance_prompt::seen::holds_for_test(
+        "claude-code",
+        session
+    ));
+    let warm = fixture.ask_input("warm", json!({"restarted_session": session}));
+    assert_eq!(warm["status"], "ok");
+    // Forgotten even before the resident has a policy binding.
+    assert_eq!(warm["payload"]["warm"], "waiting");
+    assert!(!crate::context_assistance_prompt::seen::holds_for_test(
+        "claude-code",
+        session
+    ));
+}
+
+#[test]
 fn foreign_home_and_caller_supplied_runtime_authority_are_refused() {
     let fixture = Fixture::new();
     let request: Request = serde_json::from_value(
@@ -221,5 +252,33 @@ fn the_project_picker_lists_folders_through_the_resident_without_changing_anythi
     assert_eq!(
         fixture.ask_input("folders", json!({"path": "relative"}))["code"],
         "native_context_assistance_folder_not_absolute"
+    );
+}
+
+#[test]
+fn the_savings_estimate_is_read_through_the_resident_and_takes_no_input() {
+    assert!(crate::resident_protocol::capabilities()
+        .features
+        .iter()
+        .any(|feature| feature == SAVINGS_FEATURE));
+    let fixture = Fixture::new();
+    let payload = json!({"session_id": "s1", "transcript_path": "/elsewhere/r.jsonl"});
+    let files = vec!["src/lib.rs".to_owned()];
+    crate::context_assistance_savings::noted(&fixture.home, &payload, "codex", 400, files);
+    let answer = fixture.ask("savings");
+    assert_eq!(answer["status"], "ok", "{answer}");
+    assert_eq!(answer["payload"]["data"]["data_role"], true);
+    let data = &answer["payload"]["data"]["result"];
+    assert_eq!(data["schema"], "guard-cigar-savings.v1");
+    assert_eq!(data["estimate"], true);
+    assert_eq!(data["total"]["sessions"], 1);
+    assert_eq!(data["total"]["context_tokens"], 100);
+    // A record Guard may not read gives no estimate.
+    assert_eq!(data["total"]["estimated_saved_tokens"], 0);
+    assert_eq!(data["apps"][0]["app"], "codex");
+    let refused = fixture.ask_input("savings", json!({"path": "/"}));
+    assert_eq!(
+        refused["code"],
+        "native_context_assistance_control_input_invalid"
     );
 }

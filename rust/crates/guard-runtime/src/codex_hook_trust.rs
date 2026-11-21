@@ -85,6 +85,15 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     Ok(answer.to_string().into_bytes())
 }
 
+/// One trust request already in hand, for a caller inside the runtime.
+pub(crate) fn answer_value(request: Value) -> Result<Value, String> {
+    let request: Request = serde_json::from_value(request).map_err(|_| invalid())?;
+    if request.schema != SCHEMA {
+        return Err(invalid());
+    }
+    answer(&request)
+}
+
 fn invalid() -> String {
     "codex_hook_trust_request_invalid".to_owned()
 }
@@ -380,6 +389,10 @@ fn remap(request: &Request, prefixes: &[&str]) -> Option<Vec<Value>> {
     }
     let (was, was_guard) = coordinates(request, &request.before_events);
     let (now, now_guard) = coordinates(request, &request.events);
+    let was_handlers: BTreeSet<String> = handlers(&request.before_events)
+        .into_iter()
+        .map(|found| found.coordinate)
+        .collect();
     let mut kept: Vec<(String, Option<&str>)> = Vec::new();
     let mut moves: Vec<(String, Option<&str>)> = Vec::new();
     for (key, entry) in &request.state {
@@ -390,7 +403,16 @@ fn remap(request: &Request, prefixes: &[&str]) -> Option<Vec<Value>> {
         });
         let digest = found.and_then(|(_, coordinate)| was.get(coordinate));
         let (Some((prefix, coordinate)), Some(digest)) = (found, digest) else {
-            kept.push((key.clone(), Some(key.as_str())));
+            // An entry no handler owned before this install speaks for nobody.
+            // Left where it is, a Guard handler appended into its slot would
+            // inherit a dead handler's `enabled = false` and stale trust, and
+            // Codex would skip Guard with nothing on screen saying so.
+            let orphaned = found.is_some_and(|(_, coordinate)| {
+                !was_handlers.contains(coordinate) && now_guard.contains_key(coordinate)
+            });
+            if !orphaned {
+                kept.push((key.clone(), Some(key.as_str())));
+            }
             continue;
         };
         if now.get(coordinate) == Some(digest) {

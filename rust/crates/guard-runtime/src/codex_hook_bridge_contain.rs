@@ -69,7 +69,10 @@ pub(super) fn settle(
     let (settled, unmap) = match contain(config, prepared, &response, deadline) {
         Contained::Unchanged => (response, mapped),
         Contained::Hint => (with_update_hint(response), mapped),
-        Contained::Routed(routed, unmap) => (routed, unmap),
+        Contained::Routed(routed, unmap) => {
+            admit_contained(config, prepared);
+            (routed, unmap)
+        }
     };
     let PyVal::Dict(entries) = &settled else {
         return Route::Respond(fail_closed(&prepared.event_name));
@@ -85,6 +88,30 @@ pub(super) fn settle(
         Some(pending) => Route::AwaitApproval(pending, rendered),
         None => Route::Respond(rendered),
     }
+}
+
+/// Running the call contained is how this answer settles the floor that held
+/// it, so the call's `PostToolUse` must not hold its output for that same
+/// floor again (`native_admitted_call`). Oh My Pi proves the same through its
+/// verified sink delivery; Codex has no such delivery, so the call id stands
+/// in. Secret, network and risk floors on the output still apply.
+fn admit_contained(config: &BridgeConfig, prepared: &Prepared) {
+    let Some(guard_home) = guard_home(&config.state_path) else {
+        return;
+    };
+    // The same parser routing used: a lone surrogate in an unrelated field
+    // must not leave a routed call without its witness. The witness keys on
+    // the call id and tool name only.
+    let Ok(payload) = pyjson::parse_mapping_lone_surrogates(&prepared.data) else {
+        return;
+    };
+    let mut identity = serde_json::Map::new();
+    for field in ["tool_use_id", "tool_name"] {
+        if let Some(value) = text(&payload.value, field) {
+            identity.insert(field.to_owned(), serde_json::Value::from(value));
+        }
+    }
+    crate::native_admitted_call::record_for_hook(&guard_home, "codex", &identity);
 }
 
 fn text<'a>(value: &'a PyVal, name: &str) -> Option<&'a str> {
@@ -144,8 +171,12 @@ fn contain(
         let profile = text(response, "required_execution_profile");
         match sandbox::launching_turn(&payload.value) {
             sandbox::Turn::Unknown => {}
-            turn if turn.confines(profile) => return sandbox::checked(original, &payload, profile),
-            _ => return Contained::Unchanged,
+            turn => {
+                return match turn.check_profile(profile) {
+                    Some(check) => sandbox::checked(original, &payload, Some(check)),
+                    None => Contained::Unchanged,
+                }
+            }
         }
     }
     let target = Target {

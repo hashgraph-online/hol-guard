@@ -35,6 +35,7 @@ from .runtime.extension_control_authority import (
 from .runtime.extension_control_contract import ControlLayerKind
 from .store_custom_extension_continuity import CustomExtensionContinuityMutation, mutation_wire
 from .store_local_cli_schema import ensure_local_cli_schema
+from .store_policy_activation_noop import activation_changes_enforcement
 from .store_policy_activation_preflight import (
     continuity_activation_rejection,
     encoded_policy_activation_payloads,
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 # ruff: noqa: F403,F405
+from .artifact_identity import scoped_policy_artifact_key
 from .native_approval_proof import approval_reuse_claim_disposition as native_claim_disposition
 from .native_execution import _resident_request
 from .native_memory_pattern import memory_pattern_verdict
@@ -292,7 +294,8 @@ class StorePolicyMixin:
             return
         if not isinstance(next_control_state, dict):
             raise RuntimeError("Guard policy integrity control state is invalid.")
-        self._finalize_policy_integrity_control_state(next_control_state)
+        if self._finalize_policy_integrity_control_state(next_control_state) is False:
+            raise RuntimeError("Guard policy integrity control state could not be finalized.")
 
     def apply_policy_bundle_authority(self, *args: Any, **kwargs: Any) -> dict[str, object] | None:
         """Activate one authenticated policy bundle atomically.
@@ -397,7 +400,6 @@ class StorePolicyMixin:
 
         with self._extension_control_authority_lock(), self._connect() as connection:
             require_current(self, _key(cast("GuardStore", self)), activation_digest)
-            self._invalidate_native_extension_control_policy()
             managed_base_authority = self._read_extension_control_authority_locked(
                 registry.catalog_digest,
             )
@@ -596,6 +598,19 @@ class StorePolicyMixin:
                     raise
                 except (json.JSONDecodeError, TypeError, ValueError):
                     return reject("managed_controls_delivery_ack_invalid", connection)
+            # Cloud re-signs the bundle it serves on every sync. Re-writing the
+            # enforcement already in force leaves the native fence open, so
+            # readers do not republish an identical policy every sync. Managed
+            # controls and continuity mutations always close it.
+            closes_fence = (
+                managed_controls_policy is not None
+                or managed_controls_publish is not None
+                or managed_controls_delivery is not None
+                or custom_extension_continuity is not None
+                or active_row is not None
+                or revision_row is not None
+                or activation_changes_enforcement(connection, payloads=encoded_payloads, rows=rows)
+            )
             connection.rollback()
             if managed_controls_delivery is None:
                 # Only a managed delivery decides from these two.
@@ -636,6 +651,10 @@ class StorePolicyMixin:
                 if reply.get("applied") is not True:
                     raise _PolicyActivationNotAppliedError
 
+            if closes_fence:
+                # Close readiness only once the activation is about to write.
+                # Verdict retries and rejections above change nothing durable.
+                self._invalidate_native_extension_control_policy()
             try:
                 if managed_controls_publish is None:
                     commit()
@@ -1361,7 +1380,7 @@ class StorePolicyMixin:
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:
         if decision.scope in {"harness", "global"}:
-            artifact_id = _artifact_family_key(decision.artifact_id)
+            artifact_id = scoped_policy_artifact_key(decision.artifact_id, allowed_families=_SCOPED_HARNESS_FAMILIES)
         else:
             artifact_id = decision.artifact_id if decision.scope in {"artifact", "workspace"} else None
         artifact_hash = (

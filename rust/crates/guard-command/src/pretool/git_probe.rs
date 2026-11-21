@@ -15,6 +15,28 @@ pub(super) use repository::{bisect_log_inert, repository_inert};
 /// caller's overall deadline still caps it and an expired probe still reviews.
 pub(super) const PROBE_BUDGET: Duration = Duration::from_secs(5);
 
+/// Time a probe leaves on the hook's deadline. The extension check runs after
+/// the probes on the same deadline, so a probe that took all of it turned a
+/// slow `git status` into a timed-out check instead of an unanswered probe,
+/// and only the second one can be contained.
+pub(super) const HOOK_RESERVE: Duration = Duration::from_millis(200);
+
+/// When a probe started now has to stop: within its own budget, and early
+/// enough that the work after it still fits inside the caller's deadline.
+pub(super) fn probe_deadline(deadline: Option<Instant>) -> Instant {
+    let budget = Instant::now() + PROBE_BUDGET;
+    deadline.map_or(budget, |limit| {
+        budget.min(limit.checked_sub(HOOK_RESERVE).unwrap_or(limit))
+    })
+}
+
+/// Whether a probe started now would already be past its stopping point, so
+/// a proof that needed one gave up for want of time rather than on what it
+/// found. Without a caller deadline there is always time.
+pub(super) fn probe_budget_spent(deadline: Option<Instant>) -> bool {
+    deadline.is_some_and(|limit| probe_deadline(Some(limit)) <= Instant::now())
+}
+
 /// Index and path listings stay bounded, but large enough for repositories
 /// with a few hundred thousand tracked files.
 pub(super) const LISTING_LIMIT: u64 = 16 * 1024 * 1024;
@@ -298,8 +320,19 @@ pub(super) fn copy_command(base: &Command) -> Option<Command> {
 
 #[cfg(test)]
 mod tests {
-    use super::{memoized, with_memo};
+    use super::{memoized, probe_budget_spent, with_memo, HOOK_RESERVE};
     use std::cell::Cell;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn the_probe_budget_is_spent_once_only_the_hook_reserve_is_left() {
+        assert!(!probe_budget_spent(None));
+        assert!(!probe_budget_spent(Some(
+            Instant::now() + Duration::from_secs(30)
+        )));
+        assert!(probe_budget_spent(Some(Instant::now() + HOOK_RESERVE / 2)));
+        assert!(probe_budget_spent(Some(Instant::now())));
+    }
 
     fn key(argument: &str) -> super::MemoKey {
         (

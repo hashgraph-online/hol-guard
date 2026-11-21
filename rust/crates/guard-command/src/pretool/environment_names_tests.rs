@@ -13,54 +13,51 @@ fn proven(command: &str) -> bool {
 }
 
 #[test]
-fn a_dump_piped_into_a_name_filter_is_proven() {
+fn an_awk_listing_of_environment_names_is_proven() {
     for command in [
-        "printenv | grep -oE '^(ALPHAHOST|BETAHOST)[A-Z_]*'",
-        "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort",
-        "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -u | head -40",
+        "awk 'BEGIN { for (name in ENVIRON) print name }'",
+        "awk 'BEGIN{for(k in ENVIRON)print k}' | sort",
+        "awk 'BEGIN { for (k in ENVIRON) print k }' | sort -u | head -40",
     ] {
         assert!(proven(command), "{command}");
     }
 }
 
+/// A dump of the environment renders every value before any filter sees it,
+/// and a value with a newline in it reaches the filter as a line of its own,
+/// so no filter over it is proven.
 #[test]
-fn anything_that_could_render_a_value_is_refused() {
+fn a_dump_piped_into_any_filter_is_refused() {
     for command in [
         "printenv",
+        "printenv | grep -oE '^(PATH|HOME)[A-Z_]*'",
+        "printenv | grep -oE '^AKIA[A-Z0-9_]*'",
+        "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -u | head -40",
         "printenv | cut -d= -f1",
         "printenv | awk -F= '{print $1}'",
-        "printenv | sort | head",
-        "printenv | grep x",
-        "printenv | grep -oE '^ALPHA|[A-Za-z0-9_]+'",
-        "printenv PATH | grep -oE '^ALPHA[A-Z_]*'",
-        "printenv ; grep -oE '^ALPHA[A-Z_]*'",
-        "printenv | grep -oE '^ALPHA[A-Z_]*' > names.txt",
-        "printenv | grep -oE '^ALPHA[A-Z_]*' | xargs -n1 printenv",
-        "printenv | grep -oE '^ALPHA[A-Z_]*' | sh",
-        "printenv | grep -oE '^ALPHA[A-Z_]*' | cat secrets.txt",
-        "printenv | grep -oE '^ALPHA[A-Z_]*' | sort -o /tmp/names",
-        "printenv | tee all.txt | grep -oE '^ALPHA[A-Z_]*'",
-        "SECRET=1 printenv | grep -oE '^ALPHA[A-Z_]*'",
+        "printenv | awk 'BEGIN { for (k in ENVIRON) print k }'",
+        "env | grep -oE '^(PATH|HOME)[A-Z_]*'",
     ] {
         assert!(!proven(command), "{command}");
     }
 }
 
-/// The basename of a path is not the program the shell runs. `/tmp/sort`
-/// carries the name of a stage this proof trusts while running whatever the
-/// agent put there, so the qualified name refuses the pipeline.
 #[test]
-fn a_path_qualified_stage_is_refused() {
-    assert!(!proven("printenv | /tmp/grep -oE '^ALPHAHOST[A-Z_]*'"));
-    assert!(!proven(
-        "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | /tmp/sort -u"
-    ));
-}
-
-/// A bare `env` is a command prefix, so the parser cannot say with certainty
-/// what it runs and the model arrives `uncertain`. The pipeline keeps its
-/// review rather than resting a proof on a model that is not exact.
-#[test]
-fn a_bare_env_prefix_is_left_to_review() {
-    assert!(!proven("env | grep -oE '^ALPHAHOST[A-Z_]*'"));
+fn anything_that_could_render_a_value_or_reach_further_is_refused() {
+    for command in [
+        "awk 'BEGIN { for (k in ENVIRON) print k, ENVIRON[k] }'",
+        "awk 'BEGIN { for (k in ENVIRON) print ENVIRON[k] }'",
+        "awk 'BEGIN { for (k in ENVIRON) print k }' > names.txt",
+        "awk 'BEGIN { for (k in ENVIRON) print k }' | sort -o /tmp/names",
+        "awk 'BEGIN { for (k in ENVIRON) print k }' | xargs -n1 printenv",
+        "awk 'BEGIN { for (k in ENVIRON) print k }' | sh",
+        "awk 'BEGIN { for (k in ENVIRON) print k }' | cat secrets.txt",
+        "awk 'BEGIN { for (k in ENVIRON) print k }' ; printenv",
+        "awk -f names.awk",
+        "SECRET=1 awk 'BEGIN { for (k in ENVIRON) print k }'",
+        "/tmp/awk 'BEGIN { for (k in ENVIRON) print k }'",
+        "awk 'BEGIN { for (k in ENVIRON) print k }' | /tmp/sort -u",
+    ] {
+        assert!(!proven(command), "{command}");
+    }
 }

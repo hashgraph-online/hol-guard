@@ -222,8 +222,9 @@ fn proven(
         .flat_map(|observation| observation.matcher_evidence.iter())
         .map(|evidence| evidence.segment_index)
         .collect();
-    let route = route::route(model, context)?;
-    let model = route.model(model);
+    let identified = route::without_identity(model);
+    let route = route::route(identified.as_ref().unwrap_or(model), context)?;
+    let model = route.model(identified.as_ref().unwrap_or(model));
     let shell = context;
     let context = super::PathContext {
         cwd: route.cwd().or(context.cwd),
@@ -460,9 +461,14 @@ pub(in crate::pretool) fn configured_read(
 /// words after `git`; the steps `git_init_chain` runs in a new repository.
 pub(in crate::pretool) fn index_or_commit(words: &[&str]) -> bool {
     match words.split_first() {
-        Some((&"add", rest)) => forms::add(rest),
-        Some((&"commit", rest)) => forms::commit_form(rest) == Some(false),
-        _ => false,
+        Some((first, rest)) => {
+            match crate::command_compatibility::canonical_git_subcommand(first) {
+                "add" => forms::add(rest),
+                "commit" => forms::commit_form(rest) == Some(false),
+                _ => false,
+            }
+        }
+        None => false,
     }
 }
 

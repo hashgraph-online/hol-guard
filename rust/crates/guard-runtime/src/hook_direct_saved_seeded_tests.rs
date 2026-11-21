@@ -18,7 +18,7 @@ pub(super) fn answer_in(
         &connection,
         "claude-code",
         &artifact_id,
-        &token,
+        Some(&token),
         action,
         "approval-gate",
     );

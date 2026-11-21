@@ -14,7 +14,7 @@
 /// this scan carries says nothing about where its stages are, so an item that
 /// ends inside a quoted run is reported as no stages at all and keeps its
 /// review.
-pub(super) fn pipeline_stages(item: &str) -> Option<Vec<&str>> {
+pub(in crate::pretool) fn pipeline_stages(item: &str) -> Option<Vec<&str>> {
     let chars: Vec<char> = item.chars().collect();
     let offsets: Vec<usize> = item.char_indices().map(|(offset, _)| offset).collect();
     let mut stages = Vec::new();

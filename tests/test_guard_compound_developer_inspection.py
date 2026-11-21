@@ -122,7 +122,9 @@ def test_compound_inspection_accepts_safe_stderr_suppression(live_hook_root: Pat
     assert_leading_cd_inspection_allowed(_artifact(command, home=home))
 
 
-@pytest.mark.parametrize("redirect", ("2>report.txt", "> report.txt", "< input.txt"))
+# Reading a project file into stdin is the read `cat input.txt` gets, so a
+# redirect from an environment file is the input case that keeps review.
+@pytest.mark.parametrize("redirect", ("2>report.txt", "> report.txt", "< .env"))
 def test_compound_inspection_keeps_file_redirection_guarded(live_hook_root: Path, redirect: str) -> None:
     home = live_hook_root / "home"
     workspace = home / "projects" / "workspace"

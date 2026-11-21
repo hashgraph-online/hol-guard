@@ -118,7 +118,7 @@ def add_approval_parser(
     open_parser.add_argument(
         "--no-open",
         action="store_true",
-        help="Print the request's approval URL without opening it",
+        help="Print the request's links without opening them, including a short signed link for this request",
     )
     add_common_args(open_parser)
     open_parser.add_argument("--json", action="store_true")

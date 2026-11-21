@@ -44,7 +44,8 @@ export function contextDiagnostics(status: ContextAssistanceStatus, data: Contex
     qualification: status.qualification, diagnostic: code(status.diagnostic), restriction: code(status.restriction), status_observation: "last_successful_refresh",
     verification_permitted: status.verification_permitted, generation: status.generation,
     job: status.job ? { operation: status.job.operation, phase: status.job.phase } : null,
-    runtime: runtime ? { python_version: runtime.interpreter.version, python_implementation: runtime.interpreter.implementation,
+    runtime: runtime ? { engine_schema: runtime.interpreter.schema, python_version: runtime.interpreter.schema === "guard-cigar-builtin.v1" ? null : runtime.interpreter.version,
+      python_implementation: runtime.interpreter.implementation,
       sdk_version: runtime.package_version, protocol: runtime.protocol, worker_fingerprint: runtime.worker_fingerprint,
       package_fingerprint: runtime.package_fingerprint, compile_verified: runtime.compile_verified,
       persistence_compile_verified: runtime.persistence_compile_verified ?? false, active: runtime.active } : null,
@@ -176,7 +177,7 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
       <section className="space-y-3" aria-labelledby="cigar-data-fix">
         <h3 id="cigar-data-fix" className={versionHeading}>Fix a problem</h3>
         <ul className={versionList}>
-          <Row title="Start CIGAR fresh" body={!ready ? "If CIGAR seems stuck, turn it off to free everything it holds. Starting fresh needs Python 3.14, which Settings can set up." : "Ends current access and starts CIGAR again. Add your projects again afterward."}
+          <Row title="Start CIGAR fresh" body={!ready ? "If CIGAR seems stuck, turn it off to free everything it holds, then turn it on again." : "Ends current access and starts CIGAR again. Add your projects again afterward."}
             action={<button className={versionButton} type="button" disabled={busy || disabled || !status?.verification_permitted || !status?.preferences.runtime_id || Boolean(status.job)} onClick={() => setConfirm("recheck")}>Start fresh</button>} />
           <Row title="Change setup" body="Choose what CIGAR may read and how long it keeps things."
             action={<a className={versionButton} href={guardAwareHref("/cigar?section=runtime")}>Open Settings</a>} />

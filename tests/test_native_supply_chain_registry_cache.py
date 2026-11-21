@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_package_review_plan as package_review
 from codex_plugin_scanner.guard import native_supply_chain_archive as archive_module
 from codex_plugin_scanner.guard import native_supply_chain_egress as egress
 from codex_plugin_scanner.guard import native_supply_chain_registry_cache as registry_cache
-from codex_plugin_scanner.guard.hook_review import hook_native_package_review as package_review
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.native_supply_chain_registry_cache import (
     SETTLE_SECONDS,
@@ -225,18 +225,18 @@ def test_separate_reviews_download_a_registry_document_once(monkeypatch: pytest.
 
 def test_a_review_still_downloading_stops_quietly_for_a_retry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     deadlines: list[float | None] = []
+    retry = {"decision": "deny", "reason": "Run the same command again.", "prompted": False}
 
     def evaluate(*_args: object, **_kwargs: object) -> object:
         deadlines.append(registry_cache._WAIT_DEADLINE.get())
         raise RegistryDeadlineError
 
-    monkeypatch.setattr(package_review, "package_review_plan", lambda *_args, **_kwargs: (object(), True))
-    monkeypatch.setattr(package_review, "_evaluate", evaluate)
     monkeypatch.setattr(
         package_review,
-        "render_pre_tool",
-        lambda _harness, verdict, **_kwargs: dict(verdict),
+        "package_review_plan",
+        lambda *_args, **_kwargs: package_review.PackageReviewPlan(object(), True, tmp_path, True, retry),
     )
+    monkeypatch.setattr(package_review, "_evaluate", evaluate)
 
     response = package_review.native_package_review_response(
         object(),
@@ -246,11 +246,8 @@ def test_a_review_still_downloading_stops_quietly_for_a_retry(monkeypatch: pytes
         workspace=tmp_path,
         guard_home=tmp_path / "guard",
         deadline=123.0,
-    )
+    ).response
 
     assert deadlines == [123.0]
-    assert response is not None
-    assert response["decision"] == "deny"
-    assert response["reason"] == package_review.REGISTRY_STILL_LOADING_REASON
-    assert response["prompted"] is False
+    assert response is retry
     assert registry_cache._WAIT_DEADLINE.get() is None

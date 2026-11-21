@@ -410,3 +410,34 @@ assert instance.__exit__(None, None, None) is False\n\n\ndef test_other():\n    
     );
     assert!(!text.contains("test_other"), "{text}");
 }
+
+/// Three apostrophes inside a one-line string are text, not a docstring, so
+/// the function the prompt names after them is still on the map. Read as a
+/// docstring that never closed, they hid every definition below them, and
+/// the note for "`parse_basic_str` seems busted" showed other code.
+#[test]
+fn a_docstring_mark_inside_a_string_does_not_hide_later_definitions() {
+    let parser = "def parse_multiline_str(src, literal):
+    if literal:
+        end = skip_until(src, \"'''\")
+    else:
+        end = parse_basic_str(src)
+    return end
+
+
+def parse_basic_str(src):
+    return src.strip('\"')
+";
+    let text = map(
+        &super::tests::files(&[("src/_parser.py", parser)]),
+        &super::tests::looking_for(&[("parsebasicstr", true, 1)]),
+        &Asked::default(),
+        super::tests::later(),
+    )
+    .map(|rendered| rendered.text)
+    .unwrap_or_default();
+    assert!(
+        text.contains("def parse_basic_str(src):\n    return src.strip('\"')"),
+        "{text}"
+    );
+}

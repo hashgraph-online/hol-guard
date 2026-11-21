@@ -92,6 +92,9 @@ pub(crate) use policy_store_validation::read_verifier_key;
 use policy_store_validation::validate_private_directory;
 
 #[cfg(test)]
+#[path = "policy_store_cigar_replay_tests.rs"]
+mod cigar_replay_tests;
+#[cfg(test)]
 #[path = "policy_store_scope_tests.rs"]
 mod scope_tests;
 #[cfg(test)]
@@ -202,6 +205,7 @@ struct LoadedAuthority {
 
 pub(crate) struct PolicySnapshotStore {
     context_assistance: crate::context_assistance_service::Service,
+    swarm: crate::swarm_op::ResidentSwarm,
     state_base: PathBuf,
     authority_path: PathBuf,
     expected_runtime_identity: String,
@@ -315,6 +319,7 @@ impl PolicySnapshotStore {
         }
         Ok(Self {
             context_assistance,
+            swarm: crate::swarm_op::ResidentSwarm::default(),
             state_base: state_base.to_owned(),
             authority_path,
             expected_runtime_identity: runtime_identity.to_owned(),

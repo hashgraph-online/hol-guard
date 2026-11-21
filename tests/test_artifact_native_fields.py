@@ -6,7 +6,6 @@ from collections.abc import Callable
 
 import pytest
 
-from codex_plugin_scanner.guard.aibom_detection import _artifact_wire
 from codex_plugin_scanner.guard.artifact_native_fields import artifact_native_fields
 from codex_plugin_scanner.guard.artifact_native_fields import artifact_native_fields as _artifact_fields
 from codex_plugin_scanner.guard.models import GuardArtifact
@@ -15,8 +14,8 @@ from codex_plugin_scanner.guard.native_artifact_content_hash import artifact_con
 
 @pytest.mark.parametrize(
     "builder",
-    [artifact_native_fields, _artifact_wire, artifact_content_hash_fields, _artifact_fields],
-    ids=["shared", "discovery", "content-hash", "sensitive-read"],
+    [artifact_native_fields, artifact_content_hash_fields, _artifact_fields],
+    ids=["shared", "content-hash", "sensitive-read"],
 )
 def test_native_fields_preserve_raw_values_and_exclude_private_metadata(
     builder: Callable[[GuardArtifact], dict[str, object]],

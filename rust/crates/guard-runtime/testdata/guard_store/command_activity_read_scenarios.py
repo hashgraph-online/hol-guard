@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+from bundled_harness_names import prime
+
 from codex_plugin_scanner.guard.runtime.command_activity_api_contract import (
     CommandActivityAnalyticsQuery,
     CommandActivityFeedbackLabel,
     CommandActivityListQuery,
 )
 
+prime()
 UTC = timezone.utc
 ACTIVITY_INSERT = (
     "insert into command_activity (activity_id, occurred_at, harness, hook_phase, execution_status, "

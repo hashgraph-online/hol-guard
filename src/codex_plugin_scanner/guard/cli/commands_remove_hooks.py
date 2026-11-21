@@ -16,8 +16,8 @@ from .commands_lifecycle_gate import LifecycleGateRequirement, lifecycle_authori
 from .commands_parser_hooks import configure_guard_hooks_parser as configure_guard_hooks_parser
 
 if TYPE_CHECKING:
-    from ..adapters.base import HarnessContext
     from ..config import GuardConfig
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 HOOKS_REMOVE_ACTION = "hooks.remove"

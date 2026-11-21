@@ -1,5 +1,39 @@
 # Repository guidance for agents
 
+## Public GitHub surface security
+
+This repository is public. Treat every pull-request title, description, comment, review reply,
+workflow note, and linked artifact as an externally visible security boundary.
+
+- Before creating or editing any public PR text or comment, inspect the complete outgoing content,
+  including Markdown links, URLs, code blocks, quoted logs, generated summaries, and bot prompts.
+- Never publish private or identifying details. This includes private hostnames, IP addresses,
+  machine names, SSH or VPN routes, Tailscale identities, usernames, home-directory paths, local
+  checkout paths, browser-session or approval-center state, credentials, keys, tokens, request IDs,
+  internal environment names, deployment topology, or details that reveal how to reach private
+  systems. Use generic terms such as “live-agent validation was unavailable” when a limitation must
+  be recorded.
+- Describe only the target-repository change and reproducible public validation. Do not paste agent
+  transcripts, shell history, private issue context, internal handoff notes, or cross-repository
+  details into GitHub.
+- Before every public mutation, run a focused scan over the exact outgoing text for local paths,
+  home directories, IP or hostname patterns, SSH/Tailscale/VPN terms, secret or credential names,
+  and internal infrastructure keywords. Rewrite matches before publishing.
+- If a disclosure is found, remove the affected comment or review reply and sanitize the current PR
+  body. Inspect the PR's edit history and use GitHub's revision-deletion control for every affected
+  revision. Editing the current body alone does not remove an older public revision.
+- After cleanup, re-read the public PR body, comments, review threads, and retained edit history.
+  Report any inaccessible revision or uneditable comment instead of claiming complete removal.
+- Never use a public cleanup reply to repeat the sensitive detail. Keep the cleanup itself generic.
+
+### Synthetic names in fixtures, tests and public text
+
+Test fixtures, Gauntlet cases, unit tests, commit messages and pull-request text must invent their
+own names. Never copy a directory layout, route path, repository name, product name or host name
+out of a private checkout, an approval record or a local session, even when it only illustrates a
+point. Use plainly synthetic names such as `app/items/[slug]`, `app/(group)/overview` or
+`example-org/storefront-portal`, which say nothing about a real project.
+
 ## Command extension contributions
 
 Coding agents author most command extension pull requests. Fixture tests prove matcher behavior, but
@@ -28,6 +62,14 @@ After the extension ships in a release, follow
 [Test with an installed Guard](docs/guard/extensions/contributing.md#test-with-an-installed-guard)
 to turn it on and run its destructive and safe cases through the agent. Use only disposable
 targets for the destructive case and never point it at real data or shared infrastructure.
+
+## Cloud action pack contributions
+
+Packs in `contributions/cloud-actions/` follow
+[Contribute a cloud action pack](docs/guard/extensions/cloud-action-pack-contributing.md). Draft with
+`hol-guard extensions generate --cloud`, check with `hol-guard extensions validate --cloud` and
+`hol-guard command explain --cloud`, and fill in the **Cloud action pack** pull-request template. Leave
+`provider.publisher.verified` as `false`, and use synthetic identifiers in every fixture.
 
 ## Repository review guidance
 

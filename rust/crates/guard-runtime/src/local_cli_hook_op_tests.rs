@@ -605,7 +605,8 @@ fn an_unset_review_names_the_connector_to_set_up() {
     }
     // A grant recorded for an older identity is not a decision for this one.
     fixture.grant(&identity.cli_id, &"0".repeat(64), "allowed");
-    assert!(run_with_connector(&request).unwrap().1.is_some());
+    let changed = run_with_connector(&request).unwrap().1.unwrap();
+    assert_eq!(changed["allowed_earlier_version"], true);
 }
 
 #[test]
@@ -621,3 +622,7 @@ fn a_decided_connector_is_never_sent_back_to_setup() {
 
 #[path = "local_cli_hook_op_grant_lift_tests.rs"]
 mod grant_lift;
+
+#[cfg(unix)]
+#[path = "local_cli_hook_op_compound_tests.rs"]
+mod compound;

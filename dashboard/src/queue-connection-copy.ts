@@ -7,6 +7,10 @@ export const QUEUE_SESSION_ERROR_DETAIL =
   "Guard is still running on this device. This browser is not signed in to the local dashboard.";
 export const QUEUE_SESSION_ERROR_INSTRUCTION =
   "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
+export const QUEUE_DESKTOP_HANDOFF_HEADLINE = "Opened this request in HOL Guard Desktop";
+export const QUEUE_DESKTOP_HANDOFF_DETAIL =
+  "Approve it or keep it blocked in HOL Guard Desktop. This browser tab is not signed in to the local dashboard, so it cannot decide the request.";
+export const QUEUE_DESKTOP_HANDOFF_INSTRUCTION = "If HOL Guard Desktop did not open, open the request again below.";
 export const QUEUE_SESSION_COMMAND_INSTRUCTION =
   "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
 

@@ -6,6 +6,7 @@ import functools
 import os
 import secrets
 import shlex
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -250,14 +251,48 @@ def configure_each_extension_controls(
     every extension's controls go into the single layer this commits, and
     each extension reports the revision that layer landed at.
     """
+    password = _authorize_extension_controls(daemon, guard_home)
+    return _commit_each_extension(daemon, password, enabled_permissions)
+
+
+def _commit_each_extension(daemon: Any, password: str, enabled_permissions: dict[str, list[str]]) -> dict[str, int]:
+    """Commit every extension with its permissions allowed, in one layer."""
     from ci.native_runtime.probe_installed_native_extensions import commit_controls
 
-    password = _authorize_extension_controls(daemon, guard_home)
     controls: list[Any] = []
     for extension_id, permissions in enabled_permissions.items():
         controls += _extension_controls(extension_id, tuple((permission, True) for permission in permissions))
     revision = commit_controls(daemon._server.extension_control_api, password, tuple(controls))
     return {extension_id: revision for extension_id in enabled_permissions}
+
+
+def configure_each_extension_with_declared_permissions(
+    daemon: Any, guard_home: Path, extension_ids: list[str], declared: Callable[[Any, str], list[str]]
+) -> tuple[dict[str, list[str]], dict[str, int]]:
+    """Enable several extensions, then allow every permission each one declares.
+
+    An optional extension's permissions join the daemon's active catalog only
+    once the extension is enabled, so the packaged built-in catalog cannot
+    name them. Enable the optional extensions first, read each extension's
+    permissions from the live catalog through ``declared``, then commit the
+    whole set in one layer. The final layer carries the enables as well, so
+    replacing the first one drops nothing.
+    """
+    from ci.native_runtime.probe_installed_native_extensions import commit_controls
+
+    password = _authorize_extension_controls(daemon, guard_home)
+    required = _required_extension_ids()
+    enables = [
+        control
+        for extension_id in extension_ids
+        if extension_id not in required
+        for control in _extension_controls(extension_id, ())
+    ]
+    if enables:
+        commit_controls(daemon._server.extension_control_api, password, tuple(enables))
+    registry = daemon._server.extension_control_api._registry
+    permissions = {extension_id: declared(registry, extension_id) for extension_id in extension_ids}
+    return permissions, _commit_each_extension(daemon, password, permissions)
 
 
 def configure_extension_permission_denial(daemon: Any, guard_home: Path, adapter: ExtensionAdapter) -> dict[str, Any]:

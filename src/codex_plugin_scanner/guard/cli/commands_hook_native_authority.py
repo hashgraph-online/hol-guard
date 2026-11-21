@@ -11,21 +11,21 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any, TextIO
 
-from ..adapters.base import HarnessContext
-from ..adapters.bounded_cli_hook_failure import failure_payload
-from ..adapters.hermes_runtime_hooks import hermes_bridge_response
+from ..harness_context import HarnessContext
 from ..hook_deadline import RuntimeHookDeadline
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
+from ..hook_failure_bridge import RUNTIME_MISSING, native_hook_failure, native_stderr_hook_failure
 from ..hook_review.hook_availability_policy import (
     availability_harness_response,
+    canonical_hook_event_name,
     hook_event_pauses_when_unavailable,
 )
 from ..hook_review.hook_fail_closed import fail_closed_response
-from ..hook_review.hook_request_parsing import runtime_hook_event_name
 from ..hook_review.hook_worker import HookWorker
-from ..hook_review.hook_worker_structured import withhold_structured_destination, withholds_structured_destination
-from ..native_hook_evidence_writer import NativeHookEvidenceWriter
+from ..hook_review.hook_worker_unavailable import withhold_structured_destination, withholds_structured_destination
 from ..native_hook_render import native_cli_hook_emit
+from ..native_payload_facts import native_hook_event
+from ..resident_evidence_client import ResidentEvidenceClient
 from ..runtime_health.diagnostics import DaemonDiagnostics
 from ..store import GuardStore
 from .commands_support_runtime_resolution import _canonical_harness_name
@@ -40,6 +40,7 @@ _BRIDGE_RENDERED_HARNESSES = frozenset(
     {"cline", "copilot", "devin", "grok", "hermes", "kimi", "muse", "openclaw", "zcode"}
 )
 _RENDER_FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+_BRIDGE_BLOCK_REASON = "HOL Guard blocked this action."
 # What writing a finished answer is allowed to take when the review itself has
 # already used the hook's whole budget.
 _DELIVERY_BUDGET_SECONDS = 1.0
@@ -60,6 +61,15 @@ def _delivery_deadline(deadline: float | None) -> float | None:
     return max(deadline, time.monotonic() + _DELIVERY_BUDGET_SECONDS)
 
 
+def _failure_output(harness: str, event_name: str, reason: str) -> tuple[str, str, int]:
+    """The runtime's fixed fail-closed answer, or a block that names the repair."""
+
+    failure = native_hook_failure(harness, event_name, reason)
+    if failure is None:
+        return "", RUNTIME_MISSING, 2
+    return failure[0], "", failure[1]
+
+
 def _bridge_hook_output(
     canonical: str,
     response: dict[str, Any],
@@ -75,13 +85,6 @@ def _bridge_hook_output(
     writes for an outage; nothing reads the answer in Python.
     """
 
-    if canonical == "muse":
-        from ..adapters.muse_hook_render import muse_bridge_response
-
-        return muse_bridge_response(response, event_name=event_name, guard_home=guard_home, deadline=deadline)
-    if canonical == "hermes":
-        # The Hermes bridge renders its daemon reply natively; so does the CLI.
-        return hermes_bridge_response(response, event_name=event_name, guard_home=guard_home, deadline=deadline)
     rendered = native_cli_hook_emit(
         canonical, response, event_name=event_name, guard_home=guard_home, deadline=deadline
     )
@@ -94,10 +97,11 @@ def _bridge_hook_output(
             and not isinstance(exit_code, bool)
         ):
             return stdout, stderr, exit_code
-    payload, exit_code = failure_payload(
-        harness=canonical, event_name=event_name, reason=_RENDER_FAILURE_REASON, recording_only=False
-    )
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":")), "", exit_code
+    if canonical == "muse":
+        return native_stderr_hook_failure(canonical, event_name, _BRIDGE_BLOCK_REASON)
+    if canonical == "hermes":
+        return _failure_output(canonical, event_name, _BRIDGE_BLOCK_REASON)
+    return _failure_output(canonical, event_name, _RENDER_FAILURE_REASON)
 
 
 def _record_native_hook_exception(guard_home: Path, *, harness: str, event_name: str) -> None:
@@ -131,6 +135,7 @@ def try_native_hook_authority(
     workspace: Path | None,
     store: GuardStore,
     deadline: float | None = None,
+    event_name: str | None = None,
 ) -> dict[str, Any]:
     """Review one hook with the same fail-closed worker the daemon uses.
 
@@ -143,7 +148,7 @@ def try_native_hook_authority(
         # not silently downgrade a hook to a fail-safe allow.
         worker = HookWorker(
             store=store,
-            activity_writer=NativeHookEvidenceWriter(store=store),
+            activity_writer=ResidentEvidenceClient(store=store),
         )
         return worker.review_http_payload(
             payload=payload,
@@ -153,15 +158,16 @@ def try_native_hook_authority(
             guard_home=guard_home,
             workspace=workspace,
             deadline=deadline,
+            event_name=event_name,
         )
     except Exception as error:
         _record_native_hook_exception(
             guard_home,
             harness=harness,
-            event_name=runtime_hook_event_name(payload),
+            event_name=event_name or canonical_hook_event_name(payload, guard_home=guard_home, deadline=deadline),
         )
         _log_worker_exception(error, harness=harness)
-        event_name = runtime_hook_event_name(payload)
+        event_name = event_name or canonical_hook_event_name(payload, guard_home=guard_home, deadline=deadline)
         response = availability_harness_response(
             harness=harness,
             event_name=event_name,
@@ -265,7 +271,7 @@ def emit_hook_review(
             with suppress(OSError, ValueError):
                 print(stderr, file=sys.stderr)
         return exit_code
-    if not response and not hook_event_pauses_when_unavailable(event_name):
+    if not response and not hook_event_pauses_when_unavailable(event_name, guard_home=guard_home, deadline=deadline):
         # An empty answer to an event that cannot pause the turn carries no
         # decision; writing nothing lets the harness continue on its own.
         return 0
@@ -294,7 +300,9 @@ def emit_hook_review(
         # Claude reads a hook's JSON only on exit 0; any other status discards
         # the document, a PostToolUse block and its reason included.
         return 0
-    policy_action = "block" if hook_event_pauses_when_unavailable(event_name) else "allow"
+    policy_action = (
+        "block" if hook_event_pauses_when_unavailable(event_name, guard_home=guard_home, deadline=deadline) else "allow"
+    )
     return native_hook_verdict_exit_code(canonical, policy_action, event_name=event_name)
 
 
@@ -313,10 +321,11 @@ def route_native_hook(
     fallback, and the answer is the one the daemon gives the same request.
     """
 
-    event_name = runtime_hook_event_name(payload)
     deadline: float | None = None
+    event_name: str | None = None
     try:
         deadline = _cli_review_deadline(payload)
+        event_name = native_hook_event(payload, context.guard_home, deadline=deadline)
         payload = dict(payload)
         # This process runs in the shell the command is about to run in, so its
         # environment is the caller context the daemon would get from a bridge.
@@ -330,14 +339,19 @@ def route_native_hook(
             workspace=runtime_workspace or _payload_workspace(payload),
             store=store,
             deadline=deadline,
+            event_name=event_name,
         )
         if not isinstance(response, dict):
+            event_name = event_name or canonical_hook_event_name(
+                payload, guard_home=context.guard_home, deadline=deadline
+            )
             response = availability_harness_response(
                 harness=args.harness,
                 event_name=event_name,
                 reason_code="native_hook_worker_unavailable",
                 reason="HOL Guard could not complete the native hook decision safely.",
             )
+        event_name = event_name or canonical_hook_event_name(payload, guard_home=context.guard_home, deadline=deadline)
         return emit_hook_review(
             args.harness,
             response,
@@ -347,6 +361,7 @@ def route_native_hook(
             deadline=deadline,
         )
     except Exception as error:
+        event_name = event_name or canonical_hook_event_name(payload, guard_home=context.guard_home, deadline=deadline)
         _record_native_hook_exception(context.guard_home, harness=args.harness, event_name=event_name)
         _log_worker_exception(error, harness=args.harness)
         response = availability_harness_response(

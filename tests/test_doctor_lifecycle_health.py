@@ -13,9 +13,9 @@ import pytest
 from rich.console import Console
 
 from codex_plugin_scanner.guard import native_runtime
-from codex_plugin_scanner.guard.adapters.diagnostic_probes import without_command_probes
 from codex_plugin_scanner.guard.cli import doctor_native_runtime
 from codex_plugin_scanner.guard.cli.render import _render_doctor
+from codex_plugin_scanner.guard.command_probes import without_command_probes
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity, NativeRuntimeStatus
 
 JOURNAL_SCHEMA = "hol-guard-resident-lifecycle-journal.v1"
@@ -39,6 +39,9 @@ def _snapshot(**overrides: Any) -> dict[str, Any]:
     }
     health.update(overrides)
     return health
+
+
+_COLD_STARTS = {"cold_starts_within_1s": 5, "cold_starts_within_5s": 1, "cold_starts_slower": 1}
 
 
 def _installed(monkeypatch: pytest.MonkeyPatch, answer: str | None, *, asked: list[tuple[str, ...]] | None = None):
@@ -161,6 +164,11 @@ def test_a_failed_read_leaves_the_report_without_a_journal(
         # A field added or dropped is a file this reader does not know.
         json.dumps({"health": _snapshot(stderr="boom")}),
         json.dumps({"health": {key: value for key, value in _snapshot().items() if key != "starts"}}),
+        # The cold-start bands come as a set or not at all, and only as counts.
+        json.dumps({"health": _snapshot(cold_starts_within_1s=1)}),
+        json.dumps({"health": _snapshot(**{**_COLD_STARTS, "cold_starts_slower": -1})}),
+        json.dumps({"health": _snapshot(**{**_COLD_STARTS, "cold_starts_slower": 2**32})}),
+        json.dumps({"health": _snapshot(**{**_COLD_STARTS, "cold_starts_within_5s": "1.4s"})}),
     ],
 )
 def test_a_damaged_or_forged_journal_never_reaches_the_report(
@@ -199,6 +207,23 @@ def test_a_degraded_day_is_reported_even_while_the_runtime_is_up() -> None:
     assert "hol-guard runtime status" in output
 
 
+def test_a_runtime_that_counts_cold_starts_reports_their_bands(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _installed(monkeypatch, json.dumps({"health": _snapshot(**_COLD_STARTS)}))
+
+    lifecycle = doctor_native_runtime.native_resident_lifecycle(tmp_path)
+
+    assert lifecycle == _snapshot(**_COLD_STARTS)
+    output = _rendered(lifecycle)
+    assert "Cold starts: 5 ready within 1 second, 1 within 5 seconds, 1 slower." in output
+
+
+def test_a_day_without_cold_start_bands_prints_no_band_line() -> None:
+    assert "Cold starts" not in _rendered(_snapshot())
+    assert "Cold starts" not in _rendered(
+        _snapshot(cold_starts_within_1s=0, cold_starts_within_5s=0, cold_starts_slower=0)
+    )
+
+
 def test_a_runtime_that_is_not_being_restarted_is_reported_as_such() -> None:
     output = _rendered(_snapshot(state="critical", last_event="start_refused", last_event_age_seconds=7400))
 
@@ -206,7 +231,25 @@ def test_a_runtime_that_is_not_being_restarted_is_reported_as_such() -> None:
     assert "Last event: start_refused, 2h ago." in output
 
 
-@pytest.mark.parametrize("lifecycle", [_snapshot(state="healthy"), "degraded", None, {}])
+def test_a_healthy_day_still_reports_its_cold_starts() -> None:
+    output = _rendered(_snapshot(state="healthy", **_COLD_STARTS))
+
+    expected = "Native runtime, last 24 hours. Cold starts: 5 ready within 1 second, 1 within 5 seconds, 1 slower."
+    assert expected in output
+    assert "unhealthy" not in output
+    assert "Last event" not in output
+
+
+@pytest.mark.parametrize(
+    "lifecycle",
+    [
+        _snapshot(state="healthy"),
+        _snapshot(state="healthy", cold_starts_within_1s=0, cold_starts_within_5s=0, cold_starts_slower=0),
+        "degraded",
+        None,
+        {},
+    ],
+)
 def test_a_healthy_or_absent_journal_says_nothing(lifecycle: object) -> None:
     output = _rendered(lifecycle)
 

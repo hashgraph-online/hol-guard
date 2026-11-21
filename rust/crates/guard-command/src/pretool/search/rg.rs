@@ -6,14 +6,17 @@ use super::{
     ReadContext, SearchValueRole,
 };
 
-pub(in crate::pretool) fn safe_rg_stdin_arguments(arguments: &[String]) -> bool {
-    safe_rg_arguments_inner(
-        arguments,
-        crate::pretool::PathContext::default(),
-        true,
-        true,
-        true,
-    )
+/// `literal_words` are the segment's quoted words, as
+/// `listing_reads::literal_words` reads them.
+pub(in crate::pretool) fn safe_rg_stdin_arguments(
+    arguments: &[String],
+    literal_words: &[String],
+) -> bool {
+    let context = crate::pretool::PathContext {
+        literal_words,
+        ..Default::default()
+    };
+    safe_rg_arguments_inner(arguments, context, true, true, true)
 }
 
 /// An `rg` segment inside its command. A missing operand is proven only
@@ -32,9 +35,14 @@ pub(super) fn safe_rg_segment(
     // `git diff | rg PATTERN` in a repository whose `.gitignore` carries a
     // `!.env.example` rule went to review for a search that never touches
     // the tree.
+    let words = crate::pretool::listing_reads::literal_words(&segment.text);
+    let context = ReadContext {
+        literal_words: &words,
+        ..context
+    };
     if segment.pipeline_index > 0
         && config_cannot_add_arguments(&segment.arguments, context)
-        && safe_rg_stdin_arguments(&segment.arguments)
+        && safe_rg_stdin_arguments(&segment.arguments, &words)
     {
         return true;
     }
@@ -407,7 +415,10 @@ fn rg_arguments_pass(
                 && names_only_globs_proven(arguments, &unproven_roots, context)))
         && (!stdin_only || pattern_supplied)
         && (stdin_only || config_disabled || context.ripgrep_config_absent)
-        && (stdin_only || paths_only || !prove_roots || rg_whitelist::roots_proven(&roots, context))
+        && (stdin_only
+            || paths_only
+            || !prove_roots
+            || rg_whitelist::roots_proven(&roots, &narrowing_globs(arguments), context))
         && (unscreened_globs.is_empty()
             || super::super::search_scope::rg_glob_scope_proven(
                 scope,
@@ -458,15 +469,35 @@ fn proven_absent_root(value: &str, context: ReadContext<'_>, allow_absent: bool)
     allow_absent && super::grep::absent_target(value, context)
 }
 
-/// Every `-g`, `--glob` or `--iglob` value that selects rather than excludes.
+/// The inclusions that may narrow which re-included entries a search can
+/// reach, empty when they cannot be read that way.
 ///
-/// A short cluster ends at its first option that takes a value, which is the
-/// rest of the argument or the next one. Every other long option that takes
-/// a value consumes the next argument too, as `rg` parses it, so a `--`
-/// spelled as that value (`--context-separator --`) never ends the scan
-/// before a later `-g`.
+/// `--iglob` folds case and the scope filter's matcher does not, so a search
+/// carrying one narrows nothing. Exclusions only take files away, so leaving
+/// them out keeps the modeled selection at least as wide as ripgrep's.
+fn narrowing_globs(arguments: &[String]) -> Vec<&str> {
+    // Parse option values using the same rules as the inclusions. A bare
+    // `--` may itself be the value of `--context-separator` rather than
+    // ending the option list; an `--iglob` after it is still case-blind.
+    let (globs, case_blind) = parsed_inclusion_globs(arguments);
+    if case_blind {
+        Vec::new()
+    } else {
+        globs
+    }
+}
+
+/// Every `-g`, `--glob` or `--iglob` value that selects rather than excludes.
 fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
+    parsed_inclusion_globs(arguments).0
+}
+
+/// Share the option/value scan between the inclusion list and the
+/// case-blind guard. A short cluster ends at its first value-taking option;
+/// long options consume a separate value when no `=` value was attached.
+fn parsed_inclusion_globs(arguments: &[String]) -> (Vec<&str>, bool) {
     let mut globs = Vec::new();
+    let mut case_blind = false;
     let mut arguments = arguments.iter();
     while let Some(argument) = arguments.next() {
         if argument == "--" {
@@ -474,9 +505,17 @@ fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
         }
         let value = if let Some(long) = argument.strip_prefix("--") {
             match long.split_once('=') {
-                Some(("glob" | "iglob", value)) => Some(value),
+                Some(("glob", value)) => Some(value),
+                Some(("iglob", value)) => {
+                    case_blind = true;
+                    Some(value)
+                }
                 Some(_) => None,
-                None if matches!(long, "glob" | "iglob") => arguments.next().map(String::as_str),
+                None if long == "glob" => arguments.next().map(String::as_str),
+                None if long == "iglob" => {
+                    case_blind = true;
+                    arguments.next().map(String::as_str)
+                }
                 None if options::rg_value_role(argument).is_some() => {
                     arguments.next();
                     None
@@ -506,7 +545,7 @@ fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
             globs.push(value);
         }
     }
-    globs
+    (globs, case_blind)
 }
 
 #[cfg(test)]
@@ -731,6 +770,26 @@ mod tests {
         }
     }
 
+    #[test]
+    fn case_blind_globs_after_consumed_option_values_cannot_narrow() {
+        use super::{inclusion_globs, narrowing_globs};
+        let args = arguments("KEY --context-separator -- --iglob *.TS -g src/**");
+        assert_eq!(inclusion_globs(&args), vec!["*.TS", "src/**"]);
+        assert!(narrowing_globs(&args).is_empty());
+
+        for line in ["KEY --iglob=*.TS -g src/**", "KEY --iglob *.TS -g src/**"] {
+            assert!(narrowing_globs(&arguments(line)).is_empty(), "{line}");
+        }
+
+        // An option's operand, or a positional operand after the real
+        // delimiter, is not an actual case-insensitive glob.
+        assert_eq!(
+            narrowing_globs(&arguments("KEY -e --iglob -g src/**")),
+            vec!["src/**"]
+        );
+        assert!(inclusion_globs(&arguments("KEY -- --iglob *.TS -g src/**")).is_empty());
+    }
+
     /// The pattern a piped `rg` matches is text, but the shell expands the
     /// word first: `.env{,.local}` leaves a second operand `rg` would open,
     /// so the stdin proof refuses it while an ordinary pattern keeps it.
@@ -751,10 +810,10 @@ mod tests {
             "token.*expired",
             "-e auth.*header",
         ] {
-            assert!(safe_rg_stdin_arguments(&arguments(line)), "{line}");
+            assert!(safe_rg_stdin_arguments(&arguments(line), &[]), "{line}");
         }
         for line in [".env{,.local}", "-e .env{,.local}", ".env*", ".ssh/*"] {
-            assert!(!safe_rg_stdin_arguments(&arguments(line)), "{line}");
+            assert!(!safe_rg_stdin_arguments(&arguments(line), &[]), "{line}");
         }
     }
 }

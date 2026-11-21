@@ -88,12 +88,12 @@ fn switch_owner_excludes_installer_and_interpreter_preparation_on_the_same_profi
     let f = Fixture::new(false);
     assert!(!f.home.join("cigar-lifecycle.key").exists());
     let owner = Owner::acquire(&f.home).unwrap();
-    assert!(preparation::lifecycle_lease(&f.home).is_err());
+    assert!(lifecycle::lease(&f.home).is_err());
     assert!(Owner::acquire(&f.home).is_err());
     assert!(owner.record().is_none());
     assert!(!f.home.join("cigar-lifecycle.key").exists());
     drop(owner);
-    assert!(preparation::lifecycle_lease(&f.home).is_ok());
+    assert!(lifecycle::lease(&f.home).is_ok());
 }
 #[test]
 fn actual_config_commit_preserves_disabled_intent_and_promotes_last_good_only_after_health() {
@@ -269,3 +269,55 @@ mod restoration;
 mod rollback;
 #[path = "context_assistance_switch_scope_erasure_tests.rs"]
 mod scope_erasure;
+
+fn builtin(sha: char) -> SelectionPointer {
+    let mut pointer = pointer("builtin");
+    pointer.runtime.installation_sha256 = sha.to_string().repeat(64);
+    pointer.runtime.origin = SelectionOrigin::Builtin {
+        core_version: "0.14.2".into(),
+    };
+    pointer
+}
+
+#[test]
+fn updated_builtin_engine_replaces_the_saved_memory_selection() {
+    let fixture = Fixture::new(false);
+    let mut owner = Owner::acquire(&fixture.home).unwrap();
+    owner.initialize(builtin('a')).unwrap();
+    owner.initialize(builtin('b')).unwrap();
+    assert_eq!(owner.record().unwrap().current, builtin('b'));
+    assert_eq!(owner.record().unwrap().revision, 2);
+    let mut saved = builtin('c');
+    saved.data = SelectionData::LegacySaved;
+    assert!(owner.initialize(saved).is_err());
+    assert!(owner.initialize(pointer("other")).is_err());
+}
+
+#[test]
+fn updated_builtin_engine_replaces_selection_after_a_cancelled_switch() {
+    let fixture = Fixture::new(false);
+    let settings = SwitchSettings::capture(&fixture.home, &fixture.source, "new").unwrap();
+    let mut owner = Owner::acquire(&fixture.home).unwrap();
+    owner.initialize(builtin('a')).unwrap();
+    owner
+        .begin(SelectionTransaction {
+            request_id: "switch-test".into(),
+            expected_service_generation: 4,
+            before_settings_sha256: settings.before_sha256(),
+            after_settings_sha256: settings.after_sha256(),
+            source_semantic_sha256: "4".repeat(64),
+            from: builtin('a'),
+            to: pointer("new"),
+            was_enabled: false,
+            activate_target: false,
+            reconnect_acknowledged: true,
+            cancel_requested: false,
+            phase: SelectionPhase::Prepared,
+        })
+        .unwrap();
+    owner.advance(SelectionPhase::Cancelled).unwrap();
+    owner.initialize(builtin('b')).unwrap();
+    let record = owner.record().unwrap();
+    assert_eq!(record.current, builtin('b'));
+    assert!(record.transaction.is_none());
+}

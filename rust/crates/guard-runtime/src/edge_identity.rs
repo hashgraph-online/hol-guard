@@ -61,6 +61,11 @@ pub(super) fn request_payload_identity(
         "received_at",
         "receivedAt",
         "guard_remaining_ms",
+        // A transition probe only asks Guard to echo the receipt it produced,
+        // and its operation id is minted per call. Committing it gave every
+        // probed retry a new anchor, so an approval never reached the retry.
+        // The request id it carries reaches the envelope on its own.
+        "guard_transition_probe",
     ] {
         identity.remove(key);
     }

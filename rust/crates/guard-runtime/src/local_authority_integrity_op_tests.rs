@@ -190,3 +190,49 @@ fn a_large_transition_inverse_signs_and_verifies() {
     let signed = sign(payload.clone(), PURPOSE);
     assert_eq!(verify(payload, signed)["status"], "valid");
 }
+
+#[test]
+fn the_codex_hook_key_is_read_from_its_home_and_never_passed_in() {
+    let home = tempfile::tempdir().expect("home");
+    let home_text = home.path().to_str().expect("utf-8 home");
+    let identity = crate::codex_hook_key::answer("key_ensure", home_text).expect("ensure");
+    let key_id = identity["key_id"].as_str().expect("key id").to_owned();
+    let payload =
+        json!({"generated_at": SIGNED_AT, "installation_id": identity["installation_id"]});
+    let request = |op: &str, extra: Value| {
+        let mut request = json!({
+            "schema": SCHEMA,
+            "op": op,
+            "payload": payload,
+            "purpose": PURPOSE,
+            "key_hex": null,
+            "key_home": home_text,
+            "key_id": key_id,
+        });
+        request
+            .as_object_mut()
+            .expect("object")
+            .extend(extra.as_object().expect("extra").clone());
+        ask(request)
+    };
+    let signed = request("sign", json!({"signed_at": SIGNED_AT})).expect("signed");
+    assert_eq!(signed["integrity_key_id"], key_id.as_str());
+    let verified = request("verify", json!({"integrity": signed})).expect("verified");
+    assert_eq!(verified["status"], "valid");
+
+    let other = tempfile::tempdir().expect("other");
+    crate::codex_hook_key::answer("key_ensure", other.path().to_str().expect("utf-8"))
+        .expect("ensure");
+    let mut wrong = json!({
+        "schema": SCHEMA, "op": "verify", "payload": payload, "purpose": PURPOSE,
+        "key_hex": null, "key_home": other.path().to_str(), "key_id": key_id, "integrity": signed,
+    });
+    assert_ne!(ask(wrong.clone()).expect("answer")["status"], "valid");
+    wrong["op"] = json!("sign");
+    wrong.as_object_mut().expect("object").remove("integrity");
+    wrong["signed_at"] = json!(SIGNED_AT);
+    assert_eq!(
+        ask(wrong).err().as_deref(),
+        Some("codex_hook_manifest_key_mismatch")
+    );
+}

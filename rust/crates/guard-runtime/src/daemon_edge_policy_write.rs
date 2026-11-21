@@ -23,9 +23,8 @@ use super::{handler_field, NativeReads, ReadConfig, DROPPED};
 use crate::daemon_handler_policy::{
     policy_clear, policy_upsert, PolicyClearInput, PolicyUpsertInput,
 };
-use crate::policy_decision_lookup_op::{
-    artifact_family_key, computed_workspace_policy_key, SCOPED_APPROVAL_FAMILIES,
-};
+use crate::policy_bundle_store_identities::{scoped_artifact_key, scoped_risk_group};
+use crate::policy_decision_lookup_op::{computed_workspace_policy_key, SCOPED_APPROVAL_FAMILIES};
 use crate::resident_state::is_lock_contention;
 
 /// `GuardStore.hold_policy_integrity_generation_lock`'s file, which every
@@ -166,10 +165,14 @@ pub(super) fn clear(
 }
 
 /// `_validate_scoped_policy_artifact_target`: a harness or global rule may
-/// name only a family Guard scopes approvals to.
+/// name only a family Guard scopes approvals to, or a risk group Guard knows
+/// (`scoped_policy_artifact_key` refuses any other group).
 fn scoped_family_supported(scope: &str, artifact_id: Option<&str>) -> bool {
     if !matches!(scope, "harness" | "global") {
         return true;
+    }
+    if let Some(group) = scoped_risk_group(artifact_id) {
+        return crate::command_risk_groups::is_risk_group(&group);
     }
     let Some(family) = artifact_id
         .filter(|id| !id.trim().is_empty())
@@ -186,7 +189,7 @@ fn decision_row(fields: &Value) -> Option<Map<String, Value>> {
     let text = |key: &str| fields.get(key).and_then(Value::as_str);
     let scope = text("scope")?;
     let artifact_id = match scope {
-        "harness" | "global" => artifact_family_key(text("artifact_id")),
+        "harness" | "global" => scoped_artifact_key(text("artifact_id")),
         "artifact" | "workspace" => text("artifact_id").map(str::to_owned),
         _ => None,
     };
@@ -255,14 +258,31 @@ fn integrity_finalize(config: &ReadConfig, next_control_state: Option<&Value>) -
 
 /// Runs `work` holding the generation lock. `None` when the lock cannot be
 /// taken in time, as the library's wait raises.
-fn locked<T>(config: &ReadConfig, work: impl FnOnce() -> Option<T>) -> Option<T> {
-    let file = generation_lock(config.guard_home())?;
+pub(in crate::daemon_edge) fn locked<T>(
+    config: &ReadConfig,
+    work: impl FnOnce() -> Option<T>,
+) -> Option<T> {
+    locked_for(config, LOCK_TIMEOUT, work)
+}
+
+/// Runs `work` while holding the generation lock for at most `wait`.
+pub(in crate::daemon_edge) fn locked_for<T>(
+    config: &ReadConfig,
+    wait: Duration,
+    work: impl FnOnce() -> Option<T>,
+) -> Option<T> {
+    let file = generation_lock_for(config.guard_home(), wait)?;
     let answer = work();
     let _ = fs2::FileExt::unlock(&file);
     answer
 }
 
+#[cfg(test)]
 fn generation_lock(home: &Path) -> Option<File> {
+    generation_lock_for(home, LOCK_TIMEOUT)
+}
+
+fn generation_lock_for(home: &Path, wait: Duration) -> Option<File> {
     let mut options = OpenOptions::new();
     options.create(true).read(true).append(true);
     #[cfg(unix)]
@@ -276,7 +296,7 @@ fn generation_lock(home: &Path) -> Option<File> {
     if !file.metadata().ok()?.is_file() {
         return None;
     }
-    let deadline = Instant::now().checked_add(LOCK_TIMEOUT)?;
+    let deadline = Instant::now().checked_add(wait)?;
     loop {
         match fs2::FileExt::try_lock_exclusive(&file) {
             Ok(()) => return Some(file),

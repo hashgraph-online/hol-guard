@@ -119,6 +119,8 @@ fn action(layout: &Layout, cwd: &Path, command: &str) -> String {
         Some(&controls),
         None,
         guard_command::pretool::PathContext {
+            literal_words: &[],
+            guard_home: None,
             home_dir: Some(&home),
             cwd: Some(&cwd),
             cdpath_unset: true,
@@ -126,6 +128,7 @@ fn action(layout: &Layout, cwd: &Path, command: &str) -> String {
             cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
+            python_environment_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
             gem_config_absent: false,

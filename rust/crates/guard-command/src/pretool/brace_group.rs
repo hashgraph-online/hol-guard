@@ -161,7 +161,7 @@ fn redirects(text: &[char]) -> bool {
 /// braces it covers are not braces at all: `{ echo hi # ; }` is an unterminated
 /// group the shell refuses, and reading the commented `}` as the group's end
 /// would hand `echo hi #` a decision for a command that never runs.
-fn unquoted_braces(chars: &[char]) -> Option<(usize, usize)> {
+pub(super) fn unquoted_braces(chars: &[char]) -> Option<(usize, usize)> {
     let mut open = None;
     let mut close = None;
     let mut single = false;

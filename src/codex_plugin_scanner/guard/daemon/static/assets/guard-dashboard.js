@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-OxpCh2cB.js","assets/chunks/home-protection-module-CKLh5X9E.js","assets/chunks/supply-chain-protection-stats--m3HVz8Q.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BVvg6Lpo.js","assets/chunks/harness-version-label-xEsgWKwG.js","assets/chunks/connect-guard-cloud-button-Xk2GIeZa.js","assets/chunks/settings-save-proof-modal-B1l5ib5t.js","assets/chunks/settings-workspace-C_CNq8AH.js","assets/chunks/confirm-dialog-CjbF_rrG.js","assets/chunks/extensions-workspace-DeE0MG3h.js","assets/chunks/app-detail-workspace-DqHWwK_5.js","assets/chunks/policy-workspace-page-ChvzniW9.js","assets/chunks/about-workspace-DSZDVR66.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-CRKVu82y.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-dhHEpEoW.js","assets/chunks/home-protection-module-DFZ1vkRC.js","assets/chunks/supply-chain-protection-stats-BVtc2w17.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BCM0x-g-.js","assets/chunks/harness-version-label-JURowldM.js","assets/chunks/connect-guard-cloud-button-CzWHGND8.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-CL9k2vqu.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-BWBn1bK0.js","assets/chunks/app-detail-workspace-B0vkFxxc.js","assets/chunks/harness-action-errors-D4J9GNrk.js","assets/chunks/supply-chain-hub-workspace-DYqi92V0.js","assets/chunks/policy-workspace-page-BKSgx2UE.js","assets/chunks/about-workspace-Bd0-K7Pl.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -437,8 +437,8 @@ function requireReact_production() {
   react_production.use = function(usable) {
     return ReactSharedInternals.H.use(usable);
   };
-  react_production.useActionState = function(action, initialState, permalink) {
-    return ReactSharedInternals.H.useActionState(action, initialState, permalink);
+  react_production.useActionState = function(action2, initialState, permalink) {
+    return ReactSharedInternals.H.useActionState(action2, initialState, permalink);
   };
   react_production.useCallback = function(callback, deps) {
     return ReactSharedInternals.H.useCallback(callback, deps);
@@ -916,8 +916,8 @@ function requireReactDom_production() {
   reactDom_production.unstable_batchedUpdates = function(fn, a) {
     return fn(a);
   };
-  reactDom_production.useFormState = function(action, initialState, permalink) {
-    return ReactSharedInternals.H.useFormState(action, initialState, permalink);
+  reactDom_production.useFormState = function(action2, initialState, permalink) {
+    return ReactSharedInternals.H.useFormState(action2, initialState, permalink);
   };
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
@@ -4162,8 +4162,8 @@ function requireReactDomClient_production() {
     memoCache.index++;
     return updateQueue;
   }
-  function basicStateReducer(state, action) {
-    return "function" === typeof action ? action(state) : action;
+  function basicStateReducer(state, action2) {
+    return "function" === typeof action2 ? action2(state) : action2;
   }
   function updateReducer(reducer) {
     var hook = updateWorkInProgressHook();
@@ -4380,12 +4380,12 @@ function requireReactDomClient_production() {
     }
   }
   function runActionStateAction(actionQueue, node) {
-    var action = node.action, payload = node.payload, prevState = actionQueue.state;
+    var action2 = node.action, payload = node.payload, prevState = actionQueue.state;
     if (node.isTransition) {
       var prevTransition = ReactSharedInternals.T, currentTransition = {};
       ReactSharedInternals.T = currentTransition;
       try {
-        var returnValue = action(prevState, payload), onStartTransitionFinish = ReactSharedInternals.S;
+        var returnValue = action2(prevState, payload), onStartTransitionFinish = ReactSharedInternals.S;
         null !== onStartTransitionFinish && onStartTransitionFinish(currentTransition, returnValue);
         handleActionReturnValue(actionQueue, node, returnValue);
       } catch (error) {
@@ -4395,7 +4395,7 @@ function requireReactDomClient_production() {
       }
     } else
       try {
-        prevTransition = action(prevState, payload), handleActionReturnValue(actionQueue, node, prevTransition);
+        prevTransition = action2(prevState, payload), handleActionReturnValue(actionQueue, node, prevTransition);
       } catch (error$66) {
         onActionError(actionQueue, node, error$66);
       }
@@ -4436,7 +4436,7 @@ function requireReactDomClient_production() {
   function actionStateReducer(oldState, newState) {
     return newState;
   }
-  function mountActionState(action, initialStateProp) {
+  function mountActionState(action2, initialStateProp) {
     if (isHydrating) {
       var ssrFormState = workInProgressRoot.formState;
       if (null !== ssrFormState) {
@@ -4504,7 +4504,7 @@ function requireReactDomClient_production() {
     JSCompiler_inline_result$jscomp$0 = {
       state: initialStateProp,
       dispatch: null,
-      action,
+      action: action2,
       pending: null
     };
     JSCompiler_inline_result.queue = JSCompiler_inline_result$jscomp$0;
@@ -4516,14 +4516,14 @@ function requireReactDomClient_production() {
       ssrFormState
     );
     JSCompiler_inline_result$jscomp$0.dispatch = ssrFormState;
-    JSCompiler_inline_result.memoizedState = action;
+    JSCompiler_inline_result.memoizedState = action2;
     return [initialStateProp, ssrFormState, false];
   }
-  function updateActionState(action) {
+  function updateActionState(action2) {
     var stateHook = updateWorkInProgressHook();
-    return updateActionStateImpl(stateHook, currentHook, action);
+    return updateActionStateImpl(stateHook, currentHook, action2);
   }
-  function updateActionStateImpl(stateHook, currentStateHook, action) {
+  function updateActionStateImpl(stateHook, currentStateHook, action2) {
     currentStateHook = updateReducerImpl(
       stateHook,
       currentStateHook,
@@ -4540,26 +4540,26 @@ function requireReactDomClient_production() {
     else state = currentStateHook;
     currentStateHook = updateWorkInProgressHook();
     var actionQueue = currentStateHook.queue, dispatch = actionQueue.dispatch;
-    action !== currentStateHook.memoizedState && (currentlyRenderingFiber.flags |= 2048, pushSimpleEffect(
+    action2 !== currentStateHook.memoizedState && (currentlyRenderingFiber.flags |= 2048, pushSimpleEffect(
       9,
       { destroy: void 0 },
-      actionStateActionEffect.bind(null, actionQueue, action),
+      actionStateActionEffect.bind(null, actionQueue, action2),
       null
     ));
     return [state, dispatch, stateHook];
   }
-  function actionStateActionEffect(actionQueue, action) {
-    actionQueue.action = action;
+  function actionStateActionEffect(actionQueue, action2) {
+    actionQueue.action = action2;
   }
-  function rerenderActionState(action) {
+  function rerenderActionState(action2) {
     var stateHook = updateWorkInProgressHook(), currentStateHook = currentHook;
     if (null !== currentStateHook)
-      return updateActionStateImpl(stateHook, currentStateHook, action);
+      return updateActionStateImpl(stateHook, currentStateHook, action2);
     updateWorkInProgressHook();
     stateHook = stateHook.memoizedState;
     currentStateHook = updateWorkInProgressHook();
     var dispatch = currentStateHook.queue.dispatch;
-    currentStateHook.memoizedState = action;
+    currentStateHook.memoizedState = action2;
     return [stateHook, dispatch, false];
   }
   function pushSimpleEffect(tag, inst, create, deps) {
@@ -4731,7 +4731,7 @@ function requireReactDomClient_production() {
   }
   function noop() {
   }
-  function startHostTransition(formFiber, pendingState, action, formData) {
+  function startHostTransition(formFiber, pendingState, action2, formData) {
     if (5 !== formFiber.tag) throw Error(formatProdErrorMessage(476));
     var queue = ensureFormComponentIsStateful(formFiber).queue;
     startTransition(
@@ -4739,9 +4739,9 @@ function requireReactDomClient_production() {
       queue,
       pendingState,
       sharedNotPendingObject,
-      null === action ? noop : function() {
+      null === action2 ? noop : function() {
         requestFormReset$1(formFiber);
-        return action(formData);
+        return action2(formData);
       }
     );
   }
@@ -4815,29 +4815,29 @@ function requireReactDomClient_production() {
       provider = provider.return;
     }
   }
-  function dispatchReducerAction(fiber, queue, action) {
+  function dispatchReducerAction(fiber, queue, action2) {
     var lane = requestUpdateLane();
-    action = {
+    action2 = {
       lane,
       revertLane: 0,
       gesture: null,
-      action,
+      action: action2,
       hasEagerState: false,
       eagerState: null,
       next: null
     };
-    isRenderPhaseUpdate(fiber) ? enqueueRenderPhaseUpdate(queue, action) : (action = enqueueConcurrentHookUpdate(fiber, queue, action, lane), null !== action && (scheduleUpdateOnFiber(action, fiber, lane), entangleTransitionUpdate(action, queue, lane)));
+    isRenderPhaseUpdate(fiber) ? enqueueRenderPhaseUpdate(queue, action2) : (action2 = enqueueConcurrentHookUpdate(fiber, queue, action2, lane), null !== action2 && (scheduleUpdateOnFiber(action2, fiber, lane), entangleTransitionUpdate(action2, queue, lane)));
   }
-  function dispatchSetState(fiber, queue, action) {
+  function dispatchSetState(fiber, queue, action2) {
     var lane = requestUpdateLane();
-    dispatchSetStateInternal(fiber, queue, action, lane);
+    dispatchSetStateInternal(fiber, queue, action2, lane);
   }
-  function dispatchSetStateInternal(fiber, queue, action, lane) {
+  function dispatchSetStateInternal(fiber, queue, action2, lane) {
     var update = {
       lane,
       revertLane: 0,
       gesture: null,
-      action,
+      action: action2,
       hasEagerState: false,
       eagerState: null,
       next: null
@@ -4847,7 +4847,7 @@ function requireReactDomClient_production() {
       var alternate = fiber.alternate;
       if (0 === fiber.lanes && (null === alternate || 0 === alternate.lanes) && (alternate = queue.lastRenderedReducer, null !== alternate))
         try {
-          var currentState = queue.lastRenderedState, eagerState = alternate(currentState, action);
+          var currentState = queue.lastRenderedState, eagerState = alternate(currentState, action2);
           update.hasEagerState = true;
           update.eagerState = eagerState;
           if (objectIs(eagerState, currentState))
@@ -4855,18 +4855,18 @@ function requireReactDomClient_production() {
         } catch (error) {
         } finally {
         }
-      action = enqueueConcurrentHookUpdate(fiber, queue, update, lane);
-      if (null !== action)
-        return scheduleUpdateOnFiber(action, fiber, lane), entangleTransitionUpdate(action, queue, lane), true;
+      action2 = enqueueConcurrentHookUpdate(fiber, queue, update, lane);
+      if (null !== action2)
+        return scheduleUpdateOnFiber(action2, fiber, lane), entangleTransitionUpdate(action2, queue, lane), true;
     }
     return false;
   }
-  function dispatchOptimisticSetState(fiber, throwIfDuringRender, queue, action) {
-    action = {
+  function dispatchOptimisticSetState(fiber, throwIfDuringRender, queue, action2) {
+    action2 = {
       lane: 2,
       revertLane: requestTransitionLane(),
       gesture: null,
-      action,
+      action: action2,
       hasEagerState: false,
       eagerState: null,
       next: null
@@ -4877,7 +4877,7 @@ function requireReactDomClient_production() {
       throwIfDuringRender = enqueueConcurrentHookUpdate(
         fiber,
         queue,
-        action,
+        action2,
         2
       ), null !== throwIfDuringRender && scheduleUpdateOnFiber(throwIfDuringRender, fiber, 2);
   }
@@ -9608,10 +9608,10 @@ function requireReactDomClient_production() {
   }
   function extractEvents$1(dispatchQueue, domEventName, maybeTargetInst, nativeEvent, nativeEventTarget) {
     if ("submit" === domEventName && maybeTargetInst && maybeTargetInst.stateNode === nativeEventTarget) {
-      var action = coerceFormActionProp(
+      var action2 = coerceFormActionProp(
         (nativeEventTarget[internalPropsKey] || null).action
       ), submitter = nativeEvent.submitter;
-      submitter && (domEventName = (domEventName = submitter[internalPropsKey] || null) ? coerceFormActionProp(domEventName.formAction) : submitter.getAttribute("formAction"), null !== domEventName && (action = domEventName, submitter = null));
+      submitter && (domEventName = (domEventName = submitter[internalPropsKey] || null) ? coerceFormActionProp(domEventName.formAction) : submitter.getAttribute("formAction"), null !== domEventName && (action2 = domEventName, submitter = null));
       var event = new SyntheticEvent(
         "action",
         "action",
@@ -9634,22 +9634,22 @@ function requireReactDomClient_production() {
                       pending: true,
                       data: formData,
                       method: nativeEventTarget.method,
-                      action
+                      action: action2
                     },
                     null,
                     formData
                   );
                 }
               } else
-                "function" === typeof action && (event.preventDefault(), formData = submitter ? createFormDataWithSubmitter(nativeEventTarget, submitter) : new FormData(nativeEventTarget), startHostTransition(
+                "function" === typeof action2 && (event.preventDefault(), formData = submitter ? createFormDataWithSubmitter(nativeEventTarget, submitter) : new FormData(nativeEventTarget), startHostTransition(
                   maybeTargetInst,
                   {
                     pending: true,
                     data: formData,
                     method: nativeEventTarget.method,
-                    action
+                    action: action2
                   },
-                  action,
+                  action2,
                   formData
                 ));
             },
@@ -12280,15 +12280,15 @@ function requireReactDomClient_production() {
         if ("function" === typeof submitterOrAction)
           formProps || scheduleReplayQueueIfNeeded(i);
         else if (formProps) {
-          var action = null;
+          var action2 = null;
           if (submitterOrAction && submitterOrAction.hasAttribute("formAction"))
             if (form = submitterOrAction, formProps = submitterOrAction[internalPropsKey] || null)
-              action = formProps.formAction;
+              action2 = formProps.formAction;
             else {
               if (null !== findInstanceBlockingTarget(form)) continue;
             }
-          else action = formProps.action;
-          "function" === typeof action ? i[queuedTarget + 1] = action : (i.splice(queuedTarget, 3), queuedTarget -= 3);
+          else action2 = formProps.action;
+          "function" === typeof action2 ? i[queuedTarget + 1] = action2 : (i.splice(queuedTarget, 3), queuedTarget -= 3);
           scheduleReplayQueueIfNeeded(i);
         }
       }
@@ -12825,6 +12825,9 @@ function HiMiniPencilSquare(props) {
 function HiMiniPauseCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 10a8 8 0 1 1 16 0 8 8 0 0 1-16 0Zm5-2.25A.75.75 0 0 1 7.75 7h.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-.5a.75.75 0 0 1-.75-.75v-4.5Zm4 0a.75.75 0 0 1 .75-.75h.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-.5a.75.75 0 0 1-.75-.75v-4.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniPaperAirplane(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" }, "child": [] }] })(props);
+}
 function HiMiniNoSymbol(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "m5.965 4.904 9.131 9.131a6.5 6.5 0 0 0-9.131-9.131Zm8.07 10.192L4.904 5.965a6.5 6.5 0 0 0 9.131 9.131ZM4.343 4.343a8 8 0 1 1 11.314 11.314A8 8 0 0 1 4.343 4.343Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -12840,8 +12843,14 @@ function HiMiniMagnifyingGlass(props) {
 function HiMiniLockClosed(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniListBullet(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniLink(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" }, "child": [] }] })(props);
+}
+function HiMiniLightBulb(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 1a6 6 0 0 0-3.815 10.631C7.237 12.5 8 13.443 8 14.456v.644a.75.75 0 0 0 .572.729 6.016 6.016 0 0 0 2.856 0A.75.75 0 0 0 12 15.1v-.644c0-1.013.762-1.957 1.815-2.825A6 6 0 0 0 10 1ZM8.863 17.414a.75.75 0 0 0-.226 1.483 9.066 9.066 0 0 0 2.726 0 .75.75 0 0 0-.226-1.483 7.553 7.553 0 0 1-2.274 0Z" }, "child": [] }] })(props);
 }
 function HiMiniKey(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -12899,6 +12908,9 @@ function HiMiniDocumentPlus(props) {
 }
 function HiMiniDocumentMagnifyingGlass(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M8 10a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm5 5a3 3 0 1 0 1.524 5.585l1.196 1.195a.75.75 0 1 0 1.06-1.06l-1.195-1.196A3 3 0 0 0 9.5 7Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniCursorArrowRays(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 1a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 1ZM5.05 3.05a.75.75 0 0 1 1.06 0l1.062 1.06A.75.75 0 1 1 6.11 5.173L5.05 4.11a.75.75 0 0 1 0-1.06ZM14.95 3.05a.75.75 0 0 1 0 1.06l-1.06 1.062a.75.75 0 0 1-1.062-1.061l1.061-1.06a.75.75 0 0 1 1.06 0ZM3 8a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 3 8ZM14 8a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 14 8ZM7.172 10.828a.75.75 0 0 1 0 1.061L6.11 12.95a.75.75 0 0 1-1.06-1.06l1.06-1.06a.75.75 0 0 1 1.06 0ZM10.766 7.51a.75.75 0 0 0-1.37.365l-.492 6.861a.75.75 0 0 0 1.204.65l1.043-.799.985 3.678a.75.75 0 0 0 1.45-.388l-.978-3.646 1.292.204a.75.75 0 0 0 .74-1.16l-3.874-5.764Z" }, "child": [] }] })(props);
 }
 function HiMiniCube(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.362 1.093a.75.75 0 0 0-.724 0L2.523 5.018 10 9.143l7.477-4.125-7.115-3.925ZM18 6.443l-7.25 4v8.25l6.862-3.786A.75.75 0 0 0 18 14.25V6.443ZM9.25 18.693v-8.25l-7.25-4v7.807a.75.75 0 0 0 .388.657l6.862 3.786Z" }, "child": [] }] })(props);
@@ -12984,6 +12996,9 @@ function HiMiniChartBar(props) {
 function HiMiniBugAnt(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.56 1.14a.75.75 0 0 1 .177 1.045 3.989 3.989 0 0 0-.464.86c.185.17.382.329.59.473A3.993 3.993 0 0 1 10 2c1.272 0 2.405.594 3.137 1.518.208-.144.405-.302.59-.473a3.989 3.989 0 0 0-.464-.86.75.75 0 0 1 1.222-.869c.369.519.65 1.105.822 1.736a.75.75 0 0 1-.174.707 7.03 7.03 0 0 1-1.299 1.098A4 4 0 0 1 14 6c0 .52-.301.963-.723 1.187a6.961 6.961 0 0 1-1.158.486c.13.208.231.436.296.679 1.413-.174 2.779-.5 4.081-.96a19.655 19.655 0 0 0-.09-2.319.75.75 0 1 1 1.493-.146 21.239 21.239 0 0 1 .08 3.028.75.75 0 0 1-.482.667 20.873 20.873 0 0 1-5.153 1.249 2.521 2.521 0 0 1-.107.247 20.945 20.945 0 0 1 5.252 1.257.75.75 0 0 1 .482.74 20.945 20.945 0 0 1-.908 5.107.75.75 0 0 1-1.433-.444c.415-1.34.69-2.743.806-4.191-.495-.173-1-.327-1.512-.46.05.284.076.575.076.873 0 1.814-.517 3.312-1.426 4.37A4.639 4.639 0 0 1 10 19a4.639 4.639 0 0 1-3.574-1.63C5.516 16.311 5 14.813 5 13c0-.298.026-.59.076-.873-.513.133-1.017.287-1.512.46.116 1.448.39 2.85.806 4.191a.75.75 0 1 1-1.433.444 20.94 20.94 0 0 1-.908-5.107.75.75 0 0 1 .482-.74 20.838 20.838 0 0 1 5.252-1.257 2.493 2.493 0 0 1-.107-.247 20.874 20.874 0 0 1-5.153-1.249.75.75 0 0 1-.482-.667 21.342 21.342 0 0 1 .08-3.028.75.75 0 1 1 1.493.146 19.745 19.745 0 0 0-.09 2.319c1.302.46 2.668.786 4.08.96.066-.243.166-.471.297-.679a6.962 6.962 0 0 1-1.158-.486A1.348 1.348 0 0 1 6 6a4 4 0 0 1 .166-1.143 7.032 7.032 0 0 1-1.3-1.098.75.75 0 0 1-.173-.707 5.48 5.48 0 0 1 .822-1.736.75.75 0 0 1 1.046-.177Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniBookOpen(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.75 16.82A7.462 7.462 0 0 1 15 15.5c.71 0 1.396.098 2.046.282A.75.75 0 0 0 18 15.06v-11a.75.75 0 0 0-.546-.721A9.006 9.006 0 0 0 15 3a8.963 8.963 0 0 0-4.25 1.065V16.82ZM9.25 4.065A8.963 8.963 0 0 0 5 3c-.85 0-1.673.118-2.454.339A.75.75 0 0 0 2 4.06v11a.75.75 0 0 0 .954.721A7.506 7.506 0 0 1 5 15.5c1.579 0 3.042.487 4.25 1.32V4.065Z" }, "child": [] }] })(props);
+}
 function HiMiniBolt(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M11.983 1.907a.75.75 0 0 0-1.292-.657l-8.5 9.5A.75.75 0 0 0 2.75 12h6.572l-1.305 6.093a.75.75 0 0 0 1.292.657l8.5-9.5A.75.75 0 0 0 17.25 8h-6.572l1.305-6.093Z" }, "child": [] }] })(props);
 }
@@ -13001,6 +13016,9 @@ function HiMiniArrowUp(props) {
 }
 function HiMiniArrowUpTray(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" }, "child": [] }] })(props);
+}
+function HiMiniArrowUpRight(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.22 14.78a.75.75 0 0 0 1.06 0l7.22-7.22v5.69a.75.75 0 0 0 1.5 0v-7.5a.75.75 0 0 0-.75-.75h-7.5a.75.75 0 0 0 0 1.5h5.69l-7.22 7.22a.75.75 0 0 0 0 1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniArrowUpCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-.75-4.75a.75.75 0 0 0 1.5 0V8.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0L6.2 9.74a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -13229,6 +13247,16 @@ function groupByCategory(receipts) {
   }
   return map;
 }
+function scopeChoiceWithDuration(choice, persistExactAction) {
+  if (choice.value !== "artifact" || !persistExactAction) {
+    return choice;
+  }
+  return {
+    ...choice,
+    label: "Always allow this exact action",
+    description: "Guard skips review for this exact action until you remove it or the command changes."
+  };
+}
 function approvalDecisionSubjectKey(item) {
   return JSON.stringify([
     item.request_id,
@@ -13284,22 +13312,22 @@ const BLOCK_SCOPE_CHOICES = [
   {
     value: "workspace",
     label: "Block in project",
-    description: "Block matching actions in the current project."
+    description: "Block matching actions in the current project. Saved until you remove it."
   },
   {
     value: "publisher",
     label: "Block this source",
-    description: "Block matching actions from this source."
+    description: "Block matching actions from this source. Saved until you remove it."
   },
   {
     value: "harness",
     label: "Block in this app",
-    description: "Block matching actions from this AI app."
+    description: "Block matching actions from this AI app. Saved until you remove it."
   },
   {
     value: "global",
     label: "Block everywhere",
-    description: "Block matching actions across every project and AI app on this machine."
+    description: "Block matching actions across every project and AI app on this machine. Saved until you remove it."
   }
 ];
 function hasScopeContractMetadata(item) {
@@ -13308,71 +13336,71 @@ function hasScopeContractMetadata(item) {
 function hasCompleteScopeContractBinding(item) {
   return typeof item.scope_contract_version === "string" && item.scope_contract_version.length > 0 && typeof item.scope_contract_digest === "string" && item.scope_contract_digest.length > 0;
 }
-function declaredScopesForAction(item, action) {
-  if (action === "allow" && item.once_only_reason === "script_execution_binding_unavailable") {
+function declaredScopesForAction(item, action2) {
+  if (action2 === "allow" && item.once_only_reason === "script_execution_binding_unavailable") {
     return [];
   }
-  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && item.exact_action_persistence_eligible !== true) {
+  if (action2 === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && item.exact_action_persistence_eligible !== true) {
     return [];
   }
   if (hasScopeContractMetadata(item) && !hasCompleteScopeContractBinding(item)) {
     return [];
   }
-  const actionScopes = item.allowed_scopes_by_action?.[action];
+  const actionScopes = item.allowed_scopes_by_action?.[action2];
   if (Array.isArray(actionScopes)) {
     return actionScopes;
   }
-  if (action === "allow" && Array.isArray(item.allowed_scopes)) {
+  if (action2 === "allow" && Array.isArray(item.allowed_scopes)) {
     return item.allowed_scopes;
   }
   return null;
 }
-function requestSupportsScope(item, action, scope) {
-  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && scope !== "artifact") {
+function requestSupportsScope(item, action2, scope) {
+  if (action2 === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && scope !== "artifact") {
     return false;
   }
-  const declaredScopes = declaredScopesForAction(item, action);
+  const declaredScopes = declaredScopesForAction(item, action2);
   if (declaredScopes !== null) {
     return declaredScopes.includes(scope);
   }
   return scope === "artifact";
 }
-function filterScopeChoicesForRequest(item, action, choices) {
-  return choices.filter((choice) => requestSupportsScope(item, action, choice.value));
+function filterScopeChoicesForRequest(item, action2, choices) {
+  return choices.filter((choice) => requestSupportsScope(item, action2, choice.value));
 }
-function scopeChoicesForRequest(item, action = "allow") {
+function scopeChoicesForRequest(item, action2 = "allow") {
   return filterScopeChoicesForRequest(
     item,
-    action,
-    action === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES
-  ).map((choice) => action === "allow" && choice.value === "artifact" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") ? { ...choice, label: "Exact reviewed action", description: "Choose a duration below. This request requires persistent consent." } : choice);
+    action2,
+    action2 === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES
+  ).map((choice) => action2 === "allow" && choice.value === "artifact" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") ? { ...choice, label: "Exact reviewed action", description: "Choose a duration below. This request requires persistent consent." } : choice);
 }
 const ADVANCED_SCOPE_VALUES = /* @__PURE__ */ new Set(["global"]);
-function advancedScopeChoicesForRequest(item, action = "allow") {
-  return scopeChoicesForRequest(item, action).filter(
+function advancedScopeChoicesForRequest(item, action2 = "allow") {
+  return scopeChoicesForRequest(item, action2).filter(
     (choice) => ADVANCED_SCOPE_VALUES.has(choice.value)
   );
 }
-function standardScopeChoicesForRequest(item, action = "allow") {
-  return scopeChoicesForRequest(item, action).filter(
+function standardScopeChoicesForRequest(item, action2 = "allow") {
+  return scopeChoicesForRequest(item, action2).filter(
     (choice) => !ADVANCED_SCOPE_VALUES.has(choice.value)
   );
 }
-function recommendedScopeForAction(item, action) {
-  const actionRecommendation = item.recommended_scope_by_action?.[action] ?? null;
-  if (actionRecommendation !== null && requestSupportsScope(item, action, actionRecommendation)) {
+function recommendedScopeForAction(item, action2) {
+  const actionRecommendation = item.recommended_scope_by_action?.[action2] ?? null;
+  if (actionRecommendation !== null && requestSupportsScope(item, action2, actionRecommendation)) {
     return actionRecommendation;
   }
-  if (action === "allow" && item.recommended_scope !== null && requestSupportsScope(item, action, item.recommended_scope)) {
+  if (action2 === "allow" && item.recommended_scope !== null && requestSupportsScope(item, action2, item.recommended_scope)) {
     return item.recommended_scope;
   }
-  return scopeChoicesForRequest(item, action)[0]?.value ?? null;
+  return scopeChoicesForRequest(item, action2)[0]?.value ?? null;
 }
-function normalizeDecisionScope(item, action, scope) {
-  if (requestSupportsScope(item, action, scope)) {
+function normalizeDecisionScope(item, action2, scope) {
+  if (requestSupportsScope(item, action2, scope)) {
     return scope;
   }
-  return recommendedScopeForAction(item, action);
+  return recommendedScopeForAction(item, action2);
 }
 const ONCE_ONLY_REASON_COPY = {
   no_command_identity: "Always allow is unavailable: this tool call has no stable command or file to remember. You can allow it once.",
@@ -13469,8 +13497,2007 @@ function buildDecisionPayload(input) {
     } : {}
   };
 }
-function willPersistExactAction(item, action, scope, requested) {
-  return requested && normalizeDecisionScope(item, action, scope) === "artifact" && item.exact_action_persistence_eligible === true;
+function willPersistExactAction(item, action2, scope, requested) {
+  return requested && normalizeDecisionScope(item, action2, scope) === "artifact" && item.exact_action_persistence_eligible === true;
+}
+const MCP_EFFECT_COPY = {
+  // Only a built-in agent-app tool gets this; no name is read as in-app on its own.
+  "in-app": { label: "Only in the app", meaning: "It changes what the agent app shows you and nothing else." },
+  read: { label: "Looks things up", meaning: "The name suggests it reads or searches and does not change anything." },
+  write: { label: "Makes changes", meaning: "The name suggests it creates or changes something." },
+  send: { label: "Sends something", meaning: "The name suggests it sends or posts something to other people or services." },
+  delete: { label: "Deletes things", meaning: "The name suggests it removes or deletes something." },
+  "run-code": { label: "Runs code", meaning: "The name suggests it runs code or a command." },
+  connect: { label: "Changes connections", meaning: "The name suggests it connects or changes a linked account." },
+  // Only a browser or screen-control tool gets this; no name is read as acting as you on its own.
+  "act-as-you": { label: "Acts as you", meaning: "It clicks, types or opens pages as if it were you." },
+  unknown: { label: "Effect unclear", meaning: "The name does not say what it does." }
+};
+const DELETE_WORDS = /* @__PURE__ */ new Set([
+  "delete",
+  "remove",
+  "destroy",
+  "drop",
+  "purge",
+  "erase",
+  "revoke",
+  "uninstall",
+  "trash",
+  "clear",
+  "wipe",
+  "truncate",
+  "disconnect"
+]);
+const SEND_WORDS = /* @__PURE__ */ new Set([
+  "send",
+  "post",
+  "publish",
+  "reply",
+  "forward",
+  "share",
+  "invite",
+  "tweet",
+  "broadcast",
+  "notify",
+  "dm",
+  "submit"
+]);
+const RUN_WORDS = /* @__PURE__ */ new Set([
+  "run",
+  "execute",
+  "exec",
+  "bash",
+  "shell",
+  "workbench",
+  "eval",
+  "script",
+  "invoke",
+  "spawn"
+]);
+const CONNECT_WORDS = /* @__PURE__ */ new Set(["connect", "connection", "connections", "authorize", "authenticate", "login", "oauth", "unlink"]);
+const WRITE_WORDS = /* @__PURE__ */ new Set([
+  "create",
+  "update",
+  "edit",
+  "write",
+  "add",
+  "insert",
+  "set",
+  "modify",
+  "patch",
+  "upload",
+  "move",
+  "rename",
+  "archive",
+  "mark",
+  "import",
+  "append",
+  "save",
+  "put",
+  "merge",
+  "commit",
+  "push",
+  "pay",
+  "transfer",
+  "purchase",
+  "approve",
+  "enable",
+  "disable",
+  "install",
+  "deploy",
+  "assign",
+  "close",
+  "reopen",
+  "restore",
+  "sync",
+  "copy",
+  "duplicate",
+  "unarchive",
+  "unstar",
+  "follow",
+  "unfollow",
+  "subscribe",
+  "unsubscribe",
+  "reset",
+  "refresh",
+  "start",
+  "stop",
+  "cancel",
+  "unpin",
+  "untag",
+  "upsert",
+  "attach",
+  "detach",
+  "register",
+  "change",
+  "replace",
+  "make",
+  "generate"
+]);
+const READ_WORDS = /* @__PURE__ */ new Set([
+  "get",
+  "list",
+  "search",
+  "find",
+  "fetch",
+  "read",
+  "query",
+  "lookup",
+  "view",
+  "show",
+  "check",
+  "describe",
+  "count",
+  "retrieve",
+  "browse",
+  "download",
+  "inspect",
+  "preview",
+  "explore",
+  "discover",
+  "resolve",
+  "summarize",
+  "analyze",
+  "export",
+  "scan",
+  "stat",
+  "status",
+  "info",
+  "schema",
+  "schemas",
+  "catalog",
+  "load",
+  "poll"
+]);
+const NOUN_OR_VERB = /* @__PURE__ */ new Map([
+  ["comment", "send"],
+  ["label", "write"],
+  ["tag", "write"],
+  ["star", "write"],
+  ["pin", "write"],
+  ["order", "write"],
+  ["schedule", "write"],
+  ["book", "write"],
+  ["link", "connect"],
+  ["react", "send"],
+  ["build", "write"],
+  ["fork", "write"],
+  ["new", "write"],
+  ["watch", "write"]
+]);
+function nameWords(identifier2) {
+  return identifier2.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 0);
+}
+function classifyMcpEffect(identifier2) {
+  const words = nameWords(identifier2);
+  const firstRead = words.findIndex((word) => READ_WORDS.has(word));
+  const ambiguous = [];
+  words.forEach((word, index) => {
+    const kind = NOUN_OR_VERB.get(word);
+    if (kind !== void 0 && (firstRead === -1 || index < firstRead)) ambiguous.push(kind);
+  });
+  const has = (kind, set) => ambiguous.includes(kind) || words.some((word) => set.has(word));
+  if (has("delete", DELETE_WORDS)) return "delete";
+  if (has("run-code", RUN_WORDS)) return "run-code";
+  if (has("send", SEND_WORDS)) return "send";
+  if (has("connect", CONNECT_WORDS)) return "connect";
+  if (has("write", WRITE_WORDS)) return "write";
+  if (firstRead !== -1) return "read";
+  return "unknown";
+}
+const SEVERITY = {
+  "in-app": 0,
+  read: 1,
+  unknown: 2,
+  connect: 3,
+  write: 4,
+  "act-as-you": 5,
+  send: 6,
+  "run-code": 7,
+  delete: 8
+};
+function worstMcpEffect(effects) {
+  if (effects.length === 0) return "unknown";
+  let worst = effects[0];
+  for (const effect of effects) {
+    if (SEVERITY[effect] > SEVERITY[worst]) worst = effect;
+  }
+  return worst;
+}
+function firstActionWordIndex(words) {
+  return words.findIndex(
+    (word) => DELETE_WORDS.has(word) || SEND_WORDS.has(word) || RUN_WORDS.has(word) || CONNECT_WORDS.has(word) || WRITE_WORDS.has(word) || READ_WORDS.has(word) || NOUN_OR_VERB.has(word)
+  );
+}
+const INTENT_FIELDS = ["description", "justification"];
+const MAX_INTENT_CHARS = 300;
+const SHELL_TOOL_NAMES = /* @__PURE__ */ new Set([
+  "bash",
+  "shell",
+  "sh",
+  "zsh",
+  "terminal",
+  "run_command",
+  "run_terminal_command",
+  "run_shell_command",
+  "exec_command"
+]);
+const CODEX_TOOL_NAMESPACE = "functions.";
+const TOOL_INPUT_KEYS$1 = ["tool_input", "toolInput", "toolArgs", "arguments"];
+const UNSAFE_CHARACTERS = new RegExp(
+  "[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
+  "g"
+);
+function cleanAgentText(value, maxChars) {
+  const text2 = value.replace(UNSAFE_CHARACTERS, " ").replace(/\s+/g, " ").trim();
+  return text2.length > maxChars ? `${text2.slice(0, maxChars)}…` : text2;
+}
+function resolveAgentStatedIntent(item) {
+  const envelope = item.action_envelope_json;
+  if (!envelope) {
+    return null;
+  }
+  if (envelope.action_type !== "shell_command" && envelope.action_type !== "package_script") {
+    return null;
+  }
+  if (envelope.mcp_server) {
+    return null;
+  }
+  const raw = recordValue(envelope.raw_payload_redacted);
+  const toolName = envelope.tool_name ?? (typeof raw?.tool_name === "string" ? raw.tool_name : null);
+  if (toolName === null || !SHELL_TOOL_NAMES.has(shellToolName(toolName))) {
+    return null;
+  }
+  const toolInput = firstToolInput(raw);
+  if (toolInput === null) {
+    return null;
+  }
+  for (const field of INTENT_FIELDS) {
+    const value = toolInput[field];
+    if (typeof value !== "string") {
+      continue;
+    }
+    const text2 = value.replace(UNSAFE_CHARACTERS, " ").replace(/\s+/g, " ").trim();
+    if (text2.length === 0) {
+      continue;
+    }
+    return {
+      text: text2.length > MAX_INTENT_CHARS ? `${text2.slice(0, MAX_INTENT_CHARS)}…` : text2,
+      field
+    };
+  }
+  return null;
+}
+function firstToolInput(raw) {
+  if (raw === null) {
+    return null;
+  }
+  for (const key of TOOL_INPUT_KEYS$1) {
+    const value = raw[key];
+    const input = recordValue(value);
+    if (input !== null) {
+      return input;
+    }
+    if (typeof value !== "string" || value.trim().length === 0) {
+      continue;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+    if (recordValue(parsed) !== null) {
+      return null;
+    }
+  }
+  return null;
+}
+function shellToolName(toolName) {
+  const name = toolName.trim().toLowerCase();
+  return name.startsWith(CODEX_TOOL_NAMESPACE) ? name.slice(CODEX_TOOL_NAMESPACE.length) : name;
+}
+function recordValue(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+}
+const MESSAGE_BODY = ["body", "message", "text", "content", "message_body", "markdown_text"];
+const EMAIL_FIELDS = [
+  { label: "To", keys: ["to", "recipient", "recipients", "recipient_email", "to_email", "email"] },
+  { label: "Cc", keys: ["cc"] },
+  { label: "Bcc", keys: ["bcc"] },
+  { label: "Subject", keys: ["subject", "title"] },
+  { label: "Message", keys: MESSAGE_BODY, kind: "long" }
+];
+const CHAT_FIELDS = [
+  { label: "Where", keys: ["channel", "channel_id", "channel_name", "conversation", "thread"] },
+  { label: "To", keys: ["user", "user_id", "recipient", "to"] },
+  { label: "Message", keys: MESSAGE_BODY, kind: "long" }
+];
+const ISSUE_FIELDS = [
+  { label: "Repository", keys: ["repo", "repository", "project", "team"] },
+  { label: "Title", keys: ["title", "summary", "name"] },
+  { label: "Details", keys: ["body", "description", "details"], kind: "long" },
+  { label: "Assigned to", keys: ["assignees", "assignee"] },
+  { label: "Labels", keys: ["labels", "label"] }
+];
+const EVENT_FIELDS = [
+  { label: "Title", keys: ["summary", "title", "name"] },
+  { label: "Starts", keys: ["start", "start_time", "start_datetime", "starts_at"] },
+  { label: "Ends", keys: ["end", "end_time", "end_datetime", "ends_at"] },
+  { label: "Guests", keys: ["attendees", "guests", "invitees"] },
+  { label: "Where", keys: ["location"] },
+  { label: "Details", keys: ["description", "details"], kind: "long" }
+];
+const QUERY_FIELDS = [
+  { label: "Query", keys: ["query", "sql", "statement"], kind: "code" },
+  { label: "Database", keys: ["database", "db", "dataset"] }
+];
+const PAGE_FIELDS = [
+  { label: "Title", keys: ["title", "name"] },
+  { label: "Where", keys: ["parent", "parent_id", "database_id", "folder", "folder_id"] },
+  { label: "Content", keys: ["content", "body", "text", "markdown"], kind: "long" }
+];
+const PREVIEWS = /* @__PURE__ */ new Map([
+  ["send_email", EMAIL_FIELDS],
+  ["create_email_draft", EMAIL_FIELDS],
+  ["create_draft", EMAIL_FIELDS],
+  ["reply_to_thread", EMAIL_FIELDS],
+  ["forward_email", EMAIL_FIELDS],
+  ["send_message", CHAT_FIELDS],
+  ["post_message", CHAT_FIELDS],
+  ["chat_post_message", CHAT_FIELDS],
+  ["send_direct_message", CHAT_FIELDS],
+  ["create_issue", ISSUE_FIELDS],
+  ["update_issue", ISSUE_FIELDS],
+  ["create_pull_request", [{ label: "From", keys: ["head", "branch"] }, { label: "Into", keys: ["base"] }, ...ISSUE_FIELDS]],
+  ["create_event", EVENT_FIELDS],
+  ["create_calendar_event", EVENT_FIELDS],
+  ["update_event", EVENT_FIELDS],
+  ["run_query", QUERY_FIELDS],
+  ["execute_sql", QUERY_FIELDS],
+  ["query", QUERY_FIELDS],
+  ["create_page", PAGE_FIELDS],
+  ["append_block_children", PAGE_FIELDS]
+]);
+function previewFieldsFor(toolName) {
+  const words = nameWords(toolName);
+  for (let start = 0; start < words.length; start += 1) {
+    const fields2 = PREVIEWS.get(words.slice(start).join("_"));
+    if (fields2 !== void 0) return fields2;
+  }
+  return null;
+}
+const SERVICE_NAMES = /* @__PURE__ */ new Map([
+  ["composio", "Composio"],
+  ["gmail", "Gmail"],
+  ["googlecalendar", "Google Calendar"],
+  ["googledrive", "Google Drive"],
+  ["googledocs", "Google Docs"],
+  ["googlesheets", "Google Sheets"],
+  ["googleslides", "Google Slides"],
+  ["googlemeet", "Google Meet"],
+  ["googletasks", "Google Tasks"],
+  ["github", "GitHub"],
+  ["gitlab", "GitLab"],
+  ["slack", "Slack"],
+  ["discord", "Discord"],
+  ["notion", "Notion"],
+  ["linear", "Linear"],
+  ["jira", "Jira"],
+  ["asana", "Asana"],
+  ["trello", "Trello"],
+  ["airtable", "Airtable"],
+  ["hubspot", "HubSpot"],
+  ["salesforce", "Salesforce"],
+  ["stripe", "Stripe"],
+  ["shopify", "Shopify"],
+  ["youtube", "YouTube"],
+  ["linkedin", "LinkedIn"],
+  ["twitter", "X (Twitter)"],
+  ["reddit", "Reddit"],
+  ["facebook", "Facebook"],
+  ["instagram", "Instagram"],
+  ["dropbox", "Dropbox"],
+  ["outlook", "Outlook"],
+  ["zoom", "Zoom"],
+  ["figma", "Figma"],
+  ["sentry", "Sentry"],
+  ["posthog", "PostHog"],
+  ["supabase", "Supabase"],
+  ["vercel", "Vercel"],
+  ["cloudflare", "Cloudflare"],
+  ["openai", "OpenAI"],
+  ["perplexity", "Perplexity"],
+  ["firecrawl", "Firecrawl"],
+  ["context7", "Context7"],
+  ["playwright", "Playwright browser"],
+  ["puppeteer", "Puppeteer browser"],
+  ["claudebrowser", "Claude's browser"],
+  ["claudeinchrome", "Chrome"],
+  ["chromedevtools", "Chrome"],
+  ["computeruse", "Computer control"],
+  ["filesystem", "Files"],
+  ["postgres", "Postgres"],
+  ["sqlite", "SQLite"],
+  ["brave", "Brave Search"],
+  ["bravesearch", "Brave Search"],
+  ["exa", "Exa"],
+  ["tavily", "Tavily"]
+]);
+function serviceDisplayName(key) {
+  const known = SERVICE_NAMES.get(key.trim().toLowerCase().replace(/[\s_-]+/g, ""));
+  if (known !== void 0) return known;
+  const words = nameWords(key);
+  if (words.length === 0) return key.trim();
+  return words.map(capitalize).join(" ");
+}
+function capitalize(word) {
+  return word.length === 0 ? word : `${word[0].toUpperCase()}${word.slice(1)}`;
+}
+function sentenceCase(identifier2) {
+  const words = nameWords(identifier2);
+  if (words.length === 0) return identifier2.trim();
+  return capitalize(words.join(" "));
+}
+function splitToolSlug(slug) {
+  const words = nameWords(slug);
+  const split = firstActionWordIndex(words);
+  if (split <= 0) {
+    return { app: null, action: sentenceCase(slug) };
+  }
+  const action2 = words.slice(split);
+  action2[0] = PLAIN_VERBS.get(action2[0]) ?? action2[0];
+  return {
+    app: serviceDisplayName(words.slice(0, split).join("_")),
+    action: capitalize(action2.join(" "))
+  };
+}
+const PLAIN_VERBS = /* @__PURE__ */ new Map([
+  ["fetch", "get"],
+  ["retrieve", "get"]
+]);
+function toolTitle(service, tool) {
+  const serviceWords = new Set(nameWords(service));
+  const words = nameWords(tool);
+  let start = 0;
+  while (start < words.length - 1 && serviceWords.has(words[start])) start += 1;
+  return start === 0 ? sentenceCase(tool) : capitalize(words.slice(start).join(" "));
+}
+const NAME_PART = /^[a-zA-Z0-9_.:-]{1,120}$/;
+function parseNamespacedMcpName(raw) {
+  if (!raw || raw.length > 256 || !raw.startsWith("mcp__")) return null;
+  const parts = raw.slice(5).split("__");
+  if (parts.length < 2 || parts.some((part) => !NAME_PART.test(part))) return null;
+  const codexApp = parts[0] === "codex_apps" && parts.length > 2;
+  return { server: codexApp ? parts[1] : parts[0], tool: parts.slice(codexApp ? 2 : 1).join("__") };
+}
+function isPlainNamePart(value) {
+  return typeof value === "string" && NAME_PART.test(value);
+}
+function shortToolName(server, tool) {
+  const prefix = `${server.toLowerCase()}_`;
+  return tool.toLowerCase().startsWith(prefix) && tool.length > prefix.length ? tool.slice(prefix.length) : tool;
+}
+const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
+const LONG_TEXT_CHARS = 120;
+const MAX_ADDRESSES = 12;
+function emailAddresses(value) {
+  const parts = value.split(/[,;]/).map((part) => part.trim()).filter((part) => part.length > 0);
+  if (parts.length === 0 || parts.length > MAX_ADDRESSES) return null;
+  return parts.every((part) => EMAIL.test(part)) ? parts : null;
+}
+function linkParts(value) {
+  if (!/^https?:\/\//i.test(value) || /\s/.test(value)) return null;
+  try {
+    const url = new URL(value);
+    if (url.hostname.length === 0) return null;
+    const rest = `${url.pathname === "/" ? "" : url.pathname}${url.search}${url.hash}`;
+    return { host: url.host, rest };
+  } catch {
+    return null;
+  }
+}
+function valueKindOf(value) {
+  if (emailAddresses(value) !== null) return "email";
+  if (linkParts(value) !== null) return "url";
+  if (value.length > LONG_TEXT_CHARS || value.includes("\n")) return "long";
+  return "text";
+}
+const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"];
+const TOOL_NAME_KEYS = ["tool_name", "toolName", "name", "tool"];
+const CORE_STRING_LIMIT = 240;
+const BIDI_CONTROLS = new RegExp("[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]", "g");
+const KEY_PATTERN = /^[A-Za-z0-9_.-]{1,60}$/;
+const VALUE_CHARS = CORE_STRING_LIMIT;
+const MAX_FACTS = 8;
+const POINTER_FIELDS = /* @__PURE__ */ new Set([
+  "tabid",
+  "tab_id",
+  "coordinate",
+  "coordinates",
+  "start_coordinate",
+  "request_id",
+  "requestid",
+  "session_id",
+  "sessionid",
+  "trace_id"
+]);
+const MAX_LIST_ITEMS = 6;
+const UNSAFE_CODE_CHARACTERS = new RegExp(
+  "[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
+  "g"
+);
+function recordOf(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+}
+function textOf(value, maxChars = VALUE_CHARS) {
+  if (typeof value !== "string") return null;
+  const text2 = cleanAgentText(value, maxChars);
+  return text2.length > 0 ? text2 : null;
+}
+function recordList(value, max = 20) {
+  if (!Array.isArray(value)) return [];
+  return value.map(recordOf).filter((item) => item !== null).slice(0, max);
+}
+function textList(value, max = 20) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => textOf(item, 80)).filter((item) => item !== null).slice(0, max);
+}
+function unique(values) {
+  const seen2 = /* @__PURE__ */ new Set();
+  return values.filter((value) => {
+    const key = value.toLowerCase();
+    if (seen2.has(key)) return false;
+    seen2.add(key);
+    return true;
+  });
+}
+function joinList(values, limit = 3) {
+  const shown = values.slice(0, limit);
+  const rest = values.length - shown.length;
+  const list = shown.length <= 2 ? shown.join(" and ") : `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+  return rest > 0 ? `${shown.join(", ")} and ${rest} more` : list;
+}
+function codeOf(value) {
+  if (typeof value !== "string") return null;
+  const text2 = value.replace(UNSAFE_CODE_CHARACTERS, " ").trim();
+  return text2.length > 0 ? text2 : null;
+}
+const NO_INPUT = { record: null, text: null };
+function selectToolInput(raw) {
+  if (raw === null) return NO_INPUT;
+  const keyed = inputFromKeys(raw);
+  const hasKeyedInput = keyed !== null && (keyed.record === null || Object.keys(keyed.record).length > 0);
+  if (hasKeyedInput) return keyed;
+  return inputFromToolCalls(raw) ?? keyed ?? NO_INPUT;
+}
+function inputFromKeys(raw) {
+  for (const key of TOOL_INPUT_KEYS) {
+    const value = raw[key];
+    const record2 = recordOf(value);
+    if (record2 !== null) return inputFromRecord(record2);
+    if (typeof value !== "string" || value.trim().length === 0) continue;
+    if (coreSkipsString(value)) continue;
+    return { record: null, text: escapeBidi(value) };
+  }
+  return null;
+}
+function inputFromToolCalls(raw) {
+  const calls = raw.toolCalls;
+  if (!Array.isArray(calls)) return null;
+  const expected = TOOL_NAME_KEYS.map((key) => raw[key]).find(
+    (value) => typeof value === "string" && value.trim().length > 0
+  );
+  let chosen;
+  for (const item of calls) {
+    const call = recordOf(item);
+    const name = call?.name;
+    if (call === null || typeof name !== "string" || name.trim().length === 0) continue;
+    const args = recordOf(call.args);
+    if (chosen === void 0) chosen = args;
+    if (expected === void 0 || expected.trim() === name.trim()) {
+      chosen = args;
+      break;
+    }
+  }
+  return chosen === void 0 || chosen === null ? null : inputFromRecord(chosen);
+}
+function inputFromRecord(record2) {
+  try {
+    return { record: record2, text: escapeBidi(JSON.stringify(record2, null, 2)) };
+  } catch {
+    return { record: record2, text: null };
+  }
+}
+function coreSkipsString(text2) {
+  try {
+    return recordOf(JSON.parse(text2)) === null;
+  } catch {
+    return !looksLikeCutObject(text2);
+  }
+}
+function looksLikeCutObject(text2) {
+  return text2.endsWith("…") && text2.trimStart().startsWith("{") && Array.from(text2).length === CORE_STRING_LIMIT;
+}
+function escapeBidi(text2) {
+  return text2.replace(BIDI_CONTROLS, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+const ISO_DATE$1 = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+const DAY_FORMAT = { weekday: "short", month: "short", day: "numeric", year: "numeric" };
+function readableDate(text2) {
+  const match = ISO_DATE$1.exec(text2.trim());
+  if (match === null) return null;
+  const [, year, month, day, hour, minute, second, zone] = match;
+  const y = Number(year);
+  const m = Number(month) - 1;
+  const d = Number(day);
+  const dayOnly = new Date(Date.UTC(y, m, d));
+  if (dayOnly.getUTCFullYear() !== y || dayOnly.getUTCMonth() !== m || dayOnly.getUTCDate() !== d) return null;
+  if (hour === void 0) {
+    return new Intl.DateTimeFormat("en-US", { ...DAY_FORMAT, timeZone: "UTC" }).format(dayOnly);
+  }
+  const h = Number(hour);
+  const min = Number(minute);
+  const s = Number(second ?? 0);
+  if (h > 23 || min > 59 || s > 59) return null;
+  const time = { ...DAY_FORMAT, hour: "numeric", minute: "2-digit" };
+  if (zone !== void 0) {
+    const date = new Date(text2.trim());
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat("en-US", { ...time, timeZoneName: "short" }).format(date);
+  }
+  return new Intl.DateTimeFormat("en-US", { ...time, timeZone: "UTC" }).format(new Date(Date.UTC(y, m, d, h, min, s)));
+}
+const DATE_KEY = /(date|time|_at$|At$|^at$|start|end|due|deadline|until|since|when|day|scheduled|expires?)/i;
+function isDateKey(key) {
+  return key !== void 0 && DATE_KEY.test(key);
+}
+function scalarText(value, key) {
+  if (typeof value === "string") {
+    const date = isDateKey(key) ? readableDate(value) : null;
+    return date ?? textOf(value);
+  }
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value) && value.length > 0) {
+    if (value.every((item) => typeof item === "string" || typeof item === "number")) {
+      const shown = value.slice(0, MAX_LIST_ITEMS).map((item) => textOf(String(item), 60) ?? "");
+      const rest = value.length - shown.length;
+      return cleanAgentText(`${shown.filter(Boolean).join(", ")}${rest > 0 ? ` and ${rest} more` : ""}`, VALUE_CHARS);
+    }
+    return `${value.length} items`;
+  }
+  return null;
+}
+function scalarFacts(input, options = {}) {
+  if (input === null) return { facts: [], hidden: 0 };
+  const skip = new Set(options.skip ?? []);
+  const max = options.max ?? MAX_FACTS;
+  const facts = promotedFacts(input, skip, options.tool, max);
+  const promoted = new Set(facts.map((fact2) => fact2.key));
+  let hidden = 0;
+  for (const [key, value] of Object.entries(input)) {
+    if (skip.has(key) || promoted.has(key)) continue;
+    if (POINTER_FIELDS.has(key.toLowerCase())) {
+      hidden += 1;
+      continue;
+    }
+    const text2 = KEY_PATTERN.test(key) ? scalarText(value, key) : null;
+    if (text2 === null || text2.length === 0 || facts.length >= max) {
+      hidden += value === null || value === "" ? 0 : 1;
+      continue;
+    }
+    facts.push({ label: sentenceCase(key), value: text2, kind: valueKindOf(text2), key });
+  }
+  return { facts, hidden };
+}
+function fieldText(value, kind, key) {
+  if (kind !== "code" || typeof value !== "string") return scalarText(value, key);
+  const code = codeOf(value);
+  if (code === null) return null;
+  const chars = Array.from(code);
+  return chars.length > VALUE_CHARS ? `${chars.slice(0, VALUE_CHARS - 1).join("")}…` : code;
+}
+function promotedFacts(input, skip, tool, max) {
+  const fields2 = tool !== void 0 ? previewFieldsFor(tool) : null;
+  if (fields2 === null) return [];
+  const keysByLowerCase = new Map(Object.keys(input).map((key) => [key.toLowerCase(), key]));
+  const facts = [];
+  for (const field of fields2) {
+    if (facts.length >= max) break;
+    for (const candidate of field.keys) {
+      const key = keysByLowerCase.get(candidate);
+      if (key === void 0 || skip.has(key) || facts.some((fact2) => fact2.key === key)) continue;
+      const text2 = KEY_PATTERN.test(key) ? fieldText(input[key], field.kind, key) : null;
+      if (text2 === null || text2.length === 0) continue;
+      facts.push({ label: field.label, value: text2, kind: field.kind ?? valueKindOf(text2), key });
+      break;
+    }
+  }
+  return facts;
+}
+const CALL_NAMES = "run_composio_tool|execute_action|tools\\.execute";
+const CALL = new RegExp(
+  `\\b(?:${CALL_NAMES})\\s*\\(\\s*(?:(["'])([A-Za-z][A-Za-z0-9_]{2,119})\\1(?=\\s*[,)]))?`,
+  "g"
+);
+const PASSED_AROUND = new RegExp(`\\b(?:${CALL_NAMES})\\b(?!\\s*\\()`, "g");
+const RUNS_TEXT = /\b(?:exec|eval|compile|__import__)\s*\(/g;
+const KEY$1 = /(["'])([A-Za-z_][A-Za-z0-9_]{0,59})\1\s*:|\b([A-Za-z_][A-Za-z0-9_]{0,59})\s*=(?!=)/g;
+const LITERAL = /\s*(?:(["'])((?:\\.|(?!\1)[^\\\n]){0,400})\1|(-?\d+(?:\.\d+)?)(?![\w.])|(True|False|None|true|false|null)\b)(?=\s*[,})\]])/y;
+const ARG_REACH = 1200;
+function readComposioCode(code) {
+  const { scan, quoted } = maskPython(code);
+  const steps = [];
+  let unreadable = 0;
+  for (const match of scan.matchAll(CALL)) {
+    const at = match.index ?? 0;
+    if (quoted[at] === 1) continue;
+    const slug = match[2];
+    if (slug === void 0) {
+      unreadable += 1;
+      continue;
+    }
+    const start = at + match[0].length;
+    const { args, unknown } = literalArguments(scan, quoted, start, callEnd(scan, quoted, start));
+    const tool = slug.toUpperCase();
+    const { app, action: action2 } = splitToolSlug(tool);
+    const { facts, hidden } = scalarFacts(args, { max: 4, tool });
+    steps.push({
+      id: `code-${steps.length}-${slug}`,
+      app,
+      action: action2,
+      effect: classifyMcpEffect(slug),
+      details: facts,
+      hiddenDetails: hidden + unknown
+    });
+  }
+  unreadable += countOutsideStrings(scan, quoted, PASSED_AROUND, true) + countOutsideStrings(scan, quoted, RUNS_TEXT, false);
+  return { steps, unreadable };
+}
+function countOutsideStrings(scan, quoted, pattern, skipImports) {
+  let count2 = 0;
+  for (const match of scan.matchAll(pattern)) {
+    const at = match.index ?? 0;
+    if (quoted[at] === 1) continue;
+    if (skipImports && plainImport(scan, at, at + match[0].length)) continue;
+    count2 += 1;
+  }
+  return count2;
+}
+const IMPORT_BEFORE = /^\s*(?:from\s+[\w.]+\s+)?import\s+(?:[\w.]+\s*,\s*)*$/;
+const IMPORT_AFTER = /^\s*(?:,\s*[\w.]+\s*)*$/;
+function plainImport(scan, start, end) {
+  const lineStart = scan.lastIndexOf("\n", start) + 1;
+  const lineEnd = scan.indexOf("\n", end);
+  const before = scan.slice(lineStart, start);
+  const after = scan.slice(end, lineEnd === -1 ? scan.length : lineEnd);
+  return IMPORT_BEFORE.test(before) && IMPORT_AFTER.test(after);
+}
+function maskPython(code) {
+  const quoted = new Uint8Array(code.length);
+  const out = [];
+  let at = 0;
+  while (at < code.length) {
+    const char = code[at];
+    if (char === "#") {
+      while (at < code.length && code[at] !== "\n") {
+        out.push(" ");
+        at += 1;
+      }
+      continue;
+    }
+    if (char !== "'" && char !== '"') {
+      out.push(char);
+      at += 1;
+      continue;
+    }
+    const delimiter = code.startsWith(char.repeat(3), at) ? char.repeat(3) : char;
+    out.push(delimiter);
+    at += delimiter.length;
+    while (at < code.length) {
+      if (code.startsWith(delimiter, at)) {
+        quoted.fill(1, at, at + delimiter.length);
+        out.push(delimiter);
+        at += delimiter.length;
+        break;
+      }
+      if (delimiter.length === 1 && code[at] === "\n") break;
+      const width = code[at] === "\\" && at + 1 < code.length ? 2 : 1;
+      quoted.fill(1, at, at + width);
+      out.push(code.slice(at, at + width));
+      at += width;
+    }
+  }
+  return { scan: out.join(""), quoted };
+}
+function callEnd(scan, quoted, start) {
+  const limit = Math.min(scan.length, start + ARG_REACH);
+  let depth = 1;
+  for (let at = start; at < limit; at += 1) {
+    if (quoted[at] === 1) continue;
+    if (scan[at] === "(") depth += 1;
+    else if (scan[at] === ")") {
+      depth -= 1;
+      if (depth === 0) return at;
+    }
+  }
+  return limit;
+}
+function literalArguments(scan, quoted, from, to) {
+  const text2 = scan.slice(0, to);
+  const args = {};
+  let unknown = 0;
+  KEY$1.lastIndex = from;
+  for (let match = KEY$1.exec(text2); match !== null; match = KEY$1.exec(text2)) {
+    const key = match[2] ?? match[3];
+    if (key === void 0 || quoted[match.index] === 1 || key in args) continue;
+    LITERAL.lastIndex = match.index + match[0].length;
+    const value = LITERAL.exec(text2);
+    if (value === null) unknown += 1;
+    else if (value[2] !== void 0) args[key] = value[2].replace(/\\(["'\\])/g, "$1");
+    else if (value[3] !== void 0) args[key] = Number(value[3]);
+  }
+  return { args, unknown };
+}
+const NAME_BASIS = "Read from the tool's name. Guard has not checked what it does.";
+const STEP_BASIS = "Read from the action names. Guard has not checked what they do.";
+const SEPARATE_CALL = "Running a tool is a separate call, and Guard reviews that call too.";
+const THOUGHT_CAPTION = "What the agent said it is doing";
+const TITLES = {
+  search_tools: "Search for tools",
+  get_tool_schemas: "Look up how tools work",
+  manage_connections: "Manage connected accounts",
+  multi_execute_tool: "Run actions",
+  remote_workbench: "Run code in Composio's workspace",
+  remote_bash_tool: "Run a command in Composio's workspace"
+};
+const TITLES_BY_TOOL = new Map(Object.entries(TITLES));
+function composioToolTitle(shortTool) {
+  return TITLES_BY_TOOL.get(shortTool.toLowerCase()) ?? null;
+}
+function explainComposioTool(shortTool, context) {
+  switch (shortTool.toLowerCase()) {
+    case "search_tools":
+      return searchTools(context);
+    case "get_tool_schemas":
+      return toolSchemas(context);
+    case "manage_connections":
+      return manageConnections(context);
+    case "multi_execute_tool":
+      return multiExecute(context);
+    case "remote_workbench":
+      return workbenchCode(context) ?? remoteCode(context, TITLES.remote_workbench, "code_to_execute", "Code");
+    case "remote_bash_tool":
+      return remoteCode(context, TITLES.remote_bash_tool, "command", "Command");
+    default:
+      return null;
+  }
+}
+function searchTools({ harness, input }) {
+  const queries = input?.queries;
+  const entries = Array.isArray(queries) ? queries : [];
+  const records = recordList(queries);
+  const useCases = [
+    ...records.map((query) => textOf(query.use_case, 200)),
+    ...entries.map((query) => typeof query === "string" ? textOf(query, 200) : null)
+  ].filter((text2) => text2 !== null);
+  const apps = unique(records.flatMap((query) => appsFromKnownFields(query.known_fields)));
+  const count2 = Math.max(entries.length, 1);
+  return {
+    headline: `${harness} wants to search for tools in Composio`,
+    title: TITLES.search_tools,
+    aside: `Composio connects the agent to other apps. This only asks which tools could do the job. ${SEPARATE_CALL}`,
+    effect: "read",
+    effectBasis: NAME_BASIS,
+    facts: [
+      ...apps.length > 0 ? [{ label: "Apps in the search", value: apps.join(", ") }] : [],
+      ...count2 > 1 ? [{ label: "Searches", value: String(count2) }] : []
+    ],
+    steps: [],
+    quotes: useCases.length > 0 ? { caption: "What the agent said it is looking for", items: useCases.slice(0, 4) } : null,
+    code: null,
+    queueTitle: `Composio · ${TITLES.search_tools}`,
+    queueDetail: apps.length > 0 ? joinList(apps) : null
+  };
+}
+function appsFromKnownFields(value) {
+  const text2 = textOf(value, 400);
+  if (text2 === null) return [];
+  const apps = [];
+  for (const part of text2.split(/[,;]/)) {
+    const match = /^\s*(?:app|apps|toolkit|toolkits)\s*[:=]\s*(.{1,60})$/i.exec(part);
+    if (match) apps.push(serviceDisplayName(match[1].trim()));
+  }
+  return apps;
+}
+function toolSchemas({ harness, input }) {
+  const slugs = textList(input?.tool_slugs ?? input?.tools);
+  const named = slugs.map(slugLabel);
+  return {
+    headline: `${harness} wants to look up how Composio tools work`,
+    title: TITLES.get_tool_schemas,
+    aside: `This fetches the instructions the agent needs to call specific tools correctly. ${SEPARATE_CALL}`,
+    effect: "read",
+    effectBasis: NAME_BASIS,
+    facts: named.length > 0 ? [{ label: "Tools", value: joinList(named, 6) }] : [],
+    steps: [],
+    quotes: null,
+    code: null,
+    queueTitle: `Composio · ${TITLES.get_tool_schemas}`,
+    queueDetail: named.length > 0 ? joinList(named) : null
+  };
+}
+function manageConnections({ harness, input }) {
+  const accounts = unique(textList(input?.toolkits ?? input?.apps).map(serviceDisplayName));
+  return {
+    headline: `${harness} wants to manage your connected accounts in Composio`,
+    title: TITLES.manage_connections,
+    aside: "This checks which of your accounts are linked to Composio, and can ask to link another one.",
+    effect: "connect",
+    effectBasis: NAME_BASIS,
+    facts: accounts.length > 0 ? [{ label: "Accounts", value: accounts.join(", ") }] : [],
+    steps: [],
+    quotes: null,
+    code: null,
+    queueTitle: `Composio · ${TITLES.manage_connections}`,
+    queueDetail: accounts.length > 0 ? joinList(accounts) : null
+  };
+}
+const STEP_ROW_LIMIT = 10;
+function multiExecute({ harness, input }) {
+  const toolsValue = input?.tools;
+  const entries = Array.isArray(toolsValue) ? toolsValue : [];
+  const all = entries.map((entry, index) => toStep(recordOf(entry), index));
+  const steps = all.slice(0, STEP_ROW_LIMIT);
+  const hiddenSteps = all.length - steps.length;
+  const apps = unique(all.map((step) => step.app).filter((app) => app !== null));
+  const where = apps.length > 0 ? joinList(apps) : "Composio";
+  const effect = worstMcpEffect(all.map((step) => step.effect));
+  const effectApps = unique(
+    all.filter((step) => step.effect === effect).map((step) => step.app).filter((app) => app !== null)
+  );
+  const count2 = all.length;
+  const thought = textOf(input?.thought, 300);
+  const first = all[0];
+  return {
+    headline: `${harness} wants to ${batchPhrase(first, count2, where)}`,
+    title: batchTitle(first, count2, apps),
+    aside: `Composio carries out ${count2 === 1 ? "this action" : "these actions"} in your connected ${accountPhrase(apps)}, using the inputs below.`,
+    effect,
+    effectBasis: STEP_BASIS,
+    facts: [],
+    steps,
+    hiddenSteps,
+    effectApps,
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: null,
+    // The row leads with the app people know (Gmail), not the service in between.
+    queueTitle: `${apps.length === 1 ? apps[0] : "Composio"} · ${first?.action ?? "Run actions"}${count2 > 1 ? ` and ${count2 - 1} more` : ""}`,
+    queueDetail: batchQueueDetail(first, apps)
+  };
+}
+function batchQueueDetail(first, apps) {
+  if (apps.length === 1) return firstDetail(first);
+  if (apps.length > 1) return joinList(apps);
+  return null;
+}
+function batchPhrase(first, count2, where) {
+  if (count2 === 1 && first !== void 0 && first.app !== null) {
+    return `${first.action.charAt(0).toLowerCase()}${first.action.slice(1)} in ${first.app}`;
+  }
+  if (count2 === 1) return `take an action in ${where}`;
+  return `take ${count2 === 0 ? "some" : count2} actions in ${where}`;
+}
+function firstDetail(step) {
+  const value = step?.details[0]?.value;
+  return value !== void 0 && value.length > 0 ? value : null;
+}
+function accountPhrase(apps) {
+  if (apps.length === 1) return `${apps[0]} account`;
+  return "accounts";
+}
+function batchTitle(first, count2, apps) {
+  if (count2 === 1 && first !== void 0) {
+    return first.app !== null ? `${first.action} in ${first.app}` : first.action;
+  }
+  const where = apps.length > 0 ? ` in ${joinList(apps)}` : "";
+  return `Run ${count2 === 0 ? "some" : count2} actions${where}`;
+}
+function toStep(tool, index) {
+  const slug = textOf(tool?.tool_slug, 120) ?? "";
+  const { app, action: action2 } = slug.length > 0 ? splitToolSlug(slug) : { app: null, action: "Unnamed action" };
+  const { facts, hidden } = scalarFacts(recordOf(tool?.arguments), { max: 5, tool: slug });
+  return {
+    id: `${index}-${slug}`,
+    app,
+    action: action2,
+    effect: slug.length > 0 ? classifyMcpEffect(slug) : "unknown",
+    details: facts,
+    hiddenDetails: hidden
+  };
+}
+function workbenchCode({ harness, input }) {
+  const code = codeOf(input?.code_to_execute);
+  if (code === null) return null;
+  const { steps: all, unreadable } = readComposioCode(code);
+  if (all.length === 0) return null;
+  const steps = all.slice(0, STEP_ROW_LIMIT);
+  const apps = unique(all.map((step) => step.app).filter((app) => app !== null));
+  const first = all[0];
+  const count2 = all.length;
+  const thought = textOf(input?.thought, 300);
+  const lines = code.split("\n").length;
+  return {
+    headline: `${harness} wants to ${batchPhrase(first, count2, apps.length > 0 ? joinList(apps) : "Composio")}, using code`,
+    title: batchTitle(first, count2, apps),
+    aside: codeAside(apps, unreadable),
+    effect: "run-code",
+    effectBasis: "Read from the action names in the code. Guard has not run or checked it.",
+    facts: [],
+    steps,
+    hiddenSteps: all.length - steps.length,
+    stepsCaption: count2 === 1 ? "What the code asks for" : "What the code asks for, in order",
+    effectApps: apps,
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    // When part of the code could not be read, the code itself stays in view.
+    code: { label: `The code (${lines} ${lines === 1 ? "line" : "lines"})`, text: code, collapsed: unreadable === 0 },
+    queueTitle: `${apps.length === 1 ? apps[0] : "Composio"} · ${first.action}${count2 > 1 ? ` and ${count2 - 1} more` : ""}`,
+    queueDetail: batchQueueDetail(first, apps)
+  };
+}
+function codeAside(apps, unreadable) {
+  const account = apps.length > 0 ? `your connected ${accountPhrase(apps)}` : "your connected accounts";
+  const rest = unreadable > 0 ? " Some of it reaches actions in ways Guard cannot read, so read the code below." : "";
+  return `The agent wrote code that Composio runs with ${account}.${rest}`;
+}
+function remoteCode(context, title, field, label) {
+  const code = codeOf(context.input?.[field]);
+  const thought = textOf(context.input?.thought, 300);
+  return {
+    headline: `${context.harness} wants to ${title.charAt(0).toLowerCase()}${title.slice(1)}`,
+    title,
+    aside: "Composio runs this in its remote workspace.",
+    effect: "run-code",
+    effectBasis: NAME_BASIS,
+    facts: [],
+    steps: [],
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: code !== null ? { label, text: code } : null,
+    queueTitle: `Composio · ${title}`,
+    queueDetail: null
+  };
+}
+function slugLabel(slug) {
+  const { app, action: action2 } = splitToolSlug(slug);
+  return app !== null ? `${app} · ${action2}` : action2;
+}
+const BROWSER_WORDS = ["browser", "playwright", "puppeteer", "chrome", "selenium", "webdriver", "stagehand"];
+const SCREEN_WORDS = ["computeruse", "computer", "desktop"];
+const AGENT_TEXT_KEYS$1 = ["thought", "use_case"];
+const POINTER_KEYS = ["tabid", "tab_id", "coordinate", "coordinates", "start_coordinate", "ref", "element_ref", "uid", "node_id"];
+function surfaceOf(server) {
+  const key = server.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (BROWSER_WORDS.some((word) => key.includes(word))) return "page";
+  if (SCREEN_WORDS.some((word) => key.includes(word))) return "screen";
+  return null;
+}
+function action(title, phrase, effect) {
+  return { title, phrase, effect };
+}
+function actionFor(name, surface) {
+  const on = surface === "page" ? "the page" : "the screen";
+  const word = name.toLowerCase().replace(/^(browser|page|mouse|computer)_/, "");
+  switch (word) {
+    case "navigate":
+    case "navigate_page":
+    case "goto":
+    case "go_to":
+    case "open":
+    case "open_url":
+    case "open_page":
+    case "new_page":
+    case "new_tab":
+    case "tab_new":
+    case "tabs_create":
+    case "tabs_create_mcp":
+    case "preview_start":
+      return action("Open a web page", "open a web page", "act-as-you");
+    case "navigate_back":
+    case "go_back":
+    case "back":
+      return action("Go back a page", "go back a page", "act-as-you");
+    case "click":
+    case "left_click":
+    case "right_click":
+    case "middle_click":
+    case "double_click":
+    case "triple_click":
+    case "tap":
+      return action(`Click on ${on}`, `click on ${on}`, "act-as-you");
+    case "left_click_drag":
+    case "drag":
+    case "drag_and_drop":
+      return action(`Drag on ${on}`, `drag something on ${on}`, "act-as-you");
+    case "type":
+    case "type_text":
+    case "fill":
+    case "fill_form":
+    case "form_input":
+    case "input_text":
+    case "select_option":
+      return action(`Type on ${on}`, `type on ${on}`, "act-as-you");
+    case "key":
+    case "press":
+    case "press_key":
+    case "keyboard":
+      return action("Press a key", `press a key on ${on}`, "act-as-you");
+    case "scroll":
+    case "scroll_to":
+    case "hover":
+    case "mouse_move":
+      return action(`Move around ${on}`, `move around ${on}`, "act-as-you");
+    case "screenshot":
+    case "take_screenshot":
+    case "zoom":
+      return action(surface === "page" ? "Take a picture of the page" : "Take a picture of your screen", "take a screenshot", "read");
+    case "snapshot":
+    case "read_page":
+    case "get_page_text":
+    case "get_text":
+    case "get_content":
+    case "extract":
+      return action("Read the page", "read the page", "read");
+    case "find":
+    case "find_element":
+      return action("Find something on the page", "find something on the page", "read");
+    case "tabs_context":
+    case "tabs_context_mcp":
+    case "tabs":
+    case "list_tabs":
+    case "tab_list":
+      return action("See which tabs are open", "see which tabs are open", "read");
+    case "read_console_messages":
+    case "console_messages":
+      return action("Read the page's developer messages", "read the page's developer messages", "read");
+    case "read_network_requests":
+    case "network_requests":
+      return action("See what the page loaded", "see what the page loaded", "read");
+    case "wait":
+    case "wait_for":
+      return action("Wait for the page", "wait for the page", "read");
+    case "resize_window":
+    case "resize":
+      return action("Resize the window", "resize the window", "act-as-you");
+    case "close":
+    case "close_tab":
+    case "tab_close":
+    case "tabs_close":
+      return action("Close a tab", "close a tab", "act-as-you");
+    case "file_upload":
+    case "upload_file":
+    case "upload_image":
+      return action("Upload a file to a website", "upload a file to a website", "send");
+    case "evaluate":
+    case "javascript":
+    case "javascript_tool":
+    case "execute_script":
+    case "run_script":
+      return action("Run code on the page", "run code on the page", "run-code");
+    case "open_application":
+    case "open_app":
+      return action("Open an app", "open an app on your computer", "act-as-you");
+    default:
+      return null;
+  }
+}
+function fact$1(label, value, key, kind = "text") {
+  return value !== null && value.length > 0 ? [{ label, value, key, kind }] : [];
+}
+function firstKey(input, keys2) {
+  if (input === null) return null;
+  return keys2.find((key) => typeof input[key] === "string" && input[key].trim().length > 0) ?? null;
+}
+const URL_KEYS = ["url", "href", "link"];
+const TEXT_KEYS = ["text", "value", "values"];
+const KEY_KEYS = ["key", "keys"];
+const TARGET_KEYS = ["element", "description", "target", "selector"];
+const QUERY_KEYS = ["query"];
+const CODE_KEYS = ["function", "script", "expression", "code"];
+function browserFacts(input, act) {
+  const urlKey = firstKey(input, URL_KEYS);
+  const textKey = act.effect === "run-code" ? null : firstKey(input, TEXT_KEYS);
+  const keyKey = firstKey(input, KEY_KEYS);
+  const targetKey = firstKey(input, TARGET_KEYS);
+  const queryKey = firstKey(input, QUERY_KEYS);
+  const facts = [
+    ...urlKey !== null ? fact$1("Web page", textOf(input?.[urlKey]), urlKey, "url") : [],
+    ...targetKey !== null ? fact$1("On", textOf(input?.[targetKey], 160), targetKey) : [],
+    ...textKey !== null ? fact$1("What it types", textOf(input?.[textKey]), textKey, "long") : [],
+    ...keyKey !== null ? fact$1("Key", textOf(input?.[keyKey], 60), keyKey) : [],
+    ...queryKey !== null ? fact$1("Looking for", textOf(input?.[queryKey], 160), queryKey) : []
+  ];
+  return { facts, used: [urlKey, textKey, keyKey, targetKey, queryKey].filter((key) => key !== null) };
+}
+function hostOf(facts) {
+  const url = facts.find((item) => item.kind === "url")?.value;
+  return url !== void 0 ? linkParts(url)?.host ?? null : null;
+}
+function explainBrowserTool(server, shortTool, context) {
+  const surface = surfaceOf(server);
+  if (surface === null) return null;
+  const { harness, connector, input } = context;
+  const stepName = shortTool.toLowerCase() === "computer" ? textOf(input?.action, 40) ?? "" : shortTool;
+  const act = actionFor(stepName, surface);
+  if (act === null) return null;
+  const { facts: named, used } = browserFacts(input, act);
+  const codeKey = act.effect === "run-code" ? firstKey(input, [...CODE_KEYS, "text"]) : null;
+  const code = codeKey !== null ? codeOf(input?.[codeKey]) : null;
+  const skip = [...AGENT_TEXT_KEYS$1, ...used, ...codeKey !== null ? [codeKey] : [], "action", ...POINTER_KEYS];
+  const { facts: rest } = scalarFacts(input, { skip, max: Math.max(0, 6 - named.length) });
+  const facts = [...named, ...rest];
+  const host = act.title === "Open a web page" ? hostOf(facts) : null;
+  const phrase = host !== null ? `open ${host}` : act.phrase;
+  const thought = textOf(input?.thought, 300);
+  return {
+    headline: `${harness} wants to ${phrase} in ${connector}`,
+    title: act.title,
+    aside: null,
+    effect: act.effect,
+    effectBasis: "Read from the tool's name. Guard has not checked what it does.",
+    facts,
+    steps: [],
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: code !== null ? { label: "Code", text: code } : null,
+    queueTitle: `${connector} · ${host !== null ? `Open ${host}` : act.title}`,
+    queueDetail: host === null ? facts[0]?.value ?? null : null
+  };
+}
+const CLAUDE_APP = "the Claude app";
+const CLAUDE = "Claude";
+const CLAUDE_SERVER_PREFIX = "ccd_";
+const STATUS_WORDS = { completed: "Done", in_progress: "Now", pending: "Next" };
+function noFacts() {
+  return [];
+}
+function fact(label, value, key, kind = "text") {
+  return value !== null && value.length > 0 ? [{ label, value, key, kind }] : [];
+}
+function summaryFacts(input) {
+  const buttons = recordList(input?.actions, 4).map((action2) => textOf(action2.label, 40)).filter((label) => label !== null && label.length > 0);
+  return [
+    ...fact("Summary", textOf(input?.recap, 400), "recap", "long"),
+    ...fact("Question", textOf(input?.ask, 160), "ask"),
+    ...fact("Buttons", buttons.length > 0 ? buttons.join(" · ") : null, "actions")
+  ];
+}
+function taskFacts(input) {
+  const tasks = recordList(input?.items, 12).map((task) => {
+    const content = textOf(task.content, 80);
+    if (content === null || content.length === 0) return null;
+    const status = STATUS_WORDS[textOf(task.status, 20) ?? ""] ?? "Next";
+    return `${status}: ${content}`;
+  }).filter((line) => line !== null);
+  if (tasks.length > 0) return fact("Tasks", tasks.join(" · "), "items", "long");
+  return input?.advance === true ? [{ label: "Change", value: "Marks the current task done and starts the next one", key: "advance" }] : [];
+}
+function paneFacts(input) {
+  return fact("Panel", textOf(input?.pane ?? input?.kind ?? input?.name, 60), "pane");
+}
+function chapterFacts(input) {
+  return fact("Chapter", textOf(input?.title, 80), "title");
+}
+function sessionFacts(input) {
+  return fact("Task", textOf(input?.title, 120), "title");
+}
+const CLAUDE_TOOLS = /* @__PURE__ */ new Map([
+  ["ccd_turn/wrap_up", { title: "Show a summary and next steps", phrase: "show you a summary and next-step buttons", effect: "in-app", facts: summaryFacts }],
+  ["ccd_turn/update_plan", { title: "Update its task list", phrase: "update the task list under its reply", effect: "in-app", facts: taskFacts }],
+  ["ccd_view/show_pane", { title: "Open a side panel", phrase: "open a side panel", effect: "in-app", facts: paneFacts }],
+  ["ccd_view/close_pane", { title: "Close a side panel", phrase: "close a side panel", effect: "in-app", facts: paneFacts }],
+  ["ccd_view/get_layout", { title: "Check which panels are open", phrase: "check which panels are open", effect: "in-app", facts: noFacts }],
+  ["ccd_view/set_transcript_view", { title: "Change how the chat is shown", phrase: "change how the chat is shown", effect: "in-app", facts: noFacts }],
+  ["ccd_session/mark_chapter", { title: "Add a chapter to the chat", phrase: "add a chapter to the chat", effect: "in-app", facts: chapterFacts }],
+  ["ccd_session/dismiss_task", { title: "Withdraw a suggested task", phrase: "withdraw a task it suggested", effect: "in-app", facts: noFacts }],
+  ["ccd_session/start_session", { title: "Start another Claude session", phrase: "start another Claude session", effect: "write", facts: sessionFacts }]
+]);
+const CLAUDE_HARNESS = "claude-code";
+const CLAUDE_DESKTOP_ENVIRONMENT = "CLAUDE_CODE_DESKTOP_APP_VERSION";
+function fromClaudeApp(evidence) {
+  if ((evidence.harness ?? "").trim().toLowerCase().replace(/_/g, "-") === CLAUDE_HARNESS) return true;
+  const stamp = recordOf(evidence.raw?.guard_execution_environment);
+  const names = stamp?.environment_names;
+  return Array.isArray(names) && names.includes(CLAUDE_DESKTOP_ENVIRONMENT);
+}
+function hostAppTool(server, tool, evidence) {
+  const key = server.toLowerCase();
+  if (!key.startsWith(CLAUDE_SERVER_PREFIX) || !fromClaudeApp(evidence)) return null;
+  const entry = CLAUDE_TOOLS.get(`${key}/${tool.toLowerCase()}`);
+  if (entry !== void 0) return { ...entry, app: CLAUDE_APP, requester: CLAUDE };
+  const title = sentenceCase(tool);
+  return {
+    app: CLAUDE_APP,
+    requester: CLAUDE,
+    title,
+    phrase: `use its “${title}” tool`,
+    effect: classifyMcpEffect(tool),
+    facts: noFacts
+  };
+}
+function explainHostAppTool(host, input) {
+  return {
+    headline: `${host.requester} wants to ${host.phrase}`,
+    title: host.title,
+    aside: null,
+    effect: host.effect,
+    effectBasis: "Read from the tool's name.",
+    facts: host.facts(recordOf(input)),
+    steps: [],
+    quotes: null,
+    code: null,
+    queueTitle: `${host.requester} · ${host.title}`,
+    queueDetail: null,
+    builtIn: true
+  };
+}
+function consequenceFor(effect, where) {
+  switch (effect) {
+    case "in-app":
+      return {
+        tone: "calm",
+        text: `By its name, this only changes what ${where} shows you. Guard has not checked what it does.`
+      };
+    case "read":
+      return { tone: "calm", text: `By its name, this looks something up in ${where}.` };
+    case "write":
+      return { tone: "care", text: `By its name, this creates or changes something in ${where}.` };
+    case "send":
+      return {
+        tone: "danger",
+        text: `Sends something through ${where}. Once it goes out, it may not be possible to take back.`
+      };
+    case "delete":
+      return { tone: "danger", text: `Deletes something in ${where}. It may not be possible to recover.` };
+    case "run-code":
+      return {
+        tone: "danger",
+        text: `Runs code that can use ${where}. Code can do more than it says, so open it if anything looks wrong.`
+      };
+    case "connect":
+      return { tone: "care", text: `Checks or changes which accounts are linked to ${where}, and may ask you to link another.` };
+    case "act-as-you":
+      return {
+        tone: "care",
+        text: `Works in ${where} as if it were you. Where you are signed in, it can do what you can, like buy, post or change settings.`
+      };
+    case "unknown":
+      return { tone: "care", text: "Guard cannot tell what this does from the tool's name. Check the details below." };
+  }
+}
+const UNKNOWN_SERVER = "a connected server";
+const CODEX_APPS_SERVER = "codex_apps";
+const AGENT_TEXT_KEYS = ["thought", "use_case"];
+function explainMcpCall(item) {
+  const envelope = item.action_envelope_json;
+  if (!envelope) return null;
+  const ref = resolveMcpRef(envelope);
+  if (ref === null) return null;
+  const raw = recordOf(envelope.raw_payload_redacted);
+  const selected = selectToolInput(raw);
+  const input = selected.record;
+  const shortTool = shortToolName(ref.server, ref.tool);
+  const host = hostAppTool(ref.server, shortTool, { harness: item.harness, raw });
+  const harness = host?.requester ?? harnessDisplayName(item.harness);
+  const connector = host?.app ?? (ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER);
+  const body = (host !== null ? explainHostAppTool(host, input) : null) ?? (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ?? (host === null ? explainBrowserTool(ref.server, shortTool, { harness, connector, input }) : null) ?? explainGenericTool({ harness, connector, shortTool, input });
+  return {
+    ...body,
+    consequence: consequenceFor(body.effect, whereItActs(body, connector)),
+    connector,
+    requester: harness,
+    rawInput: selected.text,
+    truncated: wasTruncated(item, selected),
+    toolId: ref.server.length > 0 ? `${ref.server} / ${ref.tool}` : ref.tool,
+    whyAsked: whyAskedFor(host, ref.server.length > 0 ? connector : null)
+  };
+}
+function whyAskedFor(host, connector) {
+  if (host !== null) return `Guard asks before any tool it has not reviewed, including tools built into ${host.app}.`;
+  if (connector !== null) return `Guard asks before any tool it has not reviewed, and it has not reviewed this ${connector} tool.`;
+  return "Guard asks before any tool it has not reviewed, and it has not reviewed this one.";
+}
+function whereItActs(body, connector) {
+  const apps = body.effectApps ?? [];
+  return apps.length > 0 ? joinList(apps) : connector;
+}
+function plainMcpReason(item, text2) {
+  if (text2 === null || !text2.includes("unreviewed MCP tool")) {
+    return text2;
+  }
+  return explainMcpCall(item)?.whyAsked ?? text2;
+}
+function resolveMcpRef(envelope) {
+  const fromToolName = parseNamespacedMcpName(envelope.tool_name);
+  const fromMcpTool = parseNamespacedMcpName(envelope.mcp_tool);
+  const isMcp = envelope.action_type === "mcp_tool" || fromToolName !== null || fromMcpTool !== null || isPlainNamePart(envelope.mcp_server);
+  if (!isMcp) return null;
+  const tool = recordedTool(envelope, fromToolName, fromMcpTool);
+  if (tool === null) return null;
+  return unwrapCodexApps({ server: recordedServer(envelope, fromToolName, fromMcpTool), tool });
+}
+function recordedTool(envelope, fromToolName, fromMcpTool) {
+  if (fromMcpTool !== null) return fromMcpTool.tool;
+  if (isPlainNamePart(envelope.mcp_tool)) return envelope.mcp_tool;
+  return fromToolName?.tool ?? null;
+}
+function recordedServer(envelope, fromToolName, fromMcpTool) {
+  if (envelope.mcp_server === CODEX_APPS_SERVER && fromMcpTool !== null) return fromMcpTool.server;
+  if (isPlainNamePart(envelope.mcp_server)) return envelope.mcp_server;
+  return fromMcpTool?.server ?? fromToolName?.server ?? "";
+}
+function unwrapCodexApps(ref) {
+  if (ref.server !== CODEX_APPS_SERVER) return ref;
+  const separator = ref.tool.indexOf("__");
+  if (separator <= 0 || separator + 2 >= ref.tool.length) return ref;
+  return { server: ref.tool.slice(0, separator), tool: ref.tool.slice(separator + 2) };
+}
+function explainGenericTool(context) {
+  const { harness, connector, shortTool, input } = context;
+  const effect = classifyMcpEffect(shortTool);
+  const title = toolTitle(connector, shortTool);
+  const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS, tool: shortTool });
+  const thought = textOf(input?.thought, 300);
+  const firstValue = facts[0]?.value ?? null;
+  return {
+    headline: `${harness} wants to ${effectPhrase(effect, connector)}`,
+    title,
+    aside: null,
+    effect,
+    // An unclear effect is already said in the note's first line, so it needs no second line.
+    effectBasis: effect === "unknown" ? "" : "Read from the tool's name. Guard has not checked what it does.",
+    facts,
+    steps: [],
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: null,
+    queueTitle: `${connector} · ${title}`,
+    queueDetail: firstValue !== null && firstValue.length > 0 ? firstValue : null
+  };
+}
+function effectPhrase(effect, connector) {
+  switch (effect) {
+    case "in-app":
+      return `change what ${connector} shows you`;
+    case "read":
+      return `look something up in ${connector}`;
+    case "write":
+      return `make a change in ${connector}`;
+    case "send":
+      return `send something with ${connector}`;
+    case "delete":
+      return `delete something in ${connector}`;
+    case "run-code":
+      return `run code with ${connector}`;
+    case "connect":
+      return `change a connection in ${connector}`;
+    case "act-as-you":
+      return `use ${connector} as you`;
+    case "unknown":
+      return `use ${connector}`;
+  }
+}
+function wasTruncated(item, selected) {
+  if ((item.action_explanation?.redaction.truncated_fields.length ?? 0) > 0) return true;
+  if (selected.record === null) return selected.text !== null && selected.text.length >= CORE_STRING_LIMIT;
+  return JSON.stringify(selected.record).length >= CORE_STRING_LIMIT && containsLongString(selected.record);
+}
+function containsLongString(value) {
+  if (typeof value === "string") return value.length >= CORE_STRING_LIMIT;
+  if (Array.isArray(value)) return value.some(containsLongString);
+  const record2 = recordOf(value);
+  return record2 !== null && Object.values(record2).some(containsLongString);
+}
+function FaWindows(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 448 512" }, "child": [{ "tag": "path", "attr": { "d": "M0 93.7l183.6-25.3v177.4H0V93.7zm0 324.6l183.6 25.3V268.4H0v149.9zm203.8 28L448 480V268.4H203.8v177.9zm0-380.6v180.1H448V32L203.8 65.7z" }, "child": [] }] })(props);
+}
+function FaMicrosoft(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 448 512" }, "child": [{ "tag": "path", "attr": { "d": "M0 32h214.6v214.6H0V32zm233.4 0H448v214.6H233.4V32zM0 265.4h214.6V480H0V265.4zm233.4 0H448V480H233.4V265.4z" }, "child": [] }] })(props);
+}
+function FaLinkedin(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 448 512" }, "child": [{ "tag": "path", "attr": { "d": "M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z" }, "child": [] }] })(props);
+}
+function FaGithub(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 496 512" }, "child": [{ "tag": "path", "attr": { "d": "M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" }, "child": [] }] })(props);
+}
+function FaGitAlt(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 448 512" }, "child": [{ "tag": "path", "attr": { "d": "M439.55 236.05L244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z" }, "child": [] }] })(props);
+}
+function FaDocker(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 640 512" }, "child": [{ "tag": "path", "attr": { "d": "M349.9 236.3h-66.1v-59.4h66.1v59.4zm0-204.3h-66.1v60.7h66.1V32zm78.2 144.8H362v59.4h66.1v-59.4zm-156.3-72.1h-66.1v60.1h66.1v-60.1zm78.1 0h-66.1v60.1h66.1v-60.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1l-13.3-8.9zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1v-59.4zm-78.1-72.1h-66.1v60.1h66.1v-60.1z" }, "child": [] }] })(props);
+}
+function FaAws(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 640 512" }, "child": [{ "tag": "path", "attr": { "d": "M180.41 203.01c-.72 22.65 10.6 32.68 10.88 39.05a8.164 8.164 0 0 1-4.1 6.27l-12.8 8.96a10.66 10.66 0 0 1-5.63 1.92c-.43-.02-8.19 1.83-20.48-25.61a78.608 78.608 0 0 1-62.61 29.45c-16.28.89-60.4-9.24-58.13-56.21-1.59-38.28 34.06-62.06 70.93-60.05 7.1.02 21.6.37 46.99 6.27v-15.62c2.69-26.46-14.7-46.99-44.81-43.91-2.4.01-19.4-.5-45.84 10.11-7.36 3.38-8.3 2.82-10.75 2.82-7.41 0-4.36-21.48-2.94-24.2 5.21-6.4 35.86-18.35 65.94-18.18a76.857 76.857 0 0 1 55.69 17.28 70.285 70.285 0 0 1 17.67 52.36l-.01 69.29zM93.99 235.4c32.43-.47 46.16-19.97 49.29-30.47 2.46-10.05 2.05-16.41 2.05-27.4-9.67-2.32-23.59-4.85-39.56-4.87-15.15-1.14-42.82 5.63-41.74 32.26-1.24 16.79 11.12 31.4 29.96 30.48zm170.92 23.05c-7.86.72-11.52-4.86-12.68-10.37l-49.8-164.65c-.97-2.78-1.61-5.65-1.92-8.58a4.61 4.61 0 0 1 3.86-5.25c.24-.04-2.13 0 22.25 0 8.78-.88 11.64 6.03 12.55 10.37l35.72 140.83 33.16-140.83c.53-3.22 2.94-11.07 12.8-10.24h17.16c2.17-.18 11.11-.5 12.68 10.37l33.42 142.63L420.98 80.1c.48-2.18 2.72-11.37 12.68-10.37h19.72c.85-.13 6.15-.81 5.25 8.58-.43 1.85 3.41-10.66-52.75 169.9-1.15 5.51-4.82 11.09-12.68 10.37h-18.69c-10.94 1.15-12.51-9.66-12.68-10.75L328.67 110.7l-32.78 136.99c-.16 1.09-1.73 11.9-12.68 10.75h-18.3zm273.48 5.63c-5.88.01-33.92-.3-57.36-12.29a12.802 12.802 0 0 1-7.81-11.91v-10.75c0-8.45 6.2-6.9 8.83-5.89 10.04 4.06 16.48 7.14 28.81 9.6 36.65 7.53 52.77-2.3 56.72-4.48 13.15-7.81 14.19-25.68 5.25-34.95-10.48-8.79-15.48-9.12-53.13-21-4.64-1.29-43.7-13.61-43.79-52.36-.61-28.24 25.05-56.18 69.52-55.95 12.67-.01 46.43 4.13 55.57 15.62 1.35 2.09 2.02 4.55 1.92 7.04v10.11c0 4.44-1.62 6.66-4.87 6.66-7.71-.86-21.39-11.17-49.16-10.75-6.89-.36-39.89.91-38.41 24.97-.43 18.96 26.61 26.07 29.7 26.89 36.46 10.97 48.65 12.79 63.12 29.58 17.14 22.25 7.9 48.3 4.35 55.44-19.08 37.49-68.42 34.44-69.26 34.42zm40.2 104.86c-70.03 51.72-171.69 79.25-258.49 79.25A469.127 469.127 0 0 1 2.83 327.46c-6.53-5.89-.77-13.96 7.17-9.47a637.37 637.37 0 0 0 316.88 84.12 630.22 630.22 0 0 0 241.59-49.55c11.78-5 21.77 7.8 10.12 16.38zm29.19-33.29c-8.96-11.52-59.28-5.38-81.81-2.69-6.79.77-7.94-5.12-1.79-9.47 40.07-28.17 105.88-20.1 113.44-10.63 7.55 9.47-2.05 75.41-39.56 106.91-5.76 4.87-11.27 2.3-8.71-4.1 8.44-21.25 27.39-68.49 18.43-80.02z" }, "child": [] }] })(props);
+}
+function SiZoom(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M5.033 14.649H.743a.74.74 0 0 1-.686-.458.74.74 0 0 1 .16-.808L3.19 10.41H1.06A1.06 1.06 0 0 1 0 9.35h3.957c.301 0 .57.18.686.458a.74.74 0 0 1-.161.808L1.51 13.59h2.464c.585 0 1.06.475 1.06 1.06zM24 11.338c0-1.14-.927-2.066-2.066-2.066-.61 0-1.158.265-1.537.686a2.061 2.061 0 0 0-1.536-.686c-1.14 0-2.066.926-2.066 2.066v3.311a1.06 1.06 0 0 0 1.06-1.06v-2.251a1.004 1.004 0 0 1 2.013 0v2.251c0 .586.474 1.06 1.06 1.06v-3.311a1.004 1.004 0 0 1 2.012 0v2.251c0 .586.475 1.06 1.06 1.06zM16.265 12a2.728 2.728 0 1 1-5.457 0 2.728 2.728 0 0 1 5.457 0zm-1.06 0a1.669 1.669 0 1 0-3.338 0 1.669 1.669 0 0 0 3.338 0zm-4.82 0a2.728 2.728 0 1 1-5.458 0 2.728 2.728 0 0 1 5.457 0zm-1.06 0a1.669 1.669 0 1 0-3.338 0 1.669 1.669 0 0 0 3.338 0z" }, "child": [] }] })(props);
+}
+function SiZendesk(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12.914 2.904V16.29L24 2.905H12.914zM0 2.906C0 5.966 2.483 8.45 5.543 8.45s5.542-2.484 5.543-5.544H0zm11.086 4.807L0 21.096h11.086V7.713zm7.37 7.84c-3.063 0-5.542 2.48-5.542 5.543H24c0-3.06-2.48-5.543-5.543-5.543z" }, "child": [] }] })(props);
+}
+function SiYoutube(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" }, "child": [] }] })(props);
+}
+function SiX(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" }, "child": [] }] })(props);
+}
+function SiWordpress(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M21.469 6.825c.84 1.537 1.318 3.3 1.318 5.175 0 3.979-2.156 7.456-5.363 9.325l3.295-9.527c.615-1.54.82-2.771.82-3.864 0-.405-.026-.78-.07-1.11m-7.981.105c.647-.03 1.232-.105 1.232-.105.582-.075.514-.93-.067-.899 0 0-1.755.135-2.88.135-1.064 0-2.85-.15-2.85-.15-.585-.03-.661.855-.075.885 0 0 .54.061 1.125.09l1.68 4.605-2.37 7.08L5.354 6.9c.649-.03 1.234-.1 1.234-.1.585-.075.516-.93-.065-.896 0 0-1.746.138-2.874.138-.2 0-.438-.008-.69-.015C4.911 3.15 8.235 1.215 12 1.215c2.809 0 5.365 1.072 7.286 2.833-.046-.003-.091-.009-.141-.009-1.06 0-1.812.923-1.812 1.914 0 .89.513 1.643 1.06 2.531.411.72.89 1.643.89 2.977 0 .915-.354 1.994-.821 3.479l-1.075 3.585-3.9-11.61.001.014zM12 22.784c-1.059 0-2.081-.153-3.048-.437l3.237-9.406 3.315 9.087c.024.053.05.101.078.149-1.12.393-2.325.609-3.582.609M1.211 12c0-1.564.336-3.05.935-4.39L7.29 21.709C3.694 19.96 1.212 16.271 1.211 12M12 0C5.385 0 0 5.385 0 12s5.385 12 12 12 12-5.385 12-12S18.615 0 12 0" }, "child": [] }] })(props);
+}
+function SiWhatsapp(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" }, "child": [] }] })(props);
+}
+function SiVercel(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "m12 1.608 12 20.784H0Z" }, "child": [] }] })(props);
+}
+function SiTwilio(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12 0C5.381-.008.008 5.352 0 11.971V12c0 6.64 5.359 12 12 12 6.64 0 12-5.36 12-12 0-6.641-5.36-12-12-12zm0 20.801c-4.846.015-8.786-3.904-8.801-8.75V12c-.014-4.846 3.904-8.786 8.75-8.801H12c4.847-.014 8.786 3.904 8.801 8.75V12c.015 4.847-3.904 8.786-8.75 8.801H12zm5.44-11.76c0 1.359-1.12 2.479-2.481 2.479-1.366-.007-2.472-1.113-2.479-2.479 0-1.361 1.12-2.481 2.479-2.481 1.361 0 2.481 1.12 2.481 2.481zm0 5.919c0 1.36-1.12 2.48-2.481 2.48-1.367-.008-2.473-1.114-2.479-2.48 0-1.359 1.12-2.479 2.479-2.479 1.361-.001 2.481 1.12 2.481 2.479zm-5.919 0c0 1.36-1.12 2.48-2.479 2.48-1.368-.007-2.475-1.113-2.481-2.48 0-1.359 1.12-2.479 2.481-2.479 1.358-.001 2.479 1.12 2.479 2.479zm0-5.919c0 1.359-1.12 2.479-2.479 2.479-1.367-.007-2.475-1.112-2.481-2.479 0-1.361 1.12-2.481 2.481-2.481 1.358 0 2.479 1.12 2.479 2.481z" }, "child": [] }] })(props);
+}
+function SiTrello(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M21.147 0H2.853A2.86 2.86 0 000 2.853v18.294A2.86 2.86 0 002.853 24h18.294A2.86 2.86 0 0024 21.147V2.853A2.86 2.86 0 0021.147 0zM10.34 17.287a.953.953 0 01-.953.953h-4a.954.954 0 01-.954-.953V5.38a.953.953 0 01.954-.953h4a.954.954 0 01.953.953zm9.233-5.467a.944.944 0 01-.953.947h-4a.947.947 0 01-.953-.947V5.38a.953.953 0 01.953-.953h4a.954.954 0 01.953.953z" }, "child": [] }] })(props);
+}
+function SiTodoist(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M21 0H3C1.35 0 0 1.35 0 3v3.858s3.854 2.24 4.098 2.38c.31.18.694.177 1.004 0 .26-.147 8.02-4.608 8.136-4.675.279-.161.58-.107.748-.01.164.097.606.348.84.48.232.134.221.502.013.622l-9.712 5.59c-.346.2-.69.204-1.048.002C3.478 10.907.998 9.463 0 8.882v2.02l4.098 2.38c.31.18.694.177 1.004 0 .26-.147 8.02-4.609 8.136-4.676.279-.16.58-.106.748-.008.164.096.606.347.84.48.232.133.221.5.013.62-.208.121-9.288 5.346-9.712 5.59-.346.2-.69.205-1.048.002C3.478 14.951.998 13.506 0 12.926v2.02l4.098 2.38c.31.18.694.177 1.004 0 .26-.147 8.02-4.609 8.136-4.676.279-.16.58-.106.748-.009.164.097.606.348.84.48.232.133.221.502.013.622l-9.712 5.59c-.346.199-.69.204-1.048.001C3.478 18.994.998 17.55 0 16.97V21c0 1.65 1.35 3 3 3h18c1.65 0 3-1.35 3-3V3c0-1.65-1.35-3-3-3z" }, "child": [] }] })(props);
+}
+function SiTerraform(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M1.44 0v7.575l6.561 3.79V3.787zm21.12 4.227l-6.561 3.791v7.574l6.56-3.787zM8.72 4.23v7.575l6.561 3.787V8.018zm0 8.405v7.575L15.28 24v-7.578z" }, "child": [] }] })(props);
+}
+function SiTelegram(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" }, "child": [] }] })(props);
+}
+function SiSupabase(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.9 1.036c-.015-.986-1.26-1.41-1.874-.637L.764 12.05C-.33 13.427.65 15.455 2.409 15.455h9.579l.113 7.51c.014.985 1.259 1.408 1.873.636l9.262-11.653c1.093-1.375.113-3.403-1.645-3.403h-9.642z" }, "child": [] }] })(props);
+}
+function SiStripe(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.594-7.305h.003z" }, "child": [] }] })(props);
+}
+function SiSqlite(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M21.678.521c-1.032-.92-2.28-.55-3.513.544a8.71 8.71 0 0 0-.547.535c-2.109 2.237-4.066 6.38-4.674 9.544.237.48.422 1.093.544 1.561a13.044 13.044 0 0 1 .164.703s-.019-.071-.096-.296l-.05-.146a1.689 1.689 0 0 0-.033-.08c-.138-.32-.518-.995-.686-1.289-.143.423-.27.818-.376 1.176.484.884.778 2.4.778 2.4s-.025-.099-.147-.442c-.107-.303-.644-1.244-.772-1.464-.217.804-.304 1.346-.226 1.478.152.256.296.698.422 1.186.286 1.1.485 2.44.485 2.44l.017.224a22.41 22.41 0 0 0 .056 2.748c.095 1.146.273 2.13.5 2.657l.155-.084c-.334-1.038-.47-2.399-.41-3.967.09-2.398.642-5.29 1.661-8.304 1.723-4.55 4.113-8.201 6.3-9.945-1.993 1.8-4.692 7.63-5.5 9.788-.904 2.416-1.545 4.684-1.931 6.857.666-2.037 2.821-2.912 2.821-2.912s1.057-1.304 2.292-3.166c-.74.169-1.955.458-2.362.629-.6.251-.762.337-.762.337s1.945-1.184 3.613-1.72C21.695 7.9 24.195 2.767 21.678.521m-18.573.543A1.842 1.842 0 0 0 1.27 2.9v16.608a1.84 1.84 0 0 0 1.835 1.834h9.418a22.953 22.953 0 0 1-.052-2.707c-.006-.062-.011-.141-.016-.2a27.01 27.01 0 0 0-.473-2.378c-.121-.47-.275-.898-.369-1.057-.116-.197-.098-.31-.097-.432 0-.12.015-.245.037-.386a9.98 9.98 0 0 1 .234-1.045l.217-.028c-.017-.035-.014-.065-.031-.097l-.041-.381a32.8 32.8 0 0 1 .382-1.194l.2-.019c-.008-.016-.01-.038-.018-.053l-.043-.316c.63-3.28 2.587-7.443 4.8-9.791.066-.069.133-.128.198-.194Z" }, "child": [] }] })(props);
+}
+function SiSpotify(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" }, "child": [] }] })(props);
+}
+function SiSlack(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" }, "child": [] }] })(props);
+}
+function SiShopify(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M15.337 23.979l7.216-1.561s-2.604-17.613-2.625-17.73c-.018-.116-.114-.192-.211-.192s-1.929-.136-1.929-.136-1.275-1.274-1.439-1.411c-.045-.037-.075-.057-.121-.074l-.914 21.104h.023zM11.71 11.305s-.81-.424-1.774-.424c-1.447 0-1.504.906-1.504 1.141 0 1.232 3.24 1.715 3.24 4.629 0 2.295-1.44 3.76-3.406 3.76-2.354 0-3.54-1.465-3.54-1.465l.646-2.086s1.245 1.066 2.28 1.066c.675 0 .975-.545.975-.932 0-1.619-2.654-1.694-2.654-4.359-.034-2.237 1.571-4.416 4.827-4.416 1.257 0 1.875.361 1.875.361l-.945 2.715-.02.01zM11.17.83c.136 0 .271.038.405.135-.984.465-2.064 1.639-2.508 3.992-.656.213-1.293.405-1.889.578C7.697 3.75 8.951.84 11.17.84V.83zm1.235 2.949v.135c-.754.232-1.583.484-2.394.736.466-1.777 1.333-2.645 2.085-2.971.193.501.309 1.176.309 2.1zm.539-2.234c.694.074 1.141.867 1.429 1.755-.349.114-.735.231-1.158.366v-.252c0-.752-.096-1.371-.271-1.871v.002zm2.992 1.289c-.02 0-.06.021-.078.021s-.289.075-.714.21c-.423-1.233-1.176-2.37-2.508-2.37h-.115C12.135.209 11.669 0 11.265 0 8.159 0 6.675 3.877 6.21 5.846c-1.194.365-2.063.636-2.16.674-.675.213-.694.232-.772.87-.075.462-1.83 14.063-1.83 14.063L15.009 24l.927-21.166z" }, "child": [] }] })(props);
+}
+function SiSentry(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.91 2.505c-.873-1.448-2.972-1.448-3.844 0L6.904 7.92a15.478 15.478 0 0 1 8.53 12.811h-2.221A13.301 13.301 0 0 0 5.784 9.814l-2.926 5.06a7.65 7.65 0 0 1 4.435 5.848H2.194a.365.365 0 0 1-.298-.534l1.413-2.402a5.16 5.16 0 0 0-1.614-.913L.296 19.275a2.182 2.182 0 0 0 .812 2.999 2.24 2.24 0 0 0 1.086.288h6.983a9.322 9.322 0 0 0-3.845-8.318l1.11-1.922a11.47 11.47 0 0 1 4.95 10.24h5.915a17.242 17.242 0 0 0-7.885-15.28l2.244-3.845a.37.37 0 0 1 .504-.13c.255.14 9.75 16.708 9.928 16.9a.365.365 0 0 1-.327.543h-2.287c.029.612.029 1.223 0 1.831h2.297a2.206 2.206 0 0 0 1.922-3.31z" }, "child": [] }] })(props);
+}
+function SiSalesforce(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M10.006 5.415a4.195 4.195 0 013.045-1.306c1.56 0 2.954.9 3.69 2.205.63-.3 1.35-.45 2.1-.45 2.85 0 5.159 2.34 5.159 5.22s-2.31 5.22-5.176 5.22c-.345 0-.69-.044-1.02-.104a3.75 3.75 0 01-3.3 1.95c-.6 0-1.155-.15-1.65-.375A4.314 4.314 0 018.88 20.4a4.302 4.302 0 01-4.05-2.82c-.27.062-.54.076-.825.076-2.204 0-4.005-1.8-4.005-4.05 0-1.5.811-2.805 2.01-3.51-.255-.57-.39-1.2-.39-1.846 0-2.58 2.1-4.65 4.65-4.65 1.53 0 2.85.705 3.72 1.8" }, "child": [] }] })(props);
+}
+function SiRust(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M23.8346 11.7033l-1.0073-.6236a13.7268 13.7268 0 00-.0283-.2936l.8656-.8069a.3483.3483 0 00-.1154-.578l-1.1066-.414a8.4958 8.4958 0 00-.087-.2856l.6904-.9587a.3462.3462 0 00-.2257-.5446l-1.1663-.1894a9.3574 9.3574 0 00-.1407-.2622l.49-1.0761a.3437.3437 0 00-.0274-.3361.3486.3486 0 00-.3006-.154l-1.1845.0416a6.7444 6.7444 0 00-.1873-.2268l.2723-1.153a.3472.3472 0 00-.417-.4172l-1.1532.2724a14.0183 14.0183 0 00-.2278-.1873l.0415-1.1845a.3442.3442 0 00-.49-.328l-1.076.491c-.0872-.0476-.1742-.0952-.2623-.1407l-.1903-1.1673A.3483.3483 0 0016.256.955l-.9597.6905a8.4867 8.4867 0 00-.2855-.086l-.414-1.1066a.3483.3483 0 00-.5781-.1154l-.8069.8666a9.2936 9.2936 0 00-.2936-.0284L12.2946.1683a.3462.3462 0 00-.5892 0l-.6236 1.0073a13.7383 13.7383 0 00-.2936.0284L9.9803.3374a.3462.3462 0 00-.578.1154l-.4141 1.1065c-.0962.0274-.1903.0567-.2855.086L7.744.955a.3483.3483 0 00-.5447.2258L7.009 2.348a9.3574 9.3574 0 00-.2622.1407l-1.0762-.491a.3462.3462 0 00-.49.328l.0416 1.1845a7.9826 7.9826 0 00-.2278.1873L3.8413 3.425a.3472.3472 0 00-.4171.4171l.2713 1.1531c-.0628.075-.1255.1509-.1863.2268l-1.1845-.0415a.3462.3462 0 00-.328.49l.491 1.0761a9.167 9.167 0 00-.1407.2622l-1.1662.1894a.3483.3483 0 00-.2258.5446l.6904.9587a13.303 13.303 0 00-.087.2855l-1.1065.414a.3483.3483 0 00-.1155.5781l.8656.807a9.2936 9.2936 0 00-.0283.2935l-1.0073.6236a.3442.3442 0 000 .5892l1.0073.6236c.008.0982.0182.1964.0283.2936l-.8656.8079a.3462.3462 0 00.1155.578l1.1065.4141c.0273.0962.0567.1914.087.2855l-.6904.9587a.3452.3452 0 00.2268.5447l1.1662.1893c.0456.088.0922.1751.1408.2622l-.491 1.0762a.3462.3462 0 00.328.49l1.1834-.0415c.0618.0769.1235.1528.1873.2277l-.2713 1.1541a.3462.3462 0 00.4171.4161l1.153-.2713c.075.0638.151.1255.2279.1863l-.0415 1.1845a.3442.3442 0 00.49.327l1.0761-.49c.087.0486.1741.0951.2622.1407l.1903 1.1662a.3483.3483 0 00.5447.2268l.9587-.6904a9.299 9.299 0 00.2855.087l.414 1.1066a.3452.3452 0 00.5781.1154l.8079-.8656c.0972.0111.1954.0203.2936.0294l.6236 1.0073a.3472.3472 0 00.5892 0l.6236-1.0073c.0982-.0091.1964-.0183.2936-.0294l.8069.8656a.3483.3483 0 00.578-.1154l.4141-1.1066a8.4626 8.4626 0 00.2855-.087l.9587.6904a.3452.3452 0 00.5447-.2268l.1903-1.1662c.088-.0456.1751-.0931.2622-.1407l1.0762.49a.3472.3472 0 00.49-.327l-.0415-1.1845a6.7267 6.7267 0 00.2267-.1863l1.1531.2713a.3472.3472 0 00.4171-.416l-.2713-1.1542c.0628-.0749.1255-.1508.1863-.2278l1.1845.0415a.3442.3442 0 00.328-.49l-.49-1.076c.0475-.0872.0951-.1742.1407-.2623l1.1662-.1893a.3483.3483 0 00.2258-.5447l-.6904-.9587.087-.2855 1.1066-.414a.3462.3462 0 00.1154-.5781l-.8656-.8079c.0101-.0972.0202-.1954.0283-.2936l1.0073-.6236a.3442.3442 0 000-.5892zm-6.7413 8.3551a.7138.7138 0 01.2986-1.396.714.714 0 11-.2997 1.396zm-.3422-2.3142a.649.649 0 00-.7715.5l-.3573 1.6685c-1.1035.501-2.3285.7795-3.6193.7795a8.7368 8.7368 0 01-3.6951-.814l-.3574-1.6684a.648.648 0 00-.7714-.499l-1.473.3158a8.7216 8.7216 0 01-.7613-.898h7.1676c.081 0 .1356-.0141.1356-.088v-2.536c0-.074-.0536-.0881-.1356-.0881h-2.0966v-1.6077h2.2677c.2065 0 1.1065.0587 1.394 1.2088.0901.3533.2875 1.5044.4232 1.8729.1346.413.6833 1.2381 1.2685 1.2381h3.5716a.7492.7492 0 00.1296-.0131 8.7874 8.7874 0 01-.8119.9526zM6.8369 20.024a.714.714 0 11-.2997-1.396.714.714 0 01.2997 1.396zM4.1177 8.9972a.7137.7137 0 11-1.304.5791.7137.7137 0 011.304-.579zm-.8352 1.9813l1.5347-.6824a.65.65 0 00.33-.8585l-.3158-.7147h1.2432v5.6025H3.5669a8.7753 8.7753 0 01-.2834-3.348zm6.7343-.5437V8.7836h2.9601c.153 0 1.0792.1772 1.0792.8697 0 .575-.7107.7815-1.2948.7815zm10.7574 1.4862c0 .2187-.008.4363-.0243.651h-.9c-.09 0-.1265.0586-.1265.1477v.413c0 .973-.5487 1.1846-1.0296 1.2382-.4576.0517-.9648-.1913-1.0275-.4717-.2704-1.5186-.7198-1.8436-1.4305-2.4034.8817-.5599 1.799-1.386 1.799-2.4915 0-1.1936-.819-1.9458-1.3769-2.3153-.7825-.5163-1.6491-.6195-1.883-.6195H5.4682a8.7651 8.7651 0 014.907-2.7699l1.0974 1.151a.648.648 0 00.9182.0213l1.227-1.1743a8.7753 8.7753 0 016.0044 4.2762l-.8403 1.8982a.652.652 0 00.33.8585l1.6178.7188c.0283.2875.0425.577.0425.8717zm-9.3006-9.5993a.7128.7128 0 11.984 1.0316.7137.7137 0 01-.984-1.0316zm8.3389 6.71a.7107.7107 0 01.9395-.3625.7137.7137 0 11-.9405.3635z" }, "child": [] }] })(props);
+}
+function SiRuby(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M20.156.083c3.033.525 3.893 2.598 3.829 4.77L24 4.822 22.635 22.71 4.89 23.926h.016C3.433 23.864.15 23.729 0 19.139l1.645-3 2.819 6.586.503 1.172 2.805-9.144-.03.007.016-.03 9.255 2.956-1.396-5.431-.99-3.9 8.82-.569-.615-.51L16.5 2.114 20.159.073l-.003.01zM0 19.089zM5.13 5.073c3.561-3.533 8.157-5.621 9.922-3.84 1.762 1.777-.105 6.105-3.673 9.636-3.563 3.532-8.103 5.734-9.864 3.957-1.766-1.777.045-6.217 3.612-9.75l.003-.003z" }, "child": [] }] })(props);
+}
+function SiRedis(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M22.71 13.145c-1.66 2.092-3.452 4.483-7.038 4.483-3.203 0-4.397-2.825-4.48-5.12.701 1.484 2.073 2.685 4.214 2.63 4.117-.133 6.94-3.852 6.94-7.239 0-4.05-3.022-6.972-8.268-6.972-3.752 0-8.4 1.428-11.455 3.685C2.59 6.937 3.885 9.958 4.35 9.626c2.648-1.904 4.748-3.13 6.784-3.744C8.12 9.244.886 17.05 0 18.425c.1 1.261 1.66 4.648 2.424 4.648.232 0 .431-.133.664-.365a100.49 100.49 0 0 0 5.54-6.765c.222 3.104 1.748 6.898 6.014 6.898 3.819 0 7.604-2.756 9.33-8.965.2-.764-.73-1.361-1.261-.73zm-4.349-5.013c0 1.959-1.926 2.922-3.685 2.922-.941 0-1.664-.247-2.235-.568 1.051-1.592 2.092-3.225 3.21-4.973 1.972.334 2.71 1.43 2.71 2.619z" }, "child": [] }] })(props);
+}
+function SiReddit(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12 0C5.373 0 0 5.373 0 12c0 3.314 1.343 6.314 3.515 8.485l-2.286 2.286C.775 23.225 1.097 24 1.738 24H12c6.627 0 12-5.373 12-12S18.627 0 12 0Zm4.388 3.199c1.104 0 1.999.895 1.999 1.999 0 1.105-.895 2-1.999 2-.946 0-1.739-.657-1.947-1.539v.002c-1.147.162-2.032 1.15-2.032 2.341v.007c1.776.067 3.4.567 4.686 1.363.473-.363 1.064-.58 1.707-.58 1.547 0 2.802 1.254 2.802 2.802 0 1.117-.655 2.081-1.601 2.531-.088 3.256-3.637 5.876-7.997 5.876-4.361 0-7.905-2.617-7.998-5.87-.954-.447-1.614-1.415-1.614-2.538 0-1.548 1.255-2.802 2.803-2.802.645 0 1.239.218 1.712.585 1.275-.79 2.881-1.291 4.64-1.365v-.01c0-1.663 1.263-3.034 2.88-3.207.188-.911.993-1.595 1.959-1.595Zm-8.085 8.376c-.784 0-1.459.78-1.506 1.797-.047 1.016.64 1.429 1.426 1.429.786 0 1.371-.369 1.418-1.385.047-1.017-.553-1.841-1.338-1.841Zm7.406 0c-.786 0-1.385.824-1.338 1.841.047 1.017.634 1.385 1.418 1.385.785 0 1.473-.413 1.426-1.429-.046-1.017-.721-1.797-1.506-1.797Zm-3.703 4.013c-.974 0-1.907.048-2.77.135-.147.015-.241.168-.183.305.483 1.154 1.622 1.964 2.953 1.964 1.33 0 2.47-.81 2.953-1.964.057-.137-.037-.29-.184-.305-.863-.087-1.795-.135-2.769-.135Z" }, "child": [] }] })(props);
+}
+function SiRclone(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.842.6258C9.3647.6813 6.9754 1.9906 5.646 4.2933c-.7593 1.3144-1.0647 2.7662-.966 4.1745a7.99 7.99 0 0 1 2.6568-.4541l1.4705-.0013c-.0093-.5594.1245-1.1284.4245-1.6482.8827-1.5284 2.837-2.0522 4.3654-1.1695 1.5284.8824 2.0519 2.8366 1.1695 4.365l-1.4782 2.5647 1.1955 2.0714 2.3914-.0004 1.4775-2.5655c2.0262-3.5088.8239-7.9959-2.6853-10.0217C14.4614.9118 13.1396.5967 11.842.6258m-1.5451 8.073-2.9605.0029C3.2844 8.7017 0 11.9867 0 16.0383c0 4.052 3.2844 7.3367 7.3364 7.3367 1.5174 0 2.9267-.4609 4.0967-1.2497a8 8 0 0 1-1.72-2.0748l-.7368-1.273c-.4799.288-1.0392.4565-1.6395.4565-1.765 0-3.1958-1.4307-3.1958-3.1958 0-1.7647 1.4307-3.1954 3.1958-3.1954l2.96-.0022 1.1962-2.0708zm9.587.7475a7.99 7.99 0 0 1-.935 2.5278l-.7344 1.2745c.4892.2717.915.6719 1.2153 1.192.8823 1.528.3585 3.4826-1.1699 4.365-1.528.8823-3.4828.3588-4.3651-1.1696l-1.482-2.5628h-2.3915L8.8256 17.144l1.483 2.5626c2.0262 3.5091 6.513 4.7112 10.022 2.685 3.5089-2.0257 4.7112-6.5125 2.6853-10.0216-.7588-1.3144-1.863-2.3052-3.132-2.9237" }, "child": [] }] })(props);
+}
+function SiRabbitmq(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M23.035 9.601h-7.677a.956.956 0 01-.962-.962V.962a.956.956 0 00-.962-.956H10.56a.956.956 0 00-.962.956V8.64a.956.956 0 01-.962.962H5.762a.956.956 0 01-.961-.962V.962A.956.956 0 003.839 0H.959a.956.956 0 00-.956.962v22.076A.956.956 0 00.965 24h22.07a.956.956 0 00.962-.962V10.58a.956.956 0 00-.962-.98zm-3.86 8.152a1.437 1.437 0 01-1.437 1.443h-1.924a1.437 1.437 0 01-1.436-1.443v-1.917a1.437 1.437 0 011.436-1.443h1.924a1.437 1.437 0 011.437 1.443z" }, "child": [] }] })(props);
+}
+function SiPython(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M14.25.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.77l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.17l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05-.05-1.23.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.18l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09zm13.09 3.95l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08z" }, "child": [] }] })(props);
+}
+function SiPulumi(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.997 0C10.226 0 8.79.83 8.79 1.856c0 1.025 1.436 1.856 3.207 1.856 1.772 0 3.208-.831 3.208-1.856C15.205.83 13.77 0 11.997 0zM5.95 3.488c-1.772 0-3.208.83-3.208 1.856C2.742 6.369 4.178 7.2 5.95 7.2c1.771 0 3.207-.831 3.207-1.856 0-1.025-1.436-1.856-3.207-1.856zm12.103 0c-1.772 0-3.208.83-3.208 1.856 0 1.025 1.436 1.856 3.208 1.856 1.771 0 3.207-.831 3.207-1.856 0-1.025-1.436-1.856-3.207-1.856zm-6.056 3.495c-1.771 0-3.207.831-3.207 1.856 0 1.025 1.436 1.856 3.207 1.856 1.772 0 3.208-.83 3.208-1.856 0-1.025-1.436-1.856-3.208-1.856zm-10.127.67a1.157 1.157 0 0 0-.55.151c-.888.513-.89 2.172-.004 3.706.886 1.534 2.324 2.362 3.211 1.85.888-.513.89-2.171.003-3.706-.72-1.246-1.803-2.027-2.66-2zm20.257.004c-.857-.026-1.941.754-2.661 2-.886 1.535-.884 3.194.003 3.707.888.512 2.325-.316 3.211-1.85.886-1.534.885-3.193-.003-3.706a1.157 1.157 0 0 0-.55-.15zm-6.048 3.492c-.857-.026-1.94.754-2.66 2-.886 1.535-.885 3.194.003 3.706.887.513 2.325-.316 3.21-1.85.887-1.534.885-3.193-.003-3.706a1.157 1.157 0 0 0-.55-.15zm-8.16.001a1.157 1.157 0 0 0-.55.151c-.888.513-.89 2.172-.004 3.706.886 1.535 2.324 2.363 3.211 1.85.888-.512.89-2.171.003-3.705-.72-1.247-1.803-2.028-2.66-2.002zm-6.047 3.494a1.157 1.157 0 0 0-.55.151c-.888.513-.89 2.172-.004 3.706.886 1.534 2.324 2.362 3.212 1.85.887-.513.888-2.172.003-3.706-.72-1.246-1.804-2.027-2.661-2.001zm20.258.002c-.857-.026-1.941.755-2.66 2.001-.887 1.535-.885 3.193.003 3.706.887.512 2.325-.316 3.21-1.85.886-1.534.885-3.193-.003-3.706a1.157 1.157 0 0 0-.55-.15zm-6.047 3.492c-.858-.026-1.942.754-2.661 2-.886 1.535-.885 3.194.003 3.706.888.513 2.325-.315 3.21-1.85.887-1.533.885-3.193-.002-3.705a1.157 1.157 0 0 0-.55-.151zm-8.163.003a1.157 1.157 0 0 0-.55.151c-.887.513-.889 2.172-.003 3.706.886 1.534 2.323 2.363 3.211 1.85.888-.512.89-2.171.004-3.706-.72-1.246-1.804-2.027-2.662-2z" }, "child": [] }] })(props);
+}
+function SiPosthog(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M9.854 14.5 5 9.647.854 5.5A.5.5 0 0 0 0 5.854V8.44a.5.5 0 0 0 .146.353L5 13.647l.147.146L9.854 18.5l.146.147v-.049c.065.03.134.049.207.049h2.586a.5.5 0 0 0 .353-.854L9.854 14.5zm0-5-4-4a.487.487 0 0 0-.409-.144.515.515 0 0 0-.356.21.493.493 0 0 0-.089.288V8.44a.5.5 0 0 0 .147.353l9 9a.5.5 0 0 0 .853-.354v-2.585a.5.5 0 0 0-.146-.354l-5-5zm1-4a.5.5 0 0 0-.854.354V8.44a.5.5 0 0 0 .147.353l4 4a.5.5 0 0 0 .853-.354V9.854a.5.5 0 0 0-.146-.354l-4-4zm12.647 11.515a3.863 3.863 0 0 1-2.232-1.1l-4.708-4.707a.5.5 0 0 0-.854.354v6.585a.5.5 0 0 0 .5.5H23.5a.5.5 0 0 0 .5-.5v-.6c0-.276-.225-.497-.499-.532zm-5.394.032a.8.8 0 1 1 0-1.6.8.8 0 0 1 0 1.6zM.854 15.5a.5.5 0 0 0-.854.354v2.293a.5.5 0 0 0 .5.5h2.293c.222 0 .39-.135.462-.309a.493.493 0 0 0-.109-.545L.854 15.501zM5 14.647.854 10.5a.5.5 0 0 0-.854.353v2.586a.5.5 0 0 0 .146.353L4.854 18.5l.146.147h2.793a.5.5 0 0 0 .353-.854L5 14.647z" }, "child": [] }] })(props);
+}
+function SiPostgresql(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M23.5594 14.7228a.5269.5269 0 0 0-.0563-.1191c-.139-.2632-.4768-.3418-1.0074-.2321-1.6533.3411-2.2935.1312-2.5256-.0191 1.342-2.0482 2.445-4.522 3.0411-6.8297.2714-1.0507.7982-3.5237.1222-4.7316a1.5641 1.5641 0 0 0-.1509-.235C21.6931.9086 19.8007.0248 17.5099.0005c-1.4947-.0158-2.7705.3461-3.1161.4794a9.449 9.449 0 0 0-.5159-.0816 8.044 8.044 0 0 0-1.3114-.1278c-1.1822-.0184-2.2038.2642-3.0498.8406-.8573-.3211-4.7888-1.645-7.2219.0788C.9359 2.1526.3086 3.8733.4302 6.3043c.0409.818.5069 3.334 1.2423 5.7436.4598 1.5065.9387 2.7019 1.4334 3.582.553.9942 1.1259 1.5933 1.7143 1.7895.4474.1491 1.1327.1441 1.8581-.7279.8012-.9635 1.5903-1.8258 1.9446-2.2069.4351.2355.9064.3625 1.39.3772a.0569.0569 0 0 0 .0004.0041 11.0312 11.0312 0 0 0-.2472.3054c-.3389.4302-.4094.5197-1.5002.7443-.3102.064-1.1344.2339-1.1464.8115-.0025.1224.0329.2309.0919.3268.2269.4231.9216.6097 1.015.6331 1.3345.3335 2.5044.092 3.3714-.6787-.017 2.231.0775 4.4174.3454 5.0874.2212.5529.7618 1.9045 2.4692 1.9043.2505 0 .5263-.0291.8296-.0941 1.7819-.3821 2.5557-1.1696 2.855-2.9059.1503-.8707.4016-2.8753.5388-4.1012.0169-.0703.0357-.1207.057-.1362.0007-.0005.0697-.0471.4272.0307a.3673.3673 0 0 0 .0443.0068l.2539.0223.0149.001c.8468.0384 1.9114-.1426 2.5312-.4308.6438-.2988 1.8057-1.0323 1.5951-1.6698zM2.371 11.8765c-.7435-2.4358-1.1779-4.8851-1.2123-5.5719-.1086-2.1714.4171-3.6829 1.5623-4.4927 1.8367-1.2986 4.8398-.5408 6.108-.13-.0032.0032-.0066.0061-.0098.0094-2.0238 2.044-1.9758 5.536-1.9708 5.7495-.0002.0823.0066.1989.0162.3593.0348.5873.0996 1.6804-.0735 2.9184-.1609 1.1504.1937 2.2764.9728 3.0892.0806.0841.1648.1631.2518.2374-.3468.3714-1.1004 1.1926-1.9025 2.1576-.5677.6825-.9597.5517-1.0886.5087-.3919-.1307-.813-.5871-1.2381-1.3223-.4796-.839-.9635-2.0317-1.4155-3.5126zm6.0072 5.0871c-.1711-.0428-.3271-.1132-.4322-.1772.0889-.0394.2374-.0902.4833-.1409 1.2833-.2641 1.4815-.4506 1.9143-1.0002.0992-.126.2116-.2687.3673-.4426a.3549.3549 0 0 0 .0737-.1298c.1708-.1513.2724-.1099.4369-.0417.156.0646.3078.26.3695.4752.0291.1016.0619.2945-.0452.4444-.9043 1.2658-2.2216 1.2494-3.1676 1.0128zm2.094-3.988-.0525.141c-.133.3566-.2567.6881-.3334 1.003-.6674-.0021-1.3168-.2872-1.8105-.8024-.6279-.6551-.9131-1.5664-.7825-2.5004.1828-1.3079.1153-2.4468.079-3.0586-.005-.0857-.0095-.1607-.0122-.2199.2957-.2621 1.6659-.9962 2.6429-.7724.4459.1022.7176.4057.8305.928.5846 2.7038.0774 3.8307-.3302 4.7363-.084.1866-.1633.3629-.2311.5454zm7.3637 4.5725c-.0169.1768-.0358.376-.0618.5959l-.146.4383a.3547.3547 0 0 0-.0182.1077c-.0059.4747-.054.6489-.115.8693-.0634.2292-.1353.4891-.1794 1.0575-.11 1.4143-.8782 2.2267-2.4172 2.5565-1.5155.3251-1.7843-.4968-2.0212-1.2217a6.5824 6.5824 0 0 0-.0769-.2266c-.2154-.5858-.1911-1.4119-.1574-2.5551.0165-.5612-.0249-1.9013-.3302-2.6462.0044-.2932.0106-.5909.019-.8918a.3529.3529 0 0 0-.0153-.1126 1.4927 1.4927 0 0 0-.0439-.208c-.1226-.4283-.4213-.7866-.7797-.9351-.1424-.059-.4038-.1672-.7178-.0869.067-.276.1831-.5875.309-.9249l.0529-.142c.0595-.16.134-.3257.213-.5012.4265-.9476 1.0106-2.2453.3766-5.1772-.2374-1.0981-1.0304-1.6343-2.2324-1.5098-.7207.0746-1.3799.3654-1.7088.5321a5.6716 5.6716 0 0 0-.1958.1041c.0918-1.1064.4386-3.1741 1.7357-4.4823a4.0306 4.0306 0 0 1 .3033-.276.3532.3532 0 0 0 .1447-.0644c.7524-.5706 1.6945-.8506 2.802-.8325.4091.0067.8017.0339 1.1742.081 1.939.3544 3.2439 1.4468 4.0359 2.3827.8143.9623 1.2552 1.9315 1.4312 2.4543-1.3232-.1346-2.2234.1268-2.6797.779-.9926 1.4189.543 4.1729 1.2811 5.4964.1353.2426.2522.4522.2889.5413.2403.5825.5515.9713.7787 1.2552.0696.087.1372.1714.1885.245-.4008.1155-1.1208.3825-1.0552 1.717-.0123.1563-.0423.4469-.0834.8148-.0461.2077-.0702.4603-.0994.7662zm.8905-1.6211c-.0405-.8316.2691-.9185.5967-1.0105a2.8566 2.8566 0 0 0 .135-.0406 1.202 1.202 0 0 0 .1342.103c.5703.3765 1.5823.4213 3.0068.1344-.2016.1769-.5189.3994-.9533.6011-.4098.1903-1.0957.333-1.7473.3636-.7197.0336-1.0859-.0807-1.1721-.151zm.5695-9.2712c-.0059.3508-.0542.6692-.1054 1.0017-.055.3576-.112.7274-.1264 1.1762-.0142.4368.0404.8909.0932 1.3301.1066.887.216 1.8003-.2075 2.7014a3.5272 3.5272 0 0 1-.1876-.3856c-.0527-.1276-.1669-.3326-.3251-.6162-.6156-1.1041-2.0574-3.6896-1.3193-4.7446.3795-.5427 1.3408-.5661 2.1781-.463zm.2284 7.0137a12.3762 12.3762 0 0 0-.0853-.1074l-.0355-.0444c.7262-1.1995.5842-2.3862.4578-3.4385-.0519-.4318-.1009-.8396-.0885-1.2226.0129-.4061.0666-.7543.1185-1.0911.0639-.415.1288-.8443.1109-1.3505.0134-.0531.0188-.1158.0118-.1902-.0457-.4855-.5999-1.938-1.7294-3.253-.6076-.7073-1.4896-1.4972-2.6889-2.0395.5251-.1066 1.2328-.2035 2.0244-.1859 2.0515.0456 3.6746.8135 4.8242 2.2824a.908.908 0 0 1 .0667.1002c.7231 1.3556-.2762 6.2751-2.9867 10.5405zm-8.8166-6.1162c-.025.1794-.3089.4225-.6211.4225a.5821.5821 0 0 1-.0809-.0056c-.1873-.026-.3765-.144-.5059-.3156-.0458-.0605-.1203-.178-.1055-.2844.0055-.0401.0261-.0985.0925-.1488.1182-.0894.3518-.1226.6096-.0867.3163.0441.6426.1938.6113.4186zm7.9305-.4114c.0111.0792-.049.201-.1531.3102-.0683.0717-.212.1961-.4079.2232a.5456.5456 0 0 1-.075.0052c-.2935 0-.5414-.2344-.5607-.3717-.024-.1765.2641-.3106.5611-.352.297-.0414.6111.0088.6356.1851z" }, "child": [] }] })(props);
+}
+function SiPhp(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M7.01 10.207h-.944l-.515 2.648h.838c.556 0 .97-.105 1.242-.314.272-.21.455-.559.55-1.049.092-.47.05-.802-.124-.995-.175-.193-.523-.29-1.047-.29zM12 5.688C5.373 5.688 0 8.514 0 12s5.373 6.313 12 6.313S24 15.486 24 12c0-3.486-5.373-6.312-12-6.312zm-3.26 7.451c-.261.25-.575.438-.917.551-.336.108-.765.164-1.285.164H5.357l-.327 1.681H3.652l1.23-6.326h2.65c.797 0 1.378.209 1.744.628.366.418.476 1.002.33 1.752a2.836 2.836 0 0 1-.305.847c-.143.255-.33.49-.561.703zm4.024.715l.543-2.799c.063-.318.039-.536-.068-.651-.107-.116-.336-.174-.687-.174H11.46l-.704 3.625H9.388l1.23-6.327h1.367l-.327 1.682h1.218c.767 0 1.295.134 1.586.401s.378.7.263 1.299l-.572 2.944h-1.389zm7.597-2.265a2.782 2.782 0 0 1-.305.847c-.143.255-.33.49-.561.703a2.44 2.44 0 0 1-.917.551c-.336.108-.765.164-1.286.164h-1.18l-.327 1.682h-1.378l1.23-6.326h2.649c.797 0 1.378.209 1.744.628.366.417.477 1.001.331 1.751zM17.766 10.207h-.943l-.516 2.648h.838c.557 0 .971-.105 1.242-.314.272-.21.455-.559.551-1.049.092-.47.049-.802-.125-.995s-.524-.29-1.047-.29z" }, "child": [] }] })(props);
+}
+function SiPerplexity(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M22.3977 7.0896h-2.3106V.0676l-7.5094 6.3542V.1577h-1.1554v6.1966L4.4904 0v7.0896H1.6023v10.3976h2.8882V24l6.932-6.3591v6.2005h1.1554v-6.0469l6.9318 6.1807v-6.4879h2.8882V7.0896zm-3.4657-4.531v4.531h-5.355l5.355-4.531zm-13.2862.0676 4.8691 4.4634H5.6458V2.6262zM2.7576 16.332V8.245h7.8476l-6.1149 6.1147v1.9723H2.7576zm2.8882 5.0404v-3.8852h.0001v-2.6488l5.7763-5.7764v7.0111l-5.7764 5.2993zm12.7086.0248-5.7766-5.1509V9.0618l5.7766 5.7766v6.5588zm2.8882-5.0652h-1.733v-1.9723L13.3948 8.245h7.8478v8.087z" }, "child": [] }] })(props);
+}
+function SiPaypal(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M15.607 4.653H8.941L6.645 19.251H1.82L4.862 0h7.995c3.754 0 6.375 2.294 6.473 5.513-.648-.478-2.105-.86-3.722-.86m6.57 5.546c0 3.41-3.01 6.853-6.958 6.853h-2.493L11.595 24H6.74l1.845-11.538h3.592c4.208 0 7.346-3.634 7.153-6.949a5.24 5.24 0 0 1 2.848 4.686M9.653 5.546h6.408c.907 0 1.942.222 2.363.541-.195 2.741-2.655 5.483-6.441 5.483H8.714Z" }, "child": [] }] })(props);
+}
+function SiOpentofu(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "m10.184 23.25.002-.01-.033-.017-8.388-4.611a1.6841 1.6841 0 0 1-.873-1.475V6.864c0-.614.335-1.18.873-1.476l9.424-5.18a1.6868 1.6868 0 0 1 1.622 0l8.31 4.568.022.012.006.002-.004-.001 1.09.599c.538.296.873.862.873 1.476v10.273c0 .614-.335 1.179-.873 1.475l-8.388 4.611-.03.016-1.006.553c-.505.277-1.117.277-1.622 0l-1.003-.552-.002.01Zm.603-1.158-.005-.001.012.006c.252.123.55-.055.558-.338l.001-9.147c0-.141-.078-.272-.202-.34L2.763 7.661c-.259-.142-.576.045-.576.341v9.135c0 .141.077.272.201.34l8.394 4.613.005.002Zm.556-.327Zm0 0Zm-2.539-4.802-.005.003-1.959-1.031-.003-.004c.001-.003.001-.007.001-.01.023-.305.153-.525.346-.632.194-.107.45-.101.72.041.272.143.508.397.671.691.163.293.252.628.229.935v.007ZM5.71 15.177l-.005.002-1.96-1.031-.002-.004.001-.01c.022-.304.152-.524.346-.632.194-.107.449-.101.72.042.271.143.508.396.671.69.162.294.252.628.229.935v.008Zm14.981-8.999-.003-.018a.382.382 0 0 0-.191-.25l-8.31-4.567a.3883.3883 0 0 0-.374 0L3.503 5.91c-.162.089-.226.265-.193.423l.009.007-.009-.007c.022.1.083.194.183.253l8.32 4.572c.116.064.258.064.374 0l8.321-4.573c.151-.089.212-.256.183-.407Zm-17.37.16Zm-.002.002c0-.001-.003-.003-.005-.006-.002-.002-.004-.004-.004-.003l.009.009Zm-.467-1.56-.003.002c.002.004.005.006.005.006l-.002-.008Zm.007.007c-.001.001-.002.001-.003.001h-.002l.005-.001Z" }, "child": [] }] })(props);
+}
+function SiOpenbsd(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.695 1.653c-.202.47-.146 1.02-.293 1.509-.034.112-.146.452-.308.429-.333-.048-.16-.688-.545-.7l.12.934c-.577.073-.498-.829-.733-1.195-.27-.423-.335.192-.317.38.011.122.036.242.05.363.026.21.032.393.005.603-.552-.007-.35-.733-.754-.844l.03.874c-.612-.005-.89-.557-1.159-1.025-.112-.196-.261-.574-.53-.453.126.544.423 1.064.454 1.63.007.145-.13.516-.333.448-.469-.158-.406-1.008-.796-1.231-.08-.045-.204-.006-.29-.002 0 .45.198.996.356 1.418.034.09.129.41-.069.403-.353-.01-.441-.695-.8-.615.044.185.153.335.215.513.037.109.106.219.126.332.044.247-.269.267-.432.22-.384-.114-.66-.428-.935-.703-.076-.076-.277-.344-.404-.222-.141.135.136.373.215.464.234.271.488.589.6.935.049.148.058.36-.09.462-.146.1-.384-.083-.502-.16-.362-.239-.721-.654-1.176-.664l-.107.271.29.392.752.845-.875-.362c.035.229.583.506.475.742-.064.14-.38.142-.505.124-.446-.064-.762-.396-1.177-.515-.366-.105-.298.18-.09.343.072.057.141.117.211.177.125.108.245.219.362.336.183.183.343.378.513.573l-.875-.03v.06l.845.392-.151.603c-.244 0-.442-.067-.664-.163-.151-.066-.31-.175-.482-.163-.206.014-.328.202-.19.377.206.263.62.412.883.617.1.078.247.212.133.345-.225.264-.832-.074-1.128.013v.06c.275.161.839.253 1 .549.128.231-.232.756-.487.736-.227-.019-.436-.275-.603-.41-.401-.322-.83-.7-1.298-.923-.801-.38-1.597.226-2.232.622.081.256.402-.017.603.029.271.061.477.313.651.513.84.968 1.543 2.064 1.857 3.319.083.33.224.725-.023 1.021-.066.08-.165.09-.238.155-.055.05-.052.118.023.141.138.043.34-.021.475-.054.443-.107.949-.346 1.15-.78.125-.271.169-.797.48-.905.068.29.394.673.363.965-.029.259-.302.56-.461.751-.057.068-.193.217-.112.315.082.097.25-.112.3-.16.229-.216.73-.558.865-.062.118.432-.261 1.13-.45 1.509-.054.105-.297.435-.202.553.11.135.338-.218.387-.282.19-.249.856-.987 1.21-.722.431.324.282.555.119.994-.046.123-.216.433-.1.55.111.114.258.01.315-.098.104-.197.383-.78.661-.631.175.093.441.251.543.425.158.272.02.815-.022 1.111-.024.17-.207.702-.055.825.14.113.254-.228.296-.312.149-.295.32-.597.54-.845.08-.089.192-.237.327-.212.7.131-.015.829.273 1.185.058.072.215.067.3.083l.362-.935c.184.07.455.095.591.248.114.128.137.344.17.506.092.454.142.896.084 1.357.057.042.148.138.225.088.097-.062.11-.315.143-.42.106-.332.269-.65.42-.965.099-.207.37-.427.565-.142.2.292.12.804.246 1.138.32-.158.355-.825.362-1.147l.415.061.25.513.45 1.297c.234-.09.16-.538.187-.754.035-.293.103-.882.318-1.1.086-.087.258-.095.37-.137.129.312.199.666.354.965.06.116.198.242.337.17.133-.068.128-.224.111-.35-.042-.313-.113-.62-.138-.936.598-.042.95.441 1.325.845.145.155.271.362.485.422l-.31-.905-.172-.845c.217-.09.676-.534.905-.47.34.097.6 1.046 1.023.823.18-.095.088-.257.003-.383-.126-.188-.506-.639-.465-.874.03-.175.324-.379.494-.377.391.006 1.071.304 1.297.618l.272-.03c-.04-.54-.85-.787-.966-1.328a.404.404 0 01.004-.172c.086-.347.294-.195.51-.102.067.029.213.103.269.02.06-.091-.048-.212-.087-.289-.082-.156-.156-.337-.122-.513.282.074.455.242.694.4.056.038.18.131.251.08.075-.056-.036-.167-.071-.208-.106-.123-.432-.42-.4-.6.022-.122.227-.252.31-.335.276-.276.59-.556.815-.875h.03c.532.621 2.203.186 1.99-.754-.132.019-.256.123-.392.077-.594-.205-.45-1.157-1.116-1.163-.049-.62-.298-1.24-.599-1.78-.138-.247-.424-.473-.525-.725-.055-.14-.046-.36-.052-.512.349-.054.177-.407.05-.603-.142-.218-.292-.477-.475-.66-.226-.227-.562-.374-.533-.758.027-.357.642-.311.747-.633-.183.008-.363.053-.543.083-.449.075-.527-.076-.317-.475.183-.349.474-.613.73-.905.083-.093.336-.306.205-.441-.107-.112-.286.058-.377.119-.333.22-.705.384-1.086.502-.113.035-.448.166-.486-.035-.051-.272.463-.322.395-.628-.205.049-.61.374-.807.223-.238-.18.111-.643.149-.856.038-.216-.136-.224-.258-.09-.043.048-.081.1-.12.15-.07.087-.126.17-.17.271-.494-.288.44-.623.265-.89-.063-.095-.179 0-.235.05-.117.102-.558.61-.654.237-.106-.412.108-.908.22-1.297.028-.102.159-.376.032-.449-.185-.106-.266.253-.31.359a2.333 2.333 0 01-.615.839c-.086.077-.232.225-.36.19-.187-.051-.188-.57-.182-.728.003-.075.045-.205-.028-.26-.096-.071-.147.072-.16.14-.048.222-.186.856-.515.44-.298-.376.163-1.157-.444-1.315l-.332 1.056c-.398-.087-.31-.656-.211-.966l-.181-.06a3.303 3.303 0 01-.112.362c-.16.451-.375.539-.541.03-.127-.388-.082-.807-.145-1.207-.025-.159-.04-.32-.198-.392zm.03.905c.153.364-.008.82.237 1.176.25.364.716.168 1.02.397.108.081.022.256-.007.358-.1.347-.278.604-.465.905.655-.335.875-1.29.965-1.96h.03c-.026.596-.007 1.182 0 1.779.003.27-.037.582.272.633V4.46c.323.093.808.502 1.159.381.179-.061.342-.277.467-.411.094-.102.175-.212.244-.332h.03l-.12.965-.302-.06.663.473.261.226-.2.294-.875.636c.637-.094.958-.564 1.418-.935-.15.63-.491 1.262-.332 1.93h.03l.362-1.448c.274.13.37.476.633.633.383.228.919-.204 1.267-.331-.227.322-.57.548-.633.965l-.272-.12c.236.606.519 1.19.62 1.84.093.594-.024 1.183.016 1.78.02.275.133.517.179.784-.563.191-.666.98-1.207 1.236.043-.188.11-.377.11-.573 0-.14-.066-.282-.03-.422.073-.277.314-.508.412-.784.152-.43.05-.835-.009-1.267l.301.03-.758-1.177-.376-.573.139-.392c-.762.586-1.867 1.188-1.87 2.293l.271-.091.09.664-.422.06v.06c.353.1.722.149 1.056.306.244.114.514.265.682.479.56.71.112 1.818-.31 2.473-.213.33-.594.634-.734.996.382-.092.577-.457.792-.754.091-.127.17-.303.325-.362.24-.09.32.354.371.512.065.2.218.546.18.755-.071.401-.415.662-.34 1.116.166-.202.217-.604.482-.702.17-.062.347.095.513.12.36.053.73-.082.996-.326.285-.263.48-.686.408-1.083-.043-.24-.177-.476-.16-.724.012-.2.148-.362.22-.543.173-.427.152-.912-.257-1.189a.86.86 0 00-.362-.138c.033-.222.264-.706.53-.418.188.202.29.558.396.81.389.918.392 2.006-.163 2.865-.394.61-1.02 1.11-1.548 1.6l-.21-.604h-.061c-.07.36.185.772.332 1.086-.33-.075-.645-.415-.996-.362.099.17.748.572.242.754.003.148-.11.25-.2.362-.201.248-.454.618-.766.724l-.573-1.508h-.03c.084.661.314 1.305.61 1.9.154.307.403.611.506.935-.187-.159-.306-.413-.466-.603a6.313 6.313 0 00-.952-.892c-.227-.177-.45-.376-.754-.345.345.31.868.475.835 1.056-.01.165-.193.237-.322.296-.339.155-.67.322-1.026.438-.098.032-.279.12-.382.087-.11-.037-.097-.277-.109-.369-.037-.285.121-1.028-.172-1.146-.128 1.01.132 1.929.21 2.926h-.03c-.17-.737-.439-1.558-.838-2.202-.11-.177-.343-.597-.579-.543l.62 1.086.013.46-.452.08-1.297.033c.047-.373.13-.746.2-1.116.014-.081.074-.326-.078-.326-.14 0-.169.408-.189.507-.108.542-.204 1.106-.205 1.66h-.03c0-.913-.41-1.73-.784-2.535-.104.155.041.377.086.543.099.371.113.737.065 1.116-.612-.118-1.275-.278-1.84-.543.149-.357.576-.889.573-1.267-.554.556-.804 1.335-1.086 2.052h-.03l.12-1.448-.21-1.237c-.132.133-.06.399-.04.573.033.275.015.688-.188.9-.112.117-.226.014-.346-.034-.335-.136-.582-.36-.875-.564-.104-.072-.293-.15-.28-.302.032-.433.656-.638.672-1.026-.72.31-1.062 1.088-1.629 1.57.186-.785.782-1.703.634-2.535-.152.084-.145.295-.185.453a4.324 4.324 0 01-.388.965c-.4-.231-.72-.623-.983-.996-.073-.102-.233-.26-.235-.392-.002-.128.145-.274.225-.362.244-.265.54-.465.872-.603-.237-.147-.706.2-.965.272.175-.37.65-.732.513-1.177-.393.307-.66.97-.935 1.388h-.03l-.574-1.267.754.271c.023-.27-.36-.373-.573-.422.126-.328.476-.578.392-.965h-.06c-.087.28-.269.759-.573.844l-.09-.482h-.03c-.119.253.029.447-.04.687-.037.125-.217.106-.28.222-.085.158-.092.37-.164.539-.172.407-.5.706-.904.874l-.037-.54.459-.515-.483.361c-.062-.161-.203-.465-.12-.633.073-.145.254-.24.362-.362l-.483.241c-.163-.422.135-.3.302-.603-.122.07-.325.2-.471.133-.187-.085-.384-.64-.464-.827l.512-.09v-.03c-.242.03-.626.12-.663-.211h.633v-.03l-.712-.08-.194-.252-.421-.543c.251-.075.683-.075.935 0-.368-.387-1.024.182-1.327-.453l.754-.15v-.03c-.234 0-.67.135-.874.028-.054-.028-.094-.075-.134-.12-.388-.438.48-.478.766-.44.55.076.975.452 1.358.833.194.193.473.538.754.595.278.055.51-.122.724-.263 0 .212-.022.422.15.573 0-.416.005-.857.07-1.267.023-.152.083-.352.263-.38.225-.034.531.309.693.44.002-.234-.175-.432-.319-.603-.396-.47-1.025-.914-1.58-1.177v-.03c.823.142 1.442.625 2.322.392v-.06l-1.026-.15c.043-.321.276-.734.203-1.057-.1-.44-.568-.644-.746-1.025.306.118.63.29.966.297.188.005.336-.098.512-.14.485-.113.766.123 1.086.446.088-.305-.15-.559-.334-.784-.186-.229-.35-.46-.57-.659-.267-.24-.662-.52-.815-.85.25.049.49.256.694.402.359.255.715.503 1.116.691.211.1.578.265.754.054l-.965-.362c.07-.101.17-.188.221-.302.138-.307-.104-.568-.191-.844.185.068.345.227.543.26.464.078.734-.47 1.086-.653L9.11 6.45c.201-.168.112-.494.078-.724-.099-.664-.493-1.251-.59-1.9h.03c.381.816.835 1.696 1.598 2.201l-.277-.363-.477-.723c.095-.037.188-.077.269-.142.528-.423.078-1.012.002-1.517h.03c.065.155.14.314.235.453.441.638 1.023.536 1.696.482l-.18 1.328h.03c.089-.283.258-.516.318-.815.11-.544-.006-1.084-.017-1.629h.03c.048.322.179.63.282.936.162.482.293 1.01.653 1.387l-.331-1.357c.958-.001 1.219-.647 1.236-1.509zm-.271 2.082l-.483 2.172c.372-.227.45-1.053.483-1.448h.03c.065.348.096.696.238 1.025.056.13.117.305.275.302l-.386-1.357zm-2.956.392c.006.771.387 1.473.24 2.262.146-.088.15-.295.152-.452.004-.365-.06-.723-.06-1.086h.03c.105.364.39 1.09.814 1.146-.05-.196-.211-.344-.319-.513-.238-.374-.472-1.13-.857-1.357zm6.184.332c-.336.526-.736 1.245-1.237 1.629v.03c.38-.068.791-.549.905-.905h.03c-.005.536-.251 1.105-.03 1.629h.03c.16-.543.077-1.184.215-1.75.043-.177.203-.473.087-.633zM14.69 6.57c-.178.402-.265.775-.634 1.056v.06c.265.07.45-.262.513-.482h.03c.026.203.05.624.272.694l-.149-.694zm-6.456.03c.065.743 1.063 1.244.935 2.052.16-.094.119-.269.065-.423-.112-.317-.298-.596-.427-.905.289.264.716.562 1.117.393l-.633-.263zm4.163.242c-.091.3-.347.886-.241 1.176h.06l.211-.724h.03c.075.273.153.687.483.724l-.483-1.176zm-2.021.754l.15 1.267h.061l-.03-.905c.197.137.463.474.724.362-.1-.11-.247-.129-.362-.222-.187-.151-.286-.482-.543-.502zm6.636.18c-.318.32-.584.539-1.025.664v.061c.261.075.514-.07.724-.211-.035.177-.26.64-.09.754l.289-.875zm1.539.624c.138.01.242.186.323.282.239.279.508.575.612.935-.697-.144-1.452-.045-2.142.12.154-.405.446-.834.785-1.1.115-.092.258-.25.422-.237zm-6.697.07l-.181.936c.151-.115.187-.481.211-.664l.272.302a1.058 1.058 0 00-.302-.573zm2.956.091l-.573.573.543-.392.09.543c.106-.154.05-.578-.06-.724zm-6.334.078a.252.252 0 00-.06.013v.03c.253.256.463.61.621.935.088.179.063.376.253.483-.015-.353-.166-.62-.302-.935.214.124.5.31.754.24v-.06c-.342-.152-.607-.281-.905-.518-.11-.088-.224-.2-.361-.188zm-2.082.284c.029.255.237.35.422.49a3.5 3.5 0 01.687.657c.127.166.205.452.37.573-.036-.444-.298-.966-.725-1.147v-.03c.434.084.867.246 1.297.06v-.06l-.513-.02zm14.027.09c.296.115.613.522.724.815l-.664-.09zm-7.3.03l-.271.514.301-.332.181.302zm5.95.712a.536.536 0 01.172.031c.365.143.267.9.19 1.188-.061.234-.17.495-.4.604-.167-.3-.415-.496-.724-.64-.154-.073-.41-.101-.517-.243-.103-.137-.208-.646-.068-.78.152-.147.57-.117.766-.117.163 0 .392-.051.581-.043zm-3.054.013l-.513.392.453-.241-.06.362c.128-.09.175-.371.12-.513zm4.404.18c.136.011.37-.002.47.1.331.34.145 1.25-.259 1.44l-.12-.695c.032.002.062 0 .09-.003v.003h.09l-.04-.013c.356-.085.295-.577-.051-.59l-.09-.03.049.032-.018.001v-.003h-.06l.01.011c-.023.005-.046.01-.071.02zm-1.538.122c-.062.063-.152.11-.198.187-.318.545.886.559.546-.03-.039-.068-.108-.111-.167-.157l-.121.06h-.06zm-6.335.12c0 .154-.03.31.12.392v-.301l.363.12zm-1.676.086c-.046.002-.092.005-.134.005.053.194.137.36.302.482l-.181-.392.362.03c-.07-.127-.211-.131-.349-.125zm3.685.011c-.09.01-.168.168-.169.325l.15-.271.182.12c-.05-.132-.109-.18-.163-.174zm-4.845.084l-.513.09.423.513-.241-.422.361-.06zm-2.655.42c-.307.013-.66.365-.904.515v.06l.875.302c-.018-.229-.315-.297-.513-.331l.603-.544a.386.386 0 00-.06-.002zm1.6.063l-1.237.332v.06l.663.238.393.275c-.043-.32-.383-.375-.604-.543.28-.053.66-.058.785-.362zm3.107.332c-.129.02-.23.12-.091.21zm.995.18l-.03.212c.094-.056.11-.105.09-.211zm1.357 0c-.117.035-.214.118-.09.212zm1.117.302l-.302.09v.121zm1.146.03v.362c.113-.11.113-.25 0-.362zm4.272.179c.425.004.846.395.75.847-.062.29-.242.605-.528.718-.149.06-.486.04-.498-.175-.01-.2.388-.478.468-.694-.558.427-.9.79-1.659.694v-.03c.447-.331.634-.895 1.059-1.224a.645.645 0 01.408-.136zm-9.943.032c-.146.076-.235.236-.272.393l.362.09-.2-.193zm-4.585.061l-1.147.603c.04.225.262.104.423.093.23-.015.657.06.784.27l.211-.03c-.054-.342-.546-.342-.814-.363.197-.2.48-.259.543-.573zm5.822.241l-.332.423.422.15-.302-.18c.063-.132.31-.247.212-.393zm-2.625.09l-.362.333c.142.047.468.233.573.09l-.392-.15zm7.813 0l.422.333v.06l-.392.211a.938.938 0 00.543-.211.883.883 0 00-.573-.392zm-9.683.121c-.183.41-.464.743-.784 1.056-.184.179-.471.346-.543.603L7.45 13.8l.694-.14c-.414-.296-1.14.033-1.539.21.275-.55.813-.769.935-1.418l-.03-.03zm5.701.03c-.13.043-.146.149-.18.272l.18.03zm1.237.212l.03.332a.503.503 0 00.272-.332l-.212.15zm-4.193.422c-.13.038-.2.131-.06.211zm5.34.181l-.031.422-.271-.18c.028.182.156.27.332.3l.03-.542zm-6.758.03c-.22.069-.596.692-.694.905.2-.008.895.018.996-.12l-.664-.091zm3.7.059c-.166.01-.327.105-.502.105-.507 0-1.34-.252-1.775.092-.396.314-.42.734-.669 1.132-.121.194-.336.325-.512.465-.065.052-.184.127-.159.227.03.122.238.187.34.233.228.105.477.187.724.238.131.027.328.022.44.103.204.148.135.653.163.876.227-.13.524-.52.633-.755-.241.073-.347.31-.513.483l-.09-.633c.705-.062 1.015-.833 1.43-1.296.253-.282.57-.405.893-.575-.19-.227-.455.013-.634.15-.479.37-.755.816-1.176 1.238l.241-.633h-.03c-.131.314-.288.65-.603.814l.12-.422h-.03c-.127.303-.27.452-.603.452l.301-.694h-.03l-.392.664-.12-.03.301-.573h-.03c-.152.244-.313.59-.633.512l.27-.512c-.15.118-.216.4-.394.471-.081.032-.235-.027-.202-.135.042-.14.272-.278.363-.397.31-.405.56-1.067 1.018-1.316.376-.205.947.054 1.358.05.235-.004.503-.084.573-.333a.427.427 0 00-.072-.001zm-7.591.092l-.03.181.12-.181zm14.875.029c.228.004.48.037.61.214.133.18.101.427.17.632.052-.216.046-1.024.477-.57.349.367.256 1.162-.087 1.502-.216.213-.735.343-.992.144-.393-.303-.494-.926-.608-1.378-.027-.109-.154-.36-.084-.461.058-.086.209-.08.3-.082.065 0 .138-.002.214-.001zm2.65.182c.569.103.615.907 1.117 1.147v.06c-.285.143-.38-.002-.573-.211l.211.392c-.233-.036-.283-.262-.422-.423l.21.453c-.346 0-.493-.057-.633-.392h-.03l.06.271-.214-.152.114-.39zm-4.735.03c-.123.036-.188.105-.09.212zm-4.163.242l.332.362.15-.362-.15.241zm3.047 0l-.03.452-.302-.18c-.017.198.288.424.453.512l-.06-.784zm-8.175.512c-.094.452-.417.859-.707 1.207-.138.166-.35.333-.41.543.5-.144 1.063-.652 1.6-.603-.138-.268-.783.103-1.026.15.196-.29.463-.542.59-.874.052-.14.086-.327-.047-.423zm6.998.272c-.23.036-.218.264-.271.452-.128-.127-.258-.303-.452-.271l.573.694zm-2.805.03l-.302.272-.03-.151h-.09l.03.392c.176-.03.358-.347.392-.513zm.815.483l-.151.392h-.03l-.242-.332.211.694h.03c.08-.202.365-.572.182-.754zm3.348.18l-.09.031.18.995c-.192-.168-.785-.942-1.025-.663.555.177.786.825 1.267 1.116l-.15-.573zm1.508.242c-.153.374.22.775.362 1.116-.392-.202-.74-.539-1.207-.543v.12c.672.06 1.03.747 1.569 1.057-.005-.563-.488-1.21-.664-1.75zm-6.123.453l-.212.03c.072.169.197.306.256.482.065.196.023.466.227.573.095-.212.327-.557.271-.784-.17.085-.252.268-.27.453h-.031zm-2.806.03c0 .592-.08 1.148-.241 1.72.21.007.32-.211.433-.363.225-.299.45-.628.804-.784v-.03c-.359-.047-.807.49-.935.784h-.03c.106-.41.2-.924.03-1.327zm5.31.03c-.244.093-.182.42-.182.633l-.693-.482c.038.123.136.16.228.245.18.167.337.557.586.6zm1.538.573c-.213.377.097 1.154.15 1.569h-.03c-.168-.355-.492-.649-.754-.935-.037-.04-.228-.301-.296-.192-.071.114.278.385.343.463.241.286.459.609.642.935.105.189.197.44.397.543-.15-.778-.39-1.586-.392-2.383zm-10.045.302c.223.066.35.219.362.452l-.694.483zm5.007.24l-.03.031c.147.405.293.742.364 1.177.034.202.013.465.179.603.17-.322.23-.695.385-1.026.09-.19.234-.356.188-.573-.29.143-.461.787-.543 1.086-.15-.399-.104-1.092-.543-1.297zm2.051.303c.341.677.594 1.314.785 2.05.212-.118.183-.329.18-.542-.005-.497.186-.99.152-1.478-.143.048-.168.194-.193.332-.06.329-.06.669-.14.995-.163-.38-.293-1.279-.784-1.357zm6.365.24l.453.665-.664-.302zM8.657 19.18c.647.057.205.652-.06.935zm8.296.724l.272.845c-.224-.157-.488-.414-.604-.664zm-5.502.455l.344.058-.272.965h-.03l-.06-.754zm2.85.174c.062 0 .121.013.169.053.163.138-.067.805-.141.977l-.332-.965c.086-.022.2-.063.304-.065Z" }, "child": [] }] })(props);
+}
+function SiOpenai(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z" }, "child": [] }] })(props);
+}
+function SiObsidian(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z" }, "child": [] }] })(props);
+}
+function SiNpm(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0zM5.13 5.323l13.837.019-.009 13.836h-3.464l.01-10.382h-3.456L12.04 19.17H5.113z" }, "child": [] }] })(props);
+}
+function SiNotion(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.887l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.139c-.093-.514.28-.887.747-.933zM1.936 1.035l13.31-.98c1.634-.14 2.055-.047 3.082.7l4.249 2.986c.7.513.934.653.934 1.213v16.378c0 1.026-.373 1.634-1.68 1.726l-15.458.934c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.667c0-.839.374-1.54 1.447-1.632z" }, "child": [] }] })(props);
+}
+function SiNodedotjs(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.998,24c-0.321,0-0.641-0.084-0.922-0.247l-2.936-1.737c-0.438-0.245-0.224-0.332-0.08-0.383 c0.585-0.203,0.703-0.25,1.328-0.604c0.065-0.037,0.151-0.023,0.218,0.017l2.256,1.339c0.082,0.045,0.197,0.045,0.272,0l8.795-5.076 c0.082-0.047,0.134-0.141,0.134-0.238V6.921c0-0.099-0.053-0.192-0.137-0.242l-8.791-5.072c-0.081-0.047-0.189-0.047-0.271,0 L3.075,6.68C2.99,6.729,2.936,6.825,2.936,6.921v10.15c0,0.097,0.054,0.189,0.139,0.235l2.409,1.392 c1.307,0.654,2.108-0.116,2.108-0.89V7.787c0-0.142,0.114-0.253,0.256-0.253h1.115c0.139,0,0.255,0.112,0.255,0.253v10.021 c0,1.745-0.95,2.745-2.604,2.745c-0.508,0-0.909,0-2.026-0.551L2.28,18.675c-0.57-0.329-0.922-0.945-0.922-1.604V6.921 c0-0.659,0.353-1.275,0.922-1.603l8.795-5.082c0.557-0.315,1.296-0.315,1.848,0l8.794,5.082c0.57,0.329,0.924,0.944,0.924,1.603 v10.15c0,0.659-0.354,1.273-0.924,1.604l-8.794,5.078C12.643,23.916,12.324,24,11.998,24z M19.099,13.993 c0-1.9-1.284-2.406-3.987-2.763c-2.731-0.361-3.009-0.548-3.009-1.187c0-0.528,0.235-1.233,2.258-1.233 c1.807,0,2.473,0.389,2.747,1.607c0.024,0.115,0.129,0.199,0.247,0.199h1.141c0.071,0,0.138-0.031,0.186-0.081 c0.048-0.054,0.074-0.123,0.067-0.196c-0.177-2.098-1.571-3.076-4.388-3.076c-2.508,0-4.004,1.058-4.004,2.833 c0,1.925,1.488,2.457,3.895,2.695c2.88,0.282,3.103,0.703,3.103,1.269c0,0.983-0.789,1.402-2.642,1.402 c-2.327,0-2.839-0.584-3.011-1.742c-0.02-0.124-0.126-0.215-0.253-0.215h-1.137c-0.141,0-0.254,0.112-0.254,0.253 c0,1.482,0.806,3.248,4.655,3.248C17.501,17.007,19.099,15.91,19.099,13.993z" }, "child": [] }] })(props);
+}
+function SiNetlify(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M6.49 19.04h-.23L5.13 17.9v-.23l1.73-1.71h1.2l.15.15v1.2L6.5 19.04ZM5.13 6.31V6.1l1.13-1.13h.23L8.2 6.68v1.2l-.15.15h-1.2L5.13 6.31Zm9.96 9.09h-1.65l-.14-.13v-3.83c0-.68-.27-1.2-1.1-1.23-.42 0-.9 0-1.43.02l-.07.08v4.96l-.14.14H8.9l-.13-.14V8.73l.13-.14h3.7a2.6 2.6 0 0 1 2.61 2.6v4.08l-.13.14Zm-8.37-2.44H.14L0 12.82v-1.64l.14-.14h6.58l.14.14v1.64l-.14.14Zm17.14 0h-6.58l-.14-.14v-1.64l.14-.14h6.58l.14.14v1.64l-.14.14ZM11.05 6.55V1.64l.14-.14h1.65l.14.14v4.9l-.14.14h-1.65l-.14-.13Zm0 15.81v-4.9l.14-.14h1.65l.14.13v4.91l-.14.14h-1.65l-.14-.14Z" }, "child": [] }] })(props);
+}
+function SiNatsdotio(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12.004 0H.404v18.807h9.938l1.714 1.602v-.026L15.966 24v-5.193h7.63V0H12.003zm7.578 14.45H15.38L6.898 6.519v7.93H4.116V4.376h4.349l8.344 7.784V4.375h2.773V14.45z" }, "child": [] }] })(props);
+}
+function SiMysql(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M16.405 5.501c-.115 0-.193.014-.274.033v.013h.014c.054.104.146.18.214.273.054.107.1.214.154.32l.014-.015c.094-.066.14-.172.14-.333-.04-.047-.046-.094-.08-.14-.04-.067-.126-.1-.18-.153zM5.77 18.695h-.927a50.854 50.854 0 00-.27-4.41h-.008l-1.41 4.41H2.45l-1.4-4.41h-.01a72.892 72.892 0 00-.195 4.41H0c.055-1.966.192-3.81.41-5.53h1.15l1.335 4.064h.008l1.347-4.064h1.095c.242 2.015.384 3.86.428 5.53zm4.017-4.08c-.378 2.045-.876 3.533-1.492 4.46-.482.716-1.01 1.073-1.583 1.073-.153 0-.34-.046-.566-.138v-.494c.11.017.24.026.386.026.268 0 .483-.075.647-.222.197-.18.295-.382.295-.605 0-.155-.077-.47-.23-.944L6.23 14.615h.91l.727 2.36c.164.536.233.91.205 1.123.4-1.064.678-2.227.835-3.483zm12.325 4.08h-2.63v-5.53h.885v4.85h1.745zm-3.32.135l-1.016-.5c.09-.076.177-.158.255-.25.433-.506.648-1.258.648-2.253 0-1.83-.718-2.746-2.155-2.746-.704 0-1.254.232-1.65.697-.43.508-.646 1.256-.646 2.245 0 .972.19 1.686.574 2.14.35.41.877.615 1.583.615.264 0 .506-.033.725-.098l1.325.772.36-.622zM15.5 17.588c-.225-.36-.337-.94-.337-1.736 0-1.393.424-2.09 1.27-2.09.443 0 .77.167.977.5.224.362.336.936.336 1.723 0 1.404-.424 2.108-1.27 2.108-.445 0-.77-.167-.978-.5zm-1.658-.425c0 .47-.172.856-.516 1.156-.344.3-.803.45-1.384.45-.543 0-1.064-.172-1.573-.515l.237-.476c.438.22.833.328 1.19.328.332 0 .593-.073.783-.22a.754.754 0 00.3-.615c0-.33-.23-.61-.648-.845-.388-.213-1.163-.657-1.163-.657-.422-.307-.632-.636-.632-1.177 0-.45.157-.81.47-1.085.315-.278.72-.415 1.22-.415.512 0 .98.136 1.4.41l-.213.476a2.726 2.726 0 00-1.064-.23c-.283 0-.502.068-.654.206a.685.685 0 00-.248.524c0 .328.234.61.666.85.393.215 1.187.67 1.187.67.433.305.648.63.648 1.168zm9.382-5.852c-.535-.014-.95.04-1.297.188-.1.04-.26.04-.274.167.055.053.063.14.11.214.08.134.218.313.346.407.14.11.28.216.427.31.26.16.555.255.81.416.145.094.293.213.44.313.073.05.12.14.214.172v-.02c-.046-.06-.06-.147-.105-.214-.067-.067-.134-.127-.2-.193a3.223 3.223 0 00-.695-.675c-.214-.146-.682-.35-.77-.595l-.013-.014c.146-.013.32-.066.46-.106.227-.06.435-.047.67-.106.106-.027.213-.06.32-.094v-.06c-.12-.12-.21-.283-.334-.395a8.867 8.867 0 00-1.104-.823c-.21-.134-.476-.22-.697-.334-.08-.04-.214-.06-.26-.127-.12-.146-.19-.34-.275-.514a17.69 17.69 0 01-.547-1.163c-.12-.262-.193-.523-.34-.763-.69-1.137-1.437-1.826-2.586-2.5-.247-.14-.543-.2-.856-.274-.167-.008-.334-.02-.5-.027-.11-.047-.216-.174-.31-.235-.38-.24-1.364-.76-1.644-.072-.18.434.267.862.422 1.082.115.153.26.328.34.5.047.116.06.235.107.356.106.294.207.622.347.897.073.14.153.287.247.413.054.073.146.107.167.227-.094.136-.1.334-.154.5-.24.757-.146 1.693.194 2.25.107.166.362.534.703.393.3-.12.234-.5.32-.835.02-.08.007-.133.048-.187v.015c.094.188.188.367.274.555.206.328.566.668.867.895.16.12.287.328.487.402v-.02h-.015c-.043-.058-.1-.086-.154-.133a3.445 3.445 0 01-.35-.4 8.76 8.76 0 01-.747-1.218c-.11-.21-.202-.436-.29-.643-.04-.08-.04-.2-.107-.24-.1.146-.247.273-.32.453-.127.288-.14.642-.188 1.01-.027.007-.014 0-.027.014-.214-.052-.287-.274-.367-.46-.2-.475-.233-1.238-.06-1.785.047-.14.247-.582.167-.716-.042-.127-.174-.2-.247-.303a2.478 2.478 0 01-.24-.427c-.16-.374-.24-.788-.414-1.162-.08-.173-.22-.354-.334-.513-.127-.18-.267-.307-.368-.52-.033-.073-.08-.194-.027-.274.014-.054.042-.075.094-.09.088-.072.335.022.422.062.247.1.455.194.662.334.094.066.195.193.315.226h.14c.214.047.455.014.655.073.355.114.675.28.962.46a5.953 5.953 0 012.085 2.286c.08.154.115.295.188.455.14.33.313.663.455.982.14.315.275.636.476.897.1.14.502.213.682.286.133.06.34.115.46.188.23.14.454.3.67.454.11.076.443.243.463.378z" }, "child": [] }] })(props);
+}
+function SiMongodb(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M17.193 9.555c-1.264-5.58-4.252-7.414-4.573-8.115-.28-.394-.53-.954-.735-1.44-.036.495-.055.685-.523 1.184-.723.566-4.438 3.682-4.74 10.02-.282 5.912 4.27 9.435 4.888 9.884l.07.05A73.49 73.49 0 0111.91 24h.481c.114-1.032.284-2.056.51-3.07.417-.296.604-.463.85-.693a11.342 11.342 0 003.639-8.464c.01-.814-.103-1.662-.197-2.218zm-5.336 8.195s0-8.291.275-8.29c.213 0 .49 10.695.49 10.695-.381-.045-.765-1.76-.765-2.405z" }, "child": [] }] })(props);
+}
+function SiMiro(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M17.392 0H13.9L17 4.808 10.444 0H6.949l3.102 6.3L3.494 0H0l3.05 8.131L0 24h3.494L10.05 6.985 6.949 24h3.494L17 5.494 13.899 24h3.493L24 3.672 17.392 0z" }, "child": [] }] })(props);
+}
+function SiMinio(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.2072.006c-.6216-.0478-1.2.1943-1.6211.582a2.15 2.15 0 0 0-.0938 3.0352l3.4082 3.5507a3.042 3.042 0 0 1-.664 4.6875l-.463.2383V7.2853a15.4198 15.4198 0 0 0-8.0174 10.4862v.0176l6.5487-3.3281v7.621L13.7794 24V13.6817l.8965-.4629a4.4432 4.4432 0 0 0 1.2207-7.0292l-3.371-3.5254a.7489.7489 0 0 1 .037-1.0547.7522.7522 0 0 1 1.0567.0371l.4668.4863-.006.0059 4.0704 4.2441a.0566.0566 0 0 0 .082 0 .06.06 0 0 0 0-.0703l-3.1406-5.1425-.1484.1425.1484-.1445C14.4945.3926 13.8287.0538 13.2072.006Zm-.9024 9.8652v2.9941l-4.1523 2.1484a13.9787 13.9787 0 0 1 2.7676-3.9277 14.1784 14.1784 0 0 1 1.3847-1.2148z" }, "child": [] }] })(props);
+}
+function SiMailchimp(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.267 0C6.791-.015-1.82 10.246 1.397 12.964l.79.669a3.88 3.88 0 0 0-.22 1.792c.084.84.518 1.644 1.22 2.266.666.59 1.542.964 2.392.964 1.406 3.24 4.62 5.228 8.386 5.34 4.04.12 7.433-1.776 8.854-5.182.093-.24.488-1.316.488-2.267 0-.956-.54-1.352-.885-1.352-.01-.037-.078-.286-.172-.586-.093-.3-.19-.51-.19-.51.375-.563.382-1.065.332-1.35-.053-.353-.2-.653-.496-.964-.296-.311-.902-.63-1.753-.868l-.446-.124c-.002-.019-.024-1.053-.043-1.497-.014-.32-.042-.822-.197-1.315-.186-.668-.508-1.253-.911-1.627 1.112-1.152 1.806-2.422 1.804-3.511-.003-2.095-2.576-2.729-5.746-1.416l-.672.285A678.22 678.22 0 0 0 12.7.504C12.304.159 11.817.002 11.267 0zm.073.873c.166 0 .322.019.465.058.297.084 1.28 1.224 1.28 1.224s-1.826 1.013-3.52 2.426c-2.28 1.757-4.005 4.311-5.037 7.082-.811.158-1.526.618-1.963 1.253-.261-.218-.748-.64-.834-.804-.698-1.326.761-3.902 1.781-5.357C5.834 3.44 9.37.867 11.34.873zm3.286 3.273c.04-.002.06.05.028.074-.143.11-.299.26-.413.414a.04.04 0 0 0 .031.064c.659.004 1.587.235 2.192.574.041.023.012.103-.034.092-.915-.21-2.414-.369-3.97.01-1.39.34-2.45.863-3.224 1.426-.04.028-.086-.023-.055-.06.896-1.035 1.999-1.935 2.987-2.44.034-.018.07.019.052.052-.079.143-.23.447-.278.678-.007.035.032.063.062.042.615-.42 1.684-.868 2.622-.926zm3.023 3.205l.056.001a.896.896 0 0 1 .456.146c.534.355.61 1.216.638 1.845.015.36.059 1.229.074 1.478.034.571.184.651.487.751.17.057.33.098.563.164.706.198 1.125.4 1.39.658.157.162.23.333.253.497.083.608-.472 1.36-1.942 2.041-1.607.746-3.557.935-4.904.785l-.471-.053c-1.078-.145-1.693 1.247-1.046 2.201.417.615 1.552 1.015 2.688 1.015 2.604 0 4.605-1.111 5.35-2.072a.987.987 0 0 0 .06-.085c.036-.055.006-.085-.04-.054-.608.416-3.31 2.069-6.2 1.571 0 0-.351-.057-.672-.182-.255-.1-.788-.344-.853-.891 2.333.72 3.801.039 3.801.039a.072.072 0 0 0 .042-.072.067.067 0 0 0-.074-.06s-1.911.283-3.718-.378c.197-.64.72-.408 1.51-.345a11.045 11.045 0 0 0 3.647-.394c.818-.234 1.892-.697 2.727-1.356.281.618.38 1.299.38 1.299s.219-.04.4.073c.173.106.299.326.213.895-.176 1.063-.628 1.926-1.387 2.72a5.714 5.714 0 0 1-1.666 1.244c-.34.18-.704.334-1.087.46-2.863.935-5.794-.093-6.739-2.3a3.545 3.545 0 0 1-.189-.522c-.403-1.455-.06-3.2 1.008-4.299.065-.07.132-.153.132-.256 0-.087-.055-.179-.102-.243-.374-.543-1.669-1.466-1.409-3.254.187-1.284 1.31-2.189 2.357-2.135.089.004.177.01.266.015.453.027.85.085 1.223.1.625.028 1.187-.063 1.853-.618.225-.187.405-.35.71-.401.028-.005.092-.028.215-.028zm.022 2.18a.42.42 0 0 0-.06.005c-.335.054-.347.468-.228 1.04.068.32.187.595.32.765.175-.02.343-.022.498 0 .089-.205.104-.557.024-.942-.112-.535-.261-.872-.554-.868zm-3.66 1.546a1.724 1.724 0 0 0-1.016.326c-.16.117-.311.28-.29.378.008.032.031.056.088.063.131.015.592-.217 1.122-.25.374-.023.684.094.923.2.239.104.386.173.443.113.037-.038.026-.11-.031-.204-.118-.192-.36-.387-.618-.497a1.601 1.601 0 0 0-.621-.129zm4.082.81c-.171-.003-.313.186-.317.42-.004.236.131.43.303.432.172.003.314-.185.318-.42.004-.236-.132-.429-.304-.432zm-3.58.172c-.05 0-.102.002-.155.008-.311.05-.483.152-.593.247-.094.082-.152.173-.152.237a.075.075 0 0 0 .075.076c.07 0 .228-.063.228-.063a1.98 1.98 0 0 1 1.001-.104c.157.018.23.027.265-.026.01-.016.022-.049-.01-.1-.063-.103-.311-.269-.66-.275zm2.26.4c-.127 0-.235.051-.283.148-.075.154.035.363.246.466.21.104.443.063.52-.09.075-.155-.035-.364-.246-.467a.542.542 0 0 0-.237-.058zm-11.635.024c.048 0 .098 0 .149.003.73.04 1.806.6 2.052 2.19.217 1.41-.128 2.843-1.449 3.069-.123.02-.248.029-.374.026-1.22-.033-2.539-1.132-2.67-2.435-.145-1.44.591-2.548 1.894-2.811.117-.024.252-.04.398-.042zm-.07.927a1.144 1.144 0 0 0-.847.364c-.38.418-.439.988-.366 1.19.027.073.07.094.1.098.064.008.16-.039.22-.2a1.2 1.2 0 0 0 .017-.052 1.58 1.58 0 0 1 .157-.37.689.689 0 0 1 .955-.199c.266.174.369.5.255.81-.058.161-.154.469-.133.721.043.511.357.717.64.738.274.01.466-.143.515-.256.029-.067.005-.107-.011-.125-.043-.053-.113-.037-.18-.021a.638.638 0 0 1-.16.022.347.347 0 0 1-.294-.148c-.078-.12-.073-.3.013-.504.011-.028.025-.058.04-.092.138-.308.368-.825.11-1.317-.195-.37-.513-.602-.894-.65a1.135 1.135 0 0 0-.138-.01z" }, "child": [] }] })(props);
+}
+function SiLoom(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M24 10.665h-7.018l6.078-3.509-1.335-2.312-6.078 3.509 3.508-6.077L16.843.94l-3.508 6.077V0h-2.67v7.018L7.156.94 4.844 2.275l3.509 6.077-6.078-3.508L.94 7.156l6.078 3.509H0v2.67h7.017L.94 16.844l1.335 2.313 6.077-3.508-3.509 6.077 2.312 1.335 3.509-6.078V24h2.67v-7.017l3.508 6.077 2.312-1.335-3.509-6.078 6.078 3.509 1.335-2.313-6.077-3.508h7.017v-2.67H24zm-12 4.966a3.645 3.645 0 1 1 0-7.29 3.645 3.645 0 0 1 0 7.29z" }, "child": [] }] })(props);
+}
+function SiLinear(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M2.886 4.18A11.982 11.982 0 0 1 11.99 0C18.624 0 24 5.376 24 12.009c0 3.64-1.62 6.903-4.18 9.105L2.887 4.18ZM1.817 5.626l16.556 16.556c-.524.33-1.075.62-1.65.866L.951 7.277c.247-.575.537-1.126.866-1.65ZM.322 9.163l14.515 14.515c-.71.172-1.443.282-2.195.322L0 11.358a12 12 0 0 1 .322-2.195Zm-.17 4.862 9.823 9.824a12.02 12.02 0 0 1-9.824-9.824Z" }, "child": [] }] })(props);
+}
+function SiKubernetes(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M10.204 14.35l.007.01-.999 2.413a5.171 5.171 0 0 1-2.075-2.597l2.578-.437.004.005a.44.44 0 0 1 .484.606zm-.833-2.129a.44.44 0 0 0 .173-.756l.002-.011L7.585 9.7a5.143 5.143 0 0 0-.73 3.255l2.514-.725.002-.009zm1.145-1.98a.44.44 0 0 0 .699-.337l.01-.005.15-2.62a5.144 5.144 0 0 0-3.01 1.442l2.147 1.523.004-.002zm.76 2.75l.723.349.722-.347.18-.78-.5-.623h-.804l-.5.623.179.779zm1.5-3.095a.44.44 0 0 0 .7.336l.008.003 2.134-1.513a5.188 5.188 0 0 0-2.992-1.442l.148 2.615.002.001zm10.876 5.97l-5.773 7.181a1.6 1.6 0 0 1-1.248.594l-9.261.003a1.6 1.6 0 0 1-1.247-.596l-5.776-7.18a1.583 1.583 0 0 1-.307-1.34L2.1 5.573c.108-.47.425-.864.863-1.073L11.305.513a1.606 1.606 0 0 1 1.385 0l8.345 3.985c.438.209.755.604.863 1.073l2.062 8.955c.108.47-.005.963-.308 1.34zm-3.289-2.057c-.042-.01-.103-.026-.145-.034-.174-.033-.315-.025-.479-.038-.35-.037-.638-.067-.895-.148-.105-.04-.18-.165-.216-.216l-.201-.059a6.45 6.45 0 0 0-.105-2.332 6.465 6.465 0 0 0-.936-2.163c.052-.047.15-.133.177-.159.008-.09.001-.183.094-.282.197-.185.444-.338.743-.522.142-.084.273-.137.415-.242.032-.024.076-.062.11-.089.24-.191.295-.52.123-.736-.172-.216-.506-.236-.745-.045-.034.027-.08.062-.111.088-.134.116-.217.23-.33.35-.246.25-.45.458-.673.609-.097.056-.239.037-.303.033l-.19.135a6.545 6.545 0 0 0-4.146-2.003l-.012-.223c-.065-.062-.143-.115-.163-.25-.022-.268.015-.557.057-.905.023-.163.061-.298.068-.475.001-.04-.001-.099-.001-.142 0-.306-.224-.555-.5-.555-.275 0-.499.249-.499.555l.001.014c0 .041-.002.092 0 .128.006.177.044.312.067.475.042.348.078.637.056.906a.545.545 0 0 1-.162.258l-.012.211a6.424 6.424 0 0 0-4.166 2.003 8.373 8.373 0 0 1-.18-.128c-.09.012-.18.04-.297-.029-.223-.15-.427-.358-.673-.608-.113-.12-.195-.234-.329-.349-.03-.026-.077-.062-.111-.088a.594.594 0 0 0-.348-.132.481.481 0 0 0-.398.176c-.172.216-.117.546.123.737l.007.005.104.083c.142.105.272.159.414.242.299.185.546.338.743.522.076.082.09.226.1.288l.16.143a6.462 6.462 0 0 0-1.02 4.506l-.208.06c-.055.072-.133.184-.215.217-.257.081-.546.11-.895.147-.164.014-.305.006-.48.039-.037.007-.09.02-.133.03l-.004.002-.007.002c-.295.071-.484.342-.423.608.061.267.349.429.645.365l.007-.001.01-.003.129-.029c.17-.046.294-.113.448-.172.33-.118.604-.217.87-.256.112-.009.23.069.288.101l.217-.037a6.5 6.5 0 0 0 2.88 3.596l-.09.218c.033.084.069.199.044.282-.097.252-.263.517-.452.813-.091.136-.185.242-.268.399-.02.037-.045.095-.064.134-.128.275-.034.591.213.71.248.12.556-.007.69-.282v-.002c.02-.039.046-.09.062-.127.07-.162.094-.301.144-.458.132-.332.205-.68.387-.897.05-.06.13-.082.215-.105l.113-.205a6.453 6.453 0 0 0 4.609.012l.106.192c.086.028.18.042.256.155.136.232.229.507.342.84.05.156.074.295.145.457.016.037.043.09.062.129.133.276.442.402.69.282.247-.118.341-.435.213-.71-.02-.039-.045-.096-.065-.134-.083-.156-.177-.261-.268-.398-.19-.296-.346-.541-.443-.793-.04-.13.007-.21.038-.294-.018-.022-.059-.144-.083-.202a6.499 6.499 0 0 0 2.88-3.622c.064.01.176.03.213.038.075-.05.144-.114.28-.104.266.039.54.138.87.256.154.06.277.128.448.173.036.01.088.019.13.028l.009.003.007.001c.297.064.584-.098.645-.365.06-.266-.128-.537-.423-.608zM16.4 9.701l-1.95 1.746v.005a.44.44 0 0 0 .173.757l.003.01 2.526.728a5.199 5.199 0 0 0-.108-1.674A5.208 5.208 0 0 0 16.4 9.7zm-4.013 5.325a.437.437 0 0 0-.404-.232.44.44 0 0 0-.372.233h-.002l-1.268 2.292a5.164 5.164 0 0 0 3.326.003l-1.27-2.296h-.01zm1.888-1.293a.44.44 0 0 0-.27.036.44.44 0 0 0-.214.572l-.003.004 1.01 2.438a5.15 5.15 0 0 0 2.081-2.615l-2.6-.44-.004.005z" }, "child": [] }] })(props);
+}
+function SiJira(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.571 11.513H0a5.218 5.218 0 0 0 5.232 5.215h2.13v2.057A5.215 5.215 0 0 0 12.575 24V12.518a1.005 1.005 0 0 0-1.005-1.005zm5.723-5.756H5.736a5.215 5.215 0 0 0 5.215 5.214h2.129v2.058a5.218 5.218 0 0 0 5.215 5.214V6.758a1.001 1.001 0 0 0-1.001-1.001zM23.013 0H11.455a5.215 5.215 0 0 0 5.215 5.215h2.129v2.057A5.215 5.215 0 0 0 24 12.483V1.005A1.001 1.001 0 0 0 23.013 0Z" }, "child": [] }] })(props);
+}
+function SiIntercom(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M21 0H3C1.343 0 0 1.343 0 3v18c0 1.658 1.343 3 3 3h18c1.658 0 3-1.342 3-3V3c0-1.657-1.342-3-3-3zm-5.801 4.399c0-.44.36-.8.802-.8.44 0 .8.36.8.8v10.688c0 .442-.36.801-.8.801-.443 0-.802-.359-.802-.801V4.399zM11.2 3.994c0-.44.357-.799.8-.799s.8.359.8.799v11.602c0 .44-.357.8-.8.8s-.8-.36-.8-.8V3.994zm-4 .405c0-.44.359-.8.799-.8.443 0 .802.36.802.8v10.688c0 .442-.36.801-.802.801-.44 0-.799-.359-.799-.801V4.399zM3.199 6c0-.442.36-.8.802-.8.44 0 .799.358.799.8v7.195c0 .441-.359.8-.799.8-.443 0-.802-.36-.802-.8V6zM20.52 18.202c-.123.105-3.086 2.593-8.52 2.593-5.433 0-8.397-2.486-8.521-2.593-.335-.288-.375-.792-.086-1.128.285-.334.79-.375 1.125-.09.047.041 2.693 2.211 7.481 2.211 4.848 0 7.456-2.186 7.479-2.207.334-.289.839-.25 1.128.086.289.336.25.84-.086 1.128zm.281-5.007c0 .441-.36.8-.801.8-.441 0-.801-.36-.801-.8V6c0-.442.361-.8.801-.8.441 0 .801.357.801.8v7.195z" }, "child": [] }] })(props);
+}
+function SiInstagram(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634-.7888.3075-1.4575.72-2.1228 1.3877-.6652.6677-1.075 1.3368-1.3802 2.127-.2954.7638-.4956 1.6365-.552 2.914-.0564 1.2775-.0689 1.6882-.0626 4.947.0062 3.2586.0206 3.6671.0825 4.9473.061 1.2765.264 2.1482.5635 2.9107.308.7889.72 1.4573 1.388 2.1228.6679.6655 1.3365 1.0743 2.1285 1.38.7632.295 1.6361.4961 2.9134.552 1.2773.056 1.6884.069 4.9462.0627 3.2578-.0062 3.668-.0207 4.9478-.0814 1.28-.0607 2.147-.2652 2.9098-.5633.7889-.3086 1.4578-.72 2.1228-1.3881.665-.6682 1.0745-1.3378 1.3795-2.1284.2957-.7632.4966-1.636.552-2.9124.056-1.2809.0692-1.6898.063-4.948-.0063-3.2583-.021-3.6668-.0817-4.9465-.0607-1.2797-.264-2.1487-.5633-2.9117-.3084-.7889-.72-1.4568-1.3876-2.1228C21.2982 1.33 20.628.9208 19.8378.6165 19.074.321 18.2017.1197 16.9244.0645 15.6471.0093 15.236-.005 11.977.0014 8.718.0076 8.31.0215 7.0301.0839m.1402 21.6932c-1.17-.0509-1.8053-.2453-2.2287-.408-.5606-.216-.96-.4771-1.3819-.895-.422-.4178-.6811-.8186-.9-1.378-.1644-.4234-.3624-1.058-.4171-2.228-.0595-1.2645-.072-1.6442-.079-4.848-.007-3.2037.0053-3.583.0607-4.848.05-1.169.2456-1.805.408-2.2282.216-.5613.4762-.96.895-1.3816.4188-.4217.8184-.6814 1.3783-.9003.423-.1651 1.0575-.3614 2.227-.4171 1.2655-.06 1.6447-.072 4.848-.079 3.2033-.007 3.5835.005 4.8495.0608 1.169.0508 1.8053.2445 2.228.408.5608.216.96.4754 1.3816.895.4217.4194.6816.8176.9005 1.3787.1653.4217.3617 1.056.4169 2.2263.0602 1.2655.0739 1.645.0796 4.848.0058 3.203-.0055 3.5834-.061 4.848-.051 1.17-.245 1.8055-.408 2.2294-.216.5604-.4763.96-.8954 1.3814-.419.4215-.8181.6811-1.3783.9-.4224.1649-1.0577.3617-2.2262.4174-1.2656.0595-1.6448.072-4.8493.079-3.2045.007-3.5825-.006-4.848-.0608M16.953 5.5864A1.44 1.44 0 1 0 18.39 4.144a1.44 1.44 0 0 0-1.437 1.4424M5.8385 12.012c.0067 3.4032 2.7706 6.1557 6.173 6.1493 3.4026-.0065 6.157-2.7701 6.1506-6.1733-.0065-3.4032-2.771-6.1565-6.174-6.1498-3.403.0067-6.156 2.771-6.1496 6.1738M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077" }, "child": [] }] })(props);
+}
+function SiHuggingface(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12.025 1.13c-5.77 0-10.449 4.647-10.449 10.378 0 1.112.178 2.181.503 3.185.064-.222.203-.444.416-.577a.96.96 0 0 1 .524-.15c.293 0 .584.124.84.284.278.173.48.408.71.694.226.282.458.611.684.951v-.014c.017-.324.106-.622.264-.874s.403-.487.762-.543c.3-.047.596.06.787.203s.31.313.4.467c.15.257.212.468.233.542.01.026.653 1.552 1.657 2.54.616.605 1.01 1.223 1.082 1.912.055.537-.096 1.059-.38 1.572.637.121 1.294.187 1.967.187.657 0 1.298-.063 1.921-.178-.287-.517-.44-1.041-.384-1.581.07-.69.465-1.307 1.081-1.913 1.004-.987 1.647-2.513 1.657-2.539.021-.074.083-.285.233-.542.09-.154.208-.323.4-.467a1.08 1.08 0 0 1 .787-.203c.359.056.604.29.762.543s.247.55.265.874v.015c.225-.34.457-.67.683-.952.23-.286.432-.52.71-.694.257-.16.547-.284.84-.285a.97.97 0 0 1 .524.151c.228.143.373.388.43.625l.006.04a10.3 10.3 0 0 0 .534-3.273c0-5.731-4.678-10.378-10.449-10.378M8.327 6.583a1.5 1.5 0 0 1 .713.174 1.487 1.487 0 0 1 .617 2.013c-.183.343-.762-.214-1.102-.094-.38.134-.532.914-.917.71a1.487 1.487 0 0 1 .69-2.803m7.486 0a1.487 1.487 0 0 1 .689 2.803c-.385.204-.536-.576-.916-.71-.34-.12-.92.437-1.103.094a1.487 1.487 0 0 1 .617-2.013 1.5 1.5 0 0 1 .713-.174m-10.68 1.55a.96.96 0 1 1 0 1.921.96.96 0 0 1 0-1.92m13.838 0a.96.96 0 1 1 0 1.92.96.96 0 0 1 0-1.92M8.489 11.458c.588.01 1.965 1.157 3.572 1.164 1.607-.007 2.984-1.155 3.572-1.164.196-.003.305.12.305.454 0 .886-.424 2.328-1.563 3.202-.22-.756-1.396-1.366-1.63-1.32q-.011.001-.02.006l-.044.026-.01.008-.03.024q-.018.017-.035.036l-.032.04a1 1 0 0 0-.058.09l-.014.025q-.049.088-.11.19a1 1 0 0 1-.083.116 1.2 1.2 0 0 1-.173.18q-.035.029-.075.058a1.3 1.3 0 0 1-.251-.243 1 1 0 0 1-.076-.107c-.124-.193-.177-.363-.337-.444-.034-.016-.104-.008-.2.022q-.094.03-.216.087-.06.028-.125.063l-.13.074q-.067.04-.136.086a3 3 0 0 0-.135.096 3 3 0 0 0-.26.219 2 2 0 0 0-.12.121 2 2 0 0 0-.106.128l-.002.002a2 2 0 0 0-.09.132l-.001.001a1.2 1.2 0 0 0-.105.212q-.013.036-.024.073c-1.139-.875-1.563-2.317-1.563-3.203 0-.334.109-.457.305-.454m.836 10.354c.824-1.19.766-2.082-.365-3.194-1.13-1.112-1.789-2.738-1.789-2.738s-.246-.945-.806-.858-.97 1.499.202 2.362c1.173.864-.233 1.45-.685.64-.45-.812-1.683-2.896-2.322-3.295s-1.089-.175-.938.647 2.822 2.813 2.562 3.244-1.176-.506-1.176-.506-2.866-2.567-3.49-1.898.473 1.23 2.037 2.16c1.564.932 1.686 1.178 1.464 1.53s-3.675-2.511-4-1.297c-.323 1.214 3.524 1.567 3.287 2.405-.238.839-2.71-1.587-3.216-.642-.506.946 3.49 2.056 3.522 2.064 1.29.33 4.568 1.028 5.713-.624m5.349 0c-.824-1.19-.766-2.082.365-3.194 1.13-1.112 1.789-2.738 1.789-2.738s.246-.945.806-.858.97 1.499-.202 2.362c-1.173.864.233 1.45.685.64.451-.812 1.683-2.896 2.322-3.295s1.089-.175.938.647-2.822 2.813-2.562 3.244 1.176-.506 1.176-.506 2.866-2.567 3.49-1.898-.473 1.23-2.037 2.16c-1.564.932-1.686 1.178-1.464 1.53s3.675-2.511 4-1.297c.323 1.214-3.524 1.567-3.287 2.405.238.839 2.71-1.587 3.216-.642.506.946-3.49 2.056-3.522 2.064-1.29.33-4.568 1.028-5.713-.624" }, "child": [] }] })(props);
+}
+function SiHubspot(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M18.164 7.93V5.084a2.198 2.198 0 001.267-1.978v-.067A2.2 2.2 0 0017.238.845h-.067a2.2 2.2 0 00-2.193 2.193v.067a2.196 2.196 0 001.252 1.973l.013.006v2.852a6.22 6.22 0 00-2.969 1.31l.012-.01-7.828-6.095A2.497 2.497 0 104.3 4.656l-.012.006 7.697 5.991a6.176 6.176 0 00-1.038 3.446c0 1.343.425 2.588 1.147 3.607l-.013-.02-2.342 2.343a1.968 1.968 0 00-.58-.095h-.002a2.033 2.033 0 102.033 2.033 1.978 1.978 0 00-.1-.595l.005.014 2.317-2.317a6.247 6.247 0 104.782-11.134l-.036-.005zm-.964 9.378a3.206 3.206 0 113.215-3.207v.002a3.206 3.206 0 01-3.207 3.207z" }, "child": [] }] })(props);
+}
+function SiHomebrew(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M7.938 0a.214.214 0 0 0-.206.156c-.316 1.104.179 2.15.838 2.935.153.181.313.347.476.501a2.039 2.039 0 0 0-.665.02c-1.184.233-2.193.985-2.74 2.532a3.893 3.893 0 0 0-.2 1.466 1.565 1.565 0 0 0-1.156 1.504 1.59 1.59 0 0 0 1.227 1.541l.026 12.046c0 .195.1.377.264.482a.214.214 0 0 0 .008.005c.537.31 2.047.812 5.21.812 3.238 0 4.7-.678 5.181-1.04a.214.214 0 0 0 .008-.007.571.571 0 0 0 .206-.439c.002-.344.002-1.136.002-1.604a.143.143 0 0 1 .147-.144c.397.006.869.006 1.318.005a1.826 1.826 0 0 0 1.832-1.825v-5.804a1.826 1.826 0 0 0-1.825-1.826H16.56a.14.14 0 0 1-.143-.144V10.6h.007v-.001a1.573 1.573 0 0 0 1.356-1.556c0-.816-.627-1.489-1.424-1.563-.025-1.438-.437-2.126-.736-2.58a.214.214 0 0 0-.005-.007c-.364-.51-1.193-1.282-2.275-1.316-.503-.016-.842.124-1.125.254-.217.1-.42.177-.67.22.002-1.286.945-1.981.945-1.981a.214.214 0 0 0 .05-.298s-.087-.122-.21-.26c-.121-.136-.269-.294-.47-.378a.214.214 0 0 0-.079-.017.214.214 0 0 0-.145.055 4.308 4.308 0 0 0-.875 1.101 3.42 3.42 0 0 0-.133.273 3.497 3.497 0 0 0-.381-.846C9.794.978 9.063.436 8.017.016A.214.214 0 0 0 7.939 0zm.156.524c.85.378 1.43.83 1.79 1.403.274.438.426.962.484 1.584a3.07 3.07 0 0 0-.012.462 6.897 6.897 0 0 1-.168-.052 5.487 5.487 0 0 1-1.29-1.106c-.551-.657-.935-1.46-.804-2.291zM11.8 1.618c.07.054.141.101.212.18.034.039.032.04.058.073-.332.308-1.07 1.144-.952 2.453a.214.214 0 0 0 .222.195c.469-.017.782-.172 1.056-.299.273-.126.508-.228.931-.214.875.027 1.639.715 1.939 1.134.295.449.65 1 .663 2.36a1.66 1.66 0 0 0-.41.142 1.938 1.938 0 0 0-1.77-1.16 1.94 1.94 0 0 0-1.87 1.448 1.783 1.783 0 0 0-1.356-.64c-.484 0-.91.205-1.233.517a1.873 1.873 0 0 0-1.85-1.625c-.649 0-1.218.335-1.552.84a3.1 3.1 0 0 1 .157-.735c.51-1.437 1.355-2.045 2.42-2.254.367-.073.664-.011.99.095.325.106.671.262 1.094.342a.214.214 0 0 0 .252-.245c-.112-.67.073-1.266.336-1.744a3.71 3.71 0 0 1 .663-.863zM7.44 6.611a1.442 1.442 0 0 1 1.363 1.925.214.214 0 0 0 .168.283h.005a.214.214 0 0 0 .238-.146 1.373 1.373 0 0 1 2.613-.01.214.214 0 0 0 .417-.09 1.509 1.509 0 0 1 1.504-1.664c.678 0 1.249.445 1.442 1.056a.214.214 0 0 0 .259.143l.15-.04a.214.214 0 0 0 .051-.02 1.139 1.139 0 0 1 1.702.995 1.14 1.14 0 0 1-.985 1.131.214.214 0 0 0-.001 0 2.215 2.215 0 0 0-.485.126 10.65 10.65 0 0 1-1.176.365.214.214 0 0 0-.162.186 1.276 1.276 0 0 1-.146.478 2.07 2.07 0 0 0-.239 1.111l.001.151a.438.438 0 0 1-.16.36.665.665 0 0 1-.43.14.586.586 0 0 1-.588-.59.803.803 0 0 0-.38-.681.214.214 0 0 0-.002-.002c-.24-.145-.43-.37-.532-.636a.214.214 0 0 0-.207-.138 19.469 19.469 0 0 1-5.37-.6l-.003-.002a9.007 9.007 0 0 0-.838-.194h.003a1.16 1.16 0 0 1-.937-1.134c0-.619.488-1.118 1.101-1.14a.214.214 0 0 0 .204-.176 1.443 1.443 0 0 1 1.42-1.187zm8.549 4.106v.455c0 .314.259.573.572.573h1.329a1.397 1.397 0 0 1 1.397 1.397v5.804a1.396 1.396 0 0 1-1.402 1.396.214.214 0 0 0-.002 0c-.448.002-.918 0-1.31-.005a.573.573 0 0 0-.584.573c0 .468 0 1.262-.002 1.603a.214.214 0 0 0 0 .001c0 .042-.019.08-.05.107-.346.26-1.75.95-4.915.95-3.107 0-4.587-.52-4.99-.752a.143.143 0 0 1-.065-.118l-.025-11.955c.145.033.288.07.431.11a.214.214 0 0 0 .003 0c.115.031.246.064.383.097v10.37c0 .129.069.247.18.31.453.217 1.767.732 4.071.732 2.32 0 3.595-.626 4.022-.884a.357.357 0 0 0 .164-.3l.001-10.21c.267-.075.531-.158.792-.254zm-7.99.894a.493.493 0 0 1 .494.493v8.578a.493.493 0 0 1-.493.493.493.493 0 0 1-.494-.493v-8.578A.493.493 0 0 1 8 11.611zm8.652 1.14a.663.663 0 0 0-.662.662v5.208a.663.663 0 0 0 .662.662h1.14a.663.663 0 0 0 .662-.662v-5.209a.663.663 0 0 0-.662-.662zm0 .428h1.14a.233.233 0 0 1 .233.233v5.21a.233.233 0 0 1-.233.232h-1.14a.233.233 0 0 1-.233-.233v-5.209a.233.233 0 0 1 .233-.233z" }, "child": [] }] })(props);
+}
+function SiHeroku(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M20.61 0H3.39C2.189 0 1.23.96 1.23 2.16v19.681c0 1.198.959 2.159 2.16 2.159h17.22c1.2 0 2.159-.961 2.159-2.159V2.16C22.77.96 21.811 0 20.61 0zm.96 21.841c0 .539-.421.96-.96.96H3.39c-.54 0-.96-.421-.96-.96V2.16c0-.54.42-.961.96-.961h17.22c.539 0 .96.421.96.961v19.681zM6.63 20.399L9.33 18l-2.7-2.4v4.799zm9.72-9.719c-.479-.48-1.379-1.08-2.879-1.08-1.621 0-3.301.421-4.5.84V3.6h-2.4v10.38l1.68-.78s2.76-1.26 5.16-1.26c1.2 0 1.5.66 1.5 1.26v7.2h2.4v-7.2c.059-.179.059-1.501-.961-2.52zM13.17 7.5h2.4c1.08-1.26 1.62-2.521 1.8-3.9h-2.399c-.241 1.379-.841 2.64-1.801 3.9z" }, "child": [] }] })(props);
+}
+function SiHelm(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12.337 0c-.475 0-.861 1.016-.861 2.269 0 .527.069 1.011.183 1.396a8.514 8.514 0 0 0-3.961 1.22 5.229 5.229 0 0 0-.595-1.093c-.606-.866-1.34-1.436-1.79-1.43a.381.381 0 0 0-.217.066c-.39.273-.123 1.326.596 2.353.267.381.559.705.84.948a8.683 8.683 0 0 0-1.528 1.716h1.734a7.179 7.179 0 0 1 5.381-2.421 7.18 7.18 0 0 1 5.382 2.42h1.733a8.687 8.687 0 0 0-1.32-1.53c.35-.249.735-.643 1.078-1.133.719-1.027.986-2.08.596-2.353a.382.382 0 0 0-.217-.065c-.45-.007-1.184.563-1.79 1.43a4.897 4.897 0 0 0-.676 1.325 8.52 8.52 0 0 0-3.899-1.42c.12-.39.193-.887.193-1.429 0-1.253-.386-2.269-.862-2.269zM1.624 9.443v5.162h1.358v-1.968h1.64v1.968h1.357V9.443H4.62v1.838H2.98V9.443zm5.912 0v5.162h3.21v-1.108H8.893v-.95h1.64v-1.142h-1.64v-.84h1.853V9.443zm4.698 0v5.162h3.218v-1.362h-1.86v-3.8zm4.706 0v5.162h1.364v-2.643l1.357 1.225 1.35-1.232v2.65h1.365V9.443h-.614l-2.1 1.914-2.109-1.914zm-11.82 7.28a8.688 8.688 0 0 0 1.412 1.548 5.206 5.206 0 0 0-.841.948c-.719 1.027-.985 2.08-.596 2.353.39.273 1.289-.338 2.007-1.364a5.23 5.23 0 0 0 .595-1.092 8.514 8.514 0 0 0 3.961 1.219 5.01 5.01 0 0 0-.183 1.396c0 1.253.386 2.269.861 2.269.476 0 .862-1.016.862-2.269 0-.542-.072-1.04-.193-1.43a8.52 8.52 0 0 0 3.9-1.42c.121.4.352.865.675 1.327.719 1.026 1.617 1.637 2.007 1.364.39-.273.123-1.326-.596-2.353-.343-.49-.727-.885-1.077-1.135a8.69 8.69 0 0 0 1.202-1.36h-1.771a7.174 7.174 0 0 1-5.227 2.252 7.174 7.174 0 0 1-5.226-2.252z" }, "child": [] }] })(props);
+}
+function SiGradle(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M22.695 4.297a3.807 3.807 0 0 0-5.29-.09.368.368 0 0 0 0 .533l.46.47a.363.363 0 0 0 .474.032 2.182 2.182 0 0 1 2.86 3.291c-3.023 3.02-7.056-5.447-16.211-1.083a1.24 1.24 0 0 0-.534 1.745l1.571 2.713a1.238 1.238 0 0 0 1.681.461l.037-.02-.029.02.688-.384a16.083 16.083 0 0 0 2.193-1.635.384.384 0 0 1 .499-.016.357.357 0 0 1 .016.534 16.435 16.435 0 0 1-2.316 1.741H8.77l-.696.39a1.958 1.958 0 0 1-.963.25 1.987 1.987 0 0 1-1.726-.989L3.9 9.696C1.06 11.72-.686 15.603.26 20.522a.363.363 0 0 0 .354.296h1.675a.363.363 0 0 0 .37-.331 2.478 2.478 0 0 1 4.915 0 .36.36 0 0 0 .357.317h1.638a.363.363 0 0 0 .357-.317 2.478 2.478 0 0 1 4.914 0 .363.363 0 0 0 .358.317h1.627a.363.363 0 0 0 .363-.357c.037-2.294.656-4.93 2.42-6.25 6.108-4.57 4.502-8.486 3.088-9.9zm-6.229 6.901l-1.165-.584a.73.73 0 1 1 1.165.587z" }, "child": [] }] })(props);
+}
+function SiGoogletasks(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.383.617C5.097.617 0 5.714 0 12c0 6.286 5.097 11.383 11.383 11.383 6.286 0 11.38-5.097 11.38-11.383a11.34 11.34 0 0 0-.878-4.389l-3.203 3.203c.062.387.1.782.1 1.186a7.398 7.398 0 1 1-7.4-7.398c1.499 0 2.889.448 4.054 1.214l2.857-2.857a11.325 11.325 0 0 0-6.91-2.342zm9.674.756c-.292 0-.583.112-.805.334-2.97 2.965-5.934 5.934-8.9 8.902L9.596 8.854a1.139 1.139 0 0 0-1.61 0l-1.775 1.773a1.139 1.139 0 0 0 0 1.61l4.166 4.163a1.421 1.421 0 0 0 2.012 0L23.666 5.121a1.136 1.136 0 0 0 0-1.61l-1.805-1.804a1.136 1.136 0 0 0-.804-.334z" }, "child": [] }] })(props);
+}
+function SiGoogleslides(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M16.09 15.273H7.91v-4.637h8.18v4.637zm1.728-8.523h2.91v15.614c0 .904-.733 1.636-1.637 1.636H4.909a1.636 1.636 0 0 1-1.636-1.636V1.636C3.273.732 4.005 0 4.909 0h9.068v6.75h3.841zm-.363 2.523H6.545v7.363h10.91V9.273zm-2.728-5.979V6h6.001l-6-6v3.294z" }, "child": [] }] })(props);
+}
+function SiGooglesheets(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.318 12.545H7.91v-1.909h3.41v1.91zM14.728 0v6h6l-6-6zm1.363 10.636h-3.41v1.91h3.41v-1.91zm0 3.273h-3.41v1.91h3.41v-1.91zM20.727 6.5v15.864c0 .904-.732 1.636-1.636 1.636H4.909a1.636 1.636 0 0 1-1.636-1.636V1.636C3.273.732 4.005 0 4.909 0h9.318v6.5h6.5zm-3.273 2.773H6.545v7.909h10.91v-7.91zm-6.136 4.636H7.91v1.91h3.41v-1.91z" }, "child": [] }] })(props);
+}
+function SiGooglemeet(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M5.53 2.13 0 7.75h5.53zm.398 0v5.62h7.608v3.65l5.47-4.45c-.014-1.22.031-2.25-.025-3.46-.148-1.09-1.287-1.47-2.236-1.36zM23.1 4.32c-.802.295-1.358.995-2.047 1.49-2.506 2.05-4.982 4.12-7.468 6.19 3.025 2.59 6.04 5.18 9.065 7.76 1.218.671 1.428-.814 1.328-1.64v-13a.828.828 0 0 0-.877-.825zM.038 8.15v7.7h5.53v-7.7zm13.577 8.1H6.008v5.62c3.864-.006 7.737.011 11.58-.009 1.02-.07 1.618-1.12 1.468-2.07v-2.51l-5.47-4.68v3.65zm-13.577 0c.02 1.44-.041 2.88.033 4.31.162.948 1.158 1.43 2.047 1.31h3.464v-5.62z" }, "child": [] }] })(props);
+}
+function SiGooglemaps(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M19.527 4.799c1.212 2.608.937 5.678-.405 8.173-1.101 2.047-2.744 3.74-4.098 5.614-.619.858-1.244 1.75-1.669 2.727-.141.325-.263.658-.383.992-.121.333-.224.673-.34 1.008-.109.314-.236.684-.627.687h-.007c-.466-.001-.579-.53-.695-.887-.284-.874-.581-1.713-1.019-2.525-.51-.944-1.145-1.817-1.79-2.671L19.527 4.799zM8.545 7.705l-3.959 4.707c.724 1.54 1.821 2.863 2.871 4.18.247.31.494.622.737.936l4.984-5.925-.029.01c-1.741.601-3.691-.291-4.392-1.987a3.377 3.377 0 0 1-.209-.716c-.063-.437-.077-.761-.004-1.198l.001-.007zM5.492 3.149l-.003.004c-1.947 2.466-2.281 5.88-1.117 8.77l4.785-5.689-.058-.05-3.607-3.035zM14.661.436l-3.838 4.563a.295.295 0 0 1 .027-.01c1.6-.551 3.403.15 4.22 1.626.176.319.323.683.377 1.045.068.446.085.773.012 1.22l-.003.016 3.836-4.561A8.382 8.382 0 0 0 14.67.439l-.009-.003zM9.466 5.868L14.162.285l-.047-.012A8.31 8.31 0 0 0 11.986 0a8.439 8.439 0 0 0-6.169 2.766l-.016.018 3.665 3.084z" }, "child": [] }] })(props);
+}
+function SiGoogledrive(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12.01 1.485c-2.082 0-3.754.02-3.743.047.01.02 1.708 3.001 3.774 6.62l3.76 6.574h3.76c2.081 0 3.753-.02 3.742-.047-.005-.02-1.708-3.001-3.775-6.62l-3.76-6.574zm-4.76 1.73a789.828 789.861 0 0 0-3.63 6.319L0 15.868l1.89 3.298 1.885 3.297 3.62-6.335 3.618-6.33-1.88-3.287C8.1 4.704 7.255 3.22 7.25 3.214zm2.259 12.653-.203.348c-.114.198-.96 1.672-1.88 3.287a423.93 423.948 0 0 1-1.698 2.97c-.01.026 3.24.042 7.222.042h7.244l1.796-3.157c.992-1.734 1.85-3.23 1.906-3.323l.104-.167h-7.249z" }, "child": [] }] })(props);
+}
+function SiGoogledocs(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M14.727 6.727H14V0H4.91c-.905 0-1.637.732-1.637 1.636v20.728c0 .904.732 1.636 1.636 1.636h14.182c.904 0 1.636-.732 1.636-1.636V6.727h-6zm-.545 10.455H7.09v-1.364h7.09v1.364zm2.727-3.273H7.091v-1.364h9.818v1.364zm0-3.273H7.091V9.273h9.818v1.363zM14.727 6h6l-6-6v6z" }, "child": [] }] })(props);
+}
+function SiGooglecloud(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12.19 2.38a9.344 9.344 0 0 0-9.234 6.893c.053-.02-.055.013 0 0-3.875 2.551-3.922 8.11-.247 10.941l.006-.007-.007.03a6.717 6.717 0 0 0 4.077 1.356h5.173l.03.03h5.192c6.687.053 9.376-8.605 3.835-12.35a9.365 9.365 0 0 0-2.821-4.552l-.043.043.006-.05A9.344 9.344 0 0 0 12.19 2.38zm-.358 4.146c1.244-.04 2.518.368 3.486 1.15a5.186 5.186 0 0 1 1.862 4.078v.518c3.53-.07 3.53 5.262 0 5.193h-5.193l-.008.009v-.04H6.785a2.59 2.59 0 0 1-1.067-.23h.001a2.597 2.597 0 1 1 3.437-3.437l3.013-3.012A6.747 6.747 0 0 0 8.11 8.24c.018-.01.04-.026.054-.023a5.186 5.186 0 0 1 3.67-1.69z" }, "child": [] }] })(props);
+}
+function SiGooglechrome(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12 0C8.21 0 4.831 1.757 2.632 4.501l3.953 6.848A5.454 5.454 0 0 1 12 6.545h10.691A12 12 0 0 0 12 0zM1.931 5.47A11.943 11.943 0 0 0 0 12c0 6.012 4.42 10.991 10.189 11.864l3.953-6.847a5.45 5.45 0 0 1-6.865-2.29zm13.342 2.166a5.446 5.446 0 0 1 1.45 7.09l.002.001h-.002l-5.344 9.257c.206.01.413.016.621.016 6.627 0 12-5.373 12-12 0-1.54-.29-3.011-.818-4.364zM12 16.364a4.364 4.364 0 1 1 0-8.728 4.364 4.364 0 0 1 0 8.728Z" }, "child": [] }] })(props);
+}
+function SiGooglecalendar(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M18.316 5.684H24v12.632h-5.684V5.684zM5.684 24h12.632v-5.684H5.684V24zM18.316 5.684V0H1.895A1.894 1.894 0 0 0 0 1.895v16.421h5.684V5.684h12.632zm-7.207 6.25v-.065c.272-.144.5-.349.687-.617s.279-.595.279-.982c0-.379-.099-.72-.3-1.025a2.05 2.05 0 0 0-.832-.714 2.703 2.703 0 0 0-1.197-.257c-.6 0-1.094.156-1.481.467-.386.311-.65.671-.793 1.078l1.085.452c.086-.249.224-.461.413-.633.189-.172.445-.257.767-.257.33 0 .602.088.816.264a.86.86 0 0 1 .322.703c0 .33-.12.589-.36.778-.24.19-.535.284-.886.284h-.567v1.085h.633c.407 0 .748.109 1.02.327.272.218.407.499.407.843 0 .336-.129.614-.387.832s-.565.327-.924.327c-.351 0-.651-.103-.897-.311-.248-.208-.422-.502-.521-.881l-1.096.452c.178.616.505 1.082.977 1.401.472.319.984.478 1.538.477a2.84 2.84 0 0 0 1.293-.291c.382-.193.684-.458.902-.794.218-.336.327-.72.327-1.149 0-.429-.115-.797-.344-1.105a2.067 2.067 0 0 0-.881-.689zm2.093-1.931l.602.913L15 10.045v5.744h1.187V8.446h-.827l-2.158 1.557zM22.105 0h-3.289v5.184H24V1.895A1.894 1.894 0 0 0 22.105 0zm-3.289 23.5l4.684-4.684h-4.684V23.5zM0 22.105C0 23.152.848 24 1.895 24h3.289v-5.184H0v3.289z" }, "child": [] }] })(props);
+}
+function SiGoogle(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" }, "child": [] }] })(props);
+}
+function SiGo(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M1.811 10.231c-.047 0-.058-.023-.035-.059l.246-.315c.023-.035.081-.058.128-.058h4.172c.046 0 .058.035.035.07l-.199.303c-.023.036-.082.07-.117.07zM.047 11.306c-.047 0-.059-.023-.035-.058l.245-.316c.023-.035.082-.058.129-.058h5.328c.047 0 .07.035.058.07l-.093.28c-.012.047-.058.07-.105.07zm2.828 1.075c-.047 0-.059-.035-.035-.07l.163-.292c.023-.035.07-.07.117-.07h2.337c.047 0 .07.035.07.082l-.023.28c0 .047-.047.082-.082.082zm12.129-2.36c-.736.187-1.239.327-1.963.514-.176.046-.187.058-.34-.117-.174-.199-.303-.327-.548-.444-.737-.362-1.45-.257-2.115.175-.795.514-1.204 1.274-1.192 2.22.011.935.654 1.706 1.577 1.835.795.105 1.46-.175 1.987-.77.105-.13.198-.27.315-.434H10.47c-.245 0-.304-.152-.222-.35.152-.362.432-.97.596-1.274a.315.315 0 01.292-.187h4.253c-.023.316-.023.631-.07.947a4.983 4.983 0 01-.958 2.29c-.841 1.11-1.94 1.8-3.33 1.986-1.145.152-2.209-.07-3.143-.77-.865-.655-1.356-1.52-1.484-2.595-.152-1.274.222-2.419.993-3.424.83-1.086 1.928-1.776 3.272-2.02 1.098-.2 2.15-.07 3.096.571.62.41 1.063.97 1.356 1.648.07.105.023.164-.117.2m3.868 6.461c-1.064-.024-2.034-.328-2.852-1.029a3.665 3.665 0 01-1.262-2.255c-.21-1.32.152-2.489.947-3.529.853-1.122 1.881-1.706 3.272-1.95 1.192-.21 2.314-.095 3.33.595.923.63 1.496 1.484 1.648 2.605.198 1.578-.257 2.863-1.344 3.962-.771.783-1.718 1.273-2.805 1.495-.315.06-.63.07-.934.106zm2.78-4.72c-.011-.153-.011-.27-.034-.387-.21-1.157-1.274-1.81-2.384-1.554-1.087.245-1.788.935-2.045 2.033-.21.912.234 1.835 1.075 2.21.643.28 1.285.244 1.905-.07.923-.48 1.425-1.228 1.484-2.233z" }, "child": [] }] })(props);
+}
+function SiGmail(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z" }, "child": [] }] })(props);
+}
+function SiGitlab(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "m23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z" }, "child": [] }] })(props);
+}
+function SiGithubactions(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M10.984 13.836a.5.5 0 0 1-.353-.146l-.745-.743a.5.5 0 1 1 .706-.708l.392.391 1.181-1.18a.5.5 0 0 1 .708.707l-1.535 1.533a.504.504 0 0 1-.354.146zm9.353-.147l1.534-1.532a.5.5 0 0 0-.707-.707l-1.181 1.18-.392-.391a.5.5 0 1 0-.706.708l.746.743a.497.497 0 0 0 .706-.001zM4.527 7.452l2.557-1.585A1 1 0 0 0 7.09 4.17L4.533 2.56A1 1 0 0 0 3 3.406v3.196a1.001 1.001 0 0 0 1.527.85zm2.03-2.436L4 6.602V3.406l2.557 1.61zM24 12.5c0 1.93-1.57 3.5-3.5 3.5a3.503 3.503 0 0 1-3.46-3h-2.08a3.503 3.503 0 0 1-3.46 3 3.502 3.502 0 0 1-3.46-3h-.558c-.972 0-1.85-.399-2.482-1.042V17c0 1.654 1.346 3 3 3h.04c.244-1.693 1.7-3 3.46-3 1.93 0 3.5 1.57 3.5 3.5S13.43 24 11.5 24a3.502 3.502 0 0 1-3.46-3H8c-2.206 0-4-1.794-4-4V9.899A5.008 5.008 0 0 1 0 5c0-2.757 2.243-5 5-5s5 2.243 5 5a5.005 5.005 0 0 1-4.952 4.998A2.482 2.482 0 0 0 7.482 12h.558c.244-1.693 1.7-3 3.46-3a3.502 3.502 0 0 1 3.46 3h2.08a3.503 3.503 0 0 1 3.46-3c1.93 0 3.5 1.57 3.5 3.5zm-15 8c0 1.378 1.122 2.5 2.5 2.5s2.5-1.122 2.5-2.5-1.122-2.5-2.5-2.5S9 19.122 9 20.5zM5 9c2.206 0 4-1.794 4-4S7.206 1 5 1 1 2.794 1 5s1.794 4 4 4zm9 3.5c0-1.378-1.122-2.5-2.5-2.5S9 11.122 9 12.5s1.122 2.5 2.5 2.5 2.5-1.122 2.5-2.5zm9 0c0-1.378-1.122-2.5-2.5-2.5S18 11.122 18 12.5s1.122 2.5 2.5 2.5 2.5-1.122 2.5-2.5zm-13 8a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0zm2 0a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0zm12 0c0 1.93-1.57 3.5-3.5 3.5a3.503 3.503 0 0 1-3.46-3.002c-.007.001-.013.005-.021.005l-.506.017h-.017a.5.5 0 0 1-.016-.999l.506-.017c.018-.002.035.006.052.007A3.503 3.503 0 0 1 20.5 17c1.93 0 3.5 1.57 3.5 3.5zm-1 0c0-1.378-1.122-2.5-2.5-2.5S18 19.122 18 20.5s1.122 2.5 2.5 2.5 2.5-1.122 2.5-2.5z" }, "child": [] }] })(props);
+}
+function SiGithub(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" }, "child": [] }] })(props);
+}
+function SiGit(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M23.546 10.93L13.067.452c-.604-.603-1.582-.603-2.188 0L8.708 2.627l2.76 2.76c.645-.215 1.379-.07 1.889.441.516.515.658 1.258.438 1.9l2.658 2.66c.645-.223 1.387-.078 1.9.435.721.72.721 1.884 0 2.604-.719.719-1.881.719-2.6 0-.539-.541-.674-1.337-.404-1.996L12.86 8.955v6.525c.176.086.342.203.488.348.713.721.713 1.883 0 2.6-.719.721-1.889.721-2.609 0-.719-.719-.719-1.879 0-2.598.182-.18.387-.316.605-.406V8.835c-.217-.091-.424-.222-.6-.401-.545-.545-.676-1.342-.396-2.009L7.636 3.7.45 10.881c-.6.605-.6 1.584 0 2.189l10.48 10.477c.604.604 1.582.604 2.186 0l10.43-10.43c.605-.603.605-1.582 0-2.187" }, "child": [] }] })(props);
+}
+function SiFirebase(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M19.455 8.369c-.538-.748-1.778-2.285-3.681-4.569-.826-.991-1.535-1.832-1.884-2.245a146 146 0 0 0-.488-.576l-.207-.245-.113-.133-.022-.032-.01-.005L12.57 0l-.609.488c-1.555 1.246-2.828 2.851-3.681 4.64-.523 1.064-.864 2.105-1.043 3.176-.047.241-.088.489-.121.738-.209-.017-.421-.028-.632-.033-.018-.001-.035-.002-.059-.003a7.46 7.46 0 0 0-2.28.274l-.317.089-.163.286c-.765 1.342-1.198 2.869-1.252 4.416-.07 2.01.477 3.954 1.583 5.625 1.082 1.633 2.61 2.882 4.42 3.611l.236.095.071.025.003-.001a9.59 9.59 0 0 0 2.941.568q.171.006.342.006c1.273 0 2.513-.249 3.69-.742l.008.004.313-.145a9.63 9.63 0 0 0 3.927-3.335c1.01-1.49 1.577-3.234 1.641-5.042.075-2.161-.643-4.304-2.133-6.371m-7.083 6.695c.328 1.244.264 2.44-.191 3.558-1.135-1.12-1.967-2.352-2.475-3.665-.543-1.404-.87-2.74-.974-3.975.48.157.922.366 1.315.622 1.132.737 1.914 1.902 2.325 3.461zm.207 6.022c.482.368.99.712 1.513 1.028-.771.21-1.565.302-2.369.273a8 8 0 0 1-.373-.022c.458-.394.869-.823 1.228-1.279zm1.347-6.431c-.516-1.957-1.527-3.437-3.002-4.398-.647-.421-1.385-.741-2.194-.95.011-.134.026-.268.043-.4.014-.113.03-.216.046-.313.133-.689.332-1.37.589-2.025.099-.25.206-.499.321-.74l.004-.008c.177-.358.376-.719.61-1.105l.092-.152-.003-.001c.544-.851 1.197-1.627 1.942-2.311l.288.341c.672.796 1.304 1.548 1.878 2.237 1.291 1.549 2.966 3.583 3.612 4.48 1.277 1.771 1.893 3.579 1.83 5.375-.049 1.395-.461 2.755-1.195 3.933-.694 1.116-1.661 2.05-2.8 2.708-.636-.318-1.559-.839-2.539-1.599.79-1.575.952-3.28.479-5.072zm-2.575 5.397c-.725.939-1.587 1.55-2.09 1.856-.081-.029-.163-.06-.243-.093l-.065-.026c-1.49-.616-2.747-1.656-3.635-3.01-.907-1.384-1.356-2.993-1.298-4.653.041-1.19.338-2.327.882-3.379.316-.07.638-.114.96-.131l.084-.002c.162-.003.324-.003.478 0 .227.011.454.035.677.07.073 1.513.445 3.145 1.105 4.852.637 1.644 1.694 3.162 3.144 4.515z" }, "child": [] }] })(props);
+}
+function SiFigma(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.355-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.014-4.49-4.49S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.02 3.019 3.02h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.355 3.019 3.019 3.019h3.117V8.981H8.148zM8.172 24c-2.489 0-4.515-2.014-4.515-4.49s2.014-4.49 4.49-4.49h4.588v4.441c0 2.503-2.047 4.539-4.563 4.539zm-.024-7.51a3.023 3.023 0 0 0-3.019 3.019c0 1.665 1.365 3.019 3.044 3.019 1.705 0 3.093-1.376 3.093-3.068v-2.97H8.148zm7.704 0h-.098c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h.098c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.49-4.49 4.49zm-.097-7.509c-1.665 0-3.019 1.355-3.019 3.019s1.355 3.019 3.019 3.019h.098c1.665 0 3.019-1.355 3.019-3.019s-1.355-3.019-3.019-3.019h-.098z" }, "child": [] }] })(props);
+}
+function SiFacebook(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z" }, "child": [] }] })(props);
+}
+function SiElasticsearch(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.394 0C8.683 0 4.609 2.716 2.644 6.667h15.641a4.77 4.77 0 0 0 3.073-1.11c.446-.375.864-.785 1.247-1.243l.001-.002A11.974 11.974 0 0 0 13.394 0zM1.804 8.889a12.009 12.009 0 0 0 0 6.222h14.7a3.111 3.111 0 1 0 0-6.222zm.84 8.444C4.61 21.283 8.684 24 13.395 24c3.701 0 7.011-1.677 9.212-4.312l-.001-.002a9.958 9.958 0 0 0-1.247-1.243 4.77 4.77 0 0 0-3.073-1.11z" }, "child": [] }] })(props);
+}
+function SiDropbox(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M6 1.807L0 5.629l6 3.822 6.001-3.822L6 1.807zM18 1.807l-6 3.822 6 3.822 6-3.822-6-3.822zM0 13.274l6 3.822 6.001-3.822L6 9.452l-6 3.822zM18 9.452l-6 3.822 6 3.822 6-3.822-6-3.822zM6 18.371l6.001 3.822 6-3.822-6-3.822L6 18.371z" }, "child": [] }] })(props);
+}
+function SiDocker(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.887c0 .102.082.185.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.185.185 0 00-.185.185v1.887c0 .102.083.185.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.185.185 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.185.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.083.185.185.185m-2.964 0h2.119a.185.185 0 00.185-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.082.185.185.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.376 11.376 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.248 12.248 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288Z" }, "child": [] }] })(props);
+}
+function SiDiscord(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z" }, "child": [] }] })(props);
+}
+function SiDebian(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.88 12.685c-.4 0 .08.2.601.28.14-.1.27-.22.39-.33a3.001 3.001 0 01-.99.05m2.14-.53c.23-.33.4-.69.47-1.06-.06.27-.2.5-.33.73-.75.47-.07-.27 0-.56-.8 1.01-.11.6-.14.89m.781-2.05c.05-.721-.14-.501-.2-.221.07.04.13.5.2.22M12.38.31c.2.04.45.07.42.12.23-.05.28-.1-.43-.12m.43.12l-.15.03.14-.01V.43m6.633 9.944c.02.64-.2.95-.38 1.5l-.35.181c-.28.54.03.35-.17.78-.44.39-1.34 1.22-1.62 1.301-.201 0 .14-.25.19-.34-.591.4-.481.6-1.371.85l-.03-.06c-2.221 1.04-5.303-1.02-5.253-3.842-.03.17-.07.13-.12.2a3.551 3.552 0 012.001-3.501 3.361 3.362 0 013.732.48 3.341 3.342 0 00-2.721-1.3c-1.18.01-2.281.76-2.651 1.57-.6.38-.67 1.47-.93 1.661-.361 2.601.66 3.722 2.38 5.042.27.19.08.21.12.35a4.702 4.702 0 01-1.53-1.16c.23.33.47.66.8.91-.55-.18-1.27-1.3-1.48-1.35.93 1.66 3.78 2.921 5.261 2.3a6.203 6.203 0 01-2.33-.28c-.33-.16-.77-.51-.7-.57a5.802 5.803 0 005.902-.84c.44-.35.93-.94 1.07-.95-.2.32.04.16-.12.44.44-.72-.2-.3.46-1.24l.24.33c-.09-.6.74-1.321.66-2.262.19-.3.2.3 0 .97.29-.74.08-.85.15-1.46.08.2.18.42.23.63-.18-.7.2-1.2.28-1.6-.09-.05-.28.3-.32-.53 0-.37.1-.2.14-.28-.08-.05-.26-.32-.38-.861.08-.13.22.33.34.34-.08-.42-.2-.75-.2-1.08-.34-.68-.12.1-.4-.3-.34-1.091.3-.25.34-.74.54.77.84 1.96.981 2.46-.1-.6-.28-1.2-.49-1.76.16.07-.26-1.241.21-.37A7.823 7.824 0 0017.702 1.6c.18.17.42.39.33.42-.75-.45-.62-.48-.73-.67-.61-.25-.65.02-1.06 0C15.082.73 14.862.8 13.8.4l.05.23c-.77-.25-.9.1-1.73 0-.05-.04.27-.14.53-.18-.741.1-.701-.14-1.431.03.17-.13.36-.21.55-.32-.6.04-1.44.35-1.18.07C9.6.68 7.847 1.3 6.867 2.22L6.838 2c-.45.54-1.96 1.611-2.08 2.311l-.131.03c-.23.4-.38.85-.57 1.261-.3.52-.45.2-.4.28-.6 1.22-.9 2.251-1.16 3.102.18.27 0 1.65.07 2.76-.3 5.463 3.84 10.776 8.363 12.006.67.23 1.65.23 2.49.25-.99-.28-1.12-.15-2.08-.49-.7-.32-.85-.7-1.34-1.13l.2.35c-.971-.34-.57-.42-1.361-.67l.21-.27c-.31-.03-.83-.53-.97-.81l-.34.01c-.41-.501-.63-.871-.61-1.161l-.111.2c-.13-.21-1.52-1.901-.8-1.511-.13-.12-.31-.2-.5-.55l.14-.17c-.35-.44-.64-1.02-.62-1.2.2.24.32.3.45.33-.88-2.172-.93-.12-1.601-2.202l.15-.02c-.1-.16-.18-.34-.26-.51l.06-.6c-.63-.74-.18-3.102-.09-4.402.07-.54.53-1.1.88-1.981l-.21-.04c.4-.71 2.341-2.872 3.241-2.761.43-.55-.09 0-.18-.14.96-.991 1.26-.7 1.901-.88.7-.401-.6.16-.27-.151 1.2-.3.85-.7 2.421-.85.16.1-.39.14-.52.26 1-.49 3.151-.37 4.562.27 1.63.77 3.461 3.011 3.531 5.132l.08.02c-.04.85.13 1.821-.17 2.711l.2-.42M9.54 13.236l-.05.28c.26.35.47.73.8 1.01-.24-.47-.42-.66-.75-1.3m.62-.02c-.14-.15-.22-.34-.31-.52.08.32.26.6.43.88l-.12-.36m10.945-2.382l-.07.15c-.1.76-.34 1.511-.69 2.212.4-.73.65-1.541.75-2.362M12.45.12c.27-.1.66-.05.95-.12-.37.03-.74.05-1.1.1l.15.02M3.006 5.142c.07.57-.43.8.11.42.3-.66-.11-.18-.1-.42m-.64 2.661c.12-.39.15-.62.2-.84-.35.44-.17.53-.2.83" }, "child": [] }] })(props);
+}
+function SiDatadog(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M19.57 17.04l-1.997-1.316-1.665 2.782-1.937-.567-1.706 2.604.087.82 9.274-1.71-.538-5.794zm-8.649-2.498l1.488-.204c.241.108.409.15.697.223.45.117.97.23 1.741-.16.18-.088.553-.43.704-.625l6.096-1.106.622 7.527-10.444 1.882zm11.325-2.712l-.602.115L20.488 0 .789 2.285l2.427 19.693 2.306-.334c-.184-.263-.471-.581-.96-.989-.68-.564-.44-1.522-.039-2.127.53-1.022 3.26-2.322 3.106-3.956-.056-.594-.15-1.368-.702-1.898-.02.22.017.432.017.432s-.227-.289-.34-.683c-.112-.15-.2-.199-.319-.4-.085.233-.073.503-.073.503s-.186-.437-.216-.807c-.11.166-.137.48-.137.48s-.241-.69-.186-1.062c-.11-.323-.436-.965-.343-2.424.6.421 1.924.321 2.44-.439.171-.251.288-.939-.086-2.293-.24-.868-.835-2.16-1.066-2.651l-.028.02c.122.395.374 1.223.47 1.625.293 1.218.372 1.642.234 2.204-.116.488-.397.808-1.107 1.165-.71.358-1.653-.514-1.713-.562-.69-.55-1.224-1.447-1.284-1.883-.062-.477.275-.763.445-1.153-.243.07-.514.192-.514.192s.323-.334.722-.624c.165-.109.262-.178.436-.323a9.762 9.762 0 0 0-.456.003s.42-.227.855-.392c-.318-.014-.623-.003-.623-.003s.937-.419 1.678-.727c.509-.208 1.006-.147 1.286.257.367.53.752.817 1.569.996.501-.223.653-.337 1.284-.509.554-.61.99-.688.99-.688s-.216.198-.274.51c.314-.249.66-.455.66-.455s-.134.164-.259.426l.03.043c.366-.22.797-.394.797-.394s-.123.156-.268.358c.277-.002.838.012 1.056.037 1.285.028 1.552-1.374 2.045-1.55.618-.22.894-.353 1.947.68.903.888 1.609 2.477 1.259 2.833-.294.295-.874-.115-1.516-.916a3.466 3.466 0 0 1-.716-1.562 1.533 1.533 0 0 0-.497-.85s.23.51.23.96c0 .246.03 1.165.424 1.68-.039.076-.057.374-.1.43-.458-.554-1.443-.95-1.604-1.067.544.445 1.793 1.468 2.273 2.449.453.927.186 1.777.416 1.997.065.063.976 1.197 1.15 1.767.306.994.019 2.038-.381 2.685l-1.117.174c-.163-.045-.273-.068-.42-.153.08-.143.241-.5.243-.572l-.063-.111c-.348.492-.93.97-1.414 1.245-.633.359-1.363.304-1.838.156-1.348-.415-2.623-1.327-2.93-1.566 0 0-.01.191.048.234.34.383 1.119 1.077 1.872 1.56l-1.605.177.759 5.908c-.337.048-.39.071-.757.124-.325-1.147-.946-1.895-1.624-2.332-.599-.384-1.424-.47-2.214-.314l-.05.059a2.851 2.851 0 0 1 1.863.444c.654.413 1.181 1.481 1.375 2.124.248.822.42 1.7-.248 2.632-.476.662-1.864 1.028-2.986.237.3.481.705.876 1.25.95.809.11 1.577-.03 2.106-.574.452-.464.69-1.434.628-2.456l.714-.104.258 1.834 11.827-1.424zM15.05 6.848c-.034.075-.085.125-.007.37l.004.014.013.032.032.073c.14.287.295.558.552.696.067-.011.136-.019.207-.023.242-.01.395.028.492.08.009-.048.01-.119.005-.222-.018-.364.072-.982-.626-1.308-.264-.122-.634-.084-.757.068a.302.302 0 0 1 .058.013c.186.066.06.13.027.207m1.958 3.392c-.092-.05-.52-.03-.821.005-.574.068-1.193.267-1.328.372-.247.191-.135.523.047.66.511.382.96.638 1.432.575.29-.038.546-.497.728-.914.124-.288.124-.598-.058-.698m-5.077-2.942c.162-.154-.805-.355-1.556.156-.554.378-.571 1.187-.041 1.646.053.046.096.078.137.104a4.77 4.77 0 0 1 1.396-.412c.113-.125.243-.345.21-.745-.044-.542-.455-.456-.146-.749" }, "child": [] }] })(props);
+}
+function SiConfluence(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M.87 18.257c-.248.382-.53.875-.763 1.245a.764.764 0 0 0 .255 1.04l4.965 3.054a.764.764 0 0 0 1.058-.26c.199-.332.454-.763.733-1.221 1.967-3.247 3.945-2.853 7.508-1.146l4.957 2.337a.764.764 0 0 0 1.028-.382l2.364-5.346a.764.764 0 0 0-.382-1 599.851 599.851 0 0 1-4.965-2.361C10.911 10.97 5.224 11.185.87 18.257zM23.131 5.743c.249-.405.531-.875.764-1.25a.764.764 0 0 0-.256-1.034L18.675.404a.764.764 0 0 0-1.058.26c-.195.335-.451.763-.734 1.225-1.966 3.246-3.945 2.85-7.508 1.146L4.437.694a.764.764 0 0 0-1.027.382L1.046 6.422a.764.764 0 0 0 .382 1c1.039.49 3.105 1.467 4.965 2.361 6.698 3.246 12.392 3.029 16.738-4.04z" }, "child": [] }] })(props);
+}
+function SiComposer(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M16.66 0c-.07 0-.114.034-.164.095a.416.416 0 00-.07.43c.19.41.363.83.528 1.25.01.02.022.04.039.068-.04-.002-.05-.022-.063-.043-.297-.31-.648-.557-.998-.804-.473-.337-.99-.603-1.503-.872a.578.578 0 00-.214-.065l-.384-.04c-.202-.025-.355.09-.355.292 0 .108-.046.132-.135.14-.08.004-.187.115-.196.192a.694.694 0 00.228.619c.444.415.873.845 1.303 1.275l.015.007a.1.1 0 01.028.038c-.007.003-.014.003-.02.003a.057.057 0 01-.035-.022c-.002-.002-.005-.005-.005-.007-.062-.036-.127-.07-.187-.11-.3-.2-.595-.404-.895-.598a.943.943 0 00-.461-.17.453.453 0 00-.392.143.28.28 0 00-.088.253c.016.146.115.237.223.312.502.338.95.734 1.366 1.174.036.038.074.079.115.112.118.096.19.224.262.356.033.06.02.074-.043.074-.428 0-.836.118-1.246.204-.168.036-.334.094-.394.28-.065.21-.096.328.16.392a9.57 9.57 0 011.49.516.55.55 0 01.117.077c.12.104.23.219.362.303.38.247.77.478 1.22.583.053.012.1.039.15.05.05.015.085.044.095.094.029.178.139.279.305.33.02.006.038.02.06.028.052.017.076.055.093.108.067.24.137.478.212.715.026.08.002.1-.07.123-.372.108-.742.22-1.112.334-.132.04-.134.043-.067.163l.908 1.635c.127.23.132.23.365.11.024-.012.057-.053.079-.014.02.036.06.089.024.13-.113.129-.19.28-.286.42-.031.045-.031.074-.005.117.1.166.202.334.3.502.012.019.034.043.03.058l-.123.367a2.538 2.538 0 00-.317-.716c-.18-.288-.41-.542-.62-.811-.033-.04-.072-.077-.11-.115-.2-.207-.456-.332-.7-.478a1.026 1.026 0 00-.34-.127c-.374-.08-.746-.11-1.12.004-.075.024-.116.005-.161-.06-.092-.127-.166-.273-.29-.372-.3-.24-.616-.458-.985-.583a2.95 2.95 0 00-.865-.168 4.267 4.267 0 00-.463.017c-.396.03-.79.074-1.14.293-.07.043-.15.067-.221.108-.36.194-.716.386-1.016.679a13.1 13.1 0 00-.897.944c-.322.384-.565.818-.783 1.267-.015.03-.022.07-.07.096l-.12-.744c-.007-.046.022-.043.053-.038.089.01.175.014.264.026.067.01.103-.005.12-.08.022-.102.046-.206.067-.311.082-.397.2-.78.303-1.17.02-.074.007-.1-.07-.12-.381-.09-.763-.192-1.145-.283-.072-.017-.106-.043-.084-.12.087-.298.125-.61.242-.9a.178.178 0 01.056-.087c.098-.076.17-.165.16-.302-.007-.103.041-.168.14-.214.182-.086.358-.187.53-.288a.84.84 0 00.327-.333c.322-.605.59-1.242.98-1.81.033-.051.06-.106.1-.15.252-.264.488-.544.771-.78.089-.074.113-.175.115-.285 0-.128-.074-.217-.151-.305-.075-.087-.151-.161-.279-.147-.028.003-.057-.01-.088-.014.019-.04.05-.048.076-.065.339-.218.677-.437 1.016-.658.41-.264.819-.53 1.232-.794.052-.034.076-.06.019-.11-.015-.013-.024-.03-.036-.044-.084-.099-.084-.099-.2-.03L8.084 3.693c-.101.062-.101.062-.152-.05-.112-.263-.177-.54-.261-.81-.02-.062-.003-.098.045-.137.289-.23.553-.49.82-.742a.604.604 0 00.186-.37c.022-.17-.09-.259-.244-.196a1.707 1.707 0 00-.221.105c-.68.375-1.405.632-2.149.848-.043.012-.082.026-.118-.02-.074-.09-.185-.14-.278-.208a.073.073 0 00-.063-.015c-.1.027-.204.056-.266.147-.159.233-.358.44-.507.682-.17.28-.333.562-.525.828-.036.05-.05.058-.084-.002L3.63 2.635a2.837 2.837 0 00-.223-.338c-.094-.118-.209-.176-.358-.16-.026.004-.06-.004-.07.037-.02.11-.07.226-.057.332.034.27.082.542.15.806.114.459.244.912.38 1.364.133.444.282.88.426 1.323.012.038.033.072-.02.103-.067.038-.175.058-.187.125-.012.07.05.15.08.225l.007.017c.024.058.036.144.08.166.057.029.11-.05.162-.082.048-.03.065-.021.087.029.124.293.252.583.38.876a.18.18 0 01.006.137 4.138 4.138 0 00-.192.72c-.012.07-.038.07-.09.055a107.637 107.637 0 00-.834-.21c-.123-.032-.123-.032-.137.093v.01c-.06.665-.12 1.33-.183 1.994-.004.06.003.085.068.092.194.024.386.055.578.084.036.005.067.007.058.06-.043.225-.077.453-.125.677a.178.178 0 00.034.163l.2.264c.045.063.08.144.037.209a.201.201 0 00-.033.118c.007.415.007.83.026 1.246.01.2.007.403.012.605.01.535.04 1.068.06 1.603.01.262-.036.52-.024.783.002.065.017.1.084.122.16.05.312.116.473.166a.28.28 0 01.185.156.436.436 0 01.038.219c-.002.072.024.115.082.156.247.177.492.36.74.542.65.48 1.3.963 1.954 1.44.06.045.074.081.038.146-.034.062-.055.135-.089.197-.029.058-.024.094.031.134.082.058.161.123.236.188.065.055.067.141.048.208-.015.05-.087.005-.132 0-.032-.002-.063-.01-.094-.014-.31-.05-.617-.13-.932-.156-.5-.04-1.003-.084-1.51-.07-.026 0-.067-.024-.074.03-.007.042-.017.088.031.117.024.014.05.026.077.036.283.098.547.24.807.39.168.095.333.203.518.268.034.012.068.038.108.002-.278-.22-.554-.442-.833-.665.04-.029.07-.017.1-.014.332.026.664.072.988.15.713.17 1.421.361 2.122.572.23.07.475.104.682.243.05.033.08.067.074.13.012.014.027.033.01.045-.02.012-.036-.012-.05-.024-.164-.014-.327-.026-.488-.043-.463-.046-.924-.11-1.392-.096-.35.01-.701-.015-1.05.01-.494.033-.989.098-1.48.15-.025.003-.063-.002-.063.027 0 .036.014.077.06.087a.58.58 0 00.113.012c.25.01.497.007.746.011.62.015 1.242-.012 1.86.041.224.02.45.01.668.05 1.03.193 2.055.394 3.078.618.12.026.243.045.36.103-.055.05-.127.065-.158.137-.22.506-.363 1.04-.53 1.563-.03.09.03.192.12.216a.278.278 0 00.352-.22c.02-.109.039-.217.053-.328.005-.036.017-.055.053-.067.132-.053.26-.108.393-.16a1.63 1.63 0 00.529-.325c.134-.127.247-.274.25-.47 0-.06.014-.099.062-.135.22-.17.418-.365.61-.564a6.03 6.03 0 01.6-.533c.024-.02.043-.048.08-.034l.56.221c-.374.228-.73.447-1.082.66-.017.01-.036.015-.053.02a.813.813 0 00-.338.201c-.375.372-.567.814-.545 1.35.014.36.22.53.57.45.616-.145 1.14-.734 1.233-1.38.024-.18.052-.357-.077-.513a2.25 2.25 0 00-.178-.195c.02-.012.029-.019.039-.026.777-.463 1.625-.778 2.475-1.07 1.04-.359 2.1-.644 3.164-.918l-.075-.017c-.07.007-.136.015-.206.02a5.097 5.097 0 00-.872.134l-.016.007a.226.226 0 01-.094.015c-.014 0-.03 0-.048.002.065-.062.252-.264.303-.25l.002-.005h.005c0-.007.019-.02.019-.02.017-.03.04-.049.074-.05a.694.694 0 01.197-.189c.05-.03.103-.062.16-.086h-.001c.16 0 .319-.194.486-.262-.001-.006-.01-.01-.013-.017-.24.034-.476.072-.706.16-.492.181-1.001.323-1.481.534-.742.324-1.482.648-2.195 1.035a.818.818 0 01-.077.036l-.055-.504c-.005-.034.012-.048.04-.063.632-.334 1.266-.665 1.926-.938.543-.226 1.08-.47 1.626-.691.002-.005.005-.01.01-.01h.004c.003 0 .003.003.005.003.007.012.002.02-.005.026-.002.003-.005.003-.01.005h-.002a3.358 3.358 0 00-.372.66c.038.01.053-.003.067-.018.113-.12.226-.237.336-.357.214-.234.44-.458.704-.64.017-.012.045-.022.033-.048-.014-.03-.045-.015-.067-.01-.247.05-.494.096-.74.154-.081.019-.076-.01-.08-.067-.001-.197.028-.39.035-.586a.63.63 0 01.058-.247c.098-.226.197-.45.297-.675.05-.113.08-.233.099-.353.03-.192.055-.386.074-.58.03-.3.137-.58.187-.875.065-.374.118-.751.257-1.11.125-.316.245-.633.372-.947.176-.428.399-.833.505-1.29.036-.158.076-.302.004-.458-.04-.084-.052-.18-.081-.271a.392.392 0 01-.012-.204c.048-.245.07-.488-.063-.716-.036-.062.008-.1.044-.14.088-.09.093-.131.016-.23-.088-.11-.175-.223-.27-.326-.08-.084-.154-.175-.234-.262-.055-.033-.05-.055.012-.076.14-.048.276-.108.418-.152.08-.024.1-.07.106-.141.045-.605.09-1.213.139-1.818.007-.084-.007-.1-.094-.074-.454.144-.907.28-1.363.422-.14.044-.142.044-.204-.093-.231-.52-.411-1.057-.6-1.59a.392.392 0 01.007-.316c.067-.188.024-.377.019-.567a.104.104 0 01-.005-.03 9.16 9.16 0 00-.254-1.547 6.02 6.02 0 00-.5-1.27c-.228-.432-.473-.86-.737-1.275-.113-.178-.233-.339-.434-.427A.702.702 0 0016.66 0zm-2.642.26a.364.364 0 01.2.051 19.041 19.041 0 011.469.805c.247.158.482.338.715.52.11.087.192.217.284.33.038.047.012.09-.024.124-.024.024-.058.039-.087.055-.031.022-.072.04-.06.087.01.04.055.05.09.058a.27.27 0 00.16-.015c.168-.07.31.048.418.166.028.03.04.093.093.074.055-.021.063-.081.058-.137-.012-.15-.05-.297-.084-.444-.09-.377-.27-.718-.418-1.073-.053-.127-.11-.254-.163-.382-.03-.07.01-.132.048-.182.03-.04.08-.005.122.014.152.068.238.19.312.332.08.15.178.29.262.436.144.255.322.495.437.762.168.388.382.758.483 1.176.086.37.208.732.252 1.114.016.144-.01.283.007.422.033.279-.008.543-.123.798-.03.07-.021.136.012.208.252.533.46 1.083.67 1.635.027.072.015.1-.06.123-.482.14-.965.288-1.447.434-.07.022-.092.003-.113-.06-.123-.326-.24-.646-.353-.967-.024-.068-.053-.104-.128-.087-.088.022-.136-.017-.175-.096-.062-.127-.113-.28-.216-.36-.103-.08-.266-.082-.403-.115-.103-.027-.207-.058-.312-.075a1.428 1.428 0 01-.612-.273c-.303-.224-.615-.43-.934-.627-.104-.007-.202-.036-.303-.06-.278-.057-.554-.117-.833-.17-.067-.012-.08-.063-.084-.108-.007-.056.007-.11.065-.144.089-.053.19-.063.29-.08a9.69 9.69 0 011.345-.13c.11-.002.209.04.312.066a.18.18 0 00.166-.03c.216-.143.434-.28.65-.422.034-.021.096-.036.07-.093a.083.083 0 00-.015-.022c-.012-.01-.026-.012-.043-.012l-.05.002h-.007a1.159 1.159 0 00-.668.2c-.08.05-.26.019-.31-.056-.34-.516-.823-.888-1.282-1.29-.204-.176-.403-.361-.62-.525-.054-.04-.08-.144-.042-.196.048-.072.11-.041.168-.015.185.082.362.175.528.293.564.403 1.17.744 1.772 1.085a.51.51 0 00.05.027c.092.03.14-.01.125-.106a.267.267 0 00-.062-.134c-.488-.574-1.001-1.124-1.506-1.683-.105-.116-.23-.216-.348-.32a.854.854 0 01-.22-.278.16.16 0 01.023-.19c.04-.045.077-.055.137-.024.17.082.332.178.483.293.266.202.535.403.804.605l.807.603c.02.017.043.033.062.05.05.046.094.094.142.142l.029.029c.019.019.036.045.06.06.055.033.112.062.17.004.02-.02.029-.036.03-.055 0-.007.004-.014 0-.021l-.001-.01a.171.171 0 00-.043-.072l-.18-.187a4.537 4.537 0 00-.312-.298c-.35-.29-.706-.571-1.066-.845-.183-.14-.397-.233-.596-.348-.072-.041-.12-.101-.173-.159a.144.144 0 01-.024-.15c.022-.054.075-.051.12-.056zM8.252 1.649a.045.045 0 01.029.005c.048.027.03.077.03.135.013.06-.026.11-.08.16-.346.322-.707.627-1.076.922-.147.118-.327.173-.49.262-.034.017-.053 0-.072-.024-.12-.154-.238-.31-.358-.463-.045-.055.017-.053.046-.065.254-.091.504-.195.756-.295.365-.144.696-.35 1.04-.533.036-.02.07-.043.105-.063.024-.01.044-.037.07-.041zm-2.619.83a.223.223 0 01.134.064c.072.067.13.144.18.228.173.28.413.506.646.737.163.163.33.32.502.47.057.05.067.127.098.192.012.024.002.043-.02.055-.011.008-.023.013-.03.02-.142.12-.276.103-.442.019a3.182 3.182 0 01-.864-.646c-.01-.01-.02-.017-.03-.024-.114-.086-.12-.082-.17.05-.052.135-.086.274-.146.404-.022.045.012.094.046.127.038.039.064.099.134.089.031-.005.048-.022.055-.055.017-.08.04-.16.06-.257.262.22.553.39.84.583l-.278.159c-.713.4-1.428.8-2.139 1.205-.058.03-.082.038-.106-.034-.273-.847-.56-1.69-.79-2.552-.052-.2-.074-.408-.112-.612-.012-.06.028-.091.067-.113.053-.026.055.036.074.06.377.52.634 1.11.941 1.669.092.168.195.33.293.497.02.03.034.057.082.04.053-.02.043-.052.034-.09-.039-.174-.128-.33-.193-.493a.18.18 0 01.003-.16c.137-.284.33-.531.48-.803.14-.247.317-.468.451-.717a.205.205 0 01.2-.111zm1.774.492c.014.003.024.016.036.042.12.27.201.555.302.83.01.027.012.049-.017.066l-.256.158c-.008.005-.017.007-.046.02-.007-.013-.017-.034-.031-.051l-.54-.62c-.024-.028-.048-.055 0-.081.177-.101.312-.264.499-.35.024-.011.04-.017.053-.014zm1.929.486a.204.204 0 01.14.046.21.21 0 01.08.218.556.556 0 01-.161.29 5.528 5.528 0 00-.882 1.093c-.228.36-.453.718-.624 1.11a.768.768 0 01-.146.206c-.24.273-.526.485-.855.638a.17.17 0 00-.108.159c-.005.06-.024.118-.029.178a.48.48 0 01-.19.38c-.04.032-.045.083-.06.126l-.273.915c0 .007 0 .014-.002.019 0 .014.002.03-.017.038-.04.01-.077-.002-.113-.021a41.397 41.397 0 01-1.33-.334c-.055-.012-.108-.03-.166-.036-.088-.012-.096-.053-.055-.12.058-.281.125-.56.298-.797.038-.053.036-.096.002-.154-.19-.317-.334-.658-.492-.99-.026-.054-.017-.08.034-.11A574.255 574.255 0 006.97 4.706c.045-.03.089-.012.132-.022.151-.034.298-.08.43-.163.01-.007.026-.012.03-.022.097-.213.31-.286.49-.37.411-.187.826-.36 1.189-.633a.18.18 0 01.095-.04zm11.443 3.772v.005l.002-.001c-.021.256-.043.498-.062.74l-.043.535c-.005.065-.024.106-.094.13a561.275 561.275 0 00-3.37 1.17l-.04.009c-.035.005-.054-.012-.08-.055-.217-.394-.438-.785-.661-1.177-.03-.05-.038-.077.034-.096l4.254-1.246c.014-.005.03-.007.06-.014zm-.41.386c-.154.003-.293.147-.286.293.007.137.124.257.254.252.137-.002.27-.153.267-.302-.005-.166-.082-.245-.236-.243zm-16.83.87c.01 0 .024.002.04.007L5.512 9l1.937.51c.062.017.082.036.06.1l-.278.913c-.01.036-.017.074-.058.074a.06.06 0 01-.02-.002l-1.036-.142c-.226-.03-.45-.062-.675-.093a254.996 254.996 0 00-2.055-.286c-.043-.012-.058-.038-.05-.098.052-.476.103-.951.153-1.43.003-.011.002-.02.005-.03a.035.035 0 00.005-.015c.007-.014.021-.02.038-.02zm8.136.103l.113.002c.197.01.389.086.569.166.08.036.159.07.238.108l.057.029c.058.028.118.057.173.09l.113.065c.036.025.075.046.108.073.072.05.142.105.207.165.218.202.372.44.463.72.065.202.113.409.13.617.016.202-.044.399-.096.593-.008.03-.02.036-.03.034-.014-.005-.021-.022-.033-.036l-.216-.25a2.105 2.105 0 00-1.042-.684 4.159 4.159 0 00-.994-.154 3.799 3.799 0 00-.804.092c-.211.04-.423.074-.631.113-.137.024-.262.086-.387.14-.06.028-.12.054-.18.077l-.02.004c-.376.132-.695.36-1.024.57-.09.06-.165.14-.243.218l-.01.008-.064.065c-.152.147-.3.296-.464.43-.074.103-.175.175-.268.266.024-.17.07-.328.146-.472a4.6 4.6 0 01.262-.435c.048-.07.096-.14.146-.206a7.17 7.17 0 01.315-.396c.081-.097.163-.193.247-.29l.25-.284a.917.917 0 01.115-.1l.026-.03c.078-.066.147-.136.238-.21l.012-.01.067-.061c.24-.228.519-.406.797-.583.028-.02.057-.035.086-.051l.111-.048c.01-.004.02-.01.029-.012a2.78 2.78 0 01.173-.065l.117-.036c.14-.04.279-.074.416-.117a2.45 2.45 0 01.782-.115zm-7.57.449c-.07.004-.153-.003-.215.057a.462.462 0 00.012.665.286.286 0 00.38 0c.145-.127.182-.314.095-.535-.053-.137-.125-.187-.27-.187zm15.846.062c.087-.001.163.053.23.146.014.01.029.02.043.032.022.019.03.04.053.064.099.113.207.224.31.334a.064.064 0 01.014.024.023.023 0 01-.002.022.04.04 0 01-.015.014l-.01.015-.002.002c-.002.002-.002.005-.004.01 0 .002-.003.004-.003.004h.003v.008c-.145.146-.106.283.01.415.006.012.014.024.014.036.096.127.016.254 0 .382-.003.012-.005.016-.015.02l-.007.004a.116.116 0 01-.03-.005l-.01-.003a9.772 9.772 0 01-.251-.077c-.007 0-.012-.004-.02-.007-.006 0-.011-.007-.018-.007a.284.284 0 01-.118-.02.252.252 0 00-.292.05.054.054 0 01-.005.02c.04.06.108.075.168.094.245.08.453.23.68.348.052.03.062.092.057.152-.003.033-.012.067-.02.103l-.072.31a.127.127 0 01-.02.076c.004.168-.114.293-.17.437-.006.012-.011.017-.02.04a3.223 3.223 0 01-.128.299c0 .007-.01.017-.012.024v-.005c0 .002-.002.002-.002.005l-.005.01c-.003.002-.003.004-.005.007-.012.045-.02.093-.058.132a1.913 1.913 0 01-.187.432c-.007.012-.012.012-.017.036-.062.144-.127.317-.19.475-.014.058-.026.115-.04.17l-.008.015c0 .002-.002.002-.002.005 0 .005-.005.01-.007.014a.45.45 0 01-.036.192c-.012.039-.022.082-.034.12a.074.074 0 01-.005.02l-.201.912c-.055.25-.077.504-.118.754-.038.235-.048.477-.106.708-.04.168-.136.324-.213.48-.072.146-.118.302-.207.444l-.007.015a.169.169 0 00-.012.03c-.002.006-.002.013-.005.018l-.007.033a.182.182 0 00-.002.036c0 .012 0 .024-.003.036v.036a.71.71 0 01-.002.072c-.02.257-.053.514-.041.773.002.048-.012.075-.058.09l-.057.023a1.598 1.598 0 00-.113.048l-.06.024c-.031.012-.05.022-.1.034v-.005s-.006.005-.01.005l-.133.055-.093.038a.635.635 0 01-.211.092l-.036.02a25.181 25.181 0 00-.474.212c-.081.024-.165.072-.247.11-.09.04-.175.075-.264.114-.14.062-.278.12-.418.181-.004.002-.012 0-.016 0-.128.048-.26.118-.38.173-.048.026-.117.053-.177.077-.11.043-.135.038-.16-.075-.071-.052-.078-.14-.104-.216-.027-.072-.048-.15-.072-.222-.005-.024-.017-.02-.017-.034-.024-.033-.024-.064-.036-.098l-.003-.017c-.007-.005-.007-.012-.01-.02l-.006-.016h.004c-.033-.1-.07-.2-.093-.3-.024-.067-.067-.132-.08-.202a.17.17 0 010-.07l.008-.033.004-.017c.02-.047.05-.093.075-.14.017-.037.03-.076.048-.114.017-.038.03-.067.048-.115.038-.072.062-.156.11-.24 0-.02.015-.04.02-.058.043-.146.09-.295.149-.437 0-.005-.005-.012-.003-.017.017-.086.098-.117.146-.168v.003c.024-.008.037-.022.049-.022.014-.024.028-.034.043-.048a1.518 1.518 0 00.108-.15c.045-.066.086-.136.137-.203.016-.021.03-.055.057-.055.005 0 .007 0 .012.002.039.01.027.055.022.084a.88.88 0 000 .327c.012.084.026.168.033.252l-.002.038a.578.578 0 01.036.19c.02.082.036.16.06.242.072.15.125.3.173.454l.005-.002c.08.12.163.26.245.39.024.032.05.066.074.09h.005v.02c.024 0 .036.052.072.004-.007-.024-.012-.024-.02-.024a.448.448 0 01-.03-.08c-.005-.016-.013-.035-.015-.05a.387.387 0 01-.012-.05c-.002-.007-.002-.017-.005-.024a.282.282 0 00-.01-.048l-.011-.075-.013-.074c-.007-.007-.007-.017-.007-.026-.002-.01-.004-.02-.01-.03-.002-.028-.007-.057-.011-.086l-.022-.172c-.002-.03-.012-.058-.014-.087a3.634 3.634 0 01.036-.941h.014c.029-.144.058-.31.086-.466.008 0 .015.003.024.003-.01.26.017.52.075.775.002.005.002.012.002.017.036.098.075.197.106.298.007.02.014.043.022.062a.338.338 0 00.055.094c.007.012.02.024.02.036.025.019.037.04.057.06.014.016.026.036.04.053.05.048.104.093.166.156a3.667 3.667 0 01-.017-.14c-.004-.043-.012-.086-.016-.134 0 0-.013-.007-.013-.012a.82.82 0 00-.01-.108l-.04-.33c0-.01 0-.016.002-.025 0-.01.003-.027.003-.027a2.705 2.705 0 01-.02-.415l-.002-.017a1.122 1.122 0 01-.002-.37c.005-.033.002-.07.005-.103 0-.007-.003-.012-.003-.02 0-.158.007-.32.055-.472l.003-.017c.012-.072.024-.158.036-.238.012-.08.024-.16.033-.24.005-.033.015-.05.034-.05.01 0 .024.005.04.017l.05.03.076.049c.024.017.048.033.07.055.002.002.004.005.009.007a.116.116 0 00.017.012h.005v-.002c.168.084.26.226.374.358a.31.31 0 01.11.15c.075.099.13.205.169.323.002.01.007.02.01.03.002.01.007.006.009.03.02.024.03.055.043.084l.034.084.019.04c.005.01.01.017.017.024a.07.07 0 00.04.024c.027-.088-.035-.172-.011-.256h.007c0-.024-.007-.025-.007-.037-.024-.156-.044-.31-.11-.453l-.001-.04c-.058-.143-.086-.29-.17-.416a.103.103 0 01-.037-.063c-.026-.024-.04-.053-.055-.081a4.135 4.135 0 01-.038-.063v.017c0-.002-.005-.005-.005-.007v-.003a2.828 2.828 0 00-.22-.278l-.01-.01c-.01-.01-.02-.01-.03-.033-.057-.024-.112-.096-.17-.147-.007-.007-.014-.01-.02-.017-.004-.004 0-.01-.023-.016-.12-.082-.21-.183-.314-.255-.02-.024-.044-.01-.053-.048.31-.02.61.017.922.036v-.012h.002c.154.024.298.053.437.113.005 0 .01.007.017.007v.005c.096.022.187.065.278.108.02.01.044.04.065.012.017-.024-.01-.046-.024-.065-.036-.05-.07-.1-.108-.151-.007-.012-.02-.024-.02-.036-.071-.07-.126-.15-.19-.22a.953.953 0 01-.06-.063 1.162 1.162 0 01-.208-.17c-.012-.008-.024-.022-.036-.022-.03 0-.064-.034-.096-.056-.03-.021-.064-.04-.096-.062-.012-.007-.024-.012-.036-.02-.146-.055-.293-.105-.44-.16-.004 0-.013-.003-.013-.005 0 0-.013 0-.017-.002a.11.11 0 01-.072-.03.079.079 0 01-.027-.035l-.005-.012c-.007-.02-.01-.041-.007-.063a.968.968 0 00-.012-.22c-.002-.022-.007-.041-.012-.063a2.158 2.158 0 00-.014-.06l-.015-.062a2.29 2.29 0 00-.024-.09s-.01-.002-.01-.01c-.023-.145-.08-.292-.124-.436l-.017-.057a.369.369 0 01-.057-.168c0-.02 0-.036.002-.056l.002-.026c.005-.027.01-.055.02-.082l.033-.108c0-.005 0-.017.003-.017h-.003c.03-.17.099-.314.147-.468 0-.002.005-.002.005-.005l.01-.01c.002-.002.004-.002.004-.004a.265.265 0 00.053-.185.326.326 0 00-.027-.103c-.016-.043-.038-.084-.06-.127-.002-.005-.01-.01-.014-.012-.002-.003-.005-.005-.005-.008a1.196 1.196 0 01-.21-.355l-.015-.038c-.005-.005-.005-.01-.008-.017l-.002-.007a.12.12 0 01-.007-.017l.002.002-.002-.005a.276.276 0 01.012-.043c.004-.01.01-.017.014-.026.005-.007.012-.014.02-.022l.009-.007c.065-.094.125-.192.197-.283a.26.26 0 00.05-.252c-.04-.137-.036-.14.1-.19.025-.01.316-.12.433-.156l.075-.03.019-.006a41.644 41.644 0 01.509-.19c.005-.002.012-.002.017-.002.14-.072.293-.118.44-.168.02-.007.037-.015.06-.02.025-.02.097-.035.12-.055.12-.038.217-.093.325-.117a.287.287 0 01.167-.067zm-5.432.603a.82.82 0 01.23.036l.014.004c.259.08.523.142.77.26.04.019.084.038.113.077.16.115.307.247.43.405.19.245.38.492.557.773-.011-.003-.022-.008-.034-.013v-.001a1.018 1.018 0 01-.185-.103 6.452 6.452 0 00-.674-.356 1.467 1.467 0 00-.331-.1 3.307 3.307 0 00-.91-.041c-.084.007-.17 0-.255 0-.062 0-.091-.03-.091-.092 0-.235.012-.472-.06-.7-.015-.048.014-.068.055-.082a1.12 1.12 0 01.372-.067zm-2.75.773c.423-.015.812.105 1.167.324.132.08.253.176.363.284l.014.013c.122.123.23.26.32.41.08.13.059.272.032.414-.072.406-.316.706-.592.987-.265.269-.596.444-.903.648-.435.29-.932.403-1.438.478-.632.093-1.273.103-1.906.187-.23.029-.464.048-.694.089a1.07 1.07 0 00-.68.41c-.062.084-.1.187-.16.303a.527.527 0 01.026-.394 1.12 1.12 0 01.533-.54c.415-.22.879-.262 1.323-.375.36-.091.73-.144 1.087-.242a7.234 7.234 0 001.426-.55c.24-.125.49-.252.656-.485a.73.73 0 00.12-.557c-.005-.034-.015-.05-.027-.053-.012-.002-.03.007-.05.027-.18.16-.367.314-.571.449-.32.206-.673.33-1.038.42-.58.144-1.166.266-1.764.31a4.84 4.84 0 00-1.239.242c-.34.118-.687.235-.96.49-.034.03-.075.057-.13.098l.007-.038-.026.019v-.005c.01-.006.016-.013.024-.017a.599.599 0 01.084-.2l.646-1.022a.285.285 0 01.041-.053c.334-.33.653-.677 1.023-.965.614-.48 1.284-.855 2.055-1.02.187-.041.377-.07.57-.07.22-.002.443-.01.66-.017zm-7.632.022c.013 0 .03.002.048.009.03.01.062.007.094.01.127.028.26.03.386.062.012 0 .017.002.034.01a2.174 2.174 0 01.4.057c.145.02.29.036.433.06.033 0 .062-.002.093.017.005 0 .012-.002.012 0 .168.02.3.03.445.055h-.015v.005c.096.012.16.024.233.036.077.012.156.03.23.03h.003c.007 0 .012.004.017.004l.021.005c.048.002.067.028.075.07.038.227.07.455.117.683 0 .017.01.032.008.046l.02.11.061.332c0 .01 0 .03.003.036v.01c.024.143.05.273.074.41v.046a1.717 1.717 0 00-.3.46c-.03.075-.07.152-.1.226l-.006.003c-.024.076-.062.15-.098.223-.003 0-.005.005-.007.01-.005.009-.008.024-.012.03v.003a2.478 2.478 0 01-.192.415c-.008.02-.024.039-.024.056-.024.09-.046.182-.092.266a.757.757 0 01-.074.226 2.102 2.102 0 01-.13.394c-.007.019-.019.036-.019.055l-.002.007c-.003.007-.005.02-.01.029a.106.106 0 01-.01.03l-.002.01-.038.742.021.008.094-.185c.031-.06.055-.123.09-.185.018-.043.05-.086.05-.13.071-.12.136-.24.21-.35.008-.012.022-.02.03-.043.062-.097.134-.224.208-.334.026-.043.054-.08.078-.123.016-.048.042-.055.064-.076.021-.022.033-.044.081-.065 0 .019.005.036.003.053l-.003.01c0 .009-.004.018-.007.028l-.002.01c-.003.007-.003.012-.005.019a.054.054 0 00-.002.02c0 .006-.005.01-.003.018l-.003.015h.003c-.022.144-.02.307-.024.458 0 .007-.005.02-.005.024l.005-.002c.02.144.043.288.062.432h-.002c.003 0 .005.03.005.043.024.144.055.29.072.437l.002.017c.003.01.005.017.005.026.024.116.11.195.163.296.039.055.08.12.116.168h.002v.002c.12.106.22.214.355.31.02 0 .039.024.058.024h-.002v.012c.048.005.088.043.139.029a.087.087 0 00.026-.012c.007-.005.017-.01.02-.017.011-.022-.01-.034-.027-.041-.197-.125-.166-.33-.19-.521h.008v-.003c.048.046.081.09.122.14a.1.1 0 00.024.026l.05.055c.034.036.07.07.108.1.039.032.08.066.125.09.02.007.039.024.056.024h-.005c.144.07.269.137.4.206a.15.15 0 01.08.036c.048.144.105.288.091.456.005 0 .01.017.012.03a.066.066 0 01-.002.03c.017.14.017.28-.003.42a.044.044 0 01-.002.039c-.003.005 0 .007-.002.012h.002c0 .14-.002.278-.038.415-.003.137-.046.27-.06.406 0 .005-.003.01-.005.017-.008.026-.02.057.038.05v-.002c.13-.136.26-.267.38-.418v.01c.002-.048.03-.073.057-.096.05-.05.1-.13.151-.2.05-.07.101-.137.152-.206l.002-.012c.007-.024.017-.04.029-.046.005-.002.01-.005.014-.005H9.3a.133.133 0 01.05.02.835.835 0 01.077.048c.144.079.307.132.415.269.012.012.026.014.038.038.05.024.096.08.133.132l.038.036c.002.002.005.002.007.005.19.16.204.246.067.46-.004.007-.012.014-.016.014a.236.236 0 01-.024.055.216.216 0 01-.02.036l-.01.017c-.035.058-.074.118-.088.185a.443.443 0 00-.012.168c.026.094.05.19.07.286.012.057.024.115.028.175.02.142-.048.228-.168.288v-.002c-.024.002-.026.017-.038.024a.078.078 0 01-.02.014.362.362 0 01-.038.026.192.192 0 00-.077.087c0 .007 0 .005-.002.01-.002.004 0 .014-.002.014h.007v.014c-.024.07-.036.12-.048.156-.003.01-.007.017-.01.024-.002.008-.007.012-.01.017-.002.005-.007.01-.009.012a.045.045 0 01-.024.012h-.007a.165.165 0 01-.05-.012c-.034-.012-.078-.029-.138-.048-.004-.002-.009-.002-.011-.005a.025.025 0 00-.012-.004l-.027-.012h-.01v-.01h-.002c-.072-.024-.14-.038-.204-.065-.038-.014-.08-.026-.12-.043-.05-.012-.1-.036-.151-.036-.14-.048-.281-.072-.416-.12-.011 0-.019.002-.043 0v.002c-.096-.019-.173-.043-.264-.06-.089-.014-.122-.06-.113-.148.005-.037.003-.08.003-.116 0-.012-.003-.017-.003-.04-.014-.025-.036-.053-.055-.085a.11.11 0 01-.014-.026c-.012-.012-.036-.024-.036-.038-.024-.005-.015-.01-.022-.015-.074-.07-.053-.163-.043-.252l.002-.029.008-.055c.002-.01.002-.02.004-.026.039-.15.048-.29-.113-.38-.019-.012-.03-.024-.055-.04v.004a2.869 2.869 0 00-.225-.165c-.012-.024-.015-.029-.039-.039a1.418 1.418 0 01-.31-.227l-.074-.04h.01c-.015-.025-.032-.022-.044-.034-.019-.014-.036-.024-.06-.04-.12-.102-.283-.198-.413-.315-.045-.015-.074-.05-.11-.08v-.004c-.127-.09-.252-.176-.377-.272h.003c-.015 0-.015-.012-.039-.024-.072-.036-.144-.096-.206-.144-.02-.024-.039-.024-.058-.024-.058-.048-.108-.07-.156-.113-.02-.012-.036-.026-.06-.04a2.178 2.178 0 01-.396-.29l-.012-.011-.022-.024a.188.188 0 01-.038-.081v.019c-.087-.094-.144-.202-.216-.3l-.007-.015a.027.027 0 01-.005-.014.107.107 0 01-.003-.026.118.118 0 01.024-.053c0-.005.003-.012.003-.02.024-.153.108-.292.168-.436v-.037s0-.022-.003-.032l-.004-.014-.005-.005a.038.038 0 00-.017-.01h-.007a.122.122 0 00-.058.022.312.312 0 00-.055.043l-.02.015a.13.13 0 00-.014.019l-.007.01c0 .002-.002 0-.002 0 0 .002-.003 0-.003 0v.002c-.048.055-.12.103-.182.154-.012.012-.034.026-.034.038v-.002h-.007c-.02.024-.045.024-.072.012l-.31-.137c-.024-.012-.036-.038-.04-.062a.64.64 0 01-.008-.032l-.007-.026v.005c-.036-.168.022-.293.053-.437.002-.012.005-.024.005-.036.024-.14.033-.288.074-.423v-.062c-.02-.154-.022-.305-.033-.46l.002-.078c-.014-.286-.033-.571-.043-.857-.022-.598-.07-1.193-.053-1.79a.636.636 0 00-.074-.315 1.968 1.968 0 00-.099-.164.264.264 0 01-.048-.237c.036-.14.063-.284.09-.425.008-.05.021-.084.06-.086zm-.166.38l.005.015c.005.032-.007.065-.02.113a.117.117 0 010-.086.295.295 0 01.015-.041zm10.715.003c.13-.002.257.005.38.024.22.017.42.058.55.164.095.04.189.09.28.144.22.132.44.269.662.403a.389.389 0 01.118.108l.223.315c.012.016.03.036.015.057a.038.038 0 01-.02.014c-.018.004-.034-.002-.05-.011-.098-.056-.2-.108-.298-.164a4.76 4.76 0 00-1.184-.46c-.107-.03-.208-.06-.323-.075l-.152-.034c-.004.003.005.012.017.024.005.005.01.01.012.015a.138.138 0 00.04.033l.02.01c.228.115.613.187.893.317l.058.029c.156.08.298.182.44.29l.268.207c.404.293.65.689.77 1.169.003.014.008.029.01.043l.01.014c.02.03.024.065.017.096.002.008.002.015.005.022-.005.07-.06.04-.092.04a2.504 2.504 0 01-.61-.11h-.006c-.051-.016-.118-.04-.165-.054-.211-.075-.41-.163-.615-.238-.252-.09-.45-.261-.662-.413a7.777 7.777 0 01-1.001-.816.34.34 0 01-.08-.106 4.11 4.11 0 01-.062-.153l-.036-.094a1.088 1.088 0 00-.024-.06l-.002-.005c-.003-.002-.003-.007-.003-.01v-.002l-.002-.01a.168.168 0 01.007-.122c.002-.005.002-.01.005-.014l.005-.017.004-.014c.003-.005.003-.013.005-.017l.003-.015.002-.017.003-.014.002-.017.002-.014.003-.017.002-.014.003-.017c0-.005 0-.01.002-.015 0-.004 0-.012.003-.016v-.266c-.003-.082.026-.114.108-.111.08.002.162-.001.243-.005l.075.004c.04-.002.08-.005.122-.005zm.284.532a.12.12 0 00.028.008H15c-.012.008-.028.005-.033.02-.004-.02-.002-.027.003-.028zm.88.342a.206.206 0 00.012.006h.003zm-1.908.177l.002.003c.007.003.014.01.022.024.076.154.182.28.3.399.124.12.259.23.389.348.268.242.542.48.818.713.178.15.392.228.62.288.518.132 1.049.182 1.575.254.139.02.264.065.374.156h-.007c.01.008.017.012.024.02-.296-.043-.59-.04-.886-.046-.324-.007-.641.03-.96.067a.986.986 0 01-.336-.026c-.308-.07-.598-.195-.89-.317-.328-.14-.601-.353-.861-.588l-.057-.055a1.002 1.002 0 01-.205-.285l-.002-.006c-.09-.212-.085-.448-.016-.708.019-.07.04-.14.062-.21.007-.022.02-.034.034-.031zm-.248 1.18c.065.233.233.396.375.573l.029.039.028.038a.57.57 0 00.106.094c.017.012.03.02.046.033l.02.017a10.088 10.088 0 00.539.396l.329.229c.149.103.305.19.468.266.04.02.082.036.123.055.124.053.25.099.379.14l.02.007c.08.02.167.028.25.038.032.002.064.007.092.01a.195.195 0 01.06.024.411.411 0 01.068.05c.074.067.144.163.148.22 0 .01 0 .018-.002.025-.002.005-.002.007-.005.01-.01.016-.024.03-.033.048-.03.05-.06.1-.085.153l-.011.027a.311.311 0 00.002.26c.115-.114.218-.236.293-.376a1.139 1.139 0 00.086-.201c.01-.027.003-.058.01-.084.01-.03-.024-.07-.01-.09 0-.001.003-.001.005-.004a.04.04 0 01.014-.007c.01-.002.02-.005.027-.005.019-.002.036-.005.055-.005.048 0 .094.008.14.022.028.01.019.045.016.072v.005c-.005.086-.04.165-.072.242a.554.554 0 01-.024.055 1.68 1.68 0 01-.192.375c-.118.156-.254.302-.475.31h-.063c-.038 0-.077.01-.115.012a.085.085 0 00-.086.057c-.017.039-.04.072-.058.11l-.007.017a1.534 1.534 0 01-.408.57c-.08.07-.164.139-.25.203a1.95 1.95 0 01-.468.224l-.036.014-.034.015-.02.007c-.01.002-.021.007-.03.01-.036.014-.065.035-.046.09.02.06.063.077.118.08.012 0 .026 0 .04-.003a.613.613 0 00.15-.033c.048-.017.096-.04.146-.06.034-.015.067-.03.103-.041-.03.122-.045.235-.084.34l-.021.054a6.794 6.794 0 01-.09.192c-.018.043-.04.084-.062.125-.115.23-.245.45-.405.655a1.682 1.682 0 01-.356.34 3.954 3.954 0 01-.103.073 2.788 2.788 0 01-.38.205l-.064.03-.053.02-.043.018c-.04.016-.082.03-.123.045a2.674 2.674 0 01-.168.053 4.848 4.848 0 01-.57.134c-.008 0-.013.003-.02.003-.055.01-.108.017-.163.026-.058.008-.116.017-.176.024a2.156 2.156 0 01-.605-.02l-.028-.008a.68.68 0 01-.145-.06c-.062-.034-.12-.07-.182-.1a1.728 1.728 0 01-.13-.073 1.868 1.868 0 01-.16-.106.632.632 0 01-.233-.278 1.794 1.794 0 00-.092-.194c-.01-.02-.021-.036-.03-.053a2.718 2.718 0 00-.277-.367 2.76 2.76 0 00-.125-.142c-.021-.024-.04-.048-.062-.07a7.07 7.07 0 00-.26-.276l-.067-.067a2.787 2.787 0 00-.364-.302 2.784 2.784 0 00-.303-.192l-.06-.04a1.58 1.58 0 01-.63-.761c-.043-.093-.107-.122-.22-.124a.63.63 0 01-.252-.048l-.002-.002a.457.457 0 01-.132-.084l-.026-.016c-.022-.026-.038-.058-.058-.09a5.295 5.295 0 01-.386-.658c0 .003.002.005.003.008l-.006-.013.003.005a3.772 3.772 0 00-.073-.196l-.036-.086a.382.382 0 01-.014-.154l.007-.031c.002-.005.002-.01.005-.015a.145.145 0 01.012-.03.46.46 0 01.127-.14.898.898 0 01.067-.05c.046-.034.094-.063.14-.094.071-.044.143-.084.218-.123.271-.14.56-.238.857-.314.017-.005.033-.008.053-.012.033-.008.07-.01.105-.015.036-.002.072-.005.106-.005l.106-.002c.016 0 .036 0 .052-.002a17.864 17.864 0 00.9-.063c.18-.017.36-.036.54-.055a3.504 3.504 0 001.127-.324c.036-.02.074-.036.11-.055l.063-.034c.144-.077.288-.151.427-.233.014-.02.03-.026.055-.033l.01-.003v.012a.06.06 0 01-.02.034l-.021.014c-.14.178-.331.3-.497.45a.415.415 0 00-.05.045c-.053.043-.106.089-.166.137.209 0 .41-.024.598-.08a1.654 1.654 0 00.869-.6c.103-.137.197-.297.278-.482zm-3.265.016a1.244 1.244 0 01-.343.109c-.56.139-1.13.22-1.697.326a2.603 2.603 0 00-1.105.487c-.019.015-.04.032-.062.043-.026.017-.039.013-.043-.01-.003-.004-.003-.011-.003-.018-.01-.144.034-.214.166-.274.18-.082.36-.168.54-.252.235-.108.487-.142.742-.168.396-.043.792-.094 1.19-.14l.524-.086zm2.386 1.245h-.026c-.038.01-.036.05-.036.08.003.1.007.202.02.303.01.11.047.219.112.307a.842.842 0 00.51.334c.155.036.155.038.17.2.007.069.016.13.08.17.114.067.227.137.364.146.084.007.17.012.242.068a.583.583 0 00.32.098c.084.007.17.01.254.024.067.012.113-.01.16-.05.239-.197.474-.397.697-.617-.026-.03-.065-.04-.118-.012a6.25 6.25 0 00-.415.223.315.315 0 01-.113.048 4.032 4.032 0 01-.722.074.68.68 0 01-.368-.13c-.067-.043-.134-.105-.146-.201.036-.012.07.002.103.007.127.017.252.063.382.055.312-.02.605-.113.898-.213l.283-.103c.043-.015.055-.03.017-.07-.046-.05-.096-.04-.147-.034a5.625 5.625 0 01-1.87-.045c-.18-.034-.372-.046-.442-.27-.02-.06-.038-.12-.05-.182a.37.37 0 00-.094-.17.094.094 0 00-.065-.04zm-.573.065c-.048 0-.08.05-.103.093-.06.103-.137.196-.207.292-.108.147-.26.178-.418.154a17.985 17.985 0 00-1.718-.18c-.03-.002-.058-.01-.082.01-.183.134-.367.264-.483.468.007.002.015.007.02.007.019-.002.035-.007.055-.01.297-.074.607-.098.922-.072.398.034.792.113 1.188.168.053.008.106.01.156.036.12.063.18.173.226.29.07.18.09.373.103.565.01.15-.022.278-.144.38a.556.556 0 00-.2.278c.154 0 .286.026.387.156.063.08.144.149.223.218a.379.379 0 00.586-.081c.058-.094.113-.19.175-.281.087-.127.17-.264.325-.32.093-.03.052-.076.02-.115-.061-.08-.177-.081-.28-.02-.16.097-.266.239-.381.376-.034.04-.068.08-.113.115-.058.04-.108.043-.16-.01-.056-.057-.114-.117-.176-.168-.053-.043-.063-.082-.032-.144a.728.728 0 00.082-.413c-.03-.312-.08-.62-.3-.867-.024-.026-.024-.04.01-.064a.94.94 0 00.408-.701c.007-.075-.007-.135-.067-.156a.075.075 0 00-.022-.004zm4.46.035c.206 0 .388.08.567.182-.005 0-.007 0-.012.003l.03.017c-.27.04-.54.06-.81.03-.084-.01-.168-.026-.255-.023-.17.005-.307-.084-.451-.161h.017c-.012-.007-.024-.012-.036-.02.024.003.05.003.074.005.029.003.055.01.084.015.238.05.468-.02.704-.043a.8.8 0 01.089-.005zm-8.689.714a.045.045 0 00-.016.004c-.05.019-.098.048-.112.115-.048.223.055.437.278.552.1.053.178.127.226.23.016.037.019.106.072.094.052-.012.01-.077.021-.103.008-.135-.019-.25-.127-.32-.08-.05-.11-.12-.14-.201-.038-.106-.047-.223-.134-.307-.02-.021-.036-.064-.069-.064zm1.843.354c-.11.027-.236.053-.353.106-.082.038-.087.084-.015.139.043.034.087.05.14.03a.466.466 0 01.494.097.509.509 0 00.523.087c.106-.036.197-.096.293-.15a.319.319 0 01.113-.04c.144-.014.288-.033.43-.053.038-.005.098.01.108-.036.01-.048-.046-.077-.08-.108-.016-.017-.045-.02-.07-.026a.82.82 0 00-.436-.015 2.092 2.092 0 01-.888 0c-.08-.02-.163-.02-.26-.03zm6.903.889c.006 0 .01.003.015.007a.05.05 0 01.012.014l.008.005c.043.034-.007.11-.02.168-.03.168-.057.334-.086.502-.007.048-.012.098-.048.165l-.007-.043-.012.024a5.307 5.307 0 01-.075-.706c-.002-.053.034-.065.068-.077.048-.016.107-.066.145-.06zm-3.22.902a.08.08 0 00-.022.01c-.19.105-.404.11-.613.137-.088.012-.2-.015-.264.05-.158.156-.293.09-.432-.02-.007-.004-.014-.011-.024-.014-.206-.11-.413-.15-.624-.005a.338.338 0 01-.267.068c-.074-.02-.131-.015-.19.038-.028.027-.066.048-.1.07-.094.062-.094.072-.007.14.02.018.043.025.067.033.2.06.387.016.562-.08.182-.098.353-.093.518.032.152.112.312.115.48.045a2.97 2.97 0 01.653-.213c.034-.005.068-.017.099.01.096.088.187.026.279-.01.036-.015.04-.044.038-.08-.007-.076-.065-.12-.098-.18-.015-.025-.032-.035-.054-.03zm-4.717.07c.009 0 .02.006.032.017.039.036.075.074.113.11l.015.014c.019.017.021.039.012.06l-.224.45-.024-.008c0-.005.003-.007.003-.012.048-.197.029-.4.055-.6.002-.02.009-.03.018-.03zm3.9.588c-.238.007-.48.046-.703.122-.185.063-.392.106-.488.32-.055.124-.048.256-.086.38.017.1.017.197.074.281.017.024.024.063.065.06.043-.002.058-.038.07-.067.043-.09.053-.194.08-.29.047-.156.119-.28.282-.35.17-.072.343-.14.516-.206a.184.184 0 01.1-.012c.215.03.438.02.628.146a.079.079 0 00.062.012c.072-.017.08-.04.036-.098a.723.723 0 00-.636-.298zm-2.218.741l.014.017c.094.117.187.218.25.336.15.29.374.501.662.655.135.072.256.172.414.19l.003.001h.018c.017 0 .04-.004.036.023-.003.014-.017.014-.031.012h-.007c-.005 0-.01 0-.015-.003-.167.005-.33.033-.493.067-.085.018-.17.038-.255.058a7.838 7.838 0 01-.243.055h-.003c-.033.008-.048.024-.043.058.005.04.02.062.067.072a1.305 1.305 0 00.274.017c.118-.003.235-.015.353-.034a2.602 2.602 0 01.778-.002c-.43.07-.785.312-1.174.475-.202.084-.358.245-.55.348-.014.017-.022.044-.036.06-.031.04-.036.118-.087.11h-.004c-.005 0-.01.003-.015 0a.623.623 0 01-.266-.086c-.03-.019-.022-.055-.022-.089v-.453c0-.032.012-.067-.019-.09-.106-.066-.08-.182-.106-.278-.01-.038.017-.057.039-.08l.278-.31c.063-.068.089-.143.043-.224-.086-.163-.072-.32-.002-.485.055-.13.091-.267.142-.42zm4.585.177c.005.003.01.005.012.008l.007-.008c.039.022.04.05.05.075.102.247.2.497.3.744.025.055.03.103-.006.15a.502.502 0 00-.077.49c.067.205.019.347-.183.448a.229.229 0 01-.12.036.124.124 0 01-.088-.03c-.375-.259-.821-.345-1.242-.494-.06-.02-.117-.043-.18-.057-.072-.017-.067-.065-.057-.116.007-.036.026-.04.045-.038.02-.005.046.01.063.014.48.12.965.216 1.428.396.017.008.03.01.043.013.034-.005.044-.037.039-.082-.01-.108-.02-.214-.144-.27a2.8 2.8 0 00-.975-.234c-.05-.005-.098-.007-.15-.01.239-.144.5-.22.714-.406a.999.999 0 00.075-.067l.398-.482zm-1.882 1.133h.02c.03-.002.054.005.057.053 0 .044.01.082-.06.092a1.752 1.752 0 01-.274.021c-.094 0-.185-.01-.278-.03-.05-.013-.07-.047-.065-.087.002-.027.02-.027.04-.027a.103.103 0 01.039.003h.18a1.143 1.143 0 00.34-.024zm.036.396c.006 0 .012.002.02.005l.844.35c-.132.11-.254.207-.374.303-.221.178-.44.358-.646.553-.05.048-.09.05-.147.014a9.33 9.33 0 00-1.097-.545c-.165-.07-.34-.098-.511-.158.02-.036.055-.036.084-.046.367-.137.742-.26 1.102-.42.094-.043.187-.007.278.005.137.02.27.021.394-.046a.092.092 0 01.053-.015zm-2.161.698a.27.27 0 01.082.018c.197.077.38.185.569.274a.04.04 0 01.029.01c.004.002.005.004.005.011v.005c0 .003-.003.003-.003.005-.002.003-.005.003-.007.003l-.01-.003a.03.03 0 01-.012-.012l-.862-.214c.074-.059.133-.1.209-.097zm8.17.535c-.142-.004-.26.062-.372.15-.03.022-.046.048-.094.017-.105-.072-.206-.053-.295.04a.402.402 0 00-.103.186c-.125.504-.252 1.006-.372 1.512-.041.17.048.255.223.23.158-.026.238-.117.264-.32.026-.198.053-.392.11-.596.15.187.29.362.433.538.139.17.29.321.494.412.144.065.269.027.382-.074a.186.186 0 00.055-.206.157.157 0 00-.158-.125.246.246 0 01-.152-.07 2.27 2.27 0 01-.362-.396c-.09-.12-.094-.12.026-.202.252-.173.34-.417.322-.71-.014-.219-.132-.346-.34-.38a.454.454 0 00-.061-.006zm-10.733.03c-.04 0-.077.02-.097.075-.019.05-.053.043-.091.038a.751.751 0 00-.665.22c-.38.37-.574.813-.552 1.353.014.358.22.53.569.451.689-.16 1.224-.835 1.253-1.582.007-.192-.168-.47-.34-.538a.214.214 0 00-.077-.016zm-1.93.058a.943.943 0 00-.613.238c-.346.302-.547.693-.646 1.138a.642.642 0 00.075.482c.07.118.158.161.292.135a3.12 3.12 0 00.87-.305.867.867 0 00.225-.168.291.291 0 00.084-.204c0-.075-.033-.1-.103-.104-.07-.002-.13.024-.192.046-.207.075-.408.166-.622.22-.105.027-.14.003-.163-.105a.301.301 0 01.005-.122c.04-.168.098-.33.187-.483a.82.82 0 01.245-.283c.14-.089.283-.137.442-.04.052.03.103.016.15-.013a.352.352 0 00.15-.2c.016-.05.002-.09-.044-.117a.773.773 0 00-.343-.115zm9.2.07a.692.692 0 00-.517.206c-.156.161-.183.324-.084.526.074.151.177.28.278.415.072.094.149.187.216.286.048.07.024.125-.058.151a.199.199 0 01-.14-.005 1.076 1.076 0 01-.373-.23.243.243 0 01-.082-.125c-.012-.074-.053-.108-.125-.115-.081-.007-.156-.007-.204.08-.08.138-.057.263.087.393.276.245.605.353.933.38.3.004.485-.267.387-.522-.043-.115-.118-.216-.19-.314-.12-.159-.245-.313-.357-.476-.09-.125-.048-.216.098-.264.135-.043.25-.005.36.08.13.1.24.047.269-.116.017-.086-.03-.144-.09-.194a.68.68 0 00-.41-.157zm1.905.06c-.137-.003-.274 0-.41.016-.164.02-.32.065-.38.248-.002.01-.014.024-.024.026-.187.048-.252.202-.302.358-.106.346-.2.696-.298 1.042-.024.084.01.14.08.182.054.034.11.032.172.015.324-.08.648-.166.987-.142a.26.26 0 00.127-.029.242.242 0 00.117-.24c-.014-.09-.086-.117-.163-.13a1.484 1.484 0 00-.177-.016 3.855 3.855 0 00-.62.052c.03-.228.048-.242.264-.242.16 0 .322-.01.473-.072.1-.043.166-.113.176-.226.007-.076-.025-.122-.104-.124a1.65 1.65 0 00-.19.002l-.453.04c.024-.052.036-.1.062-.136.044-.062-.007-.178.084-.209.075-.024.164-.007.245-.01.214-.004.427-.007.634-.074a.347.347 0 00.192-.13c.07-.108.043-.18-.082-.185-.136-.006-.273-.014-.41-.017zm-6.664.008c-.071-.003-.13.042-.185.093a3.95 3.95 0 00-.392.434l-.367.456c-.02.024-.04.07-.08.05-.03-.014-.018-.055-.014-.086.01-.11.024-.218.036-.329.015-.144.034-.288.01-.432-.031-.173-.156-.22-.295-.113a.836.836 0 00-.094.091 3.168 3.168 0 00-.298.414c-.225.348-.432.71-.703 1.027-.05.06-.103.118-.149.182-.048.072-.067.154-.022.23.041.068.11.092.188.087.081-.004.125-.064.168-.122l.626-.852c.012-.015.017-.044.053-.034a1.37 1.37 0 00-.012.11c-.01.137-.038.274-.01.413.034.16.16.224.306.152a.902.902 0 00.204-.152c.117-.112.228-.233.33-.362.114-.144.229-.29.349-.447.036.12.022.228.017.336-.012.188-.048.375-.012.565.024.117.091.187.187.194a.44.44 0 00.278-.07c.125-.079.137-.237.02-.343a.19.19 0 01-.063-.113c-.026-.13-.004-.257.017-.384.039-.245.115-.485.103-.737-.004-.098-.02-.19-.12-.237a.19.19 0 00-.076-.02zm8.04.19c.117-.01.175.063.14.176a.387.387 0 01-.07.132c-.128.161-.291.27-.495.353a1.56 1.56 0 01.11-.425c.062-.134.163-.223.315-.237zm-6.651.02a.292.292 0 01.15.034c.076.043.098.146.045.233a.676.676 0 01-.185.184 1.47 1.47 0 01-.483.243c.07-.216.128-.415.245-.586a.286.286 0 01.228-.108zm1.6.091a.509.509 0 01.213.034c.113.046.15.1.149.27a1.257 1.257 0 01-.425.818.562.562 0 01-.324.136c-.147.012-.262-.08-.247-.228.028-.32.115-.624.33-.876a.436.436 0 01.304-.154zm-5.882.003a.501.501 0 01.218.036c.11.043.149.098.144.262a1.243 1.243 0 01-.422.818.581.581 0 01-.325.14c-.15.011-.266-.082-.252-.233.03-.315.116-.613.325-.86a.442.442 0 01.312-.163z" }, "child": [] }] })(props);
+}
+function SiCloudflare(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M16.5088 16.8447c.1475-.5068.0908-.9707-.1553-1.3154-.2246-.3164-.6045-.499-1.0615-.5205l-8.6592-.1123a.1559.1559 0 0 1-.1333-.0713c-.0283-.042-.0351-.0986-.021-.1553.0278-.084.1123-.1484.2036-.1562l8.7359-.1123c1.0351-.0489 2.1601-.8868 2.5537-1.9136l.499-1.3013c.0215-.0561.0293-.1128.0147-.168-.5625-2.5463-2.835-4.4453-5.5499-4.4453-2.5039 0-4.6284 1.6177-5.3876 3.8614-.4927-.3658-1.1187-.5625-1.794-.499-1.2026.119-2.1665 1.083-2.2861 2.2856-.0283.31-.0069.6128.0635.894C1.5683 13.171 0 14.7754 0 16.752c0 .1748.0142.3515.0352.5273.0141.083.0844.1475.1689.1475h15.9814c.0909 0 .1758-.0645.2032-.1553l.12-.4268zm2.7568-5.5634c-.0771 0-.1611 0-.2383.0112-.0566 0-.1054.0415-.127.0976l-.3378 1.1744c-.1475.5068-.0918.9707.1543 1.3164.2256.3164.6055.498 1.0625.5195l1.8437.1133c.0557 0 .1055.0263.1329.0703.0283.043.0351.1074.0214.1562-.0283.084-.1132.1485-.204.1553l-1.921.1123c-1.041.0488-2.1582.8867-2.5527 1.914l-.1406.3585c-.0283.0713.0215.1416.0986.1416h6.5977c.0771 0 .1474-.0489.169-.126.1122-.4082.1757-.837.1757-1.2803 0-2.6025-2.125-4.727-4.7344-4.727" }, "child": [] }] })(props);
+}
+function SiClickup(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M2 18.439l3.69-2.828c1.961 2.56 4.044 3.739 6.363 3.739 2.307 0 4.33-1.166 6.203-3.704L22 18.405C19.298 22.065 15.941 24 12.053 24 8.178 24 4.788 22.078 2 18.439zM12.04 6.15l-6.568 5.66-3.036-3.52L12.055 0l9.543 8.296-3.05 3.509z" }, "child": [] }] })(props);
+}
+function SiClaude(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z" }, "child": [] }] })(props);
+}
+function SiCircleci(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M8.963 12c0-1.584 1.284-2.855 2.855-2.855 1.572 0 2.856 1.284 2.856 2.855 0 1.572-1.284 2.856-2.856 2.856-1.57 0-2.855-1.284-2.855-2.856zm2.855-12C6.215 0 1.522 3.84.19 9.025c-.01.036-.01.07-.01.12 0 .313.252.576.575.576H5.59c.23 0 .433-.13.517-.333.997-2.16 3.18-3.672 5.712-3.672 3.466 0 6.286 2.82 6.286 6.287 0 3.47-2.82 6.29-6.29 6.29-2.53 0-4.714-1.5-5.71-3.673-.097-.19-.29-.336-.517-.336H.755c-.312 0-.575.253-.575.576 0 .037.014.072.014.12C1.514 20.16 6.214 24 11.818 24c6.624 0 12-5.375 12-12 0-6.623-5.376-12-12-12z" }, "child": [] }] })(props);
+}
+function SiCanva(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zM6.962 7.68c.754 0 1.337.549 1.405 1.2.069.583-.171 1.097-.822 1.406-.343.171-.48.172-.549.069-.034-.069 0-.137.069-.206.617-.514.617-.926.548-1.508-.034-.378-.308-.618-.583-.618-1.2 0-2.914 2.674-2.674 4.629.103.754.549 1.646 1.509 1.646.308 0 .65-.103.96-.24.5-.264.799-.47 1.097-.8-.073-.885.704-2.046 1.851-2.046.515 0 .926.205.96.583.068.514-.377.582-.514.582s-.378-.034-.378-.17c-.034-.138.309-.07.275-.378-.035-.206-.24-.274-.446-.274-.72 0-1.131.994-1.029 1.611.035.275.172.549.447.549.205 0 .514-.31.617-.755.068-.308.343-.514.583-.514.102 0 .17.034.205.171v.138c-.034.137-.137.548-.102.651 0 .069.034.171.17.171.092 0 .436-.18.777-.459.117-.59.253-1.298.253-1.357.034-.24.137-.48.617-.48.103 0 .171.034.205.171v.138l-.136.617c.445-.583 1.097-.994 1.508-.994.172 0 .309.102.309.274 0 .103 0 .274-.069.446-.137.377-.309.96-.412 1.474 0 .137.035.274.207.274.171 0 .685-.206 1.096-.754l.007-.004c-.002-.068-.007-.134-.007-.202 0-.411.035-.754.104-.994.068-.274.411-.514.617-.514.103 0 .205.069.205.171 0 .035 0 .103-.034.137-.137.446-.24.857-.24 1.269 0 .24.034.582.102.788 0 .034.035.069.07.069.068 0 .548-.445.89-1.028-.308-.206-.48-.549-.48-.96 0-.72.446-1.097.858-1.097.343 0 .617.24.617.72 0 .308-.103.65-.274.96h.102a.77.77 0 0 0 .584-.24.293.293 0 0 1 .134-.117c.335-.425.83-.74 1.41-.74.48 0 .924.205.959.582.068.515-.378.618-.515.618l-.002-.002c-.138 0-.377-.035-.377-.172 0-.137.309-.068.274-.376-.034-.206-.24-.275-.446-.275-.686 0-1.13.891-1.028 1.611.034.275.171.583.445.583.206 0 .515-.308.652-.754.068-.274.343-.514.583-.514.103 0 .17.034.205.171 0 .069 0 .206-.137.652-.17.308-.171.48-.137.617.034.274.171.48.309.583.034.034.068.102.068.102 0 .069-.034.138-.137.138-.034 0-.068 0-.103-.035-.514-.205-.72-.548-.789-.891-.205.24-.445.377-.72.377-.445 0-.89-.411-.96-.926a1.609 1.609 0 0 1 .075-.649c-.203.13-.422.203-.623.203h-.17c-.447.652-.927 1.098-1.27 1.303a.896.896 0 0 1-.377.104c-.068 0-.171-.035-.205-.104-.095-.152-.156-.392-.193-.667-.481.527-1.145.805-1.453.805-.343 0-.548-.206-.582-.55v-.376c.102-.754.377-1.2.377-1.337a.074.074 0 0 0-.069-.07c-.24 0-1.028.824-1.166 1.373l-.103.445c-.068.309-.377.515-.582.515-.103 0-.172-.035-.206-.172v-.137l.046-.233c-.435.31-.87.508-1.075.508-.308 0-.48-.172-.514-.412-.206.274-.445.412-.754.412-.352 0-.696-.24-.862-.593-.244.275-.523.553-.852.764-.48.309-1.028.549-1.68.549-.582 0-1.097-.309-1.371-.583-.412-.377-.651-.96-.686-1.509-.205-1.68.823-3.84 2.4-4.8.378-.205.755-.343 1.132-.343zm9.77 3.291c-.104 0-.172.172-.172.343 0 .274.137.583.309.755a1.74 1.74 0 0 0 .102-.583c0-.343-.137-.515-.24-.515z" }, "child": [] }] })(props);
+}
+function SiCalendly(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M19.655 14.262c.281 0 .557.023.828.064 0 .005-.005.01-.005.014-.105.267-.234.534-.381.786l-1.219 2.106c-1.112 1.936-3.177 3.127-5.411 3.127h-2.432c-2.23 0-4.294-1.191-5.412-3.127l-1.218-2.106a6.251 6.251 0 0 1 0-6.252l1.218-2.106C6.736 4.832 8.8 3.641 11.035 3.641h2.432c2.23 0 4.294 1.191 5.411 3.127l1.219 2.106c.147.252.271.519.381.786 0 .004.005.009.005.014-.267.041-.543.064-.828.064-1.816 0-2.501-.607-3.291-1.306-.764-.676-1.711-1.517-3.44-1.517h-1.029c-1.251 0-2.387.455-3.2 1.278-.796.805-1.233 1.904-1.233 3.099v1.411c0 1.196.437 2.295 1.233 3.099.813.823 1.949 1.278 3.2 1.278h1.034c1.729 0 2.676-.841 3.439-1.517.791-.703 1.471-1.306 3.287-1.301Zm.005-3.237c.399 0 .794-.036 1.179-.11-.002-.004-.002-.01-.002-.014-.073-.414-.193-.823-.349-1.218.731-.12 1.407-.396 1.986-.819 0-.004-.005-.013-.005-.018-.331-1.085-.832-2.101-1.489-3.03-.649-.915-1.435-1.719-2.331-2.395-1.867-1.398-4.088-2.138-6.428-2.138-1.448 0-2.855.28-4.175.841-1.273.543-2.423 1.315-3.407 2.299S2.878 6.552 2.341 7.83c-.557 1.324-.842 2.726-.842 4.175 0 1.448.281 2.855.842 4.174.542 1.274 1.314 2.423 2.298 3.407s2.129 1.761 3.407 2.299c1.324.556 2.727.841 4.175.841 2.34 0 4.561-.74 6.428-2.137a10.815 10.815 0 0 0 2.331-2.396c.652-.929 1.158-1.949 1.489-3.03 0-.004.005-.014.005-.018-.579-.423-1.255-.699-1.986-.819.161-.395.276-.804.349-1.218.005-.009.005-.014.005-.023.869.166 1.692.506 2.404 1.035.685.505.552 1.075.446 1.416C22.184 20.437 17.619 24 12.221 24c-6.625 0-12-5.375-12-12s5.37-12 12-12c5.398 0 9.963 3.563 11.471 8.464.106.341.239.915-.446 1.421-.717.529-1.535.873-2.404 1.034.128.716.128 1.45 0 2.166-.387-.074-.782-.11-1.182-.11-4.184 0-3.968 2.823-6.736 2.823h-1.029c-1.899 0-3.15-1.357-3.15-3.095v-1.411c0-1.738 1.251-3.094 3.15-3.094h1.034c2.768 0 2.552 2.823 6.731 2.827Z" }, "child": [] }] })(props);
+}
+function SiBrave(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M15.68 0l2.096 2.38s1.84-.512 2.709.358c.868.87 1.584 1.638 1.584 1.638l-.562 1.381.715 2.047s-2.104 7.98-2.35 8.955c-.486 1.919-.818 2.66-2.198 3.633-1.38.972-3.884 2.66-4.293 2.916-.409.256-.92.692-1.38.692-.46 0-.97-.436-1.38-.692a185.796 185.796 0 01-4.293-2.916c-1.38-.973-1.712-1.714-2.197-3.633-.247-.975-2.351-8.955-2.351-8.955l.715-2.047-.562-1.381s.716-.768 1.585-1.638c.868-.87 2.708-.358 2.708-.358L8.321 0h7.36zm-3.679 14.936c-.14 0-1.038.317-1.758.69-.72.373-1.242.637-1.409.742-.167.104-.065.301.087.409.152.107 2.194 1.69 2.393 1.866.198.175.489.464.687.464.198 0 .49-.29.688-.464.198-.175 2.24-1.759 2.392-1.866.152-.108.254-.305.087-.41-.167-.104-.689-.368-1.41-.741-.72-.373-1.617-.69-1.757-.69zm0-11.278s-.409.001-1.022.206-1.278.46-1.584.46c-.307 0-2.581-.434-2.581-.434S4.119 7.152 4.119 7.849c0 .697.339.881.68 1.243l2.02 2.149c.192.203.59.511.356 1.066-.235.555-.58 1.26-.196 1.977.384.716 1.042 1.194 1.464 1.115.421-.08 1.412-.598 1.776-.834.364-.237 1.518-1.19 1.518-1.554 0-.365-1.193-1.02-1.413-1.168-.22-.15-1.226-.725-1.247-.95-.02-.227-.012-.293.284-.851.297-.559.831-1.304.742-1.8-.089-.495-.95-.753-1.565-.986-.615-.232-1.799-.671-1.947-.74-.148-.068-.11-.133.339-.175.448-.043 1.719-.212 2.292-.052.573.16 1.552.403 1.632.532.079.13.149.134.067.579-.081.445-.5 2.581-.541 2.96-.04.38-.12.63.288.724.409.094 1.097.256 1.333.256s.924-.162 1.333-.256c.408-.093.329-.344.288-.723-.04-.38-.46-2.516-.541-2.961-.082-.445-.012-.45.067-.579.08-.129 1.059-.372 1.632-.532.573-.16 1.845.009 2.292.052.449.042.487.107.339.175-.148.069-1.332.508-1.947.74-.615.233-1.476.49-1.565.986-.09.496.445 1.241.742 1.8.297.558.304.624.284.85-.02.226-1.026.802-1.247.95-.22.15-1.413.804-1.413 1.169 0 .364 1.154 1.317 1.518 1.554.364.236 1.355.755 1.776.834.422.079 1.08-.4 1.464-1.115.384-.716.039-1.422-.195-1.977-.235-.555.163-.863.355-1.066l2.02-2.149c.341-.362.68-.546.68-1.243 0-.697-2.695-3.96-2.695-3.96s-2.274.436-2.58.436c-.307 0-.972-.256-1.585-.461-.613-.205-1.022-.206-1.022-.206z" }, "child": [] }] })(props);
+}
+function SiBox(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M.959 5.523c-.54 0-.959.42-.959.899v7.549a4.59 4.59 0 004.613 4.494 4.717 4.717 0 004.135-2.457c.779 1.438 2.337 2.457 4.074 2.457 2.577 0 4.674-2.037 4.674-4.613.06-2.457-2.037-4.495-4.613-4.495-1.738 0-3.295.959-4.074 2.397-.78-1.438-2.338-2.397-4.135-2.397-1.079 0-2.038.36-2.817.899V6.422a.92.92 0 00-.898-.899zM17.602 9.26a.95.95 0 00-.704.158c-.36.3-.479.899-.18 1.318l2.397 3.116-2.396 3.115c-.3.42-.24.96.18 1.26.419.3 1.016.298 1.316-.122l2.039-2.636 2.096 2.697c.3.36.899.419 1.318.12.36-.3.42-.84.121-1.259l-2.338-3.115 2.338-3.057c.3-.419.298-1.018-.121-1.318-.48-.3-1.019-.24-1.318.18l-2.096 2.576-2.04-2.695c-.149-.18-.373-.3-.612-.338zM4.613 11.154c1.558 0 2.817 1.26 2.817 2.758 0 1.558-1.259 2.756-2.817 2.756-1.558 0-2.816-1.198-2.816-2.756 0-1.498 1.258-2.758 2.816-2.758zm8.27 0c1.558 0 2.816 1.26 2.816 2.758-.06 1.558-1.318 2.756-2.816 2.756-1.558 0-2.817-1.198-2.817-2.756 0-1.498 1.259-2.758 2.817-2.758Z" }, "child": [] }] })(props);
+}
+function SiBorgbackup(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M0 8.144v6.023h2.006V8.144Zm2.324 0v1.203h1.488v1.285H2.324v1.048h1.488v1.284H2.324v1.203h2.328l1.207-1.203V11.78l-.603-.604.603-.603V9.347L4.652 8.144Zm5.569 1.203L6.69 10.55v2.414l1.203 1.203H9.24v-1.125h-.522V10.55h.522V9.347Zm1.665 0v1.203h.5v2.492h-.5v1.125h1.344l1.202-1.203V10.55l-1.202-1.203Zm3.454 0v4.82h2.006v-4.82Zm3 0-.672.676v.527h.854v1.171h2.01v-1.248l-.975-1.126Zm3.971 0-1.202 1.203v2.414l1.202 1.203h1.094l.6-.594v-.531h-.89V9.347Zm1.121 0v1.203h.89v4.253h-2.446v.444l.603.609h2.646L24 14.644V10.55l-1.203-1.203Z" }, "child": [] }] })(props);
+}
+function SiBitbucket(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M.778 1.213a.768.768 0 00-.768.892l3.263 19.81c.084.5.515.868 1.022.873H19.95a.772.772 0 00.77-.646l3.27-20.03a.768.768 0 00-.768-.891zM14.52 15.53H9.522L8.17 8.466h7.561z" }, "child": [] }] })(props);
+}
+function SiAsana(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M18.78 12.653c-2.882 0-5.22 2.336-5.22 5.22s2.338 5.22 5.22 5.22 5.22-2.34 5.22-5.22-2.336-5.22-5.22-5.22zm-13.56 0c-2.88 0-5.22 2.337-5.22 5.22s2.338 5.22 5.22 5.22 5.22-2.338 5.22-5.22-2.336-5.22-5.22-5.22zm12-6.525c0 2.883-2.337 5.22-5.22 5.22-2.882 0-5.22-2.337-5.22-5.22 0-2.88 2.338-5.22 5.22-5.22 2.883 0 5.22 2.34 5.22 5.22z" }, "child": [] }] })(props);
+}
+function SiApachemaven(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M4.237.001c-.312-.013-.665.072-.828.457-.158.374-.283 1.188-.34 2.276l1.223.591c-.02-.737.007-1.43.076-2.066-.026.299-.056.96.006 2.039.019.342.049.725.088 1.15.002.024.002.047.007.069a45.485 45.485 0 0 0 .309 2.412c.057.368.126.752.195 1.16l-.01.01c.014.01.015.018.014.023l.03.16c.03.162.06.328.093.494l.108.553.056.289a61.72 61.72 0 0 0 .457 2.068c.09.382.186.78.287 1.186.098.386.199.783.309 1.193.096.362.199.735.303 1.117.003.018.012.036.015.055a145.826 145.826 0 0 0 .34 1.185l.049.174c.078.261.158.533.242.805a4.2 4.2 0 0 1-.293-.135l-.19-.654c-.02-.077-.042-.148-.062-.225l-.002-.004-.004-.002c-.087-.3-.17-.607-.257-.916-.023-.087-.044-.173-.069-.263l-.314-1.178c-.1-.381-.194-.765-.29-1.154-.094-.39-.185-.78-.277-1.172-.093-.401-.181-.8-.265-1.203-.085-.396-.161-.798-.24-1.193a50.315 50.315 0 0 1-.211-1.17c-.004-.013-.006-.03-.01-.041l.004-.002c-.057-.386-.116-.77-.174-1.15a60.905 60.905 0 0 1-.154-1.204 27.447 27.447 0 0 1-.172-2.41l-1.22-.59c-.004.074-.01.15-.013.23-.012.294-.02.605-.023.93a45.3 45.3 0 0 0 .006 1.157c.009.37.025.755.045 1.148.02.336.042.675.07 1.022l.002.039.006.004c.003.023.007.05.006.076.033.368.064.739.107 1.115a34.493 34.493 0 0 0 .303 2.125c.01.064.024.131.035.195a23.418 23.418 0 0 0 .547 2.32c.07.237.14.464.21.68.063.182.13.365.194.545.155.422.327.832.512 1.232l.006.004a.318.318 0 0 0 .02.05c.225.485.475.95.755 1.395.01.013.02.033.03.047-.455-.183-1.259-.098-1.253-.097.83.288 1.557.64 2.016 1.175-.183.2-.523.352-.953.477.594.064.924-.039 1.045-.092-.31.26-.483.732-.635 1.24.35-.57.696-.949 1.033-1.094.078.258.162.524.244.788A147.532 147.532 0 0 0 5.157 24a.56.56 0 0 0 .43-.312c.13-.282.83-1.775 1.908-3.875.413 1.303.88 2.679 1.386 4.109a.494.494 0 0 0 .076-.465 103.735 103.735 0 0 1-1.308-3.945c.154-.299.316-.612.484-.932.125.04.255.094.389.155.203.186.352.491.482.84a1.515 1.515 0 0 0-.334-1.098c1.335.258 2.547.09 3.287-.81a3.97 3.97 0 0 0 .192-.258c-.325.304-.682.404-1.313.273.996-.281 1.523-.617 2.035-1.22.12-.145.244-.303.371-.48-.943.722-1.927.822-2.9.493l-.045-.018c.914.02 2.203-.474 3.092-1.189.41-.33.796-.73 1.17-1.21.28-.359.55-.76.82-1.216.234-.393.468-.824.7-1.293a2.83 2.83 0 0 1-.74.137l-.144.008c-.048.002-.093 0-.146.002.885-.198 1.5-.74 1.994-1.447-.24.117-.628.262-1.07.297-.058.006-.12.006-.182.006-.013-.002-.028 0-.047-.002.306-.078.574-.178.81-.309a3.363 3.363 0 0 0 .358-.236c.044-.037.088-.07.13-.106.099-.086.193-.18.28-.287.028-.034.056-.063.08-.098.036-.05.073-.098.104-.146a8.388 8.388 0 0 0 .51-.828c.015-.031.032-.057.046-.088.04-.084.08-.16.11-.227.042-.099.074-.179.092-.238a.515.515 0 0 1-.108.051c-.273.112-.727.187-1.086.201-.004 0-.008 0-.013.004h-.067c.72-.214 1.067-.45 1.422-.818a13.883 13.883 0 0 0 1.154-1.428c.264-.37.505-.738.692-1.072a6.5 6.5 0 0 0 .298-.592c.066-.157.122-.305.172-.45-.466.01-.986.011-1.48 0 .495.01 1.015.007 1.484-.005.5-1.485.063-2.262.063-2.262s-.526-1.212-1.4-.851c-.426.175-1.172.73-2.083 1.56l.514 1.45a17.561 17.561 0 0 1 1.703-1.602c-.257.22-.807.726-1.615 1.644-.256.29-.537.624-.844.997-.017.02-.035.038-.047.06a51.435 51.435 0 0 0-1.666 2.187c-.248.34-.498.704-.765 1.088h-.016c.002.02-.004.028-.01.032l-.101.152c-.104.155-.213.31-.318.47l-.352.534c-.061.09-.124.181-.186.277-.184.282-.367.573-.558.873a97.351 97.351 0 0 0-1.428 2.338 96.866 96.866 0 0 0-1.341 2.343c-.012.017-.02.04-.034.057a197.256 197.256 0 0 0-.668 1.223l-.097.181c-.17.318-.346.642-.52.979 0 .004-.005.008-.006.013-.026.048-.05.093-.072.141-.117.222-.218.424-.45.87a1.352 1.352 0 0 0-.233-.182l.345-.65c.047-.089.096-.177.143-.27l.04-.077.546-1.001.13-.233v-.006l-.001-.006c.169-.31.345-.62.52-.94.051-.087.102-.173.153-.265.224-.395.454-.794.684-1.197a91.685 91.685 0 0 1 2.135-3.504c.247-.386.503-.77.754-1.152.092-.138.182-.272.279-.41a72.9 72.9 0 0 1 .48-.701c.007-.012.019-.024.026-.037h.006c.26-.356.517-.713.773-1.065.278-.373.554-.735.83-1.09a31.075 31.075 0 0 1 1.777-2.075l-.515-1.446c-.06.057-.126.116-.192.178a32.37 32.37 0 0 0-.758.729c-.295.294-.597.606-.912.935a46.032 46.032 0 0 0-1.632 1.838l-.03.033.002.008c-.017.02-.033.044-.054.064-.266.323-.538.649-.801.985a39.105 39.105 0 0 0-1.445 1.95c-.043.06-.085.126-.127.186a26.458 26.458 0 0 0-1.403 2.303c-.13.247-.256.485-.37.715-.096.195-.187.395-.278.591-.21.463-.398.93-.566 1.399l.002.006a.36.36 0 0 0-.026.058c-.108.303-.203.608-.29.914-.14.174-.302.325-.483.46a3.505 3.505 0 0 0-.131-.153 5.148 5.148 0 0 0 .824-2.211 6.4 6.4 0 0 0-.016-1.488c-.046-.4-.126-.82-.238-1.274-.097-.393-.217-.81-.363-1.248-.091.185-.22.367-.379.545l-.086.094c-.029.032-.06.06-.092.094.434-.674.486-1.397.358-2.148a2.722 2.722 0 0 1-.49.85c-.033.038-.072.077-.11.116-.01.007-.019.018-.033.028.144-.24.25-.467.318-.698a1.29 1.29 0 0 0 .04-.146 2.85 2.85 0 0 0 .038-.225l.018-.146a2.11 2.11 0 0 0-.002-.354c-.003-.04-.004-.076-.01-.113-.01-.055-.016-.105-.027-.154a7.416 7.416 0 0 0-.193-.84c-.01-.028-.015-.056-.026-.084-.027-.079-.048-.149-.072-.209a2.1 2.1 0 0 0-.09-.209.455.455 0 0 1-.035.1c-.102.24-.34.57-.557.8-.003.003-.007.005-.007.01l-.04.043c.318-.58.39-.946.385-1.398a12.274 12.274 0 0 0-.16-1.615 10.68 10.68 0 0 0-.232-1.104 5.853 5.853 0 0 0-.18-.558 6.337 6.337 0 0 0-.172-.391 26.18 26.18 0 0 0 .002-.004C5.576.341 4.82.124 4.82.124s-.27-.11-.582-.123zm3.38 15.783l.032.082v.002c-.06.033-.116.067-.178.097-.012.004-.024.012-.039.018a2.41 2.41 0 0 0 .186-.2zm-.603 1.626c.13.136.25.242.354.32l.07.227a1.866 1.866 0 0 0-.246.053l-.03-.098c-.024-.084-.048-.17-.076-.257l-.021-.073zm.26.875a2.34 2.34 0 0 1 .271.01l.07.229a.778.778 0 0 1 .247-.004l-.326.627a127.643 127.643 0 0 1-.262-.862z" }, "child": [] }] })(props);
+}
+function SiApachekafka(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M9.71 2.136a1.43 1.43 0 0 0-2.047 0h-.007a1.48 1.48 0 0 0-.421 1.042c0 .41.161.777.422 1.039l.007.007c.257.264.616.426 1.019.426.404 0 .766-.162 1.027-.426l.003-.007c.261-.262.421-.629.421-1.039 0-.408-.159-.777-.421-1.042H9.71zM8.683 22.295c.404 0 .766-.167 1.027-.429l.003-.008c.261-.261.421-.631.421-1.036 0-.41-.159-.778-.421-1.044H9.71a1.42 1.42 0 0 0-1.027-.432 1.4 1.4 0 0 0-1.02.432h-.007c-.26.266-.422.634-.422 1.044 0 .406.161.775.422 1.036l.007.008c.258.262.617.429 1.02.429zm7.89-4.462c.359-.096.683-.33.882-.684l.027-.052a1.47 1.47 0 0 0 .114-1.067 1.454 1.454 0 0 0-.675-.896l-.021-.014a1.425 1.425 0 0 0-1.078-.132c-.36.091-.684.335-.881.686-.2.349-.241.75-.146 1.119.099.363.33.691.675.896h.002c.346.203.737.239 1.101.144zm-6.405-7.342a2.083 2.083 0 0 0-1.485-.627c-.58 0-1.103.242-1.482.627-.378.385-.612.916-.612 1.507s.233 1.124.612 1.514a2.08 2.08 0 0 0 2.967 0c.379-.39.612-.923.612-1.514s-.233-1.122-.612-1.507zm-.835-2.51c.843.141 1.6.552 2.178 1.144h.004c.092.093.182.196.265.299l1.446-.851a3.176 3.176 0 0 1-.047-1.808 3.149 3.149 0 0 1 1.456-1.926l.025-.016a3.062 3.062 0 0 1 2.345-.306c.77.21 1.465.721 1.898 1.482v.002c.431.757.518 1.626.313 2.408a3.145 3.145 0 0 1-1.456 1.928l-.198.118h-.02a3.095 3.095 0 0 1-2.154.201 3.127 3.127 0 0 1-1.514-.944l-1.444.848a4.162 4.162 0 0 1 0 2.879l1.444.846c.413-.47.939-.789 1.514-.944a3.041 3.041 0 0 1 2.371.319l.048.023v.002a3.17 3.17 0 0 1 1.408 1.906 3.215 3.215 0 0 1-.313 2.405l-.026.053-.003-.005a3.147 3.147 0 0 1-1.867 1.436 3.096 3.096 0 0 1-2.371-.318v-.006a3.156 3.156 0 0 1-1.456-1.927 3.175 3.175 0 0 1 .047-1.805l-1.446-.848a3.905 3.905 0 0 1-.265.294l-.004.005a3.938 3.938 0 0 1-2.178 1.138v1.699a3.09 3.09 0 0 1 1.56.862l.002.004c.565.572.914 1.368.914 2.243 0 .873-.35 1.664-.914 2.239l-.002.009a3.1 3.1 0 0 1-2.21.931 3.1 3.1 0 0 1-2.206-.93h-.002v-.009a3.186 3.186 0 0 1-.916-2.239c0-.875.35-1.672.916-2.243v-.004h.002a3.1 3.1 0 0 1 1.558-.862v-1.699a3.926 3.926 0 0 1-2.176-1.138l-.006-.005a4.098 4.098 0 0 1-1.173-2.874c0-1.122.452-2.136 1.173-2.872h.006a3.947 3.947 0 0 1 2.176-1.144V6.289a3.137 3.137 0 0 1-1.558-.864h-.002v-.004a3.192 3.192 0 0 1-.916-2.243c0-.871.35-1.669.916-2.243l.002-.002A3.084 3.084 0 0 1 8.683 0c.861 0 1.641.355 2.21.932v.002h.002c.565.574.914 1.372.914 2.243 0 .876-.35 1.667-.914 2.243l-.002.005a3.142 3.142 0 0 1-1.56.864v1.692zm8.121-1.129l-.012-.019a1.452 1.452 0 0 0-.87-.668 1.43 1.43 0 0 0-1.103.146h.002c-.347.2-.58.529-.677.896-.095.365-.054.768.146 1.119l.007.009c.2.347.519.579.874.673.357.103.755.059 1.098-.144l.019-.009a1.47 1.47 0 0 0 .657-.885 1.493 1.493 0 0 0-.141-1.118" }, "child": [] }] })(props);
+}
+function SiAirtable(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.992 1.966c-.434 0-.87.086-1.28.257L1.779 5.917c-.503.208-.49.908.012 1.116l8.982 3.558a3.266 3.266 0 0 0 2.454 0l8.982-3.558c.503-.196.503-.908.012-1.116l-8.957-3.694a3.255 3.255 0 0 0-1.272-.257zM23.4 8.056a.589.589 0 0 0-.222.045l-10.012 3.877a.612.612 0 0 0-.38.564v8.896a.6.6 0 0 0 .821.552L23.62 18.1a.583.583 0 0 0 .38-.551V8.653a.6.6 0 0 0-.6-.596zM.676 8.095a.644.644 0 0 0-.48.19C.086 8.396 0 8.53 0 8.69v8.355c0 .442.515.737.908.54l6.27-3.006.307-.147 2.969-1.436c.466-.22.43-.908-.061-1.092L.883 8.138a.57.57 0 0 0-.207-.044z" }, "child": [] }] })(props);
+}
+const GUARD_BLUE = "5599fe";
+function brand(label, icon2, color) {
+  return { label, icon: icon2, color };
+}
+const BRANDS = {
+  gmail: brand("Gmail", SiGmail, "ea4335"),
+  googlecalendar: brand("Google Calendar", SiGooglecalendar, "4285f4"),
+  googledrive: brand("Google Drive", SiGoogledrive, "1a73e8"),
+  googledocs: brand("Google Docs", SiGoogledocs, "4285f4"),
+  googlesheets: brand("Google Sheets", SiGooglesheets, "188038"),
+  googleslides: brand("Google Slides", SiGoogleslides, "e37400"),
+  googlemeet: brand("Google Meet", SiGooglemeet, "00897b"),
+  googletasks: brand("Google Tasks", SiGoogletasks, "2684fc"),
+  googlemaps: brand("Google Maps", SiGooglemaps, "34a853"),
+  googlecloud: brand("Google Cloud", SiGooglecloud, "4285f4"),
+  google: brand("Google", SiGoogle, "4285f4"),
+  github: brand("GitHub", SiGithub, "181717"),
+  gitlab: brand("GitLab", SiGitlab, "e24329"),
+  bitbucket: brand("Bitbucket", SiBitbucket, "0052cc"),
+  slack: brand("Slack", SiSlack, "4a154b"),
+  discord: brand("Discord", SiDiscord, "5865f2"),
+  telegram: brand("Telegram", SiTelegram, "26a5e4"),
+  whatsapp: brand("WhatsApp", SiWhatsapp, "1da851"),
+  notion: brand("Notion", SiNotion, "000000"),
+  linear: brand("Linear", SiLinear, "5e6ad2"),
+  jira: brand("Jira", SiJira, "0052cc"),
+  confluence: brand("Confluence", SiConfluence, "172b4d"),
+  asana: brand("Asana", SiAsana, "e8384f"),
+  trello: brand("Trello", SiTrello, "0052cc"),
+  airtable: brand("Airtable", SiAirtable, "1a8fd6"),
+  clickup: brand("ClickUp", SiClickup, "7b68ee"),
+  todoist: brand("Todoist", SiTodoist, "e44332"),
+  miro: brand("Miro", SiMiro, "050038"),
+  canva: brand("Canva", SiCanva, "00a3ad"),
+  figma: brand("Figma", SiFigma, "f24e1e"),
+  loom: brand("Loom", SiLoom, "625df5"),
+  zoom: brand("Zoom", SiZoom, "0b5cff"),
+  calendly: brand("Calendly", SiCalendly, "006bff"),
+  hubspot: brand("HubSpot", SiHubspot, "ff5c35"),
+  salesforce: brand("Salesforce", SiSalesforce, "00a1e0"),
+  zendesk: brand("Zendesk", SiZendesk, "03363d"),
+  intercom: brand("Intercom", SiIntercom, "1f8ded"),
+  mailchimp: brand("Mailchimp", SiMailchimp, "241c15"),
+  twilio: brand("Twilio", SiTwilio, "f22f46"),
+  stripe: brand("Stripe", SiStripe, "635bff"),
+  paypal: brand("PayPal", SiPaypal, "002991"),
+  shopify: brand("Shopify", SiShopify, "5e8e3e"),
+  wordpress: brand("WordPress", SiWordpress, "21759b"),
+  youtube: brand("YouTube", SiYoutube, "ff0000"),
+  x: brand("X", SiX, "000000"),
+  reddit: brand("Reddit", SiReddit, "ff4500"),
+  facebook: brand("Facebook", SiFacebook, "0866ff"),
+  instagram: brand("Instagram", SiInstagram, "e4405f"),
+  linkedin: brand("LinkedIn", FaLinkedin, "0a66c2"),
+  spotify: brand("Spotify", SiSpotify, "1aa34a"),
+  dropbox: brand("Dropbox", SiDropbox, "0061ff"),
+  box: brand("Box", SiBox, "0061d5"),
+  outlook: brand("Outlook", FaMicrosoft, "0078d4"),
+  microsoft: brand("Microsoft", FaMicrosoft, "0078d4"),
+  obsidian: brand("Obsidian", SiObsidian, "7c3aed"),
+  sentry: brand("Sentry", SiSentry, "362d59"),
+  posthog: brand("PostHog", SiPosthog, "f54e00"),
+  datadog: brand("Datadog", SiDatadog, "632ca6"),
+  supabase: brand("Supabase", SiSupabase, "249361"),
+  firebase: brand("Firebase", SiFirebase, "dd2c00"),
+  vercel: brand("Vercel", SiVercel, "000000"),
+  netlify: brand("Netlify", SiNetlify, "00a39b"),
+  cloudflare: brand("Cloudflare", SiCloudflare, "f38020"),
+  docker: brand("Docker", SiDocker, "2496ed"),
+  kubernetes: brand("Kubernetes", SiKubernetes, "326ce5"),
+  postgres: brand("Postgres", SiPostgresql, "4169e1"),
+  sqlite: brand("SQLite", SiSqlite, "003b57"),
+  mongodb: brand("MongoDB", SiMongodb, "47a248"),
+  redis: brand("Redis", SiRedis, "dc382d"),
+  openai: brand("OpenAI", SiOpenai, "000000"),
+  claude: brand("Claude", SiClaude, "d97757"),
+  perplexity: brand("Perplexity", SiPerplexity, "1a99a8"),
+  huggingface: brand("Hugging Face", SiHuggingface, "c98a00"),
+  brave: brand("Brave Search", SiBrave, "fb542b"),
+  chrome: brand("Chrome", SiGooglechrome, "4285f4")
+};
+const ALIASES = {
+  twitter: "x",
+  xtwitter: "x",
+  postgresql: "postgres",
+  pg: "postgres",
+  bravesearch: "brave",
+  googlechrome: "chrome",
+  claudeinchrome: "chrome",
+  chromedevtools: "chrome",
+  microsoftoutlook: "outlook",
+  office365: "microsoft",
+  googlegmail: "gmail",
+  googlecal: "googlecalendar",
+  gdrive: "googledrive",
+  gcal: "googlecalendar"
+};
+const KINDS = [
+  {
+    words: ["browser", "playwright", "puppeteer", "selenium", "webdriver", "stagehand"],
+    brand: brand("Browser", HiMiniGlobeAlt, GUARD_BLUE)
+  },
+  { words: ["computeruse", "computer", "desktop", "screen"], brand: brand("Your computer", HiMiniComputerDesktop, "3f4174") },
+  { words: ["filesystem", "files", "file", "fs"], brand: brand("Files", HiMiniFolder, "b7791f") },
+  { words: ["search", "exa", "tavily", "serp", "bing"], brand: brand("Search", HiMiniMagnifyingGlass, GUARD_BLUE) },
+  { words: ["database", "mysql", "sql", "db"], brand: brand("Database", HiMiniCircleStack, "3f4174") },
+  { words: ["memory", "knowledge", "notes"], brand: brand("Memory", HiMiniLightBulb, "b7791f") },
+  { words: ["fetch", "web", "http", "crawl", "scrape", "firecrawl"], brand: brand("Web", HiMiniGlobeAlt, GUARD_BLUE) },
+  { words: ["shell", "terminal", "bash", "command", "exec"], brand: brand("Terminal", HiMiniCommandLine, "3f4174") },
+  { words: ["docs", "context7", "documentation"], brand: brand("Docs", HiMiniBookOpen, GUARD_BLUE) }
+];
+const MAKER_SLUGS = /* @__PURE__ */ new Set(["google", "claude", "microsoft", "openai"]);
+const WRAPPER_WORDS = /* @__PURE__ */ new Set(["mcp", "server", "official", "the"]);
+function wordsOf(name) {
+  return name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 0 && !WRAPPER_WORDS.has(word));
+}
+function namesKind(words, key, kindWord) {
+  return kindWord.length >= 6 ? key.includes(kindWord) : words.includes(kindWord);
+}
+function mcpBrandFor(name) {
+  const words = wordsOf(name);
+  const key = words.join("");
+  if (key.length === 0) return null;
+  const known = BRANDS[ALIASES[key] ?? key];
+  if (known !== void 0) return known;
+  for (const [slug, entry] of Object.entries(BRANDS)) {
+    if (slug.length >= 4 && !MAKER_SLUGS.has(slug) && key.startsWith(slug)) return entry;
+  }
+  if (key.includes("chrome")) return BRANDS.chrome;
+  for (const kind of KINDS) {
+    if (kind.words.some((word) => namesKind(words, key, word))) return kind.brand;
+  }
+  return key.startsWith("google") ? BRANDS.google : null;
+}
+function actingApp(explanation) {
+  if ((explanation.hiddenSteps ?? 0) > 0) return explanation.connector;
+  const apps = unique(explanation.steps.map((step) => step.app).filter((app) => app !== null));
+  return apps.length === 1 ? apps[0] : explanation.connector;
+}
+function mcpMarkName(explanation) {
+  return explanation.builtIn === true ? explanation.requester ?? actingApp(explanation) : actingApp(explanation);
+}
+const TOOL_ID_PREFIX = "tool:";
+function listedMcpRef(item) {
+  if (item.action_envelope_json != null) return null;
+  const candidates = [item.artifact_id, item.launch_target, item.queue_preview, item.artifact_name];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const name = candidate.startsWith(TOOL_ID_PREFIX) ? candidate.slice(TOOL_ID_PREFIX.length) : candidate;
+    const ref = parseNamespacedMcpName(name);
+    if (ref !== null) return ref;
+  }
+  return null;
+}
+function queueRequesterName(item) {
+  const fromCall = explainMcpCall(item)?.requester;
+  if (fromCall !== void 0) return fromCall;
+  const ref = listedMcpRef(item);
+  const host = ref !== null ? hostAppTool(ref.server, shortToolName(ref.server, ref.tool), { harness: item.harness }) : null;
+  return host?.requester ?? harnessDisplayName(item.harness);
+}
+function listedMcpPreview(item) {
+  const ref = listedMcpRef(item);
+  if (ref === null) return null;
+  const short = shortToolName(ref.server, ref.tool);
+  const host = hostAppTool(ref.server, short, { harness: item.harness });
+  if (host !== null) return `${host.requester} · ${host.title}`;
+  const service = serviceDisplayName(ref.server);
+  const title = ref.server.toLowerCase() === "composio" ? composioToolTitle(short) ?? sentenceCase(short) : toolTitle(service, short);
+  return `${service} · ${title}`;
+}
+function queueMcpMarkName(item) {
+  const explanation = explainMcpCall(item);
+  if (explanation !== null) return mcpMarkName(explanation);
+  const ref = listedMcpRef(item);
+  if (ref === null) return null;
+  const host = hostAppTool(ref.server, shortToolName(ref.server, ref.tool), { harness: item.harness });
+  return host?.requester ?? serviceDisplayName(ref.server);
 }
 const REVIEW_SEMANTIC_GROUPS = [
   { id: "all", label: "All", matches: [] },
@@ -14001,7 +16028,7 @@ function resolveQueueCategoryId(item) {
   if (packageInstallCommand(command)) {
     return "package_install";
   }
-  if (envelope?.action_type === "mcp_tool") {
+  if (envelope?.action_type === "mcp_tool" || listedMcpRef(item) !== null) {
     return "mcp_tool";
   }
   if (envelope?.action_type === "config_change") {
@@ -14368,7 +16395,10 @@ function retryCannotReuseApproval(item) {
   return item.once_only_reason === "script_execution_binding_unavailable" || item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
 function oneTimeRetryWindowMinutes(item) {
-  return item.artifact_id.includes(":native-pretool:") ? 5 : 15;
+  return item.artifact_id.includes(":native-pretool:") ? 60 : 15;
+}
+function retryWindowText(minutes) {
+  return minutes === 60 ? "an hour" : `${minutes} minutes`;
 }
 function allowPermissionLabels(item) {
   const recommendation = item.extension_recommendation;
@@ -14480,7 +16510,7 @@ const ACTION_PRESENTATIONS = {
   }
 };
 function isGuardAction(value) {
-  return typeof value === "string" && GUARD_ACTIONS$1.some((action) => action === value);
+  return typeof value === "string" && GUARD_ACTIONS$1.some((action2) => action2 === value);
 }
 function isRecognizedGuardActionInput(value) {
   return value === "ask" || isGuardAction(value);
@@ -14499,7 +16529,7 @@ function guardActionPresentation(value) {
 }
 function mostRestrictiveGuardAction(...values) {
   if (values.length === 0) return "review";
-  const rank = new Map(GUARD_ACTIONS$1.map((action, index) => [action, index]));
+  const rank = new Map(GUARD_ACTIONS$1.map((action2, index) => [action2, index]));
   return values.map(normalizeGuardAction).reduce(
     (strongest, candidate) => (rank.get(candidate) ?? 0) > (rank.get(strongest) ?? 0) ? candidate : strongest
   );
@@ -14714,16 +16744,16 @@ function plainEnglishDescription(receipt) {
     const outcome = `You approved it once, but a one-time approval could not let ${app} run it, so it stayed stopped.`;
     return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${formatSubtitle(subtitle)}${outcome}` : `${app} tried to ${infinitiveVerb(type)} ${title}. ${outcome}`;
   }
-  const action = guardActionPresentation(receipt.policy_decision);
-  if (action.disposition === "allowed") {
-    const outcome = action.action === "warn" ? "allowed it with a warning" : "allowed it";
+  const action2 = guardActionPresentation(receipt.policy_decision);
+  if (action2.disposition === "allowed") {
+    const outcome = action2.action === "warn" ? "allowed it with a warning" : "allowed it";
     if (receipt.user_override !== null) {
       return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and ${outcome}.` : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and ${outcome}.`;
     }
-    const automaticOutcome = action.action === "warn" ? "Guard allowed it automatically with a warning." : "Guard allowed it automatically.";
+    const automaticOutcome = action2.action === "warn" ? "Guard allowed it automatically with a warning." : "Guard allowed it automatically.";
     return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} ${automaticOutcome}` : `${app} ${pastTenseVerb(type)} ${title}. ${automaticOutcome}`;
   }
-  const enforcementCopy = `${guardActionActivityCopy(action.action, "Guard", "it")}.`;
+  const enforcementCopy = `${guardActionActivityCopy(action2.action, "Guard", "it")}.`;
   return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy} ${formatSubtitle(subtitle)}` : `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy}`;
 }
 function pastTenseVerb(type) {
@@ -14808,6 +16838,10 @@ function plainEnglishRequestTitle(request2) {
   if (request2.artifact_type === "native_bash_request") {
     return "Run this script?";
   }
+  const mcpCall = explainMcpCall(request2);
+  if (mcpCall !== null) {
+    return mcpCall.headline;
+  }
   const category = detectCategory({
     ...request2,
     timestamp: request2.created_at,
@@ -14836,7 +16870,9 @@ function plainEnglishRequestTitle(request2) {
       return `${app} wants to do something with ${name}`;
   }
 }
+const UNREVIEWED_MCP_TOOL = "Guard asks before a tool it has not reviewed runs.";
 function whyPaused(request2) {
+  const mcpCall = explainMcpCall(request2) !== null || listedMcpRef(request2) !== null;
   const category = detectCategory({
     ...request2,
     timestamp: request2.created_at,
@@ -14858,8 +16894,9 @@ function whyPaused(request2) {
       if ((request2.artifact_name ?? "").startsWith("chrome-devtools:") || (request2.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {
         return "This uses the browser. Confirm it if you meant to.";
       }
-      return "This uses an outside tool. Guard stops new tools by default.";
+      return mcpCall ? UNREVIEWED_MCP_TOOL : "This uses an outside tool. Guard stops new tools by default.";
     default:
+      if (mcpCall) return UNREVIEWED_MCP_TOOL;
       if (isPackageDependencyMutationRequest(request2)) {
         return "This package install mutates project dependencies and installed packages. Guard pauses dependency changes so you can review them before running.";
       }
@@ -15127,21 +17164,21 @@ function resolveDataFlowSinkLabel(signal) {
   }
   return "External sink";
 }
-function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false) {
+function buildRetryAfterApprovalCopy(item, action2, persistedExactAction = false) {
   const harness = harnessDisplayName(item.harness);
   if (isWatchOnlyObservation(item)) {
-    if (persistedExactAction && action === "allow") {
+    if (persistedExactAction && action2 === "allow") {
       return "Saved. Guard will allow this exact action next time when the remembered option is selected.";
     }
     if (persistedExactAction) return "Saved. Guard will stop this exact action next time.";
     return "Reviewed. Watch already allowed this action to run; no future rule was saved.";
   }
-  if (action === "allow") {
+  if (action2 === "allow") {
     if (persistedExactAction) {
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
     if (retryCannotReuseApproval(item)) return retryBlockedApprovalCopy(item, harness);
-    return `Approved once. Return to ${harness} and retry within ${oneTimeRetryWindowMinutes(item)} minutes.`;
+    return `Approved once. Return to ${harness} and retry within ${retryWindowText(oneTimeRetryWindowMinutes(item))}.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
@@ -15259,8 +17296,8 @@ function scopeLabel(scope, variant = "review") {
       return scope;
   }
 }
-function policyActionLabel(action) {
-  return guardActionPresentation(action).label;
+function policyActionLabel(action2) {
+  return guardActionPresentation(action2).label;
 }
 function requestResolutionBlockReason(item) {
   if (item.native_business_review_display_only) {
@@ -16097,9 +18134,9 @@ function stringValue$2(value) {
 function remainingStep(candidate) {
   const step = stringValue$2(candidate.step);
   const message = stringValue$2(candidate.message);
-  const action = stringValue$2(candidate.action);
-  if ((step === "intelligence_sync" && action === "connect" || step === "package_shims" && action === "check_access") && message !== null) {
-    return { step, message, action };
+  const action2 = stringValue$2(candidate.action);
+  if ((step === "intelligence_sync" && action2 === "connect" || step === "package_shims" && action2 === "check_access") && message !== null) {
+    return { step, message, action: action2 };
   }
   return null;
 }
@@ -16548,16 +18585,16 @@ function reloadDocument(reload) {
   }
   return false;
 }
-function storageGet(storage, key) {
+function storageGet(storage2, key) {
   try {
-    return storage.getItem(key);
+    return storage2.getItem(key);
   } catch {
     return null;
   }
 }
-function storageSet(storage, key, value) {
+function storageSet(storage2, key, value) {
   try {
-    storage.setItem(key, value);
+    storage2.setItem(key, value);
     return true;
   } catch {
     return false;
@@ -16580,13 +18617,13 @@ async function loadWorkspaceModule(loader, options = {}) {
     if (!isChunkLoadError(error)) {
       throw error;
     }
-    const storage = options.storage;
+    const storage2 = options.storage;
     const failureMessage = error instanceof Error ? error.message : String(error);
     const failureFingerprint = `${options.moduleId ?? "anonymous-workspace-module"}:${failureMessage}`;
-    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
+    if (!storage2 || storageGet(storage2, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
       throw error;
     }
-    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
+    if (!storageSet(storage2, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
       throw error;
     }
     const wait = options.wait ?? defaultWait;
@@ -16626,23 +18663,23 @@ function responseDashboardBuild(response, pageOrigin) {
     return null;
   }
 }
-function claimStaleBuildReload(state, storage) {
-  if (!isDashboardBuildStale(state) || !storage || state.serverBuild === null) {
+function claimStaleBuildReload(state, storage2) {
+  if (!isDashboardBuildStale(state) || !storage2 || state.serverBuild === null) {
     return false;
   }
   try {
-    if (storage.getItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY) === state.serverBuild) {
+    if (storage2.getItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY) === state.serverBuild) {
       return false;
     }
-    storage.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, state.serverBuild);
+    storage2.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, state.serverBuild);
     return true;
   } catch {
     return false;
   }
 }
-function releaseStaleBuildClaim(storage) {
+function releaseStaleBuildClaim(storage2) {
   try {
-    storage?.removeItem?.(DASHBOARD_BUILD_RELOAD_STORAGE_KEY);
+    storage2?.removeItem?.(DASHBOARD_BUILD_RELOAD_STORAGE_KEY);
   } catch {
   }
 }
@@ -16733,12 +18770,12 @@ function releaseClaimIfLeaveIsCancelled(build) {
       if (!event.defaultPrevented) {
         return;
       }
-      const storage = browserSessionStorage();
-      releaseStaleBuildClaim(storage);
+      const storage2 = browserSessionStorage();
+      releaseStaleBuildClaim(storage2);
       const restore = () => {
         restoreClaimOnLeave = null;
         try {
-          storage?.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, build);
+          storage2?.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, build);
         } catch {
         }
       };
@@ -16750,8 +18787,8 @@ function releaseClaimIfLeaveIsCancelled(build) {
 }
 function loadCurrentDashboardBuild(href) {
   const state = currentBuildState();
-  const storage = browserSessionStorage();
-  if (typeof window === "undefined" || state.serverBuild === null || !claimStaleBuildReload(state, storage)) {
+  const storage2 = browserSessionStorage();
+  if (typeof window === "undefined" || state.serverBuild === null || !claimStaleBuildReload(state, storage2)) {
     return false;
   }
   releaseClaimIfLeaveIsCancelled(state.serverBuild);
@@ -16765,6 +18802,711 @@ function loadCurrentDashboardBuild(href) {
     window.location.assign(target2.href);
   }
   return true;
+}
+const SESSION_PART = /^[A-Za-z0-9_-]+$/;
+const REQUEST_ID$1 = /^[0-9a-f]{32}$/;
+function decodeBase64Url(part) {
+  if (!SESSION_PART.test(part)) {
+    return null;
+  }
+  const padded = part.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(part.length / 4) * 4, "=");
+  try {
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+function dashboardSessionScope(token) {
+  if (typeof token !== "string") {
+    return null;
+  }
+  const parts = token.trim().split(".");
+  if (parts.length !== 3) {
+    return null;
+  }
+  const decoded = decodeBase64Url(parts[1] ?? "");
+  if (decoded === null) {
+    return null;
+  }
+  let claims;
+  try {
+    claims = JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+  if (typeof claims !== "object" || claims === null || Array.isArray(claims)) {
+    return null;
+  }
+  const record2 = claims;
+  const expires = typeof record2["expires_at"] === "string" ? Date.parse(record2["expires_at"]) : Number.NaN;
+  const expiresAtMs = Number.isFinite(expires) ? expires : null;
+  const bound = record2["request_id"];
+  if (typeof bound === "string" && REQUEST_ID$1.test(bound)) {
+    return { kind: "request", requestId: bound, expiresAtMs };
+  }
+  if (bound !== void 0 && bound !== null) {
+    return { kind: "request", requestId: "", expiresAtMs };
+  }
+  return { kind: "full", expiresAtMs };
+}
+function dashboardSessionExpired(scope, nowMs) {
+  return scope.expiresAtMs !== null && scope.expiresAtMs <= nowMs;
+}
+const SESSION_KEY = "guard-token";
+const tabStorage = () => window.sessionStorage;
+const browserStorage = () => window.localStorage;
+function readFrom(getStorage, key) {
+  try {
+    return getStorage().getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeTo(getStorage, key, value) {
+  try {
+    if (getStorage().getItem(key) !== value) {
+      getStorage().setItem(key, value);
+    }
+  } catch {
+  }
+}
+function writeBoth(key, value) {
+  writeTo(tabStorage, key, value);
+  writeTo(browserStorage, key, value);
+}
+function requestSessionStorageKey(requestId) {
+  return `${SESSION_KEY}:request:${requestId}`;
+}
+const refusedSessions = /* @__PURE__ */ new Set();
+function markSessionRefused(token) {
+  refusedSessions.add(token);
+}
+function sessionRefused(token) {
+  return refusedSessions.has(token);
+}
+let anonymousDecisionRefused = false;
+function markAnonymousDecisionRefused() {
+  anonymousDecisionRefused = true;
+}
+function liveFullSession(token, nowMs) {
+  const scope = dashboardSessionScope(token);
+  return token !== null && scope?.kind === "full" && !dashboardSessionExpired(scope, nowMs) && !sessionRefused(token);
+}
+let lastLinkedSession = null;
+function rememberLinkedGuardSession(guardToken) {
+  const now2 = Date.now();
+  const scope = dashboardSessionScope(guardToken);
+  const ended = scope?.kind === "request" && dashboardSessionExpired(scope, now2);
+  const firstSeen = lastLinkedSession !== guardToken && !ended;
+  lastLinkedSession = guardToken;
+  if (scope?.kind === "request" && scope.requestId) {
+    if (firstSeen) {
+      forgetExpiredRequestSessions(now2);
+      writeBoth(requestSessionStorageKey(scope.requestId), guardToken);
+    }
+    for (const stored of [readFrom(browserStorage, SESSION_KEY), readFrom(tabStorage, SESSION_KEY)]) {
+      if (stored !== guardToken && liveFullSession(stored, now2)) {
+        if (firstSeen) writeTo(tabStorage, SESSION_KEY, stored);
+        return stored;
+      }
+    }
+  }
+  if (ended) return readFrom(tabStorage, SESSION_KEY) ?? readFrom(browserStorage, SESSION_KEY) ?? guardToken;
+  if (firstSeen) writeBoth(SESSION_KEY, guardToken);
+  return guardToken;
+}
+function forgetExpiredRequestSessions(nowMs) {
+  const prefix = requestSessionStorageKey("");
+  for (const getStorage of [tabStorage, browserStorage]) {
+    try {
+      const storage2 = getStorage();
+      const expired = [];
+      for (let index = 0; index < storage2.length; index += 1) {
+        const key = storage2.key(index);
+        if (key === null || !key.startsWith(prefix)) continue;
+        const scope = dashboardSessionScope(storage2.getItem(key));
+        if (scope === null || dashboardSessionExpired(scope, nowMs)) expired.push(key);
+      }
+      for (const key of expired) storage2.removeItem(key);
+    } catch {
+    }
+  }
+}
+class GuardDecisionSignInRequiredError extends Error {
+  requestId;
+  reason;
+  constructor(requestId, reason) {
+    super("Sign in to decide this request.");
+    this.name = "GuardDecisionSignInRequiredError";
+    this.requestId = requestId;
+    this.reason = reason;
+  }
+}
+function decisionSessionCandidates(requestId, current) {
+  const now2 = Date.now();
+  const seen2 = /* @__PURE__ */ new Set();
+  const live = [];
+  const lapsed = [];
+  const tokens = [
+    current,
+    readFrom(browserStorage, SESSION_KEY),
+    readFrom(tabStorage, requestSessionStorageKey(requestId)),
+    readFrom(browserStorage, requestSessionStorageKey(requestId))
+  ];
+  for (const token of tokens) {
+    if (token === null || token === "" || seen2.has(token) || sessionRefused(token)) continue;
+    seen2.add(token);
+    const scope = dashboardSessionScope(token);
+    if (scope === null) {
+      live.push({ token, scope });
+      continue;
+    }
+    if (scope.kind === "request" && scope.requestId !== requestId) continue;
+    if (!dashboardSessionExpired(scope, now2)) {
+      live.push({ token, scope });
+    } else if (scope.kind === "full") {
+      lapsed.push({ token, scope });
+    }
+  }
+  return [...live, ...lapsed].map((candidate) => candidate.token);
+}
+function decisionSessionVerdict(requestId, current) {
+  const candidates = decisionSessionCandidates(requestId, current);
+  if (candidates.length > 0) {
+    return { kind: "ready", token: candidates[0] ?? null };
+  }
+  if (current === null) {
+    return anonymousDecisionRefused ? { kind: "sign_in", reason: "no_session" } : { kind: "ready", token: null };
+  }
+  const scope = dashboardSessionScope(current);
+  if (sessionRefused(current) || scope === null || dashboardSessionExpired(scope, Date.now())) {
+    return { kind: "sign_in", reason: "expired" };
+  }
+  return { kind: "sign_in", reason: "other_request" };
+}
+async function decisionRefusedSession(response) {
+  if (response.status !== 401) return false;
+  try {
+    const payload = await response.clone().json();
+    if (typeof payload !== "object" || payload === null) return true;
+    const error = payload["error"];
+    return error === void 0 || error === "unauthorized";
+  } catch {
+    return true;
+  }
+}
+const PROTECTION_POSTURE_COPY = {
+  protected: {
+    label: "Protected",
+    help: "Stops theft, wipes, and Guard bypass. Asks once about new tools or first-time secret access, then remembers."
+  },
+  extra_careful: {
+    label: "Extra careful",
+    help: "Same as Protected, and also asks the first time this project talks to a new site or installs a new tool."
+  },
+  watch: {
+    label: "Watch",
+    help: "Records what Guard would have stopped, but does not stop anything. Use only while debugging."
+  }
+};
+const WATCH_BANNER_COPY = "Protection is off. Guard is only recording.";
+const POSTURE_OUTCOME_COLUMNS = {
+  protected: {
+    stops: "Credential theft, Guard bypass, encoded exfil, known-bad tools",
+    asks: "First secret read, new destructive command, first package script, new MCP or skill",
+    runs: "Remembered actions, routine browsing, verified-benign work"
+  },
+  extra_careful: {
+    stops: "The same automatic stops as Protected",
+    asks: "Everything Protected asks, plus first new site, first new tool, and cloud advisories",
+    runs: "Remembered actions and verified-benign work"
+  },
+  watch: {
+    stops: "Nothing. Guard only records.",
+    asks: "Nothing. Inbox shows what would have stopped.",
+    runs: "Every action, including known-bad work"
+  }
+};
+function isProtectionPosture(value) {
+  return value === "protected" || value === "extra_careful" || value === "watch";
+}
+function deriveProtectionPosture(mode, securityLevel) {
+  if (mode === "observe") return "watch";
+  if (securityLevel === "strict" || securityLevel === "paranoid") return "extra_careful";
+  return "protected";
+}
+const POSTURE_LABEL = {
+  protected: "Protected",
+  extra_careful: "Extra careful",
+  watch: "Watch"
+};
+function normalizeHarnessPostures(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  const result = {};
+  for (const [harness, posture] of Object.entries(value)) {
+    if (harness.length > 0 && typeof posture === "string" && isProtectionPosture(posture)) {
+      result[harness] = posture;
+    }
+  }
+  return result;
+}
+function globalPosture(settings) {
+  if (isProtectionPosture(settings.protection_posture)) return settings.protection_posture;
+  if (settings.mode === "observe") return "watch";
+  return "protected";
+}
+function protectedLevel(effective, baseline) {
+  if (effective !== "watch") return effective;
+  if (baseline !== "watch") return baseline;
+  return "protected";
+}
+function effectiveHarnessPosture(settings, harness) {
+  const override = settings.harness_postures?.[harness];
+  const baseline = globalPosture(settings);
+  if (override === void 0) return baseline;
+  if (override === "watch") return "watch";
+  return baseline === "extra_careful" ? baseline : override;
+}
+function harnessPostureRows(settings, capabilities) {
+  return capabilities.map((capability) => {
+    const effective = effectiveHarnessPosture(settings, capability.harness);
+    return {
+      harness: capability.harness,
+      displayName: capability.display_name,
+      effective,
+      hasOverride: settings.harness_postures?.[capability.harness] !== void 0,
+      selected: effective === "watch" ? "watch" : "on"
+    };
+  });
+}
+function harnessPostureOptions(settings, harness) {
+  const onLevel = protectedLevel(effectiveHarnessPosture(settings, harness), globalPosture(settings));
+  return [
+    { choice: "on", label: POSTURE_LABEL[onLevel] },
+    { choice: "watch", label: POSTURE_LABEL.watch }
+  ];
+}
+function selectHarnessPosture(settings, harness, choice) {
+  const baseline = globalPosture(settings);
+  if (choice === "on" && effectiveHarnessPosture(settings, harness) !== "watch") return settings;
+  const next = { ...settings.harness_postures ?? {} };
+  if (choice === "watch") {
+    if (baseline === "watch") delete next[harness];
+    else next[harness] = "watch";
+  } else if (baseline === "watch") {
+    next[harness] = "protected";
+  } else {
+    delete next[harness];
+  }
+  return { ...settings, harness_postures: next };
+}
+function canRestartHarnessWatch(settings, harness) {
+  return settings.harness_postures?.[harness] === "watch" && settings.harness_watch_entered_at?.[harness] !== void 0 && (settings.watch_auto_revert_hours ?? 24) > 0;
+}
+function restartHarnessWatch(settings, harness) {
+  if (!canRestartHarnessWatch(settings, harness)) return settings;
+  const restarts = new Set(settings.harness_watch_restart ?? []);
+  restarts.add(harness);
+  return { ...settings, harness_watch_restart: [...restarts].sort() };
+}
+function harnessPosturePatch(draft, saved) {
+  const before = saved?.harness_postures ?? {};
+  const after = draft.harness_postures ?? {};
+  const restarts = new Set(draft.harness_watch_restart ?? []);
+  const patch = {};
+  for (const harness of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const posture = after[harness] ?? null;
+    const restart = posture === "watch" && restarts.has(harness);
+    if (restart || posture !== (before[harness] ?? null)) patch[harness] = posture;
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+function clearHarnessWatchOverrides(settings) {
+  const next = Object.fromEntries(
+    Object.entries(settings.harness_postures ?? {}).filter(([, posture]) => posture !== "watch")
+  );
+  return { ...settings, harness_postures: next };
+}
+function settingsWatchBannerModel(settings, capabilities) {
+  const rows = harnessPostureRows(settings, capabilities);
+  return watchBannerModel({
+    protection_posture: globalPosture(settings),
+    harness_postures: settings.harness_postures,
+    harnesses_in_watch: rows.filter((row) => row.effective === "watch").map((row) => row.harness),
+    protection_capabilities: capabilities
+  });
+}
+function withHarnessPosturePatch(payload, draft, saved) {
+  const {
+    harness_postures: _postures,
+    harness_postures_effective: _effective,
+    harness_postures_locked: _locked,
+    harness_watch_entered_at: _enteredAt,
+    harness_watch_restart: _restart,
+    ...rest
+  } = payload;
+  const patch = harnessPosturePatch(draft, saved);
+  return patch === null ? rest : { ...rest, harness_postures: patch };
+}
+function harnessPostureSummary(rows) {
+  if (rows.length === 0) return "";
+  const watching = rows.filter((row) => row.effective === "watch");
+  if (watching.length === 0) return "Every app is protected.";
+  if (watching.length === rows.length) return "Every app is in Watch.";
+  return `${watching.length} of ${rows.length} apps in Watch: ${joinNames(watching.map((row) => row.displayName))}.`;
+}
+function harnessRowTone(row) {
+  return row.effective === "watch" ? "watch" : "protected";
+}
+function harnessRowStatus(row) {
+  if (row.effective === "watch") {
+    return row.hasOverride ? "Watch · recording only" : "Watch · follows the machine setting";
+  }
+  if (!row.hasOverride) return "Follows the machine setting";
+  return "Set for this app";
+}
+function sortHarnessRows(rows) {
+  const watching = rows.filter((row) => row.effective === "watch");
+  const rest = rows.filter((row) => row.effective !== "watch");
+  return [...watching, ...rest];
+}
+function overrideRows(rows) {
+  return rows.filter((row) => row.hasOverride);
+}
+function harnessWatchPrompt(rows, harness) {
+  const row = rows.find((candidate) => candidate.harness === harness);
+  const name = row?.displayName ?? harness;
+  const others = rows.filter((candidate) => candidate.harness !== harness);
+  const protectedOthers = others.filter((candidate) => candidate.effective !== "watch");
+  const lead = `Guard will only record in ${name}.`;
+  if (others.length === 0) return lead;
+  if (protectedOthers.length === 0) return `${lead} Every app will then be in Watch.`;
+  if (protectedOthers.length === others.length) return `${lead} Your other apps stay protected.`;
+  const verb = protectedOthers.length === 1 ? "stays" : "stay";
+  return `${lead} ${joinNames(protectedOthers.map((candidate) => candidate.displayName))} ${verb} protected.`;
+}
+function joinNames(names) {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+function displayNameFor(harness, capabilities) {
+  return capabilities?.find((capability) => capability.harness === harness)?.display_name ?? harness;
+}
+function watchBannerModel(snapshot) {
+  const globalWatch = snapshot.protection_posture === "watch";
+  const watchOverrides = Object.entries(snapshot.harness_postures ?? {}).filter(([, posture]) => posture === "watch").map(([harness]) => harness);
+  const inWatch = globalWatch ? [] : snapshot.harnesses_in_watch ?? watchOverrides;
+  if (!globalWatch && inWatch.length === 0) return null;
+  const appNames = inWatch.map((harness) => displayNameFor(harness, snapshot.protection_capabilities));
+  if (globalWatch) {
+    return {
+      globalWatch,
+      appNames: [],
+      message: WATCH_BANNER_COPY,
+      confirmMessage: "Guard will start stopping dangerous actions in every app."
+    };
+  }
+  const names = joinNames(appNames);
+  return {
+    globalWatch,
+    appNames,
+    message: `Guard is only recording in ${names}. Other apps are protected.`,
+    confirmMessage: `Guard will start stopping dangerous actions in ${names}.`
+  };
+}
+function turnProtectionOnUpdate(snapshot) {
+  const update = {};
+  if (snapshot.protection_posture === "watch") update.protection_posture = "protected";
+  const cleared = {};
+  for (const [harness, posture] of Object.entries(snapshot.harness_postures ?? {})) {
+    if (posture === "watch") cleared[harness] = null;
+  }
+  if (Object.keys(cleared).length > 0) update.harness_postures = cleared;
+  return update;
+}
+const CIGAR_APPS = /* @__PURE__ */ new Set(["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"]);
+function cigarReady(settings) {
+  const config2 = settings.context_assistance;
+  const requested = config2?.enabled === true && config2.features.agent_context && config2.sources.workspace_documents;
+  return requested && settings.context_assistance_effective_ready !== false;
+}
+function cigarLocked(settings) {
+  return settings.managed_locked_settings?.includes("harness_cigar") === true;
+}
+function cigarSupported(harness) {
+  return CIGAR_APPS.has(harness);
+}
+function cigarReachesApp(settings, harness) {
+  return cigarSupported(harness) && (settings.cigar_apps?.includes(harness) ?? true);
+}
+function cigarAvailable(settings, harness) {
+  return cigarReady(settings) && cigarReachesApp(settings, harness);
+}
+function appModes(settings, harness) {
+  return {
+    guard: effectiveHarnessPosture(settings, harness) !== "watch",
+    cigar: cigarAvailable(settings, harness) && settings.harness_cigar?.[harness] !== "off"
+  };
+}
+function watchIsUntimed(settings, harness) {
+  return settings.harness_postures?.[harness] === "watch" && settings.harness_watch_entered_at?.[harness] === void 0;
+}
+function appModesUpdate(settings, harness, next) {
+  const update = {};
+  const available = cigarAvailable(settings, harness);
+  const cigarOnly = !next.guard && next.cigar && available;
+  if (settings.harness_postures_locked === true) ;
+  else if (cigarOnly) {
+    if (!watchIsUntimed(settings, harness)) {
+      update.harness_postures = { [harness]: "watch" };
+      update.harness_watch_untimed = true;
+    }
+  } else if (next.guard) {
+    const patch = harnessPosturePatch(selectHarnessPosture(settings, harness, "on"), settings);
+    if (patch !== null) update.harness_postures = patch;
+  } else {
+    const draft = selectHarnessPosture(settings, harness, "watch");
+    const patch = harnessPosturePatch(draft, settings) ?? {};
+    if (watchIsUntimed(settings, harness) && globalPosture(settings) !== "watch") patch[harness] = "watch";
+    if (Object.keys(patch).length > 0) update.harness_postures = patch;
+  }
+  if (available) {
+    const off = settings.harness_cigar?.[harness] === "off";
+    if (next.cigar === off) update.harness_cigar = { [harness]: next.cigar ? null : "off" };
+  }
+  return Object.keys(update).length > 0 ? update : null;
+}
+function needsConfirm(current, next, locked = false) {
+  if (next.guard || locked) return false;
+  return current.guard || next.cigar && !current.cigar;
+}
+function cigarUnavailableReason(settings, harness, displayName) {
+  if (cigarAvailable(settings, harness)) {
+    return cigarLocked(settings) ? "Your organization manages CIGAR for each app." : void 0;
+  }
+  if (cigarSupported(harness) && !cigarReachesApp(settings, harness)) {
+    return `Guard is set up in ${displayName} through its plugin, which doesn't send Guard your prompts. Set up ${displayName} with its native hooks to use CIGAR.`;
+  }
+  if (cigarSupported(harness)) return "CIGAR is off on this machine. Set it up on the CIGAR page.";
+  return `${displayName} doesn't let Guard add context to its prompts yet.`;
+}
+function applyHarnessCigarPatch(current, patch) {
+  const next = { ...current ?? {} };
+  for (const [harness, choice] of Object.entries(patch)) {
+    if (choice === null) delete next[harness];
+    else next[harness] = choice;
+  }
+  return next;
+}
+function appModesNote(settings, harness) {
+  const modes = appModes(settings, harness);
+  const available = cigarAvailable(settings, harness);
+  if (modes.guard) return available && !modes.cigar ? "Guard only · CIGAR off for this app" : null;
+  if (modes.cigar) return "CIGAR only · Guard is not checking actions";
+  return globalPosture(settings) === "watch" && settings.harness_postures?.[harness] === void 0 ? "Watch · follows the machine setting" : "Watch · recording only";
+}
+function appModesStatusMessage(next, displayName) {
+  if (next.guard && next.cigar) return `Guard and CIGAR are on in ${displayName}.`;
+  if (next.guard) return `Guard is on in ${displayName}. CIGAR is off.`;
+  if (next.cigar) return `CIGAR is on in ${displayName}. Guard is not checking actions.`;
+  return `Guard is only recording in ${displayName}.`;
+}
+function guardOffPrompt(settings, harness, next, displayName) {
+  if (next.cigar && !appModes(settings, harness).guard) {
+    return `CIGAR will start adding project context in ${displayName}. Guard stays off and no longer turns back on by itself.`;
+  }
+  if (next.cigar) {
+    return `Guard will stop checking ${displayName}'s actions until you turn it back on. CIGAR keeps adding project context.`;
+  }
+  const ownWatch = appModesUpdate(settings, harness, next)?.harness_postures?.[harness] === "watch";
+  if (globalPosture(settings) === "watch" && !ownWatch) {
+    return `Guard will only record in ${displayName}, following this machine's Watch setting.`;
+  }
+  const revertHours = settings.watch_auto_revert_hours ?? 24;
+  if (revertHours > 0) {
+    const hours = revertHours === 1 ? "1 hour" : `${revertHours} hours`;
+    return `Guard will only record in ${displayName}. Protection comes back on its own after ${hours}.`;
+  }
+  return `Guard will only record in ${displayName} until you turn it back on.`;
+}
+const PULSE_APPROVAL_EVENT = "hol-guard:pulse-approval";
+const PULSE_POLL_PATH = "/v1/approval-gate/pulse/poll";
+const PULSE_DEADLINE_MS = 96e4;
+const PULSE_POLL_INTERVAL_MS = 1e4;
+const PULSE_POLL_TIMEOUT_MS = 2e4;
+function monotonicNow() {
+  return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+}
+function announce(detail) {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
+  window.dispatchEvent(new CustomEvent(PULSE_APPROVAL_EVENT, { detail }));
+}
+function jsonObjectBody(init) {
+  if ((init?.method ?? "GET").toUpperCase() !== "POST" || typeof init?.body !== "string") return null;
+  try {
+    const parsed = JSON.parse(init.body);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+async function peekJson(response) {
+  try {
+    const parsed = await response.clone().json();
+    return parsed !== null && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function failure(code, message, status = 403) {
+  return new Response(JSON.stringify({ error: code, message }), {
+    status,
+    headers: { "Content-Type": "application/json" }
+  });
+}
+const OUTCOME_ERRORS = {
+  rejected: ["approval_gate_pulse_rejected", "The action was rejected in the YID app."],
+  expired: ["approval_gate_pulse_expired", "The Pulse request expired before it was approved."],
+  error: ["approval_gate_pulse_unavailable", "Yanez Pulse is unreachable. The action stays blocked."],
+  cancelled: ["approval_gate_pulse_cancelled", "The Pulse approval was cancelled."]
+};
+function pause(ms, signal) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
+async function checkOnce(send, requestId, signal, timeoutMs) {
+  const check = new AbortController();
+  let timer;
+  let stop = () => check.abort();
+  const cutOff = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      check.abort();
+      resolve("retry");
+    }, timeoutMs);
+    stop = () => {
+      check.abort();
+      resolve("cancelled");
+    };
+  });
+  signal?.addEventListener("abort", stop, { once: true });
+  try {
+    return await Promise.race([checkResponse(send, requestId, check.signal, signal), cutOff]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", stop);
+  }
+}
+async function checkResponse(send, requestId, checkSignal, signal) {
+  try {
+    const response = await send(PULSE_POLL_PATH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request_id: requestId }),
+      signal: checkSignal
+    });
+    const payload = await peekJson(response);
+    if (response.ok) {
+      const reported = payload?.status;
+      return reported === "pending" || reported === "approved" || reported === "rejected" || reported === "expired" ? reported : "error";
+    }
+    if (response.status === 503) return "retry";
+    return payload?.error === "approval_gate_pulse_expired" ? "expired" : "error";
+  } catch {
+    return signal?.aborted ? "cancelled" : "retry";
+  }
+}
+async function waitForPulseApproval(send, detail, signal, timing = {}) {
+  const { deadlineMs = PULSE_DEADLINE_MS, intervalMs = PULSE_POLL_INTERVAL_MS, pollTimeoutMs = PULSE_POLL_TIMEOUT_MS } = timing;
+  announce({ ...detail, status: "pending" });
+  const deadline = monotonicNow() + deadlineMs;
+  let unreachable = false;
+  for (let remaining = deadlineMs; remaining > 0; remaining = deadline - monotonicNow()) {
+    await pause(Math.min(intervalMs, remaining), signal);
+    const checkMs = Math.max(1, Math.min(pollTimeoutMs, deadline - monotonicNow()));
+    const status2 = signal?.aborted ? "cancelled" : await checkOnce(send, detail.requestId, signal, checkMs);
+    unreachable = status2 === "retry";
+    if (status2 !== "pending" && status2 !== "retry") {
+      announce({ ...detail, status: status2 });
+      return status2;
+    }
+  }
+  const status = unreachable ? "error" : "expired";
+  announce({ ...detail, status });
+  return status;
+}
+async function sendWithPulseApproval(send, input, init, timing) {
+  let response = await send(input, init);
+  let body = jsonObjectBody(init);
+  if (body === null || typeof input !== "string" || input.startsWith(PULSE_POLL_PATH)) return response;
+  if (response.status === 403 && body.approval_gate_pulse !== true && body.approval_pulse_request_id === void 0) {
+    const refused = await peekJson(response);
+    if (refused?.error !== "approval_gate_pulse_required") return response;
+    body = { ...body, approval_gate_pulse: true };
+    response = await send(input, { ...init, body: JSON.stringify(body) });
+  }
+  if (response.status !== 202) return response;
+  const pending = await peekJson(response);
+  const requestId = pending?.pulse_request_id;
+  if (pending?.error !== "approval_gate_pulse_pending" || typeof requestId !== "string" || requestId === "") {
+    return response;
+  }
+  timing?.onPending?.();
+  const outcome = await waitForPulseApproval(
+    send,
+    {
+      requestId,
+      matchCode: typeof pending.pulse_match_code === "string" ? pending.pulse_match_code : null,
+      decideBy: typeof pending.pulse_decide_by === "string" ? pending.pulse_decide_by : null
+    },
+    init?.signal,
+    timing
+  );
+  if (outcome !== "approved") {
+    const [code, message] = OUTCOME_ERRORS[outcome];
+    return failure(code, message, outcome === "error" ? 503 : 403);
+  }
+  const { approval_gate_pulse: _defer, approval_password: _password, approval_totp_code: _code, ...rest } = body;
+  timing?.onApproved?.();
+  return send(input, { ...init, body: JSON.stringify({ ...rest, approval_pulse_request_id: requestId }) });
+}
+const PULSE_FACE_SCAN_OPTIONS = [
+  { value: "medium", label: "Standard face scan (recommended)" },
+  { value: "high", label: "Strict face scan" }
+];
+function pulseEnrollmentBody(agentKey, minTier) {
+  return { pulse_agent_key: agentKey, min_tier: minTier };
+}
+function pulseShowCommandBody(show) {
+  return { settings: { approval_gate: { pulse_show_command: show } } };
+}
+function pulseSetupRefusalMessage(code, minTier) {
+  if (code === "approval_gate_pulse_no_signing_key") {
+    return minTier === "high" ? "None of your devices in the YID app supports a strict face scan. Choose Standard face scan, or add a device that supports it in the YID app, then try again." : "Your Yanez identity has no device that can approve yet. Finish setting up the YID app on your phone, then try again.";
+  }
+  if (code === "approval_gate_pulse_invalid_tier") {
+    return "Choose Standard or Strict face scan, then try again.";
+  }
+  return null;
+}
+function nextPulseToasts(current, detail) {
+  return current.some((entry) => entry.requestId === detail.requestId) ? current.map((entry) => entry.requestId === detail.requestId ? detail : entry) : [...current, detail];
+}
+function dropFinishedPulseToast(current, requestId) {
+  return current.filter((entry) => entry.requestId !== requestId || entry.status === "pending");
 }
 function isRecord$5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -16837,19 +19579,34 @@ class GuardOperationTimeoutError extends Error {
 function withLocalProtectionDeadline(operation, timeoutMs, message) {
   const controller = new AbortController();
   let timer;
+  let expire = () => void 0;
+  const pause2 = () => {
+    if (timer !== void 0) clearTimeout(timer);
+    timer = void 0;
+  };
+  const restart = () => {
+    pause2();
+    timer = setTimeout(expire, timeoutMs);
+  };
   const deadline = new Promise((_, reject) => {
-    timer = setTimeout(() => {
+    expire = () => {
       reject(new GuardOperationTimeoutError(message));
       controller.abort();
-    }, timeoutMs);
+    };
   });
-  return Promise.race([Promise.resolve().then(() => operation(controller.signal)), deadline]).finally(() => {
-    if (timer !== void 0) clearTimeout(timer);
-  });
+  restart();
+  return Promise.race([
+    Promise.resolve().then(() => operation(controller.signal, { pause: pause2, restart })),
+    deadline
+  ]).finally(pause2);
 }
 function fetchLocalProtectionJson(input, init, timeoutMs, message) {
-  return withLocalProtectionDeadline(async (signal) => {
-    const response = await fetchGuardApi(input, { ...init, signal });
+  return withLocalProtectionDeadline(async (signal, deadline) => {
+    const response = await fetchWithGuardAuth(
+      input,
+      { ...init, signal },
+      { onPending: deadline.pause, onApproved: deadline.restart }
+    );
     const payload = await response.json().catch(() => null);
     return { response, payload };
   }, timeoutMs, message);
@@ -16952,10 +19709,37 @@ function readGuardToken() {
   }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
-    return guardToken;
+    return rememberLinkedGuardSession(guardToken);
   }
   return readGuardStorage(GUARD_TOKEN_PARAM);
+}
+function guardDecisionSession(requestId) {
+  if (isGuardDemoMode()) {
+    return { kind: "ready", token: null };
+  }
+  return decisionSessionVerdict(requestId, readGuardToken());
+}
+async function fetchDecisionWithSession(requestId, input, init) {
+  const verdict = guardDecisionSession(requestId);
+  if (verdict.kind === "sign_in") {
+    throw new GuardDecisionSignInRequiredError(requestId, verdict.reason);
+  }
+  const candidates = isGuardDemoMode() ? [] : decisionSessionCandidates(requestId, readGuardToken());
+  const tokens = candidates.length > 0 ? candidates : [null];
+  for (const token of tokens) {
+    const tabSession = token !== null && token === readGuardToken();
+    const send = (sendInput, sendInit) => tabSession ? fetchWithGuardAuthOnce(sendInput, sendInit) : daemonFetch(guardApiInput(sendInput), withGuardAuthForToken(sendInit, token));
+    const response = await sendWithPulseApproval(send, input, init(token));
+    if (!await decisionRefusedSession(response)) {
+      return response;
+    }
+    if (token === null) {
+      markAnonymousDecisionRefused();
+      throw new GuardDecisionSignInRequiredError(requestId, "no_session");
+    }
+    markSessionRefused(token);
+  }
+  throw new GuardDecisionSignInRequiredError(requestId, "expired");
 }
 function saveGuardToken(guardToken) {
   guardTokenOverride = guardToken;
@@ -17514,7 +20298,10 @@ function withGuardAuthForToken(init, guardToken) {
     headers
   };
 }
-async function fetchWithGuardAuth(input, init) {
+async function fetchWithGuardAuth(input, init, pulse) {
+  return sendWithPulseApproval(fetchWithGuardAuthOnce, input, init, pulse);
+}
+async function fetchWithGuardAuthOnce(input, init) {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
   const response = await daemonFetch(requestInput, withGuardAuthForToken(init, guardToken));
@@ -17807,7 +20594,7 @@ function parseDecisionV2(raw) {
     return null;
   }
   const guardAction = raw["guard_action"];
-  const action = raw["action"];
+  const action2 = raw["action"];
   const reason = raw["reason"];
   const userTitle = raw["user_title"];
   const userBody = raw["user_body"];
@@ -17817,12 +20604,12 @@ function parseDecisionV2(raw) {
   const retryInstruction = raw["retry_instruction"];
   const signals = raw["signals"];
   const confidence = raw["confidence"];
-  if (!isGuardAction(guardAction) || !isDecisionV2Action(action) || action !== guardDecisionV2Action(guardAction) || !isNonEmptyString(reason) || !isNonEmptyString(userTitle) || !isNonEmptyString(userBody) || !isNonEmptyString(harnessMessage) || !isNonEmptyString(dashboardPrimaryDetail) || !isStringArray(approvalScopes) || !isStringOrNull(retryInstruction) || !isRiskSignalV2Array(signals) || !isDecisionV2Confidence(confidence)) {
+  if (!isGuardAction(guardAction) || !isDecisionV2Action(action2) || action2 !== guardDecisionV2Action(guardAction) || !isNonEmptyString(reason) || !isNonEmptyString(userTitle) || !isNonEmptyString(userBody) || !isNonEmptyString(harnessMessage) || !isNonEmptyString(dashboardPrimaryDetail) || !isStringArray(approvalScopes) || !isStringOrNull(retryInstruction) || !isRiskSignalV2Array(signals) || !isDecisionV2Confidence(confidence)) {
     return null;
   }
   return {
     guard_action: guardAction,
-    action,
+    action: action2,
     reason,
     user_title: userTitle,
     user_body: userBody,
@@ -17841,8 +20628,8 @@ function parseLegacyPackageActionMetadata(raw) {
   if (Object.keys(raw).some((key) => isActionBearingKey(key) && key !== "policy_action")) {
     return { recognized: false, action: null };
   }
-  const action = raw["policy_action"];
-  return { recognized: true, action: isRecognizedGuardActionInput(action) ? normalizeGuardAction(action) : null };
+  const action2 = raw["policy_action"];
+  return { recognized: true, action: isRecognizedGuardActionInput(action2) ? normalizeGuardAction(action2) : null };
 }
 const DECISION_SCOPE_VALUES = /* @__PURE__ */ new Set([
   "artifact",
@@ -17885,7 +20672,7 @@ function normalizeApprovalRequest(item) {
   const hasUnknownPolicyAction = !isRecognizedGuardActionInput(item.policy_action);
   const hasMalformedActionEnvelope = item.action_envelope_json !== void 0 && item.action_envelope_json !== null && actionEnvelope === null && !(legacyActionMetadata.recognized && legacyActionMetadata.action !== null);
   const hasContradictoryActionEnvelope = actionEnvelope !== null && [actionEnvelope.pre_execution_result, actionEnvelope.policy_action].some(
-    (action) => action !== void 0 && action !== null && action !== policyAction
+    (action2) => action2 !== void 0 && action2 !== null && action2 !== policyAction
   ) || legacyActionMetadata.recognized && legacyActionMetadata.action !== policyAction;
   const hasDecisionContractError = rawContractError !== void 0 || hasUnknownPolicyAction || hasMalformedActionEnvelope || hasContradictoryActionEnvelope || item.decision_v2_json !== void 0 && item.decision_v2_json !== null && decisionV2 === null || decisionV2 !== null && (decisionV2.guard_action !== policyAction || decisionV2.action !== guardDecisionV2Action(policyAction));
   const failClosedPolicyAction = hasDecisionContractError ? mostRestrictiveGuardAction(
@@ -18534,13 +21321,14 @@ function applyHarnessPosturePatch(current, patch) {
 async function updateSettings(settings) {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
-    const { harness_postures: posturePatch, ...rest } = settings;
+    const { harness_postures: posturePatch, harness_cigar: cigarPatch, harness_watch_untimed: _untimed, ...rest } = settings;
     return {
       ...current,
       settings: {
         ...current.settings,
         ...rest,
-        ...posturePatch === void 0 ? {} : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) }
+        ...posturePatch === void 0 ? {} : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) },
+        ...cigarPatch === void 0 ? {} : { harness_cigar: applyHarnessCigarPatch(current.settings.harness_cigar, cigarPatch) }
       }
     };
   }
@@ -18630,7 +21418,7 @@ function normalizeReceipt(item) {
   const hasUnknownPolicyAction = !isRecognizedGuardActionInput(item.policy_decision);
   const hasMalformedActionEnvelope = item.action_envelope_json !== void 0 && item.action_envelope_json !== null && actionEnvelope === null && !(legacyActionMetadata.recognized && legacyActionMetadata.action !== null);
   const hasContradictoryActionEnvelope = actionEnvelope !== null && [actionEnvelope.pre_execution_result, actionEnvelope.policy_action].some(
-    (action) => action !== void 0 && action !== null && action !== policyAction
+    (action2) => action2 !== void 0 && action2 !== null && action2 !== policyAction
   ) || legacyActionMetadata.recognized && legacyActionMetadata.action !== policyAction;
   const hasDecisionContractError = item.decision_contract_error !== void 0 || hasUnknownPolicyAction || hasMalformedActionEnvelope || hasContradictoryActionEnvelope;
   const failClosedPolicyAction = hasDecisionContractError ? mostRestrictiveGuardAction(
@@ -19134,7 +21922,7 @@ async function resolveRequestWithQueueResult(input) {
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
   const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
-  const init = (guardToken = readGuardToken()) => ({
+  const init = (guardToken) => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -19157,7 +21945,7 @@ async function resolveRequestWithQueueResult(input) {
       ...input.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {}
     })
   });
-  const response = await fetchGuardApi(path, init());
+  const response = await fetchDecisionWithSession(input.requestId, path, init);
   if (!response.ok) {
     let payload2 = null;
     try {
@@ -19193,7 +21981,8 @@ async function bulkAllowReadOnce(input) {
       request_ids: input.requestIds,
       ...input.approval_password !== void 0 ? { approval_password: input.approval_password } : {},
       ...input.approval_totp_code !== void 0 ? { approval_totp_code: input.approval_totp_code } : {},
-      approval_gate_use_cooldown: input.approval_gate_use_cooldown ?? false
+      approval_gate_use_cooldown: input.approval_gate_use_cooldown ?? false,
+      ...input.approval_gate_pulse === true ? { approval_gate_pulse: true } : {}
     })
   });
   return {
@@ -19313,7 +22102,8 @@ function normalizeGuardUpdateStatus(raw, fallbackReleaseChannel = null) {
     update_suppressed: value.update_suppressed === true ? true : void 0,
     retry_command: typeof value.retry_command === "string" ? value.retry_command : void 0,
     update_attempt_message: typeof value.update_attempt_message === "string" ? value.update_attempt_message : void 0,
-    release_channel: isGuardUpdateChannel(value.release_channel) ? value.release_channel : fallbackReleaseChannel ?? "stable"
+    release_channel: isGuardUpdateChannel(value.release_channel) ? value.release_channel : fallbackReleaseChannel ?? "stable",
+    update_mode: value.update_mode === "ask" || value.update_mode === "off" ? value.update_mode : "automatic"
   };
 }
 async function fetchGuardUpdateStatus() {
@@ -19366,7 +22156,17 @@ async function scheduleGuardUpdate(options) {
     error: stringValue$1(payload.error) ?? void 0
   };
 }
-async function requestGuardDesktopHandoff() {
+class GuardDesktopHandoffError extends Error {
+  code;
+  status;
+  constructor(message, code, status) {
+    super(message);
+    this.name = "GuardDesktopHandoffError";
+    this.code = code;
+    this.status = status;
+  }
+}
+async function requestGuardDesktopHandoff(offeredVersion = null) {
   if (isGuardDemoMode()) {
     return { handoff_requested: false, latest_version: null };
   }
@@ -19378,7 +22178,12 @@ async function requestGuardDesktopHandoff() {
       method: "POST",
       redirect: "error",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handoff_to_desktop: true }),
+      // The version the banner offered: when Guard's own re-check briefly
+      // cannot confirm it, the daemon still hands it to the app, which
+      // re-verifies the release before installing anything.
+      body: JSON.stringify(
+        offeredVersion ? { handoff_to_desktop: true, latest_version: offeredVersion } : { handoff_to_desktop: true }
+      ),
       signal: controller.signal
     });
   } finally {
@@ -19387,12 +22192,31 @@ async function requestGuardDesktopHandoff() {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = stringValue$1(payload.message) ?? stringValue$1(payload.error) ?? `Guard update failed with ${response.status}`;
-    throw new Error(message);
+    throw new GuardDesktopHandoffError(message, stringValue$1(payload.error), response.status);
   }
   return {
     handoff_requested: payload.handoff_requested === true,
     latest_version: stringValue$1(payload.latest_version)
   };
+}
+async function setGuardUpdateMode(mode, proof) {
+  if (isGuardDemoMode()) {
+    return normalizeGuardUpdateStatus({
+      ...await fetchGuardUpdateStatus(),
+      update_mode: mode
+    });
+  }
+  const response = await fetchWithGuardAuth("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings: { update_mode: mode }, ...proof })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const value = isRecord$4(payload) ? payload : {};
+    throw new Error(stringValue$1(value.message) ?? `Update preference failed with ${response.status}`);
+  }
+  return fetchGuardUpdateStatus();
 }
 async function setGuardUpdateChannel(channel, proof) {
   if (isGuardDemoMode()) {
@@ -19439,15 +22263,22 @@ async function retryResume(requestId) {
     return null;
   }
   const path = `/v1/requests/${encodeURIComponent(requestId)}/resume`;
-  const init = (guardToken = readGuardToken()) => ({
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeadersForToken(guardToken)
-    },
-    body: JSON.stringify({})
-  });
-  const response = await fetchGuardApi(path, init());
+  let response;
+  try {
+    response = await fetchDecisionWithSession(requestId, path, (guardToken) => ({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeadersForToken(guardToken)
+      },
+      body: JSON.stringify({})
+    }));
+  } catch (error) {
+    if (error instanceof GuardDecisionSignInRequiredError) {
+      throw new Error("Sign in to retry resuming: open this request from Guard on this device.");
+    }
+    throw error;
+  }
   if (!response.ok) {
     throw new Error(`Resume retry failed with ${response.status}`);
   }
@@ -19788,14 +22619,14 @@ async function fetchSupplyChainBundle() {
   }
   return bundle;
 }
-async function runPackageFirewallAction(action, manager, credentials) {
+async function runPackageFirewallAction(action2, manager, credentials) {
   const payload = {
     ...manager !== null ? { managers: [manager] } : {},
     ...credentials?.approval_password !== void 0 ? { approval_password: credentials.approval_password } : {},
     ...credentials?.approval_totp_code !== void 0 ? { approval_totp_code: credentials.approval_totp_code } : {}
   };
   const { response, payload: payloadBody } = await fetchLocalProtectionJson(
-    `/v1/supply-chain/package-shims/${action}`,
+    `/v1/supply-chain/package-shims/${action2}`,
     {
       method: "POST",
       headers: {
@@ -20064,9 +22895,10 @@ async function fetchMcpPolicyRequest(requestId) {
   return normalizeMcpPolicyRequest(payload);
 }
 async function resolveMcpPolicyRequest(input) {
-  const response = await fetchGuardApi(
+  const response = await fetchDecisionWithSession(
+    input.requestId,
     `/v1/mcp-policy/requests/${encodeURIComponent(input.requestId)}/decision`,
-    {
+    () => ({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -20074,7 +22906,7 @@ async function resolveMcpPolicyRequest(input) {
         ...input.approval_password ? { approval_password: input.approval_password } : {},
         ...input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}
       })
-    }
+    })
   );
   const payloadBody = await response.json().catch(() => null);
   if (!response.ok) {
@@ -20092,6 +22924,63 @@ async function resolveMcpPolicyRequest(input) {
     failureCode: typeof record2["failureCode"] === "string" ? record2["failureCode"] : null,
     message: typeof record2["message"] === "string" ? record2["message"] : void 0
   };
+}
+async function authorizeApprovalGatePulseSetup(payload) {
+  return readJson$1("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, step: "authorize" })
+  });
+}
+async function beginApprovalGatePulseEnrollment(payload) {
+  const response = await fetchWithGuardAuth("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pulseEnrollmentBody(payload.pulse_agent_key, payload.min_tier))
+  });
+  if (!response.ok) {
+    let code = null;
+    try {
+      const refused = await response.clone().json();
+      code = isRecord$4(refused) ? refused["error"] : null;
+    } catch {
+      code = null;
+    }
+    throw new Error(
+      pulseSetupRefusalMessage(code, payload.min_tier) ?? await requestErrorMessage(response, `Request failed with ${response.status}`)
+    );
+  }
+  return await response.json();
+}
+async function confirmApprovalGatePulseEnrollment(payload) {
+  return readJson$1("/v1/approval-gate/pulse/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+async function disableApprovalGatePulse(signal) {
+  return readJson$1("/v1/approval-gate/pulse/disable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+    signal
+  });
+}
+async function setApprovalGatePulseShowCommand(show, signal) {
+  return readJson$1("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify(pulseShowCommandBody(show)),
+    signal
+  });
+}
+async function recoverApprovalGatePulse(payload) {
+  return readJson$1("/v1/approval-gate/pulse/recover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
 }
 const GITHUB_ISSUE_BASE_URL = "https://github.com/hashgraph-online/hol-guard/issues/new";
 const DEFAULT_ISSUE_BODY = [
@@ -20936,8 +23825,8 @@ function approvalGateLockRemainingSeconds(gate, nowMs = Date.now()) {
 function approvalGateIsLocked(gate, nowMs = Date.now()) {
   return approvalGateLockRemainingSeconds(gate, nowMs) > 0;
 }
-function approvalGateRequiredForResolution(gate, action, scope) {
-  return gate?.enabled === true && (action === "allow" || scope === "global" || gate.strict_all_decisions === true);
+function approvalGateRequiredForResolution(gate, action2, scope) {
+  return gate?.enabled === true && (action2 === "allow" || scope === "global" || gate.strict_all_decisions === true);
 }
 function approvalGateCooldownLabel(seconds) {
   if (seconds === 0) return "Every approval";
@@ -20960,12 +23849,21 @@ function defaultUseApprovalCooldown(gate) {
 function isBulkApproveGateReady(gate) {
   return gate?.enabled === true && gate?.configured === true;
 }
+function bulkApproveUsesPulse(gate) {
+  return isBulkApproveGateReady(gate) && gate?.pulse_enabled === true;
+}
+function bulkPulsePrompt(selectedGroupCount) {
+  return selectedGroupCount === 1 ? "Approve this request in your YID app." : `Approve these ${selectedGroupCount} requests in your YID app.`;
+}
 function bulkApproveCooldownOpen(gate) {
-  return isBulkApproveGateReady(gate) && gate?.totp_enabled !== true && gate?.strict_all_decisions !== true && (gate?.cooldown_seconds ?? 0) > 0 && gate?.cooldown_active === true;
+  return isBulkApproveGateReady(gate) && gate?.totp_enabled !== true && gate?.pulse_enabled !== true && gate?.strict_all_decisions !== true && (gate?.cooldown_seconds ?? 0) > 0 && gate?.cooldown_active === true;
 }
 function validateBulkApproveCredentials(gate, credentials) {
   if (!isBulkApproveGateReady(gate)) {
     return "Set up an approval gate in Settings before bulk approval.";
+  }
+  if (bulkApproveUsesPulse(gate)) {
+    return null;
   }
   if (gate?.totp_enabled === true) {
     return credentials.totpCode.trim() ? null : "Enter your authenticator code to continue.";
@@ -20978,6 +23876,9 @@ function validateBulkApproveCredentials(gate, credentials) {
 function buildBulkGateCredentials(gate, password, totpCode) {
   if (!isBulkApproveGateReady(gate)) {
     return void 0;
+  }
+  if (bulkApproveUsesPulse(gate)) {
+    return { approval_gate_pulse: true };
   }
   if (gate?.totp_enabled === true) {
     return {
@@ -20997,13 +23898,22 @@ function bulkApprovalProof(credentials) {
   if (credentials?.approval_password?.trim() || credentials?.approval_totp_code?.trim()) {
     return "secret";
   }
+  if (credentials?.approval_gate_pulse === true) {
+    return "pulse";
+  }
   return credentials?.approval_gate_use_cooldown === true ? "cooldown" : null;
 }
 function approvalProofRecentlySatisfied(gate) {
   return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
 }
 function approvalProofRequiresPassword(gate) {
-  return gate?.totp_enabled !== true;
+  return gate?.totp_enabled !== true && !approvalProofUsesPulse(gate);
+}
+function approvalProofUsesPulse(gate) {
+  return gate?.enabled === true && gate.pulse_enabled === true;
+}
+function PulseApprovalProofNotice() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", role: "note", children: "You will approve this in the YID app with a face scan. Check that the app shows the same match code as this page." });
 }
 function approvalGateNeedsSetup(gate) {
   return gate !== null && gate !== void 0 && gate.enabled !== true;
@@ -21049,6 +23959,9 @@ function isApprovalProofSubmitDisabled(gate, credentials, busy, requireFreshTotp
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
     return false;
   }
+  if (approvalProofUsesPulse(gate)) {
+    return false;
+  }
   if (approvalProofRequiresPassword(gate)) {
     return credentials.approvalPassword.trim() === "";
   }
@@ -21062,6 +23975,9 @@ function buildApprovalProofCredentials(gate, credentials, requireFreshTotp = fal
     return {};
   }
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
+    return {};
+  }
+  if (approvalProofUsesPulse(gate)) {
     return {};
   }
   if (approvalProofRequiresPassword(gate)) {
@@ -21087,6 +24003,9 @@ function ApprovalProofFieldInputs(props) {
   }
   if (!props.requireFreshTotp && approvalProofRecentlySatisfied(props.approvalGate)) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Recently confirmed with your authenticator. A new code is not needed yet." });
+  }
+  if (approvalProofUsesPulse(props.approvalGate)) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(PulseApprovalProofNotice, {});
   }
   const needsPassword = approvalProofRequiresPassword(props.approvalGate);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: passwordFieldId, children: [
@@ -21261,6 +24180,59 @@ function AlphaChannelDialog({
     ] })
   ] });
 }
+const MODE_COPY = {
+  automatic: "Guard checks periodically and installs Core updates in the background.",
+  ask: "Guard checks periodically and waits for you to start an available Core update.",
+  off: "Guard still shows available Core updates, but never installs them in the background."
+};
+function UpdateModeDialog({
+  mode,
+  draft,
+  pending,
+  error,
+  approvalGate,
+  approvalPassword,
+  approvalTotpCode,
+  onDraftChange,
+  onClose,
+  onConfirm,
+  onApprovalPasswordChange,
+  onApprovalTotpCodeChange
+}) {
+  const confirmDisabled = pending || draft === mode || approvalGate?.enabled === true && isApprovalProofSubmitDisabled(approvalGate, { approvalPassword, approvalTotpCode }, false);
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!confirmDisabled) onConfirm();
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { onSubmit: handleSubmit, className: "rounded-lg bg-white shadow-xl", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: "Core update preferences" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/70", children: "Choose whether Guard can install Core updates without asking." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, disabled: pending, "aria-label": "Close Core update preferences", className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-brand-dark/55 transition-colors hover:bg-slate-100 hover:text-brand-dark disabled:cursor-not-allowed disabled:opacity-50", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 px-5 py-4 text-sm leading-relaxed text-brand-dark/75", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-semibold text-brand-dark", htmlFor: "guard-update-mode", children: "Install behavior" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { id: "guard-update-mode", value: draft, onChange: onDraftChange, disabled: pending, className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "automatic", children: "Automatic" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ask", children: "Ask first" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "off", children: "Off" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: MODE_COPY[draft] }),
+      draft !== mode ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Changing this preference only saves the setting. It does not install an update immediately." }) : null,
+      approvalGate?.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-brand-blue/20 bg-brand-blue/[0.04] p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-3 text-sm font-semibold text-brand-dark", children: "Confirm this preference change" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofFieldInputs, { approvalGate, approvalPassword, approvalTotpCode, onApprovalPasswordChange, onApprovalTotpCodeChange })
+      ] }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-md bg-red-50 px-3 py-2 text-sm text-red-700", children: error }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, disabled: pending, className: "min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50", children: "Cancel" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: confirmDisabled, className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60", children: pending ? "Saving…" : "Save preference" })
+    ] })
+  ] });
+}
 let embeddedLatch = false;
 let memoForHref = null;
 let memoResult = false;
@@ -21318,6 +24290,21 @@ function desktopUpdateBannerModel(status, embeddedInDesktop, dismissedVersion) {
 const DESKTOP_HANDOFF_OPENING_LABEL = "Opening the app updater…";
 const DESKTOP_HANDOFF_GUIDANCE = "If the updater didn't open, choose Check for Updates from the HOL Guard menu-bar icon.";
 const DESKTOP_HANDOFF_FAILED = "The request did not reach the app. Choose Check for Updates from the HOL Guard menu-bar icon.";
+const DESKTOP_HANDOFF_ALREADY_CURRENT = "Guard is already on the latest version. Choose Check for Updates from the HOL Guard menu-bar icon to look again.";
+function desktopHandoffFailureMessage(error) {
+  if (!(error instanceof Error) || error.name !== "GuardDesktopHandoffError") {
+    return DESKTOP_HANDOFF_FAILED;
+  }
+  const code = error.code;
+  if (code === "update_not_available") {
+    return DESKTOP_HANDOFF_ALREADY_CURRENT;
+  }
+  const reason = error.message.trim();
+  if (!reason) {
+    return DESKTOP_HANDOFF_FAILED;
+  }
+  return `${reason} You can also choose Check for Updates from the HOL Guard menu-bar icon.`;
+}
 function shouldPromptRecoveryReinstall(status) {
   return status?.recovery_reinstall_available === true && status?.auto_updatable !== true && status?.version_check?.update_available === true;
 }
@@ -21586,137 +24573,6 @@ function GuardUpdateChannelSummary(props) {
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 18e4;
-function GuardUpdatePanel(props) {
-  const version2 = props.guardVersion ?? props.updateStatus?.current_version ?? null;
-  const phase = props.updatePhase ?? "idle";
-  const embeddedInDesktop = dashboardEmbedsInDesktop();
-  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
-  const showUpdateButton = !embeddedInDesktop && props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
-  const showReinstallButton = !embeddedInDesktop && shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
-  const busy = phase === "updating" || phase === "reconnecting";
-  const useAlpha = props.updateStatus?.release_channel === "alpha" || props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha";
-  const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
-  const [alphaSavePending, setAlphaSavePending] = reactExports.useState(false);
-  const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
-  const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports.useState("");
-  const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports.useState("");
-  const targetChannel = useAlpha ? "stable" : "alpha";
-  const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
-  const handleOpenAlphaModal = reactExports.useCallback(() => {
-    setAlphaSaveError(null);
-    setAlphaApprovalPassword("");
-    setAlphaApprovalTotpCode("");
-    setAlphaModalOpen(true);
-  }, []);
-  const handleCloseAlphaModal = reactExports.useCallback(() => {
-    if (alphaSavePending) {
-      return;
-    }
-    setAlphaModalOpen(false);
-    setAlphaSaveError(null);
-    setAlphaApprovalPassword("");
-    setAlphaApprovalTotpCode("");
-  }, [alphaSavePending]);
-  const handleConfirmAlphaChannel = reactExports.useCallback(async () => {
-    if (!props.onSetUpdateChannel) {
-      return;
-    }
-    setAlphaSavePending(true);
-    setAlphaSaveError(null);
-    try {
-      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
-        approvalPassword: alphaApprovalPassword,
-        approvalTotpCode: alphaApprovalTotpCode
-      }) : void 0;
-      await props.onSetUpdateChannel(targetChannel, proof);
-      setAlphaModalOpen(false);
-    } catch (error) {
-      setAlphaSaveError(error instanceof Error ? error.message : "Guard could not change the update channel. Try again.");
-    } finally {
-      setAlphaSavePending(false);
-    }
-  }, [alphaApprovalPassword, alphaApprovalTotpCode, props.approvalGate, props.onSetUpdateChannel, targetChannel]);
-  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
-    setAlphaApprovalPassword(event.target.value);
-  }, []);
-  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
-    setAlphaApprovalTotpCode(event.target.value);
-  }, []);
-  let updateChannelSummary = null;
-  if (props.onSetUpdateChannel) {
-    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GuardUpdateChannelSummary,
-      {
-        version: version2,
-        useAlpha,
-        busy,
-        onManage: handleOpenAlphaModal
-      }
-    );
-  } else if (version2) {
-    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version2}`, children: [
-      "v",
-      version2
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: props.compact ? "space-y-1 border-t border-brand-blue/10 pt-1.5" : "space-y-1.5 border-t border-brand-blue/10 pt-2",
-      children: [
-        updateChannelSummary,
-        props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]", children: updateStatusLabel(props.updateStatus) }),
-          showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              type: "button",
-              onClick: props.onUpdateGuard,
-              "aria-label": "Update Guard to the latest version",
-              className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Update" })
-              ]
-            }
-          ) : null
-        ] }) : null,
-        helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] leading-4 text-brand-dark/70", children: helpCopy }) : null,
-        showReinstallButton && props.onReinstallGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: props.onReinstallGuard,
-            className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Reinstall from PyPI" })
-            ]
-          }
-        ) : null,
-        busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue", role: "status", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
-          phase === "updating" ? "Updating Guard…" : "Reconnecting…"
-        ] }),
-        alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          AlphaChannelDialog,
-          {
-            useAlpha,
-            pending: alphaSavePending,
-            error: alphaSaveError,
-            approvalGate: props.approvalGate ?? null,
-            approvalPassword: alphaApprovalPassword,
-            approvalTotpCode: alphaApprovalTotpCode,
-            onClose: handleCloseAlphaModal,
-            onConfirm: handleConfirmAlphaChannel,
-            onApprovalPasswordChange: handleApprovalPasswordChange,
-            onApprovalTotpCodeChange: handleApprovalTotpCodeChange
-          }
-        ) }) : null
-      ]
-    }
-  );
-}
 function useGuardUpdate(options) {
   const enabled = options?.enabled !== false;
   const [updateStatus, setUpdateStatus] = reactExports.useState(null);
@@ -21727,6 +24583,8 @@ function useGuardUpdate(options) {
   const updateStatusEpoch = reactExports.useRef(0);
   const channelMutationId = reactExports.useRef(0);
   const channelMutationPending = reactExports.useRef(false);
+  const modeMutationId = reactExports.useRef(0);
+  const modeMutationPending = reactExports.useRef(false);
   const isMounted = reactExports.useRef(false);
   reactExports.useEffect(() => {
     updatePhaseRef.current = updatePhase;
@@ -21738,14 +24596,14 @@ function useGuardUpdate(options) {
     };
   }, []);
   const refreshUpdateStatus = reactExports.useCallback(async () => {
-    if (!enabled || !isMounted.current || channelMutationPending.current) {
+    if (!enabled || !isMounted.current || channelMutationPending.current || modeMutationPending.current) {
       return;
     }
     const epoch = updateStatusEpoch.current;
     const mutationId = channelMutationId.current;
     try {
       const status = await fetchGuardUpdateStatus();
-      if (!isMounted.current || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
+      if (!isMounted.current || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current || modeMutationPending.current) {
         return;
       }
       setUpdateStatus(status);
@@ -21767,7 +24625,7 @@ function useGuardUpdate(options) {
     const epoch = updateStatusEpoch.current;
     const mutationId = channelMutationId.current;
     void fetchGuardUpdateStatus().then((status) => {
-      if (cancelled || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
+      if (cancelled || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current || modeMutationPending.current) {
         return;
       }
       setUpdateStatus(status);
@@ -21908,6 +24766,21 @@ function useGuardUpdate(options) {
       }
     }
   }, []);
+  const onSetUpdateMode = reactExports.useCallback(async (mode, proof) => {
+    const mutationId = ++modeMutationId.current;
+    updateStatusEpoch.current += 1;
+    modeMutationPending.current = true;
+    try {
+      const status = await setGuardUpdateMode(mode, proof);
+      if (mutationId === modeMutationId.current) {
+        updateStatusEpoch.current += 1;
+        setUpdateStatus(status);
+        if (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle") setUpdatePhase("idle");
+      }
+    } finally {
+      if (mutationId === modeMutationId.current) modeMutationPending.current = false;
+    }
+  }, []);
   return {
     guardVersion: updateStatus?.current_version ?? null,
     updateStatus,
@@ -21916,8 +24789,199 @@ function useGuardUpdate(options) {
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,
+    onSetUpdateMode,
     refreshUpdateStatus
   };
+}
+function GuardUpdatePanel(props) {
+  const version2 = props.guardVersion ?? props.updateStatus?.current_version ?? null;
+  const phase = props.updatePhase ?? "idle";
+  const embeddedInDesktop = dashboardEmbedsInDesktop();
+  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
+  const showUpdateButton = !embeddedInDesktop && props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
+  const showReinstallButton = !embeddedInDesktop && shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
+  const busy = phase === "updating" || phase === "reconnecting";
+  const useAlpha = props.updateStatus?.release_channel === "alpha" || props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha";
+  const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
+  const [alphaSavePending, setAlphaSavePending] = reactExports.useState(false);
+  const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
+  const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports.useState("");
+  const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports.useState("");
+  const [updateModeModalOpen, setUpdateModeModalOpen] = reactExports.useState(false);
+  const [updateModeDraft, setUpdateModeDraft] = reactExports.useState(props.updateStatus?.update_mode ?? "automatic");
+  const [updateModeSavePending, setUpdateModeSavePending] = reactExports.useState(false);
+  const [updateModeSaveError, setUpdateModeSaveError] = reactExports.useState(null);
+  const [updateModeApprovalPassword, setUpdateModeApprovalPassword] = reactExports.useState("");
+  const [updateModeApprovalTotpCode, setUpdateModeApprovalTotpCode] = reactExports.useState("");
+  const targetChannel = useAlpha ? "stable" : "alpha";
+  const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
+  const handleOpenAlphaModal = reactExports.useCallback(() => {
+    setAlphaSaveError(null);
+    setAlphaApprovalPassword("");
+    setAlphaApprovalTotpCode("");
+    setAlphaModalOpen(true);
+  }, []);
+  const handleCloseAlphaModal = reactExports.useCallback(() => {
+    if (alphaSavePending) {
+      return;
+    }
+    setAlphaModalOpen(false);
+    setAlphaSaveError(null);
+    setAlphaApprovalPassword("");
+    setAlphaApprovalTotpCode("");
+  }, [alphaSavePending]);
+  const handleConfirmAlphaChannel = reactExports.useCallback(async () => {
+    if (!props.onSetUpdateChannel) {
+      return;
+    }
+    setAlphaSavePending(true);
+    setAlphaSaveError(null);
+    try {
+      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
+        approvalPassword: alphaApprovalPassword,
+        approvalTotpCode: alphaApprovalTotpCode
+      }) : void 0;
+      await props.onSetUpdateChannel(targetChannel, proof);
+      setAlphaModalOpen(false);
+    } catch (error) {
+      setAlphaSaveError(error instanceof Error ? error.message : "Guard could not change the update channel. Try again.");
+    } finally {
+      setAlphaSavePending(false);
+    }
+  }, [alphaApprovalPassword, alphaApprovalTotpCode, props.approvalGate, props.onSetUpdateChannel, targetChannel]);
+  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
+    setAlphaApprovalPassword(event.target.value);
+  }, []);
+  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
+    setAlphaApprovalTotpCode(event.target.value);
+  }, []);
+  const handleOpenUpdateModeModal = reactExports.useCallback(() => {
+    setUpdateModeDraft(props.updateStatus?.update_mode ?? "automatic");
+    setUpdateModeSaveError(null);
+    setUpdateModeApprovalPassword("");
+    setUpdateModeApprovalTotpCode("");
+    setUpdateModeModalOpen(true);
+  }, [props.updateStatus?.update_mode]);
+  const handleCloseUpdateModeModal = reactExports.useCallback(() => {
+    if (updateModeSavePending) return;
+    setUpdateModeModalOpen(false);
+    setUpdateModeSaveError(null);
+  }, [updateModeSavePending]);
+  const handleConfirmUpdateMode = reactExports.useCallback(async () => {
+    if (!props.onSetUpdateMode) return;
+    setUpdateModeSavePending(true);
+    setUpdateModeSaveError(null);
+    try {
+      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
+        approvalPassword: updateModeApprovalPassword,
+        approvalTotpCode: updateModeApprovalTotpCode
+      }) : void 0;
+      await props.onSetUpdateMode(updateModeDraft, proof);
+      setUpdateModeModalOpen(false);
+    } catch (error) {
+      setUpdateModeSaveError(error instanceof Error ? error.message : "Guard could not save the update preference. Try again.");
+    } finally {
+      setUpdateModeSavePending(false);
+    }
+  }, [props.approvalGate, props.onSetUpdateMode, updateModeApprovalPassword, updateModeApprovalTotpCode, updateModeDraft]);
+  let updateChannelSummary = null;
+  if (props.onSetUpdateChannel) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GuardUpdateChannelSummary,
+      {
+        version: version2,
+        useAlpha,
+        busy,
+        onManage: handleOpenAlphaModal
+      }
+    );
+  } else if (version2) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version2}`, children: [
+      "v",
+      version2
+    ] });
+  }
+  let updateModeLabel = "Automatic Core updates on";
+  if (props.updateStatus?.update_mode === "ask") {
+    updateModeLabel = "Ask before installing";
+  } else if (props.updateStatus?.update_mode === "off") {
+    updateModeLabel = "Automatic Core updates off";
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: props.compact ? "space-y-1 border-t border-brand-blue/10 pt-1.5" : "space-y-1.5 border-t border-brand-blue/10 pt-2",
+      children: [
+        updateChannelSummary,
+        props.onSetUpdateMode ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpenUpdateModeModal, disabled: busy, className: "text-[11px] font-medium text-brand-blue hover:underline", "aria-label": "Manage Core update preferences", children: updateModeLabel }) : null,
+        props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]", children: updateStatusLabel(props.updateStatus) }),
+          showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: props.onUpdateGuard,
+              "aria-label": "Update Guard to the latest version",
+              className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Update" })
+              ]
+            }
+          ) : null
+        ] }) : null,
+        helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] leading-4 text-brand-dark/70", children: helpCopy }) : null,
+        showReinstallButton && props.onReinstallGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: props.onReinstallGuard,
+            className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Reinstall from PyPI" })
+            ]
+          }
+        ) : null,
+        busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue", role: "status", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
+          phase === "updating" ? "Updating Guard…" : "Reconnecting…"
+        ] }),
+        alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          AlphaChannelDialog,
+          {
+            useAlpha,
+            pending: alphaSavePending,
+            error: alphaSaveError,
+            approvalGate: props.approvalGate ?? null,
+            approvalPassword: alphaApprovalPassword,
+            approvalTotpCode: alphaApprovalTotpCode,
+            onClose: handleCloseAlphaModal,
+            onConfirm: handleConfirmAlphaChannel,
+            onApprovalPasswordChange: handleApprovalPasswordChange,
+            onApprovalTotpCodeChange: handleApprovalTotpCodeChange
+          }
+        ) }) : null,
+        updateModeModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Core update preferences", onClose: handleCloseUpdateModeModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          UpdateModeDialog,
+          {
+            mode: props.updateStatus?.update_mode ?? "automatic",
+            draft: updateModeDraft,
+            pending: updateModeSavePending,
+            error: updateModeSaveError,
+            approvalGate: props.approvalGate ?? null,
+            approvalPassword: updateModeApprovalPassword,
+            approvalTotpCode: updateModeApprovalTotpCode,
+            onDraftChange: (event) => setUpdateModeDraft(event.target.value),
+            onClose: handleCloseUpdateModeModal,
+            onConfirm: handleConfirmUpdateMode,
+            onApprovalPasswordChange: (event) => setUpdateModeApprovalPassword(event.target.value),
+            onApprovalTotpCodeChange: (event) => setUpdateModeApprovalTotpCode(event.target.value)
+          }
+        ) }) : null
+      ]
+    }
+  );
 }
 const SHELL_NAV_ITEMS = [
   {
@@ -21946,6 +25010,16 @@ const SHELL_NAV_ITEMS = [
     view: "fleet",
     group: "primary",
     icon: HiMiniShieldCheck
+  },
+  {
+    href: "/swarm",
+    label: "Swarm",
+    shortLabel: "Swarm",
+    description: "Launch, follow, and direct local agents across projects",
+    view: "swarm",
+    group: "primary",
+    icon: HiMiniSquares2X2,
+    badge: "Alpha"
   },
   {
     href: "/cigar",
@@ -22316,6 +25390,7 @@ function NavigationDrawer(props) {
                       onUpdateGuard: props.onUpdateGuard,
                       onReinstallGuard: props.onReinstallGuard,
                       onSetUpdateChannel: props.onSetUpdateChannel,
+                      onSetUpdateMode: props.onSetUpdateMode,
                       approvalGate: props.approvalGate
                     }
                   )
@@ -22529,6 +25604,7 @@ function PersistentSidebar(props) {
                   onUpdateGuard: props.onUpdateGuard,
                   onReinstallGuard: props.onReinstallGuard,
                   onSetUpdateChannel: props.onSetUpdateChannel,
+                  onSetUpdateMode: props.onSetUpdateMode,
                   approvalGate: props.approvalGate
                 }
               )
@@ -23880,41 +26956,41 @@ function store() {
     return null;
   }
 }
-function rememberTurnOn(now2, storage = store()) {
+function rememberTurnOn(now2, storage2 = store()) {
   try {
-    storage?.setItem(KEY, String(now2));
+    storage2?.setItem(KEY, String(now2));
   } catch {
   }
 }
-function rememberTurnOnJob(jobId, storage = store()) {
+function rememberTurnOnJob(jobId, storage2 = store()) {
   try {
-    storage?.setItem(JOB_KEY, jobId);
+    storage2?.setItem(JOB_KEY, jobId);
   } catch {
   }
 }
-function forgetTurnOnClick(storage = store()) {
+function forgetTurnOnClick(storage2 = store()) {
   try {
-    storage?.removeItem(KEY);
+    storage2?.removeItem(KEY);
   } catch {
   }
 }
-function forgetTurnOn(storage = store()) {
+function forgetTurnOn(storage2 = store()) {
   try {
-    storage?.removeItem(KEY);
-    storage?.removeItem(JOB_KEY);
+    storage2?.removeItem(KEY);
+    storage2?.removeItem(JOB_KEY);
   } catch {
   }
 }
-function turnOnJob(storage = store()) {
+function turnOnJob(storage2 = store()) {
   try {
-    return storage?.getItem(JOB_KEY) || null;
+    return storage2?.getItem(JOB_KEY) || null;
   } catch {
     return null;
   }
 }
-function turnOnRequestedAt(storage = store()) {
+function turnOnRequestedAt(storage2 = store()) {
   try {
-    const value = Number(storage?.getItem(KEY) ?? NaN);
+    const value = Number(storage2?.getItem(KEY) ?? NaN);
     return Number.isFinite(value) ? value : null;
   } catch {
     return null;
@@ -23969,23 +27045,31 @@ const revision = (value) => typeof value === "string" && /^[1-9][0-9]{0,19}$/.te
 const version$1 = (value) => Array.isArray(value) && value.length === 3 && value.every((part) => Number.isSafeInteger(part) && part >= 0 && part <= 65535);
 function config(value) {
   if (!record$5(value) || value.schema_version !== 1 || typeof value.enabled !== "boolean" || !text$3(value.runtime_id, 128) || !["low_memory", "balanced", "custom"].includes(String(value.resource_profile)) || !record$5(value.features) || !record$5(value.sources) || !record$5(value.storage) || !record$5(value.limits)) return false;
-  const { features, sources, storage, limits } = value;
-  return ["review_briefs", "agent_context", "shared_agents"].every((key) => typeof features[key] === "boolean") && (features.execution_context === void 0 || typeof features.execution_context === "boolean") && ["native_policy_facts", "sanitized_receipt_facts", "workspace_documents"].every((key) => typeof sources[key] === "boolean") && text$3(sources.source_set_id, 128) && (storage.mode === "memory" || storage.mode === "sqlite") && Number.isSafeInteger(storage.retention_hours) && ["context_tokens", "reserve_tokens", "max_active_workspaces", "idle_shutdown_seconds"].every((key) => Number.isSafeInteger(limits[key]));
+  const { features, sources, storage: storage2, limits } = value;
+  return ["review_briefs", "agent_context", "shared_agents"].every((key) => typeof features[key] === "boolean") && (features.execution_context === void 0 || typeof features.execution_context === "boolean") && ["native_policy_facts", "sanitized_receipt_facts", "workspace_documents"].every((key) => typeof sources[key] === "boolean") && text$3(sources.source_set_id, 128) && (storage2.mode === "memory" || storage2.mode === "sqlite") && Number.isSafeInteger(storage2.retention_hours) && ["context_tokens", "reserve_tokens", "max_active_workspaces", "idle_shutdown_seconds"].every((key) => Number.isSafeInteger(limits[key]));
+}
+function engineLabel(facts) {
+  return facts.schema === "guard-cigar-builtin.v1" ? "Built into Guard" : "Python " + facts.version.join(".");
 }
 function runtime(value) {
   if (!record$5(value) || value.schema !== "guard-cigar-runtime-status.v1" || !record$5(value.interpreter)) return false;
   const facts = value.interpreter;
-  return facts.schema === "guard-cigar-interpreter.v1" && version$1(facts.version) && ["implementation", "release_level", "abi", "platform"].every((key) => text$3(facts[key])) && typeof facts.free_threaded === "boolean" && typeof facts.debug_build === "boolean" && isCigarProducerVersion(value.package_version) && text$3(value.protocol) && (value.core_version === void 0 || isCigarCoreLabel(value.core_version)) && (value.release === void 0 || isCigarReleaseBinding(value.release) && value.package_version === value.release.identity.sdk_version && value.core_version === value.release.identity.core_version && value.adapter_id === value.release.adapter_id && value.adapter_revision === value.release.adapter_revision) && digest$5(value.package_fingerprint) && digest$5(value.worker_fingerprint) && Array.isArray(value.features) && value.features.length <= 64 && value.features.every((item) => text$3(item, 64)) && typeof value.compile_verified === "boolean" && typeof value.active === "boolean" && (value.shared_compile_verified === void 0 || typeof value.shared_compile_verified === "boolean") && (value.persistence_compile_verified === void 0 || typeof value.persistence_compile_verified === "boolean") && (value.execution_handoff_verified === void 0 || typeof value.execution_handoff_verified === "boolean");
+  const builtinFacts = facts.schema === "guard-cigar-builtin.v1" && facts.implementation === "guard-builtin" && facts.abi === "none" && value.adapter_id === "guard-cigar-builtin-v1";
+  return (facts.schema === "guard-cigar-interpreter.v1" || builtinFacts) && version$1(facts.version) && ["implementation", "release_level", "abi", "platform"].every((key) => text$3(facts[key])) && typeof facts.free_threaded === "boolean" && typeof facts.debug_build === "boolean" && isCigarProducerVersion(value.package_version) && text$3(value.protocol) && (value.core_version === void 0 || isCigarCoreLabel(value.core_version)) && (value.release === void 0 || isCigarReleaseBinding(value.release) && value.package_version === value.release.identity.sdk_version && value.core_version === value.release.identity.core_version && value.adapter_id === value.release.adapter_id && value.adapter_revision === value.release.adapter_revision) && digest$5(value.package_fingerprint) && digest$5(value.worker_fingerprint) && Array.isArray(value.features) && value.features.length <= 64 && value.features.every((item) => text$3(item, 64)) && typeof value.compile_verified === "boolean" && typeof value.active === "boolean" && (value.shared_compile_verified === void 0 || typeof value.shared_compile_verified === "boolean") && (value.persistence_compile_verified === void 0 || typeof value.persistence_compile_verified === "boolean") && (value.execution_handoff_verified === void 0 || typeof value.execution_handoff_verified === "boolean");
 }
 function installation(value) {
-  if (!record$5(value) || !text$3(value.runtime_id, 128) || !["local_candidate", "guard_qualified"].includes(String(value.qualification)) || !version$1(value.python_version) || !text$3(value.platform) || !digest$5(value.worker_fingerprint)) return false;
+  if (!record$5(value) || !text$3(value.runtime_id, 128) || !["local_candidate", "guard_qualified", "guard_builtin"].includes(String(value.qualification)) || !text$3(value.platform) || !digest$5(value.worker_fingerprint)) return false;
+  if (value.qualification === "guard_builtin") {
+    return value.runtime_id === "builtin" && value.builtin === true && value.python_version === null && value.managed === false && value.build_id === null && isCigarProducerVersion(value.sdk_version) && isCigarCoreLabel(value.core_version) && text$3(value.adapter_id, 128) && value.adapter_revision === 1;
+  }
+  if (!version$1(value.python_version) || value.builtin !== void 0 && value.builtin !== false) return false;
   const metadata = ["sdk_version", "core_version", "build_id", "adapter_id", "adapter_revision", "managed"];
   if (!metadata.some((key) => value[key] !== void 0)) return value.qualification === "local_candidate";
   if (!isCigarProducerVersion(value.sdk_version) || !isCigarCoreLabel(value.core_version) || !text$3(value.adapter_id, 128) || !Number.isSafeInteger(value.adapter_revision) || Number(value.adapter_revision) < 1 || Number(value.adapter_revision) > 65535 || typeof value.managed !== "boolean") return false;
   return value.qualification === "guard_qualified" ? value.managed && typeof value.build_id === "string" && value.build_id === value.build_id.trim() && /^[a-z0-9_:-]{1,128}$/i.test(value.build_id) : !value.managed && value.build_id === null;
 }
 function parseContextAssistanceStatus(value) {
-  if (!record$5(value) || value.schema !== "guard-context-assistance-status.v2" || !["off", "unavailable", "checking", "ready"].includes(String(value.availability)) || typeof value.requested_enabled !== "boolean" || typeof value.effective_enabled !== "boolean" || !config(value.preferences) || !config(value.effective_preferences) || !revision(value.generation) || !(value.restriction === null || text$3(value.restriction)) || typeof value.verification_permitted !== "boolean" || !(value.diagnostic === null || text$3(value.diagnostic)) || !(value.runtime === null || runtime(value.runtime)) || !(value.last_check === null || runtime(value.last_check)) || !(value.qualification === null || ["local_candidate", "guard_qualified"].includes(String(value.qualification))) || !(value.capabilities === void 0 || record$5(value.capabilities) && typeof value.capabilities.shared_agents === "boolean" && typeof value.capabilities.private_persistence === "boolean" && (value.capabilities.execution_context === void 0 || typeof value.capabilities.execution_context === "boolean")) || !(value.execution_ready === void 0 || typeof value.execution_ready === "boolean") || !(value.execution_observations === void 0 || value.execution_observations === null || Array.isArray(value.execution_observations) && value.execution_observations.length <= 32 && value.execution_observations.every(isContextExecutionObservation)) || !(value.installation_options === null || Array.isArray(value.installation_options) && value.installation_options.length <= 8 && value.installation_options.every(installation)) || !(value.job === null || record$5(value.job) && revision(value.job.id) && (value.job.operation === "activate" || value.job.operation === "recheck") && (value.job.phase === "verifying" || value.job.phase === "cancelling"))) {
+  if (!record$5(value) || value.schema !== "guard-context-assistance-status.v2" || !["off", "unavailable", "checking", "ready"].includes(String(value.availability)) || typeof value.requested_enabled !== "boolean" || typeof value.effective_enabled !== "boolean" || !config(value.preferences) || !config(value.effective_preferences) || !revision(value.generation) || !(value.restriction === null || text$3(value.restriction)) || typeof value.verification_permitted !== "boolean" || !(value.diagnostic === null || text$3(value.diagnostic)) || !(value.runtime === null || runtime(value.runtime)) || !(value.last_check === null || runtime(value.last_check)) || !(value.qualification === null || ["local_candidate", "guard_qualified"].includes(String(value.qualification))) || !(value.capabilities === void 0 || record$5(value.capabilities) && typeof value.capabilities.shared_agents === "boolean" && typeof value.capabilities.private_persistence === "boolean" && (value.capabilities.execution_context === void 0 || typeof value.capabilities.execution_context === "boolean")) || !(value.execution_ready === void 0 || typeof value.execution_ready === "boolean") || !(value.execution_observations === void 0 || value.execution_observations === null || Array.isArray(value.execution_observations) && value.execution_observations.length <= 32 && value.execution_observations.every(isContextExecutionObservation)) || !(value.installation_options === null || Array.isArray(value.installation_options) && value.installation_options.length <= 9 && value.installation_options.every(installation)) || !(value.job === null || record$5(value.job) && revision(value.job.id) && (value.job.operation === "activate" || value.job.operation === "recheck") && (value.job.phase === "verifying" || value.job.phase === "cancelling"))) {
     throw new Error("Context assistance returned an incompatible status. Update Guard and check again.");
   }
   if (value.qualification === "guard_qualified") {
@@ -24000,7 +27084,7 @@ function parseContextAssistanceStatus(value) {
   return value;
 }
 function contextStatusCopy(status) {
-  if (status.job) return status.job.phase === "cancelling" ? { label: "Stopping", detail: "Cancelling the pending runtime check." } : { label: "Checking runtime", detail: "Guard is verifying Python, CIGAR and its worker in the background." };
+  if (status.job) return status.job.phase === "cancelling" ? { label: "Stopping", detail: "Cancelling the pending runtime check." } : { label: "Checking runtime", detail: "Guard is checking CIGAR and its worker in the background." };
   if (status.effective_enabled) return {
     label: "Ready",
     detail: "The local CIGAR runtime is ready. Context uses only the sources and app access you authorize."
@@ -24026,7 +27110,7 @@ function contextStatusCopy(status) {
     detail: "CIGAR stopped after being idle. Click Turn on CIGAR when you need context again."
   };
   const code = status.diagnostic ?? "runtime_not_verified";
-  const detail = code === "policy_restricted" ? "Your preference is saved. Organization or workspace policy currently prevents context assistance. You can still turn it off." : code.startsWith("python_") ? "Choose a verified final CPython 3.14 runtime. Other Python versions cannot run this feature." : code.includes("managed") || code.includes("configuration") ? "Local or managed settings currently restrict context assistance. Review this machine's settings." : code === "runtime_not_verified" ? "Your preference is saved. Review the selected runtime and any policy restrictions before starting CIGAR." : "Context assistance needs attention. Check the selected runtime; Guard protection remains available.";
+  const detail = code === "policy_restricted" ? "Your preference is saved. Organization or workspace policy currently prevents context assistance. You can still turn it off." : code.includes("managed") || code.includes("configuration") ? "Local or managed settings currently restrict context assistance. Review this machine's settings." : code === "runtime_not_verified" ? "Your preference is saved. Review the selected runtime and any policy restrictions before starting CIGAR." : "Context assistance needs attention. Check the selected runtime; Guard protection remains available.";
   return { label: "Unavailable", detail };
 }
 class ContextAssistanceApiError extends Error {
@@ -24037,36 +27121,59 @@ class ContextAssistanceApiError extends Error {
   }
   code;
 }
-async function request$1(path, action, signal) {
+function waitForStatusRetry(signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, 1e3);
+    function onAbort() {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+async function request$1(path, action2, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context assistance setup requires a local Guard installation.");
   const timeout = AbortSignal.timeout(1e4);
-  const response = await fetchWithGuardAuth(path, {
-    cache: "no-store",
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    ...action ? {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}"
-    } : {}
-  });
-  if (!response.ok) {
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  for (let retry = 0; ; retry += 1) {
+    requestSignal.throwIfAborted();
+    const response = await fetchWithGuardAuth(path, {
+      cache: "no-store",
+      signal: requestSignal,
+      ...action2 ? {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      } : {}
+    });
+    if (response.ok) return parseContextAssistanceStatus(await response.json());
     const body = await response.json().catch(() => null);
     const code = body !== null && typeof body === "object" && "code" in body && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_assistance_unavailable";
+    if (!action2 && response.status === 409 && code === "native_context_assistance_busy" && retry < 8) {
+      await waitForStatusRetry(requestSignal);
+      continue;
+    }
     throw new ContextAssistanceApiError(
       code,
       response.status === 404 ? "This Guard installation needs a native core with context assistance support. Update Guard to continue." : "Context assistance is unavailable. Refresh its status before trying again."
     );
   }
-  return parseContextAssistanceStatus(await response.json());
 }
 const fetchContextAssistance = (signal) => request$1("/v1/context-assistance", void 0, signal);
 const fetchContextInstallations = (signal) => request$1("/v1/context-assistance/installations", void 0, signal);
-function controlContextAssistance(action, signal) {
-  if (!["recheck", "activate", "stop"].includes(action)) {
+function controlContextAssistance(action2, signal) {
+  if (!["recheck", "activate", "stop"].includes(action2)) {
     return Promise.reject(new ContextAssistanceApiError("action_invalid", "Invalid context assistance action."));
   }
-  if (action === "stop") forgetTurnOn();
-  return request$1(`/v1/context-assistance/${action}`, action, signal);
+  if (action2 === "stop") forgetTurnOn();
+  return request$1(`/v1/context-assistance/${action2}`, action2, signal);
 }
 function ContextBriefView({ brief, scope }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
@@ -24124,14 +27231,17 @@ function parseContextBrief(value) {
   if (!object$2(value) || value.schema !== "guard-cigar-context-brief.v1" || value.data_role !== true || !digest$4(value.snapshot_id) || !text$2(value.policy_revision) || !count$1(value.graph_revision) || !text$2(value.rendered) || value.rendered.length > 262144 || !count$1(value.rendered_tokens) || !Array.isArray(value.excerpts) || value.excerpts.length > 16 || !value.excerpts.every((excerpt) => object$2(excerpt) && text$2(excerpt.text) && Array.isArray(excerpt.citations)) || !Array.isArray(value.citations) || value.citations.length > 1024 || !value.citations.every((citation) => object$2(citation) && text$2(citation.source) && text$2(citation.node_id) && count$1(citation.start_line) && citation.start_line > 0 && count$1(citation.end_line) && citation.end_line >= citation.start_line && digest$4(citation.document_digest))) invalid$3();
   return value;
 }
-function refusal(code, action, status) {
+function refusal(code, action2, status) {
+  if (/runtime_(deadline_exceeded|not_verified|closed|crashed|cancelled|transport_failed)$/.test(code)) {
+    return "CIGAR stopped before it could finish. Restart CIGAR at the top of this page, then try again. Your saved project choices are kept.";
+  }
   if (code.endsWith("context_storage_repair_required")) return "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again.";
   if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
-  if (code.endsWith("context_resource_limit") && action === "authorize_agent") {
+  if (code.endsWith("context_resource_limit") && action2 === "authorize_agent") {
     return "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code.";
   }
   if (code.endsWith("context_busy") || code.endsWith("_busy")) return "CIGAR is still finishing something. Try again in a moment.";
-  if (code.endsWith("context_scope_denied") && action === "grant") {
+  if (code.endsWith("context_scope_denied") && action2 === "grant") {
     return "CIGAR couldn't add these files. It won't read a file that looks like it holds a password or key, a file your settings block, or a folder Guard keeps private. Take that file out, or pick another folder, and try again.";
   }
   if (code.endsWith("context_stale") || code.endsWith("context_scope_denied")) return "The project or its files changed. Choose Read files again, or add the project again.";
@@ -24180,8 +27290,8 @@ async function authorizeContextAgentSession(sessionId, scopeId, proof, signal) {
 async function revokeContextAgentSession(sessionId, signal) {
   return ask("workspace-access", { action: "revoke_agent", session_id: sessionId }, void 0, signal);
 }
-async function manageContextWorkspace(action, scopeId, sourceId, signal) {
-  return ask("workspace-access", { action, ...scopeId ? { scope_id: scopeId } : {}, ...sourceId ? { source_id: sourceId } : {} }, void 0, signal);
+async function manageContextWorkspace(action2, scopeId, sourceId, signal) {
+  return ask("workspace-access", { action: action2, ...scopeId ? { scope_id: scopeId } : {}, ...sourceId ? { source_id: sourceId } : {} }, void 0, signal);
 }
 async function compileWorkspaceContext(scopeId, query, signal) {
   const result = await ask("workspace", { action: "compile", scope_id: scopeId, query }, void 0, signal);
@@ -24621,18 +27731,18 @@ function nextSafeStep(receipt) {
   if (approvalLeftActionStopped(receipt)) {
     return 'A one-time approval cannot let the agent run this command. Run it yourself, or approve the next request with "Always allow exact action" when that option is offered.';
   }
-  const action = guardActionPresentation(receipt.policy_decision).action;
-  if (action === "block") {
+  const action2 = guardActionPresentation(receipt.policy_decision).action;
+  if (action2 === "block") {
     return "This action is blocked. Review the governing policy or choose a safer alternative; it cannot be approved from the review queue.";
   }
-  if (action === "sandbox-required") {
+  if (action2 === "sandbox-required") {
     return "Run this action through an approved sandbox, then retry only after the sandbox requirement is satisfied.";
   }
-  if (action === "allow" || action === "warn") {
+  if (action2 === "allow" || action2 === "warn") {
     return null;
   }
   const category = detectCategory(receipt);
-  const approvalCopy = action === "require-reapproval" ? "grant fresh approval" : "approve it";
+  const approvalCopy = action2 === "require-reapproval" ? "grant fresh approval" : "approve it";
   if (category === "supply-chain") {
     return `Review the package source and version, then ${approvalCopy} from the review queue if it is safe.`;
   }
@@ -24656,7 +27766,7 @@ function NextSafeCommandHint({ receipt }) {
   ] });
 }
 function EvidenceTimeline({ receipt }) {
-  const action = guardActionPresentation(receipt.policy_decision);
+  const action2 = guardActionPresentation(receipt.policy_decision);
   const stopped = approvalLeftActionStopped(receipt);
   const events = [
     {
@@ -24665,9 +27775,9 @@ function EvidenceTimeline({ receipt }) {
       icon: "start"
     },
     {
-      label: stopped ? APPROVAL_LEFT_STOPPED_LABEL : action.label,
+      label: stopped ? APPROVAL_LEFT_STOPPED_LABEL : action2.label,
       time: receipt.timestamp,
-      icon: stopped ? "blocked" : action.disposition
+      icon: stopped ? "blocked" : action2.disposition
     }
   ];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -28153,8 +31263,8 @@ const FEEDBACK_LABELS$1 = {
   should_not_have_interrupted: "Should not have interrupted",
   expected_guard_to_stop_this: "Expected Guard to stop this"
 };
-function commandDecisionLabel(action) {
-  return action === null ? "Decision unavailable" : DECISION_LABELS[action];
+function commandDecisionLabel(action2) {
+  return action2 === null ? "Decision unavailable" : DECISION_LABELS[action2];
 }
 function commandExecutionLabel(status) {
   return EXECUTION_LABELS[status];
@@ -30583,7 +33693,8 @@ function QueueBulkDrawer(props) {
           ] }),
           !executionApprovalAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-attention", role: "status", children: "Run once is unavailable for part of this selection. Open those requests individually before approving the remaining actions." }) : gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
             bulkApproveCooldownOpen(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: "Your approval window is still open, so no password is needed." }),
-            props.approvalGate?.totp_enabled !== true && !bulkApproveCooldownOpen(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            bulkApproveUsesPulse(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: bulkPulsePrompt(props.selectedGroups.length) }),
+            props.approvalGate?.totp_enabled !== true && !bulkApproveUsesPulse(props.approvalGate) && !bulkApproveCooldownOpen(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
@@ -30602,7 +33713,7 @@ function QueueBulkDrawer(props) {
                 }
               )
             ] }),
-            props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            props.approvalGate?.totp_enabled === true && !bulkApproveUsesPulse(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-totp", className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" })
@@ -31261,8 +34372,12 @@ function useQueueBulkApprove(props) {
     }
   };
 }
-function approvalProofModalTitle(locked, recentlySatisfied, needsPassword) {
+function approvalProofCooldownOptionShown(gate) {
+  return gate.cooldown_seconds > 0 && !gate.cooldown_active && gate.totp_enabled !== true && !approvalProofUsesPulse(gate);
+}
+function approvalProofModalTitle(locked, recentlySatisfied, needsPassword, usesPulse = false) {
   if (locked) return "Approval gate temporarily locked";
+  if (usesPulse) return "Approve in the YID app";
   if (recentlySatisfied) return "Recently confirmed";
   if (needsPassword) return "Approval password required";
   return "Authenticator code required";
@@ -31270,14 +34385,16 @@ function approvalProofModalTitle(locked, recentlySatisfied, needsPassword) {
 function ApprovalPasswordModal(props) {
   const passwordRef = reactExports.useRef(null);
   const [now2, setNow] = reactExports.useState(() => Date.now());
-  const recentlySatisfied = approvalProofRecentlySatisfied(props.gate);
+  const requireFreshTotp = props.requireFreshTotp === true;
+  const recentlySatisfied = !requireFreshTotp && approvalProofRecentlySatisfied(props.gate);
   const needsPassword = approvalProofRequiresPassword(props.gate);
   const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.gate, now2);
   const gateLocked = lockRemainingSeconds > 0;
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
-    props.busy === true
+    props.busy === true,
+    requireFreshTotp
   );
   reactExports.useEffect(() => {
     if (!gateLocked) return void 0;
@@ -31298,7 +34415,7 @@ function ApprovalPasswordModal(props) {
   if (gateLocked) {
     modalDescription = `Approval gate is temporarily locked. Try again in ${lockRemainingSeconds} seconds.`;
   }
-  const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
+  const showCooldownOption = approvalProofCooldownOptionShown(props.gate);
   const handleBackdropClick = reactExports.useCallback(
     (e) => {
       if (e.target === e.currentTarget && props.busy !== true) props.onCancel();
@@ -31329,7 +34446,7 @@ function ApprovalPasswordModal(props) {
               {
                 id: "approval-password-modal-title",
                 className: "text-lg font-semibold tracking-tight text-brand-dark",
-                children: approvalProofModalTitle(gateLocked, recentlySatisfied, needsPassword)
+                children: approvalProofModalTitle(gateLocked, recentlySatisfied, needsPassword, approvalProofUsesPulse(props.gate))
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: modalDescription })
@@ -31343,6 +34460,7 @@ function ApprovalPasswordModal(props) {
               approvalPassword: props.approvalPassword,
               approvalTotpCode: props.approvalTotpCode,
               passwordRef,
+              requireFreshTotp,
               onApprovalPasswordChange: props.onApprovalPasswordChange,
               onApprovalTotpCodeChange: props.onApprovalTotpCodeChange
             }
@@ -31707,11 +34825,13 @@ function ScannerEvidenceSection(props) {
 }
 function buildTopAlertItems(item) {
   const items = [];
-  const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
+  const mcpCall = explainMcpCall(item);
+  const secondaryRiskSummary = plainMcpReason(item, resolveSecondaryRiskSummary(item));
   const watchOnly = isWatchOnlyObservation(item);
   const ruleLines = watchOnly ? [] : ruleMatchLines(item.extension_coverage);
-  const pauseReason = watchOnly || ruleLines.length > 0 ? null : whyPaused(item);
-  if (secondaryRiskSummary) {
+  const guessedReason = watchOnly || ruleLines.length > 0 ? null : whyPaused(item);
+  const pauseReason = mcpCall !== null && guessedReason === UNREVIEWED_MCP_TOOL ? null : guessedReason;
+  if (secondaryRiskSummary && !(mcpCall !== null && secondaryRiskSummary === mcpCall.whyAsked)) {
     items.push({
       id: "secondary-risk",
       title: "Additional risk",
@@ -31793,14 +34913,72 @@ function buildEvidenceItems(item) {
   }
   return items;
 }
+function simpleMcpChoiceApplies(item) {
+  return explainMcpCall(item) !== null && !isWatchOnlyObservation(item) && item.artifact_type !== "native_bash_request" && !retryCannotReuseApproval(item) && item.exact_action_persistence_eligible === true && requestSupportsScope(item, "allow", "artifact");
+}
+function McpDecisionChoice(props) {
+  const exact = props.allowScope === "artifact";
+  const { onAllowScopeChange, onRememberExactActionChange } = props;
+  const chooseOnce = reactExports.useCallback(() => {
+    onAllowScopeChange("artifact");
+    onRememberExactActionChange(false);
+  }, [onAllowScopeChange, onRememberExactActionChange]);
+  const chooseAlways = reactExports.useCallback(() => {
+    onAllowScopeChange("artifact");
+    onRememberExactActionChange(true);
+  }, [onAllowScopeChange, onRememberExactActionChange]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "How long should Guard allow it?" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-2 sm:grid-cols-2", role: "radiogroup", "aria-label": "How long to allow this call", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ChoiceCard,
+        {
+          checked: exact && !props.rememberExactAction,
+          title: "Just this once",
+          body: `Lets the agent retry this call within ${retryWindowText(props.retryWindowMinutes)}. After that, Guard asks again.`,
+          onChoose: chooseOnce
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ChoiceCard,
+        {
+          checked: exact && props.rememberExactAction,
+          title: "Always allow this call",
+          body: "Lets the agent make exactly this call whenever it asks. A different call still asks you first.",
+          onChoose: chooseAlways
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-slate-200/70 bg-slate-50/60 p-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "More choices" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: props.moreChoices })
+    ] })
+  ] });
+}
+function ChoiceCard(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      role: "radio",
+      "aria-checked": props.checked,
+      onClick: props.onChoose,
+      className: `rounded-xl border px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-brand-blue/20 ${props.checked ? "border-brand-blue bg-brand-blue/[0.06] ring-1 ring-brand-blue/20" : "border-slate-200/70 bg-white hover:bg-slate-50"}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: props.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-snug text-muted-foreground", children: props.body })
+      ]
+    }
+  );
+}
 function ReviewScopeControls(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval scope" }),
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.bare === true ? "space-y-2" : "mt-6 space-y-2", children: [
+    props.bare !== true && /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval scope" }),
     !props.hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "status", children: props.oneTimeRetryBlocked ? "Guard cannot bind this app's retry to the reviewed version. Execution approval is unavailable." : "This action cannot be approved under its current Guard policy." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: props.commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    props.commonScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: props.commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       ScopeChoiceButton,
       {
-        choice,
+        choice: scopeChoiceWithDuration(choice, props.rememberExactAction && props.exactActionPersistenceEligible),
         checked: props.allowScope === choice.value,
         onScopeChange: props.onAllowScopeChange
       },
@@ -31880,7 +35058,7 @@ function ExactActionPersistenceChoice(props) {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: props.versionBoundScript ? "Run once" : "This time" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${props.retryWindowMinutes} minutes.` })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${retryWindowText(props.retryWindowMinutes)}.` })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(props.checked), children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -31945,92 +35123,561 @@ function blockButtonLabel(scope) {
   }
   return "Block matching actions";
 }
-const INTENT_FIELDS = ["description", "justification"];
-const MAX_INTENT_CHARS = 300;
-const SHELL_TOOL_NAMES = /* @__PURE__ */ new Set([
-  "bash",
-  "shell",
-  "sh",
-  "zsh",
-  "terminal",
-  "run_command",
-  "run_terminal_command",
-  "run_shell_command",
-  "exec_command"
-]);
-const CODEX_TOOL_NAMESPACE = "functions.";
-const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"];
-const UNSAFE_CHARACTERS = new RegExp(
-  "[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
-  "g"
-);
-function resolveAgentStatedIntent(item) {
-  const envelope = item.action_envelope_json;
-  if (!envelope) {
-    return null;
-  }
-  if (envelope.action_type !== "shell_command" && envelope.action_type !== "package_script") {
-    return null;
-  }
-  if (envelope.mcp_server) {
-    return null;
-  }
-  const raw = recordValue(envelope.raw_payload_redacted);
-  const toolName = envelope.tool_name ?? (typeof raw?.tool_name === "string" ? raw.tool_name : null);
-  if (toolName === null || !SHELL_TOOL_NAMES.has(shellToolName(toolName))) {
-    return null;
-  }
-  const toolInput = firstToolInput(raw);
-  if (toolInput === null) {
-    return null;
-  }
-  for (const field of INTENT_FIELDS) {
-    const value = toolInput[field];
-    if (typeof value !== "string") {
-      continue;
+function ReviewDecisionControls({ simpleMcp, ...props }) {
+  if (!simpleMcp) return /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewScopeControls, { ...props });
+  const workspaceOnly = props.commonScopeOptions.filter((choice) => choice.value !== "artifact");
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    McpDecisionChoice,
+    {
+      allowScope: props.allowScope,
+      rememberExactAction: props.rememberExactAction,
+      retryWindowMinutes: props.retryWindowMinutes ?? 15,
+      onAllowScopeChange: props.onAllowScopeChange,
+      onRememberExactActionChange: props.onRememberExactActionChange,
+      moreChoices: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ReviewScopeControls,
+        {
+          ...props,
+          bare: true,
+          commonScopeOptions: workspaceOnly,
+          exactActionPersistenceEligible: false
+        }
+      )
     }
-    const text2 = value.replace(UNSAFE_CHARACTERS, " ").replace(/\s+/g, " ").trim();
-    if (text2.length === 0) {
-      continue;
-    }
-    return {
-      text: text2.length > MAX_INTENT_CHARS ? `${text2.slice(0, MAX_INTENT_CHARS)}…` : text2,
-      field
-    };
-  }
-  return null;
+  );
 }
-function firstToolInput(raw) {
-  if (raw === null) {
-    return null;
+function decisionButtonLabels(input) {
+  const { item, allowScope, blockScope, watchOnlyObservation } = input;
+  const versionBoundScript = item.artifact_type === "native_bash_request";
+  const persistExactAllow = willPersistExactAction(item, "allow", allowScope, input.rememberExactAction);
+  const persistExactBlock = willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
+  let allowLabel = allowButtonLabel(allowScope, versionBoundScript, persistExactAllow);
+  if (watchOnlyObservation) {
+    allowLabel = "Keep allowing";
+  } else if (input.simpleMcp && allowScope === "artifact") {
+    allowLabel = persistExactAllow ? "Always allow this call" : "Allow once";
+  } else if (persistExactAllow && !versionBoundScript) {
+    allowLabel = "Approve and remember";
+  } else if (retryCannotReuseApproval(item)) {
+    allowLabel = "Choose an available approval duration";
   }
-  for (const key of TOOL_INPUT_KEYS) {
-    const value = raw[key];
-    const input = recordValue(value);
-    if (input !== null) {
-      return input;
-    }
-    if (typeof value !== "string" || value.trim().length === 0) {
-      continue;
-    }
-    let parsed;
-    try {
-      parsed = JSON.parse(value);
-    } catch {
-      return null;
-    }
-    if (recordValue(parsed) !== null) {
-      return null;
-    }
+  const blockLabel = watchOnlyObservation || persistExactBlock ? "Stop this next time" : blockButtonLabel(blockScope);
+  return { persistExactAllow, persistExactBlock, allowLabel, blockLabel };
+}
+function resolvedActionCopy(item, action2, persistedExactAction) {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action2, persistedExactAction);
+  if (action2 === "allow") return "Approved: action can proceed";
+  return "Blocked: action stopped";
+}
+const EXTENSION_BRANDS = {
+  git: { slug: "git", label: "Git", color: "F05032" },
+  github: { slug: "github", label: "GitHub", color: "181717" },
+  "github-actions": { slug: "github-actions", label: "GitHub Actions", color: "2088FF" },
+  gitlab: { slug: "gitlab", label: "GitLab", color: "FC6D26" },
+  circleci: { slug: "circleci", label: "CircleCI", color: "343434" },
+  aws: { slug: "aws", label: "AWS", color: "FF9900" },
+  gcp: { slug: "gcp", label: "Google Cloud", color: "4285F4" },
+  azure: { slug: "azure", label: "Azure", color: "0078D4" },
+  postgresql: { slug: "postgresql", label: "PostgreSQL", color: "4169E1" },
+  mysql: { slug: "mysql", label: "MySQL", color: "4479A1" },
+  mongodb: { slug: "mongodb", label: "MongoDB", color: "47A248" },
+  redis: { slug: "redis", label: "Redis", color: "FF4438" },
+  sqlite: { slug: "sqlite", label: "SQLite", color: "003B57" },
+  supabase: { slug: "supabase", label: "Supabase", color: "3FCF8E" },
+  vercel: { slug: "vercel", label: "Vercel", color: "000000" },
+  netlify: { slug: "netlify", label: "Netlify", color: "00C7B7" },
+  heroku: { slug: "heroku", label: "Heroku", color: "430098" },
+  minio: { slug: "minio", label: "MinIO", color: "C72E49" },
+  elasticsearch: { slug: "elasticsearch", label: "Elasticsearch", color: "005571" },
+  kafka: { slug: "kafka", label: "Apache Kafka", color: "231F20" },
+  rabbitmq: { slug: "rabbitmq", label: "RabbitMQ", color: "FF6600" },
+  nats: { slug: "nats", label: "NATS", color: "27AAE1" },
+  docker: { slug: "docker", label: "Docker", color: "2496ED" },
+  kubernetes: { slug: "kubernetes", label: "Kubernetes", color: "326CE5" },
+  helm: { slug: "helm", label: "Helm", color: "0F1689" },
+  launchdarkly: { slug: "launchdarkly", label: "LaunchDarkly", color: "A34FDE" },
+  stripe: { slug: "stripe", label: "Stripe", color: "635BFF" },
+  npm: { slug: "npm", label: "npm", color: "CB3837" },
+  node: { slug: "node", label: "Node.js", color: "5FA04E" },
+  python: { slug: "python", label: "Python", color: "3776AB" },
+  rust: { slug: "rust", label: "Rust", color: "000000" },
+  go: { slug: "go", label: "Go", color: "00ADD8" },
+  ruby: { slug: "ruby", label: "Ruby", color: "CC342D" },
+  php: { slug: "php", label: "PHP", color: "777BB4" },
+  composer: { slug: "composer", label: "Composer", color: "885630" },
+  maven: { slug: "maven", label: "Maven", color: "C71A36" },
+  gradle: { slug: "gradle", label: "Gradle", color: "02303A" },
+  homebrew: { slug: "homebrew", label: "Homebrew", color: "FBB040" },
+  debian: { slug: "debian", label: "Debian", color: "A81D33" },
+  terraform: { slug: "terraform", label: "Terraform", color: "844FBA" },
+  opentofu: { slug: "opentofu", label: "OpenTofu", color: "FFDA18" },
+  pulumi: { slug: "pulumi", label: "Pulumi", color: "8A3391" },
+  windows: { slug: "windows", label: "Windows", color: "0078D4" },
+  rclone: { slug: "rclone", label: "Rclone", color: "3F79AD" },
+  restic: { slug: "restic", label: "Restic", color: "2EA043" },
+  borg: { slug: "borg", label: "Borg", color: "00B000" },
+  velero: { slug: "velero", label: "Velero", color: "326CE5" },
+  openssh: { slug: "openssh", label: "OpenSSH", color: "F2CA30" },
+  cloudflare: { slug: "cloudflare", label: "Cloudflare", color: "F38020" }
+};
+const CLOUD_CLUSTER = ["aws", "gcp", "azure"];
+const BY_EXTENSION_ID = {
+  "command.git": ["git"],
+  "command.github": ["github"],
+  "command.filesystem": [],
+  "command.system": [],
+  "command.windows": ["windows"],
+  "command.container-runtime": ["docker"],
+  "command.data-protection": [],
+  "command.encoded-execution": [],
+  "command.guard-self-protection": [],
+  "command.kubernetes-secrets": ["kubernetes"],
+  "command.shell-mutations": [],
+  "command.package.node": ["node", "npm"],
+  "command.package.python": ["python"],
+  "command.package.rust": ["rust"],
+  "command.package.go": ["go"],
+  "command.package.jvm": ["maven", "gradle"],
+  "command.package.ruby": ["ruby"],
+  "command.package.php": ["php", "composer"],
+  "command.package.system": ["homebrew", "debian"],
+  "command.cloud.aws": ["aws"],
+  "command.cloud.gcp": ["gcp"],
+  "command.cloud.azure": ["azure"],
+  "command.database.postgresql": ["postgresql"],
+  "command.database.mysql": ["mysql"],
+  "command.database.mongodb": ["mongodb"],
+  "command.database.redis": ["redis"],
+  "command.database.sqlite": ["sqlite"],
+  "command.database.supabase": ["supabase"],
+  "command.storage.aws-s3": ["aws"],
+  "command.storage.google-cloud": ["gcp"],
+  "command.storage.azure-blob": ["azure"],
+  "command.storage.minio": ["minio"],
+  "command.backup.rclone": ["rclone"],
+  "command.backup.restic": ["restic"],
+  "command.backup.borg": ["borg"],
+  "command.backup.velero": ["velero"],
+  "command.remote.ssh": [],
+  "command.remote.scp": [],
+  "command.remote.rsync": [],
+  "command.cicd.github": ["github-actions"],
+  "command.cicd.gitlab": ["gitlab"],
+  "command.cicd.circleci": ["circleci"],
+  "command.platform.vercel": ["vercel"],
+  "command.platform.netlify": ["netlify"],
+  "command.platform.heroku": ["heroku"],
+  "command.dns.aws": ["aws"],
+  "command.dns.gcp": ["gcp"],
+  "command.dns.azure": ["azure"],
+  "command.cdn": CLOUD_CLUSTER,
+  "command.api-gateway": CLOUD_CLUSTER,
+  "command.load-balancer": CLOUD_CLUSTER,
+  "command.monitoring": CLOUD_CLUSTER,
+  "command.email": ["aws"],
+  "command.feature-flags": ["launchdarkly"],
+  "command.payment": ["stripe"],
+  "command.search.elasticsearch": ["elasticsearch"],
+  "command.messaging.kafka": ["kafka"],
+  "command.messaging.rabbitmq": ["rabbitmq"],
+  "command.messaging.nats": ["nats"],
+  "command.kubernetes-operations": ["kubernetes", "helm"],
+  "command.infrastructure-as-code": ["terraform", "opentofu", "pulumi"]
+};
+Object.freeze(Object.keys(BY_EXTENSION_ID));
+const INFERENCE = [
+  { slug: "github-actions", pattern: /\bgithub actions\b/ },
+  { slug: "github", pattern: /\bgithub\b/ },
+  { slug: "gitlab", pattern: /\bgitlab\b/ },
+  { slug: "circleci", pattern: /\bcircleci\b/ },
+  { slug: "git", pattern: /\bgit\b/ },
+  { slug: "aws", pattern: /\b(?:aws|amazon|s3)\b/ },
+  { slug: "gcp", pattern: /\b(?:gcp|gcloud|google cloud)\b/ },
+  { slug: "azure", pattern: /\bazure\b/ },
+  { slug: "postgresql", pattern: /\b(?:postgres|postgresql|psql)\b/ },
+  { slug: "mysql", pattern: /\bmysql\b/ },
+  { slug: "mongodb", pattern: /\b(?:mongo|mongodb)\b/ },
+  { slug: "redis", pattern: /\bredis\b/ },
+  { slug: "sqlite", pattern: /\bsqlite\b/ },
+  { slug: "supabase", pattern: /\bsupabase\b/ },
+  { slug: "vercel", pattern: /\bvercel\b/ },
+  { slug: "netlify", pattern: /\bnetlify\b/ },
+  { slug: "heroku", pattern: /\bheroku\b/ },
+  { slug: "minio", pattern: /\bminio\b/ },
+  { slug: "elasticsearch", pattern: /\b(?:elastic|elasticsearch)\b/ },
+  { slug: "kafka", pattern: /\bkafka\b/ },
+  { slug: "rabbitmq", pattern: /\brabbit(?:mq)?\b/ },
+  { slug: "nats", pattern: /\bnats\b/ },
+  { slug: "docker", pattern: /\b(?:docker|podman|container)\b/ },
+  { slug: "kubernetes", pattern: /\b(?:kubernetes|kubectl|k8s)\b/ },
+  { slug: "helm", pattern: /\bhelm\b/ },
+  { slug: "launchdarkly", pattern: /\b(?:launchdarkly|feature.?flag)\b/ },
+  { slug: "stripe", pattern: /\bstripe\b/ },
+  { slug: "npm", pattern: /\bnpm\b/ },
+  { slug: "node", pattern: /\b(?:node|nodejs|nodedotjs)\b/ },
+  { slug: "python", pattern: /\b(?:python|pip|poetry)\b/ },
+  { slug: "rust", pattern: /\b(?:rust|cargo)\b/ },
+  { slug: "go", pattern: /\bgolang\b|\bgo\b/ },
+  { slug: "ruby", pattern: /\b(?:ruby|gem|bundler)\b/ },
+  { slug: "php", pattern: /\bphp\b/ },
+  { slug: "composer", pattern: /\bcomposer\b/ },
+  { slug: "maven", pattern: /\b(?:maven|mvn)\b/ },
+  { slug: "gradle", pattern: /\bgradle\b/ },
+  { slug: "homebrew", pattern: /\b(?:homebrew|brew)\b/ },
+  { slug: "debian", pattern: /\b(?:debian|apt)\b/ },
+  { slug: "terraform", pattern: /\bterraform\b/ },
+  { slug: "opentofu", pattern: /\b(?:opentofu|tofu)\b/ },
+  { slug: "pulumi", pattern: /\bpulumi\b/ },
+  { slug: "windows", pattern: /\bwindows\b/ },
+  { slug: "rclone", pattern: /\brclone\b/ },
+  { slug: "restic", pattern: /\brestic\b/ },
+  { slug: "borg", pattern: /\bborg\b/ },
+  { slug: "velero", pattern: /\bvelero\b/ },
+  { slug: "cloudflare", pattern: /\b(?:cloudflare|wrangler)\b/ },
+  { slug: "openssh", pattern: /\b(?:ssh|scp|openssh)\b/ }
+];
+function searchableText(input) {
+  return [
+    input.extension_id,
+    input.name ?? "",
+    ...input.executables ?? [],
+    ...input.ecosystem_ids ?? []
+  ].join(" ").replace(/[._/-]+/g, " ").toLowerCase();
+}
+function uniqueSlugs(slugs) {
+  const seen2 = /* @__PURE__ */ new Set();
+  const ordered = [];
+  for (const slug of slugs) {
+    if (seen2.has(slug)) continue;
+    seen2.add(slug);
+    ordered.push(slug);
   }
-  return null;
+  return ordered.slice(0, 3);
 }
-function shellToolName(toolName) {
-  const name = toolName.trim().toLowerCase();
-  return name.startsWith(CODEX_TOOL_NAMESPACE) ? name.slice(CODEX_TOOL_NAMESPACE.length) : name;
+function inferSlugs(input) {
+  const text2 = searchableText(input);
+  const found = [];
+  for (const entry of INFERENCE) {
+    if (entry.pattern.test(text2)) found.push(entry.slug);
+  }
+  return uniqueSlugs(found);
 }
-function recordValue(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+function fallbackForExtensionId(extensionId) {
+  if (extensionId === "command.guard-self-protection") return "shield";
+  if (extensionId.includes("secret") || extensionId.includes("data-protection")) return "lock";
+  if (extensionId.includes("package")) return "cube";
+  if (extensionId.includes("cloud") || extensionId.includes("platform")) return "cloud";
+  if (extensionId.includes("database") || extensionId.includes("storage") || extensionId.includes("backup")) return "server";
+  if (extensionId.includes("remote") || extensionId.includes("network")) return "globe";
+  if (extensionId.includes("filesystem")) return "folder";
+  if (extensionId.includes("shell") || extensionId.includes("system") || extensionId.includes("encoded") || extensionId.includes("rsync")) return "terminal";
+  if (extensionId.includes("payment") || extensionId.includes("feature")) return "bolt";
+  return "shield";
+}
+function isNearBlackBrand(color) {
+  const hex = color.toLowerCase();
+  return hex === "000000" || hex === "181717" || hex === "231f20" || hex === "343434";
+}
+function brandSlugFromField(brand2) {
+  return brand2 !== void 0 && Object.prototype.hasOwnProperty.call(EXTENSION_BRANDS, brand2) ? brand2 : null;
+}
+function resolveExtensionBrand(input) {
+  const fallback = fallbackForExtensionId(input.extension_id);
+  if (input.extension_id === "command.guard-self-protection") {
+    return { kind: "guard", marks: [], fallback: "shield" };
+  }
+  const mapped = BY_EXTENSION_ID[input.extension_id];
+  const declared = brandSlugFromField(input.brand);
+  const slugs = uniqueSlugs(mapped ?? (declared ? [declared] : inferSlugs(input)));
+  if (slugs.length === 0) {
+    return { kind: "fallback", marks: [], fallback };
+  }
+  return {
+    kind: "marks",
+    marks: slugs.map((slug) => EXTENSION_BRANDS[slug]),
+    fallback
+  };
+}
+function extensionBrandTestId(resolution) {
+  if (resolution.kind === "guard") return "guard";
+  if (resolution.kind === "marks") return resolution.marks.map((mark) => mark.slug).join(" ");
+  return `fallback-${resolution.fallback}`;
+}
+const LETTER_COLORS = ["2563eb", "0f766e", "7c3aed", "b45309", "be123c", "0369a1"];
+function letterColor(name) {
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) % LETTER_COLORS.length;
+  return LETTER_COLORS[hash];
+}
+function tileStyle$1(color) {
+  return { ["--extension-brand"]: `#${isNearBlackBrand(color) ? "3f4174" : color}` };
+}
+function McpAppMark({ name, size = "md" }) {
+  const brand2 = mcpBrandFor(name);
+  if (brand2 !== null) {
+    const Icon = brand2.icon;
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: "guard-extension-mark",
+        "data-size": size,
+        "data-kind": "mcp-app",
+        "data-mcp-app": brand2.label,
+        style: tileStyle$1(brand2.color),
+        "aria-hidden": "true",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, {})
+      }
+    );
+  }
+  const letter = name.trim().charAt(0).toUpperCase() || "?";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "span",
+    {
+      className: "guard-extension-mark",
+      "data-size": size,
+      "data-kind": "letter",
+      "data-mcp-app": "letter",
+      style: tileStyle$1(letterColor(name)),
+      "aria-hidden": "true",
+      children: letter
+    }
+  );
+}
+const EFFECT_ICONS = {
+  "in-app": HiMiniComputerDesktop,
+  read: HiMiniMagnifyingGlass,
+  write: HiMiniPencilSquare,
+  send: HiMiniPaperAirplane,
+  delete: HiMiniTrash,
+  "run-code": HiMiniCommandLine,
+  connect: HiMiniLink,
+  "act-as-you": HiMiniCursorArrowRays,
+  unknown: HiMiniQuestionMarkCircle
+};
+const CONSEQUENCE_TONES = {
+  calm: "border-slate-200 bg-slate-50",
+  care: "border-brand-attention/30 bg-brand-attention/[0.07]",
+  danger: "border-red-200 bg-red-50"
+};
+const LONG_VALUE_CHARS = 140;
+function EffectPill({ effect }) {
+  const Icon = EFFECT_ICONS[effect];
+  const tone = effect === "read" || effect === "in-app" ? "border-slate-200 bg-slate-50 text-brand-dark/80" : "border-brand-attention/30 bg-brand-attention/[0.08] text-brand-dark";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+    MCP_EFFECT_COPY[effect].label
+  ] });
+}
+function ConsequenceNote({ explanation }) {
+  const { consequence, aside, effect, effectBasis } = explanation;
+  const Icon = consequence.tone === "danger" ? HiMiniExclamationTriangle : EFFECT_ICONS[effect];
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "note", className: `mx-4 mb-4 rounded-xl border px-3.5 py-3 sm:mx-5 ${CONSEQUENCE_TONES[consequence.tone]}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-dark/70", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium leading-snug text-brand-dark", children: consequence.text }),
+      aside !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-snug text-brand-dark/75", children: aside }),
+      effectBasis.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1.5 flex items-center gap-1 text-xs leading-snug text-muted-foreground", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "h-3.5 w-3.5 shrink-0", "aria-hidden": "true" }),
+        effectBasis
+      ] })
+    ] })
+  ] }) });
+}
+function StepRow({ step, position, total }) {
+  const Icon = EFFECT_ICONS[step.effect];
+  const lone = total === 1;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-start gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0 sm:px-5", children: [
+    !lone && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        "aria-hidden": "true",
+        className: "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-brand-dark/70",
+        children: position
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      !lone && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex min-w-0 items-center gap-1.5 break-words text-sm font-medium text-brand-dark", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4 shrink-0 text-brand-dark/60", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+            step.action,
+            step.app !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-brand-dark/70", children: [
+              " in ",
+              step.app
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs text-brand-dark/60", children: MCP_EFFECT_COPY[step.effect].label })
+      ] }),
+      step.details.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: lone ? "" : "mt-1.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FactList, { facts: step.details }) }),
+      step.hiddenDetails > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-muted-foreground", children: [
+        step.hiddenDetails,
+        " more ",
+        step.hiddenDetails === 1 ? "field" : "fields",
+        " in the exact input"
+      ] })
+    ] })
+  ] });
+}
+function FactList({ facts }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "grid grid-cols-[minmax(5.5rem,auto)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm", children: facts.map((fact2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "contents", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "pt-0.5 text-brand-dark/60", children: fact2.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "min-w-0 break-words text-brand-dark", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FactValue, { fact: fact2 }) })
+  ] }, `${fact2.label}-${fact2.value}`)) });
+}
+function FactValue({ fact: fact2 }) {
+  switch (fact2.kind) {
+    case "email":
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(AddressChips, { value: fact2.value });
+    case "url":
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(LinkValue, { value: fact2.value });
+    case "long":
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(LongText, { value: fact2.value });
+    case "code":
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block whitespace-pre-wrap break-words rounded-md bg-slate-50 px-2 py-1 font-mono text-xs", children: fact2.value });
+    default:
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: fact2.mono === true ? "font-mono text-xs" : "", children: fact2.value });
+  }
+}
+function AddressChips({ value }) {
+  const addresses = emailAddresses(value) ?? [value];
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-wrap gap-1.5", "aria-label": "Addresses", children: addresses.map((address) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium", children: address }, address)) });
+}
+function LinkValue({ value }) {
+  const parts = linkParts(value);
+  if (parts === null) return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: value });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "break-all", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: parts.host }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-brand-dark/60", children: parts.rest })
+  ] });
+}
+function LongText({ value }) {
+  const [open, setOpen] = reactExports.useState(false);
+  const toggle = reactExports.useCallback(() => setOpen((current) => !current), []);
+  const needsToggle = value.length > LONG_VALUE_CHARS || value.includes("\n");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `whitespace-pre-wrap break-words ${open || !needsToggle ? "" : "line-clamp-3"}`, children: value }),
+    needsToggle && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: toggle,
+        "aria-expanded": open,
+        className: "mt-0.5 text-xs font-medium text-brand-blue hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30",
+        children: open ? "Show less" : "Show more"
+      }
+    )
+  ] });
+}
+function showsSteps(explanation) {
+  if (explanation.steps.length > 1 || (explanation.hiddenSteps ?? 0) > 0) return true;
+  return explanation.steps.some((step) => step.details.length > 0 || step.hiddenDetails > 0);
+}
+function subtitleOf(explanation, app) {
+  if (explanation.builtIn === true) return `Built into ${explanation.connector}`;
+  return app === explanation.connector ? `Tool from ${explanation.connector}` : `${app}, through ${explanation.connector}`;
+}
+const GENERIC_REASON = /needs your approval before this action can run/i;
+function scopeNote(item, connector) {
+  if (item.scope_restrictions?.includes("provider_account_unverified_once_only") === true) {
+    return `You can allow this once, for these exact inputs. Guard cannot save it for next time, because it cannot confirm which ${connector} account it uses.`;
+  }
+  return "Allow once and Always allow both cover only these exact inputs. If the inputs change, Guard asks again.";
+}
+function CodePanel({ requestId, code }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    LoggedActionPanel,
+    {
+      label: code.collapsed === true ? "Code" : code.label,
+      text: code.text,
+      copyAriaLabel: "Copy the code to clipboard"
+    },
+    `${requestId}-code`
+  );
+}
+function McpCallCard({ item, explanation }) {
+  const watchOnly = isWatchOnlyObservation(item);
+  const workingDirectory = resolveRequestWorkingDirectory(item);
+  const coreReason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
+  const reason = coreReason !== null && !GENERIC_REASON.test(coreReason) ? coreReason : explanation.whyAsked;
+  const app = actingApp(explanation);
+  const facts = [
+    ...explanation.facts,
+    ...workingDirectory !== null ? [{ label: "Working directory", value: workingDirectory, mono: true }] : []
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "What the agent is asking to do", className: "mt-5 rounded-2xl border border-slate-200 bg-white", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:p-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(McpAppMark, { name: mcpMarkName(explanation), size: "md" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-semibold leading-snug text-brand-dark", children: explanation.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-words text-sm text-brand-dark/70", children: subtitleOf(explanation, app) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "col-start-2 row-start-2 sm:col-start-3 sm:row-start-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EffectPill, { effect: explanation.effect }) })
+    ] }),
+    watchOnly && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-4 mb-3 text-sm font-medium text-brand-dark sm:mx-5", children: "Watch let this call through. Guard would have stopped it." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ConsequenceNote, { explanation }),
+    showsSteps(explanation) && explanation.stepsCaption !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "border-t border-slate-100 px-4 pt-3 text-xs font-medium uppercase tracking-wide text-brand-dark/60 sm:px-5", children: explanation.stepsCaption }),
+    showsSteps(explanation) && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "ol",
+      {
+        className: explanation.stepsCaption !== void 0 ? "" : "border-t border-slate-100",
+        "aria-label": explanation.stepsCaption ?? "Actions in this call",
+        children: [
+          explanation.steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(StepRow, { step, position: index + 1, total: explanation.steps.length }, step.id)),
+          (explanation.hiddenSteps ?? 0) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "border-t border-slate-100 px-4 py-3 text-xs text-muted-foreground sm:px-5", children: [
+            explanation.hiddenSteps,
+            " more ",
+            explanation.hiddenSteps === 1 ? "action" : "actions",
+            " in the exact input"
+          ] })
+        ]
+      }
+    ),
+    facts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-4 py-3.5 sm:px-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FactList, { facts }) }),
+    explanation.quotes !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("figure", { className: "mx-4 mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 sm:mx-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("figcaption", { className: "text-xs font-medium text-brand-dark/70", children: explanation.quotes.caption }),
+      explanation.quotes.items.map((text2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("blockquote", { className: "mt-1 break-words text-sm text-brand-dark", children: [
+        "“",
+        text2,
+        "”"
+      ] }, text2)),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[11px] leading-snug text-muted-foreground", children: "In the agent's own words. Guard has not checked this, so decide from what the call does." })
+    ] }),
+    explanation.code !== null && explanation.code.collapsed !== true && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-4 mb-4 sm:mx-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) }),
+    explanation.code !== null && explanation.code.collapsed === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: [
+        "See ",
+        explanation.code.label.charAt(0).toLowerCase(),
+        explanation.code.label.slice(1)
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the exact input" }),
+      explanation.rawInput !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        LoggedActionPanel,
+        {
+          label: "Input",
+          text: explanation.rawInput,
+          copyAriaLabel: "Copy the exact input to clipboard",
+          expandAriaLabel: "Expand the exact input",
+          collapseAriaLabel: "Collapse the exact input"
+        },
+        `${item.request_id}-input`
+      ) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "This call sent no input." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 break-all text-xs text-muted-foreground", children: [
+        "Tool ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "font-mono text-brand-dark/80", children: explanation.toolId })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 border-t border-slate-100 px-4 py-3 text-xs leading-snug text-muted-foreground sm:px-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: reason }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        scopeNote(item, explanation.connector),
+        explanation.truncated ? " Long text is shown shortened here." : ""
+      ] })
+    ] })
+  ] });
 }
 const PROTECTION_APPEARANCE = {
   protected: {
@@ -32139,17 +35786,24 @@ function ReviewEmptyState({ runtime: runtime2, resolutionMessage, codexResume, o
   ] });
 }
 function PrimaryActionCard({ item }) {
-  const action = buildPrimaryReviewAction(item);
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(McpCallCard, { item, explanation: mcpCall });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(LoggedActionCard, { item });
+}
+function LoggedActionCard({ item }) {
+  const action2 = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
   const agentIntent = resolveAgentStatedIntent(item);
   const watchOnlyObservation = isWatchOnlyObservation(item);
   const actionDescription = watchOnlyObservation ? "observed action" : "stopped action";
-  const actionLabel = watchOnlyObservation ? "Would have stopped" : action.label;
+  const actionLabel = watchOnlyObservation ? "Would have stopped" : action2.label;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: watchOnlyObservation ? "What Watch observed" : "What was stopped" }),
-        action.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
+        action2.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action2.detail })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: actionLabel })
     ] }),
@@ -32158,7 +35812,7 @@ function PrimaryActionCard({ item }) {
         LoggedActionPanel,
         {
           label: actionLabel,
-          text: action.text,
+          text: action2.text,
           copyAriaLabel: `Copy full ${actionDescription} to clipboard`,
           expandAriaLabel: `Expand full ${actionDescription}`,
           collapseAriaLabel: `Collapse full ${actionDescription}`
@@ -32186,6 +35840,7 @@ function buildWhatWouldHappen(item) {
   if (isWatchOnlyObservation(item)) {
     return `Watch allowed this action to continue. ${watchProtectedOutcome(item)}`;
   }
+  if (explainMcpCall(item) !== null) return null;
   const type = item.artifact_type;
   if (type?.includes("file_write") || type?.includes("file_read")) {
     return `Without Guard, ${harnessDisplayName(item.harness)} would access "${item.artifact_name ?? item.artifact_id}" immediately. Guard paused it so you can review first.`;
@@ -33831,7 +37486,10 @@ function resolvedStateForItem(state, item) {
 function approvalGateRefreshNeeded(err) {
   if (!(err instanceof GuardRequestResolutionError)) return false;
   const code = err.payload?.["error"];
-  return err.status === 423 && code === "approval_gate_locked" || code === "approval_gate_totp_required";
+  return err.status === 423 && code === "approval_gate_locked" || approvalGateDemandedCode(err);
+}
+function approvalGateDemandedCode(err) {
+  return err instanceof GuardRequestResolutionError && err.payload?.["error"] === "approval_gate_totp_required";
 }
 function useShownRequestCheck(requestId) {
   const shown = reactExports.useRef(requestId);
@@ -33903,9 +37561,40 @@ function useReviewDecisionResolve(params) {
   const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
   const [preflighting, setPreflighting] = reactExports.useState(false);
   const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports.useState(params.approvalGate);
+  const [freshCodeRequired, setFreshCodeRequired] = reactExports.useState(false);
   const approvalGate = effectiveApprovalGate;
   const useCooldown = defaultUseApprovalCooldown(approvalGate) && !cooldownOptOut;
   const decisionBusy = submitting !== null || preflighting;
+  const [signInReason, setSignInReason] = reactExports.useState(null);
+  const shownRequestId = item?.request_id ?? null;
+  const recheckSignIn = reactExports.useCallback(() => {
+    if (shownRequestId === null) {
+      setSignInReason(null);
+      return true;
+    }
+    const verdict = guardDecisionSession(shownRequestId);
+    if (verdict.kind === "ready") {
+      setSignInReason(null);
+      return true;
+    }
+    setSignInReason(verdict.reason);
+    setErrorMessage(null);
+    setPendingAction(null);
+    setPendingContractKey(null);
+    return false;
+  }, [shownRequestId]);
+  reactExports.useEffect(() => {
+    recheckSignIn();
+    const handleStorage = () => {
+      recheckSignIn();
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleStorage);
+    };
+  }, [recheckSignIn]);
   reactExports.useEffect(() => {
     setEffectiveApprovalGate(params.approvalGate);
   }, [params.approvalGate]);
@@ -33921,45 +37610,46 @@ function useReviewDecisionResolve(params) {
     setCooldownOptOut(false);
     setPendingAction(null);
     setPendingContractKey(null);
+    setFreshCodeRequired(false);
   }, [decisionSubjectKey]);
   const handleResolve = reactExports.useCallback(
-    async (action, gateOverride) => {
+    async (action2, gateOverride) => {
       if (!item || resolutionBlockReason !== null) return;
-      if (action === "allow" && !canSubmitAllow) {
+      if (action2 === "allow" && !canSubmitAllow) {
         setErrorMessage(hasAllowScope ? "Choose 'Always allow exact action' before approving; run once is unavailable." : "This action has no eligible approval scope.");
         return;
       }
       const requestId = item.request_id;
-      const requestedScope = action === "allow" ? allowScope : blockScope;
+      const requestedScope = action2 === "allow" ? allowScope : blockScope;
       const gate = gateOverride ?? approvalGate;
-      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
+      const gateRequired = approvalGateRequiredForResolution(gate, action2, requestedScope);
       if (gateRequired && approvalGateIsLocked(gate)) {
         setErrorMessage(
           `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
         );
         return;
       }
-      setSubmitting(action);
+      setSubmitting(action2);
       setErrorMessage(null);
       try {
         const persistExactAction = willPersistExactAction(
           item,
-          action,
+          action2,
           requestedScope,
-          action === "allow" ? rememberExactAction : watchOnlyObservation
+          action2 === "allow" ? rememberExactAction : watchOnlyObservation
         );
-        const includeGateFields = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
+        const includeGateFields = gateRequired && gate?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
           gate.cooldown_active,
           gate.strict_all_decisions,
           requestedScope
-        );
-        const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }) : {};
+        ));
+        const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }, freshCodeRequired) : {};
         await onResolve({
           ...buildDecisionPayload({
             item,
-            action,
+            action: action2,
             scope: requestedScope,
-            reason: action === "allow" ? "approved in review" : "blocked in review",
+            reason: action2 === "allow" ? "approved in review" : "blocked in review",
             persistExactAction
           }),
           ...proof,
@@ -33968,12 +37658,13 @@ function useReviewDecisionResolve(params) {
           } : {}
         });
         if (!isStillShown(requestId)) return;
-        setResolved({ requestId, action, persistedExactAction: persistExactAction });
+        setResolved({ requestId, action: action2, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setCooldownOptOut(false);
         setPendingAction(null);
         setPendingContractKey(null);
+        setFreshCodeRequired(false);
         if (gateRequired && (gate?.cooldown_seconds ?? 0) > 0) {
           void fetchResolvedApprovalGate().then((refreshed) => {
             if (isStillShown(requestId)) setEffectiveApprovalGate(refreshed);
@@ -33982,8 +37673,16 @@ function useReviewDecisionResolve(params) {
         }
       } catch (err) {
         if (!isStillShown(requestId)) return;
+        if (err instanceof GuardDecisionSignInRequiredError) {
+          setErrorMessage(null);
+          setPendingAction(null);
+          setPendingContractKey(null);
+          setSignInReason(err.reason);
+          return;
+        }
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
+        if (approvalGateDemandedCode(err)) setFreshCodeRequired(true);
         if (approvalGateRefreshNeeded(err)) {
           setSubmitting(null);
           try {
@@ -34009,30 +37708,32 @@ function useReviewDecisionResolve(params) {
       approvalPassword,
       approvalTotpCode,
       cooldownOptOut,
+      freshCodeRequired,
       resolutionBlockReason,
       canSubmitAllow,
       hasAllowScope
     ]
   );
   const handleRequestResolve = reactExports.useCallback(
-    (action) => {
+    (action2) => {
       if (resolutionBlockReason !== null || decisionBusy) return;
-      if (action === "allow" && !hasAllowScope) {
+      if (!recheckSignIn()) return;
+      if (action2 === "allow" && !hasAllowScope) {
         setErrorMessage("This action has no eligible approval scope.");
         return;
       }
-      if (action === "allow" && !canSubmitAllow) {
+      if (action2 === "allow" && !canSubmitAllow) {
         setErrorMessage("Choose 'Always allow exact action' before approving; run once is unavailable.");
         return;
       }
-      if (action === "block" && blockScopeOptions.length === 0) {
+      if (action2 === "block" && blockScopeOptions.length === 0) {
         setErrorMessage("This action has no eligible block scope.");
         return;
       }
-      setLastAction(action);
-      const requestedScope = action === "allow" ? allowScope : blockScope;
+      setLastAction(action2);
+      const requestedScope = action2 === "allow" ? allowScope : blockScope;
       const gate = approvalGate;
-      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
+      const gateRequired = approvalGateRequiredForResolution(gate, action2, requestedScope);
       if (gateRequired && approvalGateIsLocked(gate)) {
         setErrorMessage(
           `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
@@ -34055,35 +37756,35 @@ function useReviewDecisionResolve(params) {
               setEffectiveApprovalGate(fresh2.gate);
             }
           }
-          if (approvalGateRequiredForResolution(current, action, requestedScope) && approvalGateIsLocked(current)) {
+          if (approvalGateRequiredForResolution(current, action2, requestedScope) && approvalGateIsLocked(current)) {
             setErrorMessage(
               `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(current)} seconds.`
             );
             return;
           }
-          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && requiresApprovalPasswordPrompt(
+          const gateEnabled = approvalGateRequiredForResolution(current, action2, requestedScope) && current?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
             current.cooldown_active,
             current.strict_all_decisions,
             requestedScope
-          );
+          ));
           if (!gateEnabled) {
-            void handleResolve(action, current);
+            void handleResolve(action2, current);
             return;
           }
           setErrorMessage(null);
-          if (!approvalProofRecentlySatisfied(current)) {
-            setPendingAction(action);
+          if (freshCodeRequired || !approvalProofRecentlySatisfied(current)) {
+            setPendingAction(action2);
             setPendingContractKey(decisionContractKey);
             return;
           }
           const fresh = await fetchResolvedApprovalGate().catch(() => current);
           if (requestId !== null && !isStillShown(requestId)) return;
           if (approvalProofRecentlySatisfied(fresh ?? current)) {
-            void handleResolve(action, fresh ?? current);
+            void handleResolve(action2, fresh ?? current);
             return;
           }
           if (fresh) setEffectiveApprovalGate(fresh);
-          setPendingAction(action);
+          setPendingAction(action2);
           setPendingContractKey(decisionContractKey);
         } finally {
           setPreflighting(false);
@@ -34096,12 +37797,14 @@ function useReviewDecisionResolve(params) {
       blockScopeOptions.length,
       decisionBusy,
       decisionContractKey,
+      freshCodeRequired,
       handleResolve,
       hasAllowScope,
       canSubmitAllow,
       isStillShown,
       item,
       approvalGate,
+      recheckSignIn,
       resolutionBlockReason
     ]
   );
@@ -34163,6 +37866,11 @@ function useReviewDecisionResolve(params) {
     setApprovalTotpCode("");
     setCooldownOptOut(false);
   }, []);
+  const handleSignInRecheck = reactExports.useCallback(() => {
+    if (recheckSignIn()) {
+      setErrorMessage(null);
+    }
+  }, [recheckSignIn]);
   const handleRetryLastAction = reactExports.useCallback(() => {
     setErrorMessage(null);
     if (lastAction !== null) {
@@ -34183,6 +37891,7 @@ function useReviewDecisionResolve(params) {
     approvalPassword,
     approvalTotpCode,
     errorMessage,
+    freshCodeRequired,
     handleAllow,
     handleApprovalPasswordChange,
     handleApprovalTotpCodeChange,
@@ -34190,13 +37899,115 @@ function useReviewDecisionResolve(params) {
     handleModalCancel,
     handleModalSubmit,
     handleRetryLastAction,
+    handleSignInRecheck,
     handleUseCooldownChange,
     pendingAction,
     resolved,
     setResolved,
+    signInReason,
     submitting,
     useCooldown
   };
+}
+const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
+const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
+const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
+const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
+const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
+const QUEUE_DESKTOP_HANDOFF_HEADLINE = "Opened this request in HOL Guard Desktop";
+const QUEUE_DESKTOP_HANDOFF_DETAIL = "Approve it or keep it blocked in HOL Guard Desktop. This browser tab is not signed in to the local dashboard, so it cannot decide the request.";
+const QUEUE_DESKTOP_HANDOFF_INSTRUCTION = "If HOL Guard Desktop did not open, open the request again below.";
+const QUEUE_SESSION_COMMAND_INSTRUCTION = "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
+const REQUEST_ID = /^[0-9a-f]{32}$/;
+function desktopRequestUrl(requestId) {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard-desktop://requests/${requestId}` : null;
+}
+function approvalsOpenCommand(requestId) {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard approvals open ${requestId}` : null;
+}
+function queueErrorIsUnauthorizedSession(message) {
+  const lower = message.trim().toLowerCase();
+  if (!lower) {
+    return false;
+  }
+  if (lower.includes("unauthorized")) {
+    return true;
+  }
+  return /request failed with 401(?:\D|$)/.test(lower);
+}
+function decisionSignInCopy(reason) {
+  switch (reason) {
+    case "other_request":
+      return {
+        headline: "This tab is signed in for a different request",
+        detail: "The link you opened earlier lets this tab decide only that request. Open this one from Guard on this device to approve or block it."
+      };
+    case "expired":
+      return {
+        headline: "Your session for this request has ended",
+        detail: "Guard sessions last a limited time and end when Guard restarts. Open the request from Guard on this device again to get a new one."
+      };
+    case "no_session":
+      return {
+        headline: "Sign in to approve or block this request",
+        detail: "You can read the request here, but Guard saves a decision only from a signed local session. Open the request from Guard on this device to sign in."
+      };
+  }
+}
+const DECISION_SIGN_IN_RECHECK_HINT = "Once it opens signed in, this tab picks up the session. If it does not, check again.";
+function ReviewDecisionSignIn(props) {
+  const headingId = reactExports.useId();
+  const { headline, detail } = decisionSignInCopy(props.reason);
+  const desktopUrl = desktopRequestUrl(props.requestId);
+  const openCommand = approvalsOpenCommand(props.requestId);
+  const [copied, setCopied] = reactExports.useState(false);
+  const copiedTimer = reactExports.useRef(null);
+  reactExports.useEffect(
+    () => () => {
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+    },
+    []
+  );
+  const handleCopy = reactExports.useCallback(() => {
+    if (openCommand === null || navigator.clipboard === void 0) return;
+    void navigator.clipboard.writeText(openCommand).then(
+      () => {
+        setCopied(true);
+        if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+        copiedTimer.current = window.setTimeout(() => setCopied(false), 2e3);
+      },
+      () => {
+      }
+    );
+  }, [openCommand]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "section",
+    {
+      "aria-labelledby": headingId,
+      "aria-live": "polite",
+      className: "guard-fade-in mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5",
+      "data-testid": "review-decision-sign-in",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: headingId, className: "text-sm font-semibold text-brand-dark", children: headline }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-prose text-sm text-slate-600", children: detail }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
+            desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: "Open in HOL Guard Desktop" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRecheck, children: "Check again" })
+          ] }),
+          openCommand !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Or run this in a terminal on this device:" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex items-stretch gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "flex min-h-10 min-w-0 flex-1 items-center overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark select-all", children: openCommand }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleCopy, children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-live": "polite", children: copied ? "Copied" : "Copy" }) })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: DECISION_SIGN_IN_RECHECK_HINT })
+        ] })
+      ] })
+    }
+  );
 }
 const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
 function ContextReviewPanel({ item }) {
@@ -34279,7 +38090,7 @@ function ContextReviewPanel({ item }) {
       const status = await fetchContextAssistance(controller.signal);
       if (controller.signal.aborted) return;
       if (!status.effective_enabled || !status.effective_preferences.features.review_briefs) {
-        throw new Error("Enable review context and start a verified Python 3.14 runtime in CIGAR → Settings.");
+        throw new Error("Enable review context in CIGAR → Settings, then turn CIGAR on.");
       }
       generation.current = status.generation;
       const scopes = await listContextWorkspaces(controller.signal);
@@ -34371,11 +38182,6 @@ function ReviewLastTimeCard({ detail }) {
   ] });
 }
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
-function resolvedActionCopy(item, action, persistedExactAction) {
-  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
-  if (action === "allow") return "Approved: action can proceed";
-  return "Blocked: action stopped";
-}
 function ReviewDecisionCard(props) {
   const detail = props.detail;
   const item = detail?.item ?? null;
@@ -34415,7 +38221,7 @@ function ReviewDecisionCard(props) {
   const decisionSubjectKey = item ? approvalDecisionSubjectKey(item) : null;
   reactExports.useEffect(() => {
     if (item) {
-      setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
+      setAllowScope(simpleMcpChoiceApplies(item) ? "artifact" : recommendedScopeForAction(item, "allow") ?? "artifact");
       setBlockScope(recommendedScopeForAction(item, "block") ?? "artifact");
       setRememberExactAction(false);
     }
@@ -34437,6 +38243,7 @@ function ReviewDecisionCard(props) {
     approvalPassword,
     approvalTotpCode,
     errorMessage,
+    freshCodeRequired,
     handleAllow,
     handleApprovalPasswordChange,
     handleApprovalTotpCodeChange,
@@ -34444,10 +38251,12 @@ function ReviewDecisionCard(props) {
     handleModalCancel,
     handleModalSubmit,
     handleRetryLastAction,
+    handleSignInRecheck,
     handleUseCooldownChange,
     pendingAction,
     resolved,
     setResolved,
+    signInReason,
     submitting,
     useCooldown
   } = useReviewDecisionResolve({
@@ -34505,7 +38314,8 @@ function ReviewDecisionCard(props) {
   const nativeDisplayOnly = item.native_business_review_display_only === true;
   const versionBoundScript = item.artifact_type === "native_bash_request";
   const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
-  const harnessName = harnessDisplayName(item.harness);
+  const mcpCall = nativeDisplayOnly ? null : explainMcpCall(item);
+  const harnessName = mcpCall?.requester ?? harnessDisplayName(item.harness);
   const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
   const topAlertItems = nativeDisplayOnly ? [] : buildTopAlertItems(item);
   const evidenceItems = nativeDisplayOnly ? [] : buildEvidenceItems(item);
@@ -34519,20 +38329,12 @@ function ReviewDecisionCard(props) {
     sectionLabel = "Watch-only finding";
     badgeLabel = "Would have stopped";
   }
-  const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
-  const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
-  let resolvedAllowButtonLabel = allowButtonLabel(allowScope, versionBoundScript, persistExactAllow);
-  if (watchOnlyObservation) {
-    resolvedAllowButtonLabel = "Keep allowing";
-  } else if (persistExactAllow && !versionBoundScript) {
-    resolvedAllowButtonLabel = "Approve and remember";
-  } else if (retryCannotReuseApproval(item)) {
-    resolvedAllowButtonLabel = "Choose an available approval duration";
-  }
-  let resolvedBlockButtonLabel = blockButtonLabel(blockScope);
-  if (watchOnlyObservation || persistExactBlock) {
-    resolvedBlockButtonLabel = "Stop this next time";
-  }
+  const simpleMcp = simpleMcpChoiceApplies(item);
+  const {
+    persistExactAllow,
+    allowLabel: resolvedAllowButtonLabel,
+    blockLabel: resolvedBlockButtonLabel
+  } = decisionButtonLabels({ item, allowScope, blockScope, rememberExactAction, watchOnlyObservation, simpleMcp });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-5", children: [
     resolved && /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
@@ -34557,7 +38359,7 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
           !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: sectionLabel }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: `${nativeDisplayOnly ? "" : "mt-2 "}text-lg font-semibold text-brand-dark`, children: plainTitle }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
+          mcpCall === null && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
             "From ",
             harnessName
           ] })
@@ -34567,7 +38369,7 @@ function ReviewDecisionCard(props) {
       !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
       nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, item.request_id),
       resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: retryCannotReuseApprovalHint(item, harnessName) }) : null,
-      item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
+      mcpCall === null && item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           HiMiniExclamationTriangle,
@@ -34607,7 +38409,7 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
-      resolutionBlockReason === null && resolved === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalExtensionRecommendationCard,
         {
           item,
@@ -34632,8 +38434,9 @@ function ReviewDecisionCard(props) {
         }
       ),
       resolutionBlockReason === null && resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ReviewScopeControls,
+        ReviewDecisionControls,
         {
+          simpleMcp,
           commonScopeOptions,
           broaderScopeOptions,
           advancedScopeOptions,
@@ -34667,7 +38470,8 @@ function ReviewDecisionCard(props) {
           )
         ] })
       ] }) }),
-      resolutionBlockReason === null && resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
+      resolutionBlockReason === null && resolved === null && signInReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewDecisionSignIn, { requestId: item.request_id, reason: signInReason, onRecheck: handleSignInRecheck }),
+      resolutionBlockReason === null && resolved === null && signInReason === null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
         hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx(
           ActionButton,
           {
@@ -34718,7 +38522,13 @@ function ReviewDecisionCard(props) {
       ),
       showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, item.request_id) })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`),
+    mcpCall === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`) : (
+      // The MCP card answers the question on its own; extra context is there for anyone who wants it.
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-slate-100 px-4 py-3 sm:px-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80", children: "Prepare more context for this decision" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`) })
+      ] })
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewLastTimeCard, { detail }),
     pendingAction !== null && approvalGate !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalPasswordModal,
@@ -34732,392 +38542,15 @@ function ReviewDecisionCard(props) {
         onUseCooldownChange: handleUseCooldownChange,
         onSubmit: handleModalSubmit,
         busy: submitting !== null,
+        requireFreshTotp: freshCodeRequired,
         onCancel: handleModalCancel,
         submitLabel: pendingAction === "allow" ? resolvedAllowButtonLabel : resolvedBlockButtonLabel
       }
     )
   ] });
 }
-function FaWindows(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 448 512" }, "child": [{ "tag": "path", "attr": { "d": "M0 93.7l183.6-25.3v177.4H0V93.7zm0 324.6l183.6 25.3V268.4H0v149.9zm203.8 28L448 480V268.4H203.8v177.9zm0-380.6v180.1H448V32L203.8 65.7z" }, "child": [] }] })(props);
-}
-function FaGithub(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 496 512" }, "child": [{ "tag": "path", "attr": { "d": "M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" }, "child": [] }] })(props);
-}
-function FaGitAlt(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 448 512" }, "child": [{ "tag": "path", "attr": { "d": "M439.55 236.05L244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z" }, "child": [] }] })(props);
-}
-function FaDocker(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 640 512" }, "child": [{ "tag": "path", "attr": { "d": "M349.9 236.3h-66.1v-59.4h66.1v59.4zm0-204.3h-66.1v60.7h66.1V32zm78.2 144.8H362v59.4h66.1v-59.4zm-156.3-72.1h-66.1v60.1h66.1v-60.1zm78.1 0h-66.1v60.1h66.1v-60.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1l-13.3-8.9zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1v-59.4zm-78.1-72.1h-66.1v60.1h66.1v-60.1z" }, "child": [] }] })(props);
-}
-function FaAws(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 640 512" }, "child": [{ "tag": "path", "attr": { "d": "M180.41 203.01c-.72 22.65 10.6 32.68 10.88 39.05a8.164 8.164 0 0 1-4.1 6.27l-12.8 8.96a10.66 10.66 0 0 1-5.63 1.92c-.43-.02-8.19 1.83-20.48-25.61a78.608 78.608 0 0 1-62.61 29.45c-16.28.89-60.4-9.24-58.13-56.21-1.59-38.28 34.06-62.06 70.93-60.05 7.1.02 21.6.37 46.99 6.27v-15.62c2.69-26.46-14.7-46.99-44.81-43.91-2.4.01-19.4-.5-45.84 10.11-7.36 3.38-8.3 2.82-10.75 2.82-7.41 0-4.36-21.48-2.94-24.2 5.21-6.4 35.86-18.35 65.94-18.18a76.857 76.857 0 0 1 55.69 17.28 70.285 70.285 0 0 1 17.67 52.36l-.01 69.29zM93.99 235.4c32.43-.47 46.16-19.97 49.29-30.47 2.46-10.05 2.05-16.41 2.05-27.4-9.67-2.32-23.59-4.85-39.56-4.87-15.15-1.14-42.82 5.63-41.74 32.26-1.24 16.79 11.12 31.4 29.96 30.48zm170.92 23.05c-7.86.72-11.52-4.86-12.68-10.37l-49.8-164.65c-.97-2.78-1.61-5.65-1.92-8.58a4.61 4.61 0 0 1 3.86-5.25c.24-.04-2.13 0 22.25 0 8.78-.88 11.64 6.03 12.55 10.37l35.72 140.83 33.16-140.83c.53-3.22 2.94-11.07 12.8-10.24h17.16c2.17-.18 11.11-.5 12.68 10.37l33.42 142.63L420.98 80.1c.48-2.18 2.72-11.37 12.68-10.37h19.72c.85-.13 6.15-.81 5.25 8.58-.43 1.85 3.41-10.66-52.75 169.9-1.15 5.51-4.82 11.09-12.68 10.37h-18.69c-10.94 1.15-12.51-9.66-12.68-10.75L328.67 110.7l-32.78 136.99c-.16 1.09-1.73 11.9-12.68 10.75h-18.3zm273.48 5.63c-5.88.01-33.92-.3-57.36-12.29a12.802 12.802 0 0 1-7.81-11.91v-10.75c0-8.45 6.2-6.9 8.83-5.89 10.04 4.06 16.48 7.14 28.81 9.6 36.65 7.53 52.77-2.3 56.72-4.48 13.15-7.81 14.19-25.68 5.25-34.95-10.48-8.79-15.48-9.12-53.13-21-4.64-1.29-43.7-13.61-43.79-52.36-.61-28.24 25.05-56.18 69.52-55.95 12.67-.01 46.43 4.13 55.57 15.62 1.35 2.09 2.02 4.55 1.92 7.04v10.11c0 4.44-1.62 6.66-4.87 6.66-7.71-.86-21.39-11.17-49.16-10.75-6.89-.36-39.89.91-38.41 24.97-.43 18.96 26.61 26.07 29.7 26.89 36.46 10.97 48.65 12.79 63.12 29.58 17.14 22.25 7.9 48.3 4.35 55.44-19.08 37.49-68.42 34.44-69.26 34.42zm40.2 104.86c-70.03 51.72-171.69 79.25-258.49 79.25A469.127 469.127 0 0 1 2.83 327.46c-6.53-5.89-.77-13.96 7.17-9.47a637.37 637.37 0 0 0 316.88 84.12 630.22 630.22 0 0 0 241.59-49.55c11.78-5 21.77 7.8 10.12 16.38zm29.19-33.29c-8.96-11.52-59.28-5.38-81.81-2.69-6.79.77-7.94-5.12-1.79-9.47 40.07-28.17 105.88-20.1 113.44-10.63 7.55 9.47-2.05 75.41-39.56 106.91-5.76 4.87-11.27 2.3-8.71-4.1 8.44-21.25 27.39-68.49 18.43-80.02z" }, "child": [] }] })(props);
-}
-function SiVercel(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "m12 1.608 12 20.784H0Z" }, "child": [] }] })(props);
-}
-function SiTerraform(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M1.44 0v7.575l6.561 3.79V3.787zm21.12 4.227l-6.561 3.791v7.574l6.56-3.787zM8.72 4.23v7.575l6.561 3.787V8.018zm0 8.405v7.575L15.28 24v-7.578z" }, "child": [] }] })(props);
-}
-function SiSupabase(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.9 1.036c-.015-.986-1.26-1.41-1.874-.637L.764 12.05C-.33 13.427.65 15.455 2.409 15.455h9.579l.113 7.51c.014.985 1.259 1.408 1.873.636l9.262-11.653c1.093-1.375.113-3.403-1.645-3.403h-9.642z" }, "child": [] }] })(props);
-}
-function SiStripe(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.594-7.305h.003z" }, "child": [] }] })(props);
-}
-function SiSqlite(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M21.678.521c-1.032-.92-2.28-.55-3.513.544a8.71 8.71 0 0 0-.547.535c-2.109 2.237-4.066 6.38-4.674 9.544.237.48.422 1.093.544 1.561a13.044 13.044 0 0 1 .164.703s-.019-.071-.096-.296l-.05-.146a1.689 1.689 0 0 0-.033-.08c-.138-.32-.518-.995-.686-1.289-.143.423-.27.818-.376 1.176.484.884.778 2.4.778 2.4s-.025-.099-.147-.442c-.107-.303-.644-1.244-.772-1.464-.217.804-.304 1.346-.226 1.478.152.256.296.698.422 1.186.286 1.1.485 2.44.485 2.44l.017.224a22.41 22.41 0 0 0 .056 2.748c.095 1.146.273 2.13.5 2.657l.155-.084c-.334-1.038-.47-2.399-.41-3.967.09-2.398.642-5.29 1.661-8.304 1.723-4.55 4.113-8.201 6.3-9.945-1.993 1.8-4.692 7.63-5.5 9.788-.904 2.416-1.545 4.684-1.931 6.857.666-2.037 2.821-2.912 2.821-2.912s1.057-1.304 2.292-3.166c-.74.169-1.955.458-2.362.629-.6.251-.762.337-.762.337s1.945-1.184 3.613-1.72C21.695 7.9 24.195 2.767 21.678.521m-18.573.543A1.842 1.842 0 0 0 1.27 2.9v16.608a1.84 1.84 0 0 0 1.835 1.834h9.418a22.953 22.953 0 0 1-.052-2.707c-.006-.062-.011-.141-.016-.2a27.01 27.01 0 0 0-.473-2.378c-.121-.47-.275-.898-.369-1.057-.116-.197-.098-.31-.097-.432 0-.12.015-.245.037-.386a9.98 9.98 0 0 1 .234-1.045l.217-.028c-.017-.035-.014-.065-.031-.097l-.041-.381a32.8 32.8 0 0 1 .382-1.194l.2-.019c-.008-.016-.01-.038-.018-.053l-.043-.316c.63-3.28 2.587-7.443 4.8-9.791.066-.069.133-.128.198-.194Z" }, "child": [] }] })(props);
-}
-function SiRust(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M23.8346 11.7033l-1.0073-.6236a13.7268 13.7268 0 00-.0283-.2936l.8656-.8069a.3483.3483 0 00-.1154-.578l-1.1066-.414a8.4958 8.4958 0 00-.087-.2856l.6904-.9587a.3462.3462 0 00-.2257-.5446l-1.1663-.1894a9.3574 9.3574 0 00-.1407-.2622l.49-1.0761a.3437.3437 0 00-.0274-.3361.3486.3486 0 00-.3006-.154l-1.1845.0416a6.7444 6.7444 0 00-.1873-.2268l.2723-1.153a.3472.3472 0 00-.417-.4172l-1.1532.2724a14.0183 14.0183 0 00-.2278-.1873l.0415-1.1845a.3442.3442 0 00-.49-.328l-1.076.491c-.0872-.0476-.1742-.0952-.2623-.1407l-.1903-1.1673A.3483.3483 0 0016.256.955l-.9597.6905a8.4867 8.4867 0 00-.2855-.086l-.414-1.1066a.3483.3483 0 00-.5781-.1154l-.8069.8666a9.2936 9.2936 0 00-.2936-.0284L12.2946.1683a.3462.3462 0 00-.5892 0l-.6236 1.0073a13.7383 13.7383 0 00-.2936.0284L9.9803.3374a.3462.3462 0 00-.578.1154l-.4141 1.1065c-.0962.0274-.1903.0567-.2855.086L7.744.955a.3483.3483 0 00-.5447.2258L7.009 2.348a9.3574 9.3574 0 00-.2622.1407l-1.0762-.491a.3462.3462 0 00-.49.328l.0416 1.1845a7.9826 7.9826 0 00-.2278.1873L3.8413 3.425a.3472.3472 0 00-.4171.4171l.2713 1.1531c-.0628.075-.1255.1509-.1863.2268l-1.1845-.0415a.3462.3462 0 00-.328.49l.491 1.0761a9.167 9.167 0 00-.1407.2622l-1.1662.1894a.3483.3483 0 00-.2258.5446l.6904.9587a13.303 13.303 0 00-.087.2855l-1.1065.414a.3483.3483 0 00-.1155.5781l.8656.807a9.2936 9.2936 0 00-.0283.2935l-1.0073.6236a.3442.3442 0 000 .5892l1.0073.6236c.008.0982.0182.1964.0283.2936l-.8656.8079a.3462.3462 0 00.1155.578l1.1065.4141c.0273.0962.0567.1914.087.2855l-.6904.9587a.3452.3452 0 00.2268.5447l1.1662.1893c.0456.088.0922.1751.1408.2622l-.491 1.0762a.3462.3462 0 00.328.49l1.1834-.0415c.0618.0769.1235.1528.1873.2277l-.2713 1.1541a.3462.3462 0 00.4171.4161l1.153-.2713c.075.0638.151.1255.2279.1863l-.0415 1.1845a.3442.3442 0 00.49.327l1.0761-.49c.087.0486.1741.0951.2622.1407l.1903 1.1662a.3483.3483 0 00.5447.2268l.9587-.6904a9.299 9.299 0 00.2855.087l.414 1.1066a.3452.3452 0 00.5781.1154l.8079-.8656c.0972.0111.1954.0203.2936.0294l.6236 1.0073a.3472.3472 0 00.5892 0l.6236-1.0073c.0982-.0091.1964-.0183.2936-.0294l.8069.8656a.3483.3483 0 00.578-.1154l.4141-1.1066a8.4626 8.4626 0 00.2855-.087l.9587.6904a.3452.3452 0 00.5447-.2268l.1903-1.1662c.088-.0456.1751-.0931.2622-.1407l1.0762.49a.3472.3472 0 00.49-.327l-.0415-1.1845a6.7267 6.7267 0 00.2267-.1863l1.1531.2713a.3472.3472 0 00.4171-.416l-.2713-1.1542c.0628-.0749.1255-.1508.1863-.2278l1.1845.0415a.3442.3442 0 00.328-.49l-.49-1.076c.0475-.0872.0951-.1742.1407-.2623l1.1662-.1893a.3483.3483 0 00.2258-.5447l-.6904-.9587.087-.2855 1.1066-.414a.3462.3462 0 00.1154-.5781l-.8656-.8079c.0101-.0972.0202-.1954.0283-.2936l1.0073-.6236a.3442.3442 0 000-.5892zm-6.7413 8.3551a.7138.7138 0 01.2986-1.396.714.714 0 11-.2997 1.396zm-.3422-2.3142a.649.649 0 00-.7715.5l-.3573 1.6685c-1.1035.501-2.3285.7795-3.6193.7795a8.7368 8.7368 0 01-3.6951-.814l-.3574-1.6684a.648.648 0 00-.7714-.499l-1.473.3158a8.7216 8.7216 0 01-.7613-.898h7.1676c.081 0 .1356-.0141.1356-.088v-2.536c0-.074-.0536-.0881-.1356-.0881h-2.0966v-1.6077h2.2677c.2065 0 1.1065.0587 1.394 1.2088.0901.3533.2875 1.5044.4232 1.8729.1346.413.6833 1.2381 1.2685 1.2381h3.5716a.7492.7492 0 00.1296-.0131 8.7874 8.7874 0 01-.8119.9526zM6.8369 20.024a.714.714 0 11-.2997-1.396.714.714 0 01.2997 1.396zM4.1177 8.9972a.7137.7137 0 11-1.304.5791.7137.7137 0 011.304-.579zm-.8352 1.9813l1.5347-.6824a.65.65 0 00.33-.8585l-.3158-.7147h1.2432v5.6025H3.5669a8.7753 8.7753 0 01-.2834-3.348zm6.7343-.5437V8.7836h2.9601c.153 0 1.0792.1772 1.0792.8697 0 .575-.7107.7815-1.2948.7815zm10.7574 1.4862c0 .2187-.008.4363-.0243.651h-.9c-.09 0-.1265.0586-.1265.1477v.413c0 .973-.5487 1.1846-1.0296 1.2382-.4576.0517-.9648-.1913-1.0275-.4717-.2704-1.5186-.7198-1.8436-1.4305-2.4034.8817-.5599 1.799-1.386 1.799-2.4915 0-1.1936-.819-1.9458-1.3769-2.3153-.7825-.5163-1.6491-.6195-1.883-.6195H5.4682a8.7651 8.7651 0 014.907-2.7699l1.0974 1.151a.648.648 0 00.9182.0213l1.227-1.1743a8.7753 8.7753 0 016.0044 4.2762l-.8403 1.8982a.652.652 0 00.33.8585l1.6178.7188c.0283.2875.0425.577.0425.8717zm-9.3006-9.5993a.7128.7128 0 11.984 1.0316.7137.7137 0 01-.984-1.0316zm8.3389 6.71a.7107.7107 0 01.9395-.3625.7137.7137 0 11-.9405.3635z" }, "child": [] }] })(props);
-}
-function SiRuby(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M20.156.083c3.033.525 3.893 2.598 3.829 4.77L24 4.822 22.635 22.71 4.89 23.926h.016C3.433 23.864.15 23.729 0 19.139l1.645-3 2.819 6.586.503 1.172 2.805-9.144-.03.007.016-.03 9.255 2.956-1.396-5.431-.99-3.9 8.82-.569-.615-.51L16.5 2.114 20.159.073l-.003.01zM0 19.089zM5.13 5.073c3.561-3.533 8.157-5.621 9.922-3.84 1.762 1.777-.105 6.105-3.673 9.636-3.563 3.532-8.103 5.734-9.864 3.957-1.766-1.777.045-6.217 3.612-9.75l.003-.003z" }, "child": [] }] })(props);
-}
-function SiRedis(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M22.71 13.145c-1.66 2.092-3.452 4.483-7.038 4.483-3.203 0-4.397-2.825-4.48-5.12.701 1.484 2.073 2.685 4.214 2.63 4.117-.133 6.94-3.852 6.94-7.239 0-4.05-3.022-6.972-8.268-6.972-3.752 0-8.4 1.428-11.455 3.685C2.59 6.937 3.885 9.958 4.35 9.626c2.648-1.904 4.748-3.13 6.784-3.744C8.12 9.244.886 17.05 0 18.425c.1 1.261 1.66 4.648 2.424 4.648.232 0 .431-.133.664-.365a100.49 100.49 0 0 0 5.54-6.765c.222 3.104 1.748 6.898 6.014 6.898 3.819 0 7.604-2.756 9.33-8.965.2-.764-.73-1.361-1.261-.73zm-4.349-5.013c0 1.959-1.926 2.922-3.685 2.922-.941 0-1.664-.247-2.235-.568 1.051-1.592 2.092-3.225 3.21-4.973 1.972.334 2.71 1.43 2.71 2.619z" }, "child": [] }] })(props);
-}
-function SiRclone(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.842.6258C9.3647.6813 6.9754 1.9906 5.646 4.2933c-.7593 1.3144-1.0647 2.7662-.966 4.1745a7.99 7.99 0 0 1 2.6568-.4541l1.4705-.0013c-.0093-.5594.1245-1.1284.4245-1.6482.8827-1.5284 2.837-2.0522 4.3654-1.1695 1.5284.8824 2.0519 2.8366 1.1695 4.365l-1.4782 2.5647 1.1955 2.0714 2.3914-.0004 1.4775-2.5655c2.0262-3.5088.8239-7.9959-2.6853-10.0217C14.4614.9118 13.1396.5967 11.842.6258m-1.5451 8.073-2.9605.0029C3.2844 8.7017 0 11.9867 0 16.0383c0 4.052 3.2844 7.3367 7.3364 7.3367 1.5174 0 2.9267-.4609 4.0967-1.2497a8 8 0 0 1-1.72-2.0748l-.7368-1.273c-.4799.288-1.0392.4565-1.6395.4565-1.765 0-3.1958-1.4307-3.1958-3.1958 0-1.7647 1.4307-3.1954 3.1958-3.1954l2.96-.0022 1.1962-2.0708zm9.587.7475a7.99 7.99 0 0 1-.935 2.5278l-.7344 1.2745c.4892.2717.915.6719 1.2153 1.192.8823 1.528.3585 3.4826-1.1699 4.365-1.528.8823-3.4828.3588-4.3651-1.1696l-1.482-2.5628h-2.3915L8.8256 17.144l1.483 2.5626c2.0262 3.5091 6.513 4.7112 10.022 2.685 3.5089-2.0257 4.7112-6.5125 2.6853-10.0216-.7588-1.3144-1.863-2.3052-3.132-2.9237" }, "child": [] }] })(props);
-}
-function SiRabbitmq(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M23.035 9.601h-7.677a.956.956 0 01-.962-.962V.962a.956.956 0 00-.962-.956H10.56a.956.956 0 00-.962.956V8.64a.956.956 0 01-.962.962H5.762a.956.956 0 01-.961-.962V.962A.956.956 0 003.839 0H.959a.956.956 0 00-.956.962v22.076A.956.956 0 00.965 24h22.07a.956.956 0 00.962-.962V10.58a.956.956 0 00-.962-.98zm-3.86 8.152a1.437 1.437 0 01-1.437 1.443h-1.924a1.437 1.437 0 01-1.436-1.443v-1.917a1.437 1.437 0 011.436-1.443h1.924a1.437 1.437 0 011.437 1.443z" }, "child": [] }] })(props);
-}
-function SiPython(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M14.25.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.77l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.17l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05-.05-1.23.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.18l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09zm13.09 3.95l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08z" }, "child": [] }] })(props);
-}
-function SiPulumi(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.997 0C10.226 0 8.79.83 8.79 1.856c0 1.025 1.436 1.856 3.207 1.856 1.772 0 3.208-.831 3.208-1.856C15.205.83 13.77 0 11.997 0zM5.95 3.488c-1.772 0-3.208.83-3.208 1.856C2.742 6.369 4.178 7.2 5.95 7.2c1.771 0 3.207-.831 3.207-1.856 0-1.025-1.436-1.856-3.207-1.856zm12.103 0c-1.772 0-3.208.83-3.208 1.856 0 1.025 1.436 1.856 3.208 1.856 1.771 0 3.207-.831 3.207-1.856 0-1.025-1.436-1.856-3.207-1.856zm-6.056 3.495c-1.771 0-3.207.831-3.207 1.856 0 1.025 1.436 1.856 3.207 1.856 1.772 0 3.208-.83 3.208-1.856 0-1.025-1.436-1.856-3.208-1.856zm-10.127.67a1.157 1.157 0 0 0-.55.151c-.888.513-.89 2.172-.004 3.706.886 1.534 2.324 2.362 3.211 1.85.888-.513.89-2.171.003-3.706-.72-1.246-1.803-2.027-2.66-2zm20.257.004c-.857-.026-1.941.754-2.661 2-.886 1.535-.884 3.194.003 3.707.888.512 2.325-.316 3.211-1.85.886-1.534.885-3.193-.003-3.706a1.157 1.157 0 0 0-.55-.15zm-6.048 3.492c-.857-.026-1.94.754-2.66 2-.886 1.535-.885 3.194.003 3.706.887.513 2.325-.316 3.21-1.85.887-1.534.885-3.193-.003-3.706a1.157 1.157 0 0 0-.55-.15zm-8.16.001a1.157 1.157 0 0 0-.55.151c-.888.513-.89 2.172-.004 3.706.886 1.535 2.324 2.363 3.211 1.85.888-.512.89-2.171.003-3.705-.72-1.247-1.803-2.028-2.66-2.002zm-6.047 3.494a1.157 1.157 0 0 0-.55.151c-.888.513-.89 2.172-.004 3.706.886 1.534 2.324 2.362 3.212 1.85.887-.513.888-2.172.003-3.706-.72-1.246-1.804-2.027-2.661-2.001zm20.258.002c-.857-.026-1.941.755-2.66 2.001-.887 1.535-.885 3.193.003 3.706.887.512 2.325-.316 3.21-1.85.886-1.534.885-3.193-.003-3.706a1.157 1.157 0 0 0-.55-.15zm-6.047 3.492c-.858-.026-1.942.754-2.661 2-.886 1.535-.885 3.194.003 3.706.888.513 2.325-.315 3.21-1.85.887-1.533.885-3.193-.002-3.705a1.157 1.157 0 0 0-.55-.151zm-8.163.003a1.157 1.157 0 0 0-.55.151c-.887.513-.889 2.172-.003 3.706.886 1.534 2.323 2.363 3.211 1.85.888-.512.89-2.171.004-3.706-.72-1.246-1.804-2.027-2.662-2z" }, "child": [] }] })(props);
-}
-function SiPostgresql(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M23.5594 14.7228a.5269.5269 0 0 0-.0563-.1191c-.139-.2632-.4768-.3418-1.0074-.2321-1.6533.3411-2.2935.1312-2.5256-.0191 1.342-2.0482 2.445-4.522 3.0411-6.8297.2714-1.0507.7982-3.5237.1222-4.7316a1.5641 1.5641 0 0 0-.1509-.235C21.6931.9086 19.8007.0248 17.5099.0005c-1.4947-.0158-2.7705.3461-3.1161.4794a9.449 9.449 0 0 0-.5159-.0816 8.044 8.044 0 0 0-1.3114-.1278c-1.1822-.0184-2.2038.2642-3.0498.8406-.8573-.3211-4.7888-1.645-7.2219.0788C.9359 2.1526.3086 3.8733.4302 6.3043c.0409.818.5069 3.334 1.2423 5.7436.4598 1.5065.9387 2.7019 1.4334 3.582.553.9942 1.1259 1.5933 1.7143 1.7895.4474.1491 1.1327.1441 1.8581-.7279.8012-.9635 1.5903-1.8258 1.9446-2.2069.4351.2355.9064.3625 1.39.3772a.0569.0569 0 0 0 .0004.0041 11.0312 11.0312 0 0 0-.2472.3054c-.3389.4302-.4094.5197-1.5002.7443-.3102.064-1.1344.2339-1.1464.8115-.0025.1224.0329.2309.0919.3268.2269.4231.9216.6097 1.015.6331 1.3345.3335 2.5044.092 3.3714-.6787-.017 2.231.0775 4.4174.3454 5.0874.2212.5529.7618 1.9045 2.4692 1.9043.2505 0 .5263-.0291.8296-.0941 1.7819-.3821 2.5557-1.1696 2.855-2.9059.1503-.8707.4016-2.8753.5388-4.1012.0169-.0703.0357-.1207.057-.1362.0007-.0005.0697-.0471.4272.0307a.3673.3673 0 0 0 .0443.0068l.2539.0223.0149.001c.8468.0384 1.9114-.1426 2.5312-.4308.6438-.2988 1.8057-1.0323 1.5951-1.6698zM2.371 11.8765c-.7435-2.4358-1.1779-4.8851-1.2123-5.5719-.1086-2.1714.4171-3.6829 1.5623-4.4927 1.8367-1.2986 4.8398-.5408 6.108-.13-.0032.0032-.0066.0061-.0098.0094-2.0238 2.044-1.9758 5.536-1.9708 5.7495-.0002.0823.0066.1989.0162.3593.0348.5873.0996 1.6804-.0735 2.9184-.1609 1.1504.1937 2.2764.9728 3.0892.0806.0841.1648.1631.2518.2374-.3468.3714-1.1004 1.1926-1.9025 2.1576-.5677.6825-.9597.5517-1.0886.5087-.3919-.1307-.813-.5871-1.2381-1.3223-.4796-.839-.9635-2.0317-1.4155-3.5126zm6.0072 5.0871c-.1711-.0428-.3271-.1132-.4322-.1772.0889-.0394.2374-.0902.4833-.1409 1.2833-.2641 1.4815-.4506 1.9143-1.0002.0992-.126.2116-.2687.3673-.4426a.3549.3549 0 0 0 .0737-.1298c.1708-.1513.2724-.1099.4369-.0417.156.0646.3078.26.3695.4752.0291.1016.0619.2945-.0452.4444-.9043 1.2658-2.2216 1.2494-3.1676 1.0128zm2.094-3.988-.0525.141c-.133.3566-.2567.6881-.3334 1.003-.6674-.0021-1.3168-.2872-1.8105-.8024-.6279-.6551-.9131-1.5664-.7825-2.5004.1828-1.3079.1153-2.4468.079-3.0586-.005-.0857-.0095-.1607-.0122-.2199.2957-.2621 1.6659-.9962 2.6429-.7724.4459.1022.7176.4057.8305.928.5846 2.7038.0774 3.8307-.3302 4.7363-.084.1866-.1633.3629-.2311.5454zm7.3637 4.5725c-.0169.1768-.0358.376-.0618.5959l-.146.4383a.3547.3547 0 0 0-.0182.1077c-.0059.4747-.054.6489-.115.8693-.0634.2292-.1353.4891-.1794 1.0575-.11 1.4143-.8782 2.2267-2.4172 2.5565-1.5155.3251-1.7843-.4968-2.0212-1.2217a6.5824 6.5824 0 0 0-.0769-.2266c-.2154-.5858-.1911-1.4119-.1574-2.5551.0165-.5612-.0249-1.9013-.3302-2.6462.0044-.2932.0106-.5909.019-.8918a.3529.3529 0 0 0-.0153-.1126 1.4927 1.4927 0 0 0-.0439-.208c-.1226-.4283-.4213-.7866-.7797-.9351-.1424-.059-.4038-.1672-.7178-.0869.067-.276.1831-.5875.309-.9249l.0529-.142c.0595-.16.134-.3257.213-.5012.4265-.9476 1.0106-2.2453.3766-5.1772-.2374-1.0981-1.0304-1.6343-2.2324-1.5098-.7207.0746-1.3799.3654-1.7088.5321a5.6716 5.6716 0 0 0-.1958.1041c.0918-1.1064.4386-3.1741 1.7357-4.4823a4.0306 4.0306 0 0 1 .3033-.276.3532.3532 0 0 0 .1447-.0644c.7524-.5706 1.6945-.8506 2.802-.8325.4091.0067.8017.0339 1.1742.081 1.939.3544 3.2439 1.4468 4.0359 2.3827.8143.9623 1.2552 1.9315 1.4312 2.4543-1.3232-.1346-2.2234.1268-2.6797.779-.9926 1.4189.543 4.1729 1.2811 5.4964.1353.2426.2522.4522.2889.5413.2403.5825.5515.9713.7787 1.2552.0696.087.1372.1714.1885.245-.4008.1155-1.1208.3825-1.0552 1.717-.0123.1563-.0423.4469-.0834.8148-.0461.2077-.0702.4603-.0994.7662zm.8905-1.6211c-.0405-.8316.2691-.9185.5967-1.0105a2.8566 2.8566 0 0 0 .135-.0406 1.202 1.202 0 0 0 .1342.103c.5703.3765 1.5823.4213 3.0068.1344-.2016.1769-.5189.3994-.9533.6011-.4098.1903-1.0957.333-1.7473.3636-.7197.0336-1.0859-.0807-1.1721-.151zm.5695-9.2712c-.0059.3508-.0542.6692-.1054 1.0017-.055.3576-.112.7274-.1264 1.1762-.0142.4368.0404.8909.0932 1.3301.1066.887.216 1.8003-.2075 2.7014a3.5272 3.5272 0 0 1-.1876-.3856c-.0527-.1276-.1669-.3326-.3251-.6162-.6156-1.1041-2.0574-3.6896-1.3193-4.7446.3795-.5427 1.3408-.5661 2.1781-.463zm.2284 7.0137a12.3762 12.3762 0 0 0-.0853-.1074l-.0355-.0444c.7262-1.1995.5842-2.3862.4578-3.4385-.0519-.4318-.1009-.8396-.0885-1.2226.0129-.4061.0666-.7543.1185-1.0911.0639-.415.1288-.8443.1109-1.3505.0134-.0531.0188-.1158.0118-.1902-.0457-.4855-.5999-1.938-1.7294-3.253-.6076-.7073-1.4896-1.4972-2.6889-2.0395.5251-.1066 1.2328-.2035 2.0244-.1859 2.0515.0456 3.6746.8135 4.8242 2.2824a.908.908 0 0 1 .0667.1002c.7231 1.3556-.2762 6.2751-2.9867 10.5405zm-8.8166-6.1162c-.025.1794-.3089.4225-.6211.4225a.5821.5821 0 0 1-.0809-.0056c-.1873-.026-.3765-.144-.5059-.3156-.0458-.0605-.1203-.178-.1055-.2844.0055-.0401.0261-.0985.0925-.1488.1182-.0894.3518-.1226.6096-.0867.3163.0441.6426.1938.6113.4186zm7.9305-.4114c.0111.0792-.049.201-.1531.3102-.0683.0717-.212.1961-.4079.2232a.5456.5456 0 0 1-.075.0052c-.2935 0-.5414-.2344-.5607-.3717-.024-.1765.2641-.3106.5611-.352.297-.0414.6111.0088.6356.1851z" }, "child": [] }] })(props);
-}
-function SiPhp(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M7.01 10.207h-.944l-.515 2.648h.838c.556 0 .97-.105 1.242-.314.272-.21.455-.559.55-1.049.092-.47.05-.802-.124-.995-.175-.193-.523-.29-1.047-.29zM12 5.688C5.373 5.688 0 8.514 0 12s5.373 6.313 12 6.313S24 15.486 24 12c0-3.486-5.373-6.312-12-6.312zm-3.26 7.451c-.261.25-.575.438-.917.551-.336.108-.765.164-1.285.164H5.357l-.327 1.681H3.652l1.23-6.326h2.65c.797 0 1.378.209 1.744.628.366.418.476 1.002.33 1.752a2.836 2.836 0 0 1-.305.847c-.143.255-.33.49-.561.703zm4.024.715l.543-2.799c.063-.318.039-.536-.068-.651-.107-.116-.336-.174-.687-.174H11.46l-.704 3.625H9.388l1.23-6.327h1.367l-.327 1.682h1.218c.767 0 1.295.134 1.586.401s.378.7.263 1.299l-.572 2.944h-1.389zm7.597-2.265a2.782 2.782 0 0 1-.305.847c-.143.255-.33.49-.561.703a2.44 2.44 0 0 1-.917.551c-.336.108-.765.164-1.286.164h-1.18l-.327 1.682h-1.378l1.23-6.326h2.649c.797 0 1.378.209 1.744.628.366.417.477 1.001.331 1.751zM17.766 10.207h-.943l-.516 2.648h.838c.557 0 .971-.105 1.242-.314.272-.21.455-.559.551-1.049.092-.47.049-.802-.125-.995s-.524-.29-1.047-.29z" }, "child": [] }] })(props);
-}
-function SiOpentofu(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "m10.184 23.25.002-.01-.033-.017-8.388-4.611a1.6841 1.6841 0 0 1-.873-1.475V6.864c0-.614.335-1.18.873-1.476l9.424-5.18a1.6868 1.6868 0 0 1 1.622 0l8.31 4.568.022.012.006.002-.004-.001 1.09.599c.538.296.873.862.873 1.476v10.273c0 .614-.335 1.179-.873 1.475l-8.388 4.611-.03.016-1.006.553c-.505.277-1.117.277-1.622 0l-1.003-.552-.002.01Zm.603-1.158-.005-.001.012.006c.252.123.55-.055.558-.338l.001-9.147c0-.141-.078-.272-.202-.34L2.763 7.661c-.259-.142-.576.045-.576.341v9.135c0 .141.077.272.201.34l8.394 4.613.005.002Zm.556-.327Zm0 0Zm-2.539-4.802-.005.003-1.959-1.031-.003-.004c.001-.003.001-.007.001-.01.023-.305.153-.525.346-.632.194-.107.45-.101.72.041.272.143.508.397.671.691.163.293.252.628.229.935v.007ZM5.71 15.177l-.005.002-1.96-1.031-.002-.004.001-.01c.022-.304.152-.524.346-.632.194-.107.449-.101.72.042.271.143.508.396.671.69.162.294.252.628.229.935v.008Zm14.981-8.999-.003-.018a.382.382 0 0 0-.191-.25l-8.31-4.567a.3883.3883 0 0 0-.374 0L3.503 5.91c-.162.089-.226.265-.193.423l.009.007-.009-.007c.022.1.083.194.183.253l8.32 4.572c.116.064.258.064.374 0l8.321-4.573c.151-.089.212-.256.183-.407Zm-17.37.16Zm-.002.002c0-.001-.003-.003-.005-.006-.002-.002-.004-.004-.004-.003l.009.009Zm-.467-1.56-.003.002c.002.004.005.006.005.006l-.002-.008Zm.007.007c-.001.001-.002.001-.003.001h-.002l.005-.001Z" }, "child": [] }] })(props);
-}
-function SiOpenbsd(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.695 1.653c-.202.47-.146 1.02-.293 1.509-.034.112-.146.452-.308.429-.333-.048-.16-.688-.545-.7l.12.934c-.577.073-.498-.829-.733-1.195-.27-.423-.335.192-.317.38.011.122.036.242.05.363.026.21.032.393.005.603-.552-.007-.35-.733-.754-.844l.03.874c-.612-.005-.89-.557-1.159-1.025-.112-.196-.261-.574-.53-.453.126.544.423 1.064.454 1.63.007.145-.13.516-.333.448-.469-.158-.406-1.008-.796-1.231-.08-.045-.204-.006-.29-.002 0 .45.198.996.356 1.418.034.09.129.41-.069.403-.353-.01-.441-.695-.8-.615.044.185.153.335.215.513.037.109.106.219.126.332.044.247-.269.267-.432.22-.384-.114-.66-.428-.935-.703-.076-.076-.277-.344-.404-.222-.141.135.136.373.215.464.234.271.488.589.6.935.049.148.058.36-.09.462-.146.1-.384-.083-.502-.16-.362-.239-.721-.654-1.176-.664l-.107.271.29.392.752.845-.875-.362c.035.229.583.506.475.742-.064.14-.38.142-.505.124-.446-.064-.762-.396-1.177-.515-.366-.105-.298.18-.09.343.072.057.141.117.211.177.125.108.245.219.362.336.183.183.343.378.513.573l-.875-.03v.06l.845.392-.151.603c-.244 0-.442-.067-.664-.163-.151-.066-.31-.175-.482-.163-.206.014-.328.202-.19.377.206.263.62.412.883.617.1.078.247.212.133.345-.225.264-.832-.074-1.128.013v.06c.275.161.839.253 1 .549.128.231-.232.756-.487.736-.227-.019-.436-.275-.603-.41-.401-.322-.83-.7-1.298-.923-.801-.38-1.597.226-2.232.622.081.256.402-.017.603.029.271.061.477.313.651.513.84.968 1.543 2.064 1.857 3.319.083.33.224.725-.023 1.021-.066.08-.165.09-.238.155-.055.05-.052.118.023.141.138.043.34-.021.475-.054.443-.107.949-.346 1.15-.78.125-.271.169-.797.48-.905.068.29.394.673.363.965-.029.259-.302.56-.461.751-.057.068-.193.217-.112.315.082.097.25-.112.3-.16.229-.216.73-.558.865-.062.118.432-.261 1.13-.45 1.509-.054.105-.297.435-.202.553.11.135.338-.218.387-.282.19-.249.856-.987 1.21-.722.431.324.282.555.119.994-.046.123-.216.433-.1.55.111.114.258.01.315-.098.104-.197.383-.78.661-.631.175.093.441.251.543.425.158.272.02.815-.022 1.111-.024.17-.207.702-.055.825.14.113.254-.228.296-.312.149-.295.32-.597.54-.845.08-.089.192-.237.327-.212.7.131-.015.829.273 1.185.058.072.215.067.3.083l.362-.935c.184.07.455.095.591.248.114.128.137.344.17.506.092.454.142.896.084 1.357.057.042.148.138.225.088.097-.062.11-.315.143-.42.106-.332.269-.65.42-.965.099-.207.37-.427.565-.142.2.292.12.804.246 1.138.32-.158.355-.825.362-1.147l.415.061.25.513.45 1.297c.234-.09.16-.538.187-.754.035-.293.103-.882.318-1.1.086-.087.258-.095.37-.137.129.312.199.666.354.965.06.116.198.242.337.17.133-.068.128-.224.111-.35-.042-.313-.113-.62-.138-.936.598-.042.95.441 1.325.845.145.155.271.362.485.422l-.31-.905-.172-.845c.217-.09.676-.534.905-.47.34.097.6 1.046 1.023.823.18-.095.088-.257.003-.383-.126-.188-.506-.639-.465-.874.03-.175.324-.379.494-.377.391.006 1.071.304 1.297.618l.272-.03c-.04-.54-.85-.787-.966-1.328a.404.404 0 01.004-.172c.086-.347.294-.195.51-.102.067.029.213.103.269.02.06-.091-.048-.212-.087-.289-.082-.156-.156-.337-.122-.513.282.074.455.242.694.4.056.038.18.131.251.08.075-.056-.036-.167-.071-.208-.106-.123-.432-.42-.4-.6.022-.122.227-.252.31-.335.276-.276.59-.556.815-.875h.03c.532.621 2.203.186 1.99-.754-.132.019-.256.123-.392.077-.594-.205-.45-1.157-1.116-1.163-.049-.62-.298-1.24-.599-1.78-.138-.247-.424-.473-.525-.725-.055-.14-.046-.36-.052-.512.349-.054.177-.407.05-.603-.142-.218-.292-.477-.475-.66-.226-.227-.562-.374-.533-.758.027-.357.642-.311.747-.633-.183.008-.363.053-.543.083-.449.075-.527-.076-.317-.475.183-.349.474-.613.73-.905.083-.093.336-.306.205-.441-.107-.112-.286.058-.377.119-.333.22-.705.384-1.086.502-.113.035-.448.166-.486-.035-.051-.272.463-.322.395-.628-.205.049-.61.374-.807.223-.238-.18.111-.643.149-.856.038-.216-.136-.224-.258-.09-.043.048-.081.1-.12.15-.07.087-.126.17-.17.271-.494-.288.44-.623.265-.89-.063-.095-.179 0-.235.05-.117.102-.558.61-.654.237-.106-.412.108-.908.22-1.297.028-.102.159-.376.032-.449-.185-.106-.266.253-.31.359a2.333 2.333 0 01-.615.839c-.086.077-.232.225-.36.19-.187-.051-.188-.57-.182-.728.003-.075.045-.205-.028-.26-.096-.071-.147.072-.16.14-.048.222-.186.856-.515.44-.298-.376.163-1.157-.444-1.315l-.332 1.056c-.398-.087-.31-.656-.211-.966l-.181-.06a3.303 3.303 0 01-.112.362c-.16.451-.375.539-.541.03-.127-.388-.082-.807-.145-1.207-.025-.159-.04-.32-.198-.392zm.03.905c.153.364-.008.82.237 1.176.25.364.716.168 1.02.397.108.081.022.256-.007.358-.1.347-.278.604-.465.905.655-.335.875-1.29.965-1.96h.03c-.026.596-.007 1.182 0 1.779.003.27-.037.582.272.633V4.46c.323.093.808.502 1.159.381.179-.061.342-.277.467-.411.094-.102.175-.212.244-.332h.03l-.12.965-.302-.06.663.473.261.226-.2.294-.875.636c.637-.094.958-.564 1.418-.935-.15.63-.491 1.262-.332 1.93h.03l.362-1.448c.274.13.37.476.633.633.383.228.919-.204 1.267-.331-.227.322-.57.548-.633.965l-.272-.12c.236.606.519 1.19.62 1.84.093.594-.024 1.183.016 1.78.02.275.133.517.179.784-.563.191-.666.98-1.207 1.236.043-.188.11-.377.11-.573 0-.14-.066-.282-.03-.422.073-.277.314-.508.412-.784.152-.43.05-.835-.009-1.267l.301.03-.758-1.177-.376-.573.139-.392c-.762.586-1.867 1.188-1.87 2.293l.271-.091.09.664-.422.06v.06c.353.1.722.149 1.056.306.244.114.514.265.682.479.56.71.112 1.818-.31 2.473-.213.33-.594.634-.734.996.382-.092.577-.457.792-.754.091-.127.17-.303.325-.362.24-.09.32.354.371.512.065.2.218.546.18.755-.071.401-.415.662-.34 1.116.166-.202.217-.604.482-.702.17-.062.347.095.513.12.36.053.73-.082.996-.326.285-.263.48-.686.408-1.083-.043-.24-.177-.476-.16-.724.012-.2.148-.362.22-.543.173-.427.152-.912-.257-1.189a.86.86 0 00-.362-.138c.033-.222.264-.706.53-.418.188.202.29.558.396.81.389.918.392 2.006-.163 2.865-.394.61-1.02 1.11-1.548 1.6l-.21-.604h-.061c-.07.36.185.772.332 1.086-.33-.075-.645-.415-.996-.362.099.17.748.572.242.754.003.148-.11.25-.2.362-.201.248-.454.618-.766.724l-.573-1.508h-.03c.084.661.314 1.305.61 1.9.154.307.403.611.506.935-.187-.159-.306-.413-.466-.603a6.313 6.313 0 00-.952-.892c-.227-.177-.45-.376-.754-.345.345.31.868.475.835 1.056-.01.165-.193.237-.322.296-.339.155-.67.322-1.026.438-.098.032-.279.12-.382.087-.11-.037-.097-.277-.109-.369-.037-.285.121-1.028-.172-1.146-.128 1.01.132 1.929.21 2.926h-.03c-.17-.737-.439-1.558-.838-2.202-.11-.177-.343-.597-.579-.543l.62 1.086.013.46-.452.08-1.297.033c.047-.373.13-.746.2-1.116.014-.081.074-.326-.078-.326-.14 0-.169.408-.189.507-.108.542-.204 1.106-.205 1.66h-.03c0-.913-.41-1.73-.784-2.535-.104.155.041.377.086.543.099.371.113.737.065 1.116-.612-.118-1.275-.278-1.84-.543.149-.357.576-.889.573-1.267-.554.556-.804 1.335-1.086 2.052h-.03l.12-1.448-.21-1.237c-.132.133-.06.399-.04.573.033.275.015.688-.188.9-.112.117-.226.014-.346-.034-.335-.136-.582-.36-.875-.564-.104-.072-.293-.15-.28-.302.032-.433.656-.638.672-1.026-.72.31-1.062 1.088-1.629 1.57.186-.785.782-1.703.634-2.535-.152.084-.145.295-.185.453a4.324 4.324 0 01-.388.965c-.4-.231-.72-.623-.983-.996-.073-.102-.233-.26-.235-.392-.002-.128.145-.274.225-.362.244-.265.54-.465.872-.603-.237-.147-.706.2-.965.272.175-.37.65-.732.513-1.177-.393.307-.66.97-.935 1.388h-.03l-.574-1.267.754.271c.023-.27-.36-.373-.573-.422.126-.328.476-.578.392-.965h-.06c-.087.28-.269.759-.573.844l-.09-.482h-.03c-.119.253.029.447-.04.687-.037.125-.217.106-.28.222-.085.158-.092.37-.164.539-.172.407-.5.706-.904.874l-.037-.54.459-.515-.483.361c-.062-.161-.203-.465-.12-.633.073-.145.254-.24.362-.362l-.483.241c-.163-.422.135-.3.302-.603-.122.07-.325.2-.471.133-.187-.085-.384-.64-.464-.827l.512-.09v-.03c-.242.03-.626.12-.663-.211h.633v-.03l-.712-.08-.194-.252-.421-.543c.251-.075.683-.075.935 0-.368-.387-1.024.182-1.327-.453l.754-.15v-.03c-.234 0-.67.135-.874.028-.054-.028-.094-.075-.134-.12-.388-.438.48-.478.766-.44.55.076.975.452 1.358.833.194.193.473.538.754.595.278.055.51-.122.724-.263 0 .212-.022.422.15.573 0-.416.005-.857.07-1.267.023-.152.083-.352.263-.38.225-.034.531.309.693.44.002-.234-.175-.432-.319-.603-.396-.47-1.025-.914-1.58-1.177v-.03c.823.142 1.442.625 2.322.392v-.06l-1.026-.15c.043-.321.276-.734.203-1.057-.1-.44-.568-.644-.746-1.025.306.118.63.29.966.297.188.005.336-.098.512-.14.485-.113.766.123 1.086.446.088-.305-.15-.559-.334-.784-.186-.229-.35-.46-.57-.659-.267-.24-.662-.52-.815-.85.25.049.49.256.694.402.359.255.715.503 1.116.691.211.1.578.265.754.054l-.965-.362c.07-.101.17-.188.221-.302.138-.307-.104-.568-.191-.844.185.068.345.227.543.26.464.078.734-.47 1.086-.653L9.11 6.45c.201-.168.112-.494.078-.724-.099-.664-.493-1.251-.59-1.9h.03c.381.816.835 1.696 1.598 2.201l-.277-.363-.477-.723c.095-.037.188-.077.269-.142.528-.423.078-1.012.002-1.517h.03c.065.155.14.314.235.453.441.638 1.023.536 1.696.482l-.18 1.328h.03c.089-.283.258-.516.318-.815.11-.544-.006-1.084-.017-1.629h.03c.048.322.179.63.282.936.162.482.293 1.01.653 1.387l-.331-1.357c.958-.001 1.219-.647 1.236-1.509zm-.271 2.082l-.483 2.172c.372-.227.45-1.053.483-1.448h.03c.065.348.096.696.238 1.025.056.13.117.305.275.302l-.386-1.357zm-2.956.392c.006.771.387 1.473.24 2.262.146-.088.15-.295.152-.452.004-.365-.06-.723-.06-1.086h.03c.105.364.39 1.09.814 1.146-.05-.196-.211-.344-.319-.513-.238-.374-.472-1.13-.857-1.357zm6.184.332c-.336.526-.736 1.245-1.237 1.629v.03c.38-.068.791-.549.905-.905h.03c-.005.536-.251 1.105-.03 1.629h.03c.16-.543.077-1.184.215-1.75.043-.177.203-.473.087-.633zM14.69 6.57c-.178.402-.265.775-.634 1.056v.06c.265.07.45-.262.513-.482h.03c.026.203.05.624.272.694l-.149-.694zm-6.456.03c.065.743 1.063 1.244.935 2.052.16-.094.119-.269.065-.423-.112-.317-.298-.596-.427-.905.289.264.716.562 1.117.393l-.633-.263zm4.163.242c-.091.3-.347.886-.241 1.176h.06l.211-.724h.03c.075.273.153.687.483.724l-.483-1.176zm-2.021.754l.15 1.267h.061l-.03-.905c.197.137.463.474.724.362-.1-.11-.247-.129-.362-.222-.187-.151-.286-.482-.543-.502zm6.636.18c-.318.32-.584.539-1.025.664v.061c.261.075.514-.07.724-.211-.035.177-.26.64-.09.754l.289-.875zm1.539.624c.138.01.242.186.323.282.239.279.508.575.612.935-.697-.144-1.452-.045-2.142.12.154-.405.446-.834.785-1.1.115-.092.258-.25.422-.237zm-6.697.07l-.181.936c.151-.115.187-.481.211-.664l.272.302a1.058 1.058 0 00-.302-.573zm2.956.091l-.573.573.543-.392.09.543c.106-.154.05-.578-.06-.724zm-6.334.078a.252.252 0 00-.06.013v.03c.253.256.463.61.621.935.088.179.063.376.253.483-.015-.353-.166-.62-.302-.935.214.124.5.31.754.24v-.06c-.342-.152-.607-.281-.905-.518-.11-.088-.224-.2-.361-.188zm-2.082.284c.029.255.237.35.422.49a3.5 3.5 0 01.687.657c.127.166.205.452.37.573-.036-.444-.298-.966-.725-1.147v-.03c.434.084.867.246 1.297.06v-.06l-.513-.02zm14.027.09c.296.115.613.522.724.815l-.664-.09zm-7.3.03l-.271.514.301-.332.181.302zm5.95.712a.536.536 0 01.172.031c.365.143.267.9.19 1.188-.061.234-.17.495-.4.604-.167-.3-.415-.496-.724-.64-.154-.073-.41-.101-.517-.243-.103-.137-.208-.646-.068-.78.152-.147.57-.117.766-.117.163 0 .392-.051.581-.043zm-3.054.013l-.513.392.453-.241-.06.362c.128-.09.175-.371.12-.513zm4.404.18c.136.011.37-.002.47.1.331.34.145 1.25-.259 1.44l-.12-.695c.032.002.062 0 .09-.003v.003h.09l-.04-.013c.356-.085.295-.577-.051-.59l-.09-.03.049.032-.018.001v-.003h-.06l.01.011c-.023.005-.046.01-.071.02zm-1.538.122c-.062.063-.152.11-.198.187-.318.545.886.559.546-.03-.039-.068-.108-.111-.167-.157l-.121.06h-.06zm-6.335.12c0 .154-.03.31.12.392v-.301l.363.12zm-1.676.086c-.046.002-.092.005-.134.005.053.194.137.36.302.482l-.181-.392.362.03c-.07-.127-.211-.131-.349-.125zm3.685.011c-.09.01-.168.168-.169.325l.15-.271.182.12c-.05-.132-.109-.18-.163-.174zm-4.845.084l-.513.09.423.513-.241-.422.361-.06zm-2.655.42c-.307.013-.66.365-.904.515v.06l.875.302c-.018-.229-.315-.297-.513-.331l.603-.544a.386.386 0 00-.06-.002zm1.6.063l-1.237.332v.06l.663.238.393.275c-.043-.32-.383-.375-.604-.543.28-.053.66-.058.785-.362zm3.107.332c-.129.02-.23.12-.091.21zm.995.18l-.03.212c.094-.056.11-.105.09-.211zm1.357 0c-.117.035-.214.118-.09.212zm1.117.302l-.302.09v.121zm1.146.03v.362c.113-.11.113-.25 0-.362zm4.272.179c.425.004.846.395.75.847-.062.29-.242.605-.528.718-.149.06-.486.04-.498-.175-.01-.2.388-.478.468-.694-.558.427-.9.79-1.659.694v-.03c.447-.331.634-.895 1.059-1.224a.645.645 0 01.408-.136zm-9.943.032c-.146.076-.235.236-.272.393l.362.09-.2-.193zm-4.585.061l-1.147.603c.04.225.262.104.423.093.23-.015.657.06.784.27l.211-.03c-.054-.342-.546-.342-.814-.363.197-.2.48-.259.543-.573zm5.822.241l-.332.423.422.15-.302-.18c.063-.132.31-.247.212-.393zm-2.625.09l-.362.333c.142.047.468.233.573.09l-.392-.15zm7.813 0l.422.333v.06l-.392.211a.938.938 0 00.543-.211.883.883 0 00-.573-.392zm-9.683.121c-.183.41-.464.743-.784 1.056-.184.179-.471.346-.543.603L7.45 13.8l.694-.14c-.414-.296-1.14.033-1.539.21.275-.55.813-.769.935-1.418l-.03-.03zm5.701.03c-.13.043-.146.149-.18.272l.18.03zm1.237.212l.03.332a.503.503 0 00.272-.332l-.212.15zm-4.193.422c-.13.038-.2.131-.06.211zm5.34.181l-.031.422-.271-.18c.028.182.156.27.332.3l.03-.542zm-6.758.03c-.22.069-.596.692-.694.905.2-.008.895.018.996-.12l-.664-.091zm3.7.059c-.166.01-.327.105-.502.105-.507 0-1.34-.252-1.775.092-.396.314-.42.734-.669 1.132-.121.194-.336.325-.512.465-.065.052-.184.127-.159.227.03.122.238.187.34.233.228.105.477.187.724.238.131.027.328.022.44.103.204.148.135.653.163.876.227-.13.524-.52.633-.755-.241.073-.347.31-.513.483l-.09-.633c.705-.062 1.015-.833 1.43-1.296.253-.282.57-.405.893-.575-.19-.227-.455.013-.634.15-.479.37-.755.816-1.176 1.238l.241-.633h-.03c-.131.314-.288.65-.603.814l.12-.422h-.03c-.127.303-.27.452-.603.452l.301-.694h-.03l-.392.664-.12-.03.301-.573h-.03c-.152.244-.313.59-.633.512l.27-.512c-.15.118-.216.4-.394.471-.081.032-.235-.027-.202-.135.042-.14.272-.278.363-.397.31-.405.56-1.067 1.018-1.316.376-.205.947.054 1.358.05.235-.004.503-.084.573-.333a.427.427 0 00-.072-.001zm-7.591.092l-.03.181.12-.181zm14.875.029c.228.004.48.037.61.214.133.18.101.427.17.632.052-.216.046-1.024.477-.57.349.367.256 1.162-.087 1.502-.216.213-.735.343-.992.144-.393-.303-.494-.926-.608-1.378-.027-.109-.154-.36-.084-.461.058-.086.209-.08.3-.082.065 0 .138-.002.214-.001zm2.65.182c.569.103.615.907 1.117 1.147v.06c-.285.143-.38-.002-.573-.211l.211.392c-.233-.036-.283-.262-.422-.423l.21.453c-.346 0-.493-.057-.633-.392h-.03l.06.271-.214-.152.114-.39zm-4.735.03c-.123.036-.188.105-.09.212zm-4.163.242l.332.362.15-.362-.15.241zm3.047 0l-.03.452-.302-.18c-.017.198.288.424.453.512l-.06-.784zm-8.175.512c-.094.452-.417.859-.707 1.207-.138.166-.35.333-.41.543.5-.144 1.063-.652 1.6-.603-.138-.268-.783.103-1.026.15.196-.29.463-.542.59-.874.052-.14.086-.327-.047-.423zm6.998.272c-.23.036-.218.264-.271.452-.128-.127-.258-.303-.452-.271l.573.694zm-2.805.03l-.302.272-.03-.151h-.09l.03.392c.176-.03.358-.347.392-.513zm.815.483l-.151.392h-.03l-.242-.332.211.694h.03c.08-.202.365-.572.182-.754zm3.348.18l-.09.031.18.995c-.192-.168-.785-.942-1.025-.663.555.177.786.825 1.267 1.116l-.15-.573zm1.508.242c-.153.374.22.775.362 1.116-.392-.202-.74-.539-1.207-.543v.12c.672.06 1.03.747 1.569 1.057-.005-.563-.488-1.21-.664-1.75zm-6.123.453l-.212.03c.072.169.197.306.256.482.065.196.023.466.227.573.095-.212.327-.557.271-.784-.17.085-.252.268-.27.453h-.031zm-2.806.03c0 .592-.08 1.148-.241 1.72.21.007.32-.211.433-.363.225-.299.45-.628.804-.784v-.03c-.359-.047-.807.49-.935.784h-.03c.106-.41.2-.924.03-1.327zm5.31.03c-.244.093-.182.42-.182.633l-.693-.482c.038.123.136.16.228.245.18.167.337.557.586.6zm1.538.573c-.213.377.097 1.154.15 1.569h-.03c-.168-.355-.492-.649-.754-.935-.037-.04-.228-.301-.296-.192-.071.114.278.385.343.463.241.286.459.609.642.935.105.189.197.44.397.543-.15-.778-.39-1.586-.392-2.383zm-10.045.302c.223.066.35.219.362.452l-.694.483zm5.007.24l-.03.031c.147.405.293.742.364 1.177.034.202.013.465.179.603.17-.322.23-.695.385-1.026.09-.19.234-.356.188-.573-.29.143-.461.787-.543 1.086-.15-.399-.104-1.092-.543-1.297zm2.051.303c.341.677.594 1.314.785 2.05.212-.118.183-.329.18-.542-.005-.497.186-.99.152-1.478-.143.048-.168.194-.193.332-.06.329-.06.669-.14.995-.163-.38-.293-1.279-.784-1.357zm6.365.24l.453.665-.664-.302zM8.657 19.18c.647.057.205.652-.06.935zm8.296.724l.272.845c-.224-.157-.488-.414-.604-.664zm-5.502.455l.344.058-.272.965h-.03l-.06-.754zm2.85.174c.062 0 .121.013.169.053.163.138-.067.805-.141.977l-.332-.965c.086-.022.2-.063.304-.065Z" }, "child": [] }] })(props);
-}
-function SiNpm(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0zM5.13 5.323l13.837.019-.009 13.836h-3.464l.01-10.382h-3.456L12.04 19.17H5.113z" }, "child": [] }] })(props);
-}
-function SiNodedotjs(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M11.998,24c-0.321,0-0.641-0.084-0.922-0.247l-2.936-1.737c-0.438-0.245-0.224-0.332-0.08-0.383 c0.585-0.203,0.703-0.25,1.328-0.604c0.065-0.037,0.151-0.023,0.218,0.017l2.256,1.339c0.082,0.045,0.197,0.045,0.272,0l8.795-5.076 c0.082-0.047,0.134-0.141,0.134-0.238V6.921c0-0.099-0.053-0.192-0.137-0.242l-8.791-5.072c-0.081-0.047-0.189-0.047-0.271,0 L3.075,6.68C2.99,6.729,2.936,6.825,2.936,6.921v10.15c0,0.097,0.054,0.189,0.139,0.235l2.409,1.392 c1.307,0.654,2.108-0.116,2.108-0.89V7.787c0-0.142,0.114-0.253,0.256-0.253h1.115c0.139,0,0.255,0.112,0.255,0.253v10.021 c0,1.745-0.95,2.745-2.604,2.745c-0.508,0-0.909,0-2.026-0.551L2.28,18.675c-0.57-0.329-0.922-0.945-0.922-1.604V6.921 c0-0.659,0.353-1.275,0.922-1.603l8.795-5.082c0.557-0.315,1.296-0.315,1.848,0l8.794,5.082c0.57,0.329,0.924,0.944,0.924,1.603 v10.15c0,0.659-0.354,1.273-0.924,1.604l-8.794,5.078C12.643,23.916,12.324,24,11.998,24z M19.099,13.993 c0-1.9-1.284-2.406-3.987-2.763c-2.731-0.361-3.009-0.548-3.009-1.187c0-0.528,0.235-1.233,2.258-1.233 c1.807,0,2.473,0.389,2.747,1.607c0.024,0.115,0.129,0.199,0.247,0.199h1.141c0.071,0,0.138-0.031,0.186-0.081 c0.048-0.054,0.074-0.123,0.067-0.196c-0.177-2.098-1.571-3.076-4.388-3.076c-2.508,0-4.004,1.058-4.004,2.833 c0,1.925,1.488,2.457,3.895,2.695c2.88,0.282,3.103,0.703,3.103,1.269c0,0.983-0.789,1.402-2.642,1.402 c-2.327,0-2.839-0.584-3.011-1.742c-0.02-0.124-0.126-0.215-0.253-0.215h-1.137c-0.141,0-0.254,0.112-0.254,0.253 c0,1.482,0.806,3.248,4.655,3.248C17.501,17.007,19.099,15.91,19.099,13.993z" }, "child": [] }] })(props);
-}
-function SiNetlify(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M6.49 19.04h-.23L5.13 17.9v-.23l1.73-1.71h1.2l.15.15v1.2L6.5 19.04ZM5.13 6.31V6.1l1.13-1.13h.23L8.2 6.68v1.2l-.15.15h-1.2L5.13 6.31Zm9.96 9.09h-1.65l-.14-.13v-3.83c0-.68-.27-1.2-1.1-1.23-.42 0-.9 0-1.43.02l-.07.08v4.96l-.14.14H8.9l-.13-.14V8.73l.13-.14h3.7a2.6 2.6 0 0 1 2.61 2.6v4.08l-.13.14Zm-8.37-2.44H.14L0 12.82v-1.64l.14-.14h6.58l.14.14v1.64l-.14.14Zm17.14 0h-6.58l-.14-.14v-1.64l.14-.14h6.58l.14.14v1.64l-.14.14ZM11.05 6.55V1.64l.14-.14h1.65l.14.14v4.9l-.14.14h-1.65l-.14-.13Zm0 15.81v-4.9l.14-.14h1.65l.14.13v4.91l-.14.14h-1.65l-.14-.14Z" }, "child": [] }] })(props);
-}
-function SiNatsdotio(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12.004 0H.404v18.807h9.938l1.714 1.602v-.026L15.966 24v-5.193h7.63V0H12.003zm7.578 14.45H15.38L6.898 6.519v7.93H4.116V4.376h4.349l8.344 7.784V4.375h2.773V14.45z" }, "child": [] }] })(props);
-}
-function SiMysql(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M16.405 5.501c-.115 0-.193.014-.274.033v.013h.014c.054.104.146.18.214.273.054.107.1.214.154.32l.014-.015c.094-.066.14-.172.14-.333-.04-.047-.046-.094-.08-.14-.04-.067-.126-.1-.18-.153zM5.77 18.695h-.927a50.854 50.854 0 00-.27-4.41h-.008l-1.41 4.41H2.45l-1.4-4.41h-.01a72.892 72.892 0 00-.195 4.41H0c.055-1.966.192-3.81.41-5.53h1.15l1.335 4.064h.008l1.347-4.064h1.095c.242 2.015.384 3.86.428 5.53zm4.017-4.08c-.378 2.045-.876 3.533-1.492 4.46-.482.716-1.01 1.073-1.583 1.073-.153 0-.34-.046-.566-.138v-.494c.11.017.24.026.386.026.268 0 .483-.075.647-.222.197-.18.295-.382.295-.605 0-.155-.077-.47-.23-.944L6.23 14.615h.91l.727 2.36c.164.536.233.91.205 1.123.4-1.064.678-2.227.835-3.483zm12.325 4.08h-2.63v-5.53h.885v4.85h1.745zm-3.32.135l-1.016-.5c.09-.076.177-.158.255-.25.433-.506.648-1.258.648-2.253 0-1.83-.718-2.746-2.155-2.746-.704 0-1.254.232-1.65.697-.43.508-.646 1.256-.646 2.245 0 .972.19 1.686.574 2.14.35.41.877.615 1.583.615.264 0 .506-.033.725-.098l1.325.772.36-.622zM15.5 17.588c-.225-.36-.337-.94-.337-1.736 0-1.393.424-2.09 1.27-2.09.443 0 .77.167.977.5.224.362.336.936.336 1.723 0 1.404-.424 2.108-1.27 2.108-.445 0-.77-.167-.978-.5zm-1.658-.425c0 .47-.172.856-.516 1.156-.344.3-.803.45-1.384.45-.543 0-1.064-.172-1.573-.515l.237-.476c.438.22.833.328 1.19.328.332 0 .593-.073.783-.22a.754.754 0 00.3-.615c0-.33-.23-.61-.648-.845-.388-.213-1.163-.657-1.163-.657-.422-.307-.632-.636-.632-1.177 0-.45.157-.81.47-1.085.315-.278.72-.415 1.22-.415.512 0 .98.136 1.4.41l-.213.476a2.726 2.726 0 00-1.064-.23c-.283 0-.502.068-.654.206a.685.685 0 00-.248.524c0 .328.234.61.666.85.393.215 1.187.67 1.187.67.433.305.648.63.648 1.168zm9.382-5.852c-.535-.014-.95.04-1.297.188-.1.04-.26.04-.274.167.055.053.063.14.11.214.08.134.218.313.346.407.14.11.28.216.427.31.26.16.555.255.81.416.145.094.293.213.44.313.073.05.12.14.214.172v-.02c-.046-.06-.06-.147-.105-.214-.067-.067-.134-.127-.2-.193a3.223 3.223 0 00-.695-.675c-.214-.146-.682-.35-.77-.595l-.013-.014c.146-.013.32-.066.46-.106.227-.06.435-.047.67-.106.106-.027.213-.06.32-.094v-.06c-.12-.12-.21-.283-.334-.395a8.867 8.867 0 00-1.104-.823c-.21-.134-.476-.22-.697-.334-.08-.04-.214-.06-.26-.127-.12-.146-.19-.34-.275-.514a17.69 17.69 0 01-.547-1.163c-.12-.262-.193-.523-.34-.763-.69-1.137-1.437-1.826-2.586-2.5-.247-.14-.543-.2-.856-.274-.167-.008-.334-.02-.5-.027-.11-.047-.216-.174-.31-.235-.38-.24-1.364-.76-1.644-.072-.18.434.267.862.422 1.082.115.153.26.328.34.5.047.116.06.235.107.356.106.294.207.622.347.897.073.14.153.287.247.413.054.073.146.107.167.227-.094.136-.1.334-.154.5-.24.757-.146 1.693.194 2.25.107.166.362.534.703.393.3-.12.234-.5.32-.835.02-.08.007-.133.048-.187v.015c.094.188.188.367.274.555.206.328.566.668.867.895.16.12.287.328.487.402v-.02h-.015c-.043-.058-.1-.086-.154-.133a3.445 3.445 0 01-.35-.4 8.76 8.76 0 01-.747-1.218c-.11-.21-.202-.436-.29-.643-.04-.08-.04-.2-.107-.24-.1.146-.247.273-.32.453-.127.288-.14.642-.188 1.01-.027.007-.014 0-.027.014-.214-.052-.287-.274-.367-.46-.2-.475-.233-1.238-.06-1.785.047-.14.247-.582.167-.716-.042-.127-.174-.2-.247-.303a2.478 2.478 0 01-.24-.427c-.16-.374-.24-.788-.414-1.162-.08-.173-.22-.354-.334-.513-.127-.18-.267-.307-.368-.52-.033-.073-.08-.194-.027-.274.014-.054.042-.075.094-.09.088-.072.335.022.422.062.247.1.455.194.662.334.094.066.195.193.315.226h.14c.214.047.455.014.655.073.355.114.675.28.962.46a5.953 5.953 0 012.085 2.286c.08.154.115.295.188.455.14.33.313.663.455.982.14.315.275.636.476.897.1.14.502.213.682.286.133.06.34.115.46.188.23.14.454.3.67.454.11.076.443.243.463.378z" }, "child": [] }] })(props);
-}
-function SiMongodb(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M17.193 9.555c-1.264-5.58-4.252-7.414-4.573-8.115-.28-.394-.53-.954-.735-1.44-.036.495-.055.685-.523 1.184-.723.566-4.438 3.682-4.74 10.02-.282 5.912 4.27 9.435 4.888 9.884l.07.05A73.49 73.49 0 0111.91 24h.481c.114-1.032.284-2.056.51-3.07.417-.296.604-.463.85-.693a11.342 11.342 0 003.639-8.464c.01-.814-.103-1.662-.197-2.218zm-5.336 8.195s0-8.291.275-8.29c.213 0 .49 10.695.49 10.695-.381-.045-.765-1.76-.765-2.405z" }, "child": [] }] })(props);
-}
-function SiMinio(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.2072.006c-.6216-.0478-1.2.1943-1.6211.582a2.15 2.15 0 0 0-.0938 3.0352l3.4082 3.5507a3.042 3.042 0 0 1-.664 4.6875l-.463.2383V7.2853a15.4198 15.4198 0 0 0-8.0174 10.4862v.0176l6.5487-3.3281v7.621L13.7794 24V13.6817l.8965-.4629a4.4432 4.4432 0 0 0 1.2207-7.0292l-3.371-3.5254a.7489.7489 0 0 1 .037-1.0547.7522.7522 0 0 1 1.0567.0371l.4668.4863-.006.0059 4.0704 4.2441a.0566.0566 0 0 0 .082 0 .06.06 0 0 0 0-.0703l-3.1406-5.1425-.1484.1425.1484-.1445C14.4945.3926 13.8287.0538 13.2072.006Zm-.9024 9.8652v2.9941l-4.1523 2.1484a13.9787 13.9787 0 0 1 2.7676-3.9277 14.1784 14.1784 0 0 1 1.3847-1.2148z" }, "child": [] }] })(props);
-}
-function SiKubernetes(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M10.204 14.35l.007.01-.999 2.413a5.171 5.171 0 0 1-2.075-2.597l2.578-.437.004.005a.44.44 0 0 1 .484.606zm-.833-2.129a.44.44 0 0 0 .173-.756l.002-.011L7.585 9.7a5.143 5.143 0 0 0-.73 3.255l2.514-.725.002-.009zm1.145-1.98a.44.44 0 0 0 .699-.337l.01-.005.15-2.62a5.144 5.144 0 0 0-3.01 1.442l2.147 1.523.004-.002zm.76 2.75l.723.349.722-.347.18-.78-.5-.623h-.804l-.5.623.179.779zm1.5-3.095a.44.44 0 0 0 .7.336l.008.003 2.134-1.513a5.188 5.188 0 0 0-2.992-1.442l.148 2.615.002.001zm10.876 5.97l-5.773 7.181a1.6 1.6 0 0 1-1.248.594l-9.261.003a1.6 1.6 0 0 1-1.247-.596l-5.776-7.18a1.583 1.583 0 0 1-.307-1.34L2.1 5.573c.108-.47.425-.864.863-1.073L11.305.513a1.606 1.606 0 0 1 1.385 0l8.345 3.985c.438.209.755.604.863 1.073l2.062 8.955c.108.47-.005.963-.308 1.34zm-3.289-2.057c-.042-.01-.103-.026-.145-.034-.174-.033-.315-.025-.479-.038-.35-.037-.638-.067-.895-.148-.105-.04-.18-.165-.216-.216l-.201-.059a6.45 6.45 0 0 0-.105-2.332 6.465 6.465 0 0 0-.936-2.163c.052-.047.15-.133.177-.159.008-.09.001-.183.094-.282.197-.185.444-.338.743-.522.142-.084.273-.137.415-.242.032-.024.076-.062.11-.089.24-.191.295-.52.123-.736-.172-.216-.506-.236-.745-.045-.034.027-.08.062-.111.088-.134.116-.217.23-.33.35-.246.25-.45.458-.673.609-.097.056-.239.037-.303.033l-.19.135a6.545 6.545 0 0 0-4.146-2.003l-.012-.223c-.065-.062-.143-.115-.163-.25-.022-.268.015-.557.057-.905.023-.163.061-.298.068-.475.001-.04-.001-.099-.001-.142 0-.306-.224-.555-.5-.555-.275 0-.499.249-.499.555l.001.014c0 .041-.002.092 0 .128.006.177.044.312.067.475.042.348.078.637.056.906a.545.545 0 0 1-.162.258l-.012.211a6.424 6.424 0 0 0-4.166 2.003 8.373 8.373 0 0 1-.18-.128c-.09.012-.18.04-.297-.029-.223-.15-.427-.358-.673-.608-.113-.12-.195-.234-.329-.349-.03-.026-.077-.062-.111-.088a.594.594 0 0 0-.348-.132.481.481 0 0 0-.398.176c-.172.216-.117.546.123.737l.007.005.104.083c.142.105.272.159.414.242.299.185.546.338.743.522.076.082.09.226.1.288l.16.143a6.462 6.462 0 0 0-1.02 4.506l-.208.06c-.055.072-.133.184-.215.217-.257.081-.546.11-.895.147-.164.014-.305.006-.48.039-.037.007-.09.02-.133.03l-.004.002-.007.002c-.295.071-.484.342-.423.608.061.267.349.429.645.365l.007-.001.01-.003.129-.029c.17-.046.294-.113.448-.172.33-.118.604-.217.87-.256.112-.009.23.069.288.101l.217-.037a6.5 6.5 0 0 0 2.88 3.596l-.09.218c.033.084.069.199.044.282-.097.252-.263.517-.452.813-.091.136-.185.242-.268.399-.02.037-.045.095-.064.134-.128.275-.034.591.213.71.248.12.556-.007.69-.282v-.002c.02-.039.046-.09.062-.127.07-.162.094-.301.144-.458.132-.332.205-.68.387-.897.05-.06.13-.082.215-.105l.113-.205a6.453 6.453 0 0 0 4.609.012l.106.192c.086.028.18.042.256.155.136.232.229.507.342.84.05.156.074.295.145.457.016.037.043.09.062.129.133.276.442.402.69.282.247-.118.341-.435.213-.71-.02-.039-.045-.096-.065-.134-.083-.156-.177-.261-.268-.398-.19-.296-.346-.541-.443-.793-.04-.13.007-.21.038-.294-.018-.022-.059-.144-.083-.202a6.499 6.499 0 0 0 2.88-3.622c.064.01.176.03.213.038.075-.05.144-.114.28-.104.266.039.54.138.87.256.154.06.277.128.448.173.036.01.088.019.13.028l.009.003.007.001c.297.064.584-.098.645-.365.06-.266-.128-.537-.423-.608zM16.4 9.701l-1.95 1.746v.005a.44.44 0 0 0 .173.757l.003.01 2.526.728a5.199 5.199 0 0 0-.108-1.674A5.208 5.208 0 0 0 16.4 9.7zm-4.013 5.325a.437.437 0 0 0-.404-.232.44.44 0 0 0-.372.233h-.002l-1.268 2.292a5.164 5.164 0 0 0 3.326.003l-1.27-2.296h-.01zm1.888-1.293a.44.44 0 0 0-.27.036.44.44 0 0 0-.214.572l-.003.004 1.01 2.438a5.15 5.15 0 0 0 2.081-2.615l-2.6-.44-.004.005z" }, "child": [] }] })(props);
-}
-function SiHomebrew(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M7.938 0a.214.214 0 0 0-.206.156c-.316 1.104.179 2.15.838 2.935.153.181.313.347.476.501a2.039 2.039 0 0 0-.665.02c-1.184.233-2.193.985-2.74 2.532a3.893 3.893 0 0 0-.2 1.466 1.565 1.565 0 0 0-1.156 1.504 1.59 1.59 0 0 0 1.227 1.541l.026 12.046c0 .195.1.377.264.482a.214.214 0 0 0 .008.005c.537.31 2.047.812 5.21.812 3.238 0 4.7-.678 5.181-1.04a.214.214 0 0 0 .008-.007.571.571 0 0 0 .206-.439c.002-.344.002-1.136.002-1.604a.143.143 0 0 1 .147-.144c.397.006.869.006 1.318.005a1.826 1.826 0 0 0 1.832-1.825v-5.804a1.826 1.826 0 0 0-1.825-1.826H16.56a.14.14 0 0 1-.143-.144V10.6h.007v-.001a1.573 1.573 0 0 0 1.356-1.556c0-.816-.627-1.489-1.424-1.563-.025-1.438-.437-2.126-.736-2.58a.214.214 0 0 0-.005-.007c-.364-.51-1.193-1.282-2.275-1.316-.503-.016-.842.124-1.125.254-.217.1-.42.177-.67.22.002-1.286.945-1.981.945-1.981a.214.214 0 0 0 .05-.298s-.087-.122-.21-.26c-.121-.136-.269-.294-.47-.378a.214.214 0 0 0-.079-.017.214.214 0 0 0-.145.055 4.308 4.308 0 0 0-.875 1.101 3.42 3.42 0 0 0-.133.273 3.497 3.497 0 0 0-.381-.846C9.794.978 9.063.436 8.017.016A.214.214 0 0 0 7.939 0zm.156.524c.85.378 1.43.83 1.79 1.403.274.438.426.962.484 1.584a3.07 3.07 0 0 0-.012.462 6.897 6.897 0 0 1-.168-.052 5.487 5.487 0 0 1-1.29-1.106c-.551-.657-.935-1.46-.804-2.291zM11.8 1.618c.07.054.141.101.212.18.034.039.032.04.058.073-.332.308-1.07 1.144-.952 2.453a.214.214 0 0 0 .222.195c.469-.017.782-.172 1.056-.299.273-.126.508-.228.931-.214.875.027 1.639.715 1.939 1.134.295.449.65 1 .663 2.36a1.66 1.66 0 0 0-.41.142 1.938 1.938 0 0 0-1.77-1.16 1.94 1.94 0 0 0-1.87 1.448 1.783 1.783 0 0 0-1.356-.64c-.484 0-.91.205-1.233.517a1.873 1.873 0 0 0-1.85-1.625c-.649 0-1.218.335-1.552.84a3.1 3.1 0 0 1 .157-.735c.51-1.437 1.355-2.045 2.42-2.254.367-.073.664-.011.99.095.325.106.671.262 1.094.342a.214.214 0 0 0 .252-.245c-.112-.67.073-1.266.336-1.744a3.71 3.71 0 0 1 .663-.863zM7.44 6.611a1.442 1.442 0 0 1 1.363 1.925.214.214 0 0 0 .168.283h.005a.214.214 0 0 0 .238-.146 1.373 1.373 0 0 1 2.613-.01.214.214 0 0 0 .417-.09 1.509 1.509 0 0 1 1.504-1.664c.678 0 1.249.445 1.442 1.056a.214.214 0 0 0 .259.143l.15-.04a.214.214 0 0 0 .051-.02 1.139 1.139 0 0 1 1.702.995 1.14 1.14 0 0 1-.985 1.131.214.214 0 0 0-.001 0 2.215 2.215 0 0 0-.485.126 10.65 10.65 0 0 1-1.176.365.214.214 0 0 0-.162.186 1.276 1.276 0 0 1-.146.478 2.07 2.07 0 0 0-.239 1.111l.001.151a.438.438 0 0 1-.16.36.665.665 0 0 1-.43.14.586.586 0 0 1-.588-.59.803.803 0 0 0-.38-.681.214.214 0 0 0-.002-.002c-.24-.145-.43-.37-.532-.636a.214.214 0 0 0-.207-.138 19.469 19.469 0 0 1-5.37-.6l-.003-.002a9.007 9.007 0 0 0-.838-.194h.003a1.16 1.16 0 0 1-.937-1.134c0-.619.488-1.118 1.101-1.14a.214.214 0 0 0 .204-.176 1.443 1.443 0 0 1 1.42-1.187zm8.549 4.106v.455c0 .314.259.573.572.573h1.329a1.397 1.397 0 0 1 1.397 1.397v5.804a1.396 1.396 0 0 1-1.402 1.396.214.214 0 0 0-.002 0c-.448.002-.918 0-1.31-.005a.573.573 0 0 0-.584.573c0 .468 0 1.262-.002 1.603a.214.214 0 0 0 0 .001c0 .042-.019.08-.05.107-.346.26-1.75.95-4.915.95-3.107 0-4.587-.52-4.99-.752a.143.143 0 0 1-.065-.118l-.025-11.955c.145.033.288.07.431.11a.214.214 0 0 0 .003 0c.115.031.246.064.383.097v10.37c0 .129.069.247.18.31.453.217 1.767.732 4.071.732 2.32 0 3.595-.626 4.022-.884a.357.357 0 0 0 .164-.3l.001-10.21c.267-.075.531-.158.792-.254zm-7.99.894a.493.493 0 0 1 .494.493v8.578a.493.493 0 0 1-.493.493.493.493 0 0 1-.494-.493v-8.578A.493.493 0 0 1 8 11.611zm8.652 1.14a.663.663 0 0 0-.662.662v5.208a.663.663 0 0 0 .662.662h1.14a.663.663 0 0 0 .662-.662v-5.209a.663.663 0 0 0-.662-.662zm0 .428h1.14a.233.233 0 0 1 .233.233v5.21a.233.233 0 0 1-.233.232h-1.14a.233.233 0 0 1-.233-.233v-5.209a.233.233 0 0 1 .233-.233z" }, "child": [] }] })(props);
-}
-function SiHeroku(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M20.61 0H3.39C2.189 0 1.23.96 1.23 2.16v19.681c0 1.198.959 2.159 2.16 2.159h17.22c1.2 0 2.159-.961 2.159-2.159V2.16C22.77.96 21.811 0 20.61 0zm.96 21.841c0 .539-.421.96-.96.96H3.39c-.54 0-.96-.421-.96-.96V2.16c0-.54.42-.961.96-.961h17.22c.539 0 .96.421.96.961v19.681zM6.63 20.399L9.33 18l-2.7-2.4v4.799zm9.72-9.719c-.479-.48-1.379-1.08-2.879-1.08-1.621 0-3.301.421-4.5.84V3.6h-2.4v10.38l1.68-.78s2.76-1.26 5.16-1.26c1.2 0 1.5.66 1.5 1.26v7.2h2.4v-7.2c.059-.179.059-1.501-.961-2.52zM13.17 7.5h2.4c1.08-1.26 1.62-2.521 1.8-3.9h-2.399c-.241 1.379-.841 2.64-1.801 3.9z" }, "child": [] }] })(props);
-}
-function SiHelm(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12.337 0c-.475 0-.861 1.016-.861 2.269 0 .527.069 1.011.183 1.396a8.514 8.514 0 0 0-3.961 1.22 5.229 5.229 0 0 0-.595-1.093c-.606-.866-1.34-1.436-1.79-1.43a.381.381 0 0 0-.217.066c-.39.273-.123 1.326.596 2.353.267.381.559.705.84.948a8.683 8.683 0 0 0-1.528 1.716h1.734a7.179 7.179 0 0 1 5.381-2.421 7.18 7.18 0 0 1 5.382 2.42h1.733a8.687 8.687 0 0 0-1.32-1.53c.35-.249.735-.643 1.078-1.133.719-1.027.986-2.08.596-2.353a.382.382 0 0 0-.217-.065c-.45-.007-1.184.563-1.79 1.43a4.897 4.897 0 0 0-.676 1.325 8.52 8.52 0 0 0-3.899-1.42c.12-.39.193-.887.193-1.429 0-1.253-.386-2.269-.862-2.269zM1.624 9.443v5.162h1.358v-1.968h1.64v1.968h1.357V9.443H4.62v1.838H2.98V9.443zm5.912 0v5.162h3.21v-1.108H8.893v-.95h1.64v-1.142h-1.64v-.84h1.853V9.443zm4.698 0v5.162h3.218v-1.362h-1.86v-3.8zm4.706 0v5.162h1.364v-2.643l1.357 1.225 1.35-1.232v2.65h1.365V9.443h-.614l-2.1 1.914-2.109-1.914zm-11.82 7.28a8.688 8.688 0 0 0 1.412 1.548 5.206 5.206 0 0 0-.841.948c-.719 1.027-.985 2.08-.596 2.353.39.273 1.289-.338 2.007-1.364a5.23 5.23 0 0 0 .595-1.092 8.514 8.514 0 0 0 3.961 1.219 5.01 5.01 0 0 0-.183 1.396c0 1.253.386 2.269.861 2.269.476 0 .862-1.016.862-2.269 0-.542-.072-1.04-.193-1.43a8.52 8.52 0 0 0 3.9-1.42c.121.4.352.865.675 1.327.719 1.026 1.617 1.637 2.007 1.364.39-.273.123-1.326-.596-2.353-.343-.49-.727-.885-1.077-1.135a8.69 8.69 0 0 0 1.202-1.36h-1.771a7.174 7.174 0 0 1-5.227 2.252 7.174 7.174 0 0 1-5.226-2.252z" }, "child": [] }] })(props);
-}
-function SiGradle(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M22.695 4.297a3.807 3.807 0 0 0-5.29-.09.368.368 0 0 0 0 .533l.46.47a.363.363 0 0 0 .474.032 2.182 2.182 0 0 1 2.86 3.291c-3.023 3.02-7.056-5.447-16.211-1.083a1.24 1.24 0 0 0-.534 1.745l1.571 2.713a1.238 1.238 0 0 0 1.681.461l.037-.02-.029.02.688-.384a16.083 16.083 0 0 0 2.193-1.635.384.384 0 0 1 .499-.016.357.357 0 0 1 .016.534 16.435 16.435 0 0 1-2.316 1.741H8.77l-.696.39a1.958 1.958 0 0 1-.963.25 1.987 1.987 0 0 1-1.726-.989L3.9 9.696C1.06 11.72-.686 15.603.26 20.522a.363.363 0 0 0 .354.296h1.675a.363.363 0 0 0 .37-.331 2.478 2.478 0 0 1 4.915 0 .36.36 0 0 0 .357.317h1.638a.363.363 0 0 0 .357-.317 2.478 2.478 0 0 1 4.914 0 .363.363 0 0 0 .358.317h1.627a.363.363 0 0 0 .363-.357c.037-2.294.656-4.93 2.42-6.25 6.108-4.57 4.502-8.486 3.088-9.9zm-6.229 6.901l-1.165-.584a.73.73 0 1 1 1.165.587z" }, "child": [] }] })(props);
-}
-function SiGooglecloud(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12.19 2.38a9.344 9.344 0 0 0-9.234 6.893c.053-.02-.055.013 0 0-3.875 2.551-3.922 8.11-.247 10.941l.006-.007-.007.03a6.717 6.717 0 0 0 4.077 1.356h5.173l.03.03h5.192c6.687.053 9.376-8.605 3.835-12.35a9.365 9.365 0 0 0-2.821-4.552l-.043.043.006-.05A9.344 9.344 0 0 0 12.19 2.38zm-.358 4.146c1.244-.04 2.518.368 3.486 1.15a5.186 5.186 0 0 1 1.862 4.078v.518c3.53-.07 3.53 5.262 0 5.193h-5.193l-.008.009v-.04H6.785a2.59 2.59 0 0 1-1.067-.23h.001a2.597 2.597 0 1 1 3.437-3.437l3.013-3.012A6.747 6.747 0 0 0 8.11 8.24c.018-.01.04-.026.054-.023a5.186 5.186 0 0 1 3.67-1.69z" }, "child": [] }] })(props);
-}
-function SiGo(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M1.811 10.231c-.047 0-.058-.023-.035-.059l.246-.315c.023-.035.081-.058.128-.058h4.172c.046 0 .058.035.035.07l-.199.303c-.023.036-.082.07-.117.07zM.047 11.306c-.047 0-.059-.023-.035-.058l.245-.316c.023-.035.082-.058.129-.058h5.328c.047 0 .07.035.058.07l-.093.28c-.012.047-.058.07-.105.07zm2.828 1.075c-.047 0-.059-.035-.035-.07l.163-.292c.023-.035.07-.07.117-.07h2.337c.047 0 .07.035.07.082l-.023.28c0 .047-.047.082-.082.082zm12.129-2.36c-.736.187-1.239.327-1.963.514-.176.046-.187.058-.34-.117-.174-.199-.303-.327-.548-.444-.737-.362-1.45-.257-2.115.175-.795.514-1.204 1.274-1.192 2.22.011.935.654 1.706 1.577 1.835.795.105 1.46-.175 1.987-.77.105-.13.198-.27.315-.434H10.47c-.245 0-.304-.152-.222-.35.152-.362.432-.97.596-1.274a.315.315 0 01.292-.187h4.253c-.023.316-.023.631-.07.947a4.983 4.983 0 01-.958 2.29c-.841 1.11-1.94 1.8-3.33 1.986-1.145.152-2.209-.07-3.143-.77-.865-.655-1.356-1.52-1.484-2.595-.152-1.274.222-2.419.993-3.424.83-1.086 1.928-1.776 3.272-2.02 1.098-.2 2.15-.07 3.096.571.62.41 1.063.97 1.356 1.648.07.105.023.164-.117.2m3.868 6.461c-1.064-.024-2.034-.328-2.852-1.029a3.665 3.665 0 01-1.262-2.255c-.21-1.32.152-2.489.947-3.529.853-1.122 1.881-1.706 3.272-1.95 1.192-.21 2.314-.095 3.33.595.923.63 1.496 1.484 1.648 2.605.198 1.578-.257 2.863-1.344 3.962-.771.783-1.718 1.273-2.805 1.495-.315.06-.63.07-.934.106zm2.78-4.72c-.011-.153-.011-.27-.034-.387-.21-1.157-1.274-1.81-2.384-1.554-1.087.245-1.788.935-2.045 2.033-.21.912.234 1.835 1.075 2.21.643.28 1.285.244 1.905-.07.923-.48 1.425-1.228 1.484-2.233z" }, "child": [] }] })(props);
-}
-function SiGitlab(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "m23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z" }, "child": [] }] })(props);
-}
-function SiGithubactions(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M10.984 13.836a.5.5 0 0 1-.353-.146l-.745-.743a.5.5 0 1 1 .706-.708l.392.391 1.181-1.18a.5.5 0 0 1 .708.707l-1.535 1.533a.504.504 0 0 1-.354.146zm9.353-.147l1.534-1.532a.5.5 0 0 0-.707-.707l-1.181 1.18-.392-.391a.5.5 0 1 0-.706.708l.746.743a.497.497 0 0 0 .706-.001zM4.527 7.452l2.557-1.585A1 1 0 0 0 7.09 4.17L4.533 2.56A1 1 0 0 0 3 3.406v3.196a1.001 1.001 0 0 0 1.527.85zm2.03-2.436L4 6.602V3.406l2.557 1.61zM24 12.5c0 1.93-1.57 3.5-3.5 3.5a3.503 3.503 0 0 1-3.46-3h-2.08a3.503 3.503 0 0 1-3.46 3 3.502 3.502 0 0 1-3.46-3h-.558c-.972 0-1.85-.399-2.482-1.042V17c0 1.654 1.346 3 3 3h.04c.244-1.693 1.7-3 3.46-3 1.93 0 3.5 1.57 3.5 3.5S13.43 24 11.5 24a3.502 3.502 0 0 1-3.46-3H8c-2.206 0-4-1.794-4-4V9.899A5.008 5.008 0 0 1 0 5c0-2.757 2.243-5 5-5s5 2.243 5 5a5.005 5.005 0 0 1-4.952 4.998A2.482 2.482 0 0 0 7.482 12h.558c.244-1.693 1.7-3 3.46-3a3.502 3.502 0 0 1 3.46 3h2.08a3.503 3.503 0 0 1 3.46-3c1.93 0 3.5 1.57 3.5 3.5zm-15 8c0 1.378 1.122 2.5 2.5 2.5s2.5-1.122 2.5-2.5-1.122-2.5-2.5-2.5S9 19.122 9 20.5zM5 9c2.206 0 4-1.794 4-4S7.206 1 5 1 1 2.794 1 5s1.794 4 4 4zm9 3.5c0-1.378-1.122-2.5-2.5-2.5S9 11.122 9 12.5s1.122 2.5 2.5 2.5 2.5-1.122 2.5-2.5zm9 0c0-1.378-1.122-2.5-2.5-2.5S18 11.122 18 12.5s1.122 2.5 2.5 2.5 2.5-1.122 2.5-2.5zm-13 8a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0zm2 0a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0zm12 0c0 1.93-1.57 3.5-3.5 3.5a3.503 3.503 0 0 1-3.46-3.002c-.007.001-.013.005-.021.005l-.506.017h-.017a.5.5 0 0 1-.016-.999l.506-.017c.018-.002.035.006.052.007A3.503 3.503 0 0 1 20.5 17c1.93 0 3.5 1.57 3.5 3.5zm-1 0c0-1.378-1.122-2.5-2.5-2.5S18 19.122 18 20.5s1.122 2.5 2.5 2.5 2.5-1.122 2.5-2.5z" }, "child": [] }] })(props);
-}
-function SiGithub(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" }, "child": [] }] })(props);
-}
-function SiGit(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M23.546 10.93L13.067.452c-.604-.603-1.582-.603-2.188 0L8.708 2.627l2.76 2.76c.645-.215 1.379-.07 1.889.441.516.515.658 1.258.438 1.9l2.658 2.66c.645-.223 1.387-.078 1.9.435.721.72.721 1.884 0 2.604-.719.719-1.881.719-2.6 0-.539-.541-.674-1.337-.404-1.996L12.86 8.955v6.525c.176.086.342.203.488.348.713.721.713 1.883 0 2.6-.719.721-1.889.721-2.609 0-.719-.719-.719-1.879 0-2.598.182-.18.387-.316.605-.406V8.835c-.217-.091-.424-.222-.6-.401-.545-.545-.676-1.342-.396-2.009L7.636 3.7.45 10.881c-.6.605-.6 1.584 0 2.189l10.48 10.477c.604.604 1.582.604 2.186 0l10.43-10.43c.605-.603.605-1.582 0-2.187" }, "child": [] }] })(props);
-}
-function SiElasticsearch(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.394 0C8.683 0 4.609 2.716 2.644 6.667h15.641a4.77 4.77 0 0 0 3.073-1.11c.446-.375.864-.785 1.247-1.243l.001-.002A11.974 11.974 0 0 0 13.394 0zM1.804 8.889a12.009 12.009 0 0 0 0 6.222h14.7a3.111 3.111 0 1 0 0-6.222zm.84 8.444C4.61 21.283 8.684 24 13.395 24c3.701 0 7.011-1.677 9.212-4.312l-.001-.002a9.958 9.958 0 0 0-1.247-1.243 4.77 4.77 0 0 0-3.073-1.11z" }, "child": [] }] })(props);
-}
-function SiDocker(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.887c0 .102.082.185.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.185.185 0 00-.185.185v1.887c0 .102.083.185.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.185.185 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.185.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.083.185.185.185m-2.964 0h2.119a.185.185 0 00.185-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.082.185.185.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.376 11.376 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.248 12.248 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288Z" }, "child": [] }] })(props);
-}
-function SiDebian(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M13.88 12.685c-.4 0 .08.2.601.28.14-.1.27-.22.39-.33a3.001 3.001 0 01-.99.05m2.14-.53c.23-.33.4-.69.47-1.06-.06.27-.2.5-.33.73-.75.47-.07-.27 0-.56-.8 1.01-.11.6-.14.89m.781-2.05c.05-.721-.14-.501-.2-.221.07.04.13.5.2.22M12.38.31c.2.04.45.07.42.12.23-.05.28-.1-.43-.12m.43.12l-.15.03.14-.01V.43m6.633 9.944c.02.64-.2.95-.38 1.5l-.35.181c-.28.54.03.35-.17.78-.44.39-1.34 1.22-1.62 1.301-.201 0 .14-.25.19-.34-.591.4-.481.6-1.371.85l-.03-.06c-2.221 1.04-5.303-1.02-5.253-3.842-.03.17-.07.13-.12.2a3.551 3.552 0 012.001-3.501 3.361 3.362 0 013.732.48 3.341 3.342 0 00-2.721-1.3c-1.18.01-2.281.76-2.651 1.57-.6.38-.67 1.47-.93 1.661-.361 2.601.66 3.722 2.38 5.042.27.19.08.21.12.35a4.702 4.702 0 01-1.53-1.16c.23.33.47.66.8.91-.55-.18-1.27-1.3-1.48-1.35.93 1.66 3.78 2.921 5.261 2.3a6.203 6.203 0 01-2.33-.28c-.33-.16-.77-.51-.7-.57a5.802 5.803 0 005.902-.84c.44-.35.93-.94 1.07-.95-.2.32.04.16-.12.44.44-.72-.2-.3.46-1.24l.24.33c-.09-.6.74-1.321.66-2.262.19-.3.2.3 0 .97.29-.74.08-.85.15-1.46.08.2.18.42.23.63-.18-.7.2-1.2.28-1.6-.09-.05-.28.3-.32-.53 0-.37.1-.2.14-.28-.08-.05-.26-.32-.38-.861.08-.13.22.33.34.34-.08-.42-.2-.75-.2-1.08-.34-.68-.12.1-.4-.3-.34-1.091.3-.25.34-.74.54.77.84 1.96.981 2.46-.1-.6-.28-1.2-.49-1.76.16.07-.26-1.241.21-.37A7.823 7.824 0 0017.702 1.6c.18.17.42.39.33.42-.75-.45-.62-.48-.73-.67-.61-.25-.65.02-1.06 0C15.082.73 14.862.8 13.8.4l.05.23c-.77-.25-.9.1-1.73 0-.05-.04.27-.14.53-.18-.741.1-.701-.14-1.431.03.17-.13.36-.21.55-.32-.6.04-1.44.35-1.18.07C9.6.68 7.847 1.3 6.867 2.22L6.838 2c-.45.54-1.96 1.611-2.08 2.311l-.131.03c-.23.4-.38.85-.57 1.261-.3.52-.45.2-.4.28-.6 1.22-.9 2.251-1.16 3.102.18.27 0 1.65.07 2.76-.3 5.463 3.84 10.776 8.363 12.006.67.23 1.65.23 2.49.25-.99-.28-1.12-.15-2.08-.49-.7-.32-.85-.7-1.34-1.13l.2.35c-.971-.34-.57-.42-1.361-.67l.21-.27c-.31-.03-.83-.53-.97-.81l-.34.01c-.41-.501-.63-.871-.61-1.161l-.111.2c-.13-.21-1.52-1.901-.8-1.511-.13-.12-.31-.2-.5-.55l.14-.17c-.35-.44-.64-1.02-.62-1.2.2.24.32.3.45.33-.88-2.172-.93-.12-1.601-2.202l.15-.02c-.1-.16-.18-.34-.26-.51l.06-.6c-.63-.74-.18-3.102-.09-4.402.07-.54.53-1.1.88-1.981l-.21-.04c.4-.71 2.341-2.872 3.241-2.761.43-.55-.09 0-.18-.14.96-.991 1.26-.7 1.901-.88.7-.401-.6.16-.27-.151 1.2-.3.85-.7 2.421-.85.16.1-.39.14-.52.26 1-.49 3.151-.37 4.562.27 1.63.77 3.461 3.011 3.531 5.132l.08.02c-.04.85.13 1.821-.17 2.711l.2-.42M9.54 13.236l-.05.28c.26.35.47.73.8 1.01-.24-.47-.42-.66-.75-1.3m.62-.02c-.14-.15-.22-.34-.31-.52.08.32.26.6.43.88l-.12-.36m10.945-2.382l-.07.15c-.1.76-.34 1.511-.69 2.212.4-.73.65-1.541.75-2.362M12.45.12c.27-.1.66-.05.95-.12-.37.03-.74.05-1.1.1l.15.02M3.006 5.142c.07.57-.43.8.11.42.3-.66-.11-.18-.1-.42m-.64 2.661c.12-.39.15-.62.2-.84-.35.44-.17.53-.2.83" }, "child": [] }] })(props);
-}
-function SiComposer(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M16.66 0c-.07 0-.114.034-.164.095a.416.416 0 00-.07.43c.19.41.363.83.528 1.25.01.02.022.04.039.068-.04-.002-.05-.022-.063-.043-.297-.31-.648-.557-.998-.804-.473-.337-.99-.603-1.503-.872a.578.578 0 00-.214-.065l-.384-.04c-.202-.025-.355.09-.355.292 0 .108-.046.132-.135.14-.08.004-.187.115-.196.192a.694.694 0 00.228.619c.444.415.873.845 1.303 1.275l.015.007a.1.1 0 01.028.038c-.007.003-.014.003-.02.003a.057.057 0 01-.035-.022c-.002-.002-.005-.005-.005-.007-.062-.036-.127-.07-.187-.11-.3-.2-.595-.404-.895-.598a.943.943 0 00-.461-.17.453.453 0 00-.392.143.28.28 0 00-.088.253c.016.146.115.237.223.312.502.338.95.734 1.366 1.174.036.038.074.079.115.112.118.096.19.224.262.356.033.06.02.074-.043.074-.428 0-.836.118-1.246.204-.168.036-.334.094-.394.28-.065.21-.096.328.16.392a9.57 9.57 0 011.49.516.55.55 0 01.117.077c.12.104.23.219.362.303.38.247.77.478 1.22.583.053.012.1.039.15.05.05.015.085.044.095.094.029.178.139.279.305.33.02.006.038.02.06.028.052.017.076.055.093.108.067.24.137.478.212.715.026.08.002.1-.07.123-.372.108-.742.22-1.112.334-.132.04-.134.043-.067.163l.908 1.635c.127.23.132.23.365.11.024-.012.057-.053.079-.014.02.036.06.089.024.13-.113.129-.19.28-.286.42-.031.045-.031.074-.005.117.1.166.202.334.3.502.012.019.034.043.03.058l-.123.367a2.538 2.538 0 00-.317-.716c-.18-.288-.41-.542-.62-.811-.033-.04-.072-.077-.11-.115-.2-.207-.456-.332-.7-.478a1.026 1.026 0 00-.34-.127c-.374-.08-.746-.11-1.12.004-.075.024-.116.005-.161-.06-.092-.127-.166-.273-.29-.372-.3-.24-.616-.458-.985-.583a2.95 2.95 0 00-.865-.168 4.267 4.267 0 00-.463.017c-.396.03-.79.074-1.14.293-.07.043-.15.067-.221.108-.36.194-.716.386-1.016.679a13.1 13.1 0 00-.897.944c-.322.384-.565.818-.783 1.267-.015.03-.022.07-.07.096l-.12-.744c-.007-.046.022-.043.053-.038.089.01.175.014.264.026.067.01.103-.005.12-.08.022-.102.046-.206.067-.311.082-.397.2-.78.303-1.17.02-.074.007-.1-.07-.12-.381-.09-.763-.192-1.145-.283-.072-.017-.106-.043-.084-.12.087-.298.125-.61.242-.9a.178.178 0 01.056-.087c.098-.076.17-.165.16-.302-.007-.103.041-.168.14-.214.182-.086.358-.187.53-.288a.84.84 0 00.327-.333c.322-.605.59-1.242.98-1.81.033-.051.06-.106.1-.15.252-.264.488-.544.771-.78.089-.074.113-.175.115-.285 0-.128-.074-.217-.151-.305-.075-.087-.151-.161-.279-.147-.028.003-.057-.01-.088-.014.019-.04.05-.048.076-.065.339-.218.677-.437 1.016-.658.41-.264.819-.53 1.232-.794.052-.034.076-.06.019-.11-.015-.013-.024-.03-.036-.044-.084-.099-.084-.099-.2-.03L8.084 3.693c-.101.062-.101.062-.152-.05-.112-.263-.177-.54-.261-.81-.02-.062-.003-.098.045-.137.289-.23.553-.49.82-.742a.604.604 0 00.186-.37c.022-.17-.09-.259-.244-.196a1.707 1.707 0 00-.221.105c-.68.375-1.405.632-2.149.848-.043.012-.082.026-.118-.02-.074-.09-.185-.14-.278-.208a.073.073 0 00-.063-.015c-.1.027-.204.056-.266.147-.159.233-.358.44-.507.682-.17.28-.333.562-.525.828-.036.05-.05.058-.084-.002L3.63 2.635a2.837 2.837 0 00-.223-.338c-.094-.118-.209-.176-.358-.16-.026.004-.06-.004-.07.037-.02.11-.07.226-.057.332.034.27.082.542.15.806.114.459.244.912.38 1.364.133.444.282.88.426 1.323.012.038.033.072-.02.103-.067.038-.175.058-.187.125-.012.07.05.15.08.225l.007.017c.024.058.036.144.08.166.057.029.11-.05.162-.082.048-.03.065-.021.087.029.124.293.252.583.38.876a.18.18 0 01.006.137 4.138 4.138 0 00-.192.72c-.012.07-.038.07-.09.055a107.637 107.637 0 00-.834-.21c-.123-.032-.123-.032-.137.093v.01c-.06.665-.12 1.33-.183 1.994-.004.06.003.085.068.092.194.024.386.055.578.084.036.005.067.007.058.06-.043.225-.077.453-.125.677a.178.178 0 00.034.163l.2.264c.045.063.08.144.037.209a.201.201 0 00-.033.118c.007.415.007.83.026 1.246.01.2.007.403.012.605.01.535.04 1.068.06 1.603.01.262-.036.52-.024.783.002.065.017.1.084.122.16.05.312.116.473.166a.28.28 0 01.185.156.436.436 0 01.038.219c-.002.072.024.115.082.156.247.177.492.36.74.542.65.48 1.3.963 1.954 1.44.06.045.074.081.038.146-.034.062-.055.135-.089.197-.029.058-.024.094.031.134.082.058.161.123.236.188.065.055.067.141.048.208-.015.05-.087.005-.132 0-.032-.002-.063-.01-.094-.014-.31-.05-.617-.13-.932-.156-.5-.04-1.003-.084-1.51-.07-.026 0-.067-.024-.074.03-.007.042-.017.088.031.117.024.014.05.026.077.036.283.098.547.24.807.39.168.095.333.203.518.268.034.012.068.038.108.002-.278-.22-.554-.442-.833-.665.04-.029.07-.017.1-.014.332.026.664.072.988.15.713.17 1.421.361 2.122.572.23.07.475.104.682.243.05.033.08.067.074.13.012.014.027.033.01.045-.02.012-.036-.012-.05-.024-.164-.014-.327-.026-.488-.043-.463-.046-.924-.11-1.392-.096-.35.01-.701-.015-1.05.01-.494.033-.989.098-1.48.15-.025.003-.063-.002-.063.027 0 .036.014.077.06.087a.58.58 0 00.113.012c.25.01.497.007.746.011.62.015 1.242-.012 1.86.041.224.02.45.01.668.05 1.03.193 2.055.394 3.078.618.12.026.243.045.36.103-.055.05-.127.065-.158.137-.22.506-.363 1.04-.53 1.563-.03.09.03.192.12.216a.278.278 0 00.352-.22c.02-.109.039-.217.053-.328.005-.036.017-.055.053-.067.132-.053.26-.108.393-.16a1.63 1.63 0 00.529-.325c.134-.127.247-.274.25-.47 0-.06.014-.099.062-.135.22-.17.418-.365.61-.564a6.03 6.03 0 01.6-.533c.024-.02.043-.048.08-.034l.56.221c-.374.228-.73.447-1.082.66-.017.01-.036.015-.053.02a.813.813 0 00-.338.201c-.375.372-.567.814-.545 1.35.014.36.22.53.57.45.616-.145 1.14-.734 1.233-1.38.024-.18.052-.357-.077-.513a2.25 2.25 0 00-.178-.195c.02-.012.029-.019.039-.026.777-.463 1.625-.778 2.475-1.07 1.04-.359 2.1-.644 3.164-.918l-.075-.017c-.07.007-.136.015-.206.02a5.097 5.097 0 00-.872.134l-.016.007a.226.226 0 01-.094.015c-.014 0-.03 0-.048.002.065-.062.252-.264.303-.25l.002-.005h.005c0-.007.019-.02.019-.02.017-.03.04-.049.074-.05a.694.694 0 01.197-.189c.05-.03.103-.062.16-.086h-.001c.16 0 .319-.194.486-.262-.001-.006-.01-.01-.013-.017-.24.034-.476.072-.706.16-.492.181-1.001.323-1.481.534-.742.324-1.482.648-2.195 1.035a.818.818 0 01-.077.036l-.055-.504c-.005-.034.012-.048.04-.063.632-.334 1.266-.665 1.926-.938.543-.226 1.08-.47 1.626-.691.002-.005.005-.01.01-.01h.004c.003 0 .003.003.005.003.007.012.002.02-.005.026-.002.003-.005.003-.01.005h-.002a3.358 3.358 0 00-.372.66c.038.01.053-.003.067-.018.113-.12.226-.237.336-.357.214-.234.44-.458.704-.64.017-.012.045-.022.033-.048-.014-.03-.045-.015-.067-.01-.247.05-.494.096-.74.154-.081.019-.076-.01-.08-.067-.001-.197.028-.39.035-.586a.63.63 0 01.058-.247c.098-.226.197-.45.297-.675.05-.113.08-.233.099-.353.03-.192.055-.386.074-.58.03-.3.137-.58.187-.875.065-.374.118-.751.257-1.11.125-.316.245-.633.372-.947.176-.428.399-.833.505-1.29.036-.158.076-.302.004-.458-.04-.084-.052-.18-.081-.271a.392.392 0 01-.012-.204c.048-.245.07-.488-.063-.716-.036-.062.008-.1.044-.14.088-.09.093-.131.016-.23-.088-.11-.175-.223-.27-.326-.08-.084-.154-.175-.234-.262-.055-.033-.05-.055.012-.076.14-.048.276-.108.418-.152.08-.024.1-.07.106-.141.045-.605.09-1.213.139-1.818.007-.084-.007-.1-.094-.074-.454.144-.907.28-1.363.422-.14.044-.142.044-.204-.093-.231-.52-.411-1.057-.6-1.59a.392.392 0 01.007-.316c.067-.188.024-.377.019-.567a.104.104 0 01-.005-.03 9.16 9.16 0 00-.254-1.547 6.02 6.02 0 00-.5-1.27c-.228-.432-.473-.86-.737-1.275-.113-.178-.233-.339-.434-.427A.702.702 0 0016.66 0zm-2.642.26a.364.364 0 01.2.051 19.041 19.041 0 011.469.805c.247.158.482.338.715.52.11.087.192.217.284.33.038.047.012.09-.024.124-.024.024-.058.039-.087.055-.031.022-.072.04-.06.087.01.04.055.05.09.058a.27.27 0 00.16-.015c.168-.07.31.048.418.166.028.03.04.093.093.074.055-.021.063-.081.058-.137-.012-.15-.05-.297-.084-.444-.09-.377-.27-.718-.418-1.073-.053-.127-.11-.254-.163-.382-.03-.07.01-.132.048-.182.03-.04.08-.005.122.014.152.068.238.19.312.332.08.15.178.29.262.436.144.255.322.495.437.762.168.388.382.758.483 1.176.086.37.208.732.252 1.114.016.144-.01.283.007.422.033.279-.008.543-.123.798-.03.07-.021.136.012.208.252.533.46 1.083.67 1.635.027.072.015.1-.06.123-.482.14-.965.288-1.447.434-.07.022-.092.003-.113-.06-.123-.326-.24-.646-.353-.967-.024-.068-.053-.104-.128-.087-.088.022-.136-.017-.175-.096-.062-.127-.113-.28-.216-.36-.103-.08-.266-.082-.403-.115-.103-.027-.207-.058-.312-.075a1.428 1.428 0 01-.612-.273c-.303-.224-.615-.43-.934-.627-.104-.007-.202-.036-.303-.06-.278-.057-.554-.117-.833-.17-.067-.012-.08-.063-.084-.108-.007-.056.007-.11.065-.144.089-.053.19-.063.29-.08a9.69 9.69 0 011.345-.13c.11-.002.209.04.312.066a.18.18 0 00.166-.03c.216-.143.434-.28.65-.422.034-.021.096-.036.07-.093a.083.083 0 00-.015-.022c-.012-.01-.026-.012-.043-.012l-.05.002h-.007a1.159 1.159 0 00-.668.2c-.08.05-.26.019-.31-.056-.34-.516-.823-.888-1.282-1.29-.204-.176-.403-.361-.62-.525-.054-.04-.08-.144-.042-.196.048-.072.11-.041.168-.015.185.082.362.175.528.293.564.403 1.17.744 1.772 1.085a.51.51 0 00.05.027c.092.03.14-.01.125-.106a.267.267 0 00-.062-.134c-.488-.574-1.001-1.124-1.506-1.683-.105-.116-.23-.216-.348-.32a.854.854 0 01-.22-.278.16.16 0 01.023-.19c.04-.045.077-.055.137-.024.17.082.332.178.483.293.266.202.535.403.804.605l.807.603c.02.017.043.033.062.05.05.046.094.094.142.142l.029.029c.019.019.036.045.06.06.055.033.112.062.17.004.02-.02.029-.036.03-.055 0-.007.004-.014 0-.021l-.001-.01a.171.171 0 00-.043-.072l-.18-.187a4.537 4.537 0 00-.312-.298c-.35-.29-.706-.571-1.066-.845-.183-.14-.397-.233-.596-.348-.072-.041-.12-.101-.173-.159a.144.144 0 01-.024-.15c.022-.054.075-.051.12-.056zM8.252 1.649a.045.045 0 01.029.005c.048.027.03.077.03.135.013.06-.026.11-.08.16-.346.322-.707.627-1.076.922-.147.118-.327.173-.49.262-.034.017-.053 0-.072-.024-.12-.154-.238-.31-.358-.463-.045-.055.017-.053.046-.065.254-.091.504-.195.756-.295.365-.144.696-.35 1.04-.533.036-.02.07-.043.105-.063.024-.01.044-.037.07-.041zm-2.619.83a.223.223 0 01.134.064c.072.067.13.144.18.228.173.28.413.506.646.737.163.163.33.32.502.47.057.05.067.127.098.192.012.024.002.043-.02.055-.011.008-.023.013-.03.02-.142.12-.276.103-.442.019a3.182 3.182 0 01-.864-.646c-.01-.01-.02-.017-.03-.024-.114-.086-.12-.082-.17.05-.052.135-.086.274-.146.404-.022.045.012.094.046.127.038.039.064.099.134.089.031-.005.048-.022.055-.055.017-.08.04-.16.06-.257.262.22.553.39.84.583l-.278.159c-.713.4-1.428.8-2.139 1.205-.058.03-.082.038-.106-.034-.273-.847-.56-1.69-.79-2.552-.052-.2-.074-.408-.112-.612-.012-.06.028-.091.067-.113.053-.026.055.036.074.06.377.52.634 1.11.941 1.669.092.168.195.33.293.497.02.03.034.057.082.04.053-.02.043-.052.034-.09-.039-.174-.128-.33-.193-.493a.18.18 0 01.003-.16c.137-.284.33-.531.48-.803.14-.247.317-.468.451-.717a.205.205 0 01.2-.111zm1.774.492c.014.003.024.016.036.042.12.27.201.555.302.83.01.027.012.049-.017.066l-.256.158c-.008.005-.017.007-.046.02-.007-.013-.017-.034-.031-.051l-.54-.62c-.024-.028-.048-.055 0-.081.177-.101.312-.264.499-.35.024-.011.04-.017.053-.014zm1.929.486a.204.204 0 01.14.046.21.21 0 01.08.218.556.556 0 01-.161.29 5.528 5.528 0 00-.882 1.093c-.228.36-.453.718-.624 1.11a.768.768 0 01-.146.206c-.24.273-.526.485-.855.638a.17.17 0 00-.108.159c-.005.06-.024.118-.029.178a.48.48 0 01-.19.38c-.04.032-.045.083-.06.126l-.273.915c0 .007 0 .014-.002.019 0 .014.002.03-.017.038-.04.01-.077-.002-.113-.021a41.397 41.397 0 01-1.33-.334c-.055-.012-.108-.03-.166-.036-.088-.012-.096-.053-.055-.12.058-.281.125-.56.298-.797.038-.053.036-.096.002-.154-.19-.317-.334-.658-.492-.99-.026-.054-.017-.08.034-.11A574.255 574.255 0 006.97 4.706c.045-.03.089-.012.132-.022.151-.034.298-.08.43-.163.01-.007.026-.012.03-.022.097-.213.31-.286.49-.37.411-.187.826-.36 1.189-.633a.18.18 0 01.095-.04zm11.443 3.772v.005l.002-.001c-.021.256-.043.498-.062.74l-.043.535c-.005.065-.024.106-.094.13a561.275 561.275 0 00-3.37 1.17l-.04.009c-.035.005-.054-.012-.08-.055-.217-.394-.438-.785-.661-1.177-.03-.05-.038-.077.034-.096l4.254-1.246c.014-.005.03-.007.06-.014zm-.41.386c-.154.003-.293.147-.286.293.007.137.124.257.254.252.137-.002.27-.153.267-.302-.005-.166-.082-.245-.236-.243zm-16.83.87c.01 0 .024.002.04.007L5.512 9l1.937.51c.062.017.082.036.06.1l-.278.913c-.01.036-.017.074-.058.074a.06.06 0 01-.02-.002l-1.036-.142c-.226-.03-.45-.062-.675-.093a254.996 254.996 0 00-2.055-.286c-.043-.012-.058-.038-.05-.098.052-.476.103-.951.153-1.43.003-.011.002-.02.005-.03a.035.035 0 00.005-.015c.007-.014.021-.02.038-.02zm8.136.103l.113.002c.197.01.389.086.569.166.08.036.159.07.238.108l.057.029c.058.028.118.057.173.09l.113.065c.036.025.075.046.108.073.072.05.142.105.207.165.218.202.372.44.463.72.065.202.113.409.13.617.016.202-.044.399-.096.593-.008.03-.02.036-.03.034-.014-.005-.021-.022-.033-.036l-.216-.25a2.105 2.105 0 00-1.042-.684 4.159 4.159 0 00-.994-.154 3.799 3.799 0 00-.804.092c-.211.04-.423.074-.631.113-.137.024-.262.086-.387.14-.06.028-.12.054-.18.077l-.02.004c-.376.132-.695.36-1.024.57-.09.06-.165.14-.243.218l-.01.008-.064.065c-.152.147-.3.296-.464.43-.074.103-.175.175-.268.266.024-.17.07-.328.146-.472a4.6 4.6 0 01.262-.435c.048-.07.096-.14.146-.206a7.17 7.17 0 01.315-.396c.081-.097.163-.193.247-.29l.25-.284a.917.917 0 01.115-.1l.026-.03c.078-.066.147-.136.238-.21l.012-.01.067-.061c.24-.228.519-.406.797-.583.028-.02.057-.035.086-.051l.111-.048c.01-.004.02-.01.029-.012a2.78 2.78 0 01.173-.065l.117-.036c.14-.04.279-.074.416-.117a2.45 2.45 0 01.782-.115zm-7.57.449c-.07.004-.153-.003-.215.057a.462.462 0 00.012.665.286.286 0 00.38 0c.145-.127.182-.314.095-.535-.053-.137-.125-.187-.27-.187zm15.846.062c.087-.001.163.053.23.146.014.01.029.02.043.032.022.019.03.04.053.064.099.113.207.224.31.334a.064.064 0 01.014.024.023.023 0 01-.002.022.04.04 0 01-.015.014l-.01.015-.002.002c-.002.002-.002.005-.004.01 0 .002-.003.004-.003.004h.003v.008c-.145.146-.106.283.01.415.006.012.014.024.014.036.096.127.016.254 0 .382-.003.012-.005.016-.015.02l-.007.004a.116.116 0 01-.03-.005l-.01-.003a9.772 9.772 0 01-.251-.077c-.007 0-.012-.004-.02-.007-.006 0-.011-.007-.018-.007a.284.284 0 01-.118-.02.252.252 0 00-.292.05.054.054 0 01-.005.02c.04.06.108.075.168.094.245.08.453.23.68.348.052.03.062.092.057.152-.003.033-.012.067-.02.103l-.072.31a.127.127 0 01-.02.076c.004.168-.114.293-.17.437-.006.012-.011.017-.02.04a3.223 3.223 0 01-.128.299c0 .007-.01.017-.012.024v-.005c0 .002-.002.002-.002.005l-.005.01c-.003.002-.003.004-.005.007-.012.045-.02.093-.058.132a1.913 1.913 0 01-.187.432c-.007.012-.012.012-.017.036-.062.144-.127.317-.19.475-.014.058-.026.115-.04.17l-.008.015c0 .002-.002.002-.002.005 0 .005-.005.01-.007.014a.45.45 0 01-.036.192c-.012.039-.022.082-.034.12a.074.074 0 01-.005.02l-.201.912c-.055.25-.077.504-.118.754-.038.235-.048.477-.106.708-.04.168-.136.324-.213.48-.072.146-.118.302-.207.444l-.007.015a.169.169 0 00-.012.03c-.002.006-.002.013-.005.018l-.007.033a.182.182 0 00-.002.036c0 .012 0 .024-.003.036v.036a.71.71 0 01-.002.072c-.02.257-.053.514-.041.773.002.048-.012.075-.058.09l-.057.023a1.598 1.598 0 00-.113.048l-.06.024c-.031.012-.05.022-.1.034v-.005s-.006.005-.01.005l-.133.055-.093.038a.635.635 0 01-.211.092l-.036.02a25.181 25.181 0 00-.474.212c-.081.024-.165.072-.247.11-.09.04-.175.075-.264.114-.14.062-.278.12-.418.181-.004.002-.012 0-.016 0-.128.048-.26.118-.38.173-.048.026-.117.053-.177.077-.11.043-.135.038-.16-.075-.071-.052-.078-.14-.104-.216-.027-.072-.048-.15-.072-.222-.005-.024-.017-.02-.017-.034-.024-.033-.024-.064-.036-.098l-.003-.017c-.007-.005-.007-.012-.01-.02l-.006-.016h.004c-.033-.1-.07-.2-.093-.3-.024-.067-.067-.132-.08-.202a.17.17 0 010-.07l.008-.033.004-.017c.02-.047.05-.093.075-.14.017-.037.03-.076.048-.114.017-.038.03-.067.048-.115.038-.072.062-.156.11-.24 0-.02.015-.04.02-.058.043-.146.09-.295.149-.437 0-.005-.005-.012-.003-.017.017-.086.098-.117.146-.168v.003c.024-.008.037-.022.049-.022.014-.024.028-.034.043-.048a1.518 1.518 0 00.108-.15c.045-.066.086-.136.137-.203.016-.021.03-.055.057-.055.005 0 .007 0 .012.002.039.01.027.055.022.084a.88.88 0 000 .327c.012.084.026.168.033.252l-.002.038a.578.578 0 01.036.19c.02.082.036.16.06.242.072.15.125.3.173.454l.005-.002c.08.12.163.26.245.39.024.032.05.066.074.09h.005v.02c.024 0 .036.052.072.004-.007-.024-.012-.024-.02-.024a.448.448 0 01-.03-.08c-.005-.016-.013-.035-.015-.05a.387.387 0 01-.012-.05c-.002-.007-.002-.017-.005-.024a.282.282 0 00-.01-.048l-.011-.075-.013-.074c-.007-.007-.007-.017-.007-.026-.002-.01-.004-.02-.01-.03-.002-.028-.007-.057-.011-.086l-.022-.172c-.002-.03-.012-.058-.014-.087a3.634 3.634 0 01.036-.941h.014c.029-.144.058-.31.086-.466.008 0 .015.003.024.003-.01.26.017.52.075.775.002.005.002.012.002.017.036.098.075.197.106.298.007.02.014.043.022.062a.338.338 0 00.055.094c.007.012.02.024.02.036.025.019.037.04.057.06.014.016.026.036.04.053.05.048.104.093.166.156a3.667 3.667 0 01-.017-.14c-.004-.043-.012-.086-.016-.134 0 0-.013-.007-.013-.012a.82.82 0 00-.01-.108l-.04-.33c0-.01 0-.016.002-.025 0-.01.003-.027.003-.027a2.705 2.705 0 01-.02-.415l-.002-.017a1.122 1.122 0 01-.002-.37c.005-.033.002-.07.005-.103 0-.007-.003-.012-.003-.02 0-.158.007-.32.055-.472l.003-.017c.012-.072.024-.158.036-.238.012-.08.024-.16.033-.24.005-.033.015-.05.034-.05.01 0 .024.005.04.017l.05.03.076.049c.024.017.048.033.07.055.002.002.004.005.009.007a.116.116 0 00.017.012h.005v-.002c.168.084.26.226.374.358a.31.31 0 01.11.15c.075.099.13.205.169.323.002.01.007.02.01.03.002.01.007.006.009.03.02.024.03.055.043.084l.034.084.019.04c.005.01.01.017.017.024a.07.07 0 00.04.024c.027-.088-.035-.172-.011-.256h.007c0-.024-.007-.025-.007-.037-.024-.156-.044-.31-.11-.453l-.001-.04c-.058-.143-.086-.29-.17-.416a.103.103 0 01-.037-.063c-.026-.024-.04-.053-.055-.081a4.135 4.135 0 01-.038-.063v.017c0-.002-.005-.005-.005-.007v-.003a2.828 2.828 0 00-.22-.278l-.01-.01c-.01-.01-.02-.01-.03-.033-.057-.024-.112-.096-.17-.147-.007-.007-.014-.01-.02-.017-.004-.004 0-.01-.023-.016-.12-.082-.21-.183-.314-.255-.02-.024-.044-.01-.053-.048.31-.02.61.017.922.036v-.012h.002c.154.024.298.053.437.113.005 0 .01.007.017.007v.005c.096.022.187.065.278.108.02.01.044.04.065.012.017-.024-.01-.046-.024-.065-.036-.05-.07-.1-.108-.151-.007-.012-.02-.024-.02-.036-.071-.07-.126-.15-.19-.22a.953.953 0 01-.06-.063 1.162 1.162 0 01-.208-.17c-.012-.008-.024-.022-.036-.022-.03 0-.064-.034-.096-.056-.03-.021-.064-.04-.096-.062-.012-.007-.024-.012-.036-.02-.146-.055-.293-.105-.44-.16-.004 0-.013-.003-.013-.005 0 0-.013 0-.017-.002a.11.11 0 01-.072-.03.079.079 0 01-.027-.035l-.005-.012c-.007-.02-.01-.041-.007-.063a.968.968 0 00-.012-.22c-.002-.022-.007-.041-.012-.063a2.158 2.158 0 00-.014-.06l-.015-.062a2.29 2.29 0 00-.024-.09s-.01-.002-.01-.01c-.023-.145-.08-.292-.124-.436l-.017-.057a.369.369 0 01-.057-.168c0-.02 0-.036.002-.056l.002-.026c.005-.027.01-.055.02-.082l.033-.108c0-.005 0-.017.003-.017h-.003c.03-.17.099-.314.147-.468 0-.002.005-.002.005-.005l.01-.01c.002-.002.004-.002.004-.004a.265.265 0 00.053-.185.326.326 0 00-.027-.103c-.016-.043-.038-.084-.06-.127-.002-.005-.01-.01-.014-.012-.002-.003-.005-.005-.005-.008a1.196 1.196 0 01-.21-.355l-.015-.038c-.005-.005-.005-.01-.008-.017l-.002-.007a.12.12 0 01-.007-.017l.002.002-.002-.005a.276.276 0 01.012-.043c.004-.01.01-.017.014-.026.005-.007.012-.014.02-.022l.009-.007c.065-.094.125-.192.197-.283a.26.26 0 00.05-.252c-.04-.137-.036-.14.1-.19.025-.01.316-.12.433-.156l.075-.03.019-.006a41.644 41.644 0 01.509-.19c.005-.002.012-.002.017-.002.14-.072.293-.118.44-.168.02-.007.037-.015.06-.02.025-.02.097-.035.12-.055.12-.038.217-.093.325-.117a.287.287 0 01.167-.067zm-5.432.603a.82.82 0 01.23.036l.014.004c.259.08.523.142.77.26.04.019.084.038.113.077.16.115.307.247.43.405.19.245.38.492.557.773-.011-.003-.022-.008-.034-.013v-.001a1.018 1.018 0 01-.185-.103 6.452 6.452 0 00-.674-.356 1.467 1.467 0 00-.331-.1 3.307 3.307 0 00-.91-.041c-.084.007-.17 0-.255 0-.062 0-.091-.03-.091-.092 0-.235.012-.472-.06-.7-.015-.048.014-.068.055-.082a1.12 1.12 0 01.372-.067zm-2.75.773c.423-.015.812.105 1.167.324.132.08.253.176.363.284l.014.013c.122.123.23.26.32.41.08.13.059.272.032.414-.072.406-.316.706-.592.987-.265.269-.596.444-.903.648-.435.29-.932.403-1.438.478-.632.093-1.273.103-1.906.187-.23.029-.464.048-.694.089a1.07 1.07 0 00-.68.41c-.062.084-.1.187-.16.303a.527.527 0 01.026-.394 1.12 1.12 0 01.533-.54c.415-.22.879-.262 1.323-.375.36-.091.73-.144 1.087-.242a7.234 7.234 0 001.426-.55c.24-.125.49-.252.656-.485a.73.73 0 00.12-.557c-.005-.034-.015-.05-.027-.053-.012-.002-.03.007-.05.027-.18.16-.367.314-.571.449-.32.206-.673.33-1.038.42-.58.144-1.166.266-1.764.31a4.84 4.84 0 00-1.239.242c-.34.118-.687.235-.96.49-.034.03-.075.057-.13.098l.007-.038-.026.019v-.005c.01-.006.016-.013.024-.017a.599.599 0 01.084-.2l.646-1.022a.285.285 0 01.041-.053c.334-.33.653-.677 1.023-.965.614-.48 1.284-.855 2.055-1.02.187-.041.377-.07.57-.07.22-.002.443-.01.66-.017zm-7.632.022c.013 0 .03.002.048.009.03.01.062.007.094.01.127.028.26.03.386.062.012 0 .017.002.034.01a2.174 2.174 0 01.4.057c.145.02.29.036.433.06.033 0 .062-.002.093.017.005 0 .012-.002.012 0 .168.02.3.03.445.055h-.015v.005c.096.012.16.024.233.036.077.012.156.03.23.03h.003c.007 0 .012.004.017.004l.021.005c.048.002.067.028.075.07.038.227.07.455.117.683 0 .017.01.032.008.046l.02.11.061.332c0 .01 0 .03.003.036v.01c.024.143.05.273.074.41v.046a1.717 1.717 0 00-.3.46c-.03.075-.07.152-.1.226l-.006.003c-.024.076-.062.15-.098.223-.003 0-.005.005-.007.01-.005.009-.008.024-.012.03v.003a2.478 2.478 0 01-.192.415c-.008.02-.024.039-.024.056-.024.09-.046.182-.092.266a.757.757 0 01-.074.226 2.102 2.102 0 01-.13.394c-.007.019-.019.036-.019.055l-.002.007c-.003.007-.005.02-.01.029a.106.106 0 01-.01.03l-.002.01-.038.742.021.008.094-.185c.031-.06.055-.123.09-.185.018-.043.05-.086.05-.13.071-.12.136-.24.21-.35.008-.012.022-.02.03-.043.062-.097.134-.224.208-.334.026-.043.054-.08.078-.123.016-.048.042-.055.064-.076.021-.022.033-.044.081-.065 0 .019.005.036.003.053l-.003.01c0 .009-.004.018-.007.028l-.002.01c-.003.007-.003.012-.005.019a.054.054 0 00-.002.02c0 .006-.005.01-.003.018l-.003.015h.003c-.022.144-.02.307-.024.458 0 .007-.005.02-.005.024l.005-.002c.02.144.043.288.062.432h-.002c.003 0 .005.03.005.043.024.144.055.29.072.437l.002.017c.003.01.005.017.005.026.024.116.11.195.163.296.039.055.08.12.116.168h.002v.002c.12.106.22.214.355.31.02 0 .039.024.058.024h-.002v.012c.048.005.088.043.139.029a.087.087 0 00.026-.012c.007-.005.017-.01.02-.017.011-.022-.01-.034-.027-.041-.197-.125-.166-.33-.19-.521h.008v-.003c.048.046.081.09.122.14a.1.1 0 00.024.026l.05.055c.034.036.07.07.108.1.039.032.08.066.125.09.02.007.039.024.056.024h-.005c.144.07.269.137.4.206a.15.15 0 01.08.036c.048.144.105.288.091.456.005 0 .01.017.012.03a.066.066 0 01-.002.03c.017.14.017.28-.003.42a.044.044 0 01-.002.039c-.003.005 0 .007-.002.012h.002c0 .14-.002.278-.038.415-.003.137-.046.27-.06.406 0 .005-.003.01-.005.017-.008.026-.02.057.038.05v-.002c.13-.136.26-.267.38-.418v.01c.002-.048.03-.073.057-.096.05-.05.1-.13.151-.2.05-.07.101-.137.152-.206l.002-.012c.007-.024.017-.04.029-.046.005-.002.01-.005.014-.005H9.3a.133.133 0 01.05.02.835.835 0 01.077.048c.144.079.307.132.415.269.012.012.026.014.038.038.05.024.096.08.133.132l.038.036c.002.002.005.002.007.005.19.16.204.246.067.46-.004.007-.012.014-.016.014a.236.236 0 01-.024.055.216.216 0 01-.02.036l-.01.017c-.035.058-.074.118-.088.185a.443.443 0 00-.012.168c.026.094.05.19.07.286.012.057.024.115.028.175.02.142-.048.228-.168.288v-.002c-.024.002-.026.017-.038.024a.078.078 0 01-.02.014.362.362 0 01-.038.026.192.192 0 00-.077.087c0 .007 0 .005-.002.01-.002.004 0 .014-.002.014h.007v.014c-.024.07-.036.12-.048.156-.003.01-.007.017-.01.024-.002.008-.007.012-.01.017-.002.005-.007.01-.009.012a.045.045 0 01-.024.012h-.007a.165.165 0 01-.05-.012c-.034-.012-.078-.029-.138-.048-.004-.002-.009-.002-.011-.005a.025.025 0 00-.012-.004l-.027-.012h-.01v-.01h-.002c-.072-.024-.14-.038-.204-.065-.038-.014-.08-.026-.12-.043-.05-.012-.1-.036-.151-.036-.14-.048-.281-.072-.416-.12-.011 0-.019.002-.043 0v.002c-.096-.019-.173-.043-.264-.06-.089-.014-.122-.06-.113-.148.005-.037.003-.08.003-.116 0-.012-.003-.017-.003-.04-.014-.025-.036-.053-.055-.085a.11.11 0 01-.014-.026c-.012-.012-.036-.024-.036-.038-.024-.005-.015-.01-.022-.015-.074-.07-.053-.163-.043-.252l.002-.029.008-.055c.002-.01.002-.02.004-.026.039-.15.048-.29-.113-.38-.019-.012-.03-.024-.055-.04v.004a2.869 2.869 0 00-.225-.165c-.012-.024-.015-.029-.039-.039a1.418 1.418 0 01-.31-.227l-.074-.04h.01c-.015-.025-.032-.022-.044-.034-.019-.014-.036-.024-.06-.04-.12-.102-.283-.198-.413-.315-.045-.015-.074-.05-.11-.08v-.004c-.127-.09-.252-.176-.377-.272h.003c-.015 0-.015-.012-.039-.024-.072-.036-.144-.096-.206-.144-.02-.024-.039-.024-.058-.024-.058-.048-.108-.07-.156-.113-.02-.012-.036-.026-.06-.04a2.178 2.178 0 01-.396-.29l-.012-.011-.022-.024a.188.188 0 01-.038-.081v.019c-.087-.094-.144-.202-.216-.3l-.007-.015a.027.027 0 01-.005-.014.107.107 0 01-.003-.026.118.118 0 01.024-.053c0-.005.003-.012.003-.02.024-.153.108-.292.168-.436v-.037s0-.022-.003-.032l-.004-.014-.005-.005a.038.038 0 00-.017-.01h-.007a.122.122 0 00-.058.022.312.312 0 00-.055.043l-.02.015a.13.13 0 00-.014.019l-.007.01c0 .002-.002 0-.002 0 0 .002-.003 0-.003 0v.002c-.048.055-.12.103-.182.154-.012.012-.034.026-.034.038v-.002h-.007c-.02.024-.045.024-.072.012l-.31-.137c-.024-.012-.036-.038-.04-.062a.64.64 0 01-.008-.032l-.007-.026v.005c-.036-.168.022-.293.053-.437.002-.012.005-.024.005-.036.024-.14.033-.288.074-.423v-.062c-.02-.154-.022-.305-.033-.46l.002-.078c-.014-.286-.033-.571-.043-.857-.022-.598-.07-1.193-.053-1.79a.636.636 0 00-.074-.315 1.968 1.968 0 00-.099-.164.264.264 0 01-.048-.237c.036-.14.063-.284.09-.425.008-.05.021-.084.06-.086zm-.166.38l.005.015c.005.032-.007.065-.02.113a.117.117 0 010-.086.295.295 0 01.015-.041zm10.715.003c.13-.002.257.005.38.024.22.017.42.058.55.164.095.04.189.09.28.144.22.132.44.269.662.403a.389.389 0 01.118.108l.223.315c.012.016.03.036.015.057a.038.038 0 01-.02.014c-.018.004-.034-.002-.05-.011-.098-.056-.2-.108-.298-.164a4.76 4.76 0 00-1.184-.46c-.107-.03-.208-.06-.323-.075l-.152-.034c-.004.003.005.012.017.024.005.005.01.01.012.015a.138.138 0 00.04.033l.02.01c.228.115.613.187.893.317l.058.029c.156.08.298.182.44.29l.268.207c.404.293.65.689.77 1.169.003.014.008.029.01.043l.01.014c.02.03.024.065.017.096.002.008.002.015.005.022-.005.07-.06.04-.092.04a2.504 2.504 0 01-.61-.11h-.006c-.051-.016-.118-.04-.165-.054-.211-.075-.41-.163-.615-.238-.252-.09-.45-.261-.662-.413a7.777 7.777 0 01-1.001-.816.34.34 0 01-.08-.106 4.11 4.11 0 01-.062-.153l-.036-.094a1.088 1.088 0 00-.024-.06l-.002-.005c-.003-.002-.003-.007-.003-.01v-.002l-.002-.01a.168.168 0 01.007-.122c.002-.005.002-.01.005-.014l.005-.017.004-.014c.003-.005.003-.013.005-.017l.003-.015.002-.017.003-.014.002-.017.002-.014.003-.017.002-.014.003-.017c0-.005 0-.01.002-.015 0-.004 0-.012.003-.016v-.266c-.003-.082.026-.114.108-.111.08.002.162-.001.243-.005l.075.004c.04-.002.08-.005.122-.005zm.284.532a.12.12 0 00.028.008H15c-.012.008-.028.005-.033.02-.004-.02-.002-.027.003-.028zm.88.342a.206.206 0 00.012.006h.003zm-1.908.177l.002.003c.007.003.014.01.022.024.076.154.182.28.3.399.124.12.259.23.389.348.268.242.542.48.818.713.178.15.392.228.62.288.518.132 1.049.182 1.575.254.139.02.264.065.374.156h-.007c.01.008.017.012.024.02-.296-.043-.59-.04-.886-.046-.324-.007-.641.03-.96.067a.986.986 0 01-.336-.026c-.308-.07-.598-.195-.89-.317-.328-.14-.601-.353-.861-.588l-.057-.055a1.002 1.002 0 01-.205-.285l-.002-.006c-.09-.212-.085-.448-.016-.708.019-.07.04-.14.062-.21.007-.022.02-.034.034-.031zm-.248 1.18c.065.233.233.396.375.573l.029.039.028.038a.57.57 0 00.106.094c.017.012.03.02.046.033l.02.017a10.088 10.088 0 00.539.396l.329.229c.149.103.305.19.468.266.04.02.082.036.123.055.124.053.25.099.379.14l.02.007c.08.02.167.028.25.038.032.002.064.007.092.01a.195.195 0 01.06.024.411.411 0 01.068.05c.074.067.144.163.148.22 0 .01 0 .018-.002.025-.002.005-.002.007-.005.01-.01.016-.024.03-.033.048-.03.05-.06.1-.085.153l-.011.027a.311.311 0 00.002.26c.115-.114.218-.236.293-.376a1.139 1.139 0 00.086-.201c.01-.027.003-.058.01-.084.01-.03-.024-.07-.01-.09 0-.001.003-.001.005-.004a.04.04 0 01.014-.007c.01-.002.02-.005.027-.005.019-.002.036-.005.055-.005.048 0 .094.008.14.022.028.01.019.045.016.072v.005c-.005.086-.04.165-.072.242a.554.554 0 01-.024.055 1.68 1.68 0 01-.192.375c-.118.156-.254.302-.475.31h-.063c-.038 0-.077.01-.115.012a.085.085 0 00-.086.057c-.017.039-.04.072-.058.11l-.007.017a1.534 1.534 0 01-.408.57c-.08.07-.164.139-.25.203a1.95 1.95 0 01-.468.224l-.036.014-.034.015-.02.007c-.01.002-.021.007-.03.01-.036.014-.065.035-.046.09.02.06.063.077.118.08.012 0 .026 0 .04-.003a.613.613 0 00.15-.033c.048-.017.096-.04.146-.06.034-.015.067-.03.103-.041-.03.122-.045.235-.084.34l-.021.054a6.794 6.794 0 01-.09.192c-.018.043-.04.084-.062.125-.115.23-.245.45-.405.655a1.682 1.682 0 01-.356.34 3.954 3.954 0 01-.103.073 2.788 2.788 0 01-.38.205l-.064.03-.053.02-.043.018c-.04.016-.082.03-.123.045a2.674 2.674 0 01-.168.053 4.848 4.848 0 01-.57.134c-.008 0-.013.003-.02.003-.055.01-.108.017-.163.026-.058.008-.116.017-.176.024a2.156 2.156 0 01-.605-.02l-.028-.008a.68.68 0 01-.145-.06c-.062-.034-.12-.07-.182-.1a1.728 1.728 0 01-.13-.073 1.868 1.868 0 01-.16-.106.632.632 0 01-.233-.278 1.794 1.794 0 00-.092-.194c-.01-.02-.021-.036-.03-.053a2.718 2.718 0 00-.277-.367 2.76 2.76 0 00-.125-.142c-.021-.024-.04-.048-.062-.07a7.07 7.07 0 00-.26-.276l-.067-.067a2.787 2.787 0 00-.364-.302 2.784 2.784 0 00-.303-.192l-.06-.04a1.58 1.58 0 01-.63-.761c-.043-.093-.107-.122-.22-.124a.63.63 0 01-.252-.048l-.002-.002a.457.457 0 01-.132-.084l-.026-.016c-.022-.026-.038-.058-.058-.09a5.295 5.295 0 01-.386-.658c0 .003.002.005.003.008l-.006-.013.003.005a3.772 3.772 0 00-.073-.196l-.036-.086a.382.382 0 01-.014-.154l.007-.031c.002-.005.002-.01.005-.015a.145.145 0 01.012-.03.46.46 0 01.127-.14.898.898 0 01.067-.05c.046-.034.094-.063.14-.094.071-.044.143-.084.218-.123.271-.14.56-.238.857-.314.017-.005.033-.008.053-.012.033-.008.07-.01.105-.015.036-.002.072-.005.106-.005l.106-.002c.016 0 .036 0 .052-.002a17.864 17.864 0 00.9-.063c.18-.017.36-.036.54-.055a3.504 3.504 0 001.127-.324c.036-.02.074-.036.11-.055l.063-.034c.144-.077.288-.151.427-.233.014-.02.03-.026.055-.033l.01-.003v.012a.06.06 0 01-.02.034l-.021.014c-.14.178-.331.3-.497.45a.415.415 0 00-.05.045c-.053.043-.106.089-.166.137.209 0 .41-.024.598-.08a1.654 1.654 0 00.869-.6c.103-.137.197-.297.278-.482zm-3.265.016a1.244 1.244 0 01-.343.109c-.56.139-1.13.22-1.697.326a2.603 2.603 0 00-1.105.487c-.019.015-.04.032-.062.043-.026.017-.039.013-.043-.01-.003-.004-.003-.011-.003-.018-.01-.144.034-.214.166-.274.18-.082.36-.168.54-.252.235-.108.487-.142.742-.168.396-.043.792-.094 1.19-.14l.524-.086zm2.386 1.245h-.026c-.038.01-.036.05-.036.08.003.1.007.202.02.303.01.11.047.219.112.307a.842.842 0 00.51.334c.155.036.155.038.17.2.007.069.016.13.08.17.114.067.227.137.364.146.084.007.17.012.242.068a.583.583 0 00.32.098c.084.007.17.01.254.024.067.012.113-.01.16-.05.239-.197.474-.397.697-.617-.026-.03-.065-.04-.118-.012a6.25 6.25 0 00-.415.223.315.315 0 01-.113.048 4.032 4.032 0 01-.722.074.68.68 0 01-.368-.13c-.067-.043-.134-.105-.146-.201.036-.012.07.002.103.007.127.017.252.063.382.055.312-.02.605-.113.898-.213l.283-.103c.043-.015.055-.03.017-.07-.046-.05-.096-.04-.147-.034a5.625 5.625 0 01-1.87-.045c-.18-.034-.372-.046-.442-.27-.02-.06-.038-.12-.05-.182a.37.37 0 00-.094-.17.094.094 0 00-.065-.04zm-.573.065c-.048 0-.08.05-.103.093-.06.103-.137.196-.207.292-.108.147-.26.178-.418.154a17.985 17.985 0 00-1.718-.18c-.03-.002-.058-.01-.082.01-.183.134-.367.264-.483.468.007.002.015.007.02.007.019-.002.035-.007.055-.01.297-.074.607-.098.922-.072.398.034.792.113 1.188.168.053.008.106.01.156.036.12.063.18.173.226.29.07.18.09.373.103.565.01.15-.022.278-.144.38a.556.556 0 00-.2.278c.154 0 .286.026.387.156.063.08.144.149.223.218a.379.379 0 00.586-.081c.058-.094.113-.19.175-.281.087-.127.17-.264.325-.32.093-.03.052-.076.02-.115-.061-.08-.177-.081-.28-.02-.16.097-.266.239-.381.376-.034.04-.068.08-.113.115-.058.04-.108.043-.16-.01-.056-.057-.114-.117-.176-.168-.053-.043-.063-.082-.032-.144a.728.728 0 00.082-.413c-.03-.312-.08-.62-.3-.867-.024-.026-.024-.04.01-.064a.94.94 0 00.408-.701c.007-.075-.007-.135-.067-.156a.075.075 0 00-.022-.004zm4.46.035c.206 0 .388.08.567.182-.005 0-.007 0-.012.003l.03.017c-.27.04-.54.06-.81.03-.084-.01-.168-.026-.255-.023-.17.005-.307-.084-.451-.161h.017c-.012-.007-.024-.012-.036-.02.024.003.05.003.074.005.029.003.055.01.084.015.238.05.468-.02.704-.043a.8.8 0 01.089-.005zm-8.689.714a.045.045 0 00-.016.004c-.05.019-.098.048-.112.115-.048.223.055.437.278.552.1.053.178.127.226.23.016.037.019.106.072.094.052-.012.01-.077.021-.103.008-.135-.019-.25-.127-.32-.08-.05-.11-.12-.14-.201-.038-.106-.047-.223-.134-.307-.02-.021-.036-.064-.069-.064zm1.843.354c-.11.027-.236.053-.353.106-.082.038-.087.084-.015.139.043.034.087.05.14.03a.466.466 0 01.494.097.509.509 0 00.523.087c.106-.036.197-.096.293-.15a.319.319 0 01.113-.04c.144-.014.288-.033.43-.053.038-.005.098.01.108-.036.01-.048-.046-.077-.08-.108-.016-.017-.045-.02-.07-.026a.82.82 0 00-.436-.015 2.092 2.092 0 01-.888 0c-.08-.02-.163-.02-.26-.03zm6.903.889c.006 0 .01.003.015.007a.05.05 0 01.012.014l.008.005c.043.034-.007.11-.02.168-.03.168-.057.334-.086.502-.007.048-.012.098-.048.165l-.007-.043-.012.024a5.307 5.307 0 01-.075-.706c-.002-.053.034-.065.068-.077.048-.016.107-.066.145-.06zm-3.22.902a.08.08 0 00-.022.01c-.19.105-.404.11-.613.137-.088.012-.2-.015-.264.05-.158.156-.293.09-.432-.02-.007-.004-.014-.011-.024-.014-.206-.11-.413-.15-.624-.005a.338.338 0 01-.267.068c-.074-.02-.131-.015-.19.038-.028.027-.066.048-.1.07-.094.062-.094.072-.007.14.02.018.043.025.067.033.2.06.387.016.562-.08.182-.098.353-.093.518.032.152.112.312.115.48.045a2.97 2.97 0 01.653-.213c.034-.005.068-.017.099.01.096.088.187.026.279-.01.036-.015.04-.044.038-.08-.007-.076-.065-.12-.098-.18-.015-.025-.032-.035-.054-.03zm-4.717.07c.009 0 .02.006.032.017.039.036.075.074.113.11l.015.014c.019.017.021.039.012.06l-.224.45-.024-.008c0-.005.003-.007.003-.012.048-.197.029-.4.055-.6.002-.02.009-.03.018-.03zm3.9.588c-.238.007-.48.046-.703.122-.185.063-.392.106-.488.32-.055.124-.048.256-.086.38.017.1.017.197.074.281.017.024.024.063.065.06.043-.002.058-.038.07-.067.043-.09.053-.194.08-.29.047-.156.119-.28.282-.35.17-.072.343-.14.516-.206a.184.184 0 01.1-.012c.215.03.438.02.628.146a.079.079 0 00.062.012c.072-.017.08-.04.036-.098a.723.723 0 00-.636-.298zm-2.218.741l.014.017c.094.117.187.218.25.336.15.29.374.501.662.655.135.072.256.172.414.19l.003.001h.018c.017 0 .04-.004.036.023-.003.014-.017.014-.031.012h-.007c-.005 0-.01 0-.015-.003-.167.005-.33.033-.493.067-.085.018-.17.038-.255.058a7.838 7.838 0 01-.243.055h-.003c-.033.008-.048.024-.043.058.005.04.02.062.067.072a1.305 1.305 0 00.274.017c.118-.003.235-.015.353-.034a2.602 2.602 0 01.778-.002c-.43.07-.785.312-1.174.475-.202.084-.358.245-.55.348-.014.017-.022.044-.036.06-.031.04-.036.118-.087.11h-.004c-.005 0-.01.003-.015 0a.623.623 0 01-.266-.086c-.03-.019-.022-.055-.022-.089v-.453c0-.032.012-.067-.019-.09-.106-.066-.08-.182-.106-.278-.01-.038.017-.057.039-.08l.278-.31c.063-.068.089-.143.043-.224-.086-.163-.072-.32-.002-.485.055-.13.091-.267.142-.42zm4.585.177c.005.003.01.005.012.008l.007-.008c.039.022.04.05.05.075.102.247.2.497.3.744.025.055.03.103-.006.15a.502.502 0 00-.077.49c.067.205.019.347-.183.448a.229.229 0 01-.12.036.124.124 0 01-.088-.03c-.375-.259-.821-.345-1.242-.494-.06-.02-.117-.043-.18-.057-.072-.017-.067-.065-.057-.116.007-.036.026-.04.045-.038.02-.005.046.01.063.014.48.12.965.216 1.428.396.017.008.03.01.043.013.034-.005.044-.037.039-.082-.01-.108-.02-.214-.144-.27a2.8 2.8 0 00-.975-.234c-.05-.005-.098-.007-.15-.01.239-.144.5-.22.714-.406a.999.999 0 00.075-.067l.398-.482zm-1.882 1.133h.02c.03-.002.054.005.057.053 0 .044.01.082-.06.092a1.752 1.752 0 01-.274.021c-.094 0-.185-.01-.278-.03-.05-.013-.07-.047-.065-.087.002-.027.02-.027.04-.027a.103.103 0 01.039.003h.18a1.143 1.143 0 00.34-.024zm.036.396c.006 0 .012.002.02.005l.844.35c-.132.11-.254.207-.374.303-.221.178-.44.358-.646.553-.05.048-.09.05-.147.014a9.33 9.33 0 00-1.097-.545c-.165-.07-.34-.098-.511-.158.02-.036.055-.036.084-.046.367-.137.742-.26 1.102-.42.094-.043.187-.007.278.005.137.02.27.021.394-.046a.092.092 0 01.053-.015zm-2.161.698a.27.27 0 01.082.018c.197.077.38.185.569.274a.04.04 0 01.029.01c.004.002.005.004.005.011v.005c0 .003-.003.003-.003.005-.002.003-.005.003-.007.003l-.01-.003a.03.03 0 01-.012-.012l-.862-.214c.074-.059.133-.1.209-.097zm8.17.535c-.142-.004-.26.062-.372.15-.03.022-.046.048-.094.017-.105-.072-.206-.053-.295.04a.402.402 0 00-.103.186c-.125.504-.252 1.006-.372 1.512-.041.17.048.255.223.23.158-.026.238-.117.264-.32.026-.198.053-.392.11-.596.15.187.29.362.433.538.139.17.29.321.494.412.144.065.269.027.382-.074a.186.186 0 00.055-.206.157.157 0 00-.158-.125.246.246 0 01-.152-.07 2.27 2.27 0 01-.362-.396c-.09-.12-.094-.12.026-.202.252-.173.34-.417.322-.71-.014-.219-.132-.346-.34-.38a.454.454 0 00-.061-.006zm-10.733.03c-.04 0-.077.02-.097.075-.019.05-.053.043-.091.038a.751.751 0 00-.665.22c-.38.37-.574.813-.552 1.353.014.358.22.53.569.451.689-.16 1.224-.835 1.253-1.582.007-.192-.168-.47-.34-.538a.214.214 0 00-.077-.016zm-1.93.058a.943.943 0 00-.613.238c-.346.302-.547.693-.646 1.138a.642.642 0 00.075.482c.07.118.158.161.292.135a3.12 3.12 0 00.87-.305.867.867 0 00.225-.168.291.291 0 00.084-.204c0-.075-.033-.1-.103-.104-.07-.002-.13.024-.192.046-.207.075-.408.166-.622.22-.105.027-.14.003-.163-.105a.301.301 0 01.005-.122c.04-.168.098-.33.187-.483a.82.82 0 01.245-.283c.14-.089.283-.137.442-.04.052.03.103.016.15-.013a.352.352 0 00.15-.2c.016-.05.002-.09-.044-.117a.773.773 0 00-.343-.115zm9.2.07a.692.692 0 00-.517.206c-.156.161-.183.324-.084.526.074.151.177.28.278.415.072.094.149.187.216.286.048.07.024.125-.058.151a.199.199 0 01-.14-.005 1.076 1.076 0 01-.373-.23.243.243 0 01-.082-.125c-.012-.074-.053-.108-.125-.115-.081-.007-.156-.007-.204.08-.08.138-.057.263.087.393.276.245.605.353.933.38.3.004.485-.267.387-.522-.043-.115-.118-.216-.19-.314-.12-.159-.245-.313-.357-.476-.09-.125-.048-.216.098-.264.135-.043.25-.005.36.08.13.1.24.047.269-.116.017-.086-.03-.144-.09-.194a.68.68 0 00-.41-.157zm1.905.06c-.137-.003-.274 0-.41.016-.164.02-.32.065-.38.248-.002.01-.014.024-.024.026-.187.048-.252.202-.302.358-.106.346-.2.696-.298 1.042-.024.084.01.14.08.182.054.034.11.032.172.015.324-.08.648-.166.987-.142a.26.26 0 00.127-.029.242.242 0 00.117-.24c-.014-.09-.086-.117-.163-.13a1.484 1.484 0 00-.177-.016 3.855 3.855 0 00-.62.052c.03-.228.048-.242.264-.242.16 0 .322-.01.473-.072.1-.043.166-.113.176-.226.007-.076-.025-.122-.104-.124a1.65 1.65 0 00-.19.002l-.453.04c.024-.052.036-.1.062-.136.044-.062-.007-.178.084-.209.075-.024.164-.007.245-.01.214-.004.427-.007.634-.074a.347.347 0 00.192-.13c.07-.108.043-.18-.082-.185-.136-.006-.273-.014-.41-.017zm-6.664.008c-.071-.003-.13.042-.185.093a3.95 3.95 0 00-.392.434l-.367.456c-.02.024-.04.07-.08.05-.03-.014-.018-.055-.014-.086.01-.11.024-.218.036-.329.015-.144.034-.288.01-.432-.031-.173-.156-.22-.295-.113a.836.836 0 00-.094.091 3.168 3.168 0 00-.298.414c-.225.348-.432.71-.703 1.027-.05.06-.103.118-.149.182-.048.072-.067.154-.022.23.041.068.11.092.188.087.081-.004.125-.064.168-.122l.626-.852c.012-.015.017-.044.053-.034a1.37 1.37 0 00-.012.11c-.01.137-.038.274-.01.413.034.16.16.224.306.152a.902.902 0 00.204-.152c.117-.112.228-.233.33-.362.114-.144.229-.29.349-.447.036.12.022.228.017.336-.012.188-.048.375-.012.565.024.117.091.187.187.194a.44.44 0 00.278-.07c.125-.079.137-.237.02-.343a.19.19 0 01-.063-.113c-.026-.13-.004-.257.017-.384.039-.245.115-.485.103-.737-.004-.098-.02-.19-.12-.237a.19.19 0 00-.076-.02zm8.04.19c.117-.01.175.063.14.176a.387.387 0 01-.07.132c-.128.161-.291.27-.495.353a1.56 1.56 0 01.11-.425c.062-.134.163-.223.315-.237zm-6.651.02a.292.292 0 01.15.034c.076.043.098.146.045.233a.676.676 0 01-.185.184 1.47 1.47 0 01-.483.243c.07-.216.128-.415.245-.586a.286.286 0 01.228-.108zm1.6.091a.509.509 0 01.213.034c.113.046.15.1.149.27a1.257 1.257 0 01-.425.818.562.562 0 01-.324.136c-.147.012-.262-.08-.247-.228.028-.32.115-.624.33-.876a.436.436 0 01.304-.154zm-5.882.003a.501.501 0 01.218.036c.11.043.149.098.144.262a1.243 1.243 0 01-.422.818.581.581 0 01-.325.14c-.15.011-.266-.082-.252-.233.03-.315.116-.613.325-.86a.442.442 0 01.312-.163z" }, "child": [] }] })(props);
-}
-function SiCloudflare(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M16.5088 16.8447c.1475-.5068.0908-.9707-.1553-1.3154-.2246-.3164-.6045-.499-1.0615-.5205l-8.6592-.1123a.1559.1559 0 0 1-.1333-.0713c-.0283-.042-.0351-.0986-.021-.1553.0278-.084.1123-.1484.2036-.1562l8.7359-.1123c1.0351-.0489 2.1601-.8868 2.5537-1.9136l.499-1.3013c.0215-.0561.0293-.1128.0147-.168-.5625-2.5463-2.835-4.4453-5.5499-4.4453-2.5039 0-4.6284 1.6177-5.3876 3.8614-.4927-.3658-1.1187-.5625-1.794-.499-1.2026.119-2.1665 1.083-2.2861 2.2856-.0283.31-.0069.6128.0635.894C1.5683 13.171 0 14.7754 0 16.752c0 .1748.0142.3515.0352.5273.0141.083.0844.1475.1689.1475h15.9814c.0909 0 .1758-.0645.2032-.1553l.12-.4268zm2.7568-5.5634c-.0771 0-.1611 0-.2383.0112-.0566 0-.1054.0415-.127.0976l-.3378 1.1744c-.1475.5068-.0918.9707.1543 1.3164.2256.3164.6055.498 1.0625.5195l1.8437.1133c.0557 0 .1055.0263.1329.0703.0283.043.0351.1074.0214.1562-.0283.084-.1132.1485-.204.1553l-1.921.1123c-1.041.0488-2.1582.8867-2.5527 1.914l-.1406.3585c-.0283.0713.0215.1416.0986.1416h6.5977c.0771 0 .1474-.0489.169-.126.1122-.4082.1757-.837.1757-1.2803 0-2.6025-2.125-4.727-4.7344-4.727" }, "child": [] }] })(props);
-}
-function SiCircleci(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M8.963 12c0-1.584 1.284-2.855 2.855-2.855 1.572 0 2.856 1.284 2.856 2.855 0 1.572-1.284 2.856-2.856 2.856-1.57 0-2.855-1.284-2.855-2.856zm2.855-12C6.215 0 1.522 3.84.19 9.025c-.01.036-.01.07-.01.12 0 .313.252.576.575.576H5.59c.23 0 .433-.13.517-.333.997-2.16 3.18-3.672 5.712-3.672 3.466 0 6.286 2.82 6.286 6.287 0 3.47-2.82 6.29-6.29 6.29-2.53 0-4.714-1.5-5.71-3.673-.097-.19-.29-.336-.517-.336H.755c-.312 0-.575.253-.575.576 0 .037.014.072.014.12C1.514 20.16 6.214 24 11.818 24c6.624 0 12-5.375 12-12 0-6.623-5.376-12-12-12z" }, "child": [] }] })(props);
-}
-function SiBorgbackup(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M0 8.144v6.023h2.006V8.144Zm2.324 0v1.203h1.488v1.285H2.324v1.048h1.488v1.284H2.324v1.203h2.328l1.207-1.203V11.78l-.603-.604.603-.603V9.347L4.652 8.144Zm5.569 1.203L6.69 10.55v2.414l1.203 1.203H9.24v-1.125h-.522V10.55h.522V9.347Zm1.665 0v1.203h.5v2.492h-.5v1.125h1.344l1.202-1.203V10.55l-1.202-1.203Zm3.454 0v4.82h2.006v-4.82Zm3 0-.672.676v.527h.854v1.171h2.01v-1.248l-.975-1.126Zm3.971 0-1.202 1.203v2.414l1.202 1.203h1.094l.6-.594v-.531h-.89V9.347Zm1.121 0v1.203h.89v4.253h-2.446v.444l.603.609h2.646L24 14.644V10.55l-1.203-1.203Z" }, "child": [] }] })(props);
-}
-function SiApachemaven(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M4.237.001c-.312-.013-.665.072-.828.457-.158.374-.283 1.188-.34 2.276l1.223.591c-.02-.737.007-1.43.076-2.066-.026.299-.056.96.006 2.039.019.342.049.725.088 1.15.002.024.002.047.007.069a45.485 45.485 0 0 0 .309 2.412c.057.368.126.752.195 1.16l-.01.01c.014.01.015.018.014.023l.03.16c.03.162.06.328.093.494l.108.553.056.289a61.72 61.72 0 0 0 .457 2.068c.09.382.186.78.287 1.186.098.386.199.783.309 1.193.096.362.199.735.303 1.117.003.018.012.036.015.055a145.826 145.826 0 0 0 .34 1.185l.049.174c.078.261.158.533.242.805a4.2 4.2 0 0 1-.293-.135l-.19-.654c-.02-.077-.042-.148-.062-.225l-.002-.004-.004-.002c-.087-.3-.17-.607-.257-.916-.023-.087-.044-.173-.069-.263l-.314-1.178c-.1-.381-.194-.765-.29-1.154-.094-.39-.185-.78-.277-1.172-.093-.401-.181-.8-.265-1.203-.085-.396-.161-.798-.24-1.193a50.315 50.315 0 0 1-.211-1.17c-.004-.013-.006-.03-.01-.041l.004-.002c-.057-.386-.116-.77-.174-1.15a60.905 60.905 0 0 1-.154-1.204 27.447 27.447 0 0 1-.172-2.41l-1.22-.59c-.004.074-.01.15-.013.23-.012.294-.02.605-.023.93a45.3 45.3 0 0 0 .006 1.157c.009.37.025.755.045 1.148.02.336.042.675.07 1.022l.002.039.006.004c.003.023.007.05.006.076.033.368.064.739.107 1.115a34.493 34.493 0 0 0 .303 2.125c.01.064.024.131.035.195a23.418 23.418 0 0 0 .547 2.32c.07.237.14.464.21.68.063.182.13.365.194.545.155.422.327.832.512 1.232l.006.004a.318.318 0 0 0 .02.05c.225.485.475.95.755 1.395.01.013.02.033.03.047-.455-.183-1.259-.098-1.253-.097.83.288 1.557.64 2.016 1.175-.183.2-.523.352-.953.477.594.064.924-.039 1.045-.092-.31.26-.483.732-.635 1.24.35-.57.696-.949 1.033-1.094.078.258.162.524.244.788A147.532 147.532 0 0 0 5.157 24a.56.56 0 0 0 .43-.312c.13-.282.83-1.775 1.908-3.875.413 1.303.88 2.679 1.386 4.109a.494.494 0 0 0 .076-.465 103.735 103.735 0 0 1-1.308-3.945c.154-.299.316-.612.484-.932.125.04.255.094.389.155.203.186.352.491.482.84a1.515 1.515 0 0 0-.334-1.098c1.335.258 2.547.09 3.287-.81a3.97 3.97 0 0 0 .192-.258c-.325.304-.682.404-1.313.273.996-.281 1.523-.617 2.035-1.22.12-.145.244-.303.371-.48-.943.722-1.927.822-2.9.493l-.045-.018c.914.02 2.203-.474 3.092-1.189.41-.33.796-.73 1.17-1.21.28-.359.55-.76.82-1.216.234-.393.468-.824.7-1.293a2.83 2.83 0 0 1-.74.137l-.144.008c-.048.002-.093 0-.146.002.885-.198 1.5-.74 1.994-1.447-.24.117-.628.262-1.07.297-.058.006-.12.006-.182.006-.013-.002-.028 0-.047-.002.306-.078.574-.178.81-.309a3.363 3.363 0 0 0 .358-.236c.044-.037.088-.07.13-.106.099-.086.193-.18.28-.287.028-.034.056-.063.08-.098.036-.05.073-.098.104-.146a8.388 8.388 0 0 0 .51-.828c.015-.031.032-.057.046-.088.04-.084.08-.16.11-.227.042-.099.074-.179.092-.238a.515.515 0 0 1-.108.051c-.273.112-.727.187-1.086.201-.004 0-.008 0-.013.004h-.067c.72-.214 1.067-.45 1.422-.818a13.883 13.883 0 0 0 1.154-1.428c.264-.37.505-.738.692-1.072a6.5 6.5 0 0 0 .298-.592c.066-.157.122-.305.172-.45-.466.01-.986.011-1.48 0 .495.01 1.015.007 1.484-.005.5-1.485.063-2.262.063-2.262s-.526-1.212-1.4-.851c-.426.175-1.172.73-2.083 1.56l.514 1.45a17.561 17.561 0 0 1 1.703-1.602c-.257.22-.807.726-1.615 1.644-.256.29-.537.624-.844.997-.017.02-.035.038-.047.06a51.435 51.435 0 0 0-1.666 2.187c-.248.34-.498.704-.765 1.088h-.016c.002.02-.004.028-.01.032l-.101.152c-.104.155-.213.31-.318.47l-.352.534c-.061.09-.124.181-.186.277-.184.282-.367.573-.558.873a97.351 97.351 0 0 0-1.428 2.338 96.866 96.866 0 0 0-1.341 2.343c-.012.017-.02.04-.034.057a197.256 197.256 0 0 0-.668 1.223l-.097.181c-.17.318-.346.642-.52.979 0 .004-.005.008-.006.013-.026.048-.05.093-.072.141-.117.222-.218.424-.45.87a1.352 1.352 0 0 0-.233-.182l.345-.65c.047-.089.096-.177.143-.27l.04-.077.546-1.001.13-.233v-.006l-.001-.006c.169-.31.345-.62.52-.94.051-.087.102-.173.153-.265.224-.395.454-.794.684-1.197a91.685 91.685 0 0 1 2.135-3.504c.247-.386.503-.77.754-1.152.092-.138.182-.272.279-.41a72.9 72.9 0 0 1 .48-.701c.007-.012.019-.024.026-.037h.006c.26-.356.517-.713.773-1.065.278-.373.554-.735.83-1.09a31.075 31.075 0 0 1 1.777-2.075l-.515-1.446c-.06.057-.126.116-.192.178a32.37 32.37 0 0 0-.758.729c-.295.294-.597.606-.912.935a46.032 46.032 0 0 0-1.632 1.838l-.03.033.002.008c-.017.02-.033.044-.054.064-.266.323-.538.649-.801.985a39.105 39.105 0 0 0-1.445 1.95c-.043.06-.085.126-.127.186a26.458 26.458 0 0 0-1.403 2.303c-.13.247-.256.485-.37.715-.096.195-.187.395-.278.591-.21.463-.398.93-.566 1.399l.002.006a.36.36 0 0 0-.026.058c-.108.303-.203.608-.29.914-.14.174-.302.325-.483.46a3.505 3.505 0 0 0-.131-.153 5.148 5.148 0 0 0 .824-2.211 6.4 6.4 0 0 0-.016-1.488c-.046-.4-.126-.82-.238-1.274-.097-.393-.217-.81-.363-1.248-.091.185-.22.367-.379.545l-.086.094c-.029.032-.06.06-.092.094.434-.674.486-1.397.358-2.148a2.722 2.722 0 0 1-.49.85c-.033.038-.072.077-.11.116-.01.007-.019.018-.033.028.144-.24.25-.467.318-.698a1.29 1.29 0 0 0 .04-.146 2.85 2.85 0 0 0 .038-.225l.018-.146a2.11 2.11 0 0 0-.002-.354c-.003-.04-.004-.076-.01-.113-.01-.055-.016-.105-.027-.154a7.416 7.416 0 0 0-.193-.84c-.01-.028-.015-.056-.026-.084-.027-.079-.048-.149-.072-.209a2.1 2.1 0 0 0-.09-.209.455.455 0 0 1-.035.1c-.102.24-.34.57-.557.8-.003.003-.007.005-.007.01l-.04.043c.318-.58.39-.946.385-1.398a12.274 12.274 0 0 0-.16-1.615 10.68 10.68 0 0 0-.232-1.104 5.853 5.853 0 0 0-.18-.558 6.337 6.337 0 0 0-.172-.391 26.18 26.18 0 0 0 .002-.004C5.576.341 4.82.124 4.82.124s-.27-.11-.582-.123zm3.38 15.783l.032.082v.002c-.06.033-.116.067-.178.097-.012.004-.024.012-.039.018a2.41 2.41 0 0 0 .186-.2zm-.603 1.626c.13.136.25.242.354.32l.07.227a1.866 1.866 0 0 0-.246.053l-.03-.098c-.024-.084-.048-.17-.076-.257l-.021-.073zm.26.875a2.34 2.34 0 0 1 .271.01l.07.229a.778.778 0 0 1 .247-.004l-.326.627a127.643 127.643 0 0 1-.262-.862z" }, "child": [] }] })(props);
-}
-function SiApachekafka(props) {
-  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M9.71 2.136a1.43 1.43 0 0 0-2.047 0h-.007a1.48 1.48 0 0 0-.421 1.042c0 .41.161.777.422 1.039l.007.007c.257.264.616.426 1.019.426.404 0 .766-.162 1.027-.426l.003-.007c.261-.262.421-.629.421-1.039 0-.408-.159-.777-.421-1.042H9.71zM8.683 22.295c.404 0 .766-.167 1.027-.429l.003-.008c.261-.261.421-.631.421-1.036 0-.41-.159-.778-.421-1.044H9.71a1.42 1.42 0 0 0-1.027-.432 1.4 1.4 0 0 0-1.02.432h-.007c-.26.266-.422.634-.422 1.044 0 .406.161.775.422 1.036l.007.008c.258.262.617.429 1.02.429zm7.89-4.462c.359-.096.683-.33.882-.684l.027-.052a1.47 1.47 0 0 0 .114-1.067 1.454 1.454 0 0 0-.675-.896l-.021-.014a1.425 1.425 0 0 0-1.078-.132c-.36.091-.684.335-.881.686-.2.349-.241.75-.146 1.119.099.363.33.691.675.896h.002c.346.203.737.239 1.101.144zm-6.405-7.342a2.083 2.083 0 0 0-1.485-.627c-.58 0-1.103.242-1.482.627-.378.385-.612.916-.612 1.507s.233 1.124.612 1.514a2.08 2.08 0 0 0 2.967 0c.379-.39.612-.923.612-1.514s-.233-1.122-.612-1.507zm-.835-2.51c.843.141 1.6.552 2.178 1.144h.004c.092.093.182.196.265.299l1.446-.851a3.176 3.176 0 0 1-.047-1.808 3.149 3.149 0 0 1 1.456-1.926l.025-.016a3.062 3.062 0 0 1 2.345-.306c.77.21 1.465.721 1.898 1.482v.002c.431.757.518 1.626.313 2.408a3.145 3.145 0 0 1-1.456 1.928l-.198.118h-.02a3.095 3.095 0 0 1-2.154.201 3.127 3.127 0 0 1-1.514-.944l-1.444.848a4.162 4.162 0 0 1 0 2.879l1.444.846c.413-.47.939-.789 1.514-.944a3.041 3.041 0 0 1 2.371.319l.048.023v.002a3.17 3.17 0 0 1 1.408 1.906 3.215 3.215 0 0 1-.313 2.405l-.026.053-.003-.005a3.147 3.147 0 0 1-1.867 1.436 3.096 3.096 0 0 1-2.371-.318v-.006a3.156 3.156 0 0 1-1.456-1.927 3.175 3.175 0 0 1 .047-1.805l-1.446-.848a3.905 3.905 0 0 1-.265.294l-.004.005a3.938 3.938 0 0 1-2.178 1.138v1.699a3.09 3.09 0 0 1 1.56.862l.002.004c.565.572.914 1.368.914 2.243 0 .873-.35 1.664-.914 2.239l-.002.009a3.1 3.1 0 0 1-2.21.931 3.1 3.1 0 0 1-2.206-.93h-.002v-.009a3.186 3.186 0 0 1-.916-2.239c0-.875.35-1.672.916-2.243v-.004h.002a3.1 3.1 0 0 1 1.558-.862v-1.699a3.926 3.926 0 0 1-2.176-1.138l-.006-.005a4.098 4.098 0 0 1-1.173-2.874c0-1.122.452-2.136 1.173-2.872h.006a3.947 3.947 0 0 1 2.176-1.144V6.289a3.137 3.137 0 0 1-1.558-.864h-.002v-.004a3.192 3.192 0 0 1-.916-2.243c0-.871.35-1.669.916-2.243l.002-.002A3.084 3.084 0 0 1 8.683 0c.861 0 1.641.355 2.21.932v.002h.002c.565.574.914 1.372.914 2.243 0 .876-.35 1.667-.914 2.243l-.002.005a3.142 3.142 0 0 1-1.56.864v1.692zm8.121-1.129l-.012-.019a1.452 1.452 0 0 0-.87-.668 1.43 1.43 0 0 0-1.103.146h.002c-.347.2-.58.529-.677.896-.095.365-.054.768.146 1.119l.007.009c.2.347.519.579.874.673.357.103.755.059 1.098-.144l.019-.009a1.47 1.47 0 0 0 .657-.885 1.493 1.493 0 0 0-.141-1.118" }, "child": [] }] })(props);
-}
 function VscAzure(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 16 16", "fill": "currentColor" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "clipRule": "evenodd", "d": "M15.3702 13.6799L11.3702 1.67989C11.3006 1.47291 11.1652 1.29438 10.9846 1.17159C10.804 1.0488 10.5882 0.988513 10.3702 0.999896H5.63017C5.42052 0.999354 5.21598 1.0647 5.04551 1.18672C4.87504 1.30875 4.74724 1.48127 4.68015 1.67989L0.630165 13.6799C0.577646 13.8346 0.56382 13.9998 0.589943 14.1611C0.616066 14.3225 0.681335 14.4749 0.780007 14.6052C0.878678 14.7354 1.00778 14.8395 1.15598 14.9083C1.30419 14.9771 1.46699 15.0086 1.63017 14.9999H4.56016C4.76809 14.9984 4.97035 14.932 5.13883 14.8101C5.30731 14.6883 5.43363 14.5169 5.50016 14.3199L6.11015 12.5399L9.11015 14.8099C9.28448 14.9362 9.49495 15.0028 9.71018 14.9999H14.3902C14.5517 15.0052 14.7121 14.9712 14.8576 14.901C15.0032 14.8307 15.1295 14.7263 15.2259 14.5965C15.3222 14.4668 15.3856 14.3156 15.4107 14.156C15.4359 13.9963 15.422 13.833 15.3702 13.6799ZM9.75016 14.3399C9.67748 14.3399 9.60693 14.3153 9.55015 14.2699L3.90018 10.0799L3.81016 10.0099H6.81016L6.89017 9.79988L7.89017 7.26988L10.1302 13.8999C10.1482 13.9555 10.1515 14.0148 10.1399 14.072C10.1283 14.1293 10.1022 14.1826 10.064 14.2269C10.0258 14.2711 9.97689 14.3047 9.92191 14.3245C9.86694 14.3443 9.80778 14.3496 9.75016 14.3399V14.3399ZM14.4201 14.3399H10.7002C10.7749 14.1262 10.7749 13.8935 10.7002 13.6799L6.65018 1.67989H10.3702C10.4408 1.68024 10.5095 1.70258 10.5669 1.74379C10.6242 1.78501 10.6673 1.84308 10.6902 1.9099L14.7402 13.9099C14.7538 13.9597 14.756 14.012 14.7464 14.0628C14.7369 14.1136 14.7159 14.1615 14.6851 14.203C14.6542 14.2444 14.6144 14.2783 14.5685 14.302C14.5226 14.3257 14.4718 14.3387 14.4201 14.3399V14.3399Z" }, "child": [] }] })(props);
-}
-const EXTENSION_BRANDS = {
-  git: { slug: "git", label: "Git", color: "F05032" },
-  github: { slug: "github", label: "GitHub", color: "181717" },
-  "github-actions": { slug: "github-actions", label: "GitHub Actions", color: "2088FF" },
-  gitlab: { slug: "gitlab", label: "GitLab", color: "FC6D26" },
-  circleci: { slug: "circleci", label: "CircleCI", color: "343434" },
-  aws: { slug: "aws", label: "AWS", color: "FF9900" },
-  gcp: { slug: "gcp", label: "Google Cloud", color: "4285F4" },
-  azure: { slug: "azure", label: "Azure", color: "0078D4" },
-  postgresql: { slug: "postgresql", label: "PostgreSQL", color: "4169E1" },
-  mysql: { slug: "mysql", label: "MySQL", color: "4479A1" },
-  mongodb: { slug: "mongodb", label: "MongoDB", color: "47A248" },
-  redis: { slug: "redis", label: "Redis", color: "FF4438" },
-  sqlite: { slug: "sqlite", label: "SQLite", color: "003B57" },
-  supabase: { slug: "supabase", label: "Supabase", color: "3FCF8E" },
-  vercel: { slug: "vercel", label: "Vercel", color: "000000" },
-  netlify: { slug: "netlify", label: "Netlify", color: "00C7B7" },
-  heroku: { slug: "heroku", label: "Heroku", color: "430098" },
-  minio: { slug: "minio", label: "MinIO", color: "C72E49" },
-  elasticsearch: { slug: "elasticsearch", label: "Elasticsearch", color: "005571" },
-  kafka: { slug: "kafka", label: "Apache Kafka", color: "231F20" },
-  rabbitmq: { slug: "rabbitmq", label: "RabbitMQ", color: "FF6600" },
-  nats: { slug: "nats", label: "NATS", color: "27AAE1" },
-  docker: { slug: "docker", label: "Docker", color: "2496ED" },
-  kubernetes: { slug: "kubernetes", label: "Kubernetes", color: "326CE5" },
-  helm: { slug: "helm", label: "Helm", color: "0F1689" },
-  launchdarkly: { slug: "launchdarkly", label: "LaunchDarkly", color: "A34FDE" },
-  stripe: { slug: "stripe", label: "Stripe", color: "635BFF" },
-  npm: { slug: "npm", label: "npm", color: "CB3837" },
-  node: { slug: "node", label: "Node.js", color: "5FA04E" },
-  python: { slug: "python", label: "Python", color: "3776AB" },
-  rust: { slug: "rust", label: "Rust", color: "000000" },
-  go: { slug: "go", label: "Go", color: "00ADD8" },
-  ruby: { slug: "ruby", label: "Ruby", color: "CC342D" },
-  php: { slug: "php", label: "PHP", color: "777BB4" },
-  composer: { slug: "composer", label: "Composer", color: "885630" },
-  maven: { slug: "maven", label: "Maven", color: "C71A36" },
-  gradle: { slug: "gradle", label: "Gradle", color: "02303A" },
-  homebrew: { slug: "homebrew", label: "Homebrew", color: "FBB040" },
-  debian: { slug: "debian", label: "Debian", color: "A81D33" },
-  terraform: { slug: "terraform", label: "Terraform", color: "844FBA" },
-  opentofu: { slug: "opentofu", label: "OpenTofu", color: "FFDA18" },
-  pulumi: { slug: "pulumi", label: "Pulumi", color: "8A3391" },
-  windows: { slug: "windows", label: "Windows", color: "0078D4" },
-  rclone: { slug: "rclone", label: "Rclone", color: "3F79AD" },
-  restic: { slug: "restic", label: "Restic", color: "2EA043" },
-  borg: { slug: "borg", label: "Borg", color: "00B000" },
-  velero: { slug: "velero", label: "Velero", color: "326CE5" },
-  openssh: { slug: "openssh", label: "OpenSSH", color: "F2CA30" },
-  cloudflare: { slug: "cloudflare", label: "Cloudflare", color: "F38020" }
-};
-const CLOUD_CLUSTER = ["aws", "gcp", "azure"];
-const BY_EXTENSION_ID = {
-  "command.git": ["git"],
-  "command.github": ["github"],
-  "command.filesystem": [],
-  "command.system": [],
-  "command.windows": ["windows"],
-  "command.container-runtime": ["docker"],
-  "command.data-protection": [],
-  "command.encoded-execution": [],
-  "command.guard-self-protection": [],
-  "command.kubernetes-secrets": ["kubernetes"],
-  "command.shell-mutations": [],
-  "command.package.node": ["node", "npm"],
-  "command.package.python": ["python"],
-  "command.package.rust": ["rust"],
-  "command.package.go": ["go"],
-  "command.package.jvm": ["maven", "gradle"],
-  "command.package.ruby": ["ruby"],
-  "command.package.php": ["php", "composer"],
-  "command.package.system": ["homebrew", "debian"],
-  "command.cloud.aws": ["aws"],
-  "command.cloud.gcp": ["gcp"],
-  "command.cloud.azure": ["azure"],
-  "command.database.postgresql": ["postgresql"],
-  "command.database.mysql": ["mysql"],
-  "command.database.mongodb": ["mongodb"],
-  "command.database.redis": ["redis"],
-  "command.database.sqlite": ["sqlite"],
-  "command.database.supabase": ["supabase"],
-  "command.storage.aws-s3": ["aws"],
-  "command.storage.google-cloud": ["gcp"],
-  "command.storage.azure-blob": ["azure"],
-  "command.storage.minio": ["minio"],
-  "command.backup.rclone": ["rclone"],
-  "command.backup.restic": ["restic"],
-  "command.backup.borg": ["borg"],
-  "command.backup.velero": ["velero"],
-  "command.remote.ssh": [],
-  "command.remote.scp": [],
-  "command.remote.rsync": [],
-  "command.cicd.github": ["github-actions"],
-  "command.cicd.gitlab": ["gitlab"],
-  "command.cicd.circleci": ["circleci"],
-  "command.platform.vercel": ["vercel"],
-  "command.platform.netlify": ["netlify"],
-  "command.platform.heroku": ["heroku"],
-  "command.dns.aws": ["aws"],
-  "command.dns.gcp": ["gcp"],
-  "command.dns.azure": ["azure"],
-  "command.cdn": CLOUD_CLUSTER,
-  "command.api-gateway": CLOUD_CLUSTER,
-  "command.load-balancer": CLOUD_CLUSTER,
-  "command.monitoring": CLOUD_CLUSTER,
-  "command.email": ["aws"],
-  "command.feature-flags": ["launchdarkly"],
-  "command.payment": ["stripe"],
-  "command.search.elasticsearch": ["elasticsearch"],
-  "command.messaging.kafka": ["kafka"],
-  "command.messaging.rabbitmq": ["rabbitmq"],
-  "command.messaging.nats": ["nats"],
-  "command.kubernetes-operations": ["kubernetes", "helm"],
-  "command.infrastructure-as-code": ["terraform", "opentofu", "pulumi"]
-};
-Object.freeze(Object.keys(BY_EXTENSION_ID));
-const INFERENCE = [
-  { slug: "github-actions", pattern: /\bgithub actions\b/ },
-  { slug: "github", pattern: /\bgithub\b/ },
-  { slug: "gitlab", pattern: /\bgitlab\b/ },
-  { slug: "circleci", pattern: /\bcircleci\b/ },
-  { slug: "git", pattern: /\bgit\b/ },
-  { slug: "aws", pattern: /\b(?:aws|amazon|s3)\b/ },
-  { slug: "gcp", pattern: /\b(?:gcp|gcloud|google cloud)\b/ },
-  { slug: "azure", pattern: /\bazure\b/ },
-  { slug: "postgresql", pattern: /\b(?:postgres|postgresql|psql)\b/ },
-  { slug: "mysql", pattern: /\bmysql\b/ },
-  { slug: "mongodb", pattern: /\b(?:mongo|mongodb)\b/ },
-  { slug: "redis", pattern: /\bredis\b/ },
-  { slug: "sqlite", pattern: /\bsqlite\b/ },
-  { slug: "supabase", pattern: /\bsupabase\b/ },
-  { slug: "vercel", pattern: /\bvercel\b/ },
-  { slug: "netlify", pattern: /\bnetlify\b/ },
-  { slug: "heroku", pattern: /\bheroku\b/ },
-  { slug: "minio", pattern: /\bminio\b/ },
-  { slug: "elasticsearch", pattern: /\b(?:elastic|elasticsearch)\b/ },
-  { slug: "kafka", pattern: /\bkafka\b/ },
-  { slug: "rabbitmq", pattern: /\brabbit(?:mq)?\b/ },
-  { slug: "nats", pattern: /\bnats\b/ },
-  { slug: "docker", pattern: /\b(?:docker|podman|container)\b/ },
-  { slug: "kubernetes", pattern: /\b(?:kubernetes|kubectl|k8s)\b/ },
-  { slug: "helm", pattern: /\bhelm\b/ },
-  { slug: "launchdarkly", pattern: /\b(?:launchdarkly|feature.?flag)\b/ },
-  { slug: "stripe", pattern: /\bstripe\b/ },
-  { slug: "npm", pattern: /\bnpm\b/ },
-  { slug: "node", pattern: /\b(?:node|nodejs|nodedotjs)\b/ },
-  { slug: "python", pattern: /\b(?:python|pip|poetry)\b/ },
-  { slug: "rust", pattern: /\b(?:rust|cargo)\b/ },
-  { slug: "go", pattern: /\bgolang\b|\bgo\b/ },
-  { slug: "ruby", pattern: /\b(?:ruby|gem|bundler)\b/ },
-  { slug: "php", pattern: /\bphp\b/ },
-  { slug: "composer", pattern: /\bcomposer\b/ },
-  { slug: "maven", pattern: /\b(?:maven|mvn)\b/ },
-  { slug: "gradle", pattern: /\bgradle\b/ },
-  { slug: "homebrew", pattern: /\b(?:homebrew|brew)\b/ },
-  { slug: "debian", pattern: /\b(?:debian|apt)\b/ },
-  { slug: "terraform", pattern: /\bterraform\b/ },
-  { slug: "opentofu", pattern: /\b(?:opentofu|tofu)\b/ },
-  { slug: "pulumi", pattern: /\bpulumi\b/ },
-  { slug: "windows", pattern: /\bwindows\b/ },
-  { slug: "rclone", pattern: /\brclone\b/ },
-  { slug: "restic", pattern: /\brestic\b/ },
-  { slug: "borg", pattern: /\bborg\b/ },
-  { slug: "velero", pattern: /\bvelero\b/ },
-  { slug: "cloudflare", pattern: /\b(?:cloudflare|wrangler)\b/ },
-  { slug: "openssh", pattern: /\b(?:ssh|scp|openssh)\b/ }
-];
-function searchableText(input) {
-  return [
-    input.extension_id,
-    input.name ?? "",
-    ...input.executables ?? [],
-    ...input.ecosystem_ids ?? []
-  ].join(" ").replace(/[._/-]+/g, " ").toLowerCase();
-}
-function uniqueSlugs(slugs) {
-  const seen2 = /* @__PURE__ */ new Set();
-  const ordered = [];
-  for (const slug of slugs) {
-    if (seen2.has(slug)) continue;
-    seen2.add(slug);
-    ordered.push(slug);
-  }
-  return ordered.slice(0, 3);
-}
-function inferSlugs(input) {
-  const text2 = searchableText(input);
-  const found = [];
-  for (const entry of INFERENCE) {
-    if (entry.pattern.test(text2)) found.push(entry.slug);
-  }
-  return uniqueSlugs(found);
-}
-function fallbackForExtensionId(extensionId) {
-  if (extensionId === "command.guard-self-protection") return "shield";
-  if (extensionId.includes("secret") || extensionId.includes("data-protection")) return "lock";
-  if (extensionId.includes("package")) return "cube";
-  if (extensionId.includes("cloud") || extensionId.includes("platform")) return "cloud";
-  if (extensionId.includes("database") || extensionId.includes("storage") || extensionId.includes("backup")) return "server";
-  if (extensionId.includes("remote") || extensionId.includes("network")) return "globe";
-  if (extensionId.includes("filesystem")) return "folder";
-  if (extensionId.includes("shell") || extensionId.includes("system") || extensionId.includes("encoded") || extensionId.includes("rsync")) return "terminal";
-  if (extensionId.includes("payment") || extensionId.includes("feature")) return "bolt";
-  return "shield";
-}
-function isNearBlackBrand(color) {
-  const hex = color.toLowerCase();
-  return hex === "000000" || hex === "181717" || hex === "231f20" || hex === "343434";
-}
-function brandSlugFromField(brand) {
-  return brand !== void 0 && Object.prototype.hasOwnProperty.call(EXTENSION_BRANDS, brand) ? brand : null;
-}
-function resolveExtensionBrand(input) {
-  const fallback = fallbackForExtensionId(input.extension_id);
-  if (input.extension_id === "command.guard-self-protection") {
-    return { kind: "guard", marks: [], fallback: "shield" };
-  }
-  const mapped = BY_EXTENSION_ID[input.extension_id];
-  const declared = brandSlugFromField(input.brand);
-  const slugs = uniqueSlugs(mapped ?? (declared ? [declared] : inferSlugs(input)));
-  if (slugs.length === 0) {
-    return { kind: "fallback", marks: [], fallback };
-  }
-  return {
-    kind: "marks",
-    marks: slugs.map((slug) => EXTENSION_BRANDS[slug]),
-    fallback
-  };
-}
-function extensionBrandTestId(resolution) {
-  if (resolution.kind === "guard") return "guard";
-  if (resolution.kind === "marks") return resolution.marks.map((mark) => mark.slug).join(" ");
-  return `fallback-${resolution.fallback}`;
 }
 function OriginalMark(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: "0 0 24 24", className: props.className, "aria-hidden": "true", focusable: "false", children: props.children });
@@ -35257,6 +38690,8 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const extensionId = queueCommandExtensionId(item);
+  const mcpMarkName2 = extensionId ? null : queueMcpMarkName(item);
+  const iconLabel = mcpMarkName2 ?? category.label;
   const preview = queueItemPreview(item);
   const isRead = readState.isRead(item.request_id);
   const watchOnlyObservation = isWatchOnlyObservation(item);
@@ -35335,7 +38770,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                   preview
                 ] }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
-                  harnessDisplayName(item.harness),
+                  queueRequesterName(item),
                   " · ",
                   formatQueueRequestDate(item),
                   watchOnlyObservation ? " · Would have stopped" : ""
@@ -35357,11 +38792,18 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                 "span",
                 {
                   role: "img",
-                  "aria-label": category.label,
+                  "aria-label": iconLabel,
                   className: `group/icon relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
                   children: [
-                    extensionId && category.id !== "guard_bypass" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionBrandMark, { extension_id: extensionId, size: "sm" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: category.label })
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      QueueItemIcon,
+                      {
+                        extensionId: extensionId && category.id !== "guard_bypass" ? extensionId : null,
+                        mcpMarkName: mcpMarkName2,
+                        CategoryIcon
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: iconLabel })
                   ]
                 }
               )
@@ -35436,14 +38878,33 @@ function iconForQueueCategory(categoryId) {
 }
 function queueItemPreview(item) {
   const envelope = item.action_envelope_json;
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return mcpCall.queueDetail !== null ? `${mcpCall.queueTitle} — ${mcpCall.queueDetail}` : mcpCall.queueTitle;
+  }
+  const listedMcp = listedMcpPreview(item);
+  if (listedMcp !== null) return listedMcp;
   return envelope?.command ?? item.queue_preview ?? item.raw_command_text ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? resolveStoppedCommandText(item);
+}
+function QueueItemIcon({
+  extensionId,
+  mcpMarkName: mcpMarkName2,
+  CategoryIcon
+}) {
+  if (extensionId !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionBrandMark, { extension_id: extensionId, size: "sm" });
+  }
+  if (mcpMarkName2 !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(McpAppMark, { name: mcpMarkName2, size: "sm" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" });
 }
 const QUEUE_PAGE_SIZE$1 = 10;
 function ReviewHeader({
   count: count2,
   filteredCount,
   progress,
-  activeHarness
+  requester
 }) {
   const isFiltered = filteredCount !== count2;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
@@ -35455,7 +38916,7 @@ function ReviewHeader({
       progress,
       isFiltered ? ` · ${filteredCount} of ${count2} shown` : "",
       " · from ",
-      harnessDisplayName(activeHarness)
+      requester
     ] })
   ] });
 }
@@ -37130,7 +40591,7 @@ function ConnectorSetupCard(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-muted-foreground", children: callCountCopy(group.callCount) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-relaxed text-brand-dark/80", children: [
-            changed ? `You allowed an earlier version of this ${surface.toLowerCase()}. Its file has changed since, so its calls are paused until you allow this version.` : `Guard does not recognise this ${surface.toLowerCase()} and it is not set up on this device, so its calls are paused.`,
+            changed ? `You allowed an earlier version of this ${surface.toLowerCase()}. Its file has changed since, so its calls are paused until you allow this version. Always allow on one of these calls attempts to allow this version while keeping your command choices. A newer block or safety check can prevent the update; check the approval result.` : `Guard does not recognise this ${surface.toLowerCase()} and it is not set up on this device, so its calls are paused.`,
             " ",
             SETUP_COPY.scope
           ] }),
@@ -37379,7 +40840,7 @@ function ReviewWorkspace(props) {
         count: requests.length,
         filteredCount: filteredRequests.length,
         progress,
-        activeHarness: activeItem.harness
+        requester: queueRequesterName(activeItem)
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -37483,34 +40944,115 @@ function ReviewWorkspace(props) {
     ] })
   ] });
 }
-const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
-const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
-const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
-const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
-const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
-const QUEUE_SESSION_COMMAND_INSTRUCTION = "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
-const REQUEST_ID = /^[0-9a-f]{32}$/;
-function desktopRequestUrl(requestId) {
-  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard-desktop://requests/${requestId}` : null;
+const DESKTOP_REQUESTS_META = "guard-desktop-requests";
+const HANDOFF_KEY_PREFIX = "guard-desktop-handoff:";
+const EMBEDDED_KEY = "guard-desktop-embedded";
+const REQUEST_PATH = /^\/requests\/([0-9a-f]{32})\/?$/;
+function requestPageId(pathname) {
+  return REQUEST_PATH.exec(pathname)?.[1] ?? null;
 }
-function approvalsOpenCommand(requestId) {
-  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard approvals open ${requestId}` : null;
+function desktopHandoffTarget(page) {
+  if (!page.desktopOpensRequests || page.embedded) {
+    return null;
+  }
+  const requestId = requestPageId(page.pathname);
+  if (requestId === null || page.alreadyHandedOff(requestId)) {
+    return null;
+  }
+  return desktopRequestUrl(requestId);
 }
-function queueErrorIsUnauthorizedSession(message) {
-  const lower = message.trim().toLowerCase();
-  if (!lower) {
+function pageDesktopOpensRequests() {
+  try {
+    const meta = document.querySelector(`meta[name="${DESKTOP_REQUESTS_META}"]`);
+    return meta?.getAttribute("content") === "1";
+  } catch {
     return false;
   }
-  if (lower.includes("unauthorized")) {
+}
+function storage() {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+function readTabFlag(store2, key) {
+  try {
+    return store2?.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeTabFlag(store2, key) {
+  if (store2 === null) {
+    return false;
+  }
+  try {
+    store2.setItem(key, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+function clearTabFlag(store2, key) {
+  try {
+    store2?.removeItem(key);
+  } catch {
+  }
+}
+function tabIsEmbedded() {
+  const store2 = storage();
+  let embedded = false;
+  try {
+    embedded = dashboardEmbedsInDesktop();
+  } catch {
+    embedded = false;
+  }
+  if (embedded) {
+    writeTabFlag(store2, EMBEDDED_KEY);
     return true;
   }
-  return /request failed with 401(?:\D|$)/.test(lower);
+  return readTabFlag(store2, EMBEDDED_KEY);
+}
+function requestHandedOffToDesktop(requestId) {
+  if (!requestId) {
+    return false;
+  }
+  return readTabFlag(storage(), HANDOFF_KEY_PREFIX + requestId);
+}
+function handOffRequestPageToDesktop() {
+  let pathname;
+  try {
+    pathname = window.location.pathname;
+  } catch {
+    return;
+  }
+  const target2 = desktopHandoffTarget({
+    pathname,
+    desktopOpensRequests: pageDesktopOpensRequests(),
+    embedded: tabIsEmbedded(),
+    alreadyHandedOff: requestHandedOffToDesktop
+  });
+  const requestId = requestPageId(pathname);
+  const store2 = storage();
+  if (target2 === null || requestId === null) {
+    return;
+  }
+  if (!writeTabFlag(store2, HANDOFF_KEY_PREFIX + requestId)) {
+    return;
+  }
+  try {
+    window.location.assign(target2);
+  } catch {
+    clearTabFlag(store2, HANDOFF_KEY_PREFIX + requestId);
+  }
 }
 function QueueConnectionError(props) {
   const [repairing, setRepairing] = reactExports.useState(false);
   const sessionMissing = queueErrorIsUnauthorizedSession(props.message);
   const desktopUrl = sessionMissing ? desktopRequestUrl(props.requestId ?? null) : null;
   const openCommand = sessionMissing ? approvalsOpenCommand(props.requestId ?? null) : null;
+  const handedOff = desktopUrl !== null && (props.handedOffToDesktop ?? requestHandedOffToDesktop(props.requestId));
   const handleRepair = reactExports.useCallback(async () => {
     if (props.onRepair === void 0) {
       return;
@@ -37529,19 +41071,24 @@ function QueueConnectionError(props) {
       void handleRepair();
     }
   }, [handleRepair, props.approvalUrl]);
-  const headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
-  const detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
-  const instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  let headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
+  let detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
+  let instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  if (handedOff) {
+    headline = QUEUE_DESKTOP_HANDOFF_HEADLINE;
+    detail = QUEUE_DESKTOP_HANDOFF_DETAIL;
+    instruction = QUEUE_DESKTOP_HANDOFF_INSTRUCTION;
+  }
   let sessionRetryVariant;
   if (desktopUrl !== null) {
     sessionRetryVariant = "outline";
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: handedOff ? "default" : "danger", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", role: "alert", children: headline }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: detail }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple/70", children: instruction }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
-      desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: "Open in HOL Guard Desktop" }),
+      desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: handedOff ? "Open in HOL Guard Desktop again" : "Open in HOL Guard Desktop" }),
       sessionMissing ? props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRetry, variant: sessionRetryVariant, children: "Retry" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
       sessionMissing ? null : props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, variant: "outline", children: repairing ? "Repairing..." : "Reconnect" }),
       sessionMissing ? null : /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
@@ -37732,6 +41279,7 @@ function rememberDismissedDesktopUpdateVersion(version2) {
 function GuardUpdateBanner(props) {
   const { model, onDismiss } = props;
   const [phase, setPhase] = reactExports.useState("idle");
+  const [failureMessage, setFailureMessage] = reactExports.useState(DESKTOP_HANDOFF_FAILED);
   const guidanceTimer = reactExports.useRef(null);
   const attemptRef = reactExports.useRef(0);
   reactExports.useEffect(() => {
@@ -37757,11 +41305,12 @@ function GuardUpdateBanner(props) {
     const attempt = attemptRef.current + 1;
     attemptRef.current = attempt;
     setPhase("requesting");
-    void requestGuardDesktopHandoff().then((result) => {
+    void requestGuardDesktopHandoff(model.latestVersion).then((result) => {
       if (attemptRef.current !== attempt) {
         return;
       }
       if (!result.handoff_requested) {
+        setFailureMessage(DESKTOP_HANDOFF_FAILED);
         setPhase("failed");
         return;
       }
@@ -37771,12 +41320,13 @@ function GuardUpdateBanner(props) {
           setPhase("guidance");
         }
       }, HANDOFF_GUIDANCE_DELAY_MS);
-    }).catch(() => {
+    }).catch((error) => {
       if (attemptRef.current === attempt) {
+        setFailureMessage(desktopHandoffFailureMessage(error));
         setPhase("failed");
       }
     });
-  }, [phase]);
+  }, [model.latestVersion, phase]);
   const handleDismiss = reactExports.useCallback(() => {
     rememberDismissedDesktopUpdateVersion(model.latestVersion);
     onDismiss(model.latestVersion);
@@ -37800,7 +41350,7 @@ function GuardUpdateBanner(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: model.title }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", children: model.body }),
             phase === "guidance" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", children: DESKTOP_HANDOFF_GUIDANCE }) : null,
-            phase === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", role: "alert", children: DESKTOP_HANDOFF_FAILED }) : null
+            phase === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", role: "alert", children: failureMessage }) : null
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
@@ -37830,314 +41380,843 @@ function GuardUpdateBanner(props) {
     }
   );
 }
-const PROTECTION_POSTURE_COPY = {
-  protected: {
-    label: "Protected",
-    help: "Stops theft, wipes, and Guard bypass. Asks once about new tools or first-time secret access, then remembers."
-  },
-  extra_careful: {
-    label: "Extra careful",
-    help: "Same as Protected, and also asks the first time this project talks to a new site or installs a new tool."
-  },
-  watch: {
-    label: "Watch",
-    help: "Records what Guard would have stopped, but does not stop anything. Use only while debugging."
+function resolveSettingsSaveProofKind(input) {
+  if (input.draftGateEnabled && !input.savedGateEnabled) {
+    return "setup-gate";
   }
-};
-const WATCH_BANNER_COPY = "Protection is off. Guard is only recording.";
-const POSTURE_OUTCOME_COLUMNS = {
-  protected: {
-    stops: "Credential theft, Guard bypass, encoded exfil, known-bad tools",
-    asks: "First secret read, new destructive command, first package script, new MCP or skill",
-    runs: "Remembered actions, routine browsing, verified-benign work"
-  },
-  extra_careful: {
-    stops: "The same automatic stops as Protected",
-    asks: "Everything Protected asks, plus first new site, first new tool, and cloud advisories",
-    runs: "Remembered actions and verified-benign work"
-  },
-  watch: {
-    stops: "Nothing. Guard only records.",
-    asks: "Nothing. Inbox shows what would have stopped.",
-    runs: "Every action, including known-bad work"
+  if (input.savedGateEnabled) {
+    return "verify-save";
   }
-};
-function isProtectionPosture(value) {
-  return value === "protected" || value === "extra_careful" || value === "watch";
+  return null;
 }
-function deriveProtectionPosture(mode, securityLevel) {
-  if (mode === "observe") return "watch";
-  if (securityLevel === "strict" || securityLevel === "paranoid") return "extra_careful";
-  return "protected";
+function requiresSettingsSaveProof(kind) {
+  return kind !== null;
 }
-const DEFAULT_CONFIRM = "Guard will start stopping dangerous actions.";
-function WatchProtectionBanner(props) {
-  const [confirming, setConfirming] = reactExports.useState(false);
-  const { onTurnProtectionOn } = props;
-  const handleAsk = reactExports.useCallback(() => setConfirming(true), []);
-  const handleCancel = reactExports.useCallback(() => setConfirming(false), []);
-  const handleConfirm = reactExports.useCallback(() => {
-    setConfirming(false);
-    onTurnProtectionOn?.();
-  }, [onTurnProtectionOn]);
-  const message = props.model?.message ?? WATCH_BANNER_COPY;
-  const confirmMessage = props.model?.confirmMessage ?? DEFAULT_CONFIRM;
-  const actionLabel = props.model !== void 0 && props.model !== null && !props.model.globalWatch ? "Turn protection on for these apps" : "Turn protection on";
-  let action = null;
-  if (onTurnProtectionOn !== void 0 && confirming) {
-    action = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: handleConfirm,
-          className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
-          children: "Turn on"
+function resolveSettingsSaveProofModalCopy(input) {
+  if (input.mode === "setup-gate") {
+    return {
+      title: "Set your approval password",
+      detail: "Choose a password Guard will ask for before allow or trust changes stick.",
+      confirmLabel: "Save settings"
+    };
+  }
+  if (input.mode === "change-password") {
+    return {
+      title: "Change approval password",
+      detail: "Confirm your approval proof, then choose a new password.",
+      confirmLabel: "Update password"
+    };
+  }
+  if (input.mode === "maintenance") {
+    if (input.maintenanceAction === "clear-approvals") {
+      return {
+        title: "Clear saved approvals",
+        detail: "Guard needs fresh proof before it removes saved allow decisions.",
+        confirmLabel: "Clear approvals"
+      };
+    }
+    if (input.maintenanceAction === "clear-queue") {
+      return {
+        title: "Clear review queue",
+        detail: "Guard needs fresh proof before it removes pending review items.",
+        confirmLabel: "Clear queue"
+      };
+    }
+    if (input.maintenanceAction === "revoke-cooldown") {
+      return {
+        title: "Revoke cooldown",
+        detail: "Confirm your identity before Guard ends the active cooldown.",
+        confirmLabel: "Revoke cooldown"
+      };
+    }
+    if (input.maintenanceAction === "disable-totp") {
+      return {
+        title: "Disconnect authenticator",
+        detail: "Confirm a current app code to remove this second factor.",
+        confirmLabel: "Disconnect"
+      };
+    }
+    if (input.maintenanceAction === "import-settings") {
+      return {
+        title: "Import settings",
+        detail: "Guard needs fresh proof before it replaces your local settings from a file.",
+        confirmLabel: "Import settings"
+      };
+    }
+    if (input.maintenanceAction === "reset-settings") {
+      return {
+        title: "Reset settings",
+        detail: "Guard needs fresh proof before it restores every local setting to defaults.",
+        confirmLabel: "Reset settings"
+      };
+    }
+    return {
+      title: "Confirm your identity",
+      detail: "Guard needs fresh proof before this cleanup can continue.",
+      confirmLabel: "Continue"
+    };
+  }
+  if (input.gateSettingsChanged) {
+    return {
+      title: "Confirm before saving gate changes",
+      detail: "Enter your approval proof so Guard can apply the gate updates you chose.",
+      confirmLabel: "Save settings"
+    };
+  }
+  return {
+    title: "Confirm before saving",
+    detail: "Enter your approval proof so Guard can save these settings.",
+    confirmLabel: "Save settings"
+  };
+}
+function settingsSaveProofUsesPulse(gate, mode) {
+  return gate?.pulse_enabled === true && (mode === "verify-save" || mode === "maintenance");
+}
+function isSettingsSaveProofSubmitDisabled(mode, credentials, totpRequired, pulseRequired = false) {
+  if (pulseRequired) {
+    return false;
+  }
+  const current = credentials.currentPassword?.trim() ?? "";
+  const next = credentials.newPassword?.trim() ?? "";
+  const confirm = credentials.confirmPassword?.trim() ?? "";
+  const totp = credentials.totpCode?.trim() ?? "";
+  if (mode === "setup-gate") {
+    return next.length === 0 || confirm.length === 0 || next !== confirm;
+  }
+  if (mode === "change-password") {
+    if (next.length === 0 || confirm.length === 0 || next !== confirm) {
+      return true;
+    }
+    return totpRequired ? totp.length === 0 : current.length === 0;
+  }
+  if (totpRequired) {
+    return totp.length === 0;
+  }
+  return current.length === 0;
+}
+function SettingsSaveProofModal(props) {
+  const dialogRef = reactExports.useRef(null);
+  const passwordRef = reactExports.useRef(null);
+  const totpRef = reactExports.useRef(null);
+  const [currentPassword, setCurrentPassword] = reactExports.useState("");
+  const [newPassword, setNewPassword] = reactExports.useState("");
+  const [confirmPassword, setConfirmPassword] = reactExports.useState("");
+  const [totpCode, setTotpCode] = reactExports.useState("");
+  useFocusTrap(props.open, dialogRef);
+  reactExports.useEffect(() => {
+    if (!props.open) {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTotpCode("");
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (props.gate?.totp_enabled === true && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance")) {
+        totpRef.current?.focus();
+      } else {
+        passwordRef.current?.focus();
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [props.gate?.totp_enabled, props.open, props.mode]);
+  reactExports.useEffect(() => {
+    if (props.open) {
+      document.documentElement.dataset.guardModalOpen = String(
+        Number(document.documentElement.dataset.guardModalOpen ?? 0) + 1
+      );
+      return () => {
+        const count2 = Number(document.documentElement.dataset.guardModalOpen ?? 1) - 1;
+        if (count2 <= 0) {
+          delete document.documentElement.dataset.guardModalOpen;
+        } else {
+          document.documentElement.dataset.guardModalOpen = String(count2);
         }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
+      };
+    }
+    return void 0;
+  }, [props.open]);
+  const pulseRequired = settingsSaveProofUsesPulse(props.gate, props.mode);
+  const totpRequired = !pulseRequired && props.gate?.totp_enabled === true && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance");
+  const needsCurrentPassword = props.mode !== "setup-gate" && !totpRequired && !pulseRequired;
+  const handleCurrentPasswordChange = reactExports.useCallback((event) => {
+    setCurrentPassword(event.target.value);
+  }, []);
+  const handleNewPasswordChange = reactExports.useCallback((event) => {
+    setNewPassword(event.target.value);
+  }, []);
+  const handleConfirmPasswordChange = reactExports.useCallback((event) => {
+    setConfirmPassword(event.target.value);
+  }, []);
+  const handleTotpChange = reactExports.useCallback((event) => {
+    setTotpCode(event.target.value);
+  }, []);
+  const handleBackdropClick = reactExports.useCallback(
+    (event) => {
+      if (event.target === event.currentTarget && !props.pending) {
+        props.onCancel();
+      }
+    },
+    [props.onCancel, props.pending]
+  );
+  const handleConfirm = reactExports.useCallback((event) => {
+    event.preventDefault();
+    if (props.pending || isSettingsSaveProofSubmitDisabled(
+      props.mode,
+      { currentPassword, newPassword, confirmPassword, totpCode },
+      totpRequired,
+      pulseRequired
+    )) {
+      return;
+    }
+    if (pulseRequired) {
+      props.onConfirm({});
+      return;
+    }
+    props.onConfirm({
+      ...currentPassword.trim().length > 0 ? { currentPassword } : {},
+      ...newPassword.trim().length > 0 ? { newPassword } : {},
+      ...confirmPassword.trim().length > 0 ? { confirmPassword } : {},
+      ...totpCode.trim().length > 0 ? { totpCode } : {}
+    });
+  }, [confirmPassword, currentPassword, newPassword, props, pulseRequired, totpCode, totpRequired]);
+  const credentials = {
+    currentPassword,
+    newPassword,
+    confirmPassword,
+    totpCode
+  };
+  const confirmDisabled = isSettingsSaveProofSubmitDisabled(props.mode, credentials, totpRequired, pulseRequired);
+  if (!props.open) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm",
+      onClick: handleBackdropClick,
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "settings-save-proof-title",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "form",
         {
-          type: "button",
-          onClick: handleCancel,
-          className: "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark",
-          children: "Not now"
+          ref: dialogRef,
+          className: "w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl",
+          onSubmit: handleConfirm,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval required" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "settings-save-proof-title", className: "text-lg font-semibold tracking-tight text-brand-dark", children: props.title }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: props.detail })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
+              pulseRequired ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-lg border border-brand-blue/20 bg-brand-blue/5 px-3 py-2 text-sm text-brand-dark", children: "You will approve this in the YID app with a face scan." }) : null,
+              needsCurrentPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    ref: passwordRef,
+                    type: "password",
+                    autoComplete: "current-password",
+                    value: currentPassword,
+                    onChange: handleCurrentPasswordChange,
+                    className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  }
+                )
+              ] }) : null,
+              props.mode === "setup-gate" || props.mode === "change-password" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: props.mode === "setup-gate" ? "Password" : "New password" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      ref: props.mode === "setup-gate" ? passwordRef : void 0,
+                      type: "password",
+                      autoComplete: "new-password",
+                      value: newPassword,
+                      onChange: handleNewPasswordChange,
+                      className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Confirm password" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "password",
+                      autoComplete: "new-password",
+                      value: confirmPassword,
+                      onChange: handleConfirmPasswordChange,
+                      className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                    }
+                  )
+                ] })
+              ] }) : null,
+              totpRequired ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "text",
+                    inputMode: "numeric",
+                    pattern: "[0-9]*",
+                    maxLength: 6,
+                    ref: totpRef,
+                    autoComplete: "one-time-code",
+                    value: totpCode,
+                    onChange: handleTotpChange,
+                    placeholder: "123456",
+                    className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  }
+                )
+              ] }) : null
+            ] }),
+            props.error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark", children: props.error }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  onClick: props.onCancel,
+                  disabled: props.pending,
+                  className: "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+                  children: "Go back"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "submit", disabled: props.pending || confirmDisabled, children: props.pending ? "Working…" : props.confirmLabel })
+            ] })
+          ]
         }
       )
-    ] });
-  } else if (onTurnProtectionOn !== void 0) {
-    action = /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
+    }
+  );
+}
+function trackClass(checked, attentionWhenOff) {
+  if (checked) return "bg-brand-blue";
+  if (attentionWhenOff) return "bg-brand-attention/40";
+  return "bg-slate-200";
+}
+function FleetAppModeSwitch(props) {
+  const reasonId = reactExports.useId();
+  const { checked, disabled } = props;
+  const track = trackClass(checked, props.attentionWhenOff === true);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "label",
+    {
+      className: `inline-flex min-h-11 items-center gap-2 rounded-lg px-1 ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`,
+      title: props.unavailableReason,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-xs font-semibold ${disabled ? "text-slate-400" : "text-brand-dark"}`, children: props.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            role: "switch",
+            "aria-checked": checked,
+            "aria-label": props.accessibleName,
+            "aria-describedby": props.unavailableReason ? reasonId : void 0,
+            disabled,
+            onClick: props.onToggle,
+            "data-testid": props.testId,
+            className: `relative h-6 w-10 shrink-0 rounded-full transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/60 focus-visible:ring-offset-2 disabled:opacity-50 ${track}`,
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "span",
+              {
+                "aria-hidden": "true",
+                className: `absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-[0_1px_2px_rgba(15,23,42,0.2)] transition-transform duration-200 ease-out ${checked ? "translate-x-4" : "translate-x-0"}`
+              }
+            )
+          }
+        ),
+        props.unavailableReason ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: reasonId, className: "sr-only", children: props.unavailableReason }) : null
+      ]
+    }
+  );
+}
+function fleetMachinePosture(settings) {
+  return globalPosture(settings);
+}
+function fleetMachinePostureLabel(settings) {
+  return PROTECTION_POSTURE_COPY[fleetMachinePosture(settings)].label;
+}
+function fleetManagedCapabilities(capabilities, apps) {
+  const managed = new Set(apps.filter((app) => app.active).map((app) => app.harness));
+  const kept = capabilities.filter((capability) => managed.has(capability.harness));
+  const known = new Set(kept.map((capability) => capability.harness));
+  const synthesized = [...managed].filter((harness) => !known.has(harness)).map((harness) => ({
+    harness,
+    display_name: harnessDisplayName(harness),
+    can_pre_block: false,
+    can_ask_inline: false,
+    has_native_remember: false,
+    fail_open_on_hook_failure: true,
+    can_pre_block_limited: false,
+    honesty_sentence: "",
+    limited: false
+  }));
+  return [...kept, ...synthesized];
+}
+function fleetManagedRows(rows, apps) {
+  const managed = new Set(apps.filter((app) => app.active).map((app) => app.harness));
+  const byName = (a, b) => a.displayName.localeCompare(b.displayName);
+  const watching = rows.filter((row) => managed.has(row.harness) && row.effective === "watch").sort(byName);
+  const rest = rows.filter((row) => managed.has(row.harness) && row.effective !== "watch").sort(byName);
+  return [...watching, ...rest];
+}
+function gateProofUpdate(gate, proof) {
+  return {
+    enabled: gate?.enabled ?? false,
+    configured: gate?.configured ?? false,
+    cooldown_seconds: gate?.cooldown_seconds ?? 0,
+    cooldown_active: gate?.cooldown_active ?? false,
+    cooldown_expires_at: gate?.cooldown_expires_at ?? null,
+    locked_until: gate?.locked_until ?? null,
+    fail_closed: gate?.fail_closed ?? false,
+    strict_all_decisions: gate?.strict_all_decisions ?? false,
+    totp_enabled: gate?.totp_enabled ?? false,
+    totp_pending: gate?.totp_pending ?? false,
+    ...proof?.currentPassword ? { current_password: proof.currentPassword } : {},
+    ...proof?.totpCode ? { totp_code: proof.totpCode } : {}
+  };
+}
+function useFleetAppPosture(props) {
+  const { onChanged } = props;
+  const [state, setState] = reactExports.useState({ kind: "loading" });
+  const [pendingWatch, setPendingWatch] = reactExports.useState(null);
+  const [savingHarness, setSavingHarness] = reactExports.useState(null);
+  const [proofRequest, setProofRequest] = reactExports.useState(null);
+  const [proofPending, setProofPending] = reactExports.useState(false);
+  const [proofError, setProofError] = reactExports.useState(null);
+  const [statusMessage, setStatusMessage] = reactExports.useState(null);
+  const [error, setError] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    fetchSettings().then((payload) => {
+      if (cancelled) return;
+      setState({
+        kind: "ready",
+        settings: payload.settings,
+        capabilities: payload.protection_capabilities ?? []
+      });
+    }).catch((cause) => {
+      if (cancelled) return;
+      setState({ kind: "error", message: cause instanceof Error ? cause.message : "Unable to load app protection." });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const gate = state.kind === "ready" ? state.settings.approval_gate ?? null : null;
+  const gateEnabled = gate?.enabled === true;
+  const rows = reactExports.useMemo(() => {
+    if (state.kind !== "ready") return [];
+    return fleetManagedRows(
+      harnessPostureRows(state.settings, fleetManagedCapabilities(state.capabilities, props.apps)),
+      props.apps
+    );
+  }, [state, props.apps]);
+  const commit = reactExports.useCallback(async (harness, next, proof) => {
+    if (state.kind !== "ready") return "App protection is still loading.";
+    const saved = state.settings;
+    const update = appModesUpdate(saved, harness, next);
+    if (update === null) {
+      setPendingWatch(null);
+      return null;
+    }
+    if (gateEnabled) {
+      update.approval_gate = gateProofUpdate(saved.approval_gate, proof);
+    }
+    setSavingHarness(harness);
+    setError(null);
+    try {
+      const payload = await updateSettings(update);
+      setState((current) => current.kind === "ready" ? { ...current, settings: payload.settings } : current);
+      const name = rows.find((row) => row.harness === harness)?.displayName ?? harness;
+      setStatusMessage(appModesStatusMessage(next, name));
+      setPendingWatch(null);
+      onChanged?.();
+      return null;
+    } catch (cause) {
+      return cause instanceof Error ? cause.message : "Unable to change Guard or CIGAR for this app.";
+    } finally {
+      setSavingHarness(null);
+    }
+  }, [state, gateEnabled, rows, onChanged]);
+  const save = reactExports.useCallback((change) => {
+    if (gateEnabled) {
+      const displayName = rows.find((row) => row.harness === change.harness)?.displayName ?? change.harness;
+      setProofError(null);
+      setProofRequest({ ...change, displayName });
+      return;
+    }
+    void commit(change.harness, change.next).then((failure2) => {
+      if (failure2 !== null) setError(failure2);
+    });
+  }, [gateEnabled, rows, commit]);
+  const handleToggle = reactExports.useCallback((harness, part) => {
+    if (state.kind !== "ready") return;
+    const current = appModes(state.settings, harness);
+    const next = { ...current, [part]: !current[part] };
+    if (part === "guard" && state.settings.harness_postures_locked === true) return;
+    setError(null);
+    setStatusMessage(null);
+    if (needsConfirm(current, next, state.settings.harness_postures_locked === true)) {
+      setPendingWatch({ harness, next });
+      return;
+    }
+    setPendingWatch(null);
+    save({ harness, next });
+  }, [state, save]);
+  const handleConfirmWatch = reactExports.useCallback((change) => {
+    setPendingWatch(null);
+    save(change);
+  }, [save]);
+  const handleProofConfirm = reactExports.useCallback(async (proof) => {
+    if (proofRequest === null) return;
+    setProofPending(true);
+    setProofError(null);
+    const failure2 = await commit(proofRequest.harness, proofRequest.next, proof);
+    setProofPending(false);
+    if (failure2 === null) {
+      setProofRequest(null);
+    } else {
+      setProofError(failure2);
+    }
+  }, [proofRequest, commit]);
+  const handleCancelWatch = reactExports.useCallback(() => setPendingWatch(null), []);
+  const rowFor = reactExports.useCallback((harness) => rows.find((row) => row.harness === harness), [rows]);
+  if (state.kind !== "ready") {
+    return {
+      kind: state.kind,
+      rowFor,
+      control: () => null,
+      watchConfirm: () => null,
+      summary: null,
+      settings: null,
+      footer: state.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: "Per-app protection settings are unavailable right now." }) : null
+    };
+  }
+  const settings = state.settings;
+  const locked = settings.harness_postures_locked === true;
+  const watchingCount = rows.filter((row) => harnessRowTone(row) === "watch").length;
+  const control = (harness) => {
+    const row = rowFor(harness);
+    if (!row) return null;
+    const saving = savingHarness === harness;
+    const modes = appModes(settings, harness);
+    const cigarReason = cigarUnavailableReason(settings, harness, row.displayName);
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
       {
-        type: "button",
-        onClick: handleAsk,
-        className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
-        children: actionLabel
+        role: "group",
+        "aria-label": `Guard and CIGAR in ${row.displayName}`,
+        className: "flex shrink-0 items-center gap-3",
+        "data-testid": "fleet-app-modes",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            FleetAppModeSwitch,
+            {
+              label: "Guard",
+              accessibleName: `Guard in ${row.displayName}`,
+              checked: modes.guard,
+              disabled: saving || locked,
+              unavailableReason: locked ? "Your organization manages protection for this app." : void 0,
+              attentionWhenOff: true,
+              onToggle: () => handleToggle(harness, "guard"),
+              testId: `fleet-app-guard-${harness}`
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            FleetAppModeSwitch,
+            {
+              label: "CIGAR",
+              accessibleName: `CIGAR in ${row.displayName}`,
+              checked: modes.cigar,
+              disabled: saving || cigarReason !== void 0,
+              unavailableReason: cigarReason,
+              onToggle: () => handleToggle(harness, "cigar"),
+              testId: `fleet-app-cigar-${harness}`
+            }
+          ),
+          saving ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Saving…" }) : null
+        ]
       }
     );
+  };
+  const watchConfirm = (harness) => {
+    if (pendingWatch?.harness !== harness) return null;
+    const row = rowFor(harness);
+    if (!row) return null;
+    const change = pendingWatch;
+    const guardWasOn = appModes(settings, harness).guard;
+    const confirmLabel = guardWasOn ? "Turn Guard off" : "Turn CIGAR on";
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "mt-2 flex flex-col gap-2 rounded-xl bg-brand-attention/[0.06] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between",
+        role: "alertdialog",
+        "aria-label": guardWasOn ? `Turn Guard off in ${row.displayName}` : `Turn CIGAR on in ${row.displayName}`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: guardOffPrompt(settings, harness, change.next, row.displayName) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: () => handleConfirmWatch(change),
+                className: "inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
+                children: confirmLabel
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: handleCancelWatch,
+                className: "inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark",
+                children: guardWasOn ? "Keep Guard on" : "Cancel"
+              }
+            )
+          ] })
+        ]
+      }
+    );
+  };
+  const summary = rows.length === 0 ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", "data-testid": "fleet-machine-posture", children: [
+    "Machine:",
+    " ",
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-brand-dark", children: fleetMachinePostureLabel(settings) }),
+    watchingCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-brand-attention", children: [
+      " · Guard off in ",
+      watchingCount
+    ] }) : null
+  ] });
+  const footer = /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-lg bg-brand-attention/[0.05] px-3 py-2 text-xs text-brand-dark", children: error }) : null,
+    !cigarReady(settings) && rows.some((row) => cigarSupported(row.harness)) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-xs text-slate-500", "data-testid": "fleet-cigar-setup", children: [
+      "CIGAR is off on this machine, so it can't add project context or save tokens in any app yet.",
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "font-medium text-brand-blue underline underline-offset-2", href: guardAwareHref("/cigar"), children: "Set up CIGAR" })
+    ] }) : null,
+    locked && rows.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-400", children: "Your organization manages Guard for each app, so Guard can't be turned on or off here. CIGAR can still be changed." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: statusMessage ?? "" }),
+    proofRequest !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SettingsSaveProofModal,
+      {
+        open: true,
+        mode: "verify-save",
+        gate,
+        title: "Confirm before changing Guard or CIGAR",
+        detail: `Enter your approval proof to change ${proofRequest.displayName}.`,
+        confirmLabel: "Save change",
+        error: proofError,
+        pending: proofPending,
+        onCancel: () => {
+          if (proofPending) return;
+          setProofRequest(null);
+          setProofError(null);
+        },
+        onConfirm: handleProofConfirm
+      }
+    ) : null
+  ] });
+  return { kind: "ready", rowFor, control, watchConfirm, summary, settings, footer };
+}
+function turnProtectionOnLocked(settings, update) {
+  const managed = settings.managed_locked_settings ?? [];
+  if (update.harness_postures !== void 0 && settings.harness_postures_locked === true) return true;
+  if (update.protection_posture !== void 0 && managed.includes("protection_posture")) return true;
+  return false;
+}
+function isEmptyUpdate(update) {
+  return Object.keys(update).length === 0;
+}
+async function startTurnProtectionOn(deps) {
+  const current = await deps.fetchSettings();
+  const settings = current.settings;
+  const update = turnProtectionOnUpdate(settings);
+  if (isEmptyUpdate(update)) return { kind: "saved", payload: null };
+  if (turnProtectionOnLocked(settings, update)) return { kind: "locked" };
+  const gate = settings.approval_gate;
+  if (gate?.enabled === true) return { kind: "needs-proof", settings, gate };
+  return { kind: "saved", payload: await deps.updateSettings(update) };
+}
+async function finishTurnProtectionOn(deps, settings, proof) {
+  const update = turnProtectionOnUpdate(settings);
+  update.approval_gate = gateProofUpdate(settings.approval_gate, proof);
+  return deps.updateSettings(update);
+}
+function turnProtectionOnErrorMessage(cause) {
+  const detail = cause instanceof Error ? cause.message.trim() : "";
+  return detail.length > 0 ? detail : "Guard couldn't turn protection on. Try again.";
+}
+const DEFAULT_CONFIRM = "Guard will start stopping dangerous actions.";
+const DEFAULT_DEPS = { fetchSettings, updateSettings };
+const LOCKED_COPY = "Your organization manages protection for these apps, so it can't be turned on here.";
+const DONE_COPY = "Protection is on. Guard will stop dangerous actions again.";
+const FOCUS_RING = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-attention";
+const PRIMARY_BUTTON = `inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70 ${FOCUS_RING}`;
+const SECONDARY_BUTTON = `inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark ${FOCUS_RING}`;
+function WatchProtectionBanner(props) {
+  const { onTurnedOn, onOpenSettings, onBusyChange } = props;
+  const disabled = props.disabled === true;
+  const deps = props.deps ?? DEFAULT_DEPS;
+  const [state, setState] = reactExports.useState(props.initialState ?? { kind: "idle" });
+  const mounted = reactExports.useRef(true);
+  reactExports.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const busy = state.kind === "working" || state.kind === "proof";
+  reactExports.useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
+  reactExports.useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
+  const settle = reactExports.useCallback(async (payload) => {
+    if (mounted.current) setState({ kind: "done" });
+    await onTurnedOn?.(payload);
+  }, [onTurnedOn]);
+  const handleAsk = reactExports.useCallback(() => setState({ kind: "confirming" }), []);
+  const handleCancel = reactExports.useCallback(() => setState({ kind: "idle" }), []);
+  const handleConfirm = reactExports.useCallback(async () => {
+    if (disabled) return;
+    setState({ kind: "working" });
+    try {
+      const step = await startTurnProtectionOn(deps);
+      if (!mounted.current) return;
+      if (step.kind === "locked") {
+        setState({ kind: "locked" });
+      } else if (step.kind === "needs-proof") {
+        setState({ kind: "proof", settings: step.settings, gate: step.gate, pending: false, error: null });
+      } else {
+        await settle(step.payload);
+      }
+    } catch (cause) {
+      if (mounted.current) setState({ kind: "error", message: turnProtectionOnErrorMessage(cause) });
+    }
+  }, [deps, disabled, settle]);
+  const handleProofCancel = reactExports.useCallback(() => {
+    setState((current) => current.kind === "proof" && current.pending ? current : { kind: "idle" });
+  }, []);
+  const handleProofConfirm = reactExports.useCallback(async (proof) => {
+    if (state.kind !== "proof" || state.pending) return;
+    const { settings, gate } = state;
+    setState({ kind: "proof", settings, gate, pending: true, error: null });
+    try {
+      const payload = await finishTurnProtectionOn(deps, settings, proof);
+      await settle(payload);
+    } catch (cause) {
+      if (mounted.current) {
+        setState({ kind: "proof", settings, gate, pending: false, error: turnProtectionOnErrorMessage(cause) });
+      }
+    }
+  }, [deps, settle, state]);
+  if (state.kind === "done") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "flex items-center gap-3 rounded-xl border border-brand-green/25 bg-brand-green/[0.04] px-4 py-3",
+        role: "status",
+        "data-testid": "watch-protection-banner",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-5 w-5 shrink-0 text-brand-green-text", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: DONE_COPY })
+        ]
+      }
+    );
+  }
+  const message = props.model?.message ?? WATCH_BANNER_COPY;
+  const confirmMessage = props.model?.confirmMessage ?? DEFAULT_CONFIRM;
+  const perApp = props.model !== void 0 && props.model !== null && !props.model.globalWatch;
+  const actionLabel = perApp ? "Turn protection on for these apps" : "Turn protection on";
+  let detail = null;
+  let action2;
+  switch (state.kind) {
+    case "confirming":
+      detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: confirmMessage });
+      action2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void handleConfirm(), disabled, className: PRIMARY_BUTTON, children: "Turn on" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleCancel, className: SECONDARY_BUTTON, children: "Not now" })
+      ] });
+      break;
+    case "working":
+    case "proof":
+      detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: confirmMessage });
+      action2 = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: true, "aria-busy": "true", className: PRIMARY_BUTTON, children: state.kind === "proof" ? "Waiting for approval…" : "Turning on…" });
+      break;
+    case "error":
+      detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-1 text-sm text-slate-600", children: state.message });
+      action2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void handleConfirm(), disabled, className: PRIMARY_BUTTON, children: "Try again" }),
+        onOpenSettings !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onOpenSettings, className: SECONDARY_BUTTON, children: "Open settings" }) : null
+      ] });
+      break;
+    case "locked":
+      detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: LOCKED_COPY });
+      action2 = null;
+      break;
+    default:
+      action2 = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleAsk, disabled, className: PRIMARY_BUTTON, children: actionLabel });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
       className: "flex flex-col gap-3 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
       role: "status",
+      "data-testid": "watch-protection-banner",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: message }),
-            confirming ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: confirmMessage }) : null
+            detail
           ] })
         ] }),
-        action
+        action2,
+        state.kind === "proof" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SettingsSaveProofModal,
+          {
+            open: true,
+            mode: "verify-save",
+            gate: state.gate,
+            title: "Confirm turning protection on",
+            detail: confirmMessage,
+            confirmLabel: "Turn protection on",
+            error: state.error,
+            pending: state.pending,
+            onCancel: handleProofCancel,
+            onConfirm: (proof) => void handleProofConfirm(proof)
+          }
+        ) : null
       ]
     }
   );
 }
-const POSTURE_LABEL = {
-  protected: "Protected",
-  extra_careful: "Extra careful",
-  watch: "Watch"
-};
-function normalizeHarnessPostures(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
-  const result = {};
-  for (const [harness, posture] of Object.entries(value)) {
-    if (harness.length > 0 && typeof posture === "string" && isProtectionPosture(posture)) {
-      result[harness] = posture;
-    }
-  }
-  return result;
-}
-function globalPosture(settings) {
-  if (isProtectionPosture(settings.protection_posture)) return settings.protection_posture;
-  if (settings.mode === "observe") return "watch";
-  return "protected";
-}
-function protectedLevel(effective, baseline) {
-  if (effective !== "watch") return effective;
-  if (baseline !== "watch") return baseline;
-  return "protected";
-}
-function effectiveHarnessPosture(settings, harness) {
-  const override = settings.harness_postures?.[harness];
-  const baseline = globalPosture(settings);
-  if (override === void 0) return baseline;
-  if (override === "watch") return "watch";
-  return baseline === "extra_careful" ? baseline : override;
-}
-function harnessPostureRows(settings, capabilities) {
-  return capabilities.map((capability) => {
-    const effective = effectiveHarnessPosture(settings, capability.harness);
-    return {
-      harness: capability.harness,
-      displayName: capability.display_name,
-      effective,
-      hasOverride: settings.harness_postures?.[capability.harness] !== void 0,
-      selected: effective === "watch" ? "watch" : "on"
-    };
-  });
-}
-function harnessPostureOptions(settings, harness) {
-  const onLevel = protectedLevel(effectiveHarnessPosture(settings, harness), globalPosture(settings));
-  return [
-    { choice: "on", label: POSTURE_LABEL[onLevel] },
-    { choice: "watch", label: POSTURE_LABEL.watch }
-  ];
-}
-function selectHarnessPosture(settings, harness, choice) {
-  const baseline = globalPosture(settings);
-  if (choice === "on" && effectiveHarnessPosture(settings, harness) !== "watch") return settings;
-  const next = { ...settings.harness_postures ?? {} };
-  if (choice === "watch") {
-    if (baseline === "watch") delete next[harness];
-    else next[harness] = "watch";
-  } else if (baseline === "watch") {
-    next[harness] = "protected";
-  } else {
-    delete next[harness];
-  }
-  return { ...settings, harness_postures: next };
-}
-function canRestartHarnessWatch(settings, harness) {
-  return settings.harness_postures?.[harness] === "watch" && (settings.watch_auto_revert_hours ?? 24) > 0;
-}
-function restartHarnessWatch(settings, harness) {
-  if (!canRestartHarnessWatch(settings, harness)) return settings;
-  const restarts = new Set(settings.harness_watch_restart ?? []);
-  restarts.add(harness);
-  return { ...settings, harness_watch_restart: [...restarts].sort() };
-}
-function harnessPosturePatch(draft, saved) {
-  const before = saved?.harness_postures ?? {};
-  const after = draft.harness_postures ?? {};
-  const restarts = new Set(draft.harness_watch_restart ?? []);
-  const patch = {};
-  for (const harness of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
-    const posture = after[harness] ?? null;
-    const restart = posture === "watch" && restarts.has(harness);
-    if (restart || posture !== (before[harness] ?? null)) patch[harness] = posture;
-  }
-  return Object.keys(patch).length > 0 ? patch : null;
-}
-function clearHarnessWatchOverrides(settings) {
-  const next = Object.fromEntries(
-    Object.entries(settings.harness_postures ?? {}).filter(([, posture]) => posture !== "watch")
-  );
-  return { ...settings, harness_postures: next };
-}
-function settingsWatchBannerModel(settings, capabilities) {
-  const rows = harnessPostureRows(settings, capabilities);
-  return watchBannerModel({
-    protection_posture: globalPosture(settings),
-    harness_postures: settings.harness_postures,
-    harnesses_in_watch: rows.filter((row) => row.effective === "watch").map((row) => row.harness),
-    protection_capabilities: capabilities
-  });
-}
-function withHarnessPosturePatch(payload, draft, saved) {
-  const {
-    harness_postures: _postures,
-    harness_postures_effective: _effective,
-    harness_postures_locked: _locked,
-    harness_watch_entered_at: _enteredAt,
-    harness_watch_restart: _restart,
-    ...rest
-  } = payload;
-  const patch = harnessPosturePatch(draft, saved);
-  return patch === null ? rest : { ...rest, harness_postures: patch };
-}
-function harnessPostureSummary(rows) {
-  if (rows.length === 0) return "";
-  const watching = rows.filter((row) => row.effective === "watch");
-  if (watching.length === 0) return "Every app is protected.";
-  if (watching.length === rows.length) return "Every app is in Watch.";
-  return `${watching.length} of ${rows.length} apps in Watch: ${joinNames(watching.map((row) => row.displayName))}.`;
-}
-function harnessRowTone(row) {
-  return row.effective === "watch" ? "watch" : "protected";
-}
-function harnessRowStatus(row) {
-  if (row.effective === "watch") {
-    return row.hasOverride ? "Watch · recording only" : "Watch · follows the machine setting";
-  }
-  if (!row.hasOverride) return "Follows the machine setting";
-  return "Set for this app";
-}
-function sortHarnessRows(rows) {
-  const watching = rows.filter((row) => row.effective === "watch");
-  const rest = rows.filter((row) => row.effective !== "watch");
-  return [...watching, ...rest];
-}
-function overrideRows(rows) {
-  return rows.filter((row) => row.hasOverride);
-}
-function harnessWatchPrompt(rows, harness) {
-  const row = rows.find((candidate) => candidate.harness === harness);
-  const name = row?.displayName ?? harness;
-  const others = rows.filter((candidate) => candidate.harness !== harness);
-  const protectedOthers = others.filter((candidate) => candidate.effective !== "watch");
-  const lead = `Guard will only record in ${name}.`;
-  if (others.length === 0) return lead;
-  if (protectedOthers.length === 0) return `${lead} Every app will then be in Watch.`;
-  if (protectedOthers.length === others.length) return `${lead} Your other apps stay protected.`;
-  const verb = protectedOthers.length === 1 ? "stays" : "stay";
-  return `${lead} ${joinNames(protectedOthers.map((candidate) => candidate.displayName))} ${verb} protected.`;
-}
-function joinNames(names) {
-  if (names.length <= 1) return names[0] ?? "";
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
-}
-function displayNameFor(harness, capabilities) {
-  return capabilities?.find((capability) => capability.harness === harness)?.display_name ?? harness;
-}
-function watchBannerModel(snapshot) {
-  const globalWatch = snapshot.protection_posture === "watch";
-  const watchOverrides = Object.entries(snapshot.harness_postures ?? {}).filter(([, posture]) => posture === "watch").map(([harness]) => harness);
-  const inWatch = globalWatch ? [] : snapshot.harnesses_in_watch ?? watchOverrides;
-  if (!globalWatch && inWatch.length === 0) return null;
-  const appNames = inWatch.map((harness) => displayNameFor(harness, snapshot.protection_capabilities));
-  if (globalWatch) {
-    return {
-      globalWatch,
-      appNames: [],
-      message: WATCH_BANNER_COPY,
-      confirmMessage: "Guard will start stopping dangerous actions in every app."
-    };
-  }
-  const names = joinNames(appNames);
-  return {
-    globalWatch,
-    appNames,
-    message: `Guard is only recording in ${names}. Other apps are protected.`,
-    confirmMessage: `Guard will start stopping dangerous actions in ${names}.`
-  };
-}
-function turnProtectionOnUpdate(snapshot) {
-  const update = {};
-  if (snapshot.protection_posture === "watch") update.protection_posture = "protected";
-  const cleared = {};
-  for (const [harness, posture] of Object.entries(snapshot.harness_postures ?? {})) {
-    if (posture === "watch") cleared[harness] = null;
-  }
-  if (Object.keys(cleared).length > 0) update.harness_postures = cleared;
-  return update;
-}
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-C_EJjR5Y.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BO9hBtR_.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
-  const { snapshot } = props;
-  const handleTurnOn = reactExports.useCallback(() => {
-    void updateSettings(turnProtectionOnUpdate(snapshot)).then(() => {
-      props.onRestored?.();
-    }).catch(() => {
-      props.onOpenSettings();
-    });
-  }, [props.onOpenSettings, props.onRestored, snapshot]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { model: watchBannerModel(snapshot), onTurnProtectionOn: handleTurnOn });
+  const { snapshot, onRestored } = props;
+  const handleTurnedOn = reactExports.useCallback(() => {
+    onRestored?.();
+  }, [onRestored]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    WatchProtectionBanner,
+    {
+      model: watchBannerModel(snapshot),
+      onTurnedOn: handleTurnedOn,
+      onOpenSettings: props.onOpenSettings
+    }
+  );
 }
 function renderInboxContent(props) {
   if (props.requests.kind === "loading") {
@@ -38206,6 +42285,7 @@ function renderInboxContent(props) {
   );
 }
 function renderViewContent(props) {
+  if (props.view === "swarm") return props.swarmContent ?? null;
   if (props.view === "home") {
     return props.homeContent;
   }
@@ -38287,7 +42367,8 @@ function ApprovalCenterLayout(props) {
     updateError,
     onUpdateGuard,
     onReinstallGuard,
-    onSetUpdateChannel
+    onSetUpdateChannel,
+    onSetUpdateMode
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = reactExports.useState(
     () => readDismissedDesktopUpdateVersion()
@@ -38316,6 +42397,7 @@ function ApprovalCenterLayout(props) {
         onUpdateGuard,
         onReinstallGuard,
         onSetUpdateChannel,
+        onSetUpdateMode,
         approvalGate: props.approvalGate ?? null,
         cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
         workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null,
@@ -38810,35 +42892,84 @@ function RuntimeGate(props) {
     }
   );
 }
+const STATUS_COPY = {
+  pending: "Approve this in the YID app with your face scan.",
+  approved: "Approved in the YID app. Verifying the receipt…",
+  rejected: "Rejected in the YID app. The action stays blocked.",
+  expired: "The Pulse request expired. The action stays blocked.",
+  error: "Yanez Pulse is unreachable. The action stays blocked.",
+  cancelled: "Pulse approval cancelled."
+};
+function PulseApprovalOverlay() {
+  const [toasts, setToasts] = reactExports.useState([]);
+  reactExports.useEffect(() => {
+    const timers = /* @__PURE__ */ new Set();
+    const onEvent = (event) => {
+      const detail = event.detail;
+      setToasts((current) => nextPulseToasts(current, detail));
+      if (detail.status !== "pending") {
+        const timer = setTimeout(() => {
+          timers.delete(timer);
+          setToasts((current) => dropFinishedPulseToast(current, detail.requestId));
+        }, 4e3);
+        timers.add(timer);
+      }
+    };
+    window.addEventListener(PULSE_APPROVAL_EVENT, onEvent);
+    return () => {
+      window.removeEventListener(PULSE_APPROVAL_EVENT, onEvent);
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, []);
+  if (toasts.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed bottom-4 right-4 z-50 w-full max-w-sm space-y-2", children: toasts.map((detail) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      role: "status",
+      "aria-live": "polite",
+      className: "rounded-xl border border-brand-blue/20 bg-white p-4 shadow-xl",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-brand-blue", children: "Yanez Pulse" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: STATUS_COPY[detail.status] }),
+        detail.status === "pending" && detail.matchCode ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-slate-600", children: [
+          "Match code ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "font-mono text-base tracking-widest text-brand-dark", children: detail.matchCode })
+        ] }) : null
+      ]
+    },
+    detail.requestId
+  )) });
+}
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-OxpCh2cB.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BVvg6Lpo.js"), true ? __vite__mapDeps([7,8,9,6,10]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-C_CNq8AH.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-CRKVu82y.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-dhHEpEoW.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BCM0x-g-.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CL9k2vqu.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-DeE0MG3h.js"), true ? __vite__mapDeps([13,12]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-BWBn1bK0.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-DqHWwK_5.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-DUQGf9sy.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-B0vkFxxc.js"), true ? __vite__mapDeps([17,18,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-CtJlE48x.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BSkPbVjN.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-DYqi92V0.js").then((n) => n.d), true ? __vite__mapDeps([19,18]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-ChvzniW9.js"), true ? __vite__mapDeps([15,9]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-BKSgx2UE.js"), true ? __vite__mapDeps([20,12]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-DSZDVR66.js"), true ? __vite__mapDeps([16,4,5,17]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-Bd0-K7Pl.js"), true ? __vite__mapDeps([21,7,8,22]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-O-K0NSan.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-DFptdkRX.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-B9sLrlwj.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-MDflVaAm.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -38869,6 +43000,7 @@ function parseRequestId(pathname) {
 const PROTECT_ROUTE = "/protect";
 const TODAY_EVIDENCE_ROUTE = "/evidence?time=today";
 function viewTitle(view) {
+  if (view === "swarm") return "Swarm";
   if (view === "home") return "Home";
   if (view === "inbox") return "Inbox";
   if (view === "fleet") return "Protect";
@@ -38898,6 +43030,7 @@ function parseAppDetail(pathname) {
   }
 }
 function resolveView(pathname) {
+  if (pathname === "/swarm") return "swarm";
   if (pathname === "/cigar") return "cigar";
   if (parseAppDetail(pathname) !== null) {
     return "app-detail";
@@ -39058,12 +43191,15 @@ function App() {
     let pollId;
     let refreshInFlight = false;
     let clearedQueue = false;
-    const needsFullQueue = view === "inbox" && requestId === null;
-    const needsQueuePage = view === "inbox" || requestId !== null;
+    const needsFullQueue = (view === "inbox" || view === "swarm") && requestId === null;
+    const needsQueuePage = view === "inbox" || view === "swarm" || requestId !== null;
     const needsHomePreview = view === "home" && requestId === null;
     const needsRuntimeReceipts = view === "home" || view === "fleet" || view === "app-detail" || view === "supply-chain" || view === "audit" || view === "feed-health";
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
+        return;
+      }
+      if (needsFullQueue && view === "swarm" && document.hidden) {
         return;
       }
       refreshInFlight = true;
@@ -39474,7 +43610,8 @@ function App() {
         requestIds: ids,
         approval_password: gateCredentials.approval_password,
         approval_totp_code: gateCredentials.approval_totp_code,
-        approval_gate_use_cooldown: gateCredentials.approval_gate_use_cooldown
+        approval_gate_use_cooldown: gateCredentials.approval_gate_use_cooldown,
+        approval_gate_pulse: gateCredentials.approval_gate_pulse
       });
       await refreshStateAfterAction();
       if (result.failed.length > 0) {
@@ -39624,6 +43761,7 @@ function App() {
     navigate
   ]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PulseApprovalOverlay, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",
       {
@@ -39647,6 +43785,7 @@ function App() {
         codexResume,
         approvalGate,
         onRetryResume: handleRetryResume,
+        swarmContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SwarmWorkspace, { onNavigate: navigate, onOpenRequest: handleOpenRequest, reviews: requests.kind === "ready" ? requests.items : null }) }),
         homeContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           HomeWorkspace,
           {
@@ -39766,409 +43905,425 @@ if (container === null) {
   throw new Error("Missing guard-dashboard-root");
 }
 installStaleBuildGuard();
+handOffRequestPageToDesktop();
 clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  watchBannerModel as $,
+  DESKTOP_WINDOW_RECOVERY_MESSAGE as $,
   ActionButton as A,
-  HomeInsightsMetrics as B,
-  EvidenceActivityHeatmapMini as C,
-  homeCommandActivityModel as D,
-  EvidenceInsightsShareButton as E,
-  createCommandActivityClient as F,
-  GuardStatMetric as G,
-  HiMiniChevronRight as H,
-  fetchCommandActivityApi as I,
-  getRecoveryCapabilities as J,
-  recoveryRunsInDesktopWindow as K,
-  resolveDesktopWindowRecoveryInstructions as L,
-  resolveRecoveryInstructions as M,
-  HiMiniShieldExclamation as N,
-  DESKTOP_WINDOW_RECOVERY_MESSAGE as O,
-  HiMiniClipboardDocument as P,
-  openRecoveryView as Q,
-  useReceiptAnalytics as R,
+  HiMiniHandRaised as B,
+  HiMiniArrowUpTray as C,
+  HiMiniCube as D,
+  HiMiniPencilSquare as E,
+  HiMiniDocumentText as F,
+  HiMiniCheckCircle as G,
+  HiMiniPlus as H,
+  HiMiniArrowRight as I,
+  isConnectableAppHarness as J,
+  HiMiniLockClosed as K,
+  getHeatmapLevel as L,
+  EvidenceInsightsShareButton as M,
+  GuardStatMetric as N,
+  HomeInsightsMetrics as O,
+  EvidenceActivityHeatmapMini as P,
+  homeCommandActivityModel as Q,
+  createCommandActivityClient as R,
   SectionLabel as S,
   Tag as T,
-  updateSettings as U,
-  turnProtectionOnUpdate as V,
-  useProtectionPresentationState as W,
-  protectionHealthFor as X,
-  unavailableProtectionHealth as Y,
-  buildHomeRuntimeErrorCopy as Z,
-  RuntimeErrorState as _,
-  contextStatusCopy as a,
-  TabBar as a$,
-  WatchProtectionBanner as a0,
-  EvidenceInsightsShareModal as a1,
-  OperatorHealthCard as a2,
-  HiMiniShieldCheck as a3,
-  DeviceProofCard as a4,
-  guardActionDisposition as a5,
-  approvalLeftActionStopped as a6,
-  guardActionActivityCopy as a7,
-  HiMiniSparkles as a8,
-  HiMiniXMark as a9,
-  activeFailedHarnesses as aA,
-  resetRepairOutcomeTracker as aB,
-  HiMiniWrenchScrewdriver as aC,
-  fetchSettings as aD,
-  harnessPostureRows as aE,
-  selectHarnessPosture as aF,
-  harnessPosturePatch as aG,
-  harnessRowTone as aH,
-  PROTECTION_POSTURE_COPY as aI,
-  harnessPostureOptions as aJ,
-  globalPosture as aK,
-  harnessRowStatus as aL,
-  HiMiniEye as aM,
-  HiMiniXCircle as aN,
-  GuardHero as aO,
-  ProofStrip as aP,
-  HiMiniClipboardDocumentCheck as aQ,
-  HiMiniClipboard as aR,
-  fetchResolvedApprovalGate as aS,
-  ApprovalProofModal as aT,
-  POSTURE_OUTCOME_COLUMNS as aU,
-  getDefaultExportFromCjs as aV,
-  React as aW,
-  HiMiniSquares2X2 as aX,
-  HiMiniBellAlert as aY,
-  HiMiniAdjustmentsHorizontal as aZ,
-  HiMiniCircleStack as a_,
-  EmptyState as aa,
-  resolveCloudIntelCopy as ab,
-  HiMiniCloud as ac,
-  HiMiniQuestionMarkCircle as ad,
-  useFocusTrap as ae,
-  approvalProofRequiresPassword as af,
-  HiMiniExclamationTriangle as ag,
-  HiMiniBolt as ah,
-  Badge as ai,
-  HiMiniMinusCircle as aj,
-  buildDaemonErrorCopy as ak,
-  isUnsupportedPlatformCheck as al,
-  RECHECK_UNAVAILABLE_SIGNATURE as am,
-  protectionReasonText as an,
-  HiMiniExclamationCircle as ao,
-  hasRepairableProtectionGap as ap,
-  remainingProtectionRepairParts as aq,
-  protectionGapSignature as ar,
-  repairOutcomeIsStalled as as,
-  ProtectionRepairFlowError as at,
-  nextProtectionRepairOutcome as au,
-  waitForAuthorizeUrl as av,
-  startOrRecoverCloudConnect as aw,
-  safeCloudConnectUrl as ax,
-  openPackageFirewallAuthorizeFallback as ay,
-  waitForCloudConnection as az,
-  formatRelativeTime as b,
-  resolveProtectionLevelCopy as b$,
-  SelectMenu as b0,
-  fetchCloudReviewSettings as b1,
-  ApprovalProofFieldInputs as b2,
-  isApprovalProofSubmitDisabled as b3,
-  buildApprovalProofCredentials as b4,
-  changeCloudReviewSettings as b5,
-  fetchWithGuardAuth as b6,
-  isRecord$5 as b7,
-  HiMiniArrowTopRightOnSquare as b8,
-  shellHref as b9,
-  HiMiniCpuChip as bA,
-  HiMiniAcademicCap as bB,
-  HiMiniArrowLeft as bC,
-  isCigarProducerVersion as bD,
-  isCigarCoreLabel as bE,
-  subscribeDashboardLocation as bF,
-  HiMiniChatBubbleLeftRight as bG,
-  HiMiniArrowUpCircle as bH,
-  parseContextAssistanceStatus as bI,
-  isCigarBuildIdentity as bJ,
-  fetchContextInstallations as bK,
-  HiMiniCloudArrowDown as bL,
-  turnOnJob as bM,
-  shouldResumeTurnOn as bN,
-  turnOnRequestedAt as bO,
-  forgetTurnOn as bP,
-  rememberTurnOn as bQ,
-  forgetTurnOnClick as bR,
-  rememberTurnOnJob as bS,
-  commitDashboardLocation as bT,
-  HiMiniArrowDownTray as bU,
-  downloadBlob as bV,
-  savedEvidenceCopy as bW,
-  guardAwareHref as bX,
-  fetchContextData as bY,
-  forgetContextHistory as bZ,
-  forgetSavedEvidence as b_,
-  HiMiniPauseCircle as ba,
-  listContextAgentSessions as bb,
-  HiMiniLink as bc,
-  revokeContextAgentSession as bd,
-  grantContextWorkspace as be,
-  authorizeContextAgentSession as bf,
-  ContextAssistanceApiError as bg,
-  ask as bh,
-  parseContextScope as bi,
-  validContextBrokerRevision as bj,
-  isGuardDemoMode as bk,
-  HiMiniArrowUturnLeft as bl,
-  HiMiniCodeBracketSquare as bm,
-  HiMiniFolder as bn,
-  HiMiniComputerDesktop as bo,
-  HiMiniHome as bp,
-  HiMiniFolderPlus as bq,
-  HiMiniClock as br,
-  listContextWorkspaces as bs,
-  HiMiniFolderOpen as bt,
-  manageContextWorkspace as bu,
-  compileWorkspaceContext as bv,
-  HiMiniChatBubbleLeftEllipsis as bw,
-  HiMiniDocumentMagnifyingGlass as bx,
-  HiMiniPower as by,
-  HiMiniEyeSlash as bz,
-  controlContextAssistance as c,
-  fetchLocalCliApi as c$,
-  fetchRuntimeSnapshot as c0,
-  clearHarnessWatchOverrides as c1,
-  withHarnessPosturePatch as c2,
-  clearPolicy as c3,
-  clearReviewQueue as c4,
-  revokeApprovalGateCooldown as c5,
-  disableApprovalGateTotp as c6,
-  importSettings as c7,
-  resetSettings as c8,
-  enrollApprovalGateTotp as c9,
-  ExtensionControlProtocolError as cA,
-  normalizeExtensionCatalogItem as cB,
-  guardApiCacheScope as cC,
-  fetchExtensionCatalogV2Api as cD,
-  localPermissionDraftState as cE,
-  setLocalPermissionDraftState as cF,
-  extensionPolicyAuthorityUnchanged as cG,
-  newExtensionPolicyDraftIdentity as cH,
-  extensionPolicyDraftIsDirty as cI,
-  setLocalPermissionDraftStates as cJ,
-  buildExtensionPolicyDraftMutation as cK,
-  fetchEffectiveExtensionControls as cL,
-  previewExtensionMutation as cM,
-  isCurrentExtensionPolicyDraft as cN,
-  applyExtensionMutation as cO,
-  fetchExtensionControlHistory as cP,
-  managedPermissionState as cQ,
-  controlProvenance as cR,
-  treatmentLabel as cS,
-  useResolvedApprovalGate as cT,
-  groupPermissionsByFamily as cU,
-  HiMiniInformationCircle as cV,
-  LocalCliApiError as cW,
-  hasSuggestedRules as cX,
-  approvalProofRecentlySatisfied as cY,
-  StyledSelect as cZ,
-  bulkCommandState as c_,
-  verifyApprovalGateTotp as ca,
-  clearEvidence as cb,
-  exportDiagnostics as cc,
-  repairApprovalCenter as cd,
-  exportSettings as ce,
-  setupDesktopNotifications as cf,
-  settingsWatchBannerModel as cg,
-  WorkspacePageHeader as ch,
-  navigateFromAnchor as ci,
-  humanizeList as cj,
-  isProtectionPosture as ck,
-  deriveProtectionPosture as cl,
-  normalizeHarnessPostures as cm,
-  approvalGateCooldownLabel as cn,
-  overrideRows as co,
-  harnessPostureSummary as cp,
-  joinNames as cq,
-  sortHarnessRows as cr,
-  restartHarnessWatch as cs,
-  harnessWatchPrompt as ct,
-  canRestartHarnessWatch as cu,
-  HiMiniKey as cv,
-  fetchExtensionCatalog as cw,
-  ExtensionControlApiError as cx,
-  normalizeExtensionCatalogSummary as cy,
-  normalizeExtensionPermission as cz,
-  formatNumber as d,
-  canonicalExtensionId as d$,
-  ExtensionBrandMark as d0,
-  fetchMcpProviderActions as d1,
-  connectorSetupReady as d2,
-  shortIdentity as d3,
-  customExtensionDisplayName as d4,
-  previewLocalCliMutation as d5,
-  applyLocalCliMutation as d6,
-  LOCAL_CLI_CAPABILITIES as d7,
-  loadLocalCliCommands as d8,
-  DiscoveryFailure as d9,
-  startGuardCloudConnect as dA,
-  extensionEffectiveState as dB,
-  permissionEffectiveState as dC,
-  fetchExtensionControlApi as dD,
-  permissionForRule as dE,
-  refreshEffectiveExtensionControls as dF,
-  fetchExtensionDiscoveryApi as dG,
-  startCancelableDiscoveryJob as dH,
-  waitForMcpDiscoveryJob as dI,
-  isLocalCliId as dJ,
-  localCliHref as dK,
-  fetchPluginUpdatesApi as dL,
-  filterCodexHostApps as dM,
-  connectorWorkspaceItems as dN,
-  customExtensionNeedsReview as dO,
-  profileSetupCommand as dP,
-  customExtensionBadge as dQ,
-  extensionDisplayName as dR,
-  catalogRowSecondLine as dS,
-  extensionStateLabel as dT,
-  HiMiniGlobeAlt as dU,
-  HiMiniFunnel as dV,
-  discoveryFailureMessage as dW,
-  refreshCodexHostInventory as dX,
-  CODEX_HOST_FALLBACK as dY,
-  CONFIGURED_CONNECTIONS_FALLBACK as dZ,
-  loadCurrentDashboardBuild as d_,
-  readJson as da,
-  enrollablePackageScriptCommands as db,
-  seenSuggestionMeta as dc,
-  HiMiniPlus as dd,
-  looksLikeProjectRelocatePaste as de,
-  packageScriptFilterNeedle as df,
-  initialAddCommand as dg,
-  suggestedPackageScriptExtensions as dh,
-  filterExtensionSuggestions as di,
-  suggestedHarnessExtensions as dj,
-  suggestedSeenExtensions as dk,
-  keepsPackageScriptCatalog as dl,
-  prefillSuggestedStates as dm,
-  recognizeLocalCli as dn,
-  preferredPackageScriptExtension as dp,
-  looksLikePackageScriptPaste as dq,
-  enrollmentCommandStates as dr,
-  isBulkApproveGateReady as ds,
-  fetchLocalCliList as dt,
-  normalizeLocalCliList as du,
-  unreviewedToolChangeCount as dv,
-  connectorSetupMatch as dw,
-  refreshMcpInventory as dx,
-  connectorGroupOutcome as dy,
-  allowedEarlierVersion as dz,
-  HiMiniChevronUp as e,
-  HiMiniCloudArrowUp as e$,
-  extensionDetailHref as e0,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as e1,
-  addCustomExtensionPrefillHref as e2,
-  acknowledgeDegradedExtensionControlAuthority as e3,
-  recoverExtensionControlAuthority as e4,
-  connectorSetupLinkFromSearch as e5,
-  readExtensionDetailUrlState as e6,
-  parseProtectionRoute as e7,
-  addCustomExtensionHref as e8,
-  GuardModalLayer as e9,
-  IconActionButton as eA,
-  HiMiniBeaker as eB,
-  HiMiniBugAnt as eC,
-  ActivationSummary as eD,
-  ActionResultPanel as eE,
-  fetchSupplyChainBundle as eF,
-  closeOnEscape as eG,
-  ConnectFlowCard as eH,
-  ApprovalProofInline as eI,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eJ,
-  fetchPackageFirewallStatus as eK,
-  runPackageAudit as eL,
-  resolveSupplyChainAuditFailure as eM,
-  runPackageSync as eN,
-  GuardOperationTimeoutError as eO,
-  startPackageFirewallConnect as eP,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as eQ,
-  repairSupplyChainProtection as eR,
-  runPackageFirewallAction as eS,
-  parseInterceptProofSnapshot as eT,
-  activatePackageFirewallRuntime as eU,
-  EntitlementNotice as eV,
-  chooseSupplyChainAuditFolder as eW,
-  fetchReceipts as eX,
-  lazyWorkspace as eY,
-  __vitePreload as eZ,
-  scopeLabel as e_,
-  runHarnessAction as ea,
-  GuardHarnessActionError as eb,
-  HiMiniRocketLaunch as ec,
-  HiMiniTrash as ed,
-  fetchGuardApi as ee,
-  formatHarnessCommand as ef,
-  fetchApprovalPage as eg,
-  fetchPolicy as eh,
-  appSetupTarget as ei,
-  guardActionPresentation as ej,
-  DEFAULT_FILTER_STATE as ek,
-  filterEvidence as el,
-  sortEvidence as em,
-  computeMetrics as en,
-  CommandActivityWorkspace as eo,
-  EvidenceFilterBar as ep,
-  EvidenceInsightStrip as eq,
-  EvidenceActionList as er,
-  EvidenceActionDetail as es,
-  policyIdentityKey as et,
-  clearLabelForScope as eu,
-  HiMiniChartBar as ev,
-  HiMiniCheckBadge as ew,
-  isSupplyChainAuditIncomplete as ex,
-  isSupplyChainAuditEvidence as ey,
-  readString$1 as ez,
-  fetchContextAssistance as f,
-  HiMiniCodeBracket as f0,
-  HiMiniUsers as f1,
-  HiMiniIdentification as f2,
-  policyActionLabel as f3,
-  createCloudExceptionRequest as f4,
-  HiMiniPuzzlePiece as f5,
-  fetchCloudExceptions as f6,
-  fetchCloudExceptionRequests as f7,
-  PaginationControls as f8,
-  PolicyStatField as f9,
-  HiMiniInbox as fa,
-  HiMiniQueueList as fb,
-  Surface as fc,
-  HiMiniEllipsisHorizontal as fd,
-  HiMiniMinus as fe,
-  HiMiniWrench as ff,
-  HiMiniArrowLongRight as fg,
-  fetchReleaseFeedApi as fh,
-  fetchMcpPolicyRequest as fi,
-  resolveMcpPolicyRequest as fj,
-  HiMiniDocumentPlus as fk,
-  HiMiniChevronLeft as fl,
-  HiMiniArrowDown as fm,
-  HiMiniArrowUp as fn,
-  runAuditRemediation as fo,
-  isBlockedGuardAction as fp,
-  isSupplyChainScannerEvidence as fq,
-  HiMiniSignal as fr,
-  HiMiniChevronDown as g,
-  harnessDisplayName as h,
-  HiMiniArrowPath as i,
+  fetchCommandActivityApi as U,
+  getRecoveryCapabilities as V,
+  recoveryRunsInDesktopWindow as W,
+  resolveDesktopWindowRecoveryInstructions as X,
+  resolveRecoveryInstructions as Y,
+  HiMiniShieldExclamation as Z,
+  __vitePreload as _,
+  fetchContextAssistance as a,
+  harnessPostureRows as a$,
+  HiMiniClipboardDocument as a0,
+  openRecoveryView as a1,
+  useReceiptAnalytics as a2,
+  approvalProofUsesPulse as a3,
+  useProtectionPresentationState as a4,
+  protectionHealthFor as a5,
+  unavailableProtectionHealth as a6,
+  buildHomeRuntimeErrorCopy as a7,
+  RuntimeErrorState as a8,
+  watchBannerModel as a9,
+  remainingProtectionRepairParts as aA,
+  protectionGapSignature as aB,
+  repairOutcomeIsStalled as aC,
+  ProtectionRepairFlowError as aD,
+  nextProtectionRepairOutcome as aE,
+  waitForAuthorizeUrl as aF,
+  startOrRecoverCloudConnect as aG,
+  safeCloudConnectUrl as aH,
+  openPackageFirewallAuthorizeFallback as aI,
+  waitForCloudConnection as aJ,
+  activeFailedHarnesses as aK,
+  resetRepairOutcomeTracker as aL,
+  HiMiniWrenchScrewdriver as aM,
+  useFleetAppPosture as aN,
+  harnessRowTone as aO,
+  appModesNote as aP,
+  harnessRowStatus as aQ,
+  HiMiniEye as aR,
+  HiMiniXCircle as aS,
+  GuardHero as aT,
+  ProofStrip as aU,
+  HiMiniClipboardDocumentCheck as aV,
+  HiMiniClipboard as aW,
+  fetchResolvedApprovalGate as aX,
+  ApprovalProofModal as aY,
+  PROTECTION_POSTURE_COPY as aZ,
+  POSTURE_OUTCOME_COLUMNS as a_,
+  WatchProtectionBanner as aa,
+  EvidenceInsightsShareModal as ab,
+  OperatorHealthCard as ac,
+  HiMiniShieldCheck as ad,
+  DeviceProofCard as ae,
+  guardActionDisposition as af,
+  approvalLeftActionStopped as ag,
+  guardActionActivityCopy as ah,
+  approvalProofRequiresPassword as ai,
+  HiMiniSparkles as aj,
+  HiMiniXMark as ak,
+  EmptyState as al,
+  resolveCloudIntelCopy as am,
+  HiMiniCloud as an,
+  HiMiniQuestionMarkCircle as ao,
+  useFocusTrap as ap,
+  HiMiniExclamationTriangle as aq,
+  HiMiniBolt as ar,
+  Badge as as,
+  HiMiniMinusCircle as at,
+  buildDaemonErrorCopy as au,
+  isUnsupportedPlatformCheck as av,
+  RECHECK_UNAVAILABLE_SIGNATURE as aw,
+  protectionReasonText as ax,
+  HiMiniExclamationCircle as ay,
+  hasRepairableProtectionGap as az,
+  HiMiniCommandLine as b,
+  parseContextAssistanceStatus as b$,
+  overrideRows as b0,
+  harnessPostureSummary as b1,
+  joinNames as b2,
+  sortHarnessRows as b3,
+  globalPosture as b4,
+  selectHarnessPosture as b5,
+  restartHarnessWatch as b6,
+  harnessWatchPrompt as b7,
+  harnessPostureOptions as b8,
+  canRestartHarnessWatch as b9,
+  SettingsSaveProofModal as bA,
+  revokeContextAgentSession as bB,
+  grantContextWorkspace as bC,
+  authorizeContextAgentSession as bD,
+  ContextAssistanceApiError as bE,
+  ask as bF,
+  parseContextScope as bG,
+  validContextBrokerRevision as bH,
+  isGuardDemoMode as bI,
+  commitDashboardLocation as bJ,
+  HiMiniArrowUturnLeft as bK,
+  HiMiniCodeBracketSquare as bL,
+  HiMiniHome as bM,
+  HiMiniFolderPlus as bN,
+  HiMiniClock as bO,
+  HiMiniFolderOpen as bP,
+  manageContextWorkspace as bQ,
+  compileWorkspaceContext as bR,
+  HiMiniChatBubbleLeftEllipsis as bS,
+  HiMiniDocumentMagnifyingGlass as bT,
+  HiMiniPower as bU,
+  HiMiniEyeSlash as bV,
+  HiMiniCpuChip as bW,
+  HiMiniAcademicCap as bX,
+  HiMiniArrowLeft as bY,
+  subscribeDashboardLocation as bZ,
+  HiMiniChatBubbleLeftRight as b_,
+  getDefaultExportFromCjs as ba,
+  React as bb,
+  PULSE_FACE_SCAN_OPTIONS as bc,
+  authorizeApprovalGatePulseSetup as bd,
+  confirmApprovalGatePulseEnrollment as be,
+  waitForPulseApproval as bf,
+  beginApprovalGatePulseEnrollment as bg,
+  GuardModalLayer as bh,
+  SelectMenu as bi,
+  disableApprovalGatePulse as bj,
+  setApprovalGatePulseShowCommand as bk,
+  recoverApprovalGatePulse as bl,
+  HiMiniBellAlert as bm,
+  HiMiniAdjustmentsHorizontal as bn,
+  TabBar as bo,
+  fetchCloudReviewSettings as bp,
+  ApprovalProofFieldInputs as bq,
+  isApprovalProofSubmitDisabled as br,
+  buildApprovalProofCredentials as bs,
+  changeCloudReviewSettings as bt,
+  isRecord$5 as bu,
+  HiMiniArrowTopRightOnSquare as bv,
+  engineLabel as bw,
+  HiMiniPauseCircle as bx,
+  listContextAgentSessions as by,
+  HiMiniLink as bz,
+  HiMiniFolder as c,
+  applyExtensionMutation as c$,
+  fetchContextInstallations as c0,
+  turnOnJob as c1,
+  shouldResumeTurnOn as c2,
+  turnOnRequestedAt as c3,
+  forgetTurnOn as c4,
+  rememberTurnOn as c5,
+  forgetTurnOnClick as c6,
+  rememberTurnOnJob as c7,
+  HiMiniArrowDownTray as c8,
+  downloadBlob as c9,
+  settingsWatchBannerModel as cA,
+  WorkspacePageHeader as cB,
+  navigateFromAnchor as cC,
+  resolveSettingsSaveProofModalCopy as cD,
+  humanizeList as cE,
+  isProtectionPosture as cF,
+  deriveProtectionPosture as cG,
+  normalizeHarnessPostures as cH,
+  approvalGateCooldownLabel as cI,
+  fetchExtensionCatalog as cJ,
+  ExtensionControlApiError as cK,
+  normalizeExtensionCatalogSummary as cL,
+  normalizeExtensionPermission as cM,
+  ExtensionControlProtocolError as cN,
+  normalizeExtensionCatalogItem as cO,
+  guardApiCacheScope as cP,
+  fetchExtensionCatalogV2Api as cQ,
+  localPermissionDraftState as cR,
+  setLocalPermissionDraftState as cS,
+  extensionPolicyAuthorityUnchanged as cT,
+  newExtensionPolicyDraftIdentity as cU,
+  extensionPolicyDraftIsDirty as cV,
+  setLocalPermissionDraftStates as cW,
+  buildExtensionPolicyDraftMutation as cX,
+  fetchEffectiveExtensionControls as cY,
+  previewExtensionMutation as cZ,
+  isCurrentExtensionPolicyDraft as c_,
+  savedEvidenceCopy as ca,
+  guardAwareHref as cb,
+  fetchContextData as cc,
+  forgetContextHistory as cd,
+  forgetSavedEvidence as ce,
+  resolveProtectionLevelCopy as cf,
+  fetchSettings as cg,
+  fetchRuntimeSnapshot as ch,
+  clearHarnessWatchOverrides as ci,
+  withHarnessPosturePatch as cj,
+  updateSettings as ck,
+  clearPolicy as cl,
+  clearReviewQueue as cm,
+  revokeApprovalGateCooldown as cn,
+  disableApprovalGateTotp as co,
+  importSettings as cp,
+  resetSettings as cq,
+  resolveSettingsSaveProofKind as cr,
+  requiresSettingsSaveProof as cs,
+  enrollApprovalGateTotp as ct,
+  verifyApprovalGateTotp as cu,
+  clearEvidence as cv,
+  exportDiagnostics as cw,
+  repairApprovalCenter as cx,
+  exportSettings as cy,
+  setupDesktopNotifications as cz,
+  HiMiniCircleStack as d,
+  profileSetupCommand as d$,
+  fetchExtensionControlHistory as d0,
+  managedPermissionState as d1,
+  controlProvenance as d2,
+  treatmentLabel as d3,
+  useResolvedApprovalGate as d4,
+  groupPermissionsByFamily as d5,
+  HiMiniInformationCircle as d6,
+  LocalCliApiError as d7,
+  hasSuggestedRules as d8,
+  approvalProofRecentlySatisfied as d9,
+  recognizeLocalCli as dA,
+  preferredPackageScriptExtension as dB,
+  looksLikePackageScriptPaste as dC,
+  enrollmentCommandStates as dD,
+  isBulkApproveGateReady as dE,
+  fetchLocalCliList as dF,
+  normalizeLocalCliList as dG,
+  unreviewedToolChangeCount as dH,
+  connectorSetupMatch as dI,
+  refreshMcpInventory as dJ,
+  connectorGroupOutcome as dK,
+  allowedEarlierVersion as dL,
+  startGuardCloudConnect as dM,
+  extensionEffectiveState as dN,
+  permissionEffectiveState as dO,
+  fetchExtensionControlApi as dP,
+  permissionForRule as dQ,
+  refreshEffectiveExtensionControls as dR,
+  fetchExtensionDiscoveryApi as dS,
+  startCancelableDiscoveryJob as dT,
+  waitForMcpDiscoveryJob as dU,
+  isLocalCliId as dV,
+  localCliHref as dW,
+  fetchPluginUpdatesApi as dX,
+  filterCodexHostApps as dY,
+  connectorWorkspaceItems as dZ,
+  customExtensionNeedsReview as d_,
+  StyledSelect as da,
+  bulkCommandState as db,
+  fetchLocalCliApi as dc,
+  ExtensionBrandMark as dd,
+  fetchMcpProviderActions as de,
+  connectorSetupReady as df,
+  shortIdentity as dg,
+  customExtensionDisplayName as dh,
+  previewLocalCliMutation as di,
+  applyLocalCliMutation as dj,
+  LOCAL_CLI_CAPABILITIES as dk,
+  loadLocalCliCommands as dl,
+  DiscoveryFailure as dm,
+  readJson as dn,
+  enrollablePackageScriptCommands as dp,
+  seenSuggestionMeta as dq,
+  looksLikeProjectRelocatePaste as dr,
+  packageScriptFilterNeedle as ds,
+  initialAddCommand as dt,
+  suggestedPackageScriptExtensions as du,
+  filterExtensionSuggestions as dv,
+  suggestedHarnessExtensions as dw,
+  suggestedSeenExtensions as dx,
+  keepsPackageScriptCatalog as dy,
+  prefillSuggestedStates as dz,
+  HiMiniSquares2X2 as e,
+  GuardOperationTimeoutError as e$,
+  customExtensionBadge as e0,
+  extensionDisplayName as e1,
+  catalogRowSecondLine as e2,
+  extensionStateLabel as e3,
+  HiMiniGlobeAlt as e4,
+  HiMiniFunnel as e5,
+  discoveryFailureMessage as e6,
+  refreshCodexHostInventory as e7,
+  CODEX_HOST_FALLBACK as e8,
+  CONFIGURED_CONNECTIONS_FALLBACK as e9,
+  CommandActivityWorkspace as eA,
+  EvidenceFilterBar as eB,
+  EvidenceInsightStrip as eC,
+  EvidenceActionList as eD,
+  EvidenceActionDetail as eE,
+  policyIdentityKey as eF,
+  clearLabelForScope as eG,
+  HiMiniChartBar as eH,
+  HiMiniCheckBadge as eI,
+  isSupplyChainAuditIncomplete as eJ,
+  isSupplyChainAuditEvidence as eK,
+  readString$1 as eL,
+  IconActionButton as eM,
+  HiMiniBeaker as eN,
+  HiMiniBugAnt as eO,
+  ActivationSummary as eP,
+  ActionResultPanel as eQ,
+  fetchSupplyChainBundle as eR,
+  closeOnEscape as eS,
+  ConnectFlowCard as eT,
+  ApprovalProofInline as eU,
+  HiMiniCloudArrowDown as eV,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eW,
+  fetchPackageFirewallStatus as eX,
+  runPackageAudit as eY,
+  resolveSupplyChainAuditFailure as eZ,
+  runPackageSync as e_,
+  loadCurrentDashboardBuild as ea,
+  canonicalExtensionId as eb,
+  extensionDetailHref as ec,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as ed,
+  addCustomExtensionPrefillHref as ee,
+  acknowledgeDegradedExtensionControlAuthority as ef,
+  recoverExtensionControlAuthority as eg,
+  connectorSetupLinkFromSearch as eh,
+  readExtensionDetailUrlState as ei,
+  parseProtectionRoute as ej,
+  addCustomExtensionHref as ek,
+  runHarnessAction as el,
+  GuardHarnessActionError as em,
+  HiMiniRocketLaunch as en,
+  HiMiniTrash as eo,
+  fetchGuardApi as ep,
+  formatHarnessCommand as eq,
+  appModes as er,
+  fetchApprovalPage as es,
+  fetchPolicy as et,
+  appSetupTarget as eu,
+  guardActionPresentation as ev,
+  DEFAULT_FILTER_STATE as ew,
+  filterEvidence as ex,
+  sortEvidence as ey,
+  computeMetrics as ez,
+  fetchWithGuardAuth as f,
+  startPackageFirewallConnect as f0,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f1,
+  repairSupplyChainProtection as f2,
+  runPackageFirewallAction as f3,
+  parseInterceptProofSnapshot as f4,
+  activatePackageFirewallRuntime as f5,
+  EntitlementNotice as f6,
+  chooseSupplyChainAuditFolder as f7,
+  fetchReceipts as f8,
+  lazyWorkspace as f9,
+  HiMiniArrowUp as fA,
+  HiMiniChevronLeft as fB,
+  HiMiniArrowDown as fC,
+  runAuditRemediation as fD,
+  isBlockedGuardAction as fE,
+  isSupplyChainScannerEvidence as fF,
+  HiMiniSignal as fG,
+  scopeLabel as fa,
+  HiMiniCloudArrowUp as fb,
+  HiMiniCodeBracket as fc,
+  HiMiniUsers as fd,
+  HiMiniIdentification as fe,
+  policyActionLabel as ff,
+  createCloudExceptionRequest as fg,
+  HiMiniPuzzlePiece as fh,
+  fetchCloudExceptions as fi,
+  fetchCloudExceptionRequests as fj,
+  PaginationControls as fk,
+  PolicyStatField as fl,
+  HiMiniInbox as fm,
+  HiMiniQueueList as fn,
+  Surface as fo,
+  HiMiniEllipsisHorizontal as fp,
+  HiMiniMinus as fq,
+  HiMiniWrench as fr,
+  HiMiniArrowLongRight as fs,
+  HiMiniArrowUpCircle as ft,
+  fetchReleaseFeedApi as fu,
+  fetchMcpPolicyRequest as fv,
+  resolveMcpPolicyRequest as fw,
+  HiMiniDocumentPlus as fx,
+  HiMiniKey as fy,
+  HiMiniArrowUpRight as fz,
+  HiMiniComputerDesktop as g,
+  HiMiniMagnifyingGlass as h,
+  HiMiniListBullet as i,
   jsxRuntimeExports as j,
-  HiMiniCheck as k,
-  HiMiniNoSymbol as l,
-  HiMiniHandRaised as m,
-  normalizeHarnessSlug as n,
-  HiMiniArrowUpTray as o,
-  HiMiniCube as p,
-  HiMiniPencilSquare as q,
+  HiMiniArrowPath as k,
+  listContextWorkspaces as l,
+  loadWorkspaceModule as m,
+  browserSessionStorage as n,
+  controlContextAssistance as o,
+  contextStatusCopy as p,
+  HiMiniChevronRight as q,
   reactExports as r,
-  HiMiniCommandLine as s,
-  HiMiniMagnifyingGlass as t,
-  HiMiniDocumentText as u,
-  HiMiniCheckCircle as v,
-  HiMiniArrowRight as w,
-  isConnectableAppHarness as x,
-  HiMiniLockClosed as y,
-  getHeatmapLevel as z
+  formatRelativeTime as s,
+  harnessDisplayName as t,
+  formatNumber as u,
+  normalizeHarnessSlug as v,
+  HiMiniChevronUp as w,
+  HiMiniChevronDown as x,
+  HiMiniCheck as y,
+  HiMiniNoSymbol as z
 };

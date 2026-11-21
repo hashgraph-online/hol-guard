@@ -26,7 +26,7 @@ from .fleet_posture_common import iso, keyed_digest, parse_timestamp
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..adapters.base import HarnessContext
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -135,7 +135,7 @@ def _cache_scope(
 def _observe(
     context: HarnessContext, now: datetime, advisory: tuple[Mapping[str, object] | None, str | None]
 ) -> Mapping[str, Any]:
-    from ..adapters.harness_mcp_discovery import configured_harness_detections
+    from ..mcp_discovery_client import configured_harness_detections
     from ..runtime_posture import build_runtime_posture
 
     skipped: list[str] = []

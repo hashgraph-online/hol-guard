@@ -211,12 +211,17 @@ def native_launch_plan(
 
 def decode_native_plan(result: dict[str, Any], profiles: tuple[str, ...]):
     """Decode one profile-bound native DTO for every contained runner."""
-    from .runtime.restricted_pytest_model import RestrictedPytestPlan
+    from .runtime.restricted_pytest_model import READ_ONLY_ROOT_PROFILES, RestrictedPytestPlan
 
     scalars = {"profile_version", "backend", "backend_executable", "workspace", "cwd", "executable"}
     arrays = {"command", "allowed_executables", "denied_capabilities"}
-    # Only a Git plan grants read-only roots: its linked worktree metadata.
-    if result.get("profile_version") == "git-readonly-v1":
+    # Only a plan that runs Git grants read-only roots: its linked worktree
+    # metadata. A Git plan always names them; an inline program only when it
+    # runs Git from a linked worktree.
+    profile_version = result.get("profile_version")
+    if profile_version == "git-readonly-v1" or (
+        profile_version in READ_ONLY_ROOT_PROFILES and "read_only_roots" in result
+    ):
         arrays.add("read_only_roots")
     # Only a native build plan names the directories it may write.
     if result.get("profile_version") == "node-build-output-v1" and "output_roots" in result:

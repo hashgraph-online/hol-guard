@@ -296,26 +296,22 @@ def test_a_changed_launch_file_does_not_hide_why_guards_path_missed(tmp_path, to
     assert probes.calls == []
 
 
-def test_a_cancel_stops_further_help_runs(tool, monkeypatch):
+def test_a_cancel_reaches_the_native_discovery(tool, monkeypatch):
     import threading
 
-    started: list[tuple[str, ...]] = []
+    # The native command stops every --help it started once the event is set
+    # (``codex_hook_launch_runtime.run_isolated_hook_process``'s stop_event).
+    handed: list[object] = []
     cancel = threading.Event()
 
-    def help_once(argv):
-        started.append(tuple(argv))
-        cancel.set()
-        return "Usage: fixturetool <command>\n\nCommands:\n  deploy  Ship it\n  status  Show state\n"
+    def discover(identity, argv, *, cancel=None):
+        handed.append(cancel)
+        return (), "failed"
 
-    monkeypatch.setattr(local_cli_api, "run_cli_help", help_once)
-    # The fixture script never looks for --help, so a resident that reads
-    # sources first would not run it at all; this covers the nested probes.
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_local_cli_help_parse.resident_reads_sources_first", lambda: False
-    )
+    monkeypatch.setattr(local_cli_api, "discover_local_cli_commands", discover)
     home = Path(os.environ["HOME"])
     local_cli_api._discover_from_command(tool.name, tool, home, home, home / "guard", cancel=cancel)
-    assert len(started) == 1
+    assert handed == [cancel]
 
 
 @pytest.fixture

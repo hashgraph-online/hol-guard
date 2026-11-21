@@ -7,18 +7,20 @@ import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
-from ..desktop_core_currency import OUT_OF_SYNC_REASON, superseded_desktop_core
 from ..native_restricted_pytest import contained_target
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
-from .contained_authority import authority_unavailable, settled_authority
+from .contained_authority import settled_authority
 from .contained_command_prefix import (
     _assignments_applied,
     _peel_for_receipt,
     _split_command_prefix,
     command_words,
     peel_run_prefixes,
+    planned_route_argv,
 )
 from .contained_run_directory import as_directory_change, as_run_root
+from .contained_test_request import _contained_receipt, _names_pytest, _reject, contained_expectation
+from .contained_test_request import read_contained_test_request as read_contained_test_request
 from .contained_wrapper import anchored_sibling_root, bounded_output, peel_contained_wrapper, sibling_project_root
 from .restricted_inline_eval import prepare_restricted_inline_eval, run_restricted_inline_eval
 from .restricted_package_test import (
@@ -29,87 +31,12 @@ from .restricted_package_test import (
 )
 from .restricted_pytest import RestrictedPytestError, prepare_restricted_pytest, run_restricted_pytest
 from .restricted_pytest_model import (
-    GIT_READ_ONLY_PROFILE_VERSION,
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
-    NODE_TEST_READ_ONLY_PROFILE_VERSION,
     PYTEST_INVALID_COMMAND_REASON_CODE,
-    PYTEST_READ_ONLY_PROFILE_VERSION,
     VITEST_READ_ONLY_PROFILE_VERSION,
 )
 from .restricted_pytest_validation import _path_is_within
 from .restricted_workspace import receipt_matches, run_workspace_contained
-
-_FAILURE = "contained_run_authorization_failed"
-
-
-def _reject(response: object = None) -> RestrictedPytestError:
-    # Only an unavailable *rejected receipt* may change the error wording.
-    # Shape validation and unrelated later rejections must not inherit state
-    # from a previous native authority call in this process.
-    if authority_unavailable(response) and isinstance(response, Mapping):
-        superseded = superseded_desktop_core()
-        if superseded is not None:
-            return RestrictedPytestError(OUT_OF_SYNC_REASON, superseded.message())
-        reason = response.get("reason_code")
-        return RestrictedPytestError(
-            _FAILURE,
-            f"Guard's native policy runtime did not answer ({reason}), so this command was not run. "
-            "Try it again; if it keeps failing, run `hol-guard repair`.",
-        )
-    return RestrictedPytestError(_FAILURE, "Guard could not authorize this contained run.")
-
-
-def _names_pytest(command: list[str] | None) -> bool:
-    """Whether native authority reads `command` as a pytest run.
-
-    Only the wording of a refusal turns on this, and the planners' own reading
-    is what chose that wording, so the question goes back to them rather than to
-    a second copy of their grammar here. The copy that stood here read `python
-    -Im pytest -q` as something other than pytest, because it looked for `-m` as
-    a whole word while the planners read the `m` inside the cluster.
-
-    A command the planners never reached, or an answer native authority cannot
-    give, reports the authorization that failed, exactly as an unrecognized
-    command does.
-    """
-    if not command:
-        return False
-    from ..native_restricted_pytest import restricted_native
-
-    try:
-        return restricted_native("pytest_command", {"command": command}, bool) is True
-    except RestrictedPytestError:
-        return False
-
-
-def read_contained_test_request(path: Path, expected_sha256: str, *, workspace: Path) -> dict[str, object]:
-    """Read one bounded private adapter snapshot, without following its leaf.
-
-    Native authority reads it where and as the hook wrote it, at the digest
-    the rewritten command pins; any other answer refuses the run.
-    """
-    from ..native_restricted_pytest import restricted_native
-
-    try:
-        return restricted_native(
-            "contained_test_request",
-            {"path": path, "sha256": expected_sha256, "workspace": workspace},
-            dict,
-        )
-    except RestrictedPytestError as error:
-        if error.reason_code != _FAILURE and (superseded := superseded_desktop_core()) is not None:
-            raise RestrictedPytestError(OUT_OF_SYNC_REASON, superseded.message()) from error
-        raise _reject() from error
-
-
-def _contained_receipt(receipt: object) -> bool:
-    return (
-        isinstance(receipt, Mapping)
-        and receipt.get("decision") == "deny"
-        and receipt.get("policy_action") == "sandbox-required"
-        and isinstance(receipt.get("required_execution_profile"), str)
-        and receipt.get("observe_mode") is not True
-    )
 
 
 def run_authorized_contained_test(
@@ -155,6 +82,25 @@ def run_authorized_contained_test(
             )
             first = settled_authority(authorize, rooted) if bounded else None
             if receipt_matches(first) and isinstance(first, Mapping):
+                rooted_input = rooted["tool_input"]
+                if (
+                    isinstance(rooted_input, dict)
+                    and contained_target(str(rooted_input["command"]), cwd=root, home_dir=home_dir) is not None
+                ):
+                    # A home-spelled launcher, a trailing group or a virtualenv
+                    # activation was answered for its projection, and the
+                    # workspace planner plans only that text. The rooted call
+                    # carries no `cwd` argument, so it takes the projection
+                    # path below, as the runtime's own sink does.
+                    return run_authorized_contained_test(
+                        rooted,
+                        workspace=root,
+                        authorize=authorize,
+                        timeout_seconds=timeout_seconds,
+                        cwd=root,
+                        home_dir=home_dir,
+                        merge_stderr=merge_stderr,
+                    )
                 return run_workspace_contained(
                     rooted,
                     workspace=root,
@@ -397,28 +343,28 @@ def run_authorized_contained_test(
                 raise _reject(receipt) from error
             raise
         return exit_code
+    # Authorize after planning so the live decision follows every file the
+    # planner read. Rust may still pick the workspace sandbox for this shape.
+    receipt = settled_authority(authorize, payload)
+    exit_code = run_workspace(receipt)
+    if exit_code is not None:
+        return exit_code
+    # Native authority names the receipt this planned run must carry, from the
+    # same reason table the hook renders receipts with. A run the workspace
+    # sandbox took never needs it, so it is asked only once that sandbox declines.
     if inline_plan is not None:
-        profile = inline_plan.profile_version
-        if profile == "node-eval-readonly-v1" and Path(command[0]).name == "bun":
-            reason = "native_bun_eval_readonly_containment_required"
-        elif profile == "node-eval-readonly-v1":
-            reason = "native_node_eval_readonly_containment_required"
-        else:
-            reason = "native_python_eval_readonly_containment_required"
+        kind, plan_profile = "inline_eval", inline_plan.profile_version
     elif node_tool_plan is not None:
-        profile = node_tool_plan.profile_version
-        if profile == NODE_BUILD_OUTPUT_PROFILE_VERSION:
-            reason = "native_node_build_output_containment_required"
-        else:
-            reason = "native_node_tool_readonly_containment_required"
+        kind, plan_profile = "node_tool", node_tool_plan.profile_version
     elif git:
-        reason, profile = "native_git_readonly_containment_required", GIT_READ_ONLY_PROFILE_VERSION
+        kind, plan_profile = "git", None
     elif vitest:
-        reason, profile = "native_vitest_readonly_containment_required", VITEST_READ_ONLY_PROFILE_VERSION
+        kind, plan_profile = "vitest", None
     elif node_test:
-        reason, profile = "native_node_test_readonly_containment_required", NODE_TEST_READ_ONLY_PROFILE_VERSION
+        kind, plan_profile = "node_test", None
     else:
-        reason, profile = "native_pytest_readonly_containment_required", PYTEST_READ_ONLY_PROFILE_VERSION
+        kind, plan_profile = "pytest", None
+    reason, profile = contained_expectation(kind, plan_profile, command)
 
     def required(response: object, *, expected_reason: str = reason, expected_profile: str = profile) -> bool:
         return (
@@ -430,12 +376,6 @@ def run_authorized_contained_test(
             and response.get("observe_mode") is not True
         )
 
-    # Authorize after planning so the live decision follows every file the
-    # planner read. Rust may still pick the workspace sandbox for this shape.
-    receipt = settled_authority(authorize, payload)
-    exit_code = run_workspace(receipt)
-    if exit_code is not None:
-        return exit_code
     if not required(
         receipt,
         expected_reason=PACKAGE_TEST_REASON if package_test else reason,
@@ -478,7 +418,8 @@ def run_authorized_contained_test(
 
     # No shell and no unsandboxed retry: the required profile is the actual sink.
     if inline_plan is not None:
-        underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(inline_plan.command)}}
+        routed = shlex.join(planned_route_argv(inline_plan.command))
+        underlying = {**payload, "tool_input": {**tool_input, "command": routed}}
         underlying_receipt = settled_authority(authorize, underlying)
         if not required(underlying_receipt):
             raise _reject(underlying_receipt)
@@ -520,7 +461,8 @@ def run_authorized_contained_test(
             merge_stderr=merge_stderr,
         )
     if node_test_plan is not None:
-        underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_test_plan.command)}}
+        routed = shlex.join(planned_route_argv(node_test_plan.command))
+        underlying = {**payload, "tool_input": {**tool_input, "command": routed}}
         underlying_receipt = settled_authority(authorize, underlying)
         if not required(underlying_receipt):
             raise _reject(underlying_receipt)

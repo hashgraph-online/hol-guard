@@ -4,6 +4,7 @@ import { QueueConnectionError } from "./queue-connection-error";
 import {
   QUEUE_CONNECTION_ERROR_HEADLINE,
   QUEUE_CONNECTION_ERROR_INSTRUCTION,
+  QUEUE_DESKTOP_HANDOFF_HEADLINE,
   QUEUE_SESSION_COMMAND_INSTRUCTION,
   QUEUE_SESSION_ERROR_DETAIL,
   QUEUE_SESSION_ERROR_HEADLINE,
@@ -130,6 +131,36 @@ assert(
   !connectionWithRequestMarkup.includes("hol-guard-desktop://") &&
     !connectionWithRequestMarkup.includes("approvals open"),
   "A daemon that is down gets the start recovery, not the signed-session links",
+);
+
+const handedOffMarkup = renderToStaticMarkup(
+  createElement(QueueConnectionError, {
+    message: "unauthorized (401)",
+    approvalUrl: null,
+    requestId,
+    onRetry: () => undefined,
+    handedOffToDesktop: true,
+  }),
+);
+assert(
+  handedOffMarkup.includes(QUEUE_DESKTOP_HANDOFF_HEADLINE) &&
+    !handedOffMarkup.includes(QUEUE_SESSION_ERROR_HEADLINE) &&
+    handedOffMarkup.includes(`href="hol-guard-desktop://requests/${requestId}"`) &&
+    handedOffMarkup.includes("Open in HOL Guard Desktop again") &&
+    handedOffMarkup.includes(`hol-guard approvals open ${requestId}`),
+  "An unsigned request page that opened Desktop says so and keeps both ways back",
+);
+const handedOffWithoutRequest = renderToStaticMarkup(
+  createElement(QueueConnectionError, {
+    message: "unauthorized (401)",
+    approvalUrl: null,
+    handedOffToDesktop: true,
+  }),
+);
+assert(
+  handedOffWithoutRequest.includes(QUEUE_SESSION_ERROR_HEADLINE) &&
+    !handedOffWithoutRequest.includes(QUEUE_DESKTOP_HANDOFF_HEADLINE),
+  "Without a request id there is nothing Desktop could have opened",
 );
 
 console.log("queue-connection-error.test.ts: all tests passed");

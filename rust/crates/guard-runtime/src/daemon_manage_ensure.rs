@@ -24,6 +24,8 @@ use crate::daemon_policy_authority::{
 };
 
 use super::host::{self, Caller};
+use super::leftovers;
+use super::orphans;
 use super::records::{self, int, text};
 use super::retire::{self, Deadline};
 use super::start_progress::{self, clear_progress, load_progress, progress_is_live};
@@ -73,8 +75,14 @@ pub(super) enum Failure {
 impl Failure {
     pub(super) fn reply(self) -> Value {
         match self {
-            Self::Timeout(message) => json!({"error": message, "kind": "timeout"}),
-            Self::Runtime(message) => json!({"error": message, "kind": "runtime"}),
+            Self::Timeout(message) => {
+                let code = super::failure::code(true, &message);
+                json!({"error": message, "kind": "timeout", "code": code})
+            }
+            Self::Runtime(message) => {
+                let code = super::failure::code(false, &message);
+                json!({"error": message, "kind": "runtime", "code": code})
+            }
         }
     }
 }
@@ -129,17 +137,12 @@ pub(super) fn ensure(
         current,
     };
     let home = context.home().to_path_buf();
-    let initial_pending = records::load_pending(&home);
-    let initial_progress = load_progress(&home);
-    // Recorded start progress is settled under the start lock, where an
-    // expired launch is retired instead of blocking every later start.
-    if initial_progress.is_none()
-        && records::is_generation_bound(initial_pending.as_ref())
-        && !records::pending_is_resolved(&home)
-        && !retire::resolve_abandoned(caller, initial_pending.as_ref())
-    {
-        return Err(runtime(PREVIOUS_LAUNCH));
-    }
+    // A launch receipt and recorded start progress are settled only under
+    // the start lock. A receipt whose launcher is still alive is, most of the
+    // time, another starter handing off its daemon while it holds that lock;
+    // waiting for the lock lets that handoff clear the receipt instead of
+    // failing this start. An expired launch, or a daemon holding an abandoned
+    // receipt open, is retired there rather than blocking every later start.
     if let Some(url) = live_or_newer(&context) {
         return Ok(url);
     }
@@ -197,8 +200,8 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
                 None => return Ok(url),
                 Some(port) if url_port(&url) == Some(port) => return Ok(url),
                 Some(_) => {
-                    retire::retire_all(caller, None, deadline);
-                    if !retire::retirement_is_complete(caller) {
+                    retire::retire_all(caller, None, "port_change", deadline);
+                    if !retire::retirement_is_complete(caller, deadline) {
                         return Err(runtime(
                             "Existing Guard daemon could not be retired safely.",
                         ));
@@ -213,8 +216,10 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         && load_authenticated_daemon_identity(&home).is_none()
         && (request.background_maintenance || !records::is_exact_tombstone(&state_path))
     {
-        retire::retire_all(caller, None, deadline);
-        if !records::is_exact_tombstone(&state_path) && !retire::retirement_is_complete(caller) {
+        retire::retire_all(caller, None, "untrusted_state", deadline);
+        if !records::is_exact_tombstone(&state_path)
+            && !retire::retirement_is_complete(caller, deadline)
+        {
             return Err(runtime(
                 "Untrusted Guard daemon state could not be retired safely.",
             ));
@@ -243,8 +248,8 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
                 if progress_live {
                     return Err(still_starting(&home));
                 }
-                retire::retire_all(caller, None, deadline);
-                if !retire::retirement_is_complete(caller) {
+                retire::retire_all(caller, None, "unhealthy_published", deadline);
+                if !retire::retirement_is_complete(caller, deadline) {
                     return Err(runtime(IN_PROGRESS));
                 }
             }
@@ -260,8 +265,8 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
             }
             // `retire_all` never signals a launch whose receipt is open; its
             // marker stays until the window passes and a later start retires it.
-            retire::retire_all(caller, None, deadline);
-            if !retire::retirement_is_complete(caller) {
+            retire::retire_all(caller, None, "stalled_start", deadline);
+            if !retire::retirement_is_complete(caller, deadline) {
                 return Err(still_starting(&home));
             }
             clear_progress(&home);
@@ -272,14 +277,17 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
     let pending_path = records::pending_path(&home);
     let pending = records::load_pending(&home);
     if pending_path.is_file() || pending.is_some() {
+        if !progress_live {
+            orphans::release_abandoned_receipt(caller, &home, pending.as_ref(), deadline);
+        }
         if records::is_generation_bound(pending.as_ref())
             && !records::pending_is_resolved(&home)
-            && !retire::resolve_abandoned(caller, pending.as_ref())
+            && !retire::resolve_abandoned(caller, pending.as_ref(), deadline)
         {
             return Err(runtime(PREVIOUS_LAUNCH));
         }
         if host::nt() && !progress_live {
-            retire::retire_all(caller, None, deadline);
+            retire::retire_all(caller, None, "windows_pending_launch", deadline);
         }
         if !records::pending_is_resolved(&home) {
             return Err(runtime(PREVIOUS_LAUNCH));
@@ -289,13 +297,28 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
     if request.background_maintenance {
         retire::reap_orphaned_workers(caller, deadline);
     }
-    for port in candidate_ports(context) {
+    orphans::retire_unadopted(caller, deadline);
+    let ports = leftovers::free_ports(caller, candidate_ports(context), deadline)
+        .map_err(|message| runtime(&message))?;
+    for port in &ports {
         if deadline.passed() {
             break;
         }
-        if let Some(url) = launch_once(context, port)? {
-            return Ok(url);
+        match launch_once(context, *port) {
+            Ok(Some(url)) => return Ok(url),
+            Ok(None) => {}
+            // The launched process exited without a handoff. When another
+            // program holds every port Guard can use, that is why.
+            Err(Failure::Runtime(message))
+                if message == NOT_CONTAINED && super::failure::all_ports_in_use(&ports) =>
+            {
+                return Err(runtime(&super::failure::ports_in_use_message(&ports)));
+            }
+            Err(failure) => return Err(failure),
         }
+    }
+    if super::failure::all_ports_in_use(&ports) {
+        return Err(runtime(&super::failure::ports_in_use_message(&ports)));
     }
     Err(runtime(&format!(
         "Guard approval center did not start. Expected state file at {}.",
@@ -358,7 +381,15 @@ fn runtime_matches_current(current: &Map<String, Value>, payload: &Map<String, V
         return true;
     }
     if payload.get("source_root") == current_root {
-        return false;
+        // One install, two identities: one side predates the tree on disk.
+        // A process that cached its identity before an in-place upgrade must
+        // not retire the daemon the upgrade started, or the two retire each
+        // other's daemons in turn.
+        return crate::runtime_fingerprint::runs_installed_tree(
+            text(payload, "source_root"),
+            text(payload, "package_version"),
+            fingerprint,
+        );
     }
     if same_version {
         return true;
@@ -624,12 +655,36 @@ fn adopt(context: &Context<'_>) -> Option<String> {
         let (Ok(port16), Ok(pid32)) = (u16::try_from(port), u32::try_from(pid)) else {
             continue;
         };
-        let config = launch_config(context, port16, None)?;
-        if standalone::publish(home, &config, port16, pid32).is_ok() {
+        if publish_adopted(context, port16, pid32)? {
             return Some(format!("http://127.0.0.1:{port}"));
         }
     }
     None
+}
+
+/// Publishes the daemon answering on `port` as this home's daemon, unless the
+/// home's authenticated state already names it there.
+///
+/// A starter that found no live daemon and then waited on the start lock can
+/// reach adoption after another starter's daemon has finished starting. That
+/// daemon has published its own state; writing it again from this caller's
+/// launch configuration would stamp it with this caller's runtime identity,
+/// and an older caller would leave the current daemon looking stale to every
+/// later start. `None` when this caller's launch configuration is invalid.
+fn publish_adopted(context: &Context<'_>, port: u16, pid: u32) -> Option<bool> {
+    let home = context.home();
+    if state_names(home, port, pid) {
+        return Some(true);
+    }
+    let config = launch_config(context, port, None)?;
+    Some(standalone::publish(home, &config, port, pid).is_ok())
+}
+
+/// Whether the home's authenticated state names `pid` serving on `port`.
+fn state_names(home: &Path, port: u16, pid: u32) -> bool {
+    load_authenticated_daemon_identity(home).is_some_and(|(state, _)| {
+        int(&state, "pid") == Some(i64::from(pid)) && int(&state, "port") == Some(i64::from(port))
+    })
 }
 
 /// `_initialize_existing_guard_daemon`: the pid of a current daemon of this
@@ -685,11 +740,10 @@ fn retire_process(caller: &Caller, stale: &Map<String, Value>, deadline: Deadlin
     let marker = text(stale, "process_start_marker").filter(|marker| !marker.is_empty());
     let owner = text(stale, "user").filter(|owner| !owner.is_empty());
     match marker {
-        None => {
-            host::pid_is_proven_dead(pid)
-                || host::command_identity(caller, pid, Some(&caller.guard_home)) == Some(false)
+        None => host::pid_is_proven_dead(pid),
+        Some(marker) => {
+            retire::retire_generation(caller, pid, marker, owner, "stale_runtime", deadline)
         }
-        Some(marker) => retire::retire_generation(caller, pid, marker, owner, deadline),
     }
 }
 
@@ -765,7 +819,11 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
             Stdio::null()
         })
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(if native {
+            super::serve_stderr::daemon_stderr(home)
+        } else {
+            Stdio::null()
+        });
     // Breakaway first on Windows: the launcher's own job is closed when the
     // call returns and must not take the handed-off daemon with it. A job
     // that forbids breakaway refuses the spawn, so retry inside it.
@@ -800,11 +858,11 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
         // and signed progress marker, and the caller waits for its handoff.
         Ok(Handoff::StillStarting) => Err(still_starting(home)),
         Ok(Handoff::Missing) => {
-            terminate(&mut child);
+            terminate(context.caller, &mut child);
             Err(runtime(NOT_CONTAINED))
         }
         Err(failure) => {
-            terminate(&mut child);
+            terminate(context.caller, &mut child);
             Err(failure)
         }
     }
@@ -1006,9 +1064,16 @@ fn handoff_binds(
     !require_same_runtime || pending.get("runtime_fingerprint") == state.get("runtime_fingerprint")
 }
 
-/// `_terminate_spawned_guard_daemon`.
-fn terminate(child: &mut Child) {
+/// `_terminate_spawned_guard_daemon`. The child is this process's own, so
+/// its handle is its identity; the end of its launch is journaled first.
+/// A child that already exited was not retired, so it gets no record and
+/// no signal: its own exit record says why it stopped.
+fn terminate(caller: &Caller, child: &mut Child) {
+    if child_exited(child) {
+        return;
+    }
     let pid = i64::from(child.id());
+    retire::record_retirement(caller, pid, Some("launch_abandoned"), None);
     let wait = |child: &mut Child| {
         let until = Instant::now() + TERMINATE_WAIT;
         while Instant::now() < until {
@@ -1035,6 +1100,100 @@ fn terminate(child: &mut Child) {
 mod tests {
     use super::source_is_desktop_core;
 
+    #[cfg(unix)]
+    mod abandoned_launch {
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::Path;
+        use std::process::Command;
+        use std::time::{Duration, Instant};
+
+        use super::super::{child_exited, terminate, Caller};
+
+        fn caller(home: &Path) -> Caller {
+            Caller {
+                guard_home: home.to_path_buf(),
+                implicit_home: "/nonexistent-implicit-home/.hol-guard".into(),
+                own_pid: i64::from(std::process::id()),
+                parent_pid: i64::from(std::os::unix::process::parent_id()),
+                frozen_runtime: false,
+                frozen_parent_trusted: false,
+                executable_name: None,
+            }
+        }
+
+        fn retirements(home: &Path, pid: u32) -> usize {
+            std::fs::read_dir(home.join("daemon-lifecycle"))
+                .map(|entries| {
+                    entries
+                        .filter_map(Result::ok)
+                        .filter_map(|entry| std::fs::read(entry.path()).ok())
+                        .filter_map(|bytes| {
+                            serde_json::from_slice::<serde_json::Value>(&bytes).ok()
+                        })
+                        .filter(|event| {
+                            event["event"] == "retirement_requested" && event["pid"] == pid
+                        })
+                        .count()
+                })
+                .unwrap_or(0)
+        }
+
+        /// Waits until `pid` has exited, leaving it a zombie so that `terminate` still has to
+        /// reap it. A fixed sleep would race a slow runner.
+        fn wait_unreaped(pid: u32) {
+            let until = Instant::now() + Duration::from_secs(20);
+            while Instant::now() < until {
+                let state = Command::new("ps")
+                    .args(["-o", "stat=", "-p", &pid.to_string()])
+                    .output()
+                    .unwrap();
+                if String::from_utf8_lossy(&state.stdout)
+                    .trim_start()
+                    .starts_with('Z')
+                {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            panic!("child {pid} did not exit");
+        }
+
+        fn private_home() -> tempfile::TempDir {
+            let home = tempfile::tempdir().unwrap();
+            let mode = std::fs::Permissions::from_mode(0o700);
+            std::fs::set_permissions(home.path(), mode).unwrap();
+            home
+        }
+
+        #[test]
+        fn a_child_that_already_exited_is_not_recorded_as_retired() {
+            let home = private_home();
+            let mut child = Command::new("/bin/sh")
+                .args(["-c", "exit 3"])
+                .spawn()
+                .unwrap();
+            let pid = child.id();
+            // Wait for it to exit without reaping it, as a launch that died does.
+            wait_unreaped(pid);
+            terminate(&caller(home.path()), &mut child);
+            assert_eq!(retirements(home.path(), pid), 0);
+            assert!(child_exited(&mut child));
+        }
+
+        #[test]
+        fn a_running_child_is_recorded_and_stopped() {
+            let home = private_home();
+            let mut child = Command::new("/bin/sh")
+                .args(["-c", "sleep 30"])
+                .spawn()
+                .unwrap();
+            let pid = child.id();
+            terminate(&caller(home.path()), &mut child);
+            assert_eq!(retirements(home.path(), pid), 1);
+            assert!(child_exited(&mut child));
+        }
+    }
+
     #[test]
     fn desktop_core_shapes_match_only_desktop_layouts() {
         for shape in [
@@ -1053,3 +1212,11 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "daemon_manage_ensure_same_install_tests.rs"]
+mod same_install_tests;
+
+#[cfg(test)]
+#[path = "daemon_manage_ensure_adopt_tests.rs"]
+mod adopt_tests;

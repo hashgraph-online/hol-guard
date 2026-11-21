@@ -10,6 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard import local_trust_controller as local_trust_controller_module
 from codex_plugin_scanner.guard import store_policy_integrity_backend as policy_integrity_backend_module
+from codex_plugin_scanner.guard import store_policy_integrity_key_mint as policy_integrity_key_mint_module
 from codex_plugin_scanner.guard.local_trust_controller import resolve_passive_trust_state
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_command_control_authority import AUTHORITY_FILE_NAME, encode_authority
@@ -25,6 +26,7 @@ from codex_plugin_scanner.guard.store import (
     GuardStore,
     SystemKeyringSecretStore,
 )
+from codex_plugin_scanner.guard.store_base import _acquire_advisory_file_lock, _release_advisory_file_lock
 from codex_plugin_scanner.guard.store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
 
 
@@ -155,7 +157,7 @@ def test_linux_unavailable_legacy_keyring_does_not_replace_armed_native_key(
     assert store._policy_integrity_secret_material(create=True) == (None, None)
 
 
-def test_mirrored_policy_keyring_write_failure_keeps_existing_vault_value(
+def test_mirrored_policy_keyring_write_failure_falls_back_to_vault(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -167,11 +169,35 @@ def test_mirrored_policy_keyring_write_failure_keeps_existing_vault_value(
         raise RuntimeError("keyring unavailable")
 
     monkeypatch.setattr(primary, "set_secret", fail_write)
+    monkeypatch.setattr(primary, "get_secret_with_timeout", lambda *_args, **_kwargs: "old")
+    mirrored = MirroredPolicyIntegritySecretStore(primary, fallback)
+
+    mirrored.set_secret("integrity-key", "new")
+    assert mirrored.get_secret("integrity-key") == "new"
+    assert fallback.get_secret("integrity-key") == "new"
+
+
+def test_mirrored_policy_write_raises_when_both_stores_fail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = SystemKeyringSecretStore(service_name="hol-guard.test")
+    fallback = EncryptedFileSecretStore(tmp_path)
+
+    monkeypatch.setattr(
+        primary,
+        "set_secret",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("keyring unavailable")),
+    )
+    monkeypatch.setattr(
+        fallback,
+        "set_secret",
+        lambda *_args: (_ for _ in ()).throw(OSError("vault unavailable")),
+    )
     mirrored = MirroredPolicyIntegritySecretStore(primary, fallback)
 
     with pytest.raises(RuntimeError, match="keyring unavailable"):
         mirrored.set_secret("integrity-key", "new")
-    assert fallback.get_secret("integrity-key") == "old"
 
 
 def test_mirrored_policy_keyring_remains_readable_when_vault_fails(
@@ -231,3 +257,53 @@ def test_doctor_can_report_protected_after_linux_local_vault_repair(
     assert resolved.mode == "protected"
     assert resolved.trust_status.runtime_protection == "protected"
     assert resolved.trust_status.remembered_rules == "enforced"
+
+
+def test_first_mint_keeps_a_key_another_process_stored_after_the_empty_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_system_keyring(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    first = GuardStore(guard_home, prime_policy_integrity=False)
+    second = GuardStore(guard_home, prime_policy_integrity=False)
+    original_read = second._get_policy_integrity_secret_from_store
+    first_minted: list[tuple[bytes | None, str | None]] = []
+
+    def read_before_the_first_process_wrote(secret_id: str) -> str | None:
+        if not first_minted:
+            first_minted.append(first._policy_integrity_secret_material(create=True))
+            return None
+        return original_read(secret_id)
+
+    monkeypatch.setattr(second, "_get_policy_integrity_secret_from_store", read_before_the_first_process_wrote)
+
+    second_material = second._policy_integrity_secret_material(create=True)
+
+    assert first_minted[0][0] is not None
+    assert second_material == first_minted[0]
+    stored = GuardStore(guard_home, prime_policy_integrity=False)._policy_integrity_secret_material(create=False)
+    assert stored == first_minted[0]
+
+
+def test_a_mint_that_cannot_take_the_lock_writes_no_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_system_keyring(monkeypatch)
+    monkeypatch.setattr(policy_integrity_key_mint_module, "_MINT_LOCK_TIMEOUT_SECONDS", 0.05)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+    lock_path = guard_home / policy_integrity_key_mint_module.MINT_LOCK_FILE_NAME
+
+    with lock_path.open("a+b") as held:
+        _acquire_advisory_file_lock(held)
+        try:
+            assert store._policy_integrity_secret_material(create=True) == (None, None)
+        finally:
+            _release_advisory_file_lock(held)
+
+    assert GuardStore(guard_home, prime_policy_integrity=False)._policy_integrity_secret_material(create=False) == (
+        None,
+        None,
+    )

@@ -13,7 +13,7 @@ from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.mcp_contribution_loader import load_mcp_contribution_payloads
+from tests.mcp_contribution_loader import catalog_id_for_mcp_id, load_mcp_contribution_payloads
 
 from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
@@ -90,7 +90,7 @@ def test_resident_matches_the_recorded_expectations_for_every_bundled_package(
     assert sorted(native_batch) == sorted(case_batch)
     mismatches: list[str] = []
     for mcp_id, command, package, tool, state in native_batch:
-        catalog_id = "command." + mcp_id.replace(".", "-")
+        catalog_id = catalog_id_for_mcp_id(mcp_id)
         layer = _layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.ENABLED, lockdown=lockdown)
         store = _AuthorityStore((layer,))
         artifact = _artifact(_identity(command, package), tool)
@@ -158,3 +158,34 @@ def test_saved_approval_gate_allow_lifts_a_review_when_the_catalog_is_answered(t
     store, artifact = _store_with_saved_server_allow(tmp_path)
     lifted = _evaluate(tmp_path, store, artifact, {"uid": "button-1"})
     assert (lifted.action, lifted.source) == ("allow", "temporary-mcp-grant")
+
+
+@pytest.mark.parametrize("lockdown", [False, True])
+def test_rei_skills_pinned_and_unpinned_launches_enforce_review(lockdown: bool) -> None:
+    """The actual bundled contribution must protect installs and future tools."""
+    layer = _layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-rei-skills", ControlState.ENABLED, lockdown=lockdown)
+    store = _AuthorityStore((layer,))
+    for package in ("rei-skills@6.2.0", "rei-skills", "rei-skills@6.3.0"):
+        identity = build_mcp_server_identity(
+            config_path="", command="npx", args=("-y", package, "mcp"), transport="stdio"
+        )
+        for tool in ("rei_install_skill", "unlisted_tool", "rei_get_skill"):
+            artifact = _artifact(identity, tool)
+            for action in _ACTIONS:
+                if lockdown:
+                    expected = None if action == "block" else ("block", recorded()["source"], _LOCKDOWN_REASON)
+                else:
+                    state = "inherit" if tool == "rei_get_skill" else "review"
+                    expected = expected_decision(state, False, action)
+                assert extension_driver.apply_contributed_mcp_decision(store, artifact, action) == expected
+
+
+def test_rei_skills_inactive_and_cloud_only_enablement_contribute_no_decision() -> None:
+    artifact = _artifact(_identity("npx", "rei-skills@6.2.0"), "rei_install_skill")
+    catalog_id = "command.mcp-rei-skills"
+    for layers in (
+        (),
+        (_layer(ControlLayerKind.SIGNED_CLOUD, catalog_id, ControlState.ENABLED),),
+        (_layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.DISABLED),),
+    ):
+        assert extension_driver.apply_contributed_mcp_decision(_AuthorityStore(layers), artifact, "allow") is None

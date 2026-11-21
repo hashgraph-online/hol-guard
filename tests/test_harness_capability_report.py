@@ -9,7 +9,7 @@ import pytest
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
-from codex_plugin_scanner.guard.adapters.contracts import contract_for
+from codex_plugin_scanner.guard.setup_contracts import contract_for
 from scripts.harness_capability_report import (
     CAPABILITY_REPORT_SCHEMA,
     build_capability_report,

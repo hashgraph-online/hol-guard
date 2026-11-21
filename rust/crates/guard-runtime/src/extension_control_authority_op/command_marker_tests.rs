@@ -4,7 +4,9 @@
 
 use serde_json::{json, Value};
 
-use super::command_marker::{publish, sign_marker, MARKER_FILE};
+use super::command_marker::sign_marker;
+#[cfg(unix)]
+use super::command_marker::{publish, MARKER_FILE};
 
 const KEY: [u8; 32] = [7; 32];
 

@@ -77,10 +77,76 @@ pub fn sensitive_external_filename(path: &Path) -> bool {
     {
         return true;
     }
-    stem.replace(['-', '.'], "_")
-        .split('_')
-        .any(|token| !token.is_empty() && EXTERNAL_SENSITIVE_PARTS.contains(&token))
+    let joined = stem.replace(['-', '.'], "_");
+    let words: Vec<&str> = joined.split('_').filter(|word| !word.is_empty()).collect();
+    words.iter().enumerate().any(|(at, word)| match *word {
+        "token" | "tokens" => !design_system_token(&words, at),
+        other => EXTERNAL_SENSITIVE_PARTS.contains(&other),
+    })
 }
+
+/// Clear a token marker only when the immediately preceding word names a
+/// design value. A design word elsewhere cannot clear an API or vendor token:
+/// `brand-github-token` and `style_api_token` stay sensitive. Singular
+/// `theme-token` and `brand-token` may be access credentials, so they do not
+/// receive the design-document exception.
+pub(crate) fn design_system_token(words: &[&str], at: usize) -> bool {
+    let Some(previous) = at.checked_sub(1).and_then(|index| words.get(index)) else {
+        return false;
+    };
+    DESIGN_SYSTEM_WORDS.contains(previous)
+        && !(words[at] == "token" && matches!(*previous, "brand" | "brands" | "theme" | "themes"))
+        && !words
+            .iter()
+            .any(|word| CREDENTIAL_TOKEN_QUALIFIERS.contains(word))
+}
+
+/// Parts of a design system a token file is named for.
+const DESIGN_SYSTEM_WORDS: &[&str] = &[
+    "brand",
+    "brands",
+    "color",
+    "colors",
+    "colour",
+    "colours",
+    "design",
+    "designs",
+    "palette",
+    "palettes",
+    "spacing",
+    "style",
+    "styles",
+    "theme",
+    "themes",
+    "typography",
+    "typographies",
+];
+
+/// Explicit credential context overrides an otherwise adjacent design word.
+const CREDENTIAL_TOKEN_QUALIFIERS: &[&str] = &[
+    "access",
+    "api",
+    "auth",
+    "aws",
+    "bearer",
+    "credential",
+    "credentials",
+    "github",
+    "gitlab",
+    "key",
+    "login",
+    "npm",
+    "oauth",
+    "private",
+    "refresh",
+    "secret",
+    "secrets",
+    "service",
+    "session",
+    "shopify",
+    "slack",
+    "stripe",
+];
 
 /// Code syntax eligible for source inspection. Data formats such as JSON,
 /// TOML, YAML, and Markdown still require credential-name and glob checks.
@@ -586,7 +652,7 @@ fn project_config_rc_name(lowered: &str) -> bool {
 /// spells its own dotfile differently collected an approval nobody could
 /// answer, while the file itself is part of the checkout the agent is already
 /// working in. What stands in for that list is the shape such a file has: an
-/// ordinary document extension, a name carrying no credential marker and none
+/// ordinary document or script extension, a name carrying no credential marker and none
 /// of the words a tool keeps its own login under, every parent component
 /// visible, and a work tree of the home directory's own above it. That work
 /// tree is never the home directory itself, where a dotfiles repository would

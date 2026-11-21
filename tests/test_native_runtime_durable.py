@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_runtime, native_runtime_durable
-from codex_plugin_scanner.guard.adapters.native_hook_bridge import native_hook_bridge_executable
+from codex_plugin_scanner.guard.native_hook_bridge import native_hook_bridge_executable
 from codex_plugin_scanner.guard.native_runtime_durable import durable_hook_runtime, durable_runtime_path
 from codex_plugin_scanner.guard.native_runtime_values import (
     NativeRuntimeCapabilities,

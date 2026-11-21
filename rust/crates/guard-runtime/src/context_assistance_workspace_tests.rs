@@ -47,28 +47,9 @@ pub(super) fn candidate_with_storage(
     shared_agents: bool,
     persistent: bool,
 ) {
-    let selection: serde_json::Value = serde_json::from_slice(
-        &fs::read(
-            std::env::var_os("GUARD_CIGAR_TEST_SELECTION").expect("explicit candidate selection"),
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    let approval: serde_json::Value = serde_json::from_slice(
-        &fs::read(
-            std::env::var_os("GUARD_CIGAR_TEST_APPROVAL")
-                .expect("independently approved candidate"),
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    let enrolled: serde_json::Value = serde_json::from_slice(&crate::policy_store::context_assistance_registry::run_enroll_command(
-        json!({"schema":"guard-cigar-enroll-local.v1", "guard_home":fixture.home, "runtime_id":"source-candidate",
-        "local_candidate_approved":true, "source_revision":"b47380e5a5cbeaaad5a61cab3372e9e67368732f", "selection":selection, "approval":approval}).to_string().as_bytes()).unwrap()).unwrap();
-    assert_eq!(enrolled["ok"], true);
     let updated: serde_json::Value = serde_json::from_slice(&crate::guard_config_update::run_command(
         json!({"schema":"guard-config-update.v1", "guard_home":fixture.home, "kind":"settings", "value_text":json!({
-            "context_assistance":{"enabled":true, "runtime_id":"source-candidate", "features":{"agent_context":agent_context,"shared_agents":shared_agents},
+            "context_assistance":{"enabled":true, "runtime_id":"builtin", "features":{"agent_context":agent_context,"shared_agents":shared_agents},
                 "storage":{"mode":if persistent {"sqlite"}else{"memory"}},
                 "sources":{"workspace_documents":true, "source_set_id":"selected-files"}}
         }).to_string()}).to_string().as_bytes()).unwrap()).unwrap();

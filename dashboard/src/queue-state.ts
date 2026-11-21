@@ -1,6 +1,7 @@
 import { useRef, useCallback } from "react";
 import type { GuardApprovalRequest, GuardProtectionState, GuardQueueResolutionResult } from "./guard-types";
 import { requestSupportsScope } from "./approval-scopes";
+import { listedMcpRef } from "./mcp-call/mcp-queue-name";
 
 export type QueueSortDirection = "newest" | "oldest" | "category" | "highest_risk";
 
@@ -741,7 +742,7 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "package_install";
   }
 
-  if (envelope?.action_type === "mcp_tool") {
+  if (envelope?.action_type === "mcp_tool" || listedMcpRef(item) !== null) {
     return "mcp_tool";
   }
   if (envelope?.action_type === "config_change") {

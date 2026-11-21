@@ -14,6 +14,7 @@ pub(crate) const ACTION_FEATURE: &str = "context-assistance-native-decisions-v1"
 pub(crate) const HISTORY_FEATURE: &str = "context-assistance-history-v1";
 pub(crate) const VERSIONS_FEATURE: &str = "context-assistance-versions-v1";
 pub(crate) const FOLDERS_FEATURE: &str = "context-assistance-folders-v1";
+pub(crate) const SAVINGS_FEATURE: &str = "context-assistance-savings-v1";
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -35,6 +36,8 @@ pub(crate) enum Kind {
     WorkspaceAccess,
     WorkspaceGrant,
     Folders,
+    /// This week's savings estimate; reads records, changes nothing.
+    Savings,
     /// A Claude Code session started: start a resting worker for the
     /// session's first prompt. Does nothing unless project context is on.
     Warm,
@@ -52,6 +55,7 @@ impl Kind {
             Self::WorkspaceAccess => "workspace_access",
             Self::WorkspaceGrant => "workspace_grant",
             Self::Folders => "folders",
+            Self::Savings => "savings",
             Self::Warm => "warm",
         }
     }
@@ -87,6 +91,16 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
             let result = folders::browse(&request.query.input)?;
             return Ok(json!({"kind":"folders", "state":service.status()?,
                 "data":{"schema":"guard-cigar-workspace-result.v1", "data_role":true, "result":result}}));
+        }
+        if matches!(request.query.kind, Kind::Savings) {
+            let user_home = crate::claude_hook_bridge::home_directory()
+                .ok_or("native_context_assistance_home_unavailable")?;
+            let report =
+                crate::context_assistance_savings::report::report(home, &user_home, |name| {
+                    std::env::var(name).ok()
+                });
+            return Ok(json!({"kind":"savings", "state":service.status()?,
+                "data":{"schema":"guard-cigar-workspace-result.v1", "data_role":true, "result":report}}));
         }
         if matches!(request.query.kind, Kind::Stop) {
             service.stop()?;
@@ -147,6 +161,11 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
             // given a policy binding yet cannot tell, so it answers `waiting`
             // and the caller may ask again once the daemon has pushed one.
             Kind::Warm => {
+                // The agent of a compacted or cleared session no longer holds
+                // the code it was shown, so the next prompt sends it again.
+                if let Some(session) = restarted_session(request) {
+                    crate::context_assistance_prompt::seen::restarted("claude-code", session);
+                }
                 warm = Some(if store.admit_direct_binding().is_err() {
                     "waiting"
                 } else if crate::hook_direct::lifecycle::records_only("claude-code", store) {
@@ -163,7 +182,8 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
             | Kind::Workspace
             | Kind::WorkspaceAccess
             | Kind::WorkspaceGrant
-            | Kind::Folders => {}
+            | Kind::Folders
+            | Kind::Savings => {}
         }
         let mut state = service.status()?;
         if matches!(request.query.kind, Kind::Installations) {
@@ -204,10 +224,26 @@ fn validate(request: &Request, store: &PolicySnapshotStore) -> Result<(), String
         .input
         .as_object()
         .is_none_or(|input| !input.is_empty())
+        && restarted_session(request).is_none()
     {
         return Err("native_context_assistance_control_input_invalid".into());
     }
     Ok(())
+}
+
+/// The session a SessionStart warm names as compacted or cleared: the warm's
+/// only input, a short printable id.
+fn restarted_session(request: &Request) -> Option<&str> {
+    if !matches!(request.query.kind, Kind::Warm) {
+        return None;
+    }
+    let input = request.query.input.as_object()?;
+    let id = input.get("restarted_session")?.as_str()?;
+    (input.len() == 1
+        && !id.is_empty()
+        && id.len() <= 128
+        && id.bytes().all(|byte| byte.is_ascii_graphic()))
+    .then_some(id)
 }
 
 pub(crate) fn reject_busy(

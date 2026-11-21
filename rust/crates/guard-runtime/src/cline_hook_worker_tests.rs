@@ -172,6 +172,26 @@ fn observer_events_never_cancel() {
 }
 
 #[test]
+fn an_allowed_prompt_passes_project_context_on() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let input =
+        r#"{"hookName": "UserPromptSubmit", "userPromptSubmit": {"prompt": "fix the cart"}}"#;
+    let decision = r#"{"policy_action": "allow", "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "  HOL Guard CIGAR found code  "}}"#;
+
+    let prompt = config(root.path(), "UserPromptSubmit", Some("hooks"));
+    let (answer, _) = run(&prompt, input, Some(decision));
+    assert_eq!(
+        answer,
+        "{\"cancel\":false,\"contextModification\":\"HOL Guard CIGAR found code\"}\n"
+    );
+
+    // Other observer events keep their silent answer.
+    let after = config(root.path(), "PostToolUse", Some("hooks"));
+    let (answer, _) = run(&after, input, Some(decision));
+    assert_eq!(answer, "{\"cancel\":false,\"contextModification\":\"\"}\n");
+}
+
+#[test]
 fn another_transport_passes_and_an_unknown_one_fails_closed() {
     let root = tempfile::tempdir().expect("tempdir");
     let unknown = config(root.path(), "PreToolUse", None);

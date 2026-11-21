@@ -38,6 +38,11 @@ pub(crate) fn grant_lifts(reason_code: Option<&str>) -> bool {
     reason_code.is_none_or(|code| NON_RECOGNITION_REASON_CODES.contains(&code))
 }
 
+/// The connector field set, only to `true`, when the user allowed an earlier
+/// version of the file: the agent is told the file changed, not that the CLI
+/// was never set up.
+pub(crate) const ALLOWED_EARLIER_VERSION: &str = "allowed_earlier_version";
+
 /// Hex digits of the action digest in a connector group id.
 const ACTION_DIGEST_HEX: usize = 16;
 
@@ -67,17 +72,31 @@ pub(crate) fn for_launch(request: &LocalCliHookRequestV1, launch: &Launch) -> Op
         &launch.identity_hash,
     )
     .ok()
-    .filter(|unset| *unset)
-    .map(|_| {
-        payload(
+    .flatten()
+    .map(|undecided| {
+        let mut connector = payload(
             &launch.cli_id,
             &launch.identity_hash,
             &launch.name,
             &launch.source,
             &request.cwd,
             &request.command,
-        )
+        );
+        if undecided == crate::local_cli_grant_op::Undecided::AllowedEarlierVersion {
+            connector[ALLOWED_EARLIER_VERSION] = Value::Bool(true);
+        }
+        connector
     })
+}
+
+/// The connector payload only when the user allowed an earlier version of
+/// `launch`; a CLI this device never decided names none.
+pub(crate) fn for_changed_launch(
+    request: &LocalCliHookRequestV1,
+    launch: &Launch,
+) -> Option<Value> {
+    for_launch(request, launch)
+        .filter(|connector| connector.get(ALLOWED_EARLIER_VERSION) == Some(&Value::Bool(true)))
 }
 
 /// Whether `group` is a bare `connector:<identity_hash>` marker, which the

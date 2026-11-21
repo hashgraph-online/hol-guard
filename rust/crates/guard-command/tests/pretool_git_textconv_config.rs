@@ -107,6 +107,8 @@ fn textconv_driver_is_reviewed_only_where_git_can_run_it() {
             None,
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
+                guard_home: None,
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
                 cdpath_unset: false,
@@ -114,6 +116,7 @@ fn textconv_driver_is_reviewed_only_where_git_can_run_it() {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,

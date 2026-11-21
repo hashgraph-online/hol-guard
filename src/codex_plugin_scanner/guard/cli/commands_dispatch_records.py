@@ -661,6 +661,19 @@ def _run_guard_settings_command(
             return 2
         _emit("settings.approval-password", payload, getattr(args, "json", False))
         return 0
+    elif settings_sub == "approval-pulse":
+        from .approval_pulse_commands import run_approval_pulse_settings_command
+
+        try:
+            payload = run_approval_pulse_settings_command(args=args, guard_home=guard_home)
+        except ApprovalGateError as error:
+            _emit("settings.approval-pulse", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 4
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        _emit("settings.approval-pulse", payload, getattr(args, "json", False))
+        return 0
     elif settings_sub == "approval-totp":
         try:
             payload = _run_approval_totp_settings_command(args=args, guard_home=guard_home)

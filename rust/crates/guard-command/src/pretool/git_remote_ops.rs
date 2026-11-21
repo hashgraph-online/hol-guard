@@ -20,6 +20,10 @@ use std::time::Instant;
 #[path = "git_remote_proof.rs"]
 mod proof;
 
+#[path = "git_remote_route.rs"]
+mod route;
+use route::{leading_routes, read_route};
+
 #[path = "git_remote_pull.rs"]
 pub(super) mod pull;
 
@@ -417,7 +421,18 @@ pub(super) fn work_tree_outside_configuration(
         false,
     );
     super::git_probe::memoized(key, || {
-        let probe = Probe::new(executable, &[], context, deadline, execution_environment)?;
+        // The probe runs where the read runs. Without the read's own `-C`
+        // routes it answers for the session's checkout, whose top level is
+        // never a linked worktree the read is routed into, so every such read
+        // stayed under review.
+        let routes = leading_routes(&later.arguments);
+        let probe = Probe::new(
+            executable,
+            &routes,
+            context,
+            deadline,
+            execution_environment,
+        )?;
         Some(work_tree_settles(&probe, &route))
     })
     .unwrap_or(false)
@@ -432,33 +447,6 @@ pub(super) fn routed_directory(
     context: super::PathContext<'_>,
 ) -> Option<std::path::PathBuf> {
     read_route(segment, context)
-}
-
-/// The directory the later read runs Git in: the segment's working directory
-/// folded through its leading `-C` routes, as Git folds them. `None` when a
-/// leading option could send the read somewhere this cannot name, which
-/// `--git-dir` and `--work-tree` do.
-fn read_route(
-    later: &CommandSegmentV1,
-    context: super::PathContext<'_>,
-) -> Option<std::path::PathBuf> {
-    let mut route = std::path::PathBuf::from(context.cwd?);
-    let mut arguments = later.arguments.iter();
-    while let Some(argument) = arguments.next() {
-        match argument.as_str() {
-            "-P" | "--no-pager" | "--no-optional-locks" | "--literal-pathspecs" => {}
-            // A relative path joins what came before it; an absolute one
-            // replaces it, which `PathBuf::push` already does.
-            "-C" => route.push(arguments.next()?),
-            "-c" => {
-                arguments.next()?;
-            }
-            _ if argument.starts_with('-') => return None,
-            // The subcommand: every later word is its own.
-            _ => break,
-        }
-    }
-    std::fs::canonicalize(route).ok()
 }
 
 /// Whether the later read, routed to `route`, reads only what this checkout

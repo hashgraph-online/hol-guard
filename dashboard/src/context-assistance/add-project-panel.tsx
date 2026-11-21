@@ -17,6 +17,7 @@ type Props = {
   allowFiles?: CigarAllowFiles;
   /** Folders that already have access, so Recent only offers ones that need adding back. */
   active?: string[];
+  initialWorkspace?: string | null;
   onGrant: (input: AddProjectInput, credentials?: SettingsSaveProofCredentials) => Promise<boolean>;
 };
 
@@ -35,9 +36,9 @@ function summary(workspace: string, files: number, documentsAllowed: boolean): s
   return `No files picked, so your AI apps keep finding matching files in ${folderName(workspace)} on their own.`;
 }
 
-export function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate, error, first, allowFiles, active = [], onGrant }: Props) {
+export function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate, error, first, allowFiles, active = [], initialWorkspace = null, onGrant }: Props) {
   const id = useId();
-  const [workspace, setWorkspace] = useState<string | null>(null);
+  const [workspace, setWorkspace] = useState<string | null>(initialWorkspace);
   const [files, setFiles] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
   const [proofOpen, setProofOpen] = useState(false);

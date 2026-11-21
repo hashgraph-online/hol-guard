@@ -7,14 +7,10 @@ persisted.
 
 from __future__ import annotations
 
-import math
-import os
-import threading
 import time
 from dataclasses import dataclass, replace
-from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .approval_gate import ApprovalGateGrant, validate_grant
 from .cli.commands_lifecycle_gate import LifecycleGateRequirement, lifecycle_authority_home
@@ -29,8 +25,10 @@ from .codex_hook_recovery import (
     prepare_hook_publication,
     recover_hook_publication,
 )
-from .codex_install_transaction import CodexInstallOwner, record_codex_mutation, require_codex_install_owner
+from .native_owned import CodexInstallOwner, record_codex_mutation, require_codex_install_owner
 from .native_runtime import NativeRuntimeIdentity
+from .native_transition_files import artifact_generation, authorize_plan, require_deadline
+from .native_transition_files import publication as publication_record
 from .runtime_transition import (
     RuntimeTransition,
     TransitionError,
@@ -42,12 +40,6 @@ from .runtime_transition import (
 if TYPE_CHECKING:
     from .runtime_transition_admission import NativeProtectionAdmission
     from .store import GuardStore
-
-_claims: dict[str, tuple[str, str, int, float, float]] = {}
-_publications: dict[str, float] = {}
-_claims_guard = threading.RLock()
-_MAX_CLAIMS = 128
-_FORWARD_CAP_SECONDS = 60.0
 
 
 def prepare_codex_hook_repair_verification(
@@ -65,12 +57,7 @@ def prepare_codex_hook_repair_verification(
     """
     from .runtime_transition_prepare import _pin_executable
 
-    if (
-        isinstance(deadline_monotonic, bool)
-        or not math.isfinite(deadline_monotonic)
-        or time.monotonic() >= deadline_monotonic
-    ):
-        raise TransitionError("deadline_exceeded")
+    require_deadline(deadline_monotonic)
     if plan.native_runtime is not None or plan.verification_workspace is not None:
         raise TransitionError("authority_repair_native_binding_already_prepared")
     plan.payload()
@@ -92,8 +79,7 @@ def prepare_codex_hook_repair_verification(
             plan, files=tuple(files.values()), native_runtime=expected_runtime, verification_workspace=workspace
         )
         RuntimeTransition._compare(prepared.payload(), "before")
-    if time.monotonic() >= deadline_monotonic:
-        raise TransitionError("deadline_exceeded")
+    require_deadline(deadline_monotonic)
     return prepared
 
 
@@ -102,17 +88,6 @@ class CodexHookRepairError(TransitionError):
         super().__init__("authority_repair_inverse_failed")
         self.first_error = first_error
         self.rollback_error = rollback_error
-
-
-def _after_fork_child() -> None:
-    global _claims, _claims_guard, _publications
-    _claims = {}
-    _publications = {}
-    _claims_guard = threading.RLock()
-
-
-if hasattr(os, "register_at_fork"):
-    os.register_at_fork(after_in_child=_after_fork_child)
 
 
 def _owner_and_pending(
@@ -152,36 +127,32 @@ class CodexHookRepairAuthorization:
         self._check()
 
     def _check(self, publication: PendingCodexHookRepair | None = None) -> None:
-        if time.monotonic() >= self.deadline_monotonic:
-            raise TransitionError("deadline_exceeded")
+        require_deadline(self.deadline_monotonic)
         if publication is not None and publication.authorization is not self:
             raise TransitionError("authority_repair_authorization_invalid")
         owner = _owner_and_pending(self.plan, publication)
-        if owner.operation_id != self.owner_operation_id or owner.pid != self.owner_pid:
-            raise TransitionError("authority_repair_owner_mismatch")
         expected_home = lifecycle_authority_home(
             self.plan.guard_home,
             requirement=LifecycleGateRequirement(CODEX_AUTHORITY_REPAIR_ACTION, self.approved_subject),
         ).resolve(strict=False)
-        if expected_home != self.authority_home:
-            raise TransitionError("approval_authority_mismatch")
-        with _claims_guard:
-            claim = _claims.get(self.grant.grant_id)
-            publication_time = _publications.get(self.grant.grant_id)
-        if (
-            self.plan.subject() != self.approved_subject
-            or claim is None
-            or claim[:4]
-            != (
-                self.approved_subject,
-                self.owner_operation_id,
-                self.owner_pid,
-                self.deadline_monotonic,
-            )
-        ):
-            raise TransitionError("authority_repair_authorization_invalid")
-        if publication is not None and publication_time != publication.publication_monotonic:
-            raise TransitionError("authority_repair_authorization_invalid")
+        # The runtime judges the owner, then the authority home, then the claim:
+        # it must be this grant's, for this subject (still the one the plan
+        # derives), owner and deadline, and for the one publication named here.
+        publication_record(
+            "repair_claim_check",
+            self.plan.guard_home,
+            grant_id=self.grant.grant_id,
+            subject=self.approved_subject,
+            current_subject=self.plan.subject(),
+            owner_operation_id=self.owner_operation_id,
+            owner_pid=self.owner_pid,
+            current_owner_operation_id=owner.operation_id,
+            current_owner_pid=owner.pid,
+            authority_home=str(self.authority_home),
+            current_authority_home=str(expected_home),
+            deadline=self.deadline_monotonic,
+            publication=None if publication is None else publication.publication_monotonic,
+        )
         validate_grant(
             self.authority_home,
             self.grant,
@@ -207,12 +178,7 @@ def authorize_codex_hook_repair(
     grant: ApprovalGateGrant | None,
     deadline_monotonic: float,
 ) -> CodexHookRepairAuthorization:
-    if (
-        isinstance(deadline_monotonic, bool)
-        or not math.isfinite(deadline_monotonic)
-        or time.monotonic() >= deadline_monotonic
-    ):
-        raise TransitionError("deadline_exceeded")
+    require_deadline(deadline_monotonic)
     owner = _owner_and_pending(plan)
     subject = plan.subject()
     expected_home = lifecycle_authority_home(
@@ -232,22 +198,21 @@ def authorize_codex_hook_repair(
         session_nonce=owner.operation_id,
     )
     assert grant is not None
-    now = time.monotonic()
-    expires_epoch = datetime.fromisoformat(grant.expires_at.replace("Z", "+00:00")).timestamp()
-    claim_retirement = now + max(0.0, expires_epoch - time.time())
-    deadline = min(deadline_monotonic, now + _FORWARD_CAP_SECONDS, claim_retirement)
+    timing = authorize_plan("repair", grant.expires_at, deadline_monotonic)
+    deadline = cast(float, timing["deadline"])
     # Claim before checking files: a failed generation comparison must not
     # become a forward replay with the same proof after an inverse or edit.
-    with _claims_guard:
-        for identifier, claim in tuple(_claims.items()):
-            if claim[4] <= now:
-                del _claims[identifier]
-                _publications.pop(identifier, None)
-        if grant.grant_id in _claims:
-            raise TransitionError("authority_repair_authorization_claimed")
-        if len(_claims) >= _MAX_CLAIMS:
-            raise TransitionError("authority_repair_capacity")
-        _claims[grant.grant_id] = (subject, owner.operation_id, owner.pid, deadline, claim_retirement)
+    publication_record(
+        "repair_claim",
+        plan.guard_home,
+        grant_id=grant.grant_id,
+        subject=subject,
+        owner_operation_id=owner.operation_id,
+        owner_pid=owner.pid,
+        deadline=deadline,
+        retirement=timing["retirement"],
+        now=time.monotonic(),
+    )
     authorization = CodexHookRepairAuthorization(
         plan, expected_home, grant, owner.operation_id, owner.pid, deadline, subject
     )
@@ -288,10 +253,15 @@ def verify_and_commit_codex_hook_repair(
 
     pending.compare("after")
     authorization, plan = pending.authorization, pending.authorization.plan
-    if plan.native_runtime is None or plan.verification_workspace is None:
+    generation = artifact_generation(
+        "repair",
+        plan.subject(),
+        bound=plan.native_runtime is not None and plan.verification_workspace is not None,
+    )
+    native_runtime, workspace = plan.native_runtime, plan.verification_workspace
+    if native_runtime is None or workspace is None:
         raise TransitionError("authority_repair_native_binding_missing")
     started = time.monotonic()
-    generation = "codex-authority-repair-" + plan.subject().rsplit(":", 1)[1]
     try:
         with (
             inverse_recovery_budget(authorization.deadline_monotonic),
@@ -302,10 +272,10 @@ def verify_and_commit_codex_hook_repair(
             proof = observe_configured_codex_hook(
                 operation_id=plan.operation_id,
                 artifact_generation=generation,
-                expected_runtime=plan.native_runtime,
+                expected_runtime=native_runtime,
                 guard_home=plan.guard_home,
                 config_path=plan.config_path,
-                workspace=plan.verification_workspace,
+                workspace=workspace,
                 deadline_monotonic=authorization.deadline_monotonic,
                 receipt_store=receipt_store,
             )
@@ -334,15 +304,14 @@ def publish_codex_hook_repair(authorization: CodexHookRepairAuthorization) -> Pe
     authorization.compare_before()
     plan = authorization.plan
     with hook_validation_deadline(authorization.deadline_monotonic):
-        receipt = load_hook_authority_receipt(plan.guard_home, plan.config_path)
-    if receipt.manifest_bytes != plan.manifest_change.after:
-        raise TransitionError("generation_changed")
+        receipt = load_hook_authority_receipt(
+            plan.guard_home, plan.config_path, require_manifest=(plan.manifest_change.after, "generation_changed")
+        )
     authorization.compare_before()
-    with _claims_guard:
-        if authorization.grant.grant_id in _publications:
-            raise TransitionError("authority_repair_publication_claimed")
-        publication_time = time.monotonic()
-        _publications[authorization.grant.grant_id] = publication_time
+    publication_time = time.monotonic()
+    publication_record(
+        "repair_publish", plan.guard_home, grant_id=authorization.grant.grant_id, publication=publication_time
+    )
     with (
         inverse_recovery_budget(authorization.deadline_monotonic),
         hook_validation_deadline(

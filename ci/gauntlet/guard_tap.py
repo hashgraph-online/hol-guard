@@ -28,6 +28,9 @@ _PAYLOAD_KEYS = (
     # The workspace and session a contained-run snapshot names; see codex_contained.
     "cwd",
     "session_id",
+    # Cursor's route probe: the preToolUse for Shell that Guard answers without a receipt,
+    # leaving beforeShellExecution as the reviewed check; see harness_judge.guard_decisions.
+    "cursor_route_probe",
 )
 # How long leaving the tap waits for reviews that are still running to finish.
 _DRAIN_SECONDS = 15.0

@@ -285,7 +285,11 @@ pub(super) fn run(
     if !matches!(kind, Kind::Git | Kind::Pytest) {
         authorize_route(
             authority,
-            &with_command(payload, &plan.command, None),
+            &with_command(
+                payload,
+                &guard_command::restricted_pytest::planned_route_argv(&plan.command),
+                None,
+            ),
             route,
         )?;
     }

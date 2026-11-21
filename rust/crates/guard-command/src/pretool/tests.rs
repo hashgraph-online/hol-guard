@@ -216,6 +216,8 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
         benign_command_segments(
             &model,
             PathContext {
+                literal_words: &[],
+                guard_home: None,
                 home_dir: Some("/tmp"),
                 cwd: Some("/tmp"),
                 cdpath_unset: false,
@@ -223,6 +225,7 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
@@ -600,7 +603,7 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "cat //etc/passwd",
         "cat /proc//self/environ",
         "cat /var/../etc/passwd",
-        "head -n 10 README.md Cargo.toml",
+        "head -n 10 README.md .env",
         "ls /",
         "cat /root/secret",
         "cat /home/user/notes",
@@ -872,6 +875,13 @@ fn secret_selecting_globs_are_a_fixed_floor() {
         "dd if={x\\\"y,.env} of=copy",
         // An unterminated quote leaves no proven segment to screen.
         "dd if='{x,.env} of=copy",
+        // An option's value is screened the way a bare operand is.
+        "grep -rn needle src --include=.env* -l",
+        "grep -rn needle src --include=*.env -l",
+        "rg needle src --glob=.env*",
+        // `*.log` is not a code extension, so the value still reaches a
+        // credential name the way a bare operand would.
+        "grep -rn needle src --exclude=*.log -l",
         // A `/` makes the word a path, whatever its first component holds.
         "git log -p -1 -- 'x=y/../.en*'",
         "git diff --no-index a=b/{.env,x} README.md",
@@ -891,6 +901,11 @@ fn secret_selecting_globs_are_a_fixed_floor() {
         "gh api repos/o/r/issues -f 'labels[]=bug'",
         "dd if=out/*.ts of=copy",
         "git log -p -1 -- '[[:digit:]].ts'",
+        // An option's name is not a path, so the glob after it is read as the
+        // file filter it is instead of as one long name that could expand
+        // onto a credential.
+        "grep -rn needle src --include=*.tsx -l",
+        "rg needle src --glob=*.rs",
     ] {
         assert!(!fixed_command_floor(&model(command)), "{command}");
     }

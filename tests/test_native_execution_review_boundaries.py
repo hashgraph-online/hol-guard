@@ -258,7 +258,7 @@ def test_contained_result_requires_typed_positive_proof(translator, proof):
 
 
 def test_package_script_native_returns_dataclass_not_unvalidated_dict(monkeypatch, tmp_path):
-    from codex_plugin_scanner.guard.contained_package_script_execution import ContainedPackageScriptResult
+    from codex_plugin_scanner.guard.contained_runner_result import ContainedRunnerResult as ContainedPackageScriptResult
     from codex_plugin_scanner.guard.runtime.effect_decision import PositiveProof
 
     payload = _write_payload("bun:test")

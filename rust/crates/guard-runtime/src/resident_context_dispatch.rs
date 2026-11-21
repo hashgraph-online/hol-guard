@@ -293,6 +293,7 @@ pub(super) fn is_request(bytes: &[u8]) -> bool {
                     | "workspace_access"
                     | "workspace_grant"
                     | "folders"
+                    | "savings"
             )
         ),
         _ => false,

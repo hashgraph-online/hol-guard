@@ -14,6 +14,8 @@ const CWD: &str = r"C:\home\tester\project";
 
 fn context() -> crate::pretool::PathContext<'static> {
     crate::pretool::PathContext {
+        literal_words: &[],
+        guard_home: None,
         home_dir: Some(HOME),
         cwd: Some(CWD),
         cdpath_unset: false,
@@ -21,6 +23,7 @@ fn context() -> crate::pretool::PathContext<'static> {
         cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
+        python_environment_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
         gem_config_absent: false,
@@ -218,6 +221,8 @@ fn file_writes_never_follow_an_existing_symlink() {
     std::os::unix::fs::symlink("/etc/hosts", &file_link).unwrap();
     let cwd = root.to_str().unwrap().to_owned();
     let context = crate::pretool::PathContext {
+        literal_words: &[],
+        guard_home: None,
         home_dir: Some(HOME),
         cwd: Some(&cwd),
         cdpath_unset: false,
@@ -225,6 +230,7 @@ fn file_writes_never_follow_an_existing_symlink() {
         cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
+        python_environment_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
         gem_config_absent: false,

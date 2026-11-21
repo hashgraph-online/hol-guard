@@ -8,7 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard import inventory_contract
 from codex_plugin_scanner.guard import native_inventory_source_evidence as bridge
-from codex_plugin_scanner.guard.adapters.base import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 
 def _entries(count: int) -> list[dict[str, object]]:
@@ -117,9 +117,7 @@ def test_an_anchored_path_also_carries_the_one_the_harness_wrote(
     """The instruction role reads the configured path, not the directory we ran in."""
 
     sent = _resident(monkeypatch, lambda request: {"evidence": [{}, {}]})
-    monkeypatch.setattr(
-        bridge.Path, "cwd", classmethod(lambda _cls: Path("/run/from/docs/security"))
-    )
+    monkeypatch.setattr(bridge.Path, "cwd", classmethod(lambda _cls: Path("/run/from/docs/security")))
     bridge.native_inventory_source_evidence(
         [
             {"harness": "codex", "artifact_type": "instruction", "config_path": "notes.md"},

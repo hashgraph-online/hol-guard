@@ -48,6 +48,8 @@ fn every_guard_the_home_projection_applies_admits_a_plain_cd() {
     let (home, main, _tree) = fixture();
     let command = "cd ~/projects/app-report && ./tools/report 2>&1 | tail -15";
     let context = PathContext {
+        literal_words: &[],
+        guard_home: None,
         home_dir: home.to_str(),
         cwd: main.to_str(),
         shell_home_matches: true,
@@ -56,6 +58,7 @@ fn every_guard_the_home_projection_applies_admits_a_plain_cd() {
         cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
+        python_environment_inert: false,
         ripgrep_config_absent: false,
         gem_config_absent: false,
         http_config_absent: false,

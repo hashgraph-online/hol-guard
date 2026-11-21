@@ -16,7 +16,7 @@
 //! fetched from the registry, so such a review is planned too, for a block
 //! verdict only.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use guard_command::package_intent_common::build_package_request_artifact;
@@ -50,14 +50,16 @@ const COMMAND_FIELDS: [&str; 4] = ["command", "cmd", "shell_command", "shellComm
 /// chaining, and a word may not start with `~` or `=`, which shells expand to
 /// paths. Agents trim install output with `2>&1 | tail -3`; these filters read
 /// only the pipe: none takes a file operand, and a grep pattern may not start
-/// with `-`, so it cannot name a pattern file.
+/// with `-`, so it cannot name a pattern file. Agents also move into a nested
+/// checkout first (`cd linked && npm ci`); one leading `cd` to a directory
+/// that is not an option is read, and the plan resolves it.
 static FILTERED_COMMAND: LazyLock<Regex> = LazyLock::new(|| {
     let word = r"[A-Za-z0-9@/._^:+,-][A-Za-z0-9@/._~^:=+,-]*";
     let pattern = r"[A-Za-z0-9@/._^:+,][A-Za-z0-9@/._~^:=+,-]*";
     let filter =
         format!(r"(?:tail|head)(?: +-[0-9]+| +-n *[0-9]+)?|grep(?: +-[iEFvcnw]+)* +{pattern}");
     Regex::new(&format!(
-        r"^(?:(?P<command>{word}(?: +{word})*)(?: +2>&1)?(?P<filters>(?: *\| *(?:{filter}))*))$"
+        r"^(?:cd +(?P<directory>{pattern}) *&& *)?(?:(?P<command>{word}(?: +{word})*)(?: +2>&1)?(?P<filters>(?: *\| *(?:{filter}))*))$"
     ))
     .expect("filtered command pattern")
 });
@@ -68,6 +70,8 @@ pub(crate) struct ReviewShape {
     pub(crate) tokens: Vec<String>,
     /// The programs the output is piped through, in first-seen order.
     pub(crate) filter_programs: Vec<String>,
+    /// The directory a leading `cd` names, as written.
+    pub(crate) directory: Option<String>,
 }
 
 /// Whether the native result is a review a package evaluation may settle.
@@ -115,6 +119,7 @@ pub(crate) fn review_shape(payload: &Map<String, Value>) -> Option<ReviewShape> 
     Some(ReviewShape {
         tokens,
         filter_programs: filter_programs(filters),
+        directory: shape.name("directory").map(|name| name.as_str().to_owned()),
     })
 }
 
@@ -164,16 +169,69 @@ fn filter_programs(filters: &str) -> Vec<String> {
     programs
 }
 
-/// The request artifact for the review's command and whether the evaluator's
-/// verdict may let it continue.
+/// The directory a leading `cd` moves the install into, when the plan can
+/// prove it: a directory inside the workspace, reached without a `CDPATH`
+/// search. POSIX `cd` skips that search for an absolute operand or one that
+/// starts with `.`; any other operand needs a declared environment without
+/// `CDPATH`, or the shell might land somewhere else.
+fn moved_workspace(
+    payload: &Map<String, Value>,
+    workspace: &Path,
+    directory: &str,
+) -> Option<PathBuf> {
+    // A shell's default `cd` drops a `..` with the name before it, while the
+    // plan resolves symlinks first; through a symlink the two land apart.
+    if directory.split('/').any(|part| part == "..") {
+        return None;
+    }
+    // A shell searches `CDPATH` unless the operand is absolute or starts with
+    // a `.` component; `.cache` is searched like any other name.
+    let first = directory.split('/').next().unwrap_or_default();
+    let searched = !directory.starts_with('/') && first != ".";
+    if searched {
+        let environment = verified_npm::ExecutionEnvironment::from_value(
+            payload.get(EXECUTION_ENVIRONMENT_FIELD),
+        );
+        if !environment.well_formed
+            || environment
+                .names
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case("CDPATH"))
+        {
+            return None;
+        }
+    }
+    let root = workspace.canonicalize().ok()?;
+    let moved = workspace.join(directory).canonicalize().ok()?;
+    (moved.is_dir() && moved.starts_with(&root)).then_some(moved)
+}
+
+/// What the plan read from a review's command.
+struct Planned {
+    artifact: Value,
+    /// Whether the evaluator's verdict may let the command continue.
+    may_allow: bool,
+    /// The directory a leading `cd` moved the command into.
+    moved: Option<PathBuf>,
+    /// Whether the install's package key stands for the whole command: every
+    /// program the output is piped through resolves outside the workspace.
+    keyed: bool,
+}
+
+/// The request artifact for the review's command and how it may settle.
 fn plan(
     payload: &Map<String, Value>,
     harness: &str,
     workspace: &Path,
     home_dir: Option<&Path>,
     review_reason: Option<&str>,
-) -> Option<(Value, bool)> {
+) -> Option<Planned> {
     let shape = planned_shape(payload, review_reason)?;
+    let moved = match &shape.directory {
+        Some(directory) => Some(moved_workspace(payload, workspace, directory)?),
+        None => None,
+    };
+    let workspace = moved.as_deref().unwrap_or(workspace);
     let launch_only = review_reason == Some(LAUNCH_REVIEW_REASON);
     let tokens = &shape.tokens;
     let intent = parse_package_intent(
@@ -184,8 +242,9 @@ fn plan(
         None,
     )?;
     // The evaluator reads the redacted command, so it must be the command
-    // that runs, token for token.
-    if !matches!(intent.intent_kind, "install" | "execute")
+    // that runs, token for token. A lockfile install (`npm ci`) is a sync; it
+    // is planned for blocks and its package key only, never for an allow.
+    if !matches!(intent.intent_kind, "install" | "execute" | "sync")
         || &intent.command_tokens != tokens
         || shlex_split(&intent.redacted_command).as_ref() != Some(tokens)
     {
@@ -208,7 +267,24 @@ fn plan(
             Value::String(version.clone()),
         );
     }
-    Some((artifact.to_wire(), version.is_some()))
+    let environment =
+        verified_npm::ExecutionEnvironment::from_value(payload.get(EXECUTION_ENVIRONMENT_FIELD));
+    // The key is derived from the stamped PATH and HOME only, so it stands for
+    // the command only when no exported variable can change what npm runs. A
+    // `NODE_OPTIONS` the hook saw holding only heap and diagnostic flags, as
+    // agent wrappers export, changes nothing npm fetches or runs.
+    let keyed = environment.well_formed
+        && !environment.names.iter().any(|name| {
+            verified_npm::changes_npm(name)
+                && !(name.eq_ignore_ascii_case("NODE_OPTIONS") && environment.node_options_inert)
+        })
+        && verified_npm::filters_outside_workspace(&shape.filter_programs, &environment, workspace);
+    Some(Planned {
+        artifact: artifact.to_wire(),
+        may_allow: version.is_some(),
+        moved,
+        keyed,
+    })
 }
 
 /// The npm version the install runs, when its `PATH` and config files prove
@@ -252,14 +328,35 @@ pub(crate) fn evaluate_package_review_plan(
             request.review_reason.as_deref(),
         )
     });
-    let (artifact, may_allow) = planned.unwrap_or((Value::Null, false));
+    // The workspace is named only when a leading `cd` moved the command.
+    let (artifact, may_allow, moved, keyed) = match planned {
+        Some(planned) => (
+            planned.artifact,
+            planned.may_allow,
+            planned
+                .moved
+                .map(|directory| directory.to_string_lossy().into_owned()),
+            planned.keyed,
+        ),
+        None => (Value::Null, false, None, false),
+    };
+    let mut payload = json!({
+        "artifact": artifact,
+        "may_allow": may_allow,
+        "workspace": moved,
+        "keyed": keyed,
+    });
+    if may_allow && request.include_registry_retry == Some(true) {
+        payload["registry_retry"] =
+            crate::hook_package_review_settlement::registry_retry(&request.harness);
+    }
     crate::encode_response(&SupplyChainEvalResultV1 {
         schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
         request_id: request.request_id.clone(),
         request_sha256,
         status: "ok".to_owned(),
         code: "ok".to_owned(),
-        payload: Some(json!({"artifact": artifact, "may_allow": may_allow})),
+        payload: Some(payload),
     })
 }
 

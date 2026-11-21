@@ -5,8 +5,10 @@
 //! seeds it only when it is missing. `retry` checks the approval is a resolved Codex one, marks the
 //! record in progress, sends the continuation to the original thread and
 //! records how it went. `defer` records that a Codex hook still waiting on the
-//! browser decision will continue the action itself; the caller has already
-//! confirmed that hook is live. Every timestamp comes from the caller.
+//! browser decision will continue the action itself; `defer_live` first proves
+//! that hook is live and records nothing when it is not. `capabilities`
+//! reports whether Codex's control socket is reachable and the latest attempt.
+//! Every timestamp comes from the caller.
 
 use guard_contracts::{
     CodexRequestResumeRequestV1, CodexRequestResumeResultV1,
@@ -14,9 +16,13 @@ use guard_contracts::{
     CODEX_REQUEST_RESUME_MAX_TIMEOUT_MS, CODEX_REQUEST_RESUME_REQUEST_SCHEMA,
     CODEX_REQUEST_RESUME_RESULT_SCHEMA,
 };
+use std::path::Path;
+
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{json, Map, Value};
 
+use crate::codex_request_resume_capabilities::capabilities;
+use crate::codex_request_resume_live::defer_live;
 use crate::codex_request_resume_store::{self as store, ResumeSeed, ResumeUpdate};
 use crate::codex_thread_continue_op::{continue_thread, ContinueRequest};
 use crate::guard_store_db::{StoreError, StoreResult};
@@ -55,6 +61,11 @@ const INVALID: &str = "native_codex_request_resume_invalid";
 pub(crate) enum Outcome {
     Resume(Option<Value>),
     Refused(&'static str),
+    /// What `capabilities` reports.
+    Capabilities {
+        socket_available: bool,
+        latest_attempt: Value,
+    },
 }
 
 pub(crate) fn evaluate_codex_request_resume_request(
@@ -65,6 +76,17 @@ pub(crate) fn evaluate_codex_request_resume_request(
     let (status, code, payload) = match evaluate(request) {
         Ok(Outcome::Resume(resume)) => ("ok", "ok", Some(json!({ "resume": resume }))),
         Ok(Outcome::Refused(error)) => ("ok", "ok", Some(json!({ "error": error }))),
+        Ok(Outcome::Capabilities {
+            socket_available,
+            latest_attempt,
+        }) => (
+            "ok",
+            "ok",
+            Some(json!({
+                "app_server_socket_available": socket_available,
+                "latest_attempt": latest_attempt,
+            })),
+        ),
         Err(code) => ("error", code, None),
     };
     crate::encode_response(&CodexRequestResumeResultV1 {
@@ -116,6 +138,11 @@ fn evaluate(request: &CodexRequestResumeRequestV1) -> Result<Outcome, &'static s
         ("status", _) => status(&connection, &call).map(Outcome::Resume),
         ("retry", _) => retry(&connection, &call, request.force, &send),
         ("defer", Some(action)) => defer(&connection, &call, action).map(Outcome::Resume),
+        ("defer_live", Some(action)) => {
+            defer_live(&connection, &call, action, Path::new(&request.guard_home))
+                .map(Outcome::Resume)
+        }
+        ("capabilities", _) => capabilities(&connection, request),
         _ => return Err(INVALID),
     };
     outcome.map_err(|error| match error {

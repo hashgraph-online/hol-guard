@@ -464,6 +464,7 @@ pub(crate) fn evaluate(input: &Value) -> Result<Value, String> {
         Ok(()) => return state.answer(&key),
         Err(proofs::Failure::Need(reference)) => json!({"need":reference}),
         Err(proofs::Failure::Archives(archives)) => json!({"need_archives":archives}),
+        Err(proofs::Failure::Batch(needs)) => json!({"needs":needs}),
         Err(proofs::Failure::Invalid(code)) => return Err(code.into()),
     };
     crate::pack_preparation::transfer::account(input, request)

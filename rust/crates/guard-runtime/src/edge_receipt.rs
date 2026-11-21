@@ -36,6 +36,7 @@ use serde_json::{Map, Value};
 
 use crate::hook_direct_evidence::DirectEvidenceQueue;
 use crate::hook_evidence_writer_op as writer_op;
+use crate::policy_store::PolicySnapshotStore;
 
 /// The resident feature under which an envelope may ask for this.
 pub(crate) const EDGE_RECEIPT_RECORD_FEATURE: &str = "edge-receipt-record-v1";
@@ -48,7 +49,7 @@ pub(crate) const EDGE_PRE_TOOL_ACTIVITY_RECORD_FEATURE: &str = "edge-pre-tool-ac
 pub(crate) const DIRECT_RECEIPT_RECORDED: &str = "receipt_recorded";
 /// The field that says the resident queued its command activity as well.
 pub(crate) const DIRECT_ACTIVITY_RECORDED: &str = "activity_recorded";
-/// `hook_post_succeeded`'s compact spelling of a failed tool call's event.
+/// Compact spelling of a failed tool call's event.
 const POST_TOOL_USE_FAILURE: &str = "posttoolusefailure";
 /// The `minimum_action`s the daemon pauses for an approval
 /// (`_NATIVE_PRE_TOOL_APPROVAL_ACTIONS`, `hook_worker_native.py`).
@@ -59,11 +60,37 @@ const APPROVAL_ACTIONS: [&str; 2] = ["review", "require-reapproval"];
 /// outside the resident's own edge request, which never records.
 pub(crate) fn encode(
     envelope: &GuardHookEnvelopeV2,
+    origin_store: Option<&PolicySnapshotStore>,
+    edge: GuardHookEdgeResultV2,
+    started: Instant,
+) -> Result<Vec<u8>, String> {
+    encode_inner(
+        envelope,
+        origin_store.is_some(),
+        edge,
+        started,
+        origin_store,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn encode_for_test(
+    envelope: &GuardHookEnvelopeV2,
     resident: bool,
     edge: GuardHookEdgeResultV2,
     started: Instant,
 ) -> Result<Vec<u8>, String> {
-    let mut edge = crate::edge_structured::attached(envelope, edge, started);
+    encode_inner(envelope, resident, edge, started, None)
+}
+
+fn encode_inner(
+    envelope: &GuardHookEnvelopeV2,
+    resident: bool,
+    edge: GuardHookEdgeResultV2,
+    started: Instant,
+    origin_store: Option<&PolicySnapshotStore>,
+) -> Result<Vec<u8>, String> {
+    let mut edge = crate::edge_structured::attached(envelope, edge, started, origin_store);
     if resident && envelope.record_receipt && !budget_spent(envelope, started) {
         let activity = edge_activity(envelope, &edge);
         edge.receipt_recorded = true;
@@ -75,7 +102,8 @@ pub(crate) fn encode(
             || crate::encode_response(&edge),
             |writer| match activity {
                 Some(EdgeActivity::PostTool(payload)) => {
-                    activity_queued = queue_post_tool_activity(writer, &edge.harness, payload);
+                    activity_queued =
+                        queue_post_tool_activity(writer, &edge.harness, &edge.event_name, payload);
                 }
                 Some(EdgeActivity::PreTool(payload, activity)) => {
                     let receipt_id = Some(edge.receipt.decision_id.as_str());
@@ -289,19 +317,20 @@ fn submit_post_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value)
     ) else {
         return false;
     };
-    queue_post_tool_activity(writer, harness, payload);
+    queue_post_tool_activity(writer, harness, "PostToolUse", payload);
     true
 }
 
 /// Queue a post-tool call's Composio discovery, when it succeeded, and then
-/// its command activity, as the daemon's `_record_post_tool_activity` does.
+/// its command activity, for both direct receipts and daemon fallback.
 /// True when the writer took the activity.
-fn queue_post_tool_activity(
+pub(crate) fn queue_post_tool_activity(
     writer: &RuntimeHookEvidenceWriter,
     harness: &str,
+    event: &str,
     payload: &Map<String, Value>,
 ) -> bool {
-    let succeeded = post_succeeded(payload);
+    let succeeded = !event.to_lowercase().contains("failure") && post_succeeded(payload);
     let tool_name = payload.get("tool_name").and_then(Value::as_str);
     if let Some(tool_name) = tool_name.filter(|_| succeeded) {
         writer.submit_composio_discovery(harness, tool_name, payload);
@@ -318,8 +347,7 @@ fn queue_post_tool_activity(
     )
 }
 
-/// `hook_post_succeeded("PostToolUse", payload)`: only bounded failure
-/// signals count, and their absence means the call succeeded.
+/// Only bounded failure signals count. Their absence means the call succeeded.
 fn post_succeeded(payload: &Map<String, Value>) -> bool {
     for name in ["hook_event_name", "hookEventName"] {
         if let Some(event) = payload.get(name).and_then(Value::as_str) {

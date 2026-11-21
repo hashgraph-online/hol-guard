@@ -288,3 +288,69 @@ fn requests_match_the_retired_daemon_builder() {
         }
     }
 }
+
+/// A package install review carries the install's package key on its envelope
+/// so an Always allow on it is saved under that key too, but only an
+/// exact-action review that can offer Always allow, and only this harness's own
+/// package request keyed by a context token.
+#[cfg(unix)]
+#[test]
+fn a_package_review_carries_only_its_own_package_key() {
+    use guard_contracts::ContextDigestComponentsV1;
+    let token = crate::context_digest::build_context_token(&ContextDigestComponentsV1 {
+        identity: json!({}),
+        content: json!({}),
+        capabilities: json!({}),
+        policy: json!({}),
+        sandbox: json!({}),
+        extension_control_digest: "d".repeat(64),
+    })
+    .unwrap();
+    let document: Value = serde_json::from_str(DAEMON_REQUESTS).unwrap();
+    let vector = document["vectors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|vector| vector["exact"]["token"].is_string())
+        .expect("an exact-action review vector");
+    let mut envelope = vector["query"].clone();
+    envelope["payload"] = tagged(&vector["payload"]);
+    let harness = envelope["harness"].as_str().unwrap().to_owned();
+    let key = json!({
+        "harness": harness,
+        "artifact_id": format!("{harness}:project:package-request:{}", "e".repeat(64)),
+        "artifact_hash": token,
+    });
+    let built = |package_approval: Value, exact: Value| {
+        request(json!({
+            "kind": "review_request",
+            "envelope": envelope,
+            "result": vector["result"],
+            "native_receipt": vector["receipt"],
+            "request_id": vector["request_id"],
+            "approval_center_url": vector["approval_center_url"],
+            "guard_home": "/home/agent/.hol-guard",
+            "review_binding": vector["review_binding"],
+            "exact_token": exact,
+            "once_only_reason": vector["exact"]["once_only"],
+            "queue_group_id": null,
+            "bound_bash": null,
+            "package_approval": package_approval,
+        }))["action_envelope_json"]
+            .clone()
+    };
+    let exact = vector["exact"]["token"].clone();
+    assert_eq!(built(key.clone(), exact.clone())["package_approval"], key);
+    assert!(built(Value::Null, exact.clone())
+        .get("package_approval")
+        .is_none());
+    let mut foreign = key.clone();
+    foreign["harness"] = json!("other");
+    let mut unkeyed = key.clone();
+    unkeyed["artifact_hash"] = json!("sha256:abc");
+    let mut other_artifact = key.clone();
+    other_artifact["artifact_id"] = json!(format!("{harness}:native-pretool:bash"));
+    for bad in [foreign, unkeyed, other_artifact] {
+        assert!(built(bad, exact.clone()).get("package_approval").is_none());
+    }
+}

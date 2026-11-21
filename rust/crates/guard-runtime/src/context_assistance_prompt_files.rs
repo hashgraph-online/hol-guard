@@ -135,6 +135,9 @@ pub(crate) struct Walk {
     /// `ab`; and whether the walk read every file, none too big or unreadable.
     pub(crate) spelled: Vec<usize>,
     pub(crate) complete: bool,
+    /// How many files hold each name `walk_exact` was given, as a word, when
+    /// the walk read them all; empty when it did not.
+    pub(crate) exact: Vec<(String, usize)>,
 }
 
 impl Walk {
@@ -172,6 +175,18 @@ pub(crate) fn walk(
     named: &[String],
     budget: Duration,
 ) -> Walk {
+    walk_exact(root, terms, phrases, named, &[], budget)
+}
+
+/// `walk`, also counting the files holding each of `exact` as a word.
+pub(crate) fn walk_exact(
+    root: &Path,
+    terms: &[String],
+    phrases: &[String],
+    named: &[String],
+    exact: &[String],
+    budget: Duration,
+) -> Walk {
     let budget = budget.min(WALK_BUDGET);
     if terms.is_empty() && phrases.is_empty() && named.is_empty() {
         return Walk::default();
@@ -187,6 +202,12 @@ pub(crate) fn walk(
     let mut seen = Vec::new();
     let mut complete = true;
     let mut spelled_in = vec![0_usize; terms.len()];
+    let mut held: Vec<(String, usize)> = Vec::new();
+    for word in exact.iter().filter(|word| !word.is_empty()) {
+        if !held.iter().any(|(known, _)| known == word) {
+            held.push((word.clone(), 0));
+        }
+    }
     while let Some((dir, prefix, depth, rules)) = stack.pop() {
         let Ok(entries) = fs::read_dir(&dir) else {
             complete = false;
@@ -198,7 +219,7 @@ pub(crate) fn walk(
         for entry in entries.flatten() {
             visited += 1;
             if visited > MAX_VISITED || started.elapsed() >= budget {
-                return finish(seen, files, terms, phrases.len(), (spelled_in, false));
+                return finish(seen, files, terms, phrases, (spelled_in, held, false));
             }
             let name = entry.file_name().to_string_lossy().into_owned();
             // `file_type` never follows a link, so a linked folder or file is skipped.
@@ -252,11 +273,15 @@ pub(crate) fn walk(
                 scanned += size;
                 text = guard_secure_fs::read_bounded(&entry.path(), MAX_FILE_BYTES as usize)
                     .ok()
-                    .and_then(|read| String::from_utf8(read.bytes).ok())
-                    .map(|text| text.to_lowercase());
+                    .and_then(|read| String::from_utf8(read.bytes).ok());
                 complete &= text.is_some();
             }
+            // Read as written, as the rename list reads each file it lists.
             let text = text.unwrap_or_default();
+            for (word, count) in &mut held {
+                *count += usize::from(holds_word(&text, word));
+            }
+            let text = text.to_lowercase();
             let hits: Vec<u8> = terms
                 .iter()
                 .map(|term| text.matches(term.as_str()).take(8).count() as u8)
@@ -265,8 +290,8 @@ pub(crate) fn walk(
             let whole: Vec<bool> = (terms.iter().zip(&hits))
                 .map(|(term, &n)| code && n > 0 && whole_word(&text, term))
                 .collect();
-            for (count, held) in spelled_in.iter_mut().zip(spelled(&text, terms, &hits)) {
-                *count += usize::from(held);
+            for (count, holds) in spelled_in.iter_mut().zip(spelled(&text, terms, &hits)) {
+                *count += usize::from(holds);
             }
             let quoted = quoted(&text, phrases);
             let named = named_as(&relative, named);
@@ -290,40 +315,7 @@ pub(crate) fn walk(
         inside.sort_by_key(|(tests, _)| !tests);
         stack.extend(inside.into_iter().map(|(_, dir)| dir));
     }
-    finish(seen, files, terms, phrases.len(), (spelled_in, complete))
-}
-
-fn finish(
-    seen: Vec<Seen>,
-    checked: usize,
-    terms: &[String],
-    phrases: usize,
-    (spelled, complete): (Vec<usize>, bool),
-) -> Walk {
-    let holding = (0..terms.len())
-        .map(|i| {
-            seen.iter()
-                .filter(|s| s.in_path[i] || s.hits[i] > 0)
-                .count()
-        })
-        .collect();
-    let words = (0..terms.len())
-        .map(|i| seen.iter().filter(|s| s.whole[i]).count())
-        .collect();
-    let quoting = (0..phrases)
-        .map(|i| seen.iter().filter(|s| s.quoted[i]).count())
-        .collect();
-    let (files, tests) = ranked(scores(seen, checked, terms.len(), phrases));
-    Walk {
-        files,
-        tests,
-        checked,
-        holding,
-        quoting,
-        words,
-        spelled,
-        complete,
-    }
+    finish(seen, files, terms, phrases, (spelled_in, held, complete))
 }
 
 /// A word counts for more the fewer files contain it, so a name like
@@ -493,6 +485,10 @@ pub(crate) fn plain(path: PathBuf) -> PathBuf {
     }
     path
 }
+
+#[path = "context_assistance_prompt_files_finish.rs"]
+mod finish;
+use finish::{finish, holds_word};
 
 #[cfg(test)]
 #[path = "context_assistance_prompt_files_tests.rs"]

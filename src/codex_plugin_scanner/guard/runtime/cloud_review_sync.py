@@ -88,8 +88,32 @@ def _load_sync_state(store: GuardStore) -> dict[str, object]:
     return dict(payload) if isinstance(payload, dict) else {}
 
 
-def _save_sync_state(store: GuardStore, state: dict[str, object]) -> None:
-    store.set_sync_payload(_cloud_review_sync_state_key(store), state, _now())
+def _transition_sync_state(
+    store: GuardStore,
+    state: dict[str, object],
+    transition: str,
+    **detail: object,
+) -> None:
+    """Merge one native sync step into the stored row and mirror it in ``state``."""
+
+    merged = store.transition_cloud_review_sync_state(
+        _cloud_review_sync_state_key(store), transition, now=_now(), **detail
+    )
+    state.clear()
+    state.update(merged)
+
+
+def _record_run_failure(store: GuardStore, state: dict[str, object], error_message: str) -> None:
+    """Record a failed run without letting a store error replace the run's own error.
+
+    The caller re-raises the run's error, and the worker loop classifies it
+    (an HTTP 401 means sign-in is required) and records the failure again.
+    """
+
+    try:
+        _transition_sync_state(store, state, "failed", error=error_message)
+    except Exception as error:
+        _LOGGER.warning("Could not record the failed Cloud Review sync state: %s", type(error).__name__)
 
 
 def _batch_binding_key(binding: dict[str, str]) -> str:
@@ -111,8 +135,7 @@ def _prepare_sync_batch_state(
     except CloudReviewEventProtocolError:
         # The first batch hits the same refusal inside the run, which records it.
         limits = CloudReviewBatchLimits()
-    state.update({"state": "syncing", "last_sync_attempt_at": _now(), "last_error": None, "last_error_code": None})
-    _save_sync_state(store, state)
+    _transition_sync_state(store, state, "started")
     return state, binding_key, limits
 
 
@@ -122,15 +145,13 @@ def _persist_sync_batch_limits(
     binding_key: str,
     limits: CloudReviewBatchLimits,
 ) -> None:
-    state.update(
-        {
-            "batch_binding_key": binding_key,
-            "batch_events": limits.events,
-            "batch_max_bytes": limits.bytes,
-            "batch_event_cap": limits.event_cap,
-        }
+    _transition_sync_state(
+        store,
+        state,
+        "batch_limits",
+        binding_key=binding_key,
+        limits={"events": limits.events, "bytes": limits.bytes, "event_cap": limits.event_cap},
     )
-    _save_sync_state(store, state)
 
 
 def _select_or_quarantine_sync_batch(
@@ -190,22 +211,16 @@ def _complete_sync_state(
     completed_at = _now()
     outbox_status = store.review_event_outbox_status(now=completed_at, **delivery_binding)
     pending_error = errors[0] if errors else outbox_status.get("last_error")
-    if accepted > 0 or outbox_status["depth"] == 0:
-        state["last_success_at"] = completed_at
-    if delivered > 0:
-        state.update({"last_delivery_at": completed_at, "last_delivery_binding": delivery_binding})
-    state.update(
-        {
-            "state": "error" if pending_error and outbox_status["depth"] else "idle",
-            "last_sync_at": completed_at,
-            "synced_count": accepted,
-            "rejected_count": rejected,
-            "last_error": pending_error,
-            "outbox_depth": outbox_status["depth"],
-            "outbox_oldest_changed_at": outbox_status["oldest_changed_at"],
-        }
+    _transition_sync_state(
+        store,
+        state,
+        "completed",
+        at=completed_at,
+        counts={"accepted": accepted, "delivered": delivered, "rejected": rejected},
+        outbox={"depth": outbox_status["depth"], "oldest_changed_at": outbox_status["oldest_changed_at"]},
+        delivery_binding=delivery_binding,
+        error=pending_error,
     )
-    _save_sync_state(store, state)
     return completed_at, outbox_status
 
 
@@ -439,26 +454,12 @@ def sync_cloud_review_events_once(
         )
     except urllib.error.HTTPError as error:
         error_message = f"HTTP {error.code}: {error.reason}"
-        state.update(
-            {
-                "state": "error",
-                "last_error": error_message,
-                "last_error_at": _now(),
-            }
-        )
-        _save_sync_state(store, state)
+        _record_run_failure(store, state, error_message)
         _LOGGER.warning("Cloud Review sync failed: %s", error_message)
         raise
     except Exception as error:
         error_message = _redacted_error(error)
-        state.update(
-            {
-                "state": "error",
-                "last_error": error_message,
-                "last_error_at": _now(),
-            }
-        )
-        _save_sync_state(store, state)
+        _record_run_failure(store, state, error_message)
         _LOGGER.warning("Cloud Review sync failed: %s", error_message)
         raise
 

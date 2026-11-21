@@ -144,6 +144,7 @@ fn a_claude_code_hook_answers_with_the_daemon_home_it_left_out() {
     bound["harness_postures"] = json!({});
     bound["local_cli_block_rules"] = json!(false);
     bound["evidence_drain"] = json!(true);
+    bound["review_oauth_source"] = json!("default");
     push(&homeless.fixture, Some(bound)).unwrap();
     assert_eq!(
         deferred(&run_as(

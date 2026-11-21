@@ -210,14 +210,26 @@ def _policy_version(request_row: dict[str, object]) -> str:
     return f"request:{last_seen_at or request_row['request_id']}"
 
 
-def _claim_expiry(request_row: dict[str, object]) -> str:
+CLOUD_REVIEW_REQUEST_LIFETIME = timedelta(minutes=10)
+
+
+def cloud_review_request_expiry(request_row: dict[str, object]) -> datetime:
+    """When Cloud Review stops accepting answers for this request.
+
+    The claim sent to Cloud Review carries this deadline; after it, an answer
+    given there no longer reaches the machine.
+    """
+
     created_at = _parse_iso_timestamp(request_row.get("created_at"), field_name="created_at")
     last_seen_at = _parse_iso_timestamp(
         request_row.get("last_seen_at") or request_row.get("created_at"),
         field_name="last_seen_at",
     )
-    baseline = max(created_at, last_seen_at)
-    return (baseline + timedelta(minutes=10)).astimezone(timezone.utc).isoformat()
+    return (max(created_at, last_seen_at) + CLOUD_REVIEW_REQUEST_LIFETIME).astimezone(timezone.utc)
+
+
+def _claim_expiry(request_row: dict[str, object]) -> str:
+    return cloud_review_request_expiry(request_row).isoformat()
 
 
 def build_local_review_request_claim(

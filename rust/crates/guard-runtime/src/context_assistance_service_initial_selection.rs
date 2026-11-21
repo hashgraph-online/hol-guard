@@ -37,11 +37,6 @@ fn prepare(
     }
     let proof = switching::EmptyDataProof::capture(owner)?;
     let installation = registry::load(home, &job.request.target_runtime_id)?;
-    crate::guard_config_load::cigar_updates::check_installation(
-        home,
-        settings.update_preferences(),
-        &installation,
-    )?;
     worker::step(
         home,
         job,
@@ -183,6 +178,7 @@ fn commit(
     }
     deadline.finish();
     state.settings = prepared.settings.target_settings().clone();
+    publish_chosen(&state);
     state.generation = next;
     state.last_check = None;
     state.retiring = None;

@@ -15,39 +15,31 @@ const target = { runtime_id: "cigar:other", qualification: "local_candidate" as 
 const effect = () => { throw new Error("Rendering runtime metadata or lessons must not invoke an effect"); };
 const controls = renderToStaticMarkup(<ContextSettingsControls value={state.preferences} status={state} installations={[target]} loading={false}
   busy={false} disabled={false} locked={false} dirty={false} error={null} onChange={effect} onRefresh={effect}
-  onChooseRuntime={effect} onManageVersions={effect} onControl={effect} />);
-assert.match(controls, /Change version/);
+  onChooseRuntime={effect} onControl={effect} />);
+assert.doesNotMatch(controls, /Change version/, "only the built-in engine exists, so there is no version to change");
 assert.doesNotMatch(controls, /<option value="cigar:other"/,
   "an installed SDK cannot be drafted into the general settings form");
 assert.doesNotMatch(controls, /label="Local runtime"/);
 const pending = renderToStaticMarkup(<CigarRuntimeSelection value={{ ...state.preferences, runtime_id: target.runtime_id }} status={state}
-  installations={[target]} disabled={false} onManage={effect} onRefresh={effect} onRestore={effect} />);
+  installations={[target]} disabled={false} onRefresh={effect} onRestore={effect} />);
 assert.match(pending, /different version picked/);
 assert.match(pending, /Keep current version/);
 const locked = renderToStaticMarkup(<CigarRuntimeSelection value={state.preferences} status={state} installations={[]}
-  disabled={true} onManage={effect} onRefresh={effect} onRestore={effect} />);
-assert.match(locked, /disabled="">Change version/);
+  disabled={true} onRefresh={effect} onRestore={effect} />);
 assert.match(locked, /CIGAR is not set up on this computer yet/);
 const previous = { schema: 1 as const, tutorial: "first-brief" as const, step: 5 };
 assert.deepEqual(parseTutorialProgress(previous), previous, "existing lesson IDs and step bounds remain valid");
-const tutorial = cigarTutorial("cigar-updates");
-assert.equal(tutorial.steps.length, 6);
-for (let step = 0; step < tutorial.steps.length; step++) {
-  const progress = { schema: 1, tutorial: "cigar-updates", step };
-  assert.deepEqual(parseTutorialProgress(progress), progress);
-  assert.ok(["versions", "access"].includes(tutorial.steps[step].target));
-}
-const hub = renderToStaticMarkup(<CigarTutorials progress={{ schema: 1, tutorial: "cigar-updates", step: 2 }} onBegin={effect} />);
-assert.match(hub, /Update CIGAR with less interruption/);
-assert.match(hub, /Resume walkthrough/);
-const learning = renderToStaticMarkup(<CigarWalkthrough tutorial={tutorial} step={3} status={null} dirty={false}
+assert.deepEqual(parseTutorialProgress({ schema: 1, tutorial: "cigar-updates", step: 2 }), { schema: 1, tutorial: "first-brief", step: 0 },
+  "progress saved for the retired version-switch lesson starts over");
+const hub = renderToStaticMarkup(<CigarTutorials progress={{ schema: 1, tutorial: "first-brief", step: 2 }} onBegin={effect} />);
+assert.doesNotMatch(hub, /Update CIGAR with less interruption/);
+const tutorial = cigarTutorial("first-brief");
+const learning = renderToStaticMarkup(<CigarWalkthrough tutorial={tutorial} step={0} status={null} dirty={false}
   onMove={effect} onOpen={effect} onExit={effect} />);
-assert.match(learning, /Switch now/);
-assert.match(learning, /Select &amp; keep CIGAR off/);
 assert.match(learning, /Status unavailable/);
 assert.doesNotMatch(learning, /type="password"|role="switch"/);
 const guide = renderToStaticMarkup(<CigarGuide onSelect={effect} />);
-assert.match(guide, /Choose a version in Updates/);
+assert.doesNotMatch(guide, /Choose a version in Updates/);
 assert.doesNotMatch(guide, /runtime selector/);
-assert.ok(cigarTutorial("first-brief").steps[0].instructions.some((line) => line.includes("Updates")));
-console.log("Runtime selection stays outside ordinary drafts; update walkthroughs preserve prior progress and never grant or infer native readiness.");
+assert.ok(!cigarTutorial("first-brief").steps.some((step) => step.instructions.some((line) => line.includes("Updates"))));
+console.log("Runtime selection stays outside ordinary drafts; retired lesson progress resets and walkthroughs never grant or infer native readiness.");

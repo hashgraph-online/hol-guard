@@ -353,8 +353,10 @@ class GuardSurfaceDaemonClient:
             max_bytes=MAX_DAEMON_CATALOG_RESPONSE_BYTES,
         )
 
-    def inspect_command(self, payload: dict[str, object]) -> dict[str, object]:
-        return self._post("/v1/extension-controls/inspect", payload)
+    def inspect_command(self, payload: dict[str, object], *, timeout: float | None = None) -> dict[str, object]:
+        if timeout is None:
+            return self._post("/v1/extension-controls/inspect", payload)
+        return self._post("/v1/extension-controls/inspect", payload, timeout=timeout)
 
     def apply_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post(

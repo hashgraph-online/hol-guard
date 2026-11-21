@@ -107,6 +107,8 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
             Some(&controls),
             None,
             crate::pretool::PathContext {
+                literal_words: &[],
+                guard_home: None,
                 home_dir: request.home_dir.as_deref(),
                 cwd: request.cwd.as_deref(),
                 cdpath_unset: false,
@@ -114,6 +116,7 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,

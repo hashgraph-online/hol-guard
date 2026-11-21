@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
+from tests.execution_assurance_contract import (
     AtomicGuarantee,
     AtomicGuaranteeKind,
     DecisionContext,

@@ -26,6 +26,9 @@ fn workspace_includes_and_outside_hooks_keep_the_command_at_review() {
     assert_eq!(denials("[core]\n\thooksPath = /outside/hooks\n", ws), None);
     assert_eq!(denials("[core]\n\thooksPath = ~/hooks\n", ws), None);
     assert_eq!(denials("[core]\n\thooksPath = ../hooks\n", ws), None);
+    assert_eq!(denials("[core]\n\thooksPath = /dev/null/hooks\n", ws), None);
+    assert_eq!(denials("[core]\n\thooksPath = /dev/nul\n", ws), None);
+    assert_eq!(denials("[core]\n\thooksPath = /dev/null # off\n", ws), None);
     // An include outside the workspace is not writable from the sandbox.
     assert_eq!(
         denials("[include]\n\tpath = /etc/gitconfig.d/team\n", ws),
@@ -457,3 +460,25 @@ fn repository_hooks_below_home_are_read_like_global_ones() {
 
 #[path = "workspace_git_config_shell_tests.rs"]
 mod shell;
+
+/// `core.hooksPath = /dev/null` turns every hook off, so it names nothing the
+/// sandbox has to deny and no hook a contained command could plant.
+#[cfg(unix)]
+#[test]
+fn null_hook_directory_names_no_hooks() {
+    let ws = Path::new("/w/repo");
+    assert_eq!(
+        denials("[core]\n\thooksPath = /dev/null\n", ws),
+        Some(Vec::new())
+    );
+    assert_eq!(
+        denials("[core]\n\thooksPath = \"/dev/null\"\n", ws),
+        Some(Vec::new())
+    );
+    // Git keeps quoted spaces, so this names a relative directory the
+    // sandbox could fill with hooks.
+    assert_ne!(
+        denials("[core]\n\thooksPath = \" /dev/null \"\n", ws),
+        Some(Vec::new())
+    );
+}

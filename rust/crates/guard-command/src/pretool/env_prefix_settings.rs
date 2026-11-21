@@ -39,6 +39,15 @@ pub(super) fn inert_assignment(name: &str, value: &str) -> bool {
     {
         return true;
     }
+    // A time zone named the way the zone database spells it, such as
+    // `America/Los_Angeles` or `Etc/GMT+5`, only chooses which rules the C
+    // library reads to format a date. The slash keeps it out of the plain
+    // scalar above, so it is read here on its own terms. A value led by `:`
+    // or `/` names a file, and dots could climb out of the zone directory;
+    // neither is admitted.
+    if upper == "TZ" && zone_name(value) {
+        return true;
+    }
     // Any program may read any other name, so other settings are reviewed
     // through the projection instead of passing as inert.
     false
@@ -69,6 +78,19 @@ pub(super) fn ordinary_project_setting(name: &str, value: &str) -> bool {
 /// from the `reviewed` child module beside this one.
 pub(super) fn inert_tool_setting(name: &str, value: &str) -> bool {
     crate::pretool::generic::inert_tool_settings::inert_tool_setting(name, value)
+}
+
+/// A zone database name: non-empty segments of letters, digits, `_`, `+` and
+/// `-`, joined by single slashes, with no segment opening on `-`.
+fn zone_name(value: &str) -> bool {
+    value.len() <= MAX_SCALAR_CHARS
+        && value.split('/').all(|segment| {
+            !segment.is_empty()
+                && !segment.starts_with('-')
+                && segment
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || "_+-".contains(character))
+        })
 }
 
 fn plain_scalar(value: &str) -> bool {

@@ -40,6 +40,7 @@ import { openRecoveryView } from "./service-recovery";
 import { RuntimeGate } from "./runtime-error-state";
 
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => import("./swarm/swarm-workspace").then((m) => ({ default: m.SwarmWorkspace })));
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
 const SettingsWorkspace = lazyWorkspace("settings-workspace", () => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
@@ -82,6 +83,7 @@ import type {
   GuardInventoryItem,
   DecisionScope,
 } from "./guard-types";
+import { PulseApprovalOverlay } from "./pulse-approval-overlay";
 
 type RequestState =
   | { kind: "loading" }
@@ -152,6 +154,7 @@ export const PROTECT_ROUTE = "/protect";
 export const TODAY_EVIDENCE_ROUTE = "/evidence?time=today";
 
 export function viewTitle(view: AppView): string {
+  if (view === "swarm") return "Swarm";
   if (view === "home") return "Home";
   if (view === "inbox") return "Inbox";
   if (view === "fleet") return "Protect";
@@ -183,6 +186,7 @@ export function parseAppDetail(pathname: string): string | null {
 }
 
 export function resolveView(pathname: string): AppView {
+  if (pathname === "/swarm") return "swarm";
   if (pathname === "/cigar") return "cigar";
   if (parseAppDetail(pathname) !== null) {
     return "app-detail";
@@ -369,8 +373,8 @@ export function App() {
     let pollId: number | undefined;
     let refreshInFlight = false;
     let clearedQueue = false;
-    const needsFullQueue = view === "inbox" && requestId === null;
-    const needsQueuePage = view === "inbox" || requestId !== null;
+    const needsFullQueue = (view === "inbox" || view === "swarm") && requestId === null;
+    const needsQueuePage = view === "inbox" || view === "swarm" || requestId !== null;
     const needsHomePreview = view === "home" && requestId === null;
     const needsRuntimeReceipts =
       view === "home" ||
@@ -381,6 +385,9 @@ export function App() {
       view === "feed-health";
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
+        return;
+      }
+      if (needsFullQueue && view === "swarm" && document.hidden) {
         return;
       }
       refreshInFlight = true;
@@ -857,6 +864,7 @@ export function App() {
         approval_password: gateCredentials.approval_password,
         approval_totp_code: gateCredentials.approval_totp_code,
         approval_gate_use_cooldown: gateCredentials.approval_gate_use_cooldown,
+        approval_gate_pulse: gateCredentials.approval_gate_pulse,
       });
       await refreshStateAfterAction();
       if (result.failed.length > 0) {
@@ -1036,6 +1044,7 @@ export function App() {
 
   return (
     <>
+      <PulseApprovalOverlay />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-brand-blue focus:px-4 focus:py-2 focus:text-white focus:outline-none"
@@ -1057,6 +1066,7 @@ export function App() {
       codexResume={codexResume}
       approvalGate={approvalGate}
       onRetryResume={handleRetryResume}
+      swarmContent={<Suspense fallback={<LazyFallback />}><SwarmWorkspace onNavigate={navigate} onOpenRequest={handleOpenRequest} reviews={requests.kind === "ready" ? requests.items : null} /></Suspense>}
       homeContent={
         <Suspense fallback={<LazyFallback />}>
           <HomeWorkspace

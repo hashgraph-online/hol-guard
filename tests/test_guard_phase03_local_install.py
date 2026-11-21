@@ -15,12 +15,12 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.cli import update_artifact as update_artifact_module
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_open_command
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import CommandSafetyExtensionRegistry
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -2627,9 +2627,8 @@ def test_install_aliases_resolve_to_native_contracts() -> None:
     }
 
     for alias, canonical in aliases.items():
-        adapter = get_adapter(alias)
-        contract = adapter.setup_contract()
-        assert adapter.harness == canonical
+        contract = harness_ops.setup_contract(alias)
+        assert harness_ops.canonical_harness(alias) == canonical
         assert alias in contract.install_aliases
         assert contract.coverage.browser_fallback is True
         assert contract.coverage.native_hooks == (canonical in {"claude-code", "codex", "copilot"})

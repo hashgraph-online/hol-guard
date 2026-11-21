@@ -364,13 +364,14 @@ fn helper_denials(
                 return None;
             }
         } else if key == "hookspath" {
-            // A relative hook directory must stay inside the work tree. An
-            // absolute or `~/` one may also name a folder below home, which
-            // the sandbox cannot write, as global configuration often does.
-            // Anywhere else keeps the review, as does an inline comment or
-            // escape, which would move the path Git uses.
+            // A relative hook directory must stay in the work tree; an absolute
+            // or `~/` one may name a folder below home, which the sandbox cannot
+            // write. Elsewhere, or an inline comment or escape, keeps the review.
             if value.contains(['#', ';', '\\']) {
                 return None;
+            }
+            if super::git_hook_files::names_no_hooks(&value) {
+                continue;
             }
             let relative = !value.trim().trim_matches('"').starts_with(['~', '/']);
             let path = expand(root, home, &value)?;

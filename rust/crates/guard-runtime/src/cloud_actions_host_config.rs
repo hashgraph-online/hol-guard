@@ -1,14 +1,11 @@
 //! The one settings entry that adds Cloud actions to an AI tool.
 //!
-//! Each supported AI tool keeps its MCP servers in one user-level file. Guard
-//! adds or changes a single entry there, named `hol-guard-cloud`. The plan
-//! renders the whole file as it would be written and checks that, apart from
-//! that entry, it reads back exactly as before; the undo puts that entry back
-//! as it was, or removes it, under the same check. Nothing is read or written
-//! here: the CLI reads the file, sends its text, and writes what comes back.
-//!
-//! JSON files are rewritten with their own indentation, line endings and key
-//! order. TOML files are edited in place, so comments and layout are kept.
+//! The plan renders the whole settings file as it would be written and checks
+//! that, apart from the `hol-guard-cloud` entry, it reads back exactly as
+//! before; the undo puts that entry back as it was, or removes it, under the
+//! same check. Reading and writing the file is `cloud_actions_host_apply`.
+//! JSON files keep their own indentation, line endings and key order; TOML
+//! files are edited in place, so comments and layout are kept.
 
 use std::io::Read;
 
@@ -17,12 +14,15 @@ use serde_json::{json, Map, Value};
 
 #[path = "cloud_actions_host_config_url.rs"]
 mod address;
+#[path = "cloud_actions_host_config_fields.rs"]
+mod fields;
 #[path = "cloud_actions_host_config_json.rs"]
 mod json_text;
 #[path = "cloud_actions_host_config_toml.rs"]
 mod toml_text;
 
-use self::address::display_url;
+use self::address::{display_url, points_at};
+use self::fields::{guard_fields, Fields};
 use self::json_text::{dump_like, is_blank, json_root, lookup, parse_json, set, upsert, Node};
 use self::toml_text::{toml_edit_entry, toml_remove_entry};
 
@@ -88,20 +88,18 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     if bytes.len() as u64 > MAX_REQUEST_BYTES {
         return Err("cloud_actions_host_config_request_too_large".to_owned());
     }
+    let invalid = || "cloud_actions_host_config_request_invalid".to_owned();
     let request: Value = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
     let answer = answer(request).ok_or_else(invalid)?;
     serde_json::to_vec(&answer)
         .map_err(|_| "cloud_actions_host_config_response_encode_failed".to_owned())
 }
 
-fn invalid() -> String {
-    "cloud_actions_host_config_request_invalid".to_owned()
-}
-
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PlanRequest {
-    op: String,
+    #[serde(rename = "op")]
+    _op: String,
     ai_tool: String,
     before: Option<String>,
     entry: Value,
@@ -111,7 +109,8 @@ struct PlanRequest {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UndoRequest {
-    op: String,
+    #[serde(rename = "op")]
+    _op: String,
     ai_tool: String,
     current: String,
     written: Value,
@@ -119,137 +118,62 @@ struct UndoRequest {
 }
 
 fn answer(request: Value) -> Option<Value> {
-    match request.get("op").and_then(Value::as_str)? {
+    let op = request.get("op").and_then(Value::as_str)?.to_owned();
+    match op.as_str() {
         "plan" => {
             let request: PlanRequest = serde_json::from_value(request).ok()?;
-            let tool = tool(&request.ai_tool)?;
-            let wanted = Fields::from_request(&request.entry)?;
-            (request.op == "plan").then_some(())?;
-            Some(plan(tool, request.before.as_deref(), &wanted, &request.url))
+            plan_text(
+                &request.ai_tool,
+                request.before.as_deref(),
+                &request.entry,
+                &request.url,
+            )
         }
         "undo" => {
             let request: UndoRequest = serde_json::from_value(request).ok()?;
-            let tool = tool(&request.ai_tool)?;
-            (request.op == "undo").then_some(())?;
-            Some(
-                match undo(
-                    tool,
-                    &request.current,
-                    &request.written,
-                    request.prior.as_deref(),
-                ) {
-                    Ok((after, removed)) => json!({"after": after, "removed": removed}),
-                    Err(problem) => json!({"problem": problem}),
-                },
-            )
+            let undone = undo_text(
+                &request.ai_tool,
+                &request.current,
+                &request.written,
+                request.prior.as_deref(),
+            )?;
+            Some(match undone {
+                Ok((after, removed)) => json!({"after": after, "removed": removed}),
+                Err(problem) => json!({"problem": problem}),
+            })
         }
-        _ => None,
+        _ => crate::cloud_actions_host_apply::answer(&op, request),
     }
+}
+
+/// Whether `slug` names an AI tool with a Cloud actions setup.
+pub(crate) fn supports(slug: &str) -> bool {
+    tool(slug).is_some()
+}
+
+/// The plan for one settings text; `None` when the AI tool or the entry is not one Guard writes.
+pub(crate) fn plan_text(
+    ai_tool: &str,
+    before: Option<&str>,
+    entry: &Value,
+    url: &str,
+) -> Option<Value> {
+    let wanted = Fields::from_request(entry)?;
+    Some(plan(tool(ai_tool)?, before, &wanted, url))
+}
+
+/// `undo` for one settings text; `None` when the AI tool is not supported.
+pub(crate) fn undo_text(
+    ai_tool: &str,
+    current: &str,
+    written: &Value,
+    prior: Option<&str>,
+) -> Option<Result<(String, bool), String>> {
+    Some(undo(tool(ai_tool)?, current, written, prior))
 }
 
 fn tool(slug: &str) -> Option<&'static Tool> {
     TOOLS.iter().find(|tool| tool.slug == slug)
-}
-
-/// The fields of an entry Guard writes: the bridge launch, or the
-/// address-only entry an earlier alpha wrote.
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Fields {
-    Url(String),
-    Bridge { command: String, args: Vec<String> },
-}
-
-impl Fields {
-    fn from_request(entry: &Value) -> Option<Self> {
-        let entry = entry.as_object()?;
-        let keys: Vec<&str> = entry.keys().map(String::as_str).collect();
-        match keys.as_slice() {
-            ["url"] => Some(Self::Url(entry["url"].as_str()?.to_owned())),
-            ["args", "command"] => Some(Self::Bridge {
-                command: entry["command"].as_str()?.to_owned(),
-                args: strings(&entry["args"])?,
-            }),
-            _ => None,
-        }
-    }
-
-    /// The fields as an object, without the transport type.
-    fn value(&self) -> Value {
-        Value::Object(
-            self.entry(None)
-                .into_iter()
-                .map(|(k, v)| (k.to_owned(), v))
-                .collect(),
-        )
-    }
-
-    /// The entry in writing order, typed for an AI tool that wants a type.
-    fn entry(&self, tool: Option<&Tool>) -> Vec<(&'static str, Value)> {
-        let mut entry = Vec::new();
-        if tool.is_some_and(|tool| tool.typed) {
-            let kind = if matches!(self, Self::Url(_)) {
-                "http"
-            } else {
-                "stdio"
-            };
-            entry.push(("type", json!(kind)));
-        }
-        match self {
-            Self::Url(url) => entry.push(("url", json!(url))),
-            Self::Bridge { command, args } => {
-                entry.push(("command", json!(command)));
-                entry.push(("args", json!(args)));
-            }
-        }
-        entry
-    }
-
-    fn wanted(&self, tool: &Tool) -> Value {
-        Value::Object(
-            self.entry(Some(tool))
-                .into_iter()
-                .map(|(k, v)| (k.to_owned(), v))
-                .collect(),
-        )
-    }
-}
-
-fn strings(value: &Value) -> Option<Vec<String>> {
-    value
-        .as_array()?
-        .iter()
-        .map(|item| item.as_str().map(str::to_owned))
-        .collect()
-}
-
-fn guard_fields(tool: &Tool, entry: &Map<String, Value>) -> Option<Fields> {
-    let has_url = entry.contains_key("url");
-    match (tool.typed, entry.get("type")) {
-        (true, kind) => {
-            let wanted = if has_url { "http" } else { "stdio" };
-            if kind.and_then(Value::as_str) != Some(wanted) {
-                return None;
-            }
-        }
-        (false, Some(_)) => return None,
-        (false, None) => {}
-    }
-    let keys: Vec<&str> = entry
-        .keys()
-        .map(String::as_str)
-        .filter(|key| *key != "type")
-        .collect();
-    match keys.as_slice() {
-        ["url"] => Some(Fields::Url(entry["url"].as_str()?.to_owned())),
-        ["args", "command"] => {
-            let command = entry["command"].as_str()?.to_owned();
-            let args = strings(&entry["args"])?;
-            let bridge = [BRIDGE_ARGS[0], BRIDGE_ARGS[1], tool.slug];
-            let bridged = args.windows(3).any(|window| window == bridge);
-            bridged.then_some(Fields::Bridge { command, args })
-        }
-        _ => None,
-    }
 }
 
 fn plan(tool: &Tool, before: Option<&str>, wanted: &Fields, url: &str) -> Value {
@@ -287,7 +211,11 @@ fn plan(tool: &Tool, before: Option<&str>, wanted: &Fields, url: &str) -> Value 
                     format!("An entry named {SERVER_NAME} already exists with other settings.");
                 return answer("conflict", others, Some(problem.as_str()));
             }
-            Some(current) if current == *wanted => return answer("unchanged", others, None),
+            Some(current) if current == *wanted => {
+                let mut unchanged = answer("unchanged", others, None);
+                unchanged["after"] = json!(before);
+                return unchanged;
+            }
             Some(Fields::Url(current)) => previous_url = display_url(&current),
             Some(Fields::Bridge { .. }) => {}
         }
@@ -359,13 +287,6 @@ fn undo(
         return Err(EDIT_ERROR.to_owned());
     }
     Ok((after, true))
-}
-
-fn points_at(entry: &Map<String, Value>, url: &str) -> bool {
-    entry
-        .get("url")
-        .and_then(Value::as_str)
-        .is_some_and(|value| value.trim_end_matches('/') == url.trim_end_matches('/'))
 }
 
 /// The settings file's values, as the AI tool reads them.

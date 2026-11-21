@@ -38,6 +38,8 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             None,
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
+                guard_home: None,
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
                 cdpath_unset: false,
@@ -45,6 +47,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
@@ -443,6 +446,8 @@ fn stamped_git_reads_allow_only_when_no_diff_helper_is_configured() {
             None,
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
+                guard_home: None,
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
                 cdpath_unset: false,
@@ -450,6 +455,7 @@ fn stamped_git_reads_allow_only_when_no_diff_helper_is_configured() {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,

@@ -1,5 +1,7 @@
 //! Tests for the Git read-after-allow order checks.
-use super::{globals_only_route_or_print, preserves_tree, REF_READS};
+use super::super::git_output_target::points_output_at_a_protected_file;
+use super::super::git_step_preserves::{preserves_configuration, preserves_tree, writes_nothing};
+use super::{globals_only_route_or_print, REF_READS};
 
 #[test]
 fn working_tree_reads_are_not_ref_reads() {
@@ -18,16 +20,23 @@ fn a_read_leaves_a_later_step_running_what_guard_read() {
         "status --short --branch",
         "log --oneline -5",
         "ls-remote --heads origin",
+        "diff-tree -r --name-only HEAD",
+        "diff-index --cached --name-only HEAD",
+        "diff-files --name-only",
     ] {
-        assert!(super::writes_nothing(&words(command)), "{command}");
+        assert!(writes_nothing(&words(command)), "{command}");
     }
     // Each of these writes somewhere a later step could read.
     for command in [
         "diff --output=hook",
+        "diff-tree --output=hook -r HEAD",
+        "diff-tree -r --out hook HEAD",
+        "diff-index --output=run.sh HEAD",
+        "diff-files --outp=hook",
         "archive -o out.tar HEAD",
         "config a.b c",
     ] {
-        assert!(!super::writes_nothing(&words(command)), "{command}");
+        assert!(!writes_nothing(&words(command)), "{command}");
     }
 }
 
@@ -44,7 +53,7 @@ fn a_step_that_writes_configuration_settles_no_order_check() {
         "log --oneline -5",
         "rev-parse HEAD",
     ] {
-        assert!(super::preserves_configuration(&words(command)), "{command}");
+        assert!(preserves_configuration(&words(command)), "{command}");
     }
     // A configuration write names the pager, textconv or filter program
     // the read after it would run, so the Allow on the read cannot answer
@@ -58,10 +67,7 @@ fn a_step_that_writes_configuration_settles_no_order_check() {
         "refresh-cache",
         "--unknown-global status",
     ] {
-        assert!(
-            !super::preserves_configuration(&words(command)),
-            "{command}"
-        );
+        assert!(!preserves_configuration(&words(command)), "{command}");
     }
 }
 
@@ -90,7 +96,7 @@ fn an_output_file_that_decides_what_runs_next_is_not_a_read() {
         "archive --output",
     ] {
         assert!(
-            super::points_output_at_a_protected_file(&words(command)),
+            points_output_at_a_protected_file(&words(command)),
             "{command}"
         );
     }
@@ -113,7 +119,7 @@ fn an_output_file_that_decides_what_runs_next_is_not_a_read() {
         "log --one-line",
     ] {
         assert!(
-            !super::points_output_at_a_protected_file(&words(command)),
+            !points_output_at_a_protected_file(&words(command)),
             "{command}"
         );
     }
@@ -136,7 +142,7 @@ fn a_destination_option_outside_the_workspace_is_not_a_read() {
         "fast-export --export-marks",
     ] {
         assert!(
-            super::points_output_at_a_protected_file(&words(command)),
+            points_output_at_a_protected_file(&words(command)),
             "{command}"
         );
     }
@@ -157,7 +163,7 @@ fn a_destination_option_outside_the_workspace_is_not_a_read() {
         "fast-export --reencode=yes --all",
     ] {
         assert!(
-            !super::points_output_at_a_protected_file(&words(command)),
+            !points_output_at_a_protected_file(&words(command)),
             "{command}"
         );
     }

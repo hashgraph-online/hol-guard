@@ -29,6 +29,9 @@ use serde_json::{json, Map, Value};
 use crate::daemon_lifecycle_text::{py_isspace as py_space, shlex_split};
 use crate::guard_store_json::dumps_default;
 
+#[path = "hook_launch_scan_bounded.rs"]
+mod bounded;
+
 const COMMAND: &str = "hook-launch-scan";
 const SCHEMA: &str = "hook-launch-scan.v1";
 const BATCH_SCHEMA: &str = "hook-launch-scan.v2";
@@ -379,10 +382,10 @@ fn names_foreign_interpreter(path: &Path, current: Option<&str>, home: &str) -> 
         return false;
     }
     let text = String::from_utf8_lossy(&bytes);
-    if commands(&text)
-        .iter()
-        .any(|command| names_foreign_client(command, current, home))
-    {
+    if commands(&text).iter().any(|command| {
+        names_foreign_client(command, current, home)
+            || bounded::names_foreign_interpreter(command, current, home)
+    }) {
         return true;
     }
     names_foreign_powershell_launcher(&text, current, home)

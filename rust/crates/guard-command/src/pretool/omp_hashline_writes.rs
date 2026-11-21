@@ -15,18 +15,50 @@
 //! VCS metadata.
 //!
 //! Oh My Pi's own parser forgives a lot: it unquotes paths, strips
-//! `Update File:`-style noise and leading `***`, and recovers lowercase tags.
-//! This parser accepts only the plain grammar, so every target it reports is
-//! the file Oh My Pi would open. Deletes (`REM`), moves (`MV`), quoted or
-//! decorated paths, `~` other than a leading `~/`, and anything else it does
-//! not recognize leave the edit unproven.
+//! `Update File:`-style noise and leading `***`, unwraps `*** Begin Patch`
+//! markers written inside a header's brackets, and recovers lowercase tags.
+//! This parser repeats the marker unwrapping and the noise strip exactly as
+//! Oh My Pi 18.8 and later do them, so every target it reports is the file
+//! Oh My Pi would open. Deletes (`REM`), moves (`MV`), quoted paths, `~`
+//! other than a leading `~/`, and anything else it does not recognize leave
+//! the edit unproven.
 
 use std::path::Path;
+
+use super::omp_hashline_recovery::strip_noise;
 
 const MAX_PATCH_TARGETS: usize = 64;
 const BEGIN_PATCH: &str = "*** Begin Patch";
 const END_PATCH: &str = "*** End Patch";
 const TAG_LENGTH: usize = 4;
+/// Oh My Pi's `ENVELOPE_MARKERS`: the markers it unwraps when a model writes
+/// them inside a header's brackets.
+const ENVELOPE_MARKERS: [&str; 3] = [BEGIN_PATCH, END_PATCH, "*** Abort"];
+
+/// Oh My Pi's `unbracket_envelope_markers`: drops leading bracketed patch
+/// markers from a row, so `[*** Begin Patch [src/a.ts#1A2B]` and
+/// `[*** Begin Patch] [src/a.ts#1A2B]` both read as `[src/a.ts#1A2B]`. A row
+/// that is nothing but a marker comes back as the bare marker.
+fn unbracket_envelope_markers(line: &str) -> &str {
+    let mut rest = line;
+    loop {
+        let Some(inner) = rest.strip_prefix('[').map(str::trim_start) else {
+            return rest;
+        };
+        let Some(marker) = ENVELOPE_MARKERS
+            .iter()
+            .find(|marker| inner.starts_with(**marker))
+        else {
+            return rest;
+        };
+        let tail = inner[marker.len()..].trim_start();
+        let tail = tail.strip_prefix(']').unwrap_or(tail).trim_start();
+        if tail.is_empty() {
+            return marker;
+        }
+        rest = tail;
+    }
+}
 
 /// What the proof concluded about a hashline edit.
 #[derive(Debug, PartialEq, Eq)]
@@ -49,7 +81,10 @@ pub(super) fn hashline_targets(input: &str) -> Option<Vec<(String, bool)>> {
         return None;
     }
     let mut lines = input.trim().lines().peekable();
-    if lines.peek().is_some_and(|line| line.trim() == BEGIN_PATCH) {
+    while lines.peek().is_some_and(|line| {
+        let line = unbracket_envelope_markers(line.strip_suffix('\r').unwrap_or(line).trim_end());
+        line.trim() == BEGIN_PATCH
+    }) {
         lines.next();
     }
     let mut targets: Vec<(String, bool)> = Vec::new();
@@ -72,7 +107,11 @@ pub(super) fn hashline_targets(input: &str) -> Option<Vec<(String, bool)>> {
             continue;
         }
         if line.starts_with('[') {
-            let (path, tagged) = header_path(line.trim_end())?;
+            let header = unbracket_envelope_markers(line.trim_end());
+            if !header.starts_with('[') {
+                return None;
+            }
+            let (path, tagged) = header_path(header)?;
             if let Some(target) = targets.iter_mut().find(|(known, _)| known == path) {
                 target.1 |= tagged;
             } else if targets.len() == MAX_PATCH_TARGETS {
@@ -125,7 +164,10 @@ pub(super) fn header_paths(input: &str) -> Option<Vec<&str>> {
             return None;
         }
         if line.starts_with('[') && line.ends_with(']') {
-            paths.push(header_path(line)?.0);
+            let header = unbracket_envelope_markers(line);
+            if header.starts_with('[') {
+                paths.push(header_path(header)?.0);
+            }
         }
     }
     Some(paths)
@@ -133,6 +175,14 @@ pub(super) fn header_paths(input: &str) -> Option<Vec<&str>> {
 
 fn header_path(line: &str) -> Option<(&str, bool)> {
     let body = line.strip_prefix('[')?.strip_suffix(']')?;
+    // Oh My Pi trims the whole header body with JavaScript's `trim` before it
+    // cuts the `#TAG`, so `[ notes.md#FB48 ]` names `notes.md`. Without
+    // control characters or a byte order mark, that trims exactly what
+    // `str::trim` does; with one, the header stays unproven.
+    if body.chars().any(|c| c.is_control() || c == '\u{feff}') {
+        return None;
+    }
+    let body = body.trim();
     let (path, tagged) = match body.rsplit_once('#') {
         Some((path, tag))
             if tag.len() == TAG_LENGTH && tag.chars().all(|c| c.is_ascii_hexdigit()) =>
@@ -142,17 +192,15 @@ fn header_path(line: &str) -> Option<(&str, bool)> {
         Some(_) => return None,
         None => (body, false),
     };
-    // Oh My Pi trims the path with JavaScript's `trim`. Without control
-    // characters or a byte order mark, that trims exactly what `str::trim`
-    // does, so a padded path names the same file once trimmed.
-    if path.chars().any(|c| c.is_control() || c == '\u{feff}') {
-        return None;
-    }
+    // A space written before `#` stays in Oh My Pi's copy of the path; the
+    // file it opens is the trimmed name, less the same `***` and
+    // `Update File:` noise Oh My Pi deletes.
     let path = path.trim();
-    // Oh My Pi rewrites quoted, starred and `Update File:`-prefixed paths
-    // before opening them, and a scheme names another location, so only a
-    // path it would open as written is reported. It opens a leading `~/`
-    // under the home folder, and shows paths that way, so models copy it.
+    let path = strip_noise(path);
+    // Oh My Pi unquotes paths before opening them, and a scheme names another
+    // location, so only a path it would open as written is reported. It
+    // opens a leading `~/` under the home folder, and shows paths that way,
+    // so models copy it.
     let home_relative = path
         .strip_prefix('~')
         .is_none_or(|rest| rest.starts_with('/'));
@@ -187,9 +235,14 @@ pub(super) fn evaluate_hashline_edit(
             None => written.clone(),
         };
         // Only an ordinary name may say it is missing; a sensitive or
-        // protected one keeps its review.
+        // protected one keeps its review. Oh My Pi resolves `..` before it
+        // opens a path, so `ghost/../src/a.ts` may name a file that exists
+        // even though `ghost` does not; such a path keeps its review.
         let missing_target = || {
-            super::safe_reads::missing_read_target(target, home_dir, cwd, false)
+            !Path::new(target)
+                .components()
+                .any(|part| part == std::path::Component::ParentDir)
+                && super::safe_reads::missing_read_target(target, home_dir, cwd, false)
                 && !super::sensitive_command(target)
                 && !super::apply_patch_writes::protected_name(Path::new(target))
         };
@@ -240,7 +293,10 @@ fn unreadable_header(input: &str) -> Option<String> {
     let line = input
         .lines()
         .map(|line| line.strip_suffix('\r').unwrap_or(line).trim_end())
-        .find(|line| line.starts_with('[') && header_path(line).is_none())?;
+        .find(|line| {
+            let header = unbracket_envelope_markers(line);
+            line.starts_with('[') && header.starts_with('[') && header_path(header).is_none()
+        })?;
     let shown: String = line
         .chars()
         .filter(|c| !c.is_control())

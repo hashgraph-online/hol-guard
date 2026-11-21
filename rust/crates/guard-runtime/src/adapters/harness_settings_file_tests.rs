@@ -163,19 +163,13 @@ fn muse_fresh_install_adds_schema_version_and_status() {
     assert_eq!(answer["notes"].as_array().map(Vec::len), Some(3));
     // A schema_version the user set is kept in place; a missing one goes last.
     let kept = installed("muse", Some(r#"{"hooks": {}, "schema_version": 2}"#));
-    assert!(
-        kept.contains("  },\n  \"schema_version\": 2\n}\n"),
-        "{kept}"
-    );
+    assert!(kept.ends_with("  }, \"schema_version\": 2}"), "{kept}");
     let added = installed("muse", Some(r#"{"model": "m", "hooks": null}"#));
     assert!(
-        added.starts_with("{\n  \"model\": \"m\",\n  \"hooks\": {"),
+        added.starts_with("{\"model\": \"m\", \"hooks\": {\n"),
         "{added}"
     );
-    assert!(
-        added.ends_with("  },\n  \"schema_version\": 1\n}\n"),
-        "{added}"
-    );
+    assert!(added.ends_with("  }, \"schema_version\": 1}"), "{added}");
 }
 
 #[test]
@@ -305,12 +299,11 @@ fn muse_install_refusals_keep_python_messages() {
 
 #[test]
 fn uninstall_prunes_guard_handlers_and_drops_empty_hooks() {
-    let installed_text = installed("devin", Some(r#"{"keep": true, "hooks": {"Custom": [1]}}"#));
+    let user = r#"{"keep": true, "hooks": {"Custom": [1]}}"#;
+    let installed_text = installed("devin", Some(user));
     let answer = uninstall("devin", encoded(Some(installed_text.as_str())), true);
-    assert_eq!(
-        answer["text"],
-        "{\n  \"keep\": true,\n  \"hooks\": {\n    \"Custom\": [\n      1\n    ]\n  }\n}\n"
-    );
+    // Install then uninstall hands back the user's bytes.
+    assert_eq!(answer["text"], user);
     assert_eq!(
         answer["notes"],
         json!([
@@ -320,13 +313,10 @@ fn uninstall_prunes_guard_handlers_and_drops_empty_hooks() {
     );
     let fresh = installed("muse", Some(r#"{"model": "m"}"#));
     let answer = uninstall("muse", encoded(Some(fresh.as_str())), true);
-    assert_eq!(
-        answer["text"],
-        "{\n  \"model\": \"m\",\n  \"schema_version\": 1\n}\n"
-    );
-    // A dict hooks value always rewrites, normalizing the text.
+    assert_eq!(answer["text"], r#"{"model": "m", "schema_version": 1}"#);
+    // A dict hooks value always rewrites; the rest keeps its spelling.
     let answer = uninstall("muse", encoded(Some(r#"{"f": 1.50, "hooks": {}}"#)), true);
-    assert_eq!(answer["text"], "{\n  \"f\": 1.5\n}\n");
+    assert_eq!(answer["text"], r#"{"f": 1.50}"#);
 }
 
 #[test]
@@ -421,4 +411,16 @@ fn malformed_requests_are_refused() {
         parsed(text.as_str().expect("text"))["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"],
         605
     );
+}
+
+#[test]
+fn muse_install_then_uninstall_gives_back_the_user_bytes() {
+    let user = "{\n  \"schema_version\": 1,\n  \"syntheticUserSetting\": \"keep-me\",\n  \"nested\": {\"value\": 1}\n}\n";
+    let installed_text = installed("muse", Some(user));
+    assert!(
+        installed_text.contains("  \"nested\": {\"value\": 1}"),
+        "{installed_text}"
+    );
+    let answer = uninstall("muse", encoded(Some(installed_text.as_str())), true);
+    assert_eq!(answer["text"], user);
 }

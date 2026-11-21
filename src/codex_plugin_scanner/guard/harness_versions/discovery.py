@@ -19,7 +19,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Final
 
-from ..adapters.base import HarnessContext
+from ..harness_context import HarnessContext
 
 _FEATURE: Final = "native-harness-version-discovery-v1"
 _COMMAND: Final = "harness-version-discovery"

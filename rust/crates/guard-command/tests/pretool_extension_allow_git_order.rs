@@ -227,6 +227,10 @@ fn a_ref_read_keeps_the_review_of_a_step_nobody_allowed() {
         "git config core.pager 'sh -c true' && git rev-parse HEAD && git log -1",
         "git checkout -B refresh origin/main && docker start web",
         "git reset --hard origin/main && docker container start web",
+        // A checkout can swap a file for a symlink to a credential, so a read
+        // after it is not proven by a check made before the command ran.
+        "git checkout -B refresh origin/main && cat README.md",
+        "git checkout -B refresh origin/main && ls -la && cat README.md",
     ] {
         let result = decide(&root, "omp", command, &allowed);
         assert_ne!(
@@ -509,3 +513,5 @@ fn a_ref_read_after_a_step_routed_elsewhere_still_waits_for_review() {
         );
     }
 }
+
+mod linked;

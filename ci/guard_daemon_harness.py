@@ -9,6 +9,7 @@ patch the library work its routes hand off.
 from __future__ import annotations
 
 import hmac
+import os
 import socket
 import threading
 import uuid
@@ -87,12 +88,21 @@ class _LibraryCallServer:
         wait_for_background_work()
 
 
+# What the daemon's hook reviews change: the worker that reviews them, and the
+# writer their native receipts go to.
+_RESIDENT_ATTRIBUTES = frozenset({"hook_worker", "runtime_hook_evidence_writer"})
+
+
 class _NativeServerView:
     """Server attributes tests read or seed, from the native daemon.
 
     Anything beyond ``store`` and ``auth_token`` comes from the request host
     the daemon's library calls build, so state it keeps on disk, such as the
-    connect flows, is shared with the calls the daemon makes.
+    connect flows, is shared with the calls the daemon makes. The hook worker
+    and the evidence its reviews write come from the resident's own host once
+    the daemon runs, so a test reads the worker that reviewed the daemon's
+    hooks; everything else stays on one host across ``start``, so state a test
+    seeds before the daemon runs is the state it reads back afterwards.
     """
 
     def __init__(self, daemon: Any) -> None:
@@ -103,6 +113,33 @@ class _NativeServerView:
     @property
     def auth_token(self) -> str:
         return str(self._daemon.auth_token)
+
+    def _resident_host(self) -> Any | None:
+        """The host the daemon's hook library calls review in, once the daemon runs.
+
+        The daemon's hook route hands ``hook.warm``, ``hook.review`` and the rest
+        to the resident library, which here runs in this process and keeps one
+        host per Guard home. A test that reads the hook worker, its route metrics
+        or a tap on its reviews has to read that host, not a second one that
+        never sees a hook.
+        """
+
+        if not int(getattr(self._daemon, "pid", 0) or 0):
+            return None
+        from codex_plugin_scanner.guard.routes import hook_calls
+
+        wanted = os.path.realpath(self.store.guard_home)
+        with hook_calls._SERVERS_LOCK:
+            for key, server in hook_calls._SERVERS.items():
+                if os.path.realpath(key) == wanted:
+                    return server
+        home_dir = Path(self._daemon.home_dir) if self._daemon.home_dir is not None else Path.home()
+        # The same arguments the daemon's own ``hook.warm`` sends, so whichever
+        # call builds the host first, the other reuses it.
+        return hook_calls._server(
+            self.store,
+            {"port": int(self._daemon.port), "daemon_pid": int(self._daemon.pid), "home_dir": str(home_dir)},
+        )
 
     def _request_host(self) -> Any:
         host = self.__dict__["_host"]
@@ -120,13 +157,18 @@ class _NativeServerView:
             object.__setattr__(self, "_host", host)
         return host
 
+    def _host_for(self, name: str) -> Any:
+        if name in _RESIDENT_ATTRIBUTES and (resident := self._resident_host()) is not None:
+            return resident
+        return self._request_host()
+
     def __getattr__(self, name: str) -> Any:
         if name.startswith("__"):
             raise AttributeError(name)
-        return getattr(self._request_host(), name)
+        return getattr(self._host_for(name), name)
 
     def __setattr__(self, name: str, value: object) -> None:
-        setattr(self._request_host(), name, value)
+        setattr(self._host_for(name), name, value)
 
 
 class GuardDaemonServer:

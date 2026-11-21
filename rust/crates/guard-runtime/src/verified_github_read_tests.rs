@@ -1,44 +1,40 @@
+use std::path::PathBuf;
+
 use super::*;
 
-struct Files {
+const REPOSITORY_URL: &str = "https://api.github.com/repos/hashgraph-online/hol-guard";
+const PULL_URL: &str = "https://api.github.com/repos/hashgraph-online/hol-guard/pulls/17";
+
+struct Network {
     _dir: tempfile::TempDir,
-    executor: String,
-    bundle: String,
+    bundle: PathBuf,
+    policy: ManagedNetworkPolicy,
 }
 
-fn files() -> Files {
+fn network() -> Network {
     let dir = tempfile::tempdir().expect("dir");
-    let executor = dir.path().join("verified_github_reads.py");
     let bundle = dir.path().join("ca.pem");
-    fs::write(&executor, b"executor").expect("executor");
     fs::write(&bundle, b"bundle").expect("bundle");
-    Files {
-        executor: executor.to_str().expect("utf-8").to_owned(),
-        bundle: bundle.to_str().expect("utf-8").to_owned(),
+    let policy = ManagedNetworkPolicy {
+        ca_bundle_path: Some(bundle.clone()),
+        ..ManagedNetworkPolicy::unmanaged_default()
+    };
+    Network {
         _dir: dir,
+        bundle,
+        policy,
     }
 }
 
-fn request(files: &Files, op: &str) -> Value {
+fn request() -> Value {
     json!({
-        "op": op,
+        "op": "read",
         "owner": "hashgraph-online",
         "repository": "hol-guard",
         "pull_number": 17,
         "fields": ["number", "state", "mergeable"],
-        "network_policy": {
-            "proxyMode": "system",
-            "proxyConfigured": false,
-            "caBundleConfigured": true,
-            "allowPublicRegistries": true,
-        },
-        "ca_bundle_path": files.bundle,
-        "executor_path": files.executor,
+        "timeout_seconds": 15.0,
     })
-}
-
-fn plan(files: &Files) -> Value {
-    answer(request(files, "plan")).expect("plan")
 }
 
 fn repository_reply() -> Value {
@@ -55,67 +51,42 @@ fn pull_reply() -> Value {
     })
 }
 
-fn compose(files: &Files, identity: &Value, repository: &[u8], pull: &[u8]) -> Value {
-    let mut request = request(files, "compose");
-    let members = request.as_object_mut().expect("object");
-    members.insert("identity".to_owned(), identity.clone());
-    members.insert("tls_runtime".to_owned(), json!("OpenSSL 3.0.13"));
-    members.insert(
-        "repository_body".to_owned(),
-        json!(STANDARD.encode(repository)),
-    );
-    members.insert("pull_body".to_owned(), json!(STANDARD.encode(pull)));
-    answer(request).expect("compose")
-}
-
 fn body(value: &Value) -> Vec<u8> {
     serde_json::to_vec(value).expect("body")
 }
 
-#[test]
-fn the_plan_names_the_two_exact_api_urls_and_sorted_fields() {
-    let files = files();
-    let planned = plan(&files);
-    assert_eq!(planned["fields"], json!(["mergeable", "number", "state"]));
-    assert_eq!(
-        planned["urls"],
-        json!([
-            "https://api.github.com/repos/hashgraph-online/hol-guard",
-            "https://api.github.com/repos/hashgraph-online/hol-guard/pulls/17",
-        ])
-    );
-    assert_eq!(planned["identity"].as_str().map(str::len), Some(64));
+/// The answer to `request` when the two URLs reply with `repository` and `pull`.
+fn read_with(network: &Network, request: Value, repository: &[u8], pull: &[u8]) -> Value {
+    let (read, fields) = checked(request).expect("reviewed shape");
+    compose_read(&read, &fields, &network.policy, |url| match url {
+        REPOSITORY_URL => Some(repository.to_vec()),
+        PULL_URL => Some(pull.to_vec()),
+        _ => None,
+    })
+}
+
+fn read(network: &Network, repository: &[u8], pull: &[u8]) -> Value {
+    read_with(network, request(), repository, pull)
 }
 
 #[test]
 fn a_public_pull_request_composes_its_output_and_a_stable_proof() {
-    let files = files();
-    let identity = plan(&files)["identity"].clone();
-    let composed = compose(
-        &files,
-        &identity,
-        &body(&repository_reply()),
-        &body(&pull_reply()),
-    );
+    let network = network();
+    let composed = read(&network, &body(&repository_reply()), &body(&pull_reply()));
     assert_eq!(
         composed["stdout"],
         json!("{\"mergeable\":true,\"number\":17,\"state\":\"open\"}\n")
     );
     let binding = composed["binding_digest"].as_str().expect("digest");
     assert_eq!(binding.len(), 64);
-    let again = compose(
-        &files,
-        &identity,
-        &body(&repository_reply()),
-        &body(&pull_reply()),
-    );
+    let again = read(&network, &body(&repository_reply()), &body(&pull_reply()));
     assert_eq!(again["binding_digest"], json!(binding));
 
     let mut marked = b"\xef\xbb\xbf".to_vec();
     marked.extend_from_slice(&body(&repository_reply()));
     let mut pull = pull_reply();
     pull["mergeable"] = Value::Null;
-    let unknown = compose(&files, &identity, &marked, &body(&pull));
+    let unknown = read(&network, &marked, &body(&pull));
     assert_eq!(
         unknown["stdout"],
         json!("{\"mergeable\":null,\"number\":17,\"state\":\"open\"}\n")
@@ -124,33 +95,36 @@ fn a_public_pull_request_composes_its_output_and_a_stable_proof() {
 }
 
 #[test]
+fn a_failed_exchange_ends_the_read_and_fields_come_back_sorted() {
+    let network = network();
+    let (read, fields) = checked(request()).expect("reviewed shape");
+    let mut asked = Vec::new();
+    let answer = compose_read(&read, &fields, &network.policy, |url| {
+        asked.push(url.to_owned());
+        None
+    });
+    assert_eq!(answer, json!({"verified": false}));
+    assert_eq!(asked, vec![REPOSITORY_URL.to_owned()]);
+    assert_eq!(fields, vec!["mergeable", "number", "state"]);
+}
+
+#[test]
 fn only_the_requested_fields_are_shown() {
-    let files = files();
-    let mut request = request(&files, "plan");
+    let network = network();
+    let mut request = request();
     request["fields"] = json!(["state"]);
-    let identity = answer(request.clone()).expect("plan")["identity"].clone();
-    let members = request.as_object_mut().expect("object");
-    members.insert("op".to_owned(), json!("compose"));
-    members.insert("identity".to_owned(), identity);
-    members.insert("tls_runtime".to_owned(), json!("OpenSSL"));
-    members.insert(
-        "repository_body".to_owned(),
-        json!(STANDARD.encode(body(&repository_reply()))),
+    let answer = read_with(
+        &network,
+        request,
+        &body(&repository_reply()),
+        &body(&pull_reply()),
     );
-    members.insert(
-        "pull_body".to_owned(),
-        json!(STANDARD.encode(body(&pull_reply()))),
-    );
-    assert_eq!(
-        answer(request).expect("compose")["stdout"],
-        json!("{\"state\":\"open\"}\n")
-    );
+    assert_eq!(answer["stdout"], json!("{\"state\":\"open\"}\n"));
 }
 
 #[test]
 fn replies_that_do_not_prove_a_public_pull_request_are_unverified() {
-    let files = files();
-    let identity = plan(&files)["identity"].clone();
+    let network = network();
     let unverified = json!({"verified": false});
     let mut repositories = Vec::new();
     for (key, value) in [
@@ -171,7 +145,7 @@ fn replies_that_do_not_prove_a_public_pull_request_are_unverified() {
     repositories.push(oversized);
     for repository in repositories {
         assert_eq!(
-            compose(&files, &identity, &repository, &body(&pull_reply())),
+            read(&network, &repository, &body(&pull_reply())),
             unverified
         );
     }
@@ -192,83 +166,65 @@ fn replies_that_do_not_prove_a_public_pull_request_are_unverified() {
     }
     for pull in pulls {
         assert_eq!(
-            compose(&files, &identity, &body(&repository_reply()), &pull),
+            read(&network, &body(&repository_reply()), &pull),
             unverified
         );
     }
 }
 
 #[test]
-fn a_ca_bundle_or_executor_change_during_the_read_is_unverified() {
-    let files = files();
-    let identity = plan(&files)["identity"].clone();
-    fs::write(&files.bundle, b"another bundle").expect("bundle");
-    let unverified = json!({"verified": false});
-    assert_eq!(
-        compose(
-            &files,
-            &identity,
-            &body(&repository_reply()),
-            &body(&pull_reply())
-        ),
-        unverified
-    );
+fn a_ca_bundle_change_during_the_read_is_unverified() {
+    let network = network();
+    let (read, fields) = checked(request()).expect("reviewed shape");
+    let answer = compose_read(&read, &fields, &network.policy, |url| {
+        if url == PULL_URL {
+            fs::write(&network.bundle, b"another bundle").expect("bundle");
+            return Some(body(&pull_reply()));
+        }
+        Some(body(&repository_reply()))
+    });
+    assert_eq!(answer, json!({"verified": false}));
 
-    let files = self::files();
-    let identity = plan(&files)["identity"].clone();
-    fs::write(&files.executor, b"edited").expect("executor");
-    assert_eq!(
-        compose(
-            &files,
-            &identity,
-            &body(&repository_reply()),
-            &body(&pull_reply())
-        ),
-        unverified
-    );
-
-    let files = self::files();
-    fs::remove_file(&files.bundle).expect("remove");
-    // Without an identity Python never sends the requests.
-    assert_eq!(plan(&files)["identity"], Value::Null);
-    let identity = plan(&self::files())["identity"].clone();
-    assert_eq!(
-        compose(
-            &files,
-            &identity,
-            &body(&repository_reply()),
-            &body(&pull_reply())
-        ),
-        unverified
-    );
+    let network = self::network();
+    fs::remove_file(&network.bundle).expect("remove");
+    let (read, fields) = checked(request()).expect("reviewed shape");
+    let mut asked = false;
+    let answer = compose_read(&read, &fields, &network.policy, |_| {
+        asked = true;
+        None
+    });
+    // Without an identity no request is sent.
+    assert_eq!(answer, json!({"verified": false}));
+    assert!(!asked);
 }
 
 #[test]
 fn the_network_policy_is_part_of_the_identity() {
-    let files = files();
-    let planned = plan(&files)["identity"].clone();
-    let mut request = request(&files, "plan");
-    request["network_policy"]["proxyMode"] = json!("managed");
-    assert_ne!(answer(request).expect("plan")["identity"], planned);
-    let mut request = self::request(&files, "plan");
-    request["ca_bundle_path"] = Value::Null;
-    assert_ne!(answer(request).expect("plan")["identity"], planned);
+    let network = network();
+    let planned = identity(&network.policy).expect("identity");
+    let mut explicit = network.policy.clone();
+    explicit.proxy_mode = ProxyMode::Explicit;
+    assert_ne!(identity(&explicit), Some(planned.clone()));
+    let mut unbundled = network.policy.clone();
+    unbundled.ca_bundle_path = None;
+    assert_ne!(identity(&unbundled), Some(planned.clone()));
+    fs::write(&network.bundle, b"another bundle").expect("bundle");
+    assert_ne!(identity(&network.policy), Some(planned));
 }
 
 #[cfg(unix)]
 #[test]
-fn a_linked_identity_file_is_not_read() {
-    let files = files();
-    let link = Path::new(&files.executor).with_file_name("link.py");
-    std::os::unix::fs::symlink(&files.executor, &link).expect("link");
-    let mut request = request(&files, "plan");
-    request["executor_path"] = json!(link.to_str().expect("utf-8"));
-    assert_eq!(answer(request).expect("plan")["identity"], Value::Null);
+fn a_linked_ca_bundle_is_not_read() {
+    let network = network();
+    let link = network.bundle.with_file_name("link.pem");
+    std::os::unix::fs::symlink(&network.bundle, &link).expect("link");
+    let mut policy = network.policy.clone();
+    policy.ca_bundle_path = Some(link);
+    assert_eq!(identity(&policy), None);
 }
 
 #[test]
 fn requests_outside_the_reviewed_shape_are_refused() {
-    let files = files();
     let mut refused = Vec::new();
     for (key, value) in [
         ("owner", json!("-leading")),
@@ -284,25 +240,25 @@ fn requests_outside_the_reviewed_shape_are_refused() {
         ("fields", json!(["state", "state"])),
         ("fields", json!(["title"])),
         ("fields", json!([1])),
-        ("op", json!("fetch")),
+        ("op", json!("plan")),
+        ("op", json!("compose")),
         ("unknown", json!(1)),
-        ("tls_runtime", json!("OpenSSL")),
+        ("timeout_seconds", json!(0)),
+        ("timeout_seconds", json!(30.5)),
+        ("timeout_seconds", json!("15")),
     ] {
-        let mut request = request(&files, "plan");
+        let mut request = request();
         request[key] = value;
         refused.push(request);
     }
-    let mut incomplete = request(&files, "compose");
-    incomplete["identity"] = json!("x");
-    refused.push(incomplete);
-    let mut undecodable = request(&files, "compose");
-    for key in ["identity", "tls_runtime", "repository_body"] {
-        undecodable[key] = json!("x");
-    }
-    undecodable["pull_body"] = json!("%%%");
-    refused.push(undecodable);
+    let mut untimed = request();
+    untimed
+        .as_object_mut()
+        .expect("object")
+        .remove("timeout_seconds");
+    refused.push(untimed);
     for request in refused {
-        assert_eq!(answer(request), Err(invalid()));
+        assert_eq!(checked(request).map(|_| ()), Err(invalid()));
     }
     assert_eq!(
         run_command(&b"x"[..]),

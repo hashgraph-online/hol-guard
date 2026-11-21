@@ -27,6 +27,12 @@ use super::reads::{dashboard_build_id, NativeReads, HANDSHAKE_SCHEMA};
 use super::{serve, MAX_ACTIVE_CONNECTIONS, STALLED_WRITE_TIMEOUT};
 use crate::daemon_policy_authority::{canonical_discovery_payload, hmac_sha256_raw};
 
+#[path = "daemon_edge_exit_records.rs"]
+mod exit_records;
+#[path = "daemon_edge_resident_prewarm.rs"]
+mod resident_prewarm;
+#[path = "daemon_edge_runtime_copy.rs"]
+mod runtime_copy;
 #[path = "daemon_edge_workers.rs"]
 mod workers;
 
@@ -182,11 +188,12 @@ impl LaunchConfig {
 /// `_launch_nonce_is_valid`: 64 lowercase hex characters.
 /// Stops the daemon once the launcher that holds its standard input open
 /// exits, however it exits: the input then reaches end of file.
-fn exit_when_launcher_leaves() {
+fn exit_when_launcher_leaves(home: PathBuf) {
     let spawned = std::thread::Builder::new()
         .name("daemon-launcher-watch".to_owned())
-        .spawn(|| {
+        .spawn(move || {
             let _ = io::copy(&mut io::stdin().lock(), &mut io::sink());
+            exit_records::exiting(&home, "launcher_input_closed");
             std::process::exit(0);
         });
     if spawned.is_err() {
@@ -221,7 +228,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
     #[cfg(unix)]
     let _ = nix::unistd::setsid();
     let Some((arg_home, arg_port)) = parse_args(args) else {
-        eprintln!("usage: guard-runtime daemon-serve --guard-home H --port P < launch.json");
+        crate::runtime_output::stderr_line(format_args!(
+            "usage: guard-runtime daemon-serve --guard-home H --port P < launch.json"
+        ));
         return EXIT_USAGE;
     };
     let mut line = Vec::new();
@@ -231,15 +240,44 @@ pub(crate) fn run(args: &[String]) -> i32 {
         .read_until(b'\n', &mut line)
         .is_err()
     {
+        exit_records::start_failed(Path::new(&arg_home), "launch_input_unreadable");
         return EXIT_USAGE;
     }
     let Some(config) = LaunchConfig::parse(line.trim_ascii()) else {
-        eprintln!("daemon-serve: the launch configuration is invalid");
+        crate::runtime_output::stderr_line(format_args!(
+            "daemon-serve: the launch configuration is invalid"
+        ));
+        exit_records::start_failed(Path::new(&arg_home), "launch_config_invalid");
         return EXIT_USAGE;
     };
     if config.guard_home != arg_home || config.port != arg_port {
-        eprintln!("daemon-serve: the launch configuration names another daemon");
+        crate::runtime_output::stderr_line(format_args!(
+            "daemon-serve: the launch configuration names another daemon"
+        ));
+        exit_records::start_failed(Path::new(&arg_home), "launch_config_mismatch");
         return EXIT_USAGE;
+    }
+    let home = PathBuf::from(&config.guard_home);
+    // A panic anywhere from here on, while starting as while serving, is
+    // recorded with its location before it carries on unwinding.
+    exit_records::serve_recording_panic(&home, || start_and_serve(&home, &config))
+}
+
+/// Everything after the launch configuration is accepted: publish the
+/// daemon's state, start its workers, report ready and serve.
+fn start_and_serve(home: &Path, config: &LaunchConfig) -> i32 {
+    let home = home.to_path_buf();
+    // Before any thread starts, so every later thread inherits the block.
+    exit_records::record_termination(home.clone());
+    if config.workers {
+        // The worker host's first step runs this runtime's kept copy; place it
+        // and pay its first run while the host's own start is under way.
+        runtime_copy::prime_in_background(&home);
+    }
+    // Pin the dashboard before reporting ready: the launcher that unpacked it
+    // may exit, and remove it, once this daemon's state is published.
+    if let Some(dir) = config.dashboard_dir.as_deref() {
+        dashboard_build_id(Path::new(dir));
     }
     if let Some(version) = config.state.get("package_version").and_then(Value::as_str) {
         super::set_package_version(version);
@@ -251,25 +289,37 @@ pub(crate) fn run(args: &[String]) -> i32 {
     let listener = match TcpListener::bind(SocketAddr::new(host, config.port)) {
         Ok(listener) => listener,
         Err(error) => {
-            eprintln!("daemon-serve: cannot listen: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: cannot listen: {error}"
+            ));
+            exit_records::start_failed(&home, "listen_failed");
             return EXIT_LISTENER;
         }
     };
+    super::widen_backlog(&listener);
     let Ok(port) = listener.local_addr().map(|address| address.port()) else {
+        exit_records::start_failed(&home, "listener_address_unavailable");
         return EXIT_LISTENER;
     };
-    let home = PathBuf::from(&config.guard_home);
     let pid = config
         .launcher_pid
         .filter(|pid| *pid != 0)
         .unwrap_or_else(std::process::id);
-    let secret = match publish(&home, &config, port, pid) {
+    let secret = match publish(&home, config, port, pid) {
         Ok(secret) => secret,
         Err(error) => {
-            eprintln!("daemon-serve: cannot publish daemon state: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: cannot publish daemon state: {error}"
+            ));
+            exit_records::start_failed(&home, "publish_failed");
             return EXIT_STATE;
         }
     };
+    // The daemons before this one that stopped without saying why are named
+    // before this one's own start is journaled.
+    super::lifecycle::record_unclean_exits(&home);
+    // Each start step is journaled, so a slow cold start names the step that spent it.
+    super::lifecycle::record(&home, "published", None, None, Some(port));
     let reads = Arc::new(NativeReads::new(None));
     reads.mark_standalone();
     if let Some(state) = crate::daemon_policy_authority::load_authenticated_daemon_state(&home) {
@@ -277,32 +327,37 @@ pub(crate) fn run(args: &[String]) -> i32 {
     }
     if config.launcher_pid.is_some_and(|pid| pid != 0) {
         reads.set_launcher_pid(pid);
-        exit_when_launcher_leaves();
+        exit_when_launcher_leaves(home.clone());
     }
     reads.accept_handshake(&config.handshake(&secret));
     drop(secret);
     let session_id = random_hex(16);
     if config.workers {
         // Guard-owned hooks and launchers are brought in line with this
-        // runtime before the daemon reports ready, as its start always did.
-        workers::reconcile_artifacts(&reads, config.user_home.as_deref());
-        workers::start(
-            &reads,
-            workers::Registration {
-                session_id: session_id.clone(),
-                guard_home: home.clone(),
-                host: config.host.clone(),
-                port,
-                started_at: now_iso(),
-            },
-            config
-                .idle_timeout_seconds
-                .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
-                .map(std::time::Duration::from_secs_f64),
-        );
+        // runtime before the daemon reports ready, as its start always did,
+        // unless the reconcile outlasts its ready wait.
+        let reconcile =
+            workers::reconcile_beside(&reads, config.user_home.clone(), home.clone(), port);
+        let registration = workers::Registration {
+            session_id: session_id.clone(),
+            guard_home: home.clone(),
+            host: config.host.clone(),
+            port,
+            started_at: now_iso(),
+        };
+        workers::start(&reads, registration.clone());
+        super::lifecycle::record(&home, "workers_started", None, None, None);
+        let pending = workers::settle_before_ready(reconcile, &home);
+        if let Some(timeout) = idle_timeout(config.idle_timeout_seconds) {
+            workers::exit_when_idle(&reads, &registration, timeout, pending);
+        }
     }
     warm_hook_worker(&reads, port, pid);
-    println!("{}", json!({"port": port, "pid": pid}));
+    super::lifecycle::record(&home, "hook_worker_warming", None, None, None);
+    if config.workers {
+        resident_prewarm::prewarm_resident(&home);
+    }
+    crate::runtime_output::stdout_line(format_args!("{}", json!({"port": port, "pid": pid})));
     let _ = io::stdout().flush();
     super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));
     match serve(
@@ -311,12 +366,27 @@ pub(crate) fn run(args: &[String]) -> i32 {
         STALLED_WRITE_TIMEOUT,
         reads,
     ) {
-        Ok(()) => 0,
+        Ok(()) => {
+            exit_records::exiting(&home, "listener_closed");
+            0
+        }
         Err(error) => {
-            eprintln!("daemon-serve: listener failed: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: listener failed: {error}"
+            ));
+            exit_records::exiting(&home, "listener_failed");
             EXIT_LISTENER
         }
     }
+}
+
+/// The idle timeout a launch asked for. A value that is not finite and
+/// positive, or too large for a `Duration`, means no idle exit; it never
+/// panics the starting daemon.
+fn idle_timeout(seconds: Option<f64>) -> Option<std::time::Duration> {
+    seconds
+        .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
+        .and_then(|seconds| std::time::Duration::try_from_secs_f64(seconds).ok())
 }
 
 /// Ensures the Guard home's discovery key and auth secret, then writes the

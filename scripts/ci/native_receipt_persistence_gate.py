@@ -137,7 +137,7 @@ def _validate_hook_routes(root: Path) -> None:
     cli = _read(root, "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py")
     _contains_all(
         cli,
-        ("NativeHookEvidenceWriter", "activity_writer=NativeHookEvidenceWriter(store=store)"),
+        ("ResidentEvidenceClient", "activity_writer=ResidentEvidenceClient(store=store)"),
         "CLI receipt route",
     )
     probe = _read(root, "ci/native_runtime/probe_native_default_auto.py")

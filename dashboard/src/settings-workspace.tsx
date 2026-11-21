@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import {
   HiMiniShieldCheck,
   HiMiniCheckCircle,
@@ -71,6 +71,7 @@ export {
   TotpEnrollmentQrPanel,
 } from "./totp-enrollment-qr-panel";
 import { TotpEnrollmentQrPanel } from "./totp-enrollment-qr-panel";
+import { PulseSettingsPanel } from "./pulse-settings-panel";
 import {
   SettingsSaveProofModal,
   resolveSettingsSaveProofKind,
@@ -534,6 +535,9 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
   const [draft, setDraft] = useState<GuardSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [contextAssistanceBusy, setContextAssistanceBusy] = useState(false);
+  // The Watch banner saves on its own; hold the page Save while it runs so an
+  // older draft cannot land after it and turn Watch back on.
+  const [watchBannerBusy, setWatchBannerBusy] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [clearingApprovals, setClearingApprovals] = useState(false);
@@ -549,6 +553,7 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
   const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
   const [pendingPosture, setPendingPosture] = useState<ProtectionPosture | null>(null);
   const [activeTab, setActiveTab] = useState<LocalSettingsTabKey>(() => resolveInitialSettingsTab(window.location.search));
+  const [pulseSetupOpen, setPulseSetupOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
     if (!returnToExtensions || activeTab !== "approval" || state.kind !== "ready") return;
@@ -634,12 +639,13 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
 
   useEffect(() => {
     const handlePopState = () => {
+      if (pulseSetupOpen) return;
       setActiveTab(resolveInitialSettingsTab(window.location.search));
       setActionMessage(null);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [pulseSetupOpen]);
 
   useEffect(() => {
     function handleBeforeUnload(event: BeforeUnloadEvent) {
@@ -760,7 +766,15 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
     applyDraftPosture(posture);
   }, [applyDraftPosture]);
 
-  const handleTurnProtectionOn = useCallback(() => {
+  // The banner has already saved the change (with approval proof when the gate
+  // is on). Record the saved settings and end Watch in the draft too, keeping
+  // any other unsaved edits on the page.
+  const handleProtectionTurnedOn = useCallback((payload: GuardSettingsPayload | null) => {
+    if (payload !== null) {
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      setState({ kind: "ready", payload: normalizedPayload });
+      savedSettingsRef.current = normalizedPayload.settings;
+    }
     setDraft((value) => {
       if (value === null) return value;
       const cleared = clearHarnessWatchOverrides(value);
@@ -1200,7 +1214,7 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
   }, [pendingProofAction, executeSave, executeImportSettings, executeResetSettings, executeMaintenanceWithProof]);
 
   const handleSave = useCallback(() => {
-    if (draft === null) {
+    if (draft === null || watchBannerBusy) {
       return;
     }
     const savedGateConfig = savedSettingsRef.current?.approval_gate ?? null;
@@ -1217,7 +1231,7 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
       return;
     }
     void executeSave();
-  }, [approvalGateEnabled, draft, executeSave, openProofModal]);
+  }, [approvalGateEnabled, draft, executeSave, openProofModal, watchBannerBusy]);
 
   const handleOpenPasswordChangeModal = useCallback((mode: "change-password" | "setup-gate" = "change-password") => {
     if (mode === "setup-gate") {
@@ -1318,6 +1332,23 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
       setTotpActionPending(null);
     }
   }, [totpActionPassword, approvalGateTotpCode, onApprovalGateChange]);
+
+  const handlePulseSettingsPayload = useCallback((payload: GuardSettingsPayload) => {
+    const normalized = normalizeSettingsPayload(payload);
+    const nextGate = normalized.settings.approval_gate;
+    if (!nextGate) return;
+    setState((current) => current.kind === "ready"
+      ? { ...current, payload: { ...current.payload, settings: { ...current.payload.settings, approval_gate: nextGate } } }
+      : current);
+    setDraft((current) => current ? { ...current, approval_gate: nextGate } : current);
+    savedSettingsRef.current = savedSettingsRef.current
+      ? { ...savedSettingsRef.current, approval_gate: nextGate }
+      : savedSettingsRef.current;
+    setApprovalGateEnabled(nextGate.enabled);
+    setApprovalGateCooldown(nextGate.cooldown_seconds);
+    setApprovalGateStrictAllDecisions(nextGate.strict_all_decisions);
+    onApprovalGateChange?.(nextGate);
+  }, [onApprovalGateChange]);
 
   const handleDisableTotp = useCallback(async () => {
     handleRequestDisableTotp();
@@ -1591,7 +1622,12 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
         description="Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate."
       />
       {watchBanner !== null ? (
-        <WatchProtectionBanner model={watchBanner} onTurnProtectionOn={handleTurnProtectionOn} />
+        <WatchProtectionBanner
+          model={watchBanner}
+          onTurnedOn={handleProtectionTurnedOn}
+          onBusyChange={setWatchBannerBusy}
+          disabled={saving || proofModalOpen}
+        />
       ) : null}
 
       <div className="relative">
@@ -1843,6 +1879,14 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
               onVerifyTotpEnrollment={handleVerifyTotpEnrollment}
               onDisableTotp={handleDisableTotp}
               onRevokeCooldown={handleRequestRevokeCooldown}
+              pulseSettings={
+                <PulseSettingsPanel
+                  gateConfig={draft.approval_gate ?? null}
+                  savedGateConfig={savedSettingsRef.current?.approval_gate ?? null}
+                  onSettingsPayload={handlePulseSettingsPayload}
+                  onSetupOpenChange={setPulseSetupOpen}
+                />
+              }
             />
             </div>
             <SettingsFormSection
@@ -2112,7 +2156,7 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <ActionButton onClick={handleSave} disabled={saving || saveSuccess || contextAssistanceBusy}>
+            <ActionButton onClick={handleSave} disabled={saving || saveSuccess || contextAssistanceBusy || watchBannerBusy}>
               {saveSuccess ? (
                 <span className="flex items-center gap-2">
                   <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" />
@@ -2438,6 +2482,8 @@ type ApprovalGateCardProps = {
   onVerifyTotpEnrollment: () => void;
   onDisableTotp: () => void;
   onRevokeCooldown: () => void;
+  /** The Yanez Pulse card, shown below the authenticator card. */
+  pulseSettings?: ReactNode;
 };
 
 function ApprovalGateCard(props: ApprovalGateCardProps) {
@@ -2447,6 +2493,8 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
   const totpEnabled = props.gateConfig?.totp_enabled === true;
   const totpPending = props.gateConfig?.totp_pending === true;
+  // Pulse pauses the authenticator: its secret is kept, but no codes are accepted.
+  const totpPausedByPulse = props.gateConfig?.pulse_enabled === true;
   const failClosed = props.gateConfig?.fail_closed === true;
   const effectiveCooldownSeconds = effectiveApprovalGateCooldownSeconds(props.cooldownSeconds, totpEnabled);
   const cooldownLabel = cooldownExpiresAt
@@ -2526,8 +2574,8 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
               </p>
             </div>
             <div className="px-4">
-              <Tag tone={totpEnabled ? "green" : totpPending ? "blue" : "slate"}>
-                {totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Not connected"}
+              <Tag tone={totpPausedByPulse ? "slate" : totpEnabled ? "green" : totpPending ? "blue" : "slate"}>
+                {totpPausedByPulse ? "Paused" : totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Not connected"}
               </Tag>
             </div>
           </div>
@@ -2539,7 +2587,12 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                   : "Set an approval password first, then connect an authenticator app for high-risk approvals."}
               </p>
             )}
-            {gateActiveOnDevice && !totpEnabled && !totpPending && (
+            {gateActiveOnDevice && totpPausedByPulse && (
+              <p className="max-w-xl text-xs leading-5 text-slate-500">
+                Yanez Pulse is on, so Guard does not accept authenticator codes. An authenticator you already set up is kept and works again when you turn Pulse off.
+              </p>
+            )}
+            {gateActiveOnDevice && !totpPausedByPulse && !totpEnabled && !totpPending && (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="max-w-xl space-y-1">
                   <p className="text-sm font-medium text-brand-dark">Add a second factor for high-risk approvals.</p>
@@ -2556,7 +2609,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                 </ActionButton>
               </div>
             )}
-            {gateActiveOnDevice && totpPending && (
+            {gateActiveOnDevice && !totpPausedByPulse && totpPending && (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="max-w-xl space-y-1">
                   <p className="text-sm font-medium text-brand-dark">Finish connecting your authenticator app.</p>
@@ -2611,6 +2664,8 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
             />
           )}
         </div>
+
+        {props.pulseSettings}
 
         {cooldownActive && cooldownLabel !== null && (
           <div className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4">

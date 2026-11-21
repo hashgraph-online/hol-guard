@@ -2,8 +2,6 @@
 
 <!-- mcp-name: io.github.hashgraph-online/hol-guard -->
 
-[![HOL Guard Version](https://img.shields.io/pypi/v/hol-guard.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/hol-guard/)
-[![Plugin Scanner Version](https://img.shields.io/pypi/v/plugin-scanner.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/plugin-scanner/)
 [![HOL Guard Downloads](https://img.shields.io/pypi/dm/hol-guard?logo=pypi&logoColor=white)](https://pypi.org/project/hol-guard/)
 [![Plugin Scanner Downloads](https://img.shields.io/pypi/dm/plugin-scanner?logo=pypi&logoColor=white)](https://pypi.org/project/plugin-scanner/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](#install-hol-guard)
@@ -11,27 +9,44 @@
 [![Publish](https://img.shields.io/github/actions/workflow/status/hashgraph-online/hol-guard/publish.yml?branch=main&label=Publish&logo=githubactions&logoColor=white)](https://github.com/hashgraph-online/hol-guard/actions/workflows/publish.yml)
 [![Container Image](https://img.shields.io/badge/ghcr-hol--guard-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/hol-guard/pkgs/container/hol-guard)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/hol-guard/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/hol-guard)
-[![Vercel OSS Program](https://vercel.com/oss/program-badge.svg)](https://vercel.com/oss)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
+<a href="https://vercel.com/oss"><img src="https://vercel.com/oss/program-badge.svg" alt="Vercel OSS Program" height="20"></a>
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/hol-guard?style=social)](https://github.com/hashgraph-online/hol-guard/stargazers)
-[![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hashgraph-online/hol-guard)
+[![Reviewed by Enclave](https://img.shields.io/badge/reviewed%20by-Enclave-111111?style=flat-square&labelColor=111111&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTI2IiBoZWlnaHQ9IjEyNiIgdmlld0JveD0iMTYgMTggMTI2IDEyNiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBzdHJva2U9Im5vbmUiIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0ibm9uemVybyI%2BPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTE2LCAtMjIpIj48cGF0aCBkPSJNMTMzLjcsNDQuMSBDMTM3LjQsNDYuNiAxMzguNCw1MS41IDEzNi4wLDU1LjIgQzEyNy4yLDY4LjYgMTEyLjMsNzYuOCA5Niw3Ni44IEM3OS42LDc2LjggNjQuNyw2OC42IDU1LjksNTUuMiBDNTMuNSw1MS41IDU0LjUsNDYuNiA1OC4yLDQ0LjEgQzYxLjksNDEuNyA2Ni44LDQyLjcgNjkuMyw0Ni40IEM3NS4xLDU1LjQgODUuMSw2MC45IDk2LDYwLjkgQzEwNi44LDYwLjkgMTE2LjgsNTUuNCAxMjIuNiw0Ni40IEMxMjUuMSw0Mi43IDEzMC4wLDQxLjcgMTMzLjcsNDQuMSBaIiBmaWxsPSIjZmZmIj48L3BhdGg%2BPHBhdGggZD0iTTEzNS42LDU1LjggQzEyOC45LDY0LjIgMTI2LjgsNzUuNCAxMzAuMSw4NS44IEMxMzMuNSw5Ni4wIDE0MS41LDEwMy43IDE1MS42LDEwNi42IEwxNTIuMSwxMDYuOCBDMTU2LjMsMTA3LjkgMTU4LjgsMTEyLjMgMTU3LjcsMTE2LjYgQzE1Ni41LDEyMC45IDE1Mi4xLDEyMy4zIDE0Ny44LDEyMi4yIEMxMzIuNCwxMTcuOSAxMjAuMCwxMDYuMiAxMTQuOSw5MC43IEMxMDkuOSw3NS4xIDExMy4xLDU4LjQgMTIzLjEsNDUuOSBDMTI1LjgsNDIuNCAxMzAuOCw0MS44IDEzNC4zLDQ0LjYgQzEzNy43LDQ3LjMgMTM4LjMsNTIuMSAxMzUuNyw1NS42IEwxMzUuNiw1NS44IFoiIGZpbGw9IiNmZmYiPjwvcGF0aD48cGF0aCBkPSJNOTYuMywxNjEuOCBDOTEuOSwxNjIuMCA4OC4yLDE1OC42IDg4LjAsMTU0LjIgQzg3LjMsMTM4LjIgOTQuNSwxMjIuNyAxMDcuNywxMTMuMSBDMTIwLjksMTAzLjUgMTM3LjgsMTAxLjQgMTUyLjgsMTA3LjAgQzE1Ni45LDEwOC42IDE1OS4wLDExMy4yIDE1Ny40LDExNy4zIEMxNTUuOSwxMjEuMyAxNTEuNCwxMjMuNCAxNDcuNCwxMjIuMCBMMTQ3LjEsMTIyLjAgQzEzNy4xLDExOC4yIDEyNS45LDExOS42IDExNy4xLDEyNi4wIEMxMDguNCwxMzIuMyAxMDMuNiwxNDIuNCAxMDMuOSwxNTMuMCBMMTAzLjksMTUzLjUgQzEwNC4xLDE1Ny45IDEwMC43LDE2MS42IDk2LjMsMTYxLjggWiIgZmlsbD0iI2ZmZiI%2BPC9wYXRoPjxwYXRoIGQ9Ik04OC4wLDE1My41IEM4OC40LDE0Mi43IDgzLjYsMTMyLjQgNzQuOCwxMjYuMCBDNjYuMiwxMTkuNyA1NS4xLDExOC4yIDQ1LjIsMTIxLjggTDQ0LjgsMTIyLjAgQzQwLjYsMTIzLjUgMzYuMCwxMjEuNCAzNC41LDExNy4zIEMzMi45LDExMy4yIDM1LjAsMTA4LjYgMzkuMSwxMDcuMCBDNTQuMSwxMDEuNCA3MS4wLDEwMy41IDg0LjIsMTEzLjEgQzk3LjQsMTIyLjcgMTA0LjYsMTM4LjIgMTAzLjksMTU0LjIgQzEwMy43LDE1OC42IDEwMC4wLDE2Mi4wIDk1LjYsMTYxLjggQzkxLjMsMTYxLjYgODcuOSwxNTguMCA4OC4wLDE1My43IEw4OC4wLDE1My41IFoiIGZpbGw9IiNmZmYiPjwvcGF0aD48cGF0aCBkPSJNNTcuNiw0NC42IEM2MS4xLDQxLjggNjYuMSw0Mi40IDY4LjgsNDUuOSBDNzguOCw1OC40IDgyLjAsNzUuMSA3Ny4wLDkwLjcgQzcxLjksMTA2LjIgNTkuNSwxMTcuOSA0NC4xLDEyMi4yIEMzOS44LDEyMy4zIDM1LjQsMTIwLjkgMzQuMiwxMTYuNiBDMzMuMSwxMTIuNCAzNS41LDEwOC4xIDM5LjYsMTA2LjggTDM5LjgsMTA2LjggQzUwLjEsMTAzLjkgNTguNCw5Ni4xIDYxLjgsODUuOCBDNjUuMSw3NS41IDYzLjEsNjQuNSA1Ni42LDU2LjIgTDU2LjMsNTUuOCBDNTMuNiw1Mi4zIDU0LjEsNDcuMyA1Ny42LDQ0LjYgWiIgZmlsbD0iI2ZmZiI%2BPC9wYXRoPjwvZz48L2c%2BPC9zdmc%2B)](https://enclave.ai/?utm_source=github&utm_medium=readme_badge)
 
 | ![HOL whole dark logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Stop risky AI actions before they compromise your machine.** HOL Guard is a local-first security layer for AI agents, tools, plugins, skills, MCP servers, and package installs.<br><br>[Install HOL Guard](https://hol.org/guard/activate)<br>[Read the documentation](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md)<br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
 | :--- | :--- |
 
-HOL Guard reviews agent actions before they run: shell commands, file access, package installs, and MCP tool calls. It detects secret exposure, destructive operations, prompt injection, and supply-chain risks, then allows, blocks, or requests approval according to your policy.
+HOL Guard reviews agent actions before they run: shell commands, file access, package installs, and MCP tool calls. It detects secret exposure, destructive operations, prompt injection, and supply-chain risks, then allows, blocks, or requests approval according to your policy. It sees only the events each agent exposes to it: the [support matrix](docs/guard/harness-support.md) lists, for each agent, the event surfaces Guard hooks and the actions it does not cover.
 
 Run it locally without an account. Use the CLI and local dashboard to manage protection, resolve approvals, and inspect decision history. Optional [Guard Cloud](docs/guard/local-vs-cloud.md) adds shared history, team policy, and fleet management.
 
 [Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contribute an extension](#contribute-a-new-extension) · [Contribute an adapter](docs/guard/adapter-contributions.md) · [Development](#development)
 
 <!-- hol-sponsors:start -->
+### Sponsors
+#### Gold sponsors
+
+<p align="center">
+<a href="https://www.yanez.ai/"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/4783ec9c93e4aa9ee19b558bd1902157bcddae28/assets/yanez-sponsor-gold.svg" alt="Yanez" width="240" height="68" /></a>&nbsp;&nbsp;&nbsp;<a href="https://seltz.ai/?utm_source=hol-newsletter&amp;utm_medium=newsletter&amp;utm_campaign=the-stack-2026-11-09&amp;utm_content=banner"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/de9ab0eb38707c53ffb56ab7d8bf41a115584488/assets/seltz-sponsor-gold.svg" alt="Seltz" width="240" height="72" /></a>
+</p>
+
+#### Bronze sponsors
+
+<p align="center">
+<a href="https://synthetic.new/?referral=FTVR2kb0"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/451f3fee55db9fe86c42f545606a25af8ae8b66f/assets/synthetic-sponsor-bronze.png" alt="Synthetic" width="160" height="48" /></a>
+&nbsp;&nbsp;&nbsp;
+<a href="https://www.firecrawl.dev/referral?rid=SLPLSKAU"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/451f3fee55db9fe86c42f545606a25af8ae8b66f/assets/firecrawl-sponsor-bronze.png" alt="Firecrawl" width="160" height="48" /></a>
+</p>
+
+<p align="center"><sub>Thank you to our sponsors for supporting HOL Guard. Some sponsor links are referral links.<br>Sponsorship does not change Guard's security decisions or coverage.</sub></p>
+<p align="center">
+<a href="https://hol.org/advertise"><img src="https://img.shields.io/badge/Become_a_sponsor-hol.org%2Fadvertise-1e3970?style=flat" alt="Become a sponsor" height="22"></a>
+</p>
 <!-- hol-sponsors:end -->
 
 ## Install HOL Guard
 
-Requires Python 3.10 or newer, [pipx](https://pipx.pypa.io/stable/installation/), and a matching native runtime. Check the [platform support and Windows ARM64 setup notes](docs/guard/get-started.md#platform-support) before installing.
+Requires Python 3.10 or newer, [pipx](https://pipx.pypa.io/stable/how-to/install-pipx.html), and a matching native runtime. Check the [platform support and Windows ARM64 setup notes](docs/guard/get-started.md#platform-support) before installing.
 
 ```bash
 pipx install hol-guard
@@ -39,6 +54,8 @@ hol-guard init
 ```
 
 The first-run wizard discovers supported agents and walks you through protection setup. It asks before each setup change, including opening the dashboard, installing agent integrations, and connecting optional cloud services.
+
+**Python recommendation:** Use Python 3.11 or newer for the `pipx` installation shown above, in line with [pipx's current installation guide](https://pipx.pypa.io/stable/how-to/install-pipx.html). HOL Guard itself supports Python 3.10+, so this is a setup recommendation, not a change to the package's minimum supported Python version.
 
 Check your installation:
 
@@ -356,7 +373,7 @@ Use it for AI agent security on a developer machine, MCP security around connect
 
 ### What is HOL Guard?
 
-HOL Guard is open-source antivirus and runtime protection for AI agents. It reviews supported tool calls, shell commands, file access, and package operations for risks such as secret exposure, prompt injection, destructive actions, and malicious dependencies.
+HOL Guard is open-source antivirus and runtime protection for AI agents. It reviews supported tool calls, shell commands, file access, and package operations for risks such as secret exposure, prompt injection, destructive actions, and malicious dependencies. Unlike endpoint antivirus, it does not scan the whole machine: it sees only the actions a supported agent sends through its hooks, and some events fail open or are only observed. The [support matrix](docs/guard/harness-support.md) names those limits per agent.
 
 ### Does HOL Guard work without a cloud account?
 
@@ -565,3 +582,5 @@ Maintained by [HOL](https://github.com/hashgraph-online).
 ## License
 
 Licensed under [Apache-2.0](LICENSE).
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hashgraph-online/hol-guard)

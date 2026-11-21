@@ -20,8 +20,9 @@ use super::{authorize_token, hook_scheduler, json_response, refusals, NativeRead
 use crate::claude_hook_bridge_render::py_strip;
 use crate::pyjson::PyVal;
 use admission::{
-    client_key, exec_workdir, expires_at, lane, payload_reference, reply_event, runtime_event,
-    take_hint, truthy, Directories, Rejection, MAX_PAYLOAD_REFERENCE_BYTES,
+    client_key, exec_workdir, expires_at, lane, missing_workdir, payload, payload_reference,
+    reply_event, runtime_event, take_hint, Directories, Rejection, MAX_PAYLOAD_REFERENCE_BYTES,
+    MISSING_WORKDIR_CODE,
 };
 
 #[path = "daemon_edge_hook_admission.rs"]
@@ -30,13 +31,18 @@ mod admission;
 mod counters;
 #[path = "daemon_edge_hook_cursor_sink.rs"]
 mod cursor_sink;
+#[path = "daemon_edge_hook_envelopes.rs"]
+mod envelopes;
 #[path = "daemon_edge_hook_lifecycle.rs"]
 mod lifecycle;
+#[path = "daemon_edge_hook_managed.rs"]
+mod managed;
+#[path = "daemon_edge_hook_readiness.rs"]
+mod readiness;
+use envelopes::{capacity_reason, envelope, fail_safe, prepare_refusal, refusal};
+#[cfg(test)]
+use envelopes::{event_kind, fill, ENVELOPES};
 
-/// The daemon's fixed hook replies, declared once for every harness.
-const ENVELOPES: &str = include_str!(
-    "../../../../src/codex_plugin_scanner/guard/contracts/hook-fail-closed-envelopes.v1.json"
-);
 /// `availability_harness_response`'s reason for a hook the worker never reviewed.
 const WORKER_UNAVAILABLE_REASON: &str =
     "HOL Guard could not complete the native hook decision safely.";
@@ -87,28 +93,6 @@ fn route(path: &str) -> Option<(&str, bool)> {
 /// Whether the daemon reviews `POST path` here.
 pub(in crate::daemon_edge) fn owns(path: &str) -> bool {
     route(path).is_some()
-}
-
-/// The request body as the daemon's handler reads it, or `None` for a body it
-/// reads some other way.
-fn payload(request: &Request<'_>, body: &[u8]) -> Option<Result<Map<String, Value>, ()>> {
-    if body.is_empty() {
-        return Some(Ok(Map::new()));
-    }
-    if !request
-        .single_header("Content-Type")?
-        .contains("application/json")
-    {
-        return None;
-    }
-    let text = std::str::from_utf8(body).ok()?;
-    // A body serde rejects may still be one `json.loads` reads (`NaN`, a lone
-    // surrogate escape); only a body neither reads is refused here.
-    Some(match serde_json::from_str::<Value>(text) {
-        Ok(Value::Object(payload)) => Ok(payload),
-        Ok(_) => Ok(Map::new()),
-        Err(_) => Err(()),
-    })
 }
 
 /// The response to the hook, or `None` for a path that is not a hook route.
@@ -260,9 +244,13 @@ impl Hook<'_> {
     /// Whether the hook belongs to an app Guard is not protecting: its own
     /// managed-install row is inactive or, with no row, another app's is
     /// active. A store that cannot be read keeps the hook reviewed.
-    fn unmanaged(&self, harness: &str) -> bool {
-        crate::local_store_read::hook_store_probe(Path::new(&self.config.guard_home), harness, None)
-            .is_ok_and(|probe| probe.harness_unmanaged)
+    /// Hooks that arrived together share one read (see `managed`).
+    fn unmanaged(&self, harness: &str, arrived: std::time::Instant) -> bool {
+        let guard_home = &self.config.guard_home;
+        managed::shared().unmanaged(&format!("{guard_home}\0{harness}"), arrived, || {
+            crate::local_store_read::hook_store_probe(Path::new(guard_home), harness, None)
+                .is_ok_and(|probe| probe.harness_unmanaged)
+        })
     }
 
     /// Audits a directory the request named and the daemon refused. The
@@ -300,91 +288,10 @@ impl Hook<'_> {
         Directories::settle(&self.config.guard_home, &self.home(), candidates)
     }
 
-    /// `POST /v1/hooks/<harness>/readiness`: prepares the workspace's policy
-    /// before a host's timed hook starts.
-    fn readiness(&self, payload: &Map<String, Value>) -> (u16, Value, bool) {
-        let not_ready = (
-            503,
-            json!({ "ready": false, "reason_code": "native_policy_not_ready" }),
-            true,
-        );
-        let invalid = |rejection: &Rejection| {
-            (
-                400,
-                json!({
-                    "ready": false,
-                    "reason_code": format!("invalid_{}", rejection.parameter.replace('-', "_")),
-                }),
-                true,
-            )
-        };
-        let guard_home = self.settle(&[("guard-home", self.param("guard-home"), None)]);
-        if let Err(rejection) = guard_home.require("guard-home") {
-            self.audit_rejection(&rejection.to_value());
-            return invalid(&rejection);
-        }
-        let candidate = self.raw_param("workspace").or_else(|| {
-            let named = payload.get("workspace");
-            if truthy(named) {
-                named
-            } else {
-                payload.get("cwd")
-            }
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-        });
-        let directories = self.settle(&[("workspace", candidate, Some("hook-workspace"))]);
-        let (workspace, rejection) = match directories.require("workspace") {
-            Ok(workspace) => (workspace, None),
-            Err(rejection) => (None, Some(rejection)),
-        };
-        // An unmanaged app's hooks never reach a workspace, so its refused
-        // workspace is not audited.
-        if self.unmanaged(&self.managed_harness()) {
-            return (
-                200,
-                json!({
-                    "ready": true,
-                    "native_required": false,
-                    "workspace_acknowledged": false,
-                    "worker_ready": true,
-                }),
-                true,
-            );
-        }
-        if let Some(rejection) = rejection {
-            self.audit_rejection(&rejection.to_value());
-            return invalid(&rejection);
-        }
-        let Some(workspace) = workspace else {
-            return (
-                400,
-                json!({ "ready": false, "reason_code": "workspace_required" }),
-                true,
-            );
-        };
-        let Some(ready) = self.call("hook.ready", json!({ "workspace": workspace })) else {
-            return not_ready;
-        };
-        if ready.get("prepared") != Some(&Value::Bool(true)) {
-            return not_ready;
-        }
-        (
-            200,
-            json!({
-                "ready": true,
-                "native_required": true,
-                "native_route": "native_resident",
-                "workspace_acknowledged": true,
-                "worker_ready": true,
-            }),
-            true,
-        )
-    }
-
     /// `POST /v1/hooks/<harness>`: admits the hook under its deadline and the
     /// scheduler's capacity, and answers the worker's review or a fail-safe.
     fn runtime(&self, mut payload: Map<String, Value>, direct_miss: Option<&str>) -> Value {
+        let arrived = std::time::Instant::now();
         let event = runtime_event(&payload);
         let (hint, missing) = take_hint(&mut payload);
         // A hook with no time hint has a client that waits for its answer;
@@ -418,23 +325,22 @@ impl Hook<'_> {
         let capacity_harness = counters::capacity_harness(&reply_harness);
 
         let (workdir_named, workdir) = exec_workdir(&payload);
+        let payload_cwd = payload
+            .get("cwd")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let query_workspace = self.raw_param("workspace");
+        let named = [
+            workdir.clone(),
+            payload_cwd.clone(),
+            query_workspace.clone(),
+        ];
         let directories = self.settle(&[
             ("home", self.param("home"), None),
             ("guard-home", guard_home_query, None),
             ("exec-workdir", workdir, Some("exec-workdir")),
-            (
-                "workspace-payload",
-                payload
-                    .get("cwd")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                Some("hook-workspace"),
-            ),
-            (
-                "workspace-query",
-                self.raw_param("workspace"),
-                Some("hook-workspace"),
-            ),
+            ("workspace-payload", payload_cwd, Some("hook-workspace")),
+            ("workspace-query", query_workspace, Some("hook-workspace")),
         ]);
         let settled = (|| {
             let home_dir = directories.require("home")?;
@@ -455,14 +361,19 @@ impl Hook<'_> {
             };
             Ok((home_dir, guard_home, workspace))
         })();
+        let mut missing = None;
         let (home_dir, guard_home, workspace, rejection) = match settled {
             Ok((home_dir, guard_home, workspace)) => (home_dir, guard_home, workspace, None),
-            Err(rejection) => (
-                Some(self.home()),
-                Some(self.config.guard_home.clone()),
-                None,
-                Some(rejection.to_value()),
-            ),
+            Err(rejection) => {
+                let named = named.each_ref().map(Option::as_deref);
+                missing = missing_workdir(&event, &rejection, &named);
+                (
+                    Some(self.home()),
+                    Some(self.config.guard_home.clone()),
+                    None,
+                    Some(rejection.to_value()),
+                )
+            }
         };
 
         if let Some(rejection) = &rejection {
@@ -470,21 +381,13 @@ impl Hook<'_> {
         }
         // Leftover hooks of an app Guard is not protecting pass through.
         let managed_harness = self.managed_harness();
-        if self.unmanaged(&managed_harness) {
+        if self.unmanaged(&managed_harness, arrived) {
             return envelope("unmanaged", &managed_harness, &[]);
         }
-        let Some(prepared) = self.call_by(
-            "hook.prepare",
-            json!({
-                "workspace": workspace,
-                "remaining_seconds": remaining(),
-            }),
-            expires,
-        ) else {
-            return unavailable();
-        };
-        if let Some(refused) = prepared.get("fail_safe") {
-            return refusal(refused).map_or_else(unavailable, |(reason, code)| fail(reason, code));
+        // A command whose working directory does not exist cannot run; say so
+        // now rather than send it for approval with no workspace.
+        if let Some(reason) = missing {
+            return fail(&reason, MISSING_WORKDIR_CODE);
         }
         // A referenced payload is read only where Guard's own writer could
         // have put it, and reserves the most a reference may carry.
@@ -516,9 +419,29 @@ impl Hook<'_> {
             Ok(permit) => permit,
             Err(code) => {
                 scheduler.record_harness_rejection(capacity_harness);
-                return fail(capacity_reason(code), code);
+                return fail(
+                    &capacity_reason(code, Path::new(&self.config.guard_home), &self.home()),
+                    code,
+                );
             }
         };
+        // The policy barrier runs inside the admitted slot: it can hold a
+        // library worker for most of the hook's deadline, so a burst must
+        // queue for it here, bounded, rather than all at once in the library.
+        let Some(prepared) = self.call_by(
+            "hook.prepare",
+            json!({
+                "workspace": workspace,
+                "remaining_seconds": remaining(),
+            }),
+            expires,
+        ) else {
+            return unavailable();
+        };
+        if let Some(refused) = prepared.get("fail_safe") {
+            return prepare_refusal(&reply_harness, &reply_event, refused)
+                .unwrap_or_else(unavailable);
+        }
         if let Some(answer) = self.lifecycle(&reply_harness, &event, &payload, expires) {
             permit.release();
             return answer;
@@ -532,7 +455,6 @@ impl Hook<'_> {
                 home_dir.as_deref(),
                 guard_home.as_deref(),
             ),
-            expires,
         ) {
             permit.release();
             return answer;
@@ -564,105 +486,10 @@ impl Hook<'_> {
     }
 }
 
-/// The reason and code a library step's `fail_safe` carries.
-fn refusal(refused: &Value) -> Option<(&str, &str)> {
-    Some((
-        refused.get("reason")?.as_str()?,
-        refused.get("reason_code")?.as_str()?,
-    ))
-}
-
-/// The message a capacity refusal carries.
-fn capacity_reason(code: &str) -> &'static str {
-    if code == hook_scheduler::DEADLINE_EXHAUSTED {
-        "HOL Guard could not complete local review within the hook deadline. Retry this action."
-    } else {
-        "HOL Guard is safely queueing the maximum local review workload. Retry this action."
-    }
-}
-
-/// The harness's answer when the hook worker could not review the hook:
-/// `fail_closed_response` with `native_hook_worker_unavailable`. Tool,
-/// permission and prompt events get a constant deny in the harness envelope;
-/// other events a constant payload that carries no verdict.
-fn fail_safe(harness: &str, event: &str, reason: &str, code: &str) -> Value {
-    let contract: Value = serde_json::from_str(ENVELOPES).unwrap_or(Value::Null);
-    let kind = event_kind(&contract, event);
-    let reason = if kind == "prompt" {
-        contract["defaults"]["prompt_reason"]
-            .as_str()
-            .unwrap_or(reason)
-    } else {
-        reason
-    };
-    envelope(
-        &kind,
-        harness,
-        &[
-            ("$reason", reason),
-            ("$reason_code", code),
-            ("$event_name", event),
-        ],
-    )
-}
-
-/// `_envelope`: the contract's reply of `kind` for the harness, else its
-/// default, with the placeholders filled.
-fn envelope(kind: &str, harness: &str, values: &[(&str, &str)]) -> Value {
-    let contract: Value = serde_json::from_str(ENVELOPES).unwrap_or(Value::Null);
-    let table = &contract["envelopes"][kind];
-    let harness = harness.trim().to_lowercase().replace('_', "-");
-    let template = table
-        .get(harness.as_str())
-        .or_else(|| table.get("*"))
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    fill(template, values)
-}
-
-/// `_event_kind`: the envelope family an event name belongs to.
-fn event_kind(contract: &Value, event: &str) -> String {
-    let compact: String = event
-        .trim()
-        .to_lowercase()
-        .chars()
-        .filter(|character| *character != '_' && *character != '-')
-        .collect();
-    if let Some(kind) = contract["events"]
-        .get(compact.as_str())
-        .and_then(Value::as_str)
-    {
-        return kind.to_owned();
-    }
-    contract["event_prefixes"]
-        .as_object()
-        .into_iter()
-        .flatten()
-        .find(|(prefix, _)| compact.starts_with(prefix.as_str()))
-        .and_then(|(_, kind)| kind.as_str())
-        .unwrap_or("lifecycle")
-        .to_owned()
-}
-
-/// The envelope with its whole-string placeholders filled.
-fn fill(template: Value, values: &[(&str, &str)]) -> Value {
-    match template {
-        Value::String(text) => values
-            .iter()
-            .find(|(placeholder, _)| *placeholder == text)
-            .map_or(Value::String(text), |(_, value)| json!(value)),
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .map(|(key, value)| (key, fill(value, values)))
-                .collect(),
-        ),
-        Value::Array(items) => {
-            Value::Array(items.into_iter().map(|item| fill(item, values)).collect())
-        }
-        other => other,
-    }
-}
-
 #[cfg(test)]
 #[path = "daemon_edge_hook_review_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "daemon_edge_hook_policy_tests.rs"]
+mod policy_tests;

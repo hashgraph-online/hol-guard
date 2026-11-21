@@ -19,9 +19,9 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .adapters.base import HarnessContext
-from .adapters.contracts import contract_for
+from .harness_context import HarnessContext
 from .mdm.runtime_request import runtime_answer
+from .setup_contracts import contract_for
 
 _FEATURE = "native-hook-removal-sweep-v1"
 _BACKUP_FEATURE = "native-hook-removal-backup-v1"

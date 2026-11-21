@@ -120,6 +120,24 @@ pub(super) fn explain_expired_deadline(result: &mut PreToolResultV1, deadline: O
     }
 }
 
+/// A Rust proof that would have settled a plain review can lose the race with
+/// its probe budget after the Git configuration check and the extension
+/// controls both finished in time. The review it leaves then names a rule the
+/// command matched, which reads like Guard's answer rather than a check that
+/// did not finish, and the hook treats it as final instead of handing the
+/// command to the daemon's longer budget. When the caller reports that the
+/// probe budget ran out, such a review is reported as the timeout it is, so
+/// the hook retries it there and the agent is told to run the command again
+/// rather than wait on an approval. Only a plain review changes; a stronger
+/// floor, or a review with a reason of its own, keeps its answer.
+pub(crate) fn explain_expired_proof(result: &mut PreToolResultV1, probe_budget_spent: bool) {
+    let plain_review = matches!(
+        result.reason_code.as_str(),
+        "native_command_extension_review" | "native_command_review_required"
+    );
+    explain_timed_out_review(result, plain_review && probe_budget_spent);
+}
+
 /// A shell carrying its script under a login, interactive or alias-changing
 /// option, or any `zsh`, runs code this text does not hold, so Guard keeps
 /// the block. The agent is told which options did that and offered the plain
@@ -322,3 +340,63 @@ impl super::CompiledNativeCommandControls {
 #[cfg(test)]
 #[path = "native_command_startup_shell_tests.rs"]
 mod startup_shell_tests;
+
+#[cfg(test)]
+mod expired_proof_tests {
+    use super::{explain_expired_proof, TIMED_OUT_REVIEW_REASON};
+    use guard_contracts::PreToolResultV1;
+
+    fn review(reason_code: &str, minimum_action: &str) -> PreToolResultV1 {
+        let mut result = crate::pretool::evaluate_pre_tool_envelope(
+            "omp",
+            "PreToolUse",
+            &serde_json::json!({"tool_name":"bash","tool_input":{"command":"git push"}}),
+        );
+        result.minimum_action = minimum_action.into();
+        result.policy_action = minimum_action.into();
+        result.reason_code = reason_code.into();
+        result.reason = "matched rule".into();
+        result
+    }
+
+    #[test]
+    fn a_plain_review_left_by_a_spent_probe_budget_is_reported_as_a_timeout() {
+        for reason in [
+            "native_command_extension_review",
+            "native_command_review_required",
+        ] {
+            let mut result = review(reason, "review");
+            explain_expired_proof(&mut result, true);
+            assert_eq!(
+                result.reason_code,
+                "native_command_extension_evaluation_timed_out"
+            );
+            assert_eq!(result.reason, TIMED_OUT_REVIEW_REASON);
+            assert_eq!(result.minimum_action, "review");
+        }
+    }
+
+    #[test]
+    fn a_review_with_time_left_keeps_its_reason() {
+        let mut result = review("native_command_extension_review", "review");
+        explain_expired_proof(&mut result, false);
+        assert_eq!(result.reason_code, "native_command_extension_review");
+        assert_eq!(result.reason, "matched rule");
+    }
+
+    #[test]
+    fn a_stronger_floor_or_a_reason_of_its_own_is_never_relabelled() {
+        for (reason, action) in [
+            ("native_command_extension_review", "block"),
+            ("native_command_extension_review", "require-reapproval"),
+            ("native_command_permission_disabled", "block"),
+            ("native_git_helper_context_review", "review"),
+            ("native_command_extension_uncertain", "review"),
+        ] {
+            let mut result = review(reason, action);
+            explain_expired_proof(&mut result, true);
+            assert_eq!(result.reason_code, reason, "{reason} at {action}");
+            assert_eq!(result.minimum_action, action);
+        }
+    }
+}

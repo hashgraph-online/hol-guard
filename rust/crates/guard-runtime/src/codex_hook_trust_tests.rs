@@ -282,3 +282,42 @@ fn no_state_means_nothing_to_remap() {
     request["before_events"] = guard_events();
     assert_eq!(run(request).expect("remap")["state"], Value::Null);
 }
+
+#[test]
+fn a_dead_handlers_leftover_state_never_switches_off_the_guard_hook_that_takes_its_slot() {
+    // The person deleted a Guard handler whose program no longer exists, as the
+    // ownership refusal told them to, and ran the install again. The state that
+    // handler left behind must not ride onto the Guard hook appended in its place.
+    let mut request = table(
+        "remap",
+        json!([["PreToolUse", [{ "matcher": "Bash", "hooks": [handler(GUARD)] }]]]),
+        json!([
+            [key("pre_tool_use:0:0"), { "enabled": false, "trusted_hash": "sha256:dead" }],
+            [key("user_prompt_submit:0:0"), { "enabled": false }],
+        ]),
+    );
+    request["before_events"] = json!([]);
+    let state = run(request).expect("remap")["state"].clone();
+    assert_eq!(
+        state,
+        json!([[key("user_prompt_submit:0:0"), key("user_prompt_submit:0:0")]]),
+        "only the slot a Guard hook now occupies is cleared"
+    );
+}
+
+#[test]
+fn a_switched_off_foreign_handler_keeps_its_choice_when_guard_is_added_after_it() {
+    let foreign =
+        json!({ "matcher": "Bash", "hooks": [{ "type": "command", "command": FOREIGN }] });
+    let mut request = table(
+        "remap",
+        json!([["PreToolUse", [foreign.clone(), { "matcher": "Bash", "hooks": [handler(GUARD)] }]]]),
+        json!([[key("pre_tool_use:0:0"), { "enabled": false }]]),
+    );
+    request["before_events"] = json!([["PreToolUse", [foreign]]]);
+    let state = run(request).expect("remap")["state"].clone();
+    assert_eq!(
+        state,
+        json!([[key("pre_tool_use:0:0"), key("pre_tool_use:0:0")]])
+    );
+}

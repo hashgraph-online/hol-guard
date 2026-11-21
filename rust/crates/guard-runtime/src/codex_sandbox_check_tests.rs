@@ -33,7 +33,7 @@ fn a_malformed_call_is_refused() {
 fn a_process_outside_any_sandbox_is_refused() {
     let workspace = tempfile::tempdir().unwrap();
     let workspace = workspace.path().to_str().unwrap();
-    for profile in [WORKSPACE_PROFILE, "pytest-readonly-v2"] {
+    for profile in [WORKSPACE_PROFILE, PYTEST_PROFILE, SHARED_TMP_CHECK] {
         assert!(!confined(profile, workspace), "{profile}");
         let args = strings(&["--profile", profile, "--workspace", workspace]);
         assert_eq!(run(&args), REFUSED, "{profile}");
@@ -50,6 +50,50 @@ fn the_directories_outside_the_workspace_include_its_parent_and_tmp() {
     assert_eq!(outside[0], workspace.parent().unwrap());
     assert!(outside.contains(&std::fs::canonicalize("/tmp").unwrap()));
     assert!(outside_paths(std::path::Path::new("/")).is_none());
+}
+
+/// The shared-tmp check keeps asking about home and the folders beside the
+/// workspace, drops what Codex's default sandbox writes, and refuses when a
+/// shared temporary directory would put home in reach.
+#[test]
+fn the_shared_tmp_check_keeps_home_and_drops_shared_folders() {
+    use std::path::PathBuf;
+    let paths = |names: &[&str]| names.iter().map(PathBuf::from).collect::<Vec<_>>();
+    let shared = paths(&["/private/tmp", "/private/var/folders/x/T"]);
+    let homes = paths(&["/Users/u"]);
+    let outside = |parent: &str| {
+        paths(&[
+            parent,
+            "/Users/u",
+            "/private/tmp",
+            "/private/var/folders/x/T",
+        ])
+    };
+    let kept = |workspace: &str, parent: &str| {
+        shared_tmp_denied(outside(parent), workspace.as_ref(), &shared, &homes)
+    };
+    assert_eq!(
+        kept("/Users/u/code/app", "/Users/u/code"),
+        Some(paths(&["/Users/u/code", "/Users/u"]))
+    );
+    assert_eq!(
+        kept("/private/tmp/checkouts/app", "/private/tmp/checkouts"),
+        Some(paths(&["/Users/u"])),
+        "a checkout nested in /tmp sits in a folder Codex already writes"
+    );
+    let home_tmp = paths(&["/private/tmp", "/Users/u"]);
+    let root_tmp = paths(&["/"]);
+    for shared in [home_tmp, root_tmp] {
+        assert_eq!(
+            shared_tmp_denied(outside("/w"), "/w/app".as_ref(), &shared, &homes),
+            None,
+            "{shared:?}"
+        );
+    }
+    assert_eq!(
+        shared_tmp_denied(outside("/w"), "/w/app".as_ref(), &shared, &[]),
+        None
+    );
 }
 
 #[cfg(target_os = "macos")]
@@ -154,4 +198,63 @@ fn a_wider_sandbox_is_refused() {
             "{name}"
         );
     }
+}
+
+/// Codex's default sandbox: no network, writes to the workspace, `/tmp` and
+/// `$TMPDIR`.
+#[cfg(target_os = "macos")]
+#[test]
+fn codex_default_sandbox_holds_only_the_shared_tmp_check() {
+    let workspace = tempfile::tempdir().unwrap();
+    let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+    let shared = temp_paths();
+    let mut writable: Vec<&std::path::Path> = vec![&workspace];
+    writable.extend(shared.iter().map(std::path::PathBuf::as_path));
+    let codex = sbpl(false, &writable);
+    assert_eq!(check_under(&codex, SHARED_TMP_CHECK, &workspace), 0);
+    for profile in [WORKSPACE_PROFILE, PYTEST_PROFILE] {
+        assert_eq!(
+            check_under(&codex, profile, &workspace),
+            REFUSED,
+            "{profile}"
+        );
+    }
+    let home = std::fs::canonicalize(std::env::var_os("HOME").unwrap()).unwrap();
+    let wider = [
+        ("network", sbpl(true, &writable)),
+        (
+            "home",
+            sbpl(false, &[writable.as_slice(), &[home.as_path()]].concat()),
+        ),
+        ("no sandbox rules", "(version 1)(allow default)".to_owned()),
+    ];
+    for (name, profile) in wider {
+        assert_eq!(
+            check_under(&profile, SHARED_TMP_CHECK, &workspace),
+            REFUSED,
+            "{name}"
+        );
+    }
+}
+
+/// A workspace outside the temporary directories keeps its parent denied.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_shared_tmp_check_still_denies_the_workspace_parent() {
+    let deps = std::env::current_exe().unwrap();
+    let workspace = tempfile::tempdir_in(deps.parent().unwrap()).unwrap();
+    let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+    let parent = workspace.parent().unwrap().to_path_buf();
+    let shared = temp_paths();
+    let mut writable: Vec<&std::path::Path> = vec![&workspace];
+    writable.extend(shared.iter().map(std::path::PathBuf::as_path));
+    assert_eq!(
+        check_under(&sbpl(false, &writable), SHARED_TMP_CHECK, &workspace),
+        0
+    );
+    writable.push(&parent);
+    assert_eq!(
+        check_under(&sbpl(false, &writable), SHARED_TMP_CHECK, &workspace),
+        REFUSED
+    );
 }

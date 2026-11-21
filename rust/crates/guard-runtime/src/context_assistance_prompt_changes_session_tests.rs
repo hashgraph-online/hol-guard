@@ -151,7 +151,18 @@ def test_convert():\n    assert convert(2) == 2\n",
     let mut response = serde_json::json!({ "hookSpecificOutput": {} });
     let at = (guard_home.path(), root.as_path(), "codex", Some(&session));
     let wait = Duration::from_secs(5);
-    used::add_tests(&mut response, at, changed.clone(), &[], wait, || true);
+    let mut shown = Vec::new();
+    used::add_tests(
+        &mut response,
+        at,
+        changed.clone(),
+        &[],
+        wait,
+        || true,
+        &mut shown,
+    );
+    // The tests shown count toward the savings record like any other file.
+    assert_eq!(shown, ["tests/test_core.py"]);
     let text = response["hookSpecificOutput"]["additionalContext"]
         .as_str()
         .unwrap_or_default();
@@ -165,7 +176,7 @@ def test_convert():\n    assert convert(2) == 2\n",
     );
     // Project context turned off meanwhile sends nothing.
     let mut off = serde_json::json!({ "hookSpecificOutput": {} });
-    used::add_tests(&mut off, at, changed, &[], wait, || false);
+    used::add_tests(&mut off, at, changed, &[], wait, || false, &mut Vec::new());
     assert_eq!(off, serde_json::json!({ "hookSpecificOutput": {} }));
 }
 
@@ -198,19 +209,20 @@ fn a_prompt_about_a_failure_leads_with_fixing_from_the_code_shown() {
     fs::write(guard_home.path().join("config.toml"), ON).unwrap();
     let root = fs::canonicalize(repo.path()).unwrap();
     let session = repo.session("a-failure");
-    let ask = |prompt: &str| {
+    let ask_as = |app: &str, prompt: &str| {
         let home = repo.home.path();
         let changed = since_start(
             guard_home.path(),
             home,
             &root,
-            "codex",
+            app,
             Some(&session),
             prompt,
             later(),
         );
         changed.unwrap().text
     };
+    let ask = |prompt: &str| ask_as("claude-code", prompt);
     let lead = "This note shows the newest change. Where it caused the failure, fix it from the \
 code shown here without running the tests first: open just the range you change (a file must be \
 read before it is edited), edit it, then run ";
@@ -241,6 +253,22 @@ tests/test_e.py fail since the last commit",
         let check = format!("{lead}the tests that use it once to check.\n\n");
         assert!(text.contains(&check) && !text.contains("pytest"), "{text}");
     }
+    // Codex's apply_patch needs no read, so its lead asks for the edit and
+    // the check from one exec script and never for a read first.
+    let codex = ask_as(
+        "codex",
+        "`tests/test_core.py::test_other` started failing after the last commit.",
+    );
+    let codex_lead = format!(
+        "This note shows the newest change. Where it caused the failure, fix it from the code \
+shown here without running the tests first or opening the file: the code shown is what it holds \
+now, and apply_patch needs no read first. From one exec script, call apply_patch with the edit, \
+then run {command} once to check.\n\n"
+    );
+    assert!(
+        codex.contains(&codex_lead) && !codex.contains("must be read before"),
+        "{codex}"
+    );
     // A push no prompt says broke anything leads with nothing.
     let pushed = ask("Review what the teammate pushed.");
     assert!(

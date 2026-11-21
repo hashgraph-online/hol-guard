@@ -1,5 +1,6 @@
 //! Output filters after a contained core: `| head -N`, `| tail -N`, the same
-//! two bounded by bytes (`-c N`) or spelled with `-n N`, a `grep` or `rg`
+//! two bounded by bytes (`-c N`), spelled with `-n N` or left to the ten
+//! lines both programs print when no count is given, a `grep` or `rg`
 //! that only reads its standard input, and a `cut` that keeps part of each
 //! line, chained up to three deep.
 //!
@@ -11,6 +12,9 @@ use crate::CommandSegmentV1;
 
 /// The longest chain the sink applies.
 pub(in crate::pretool) const MAX_FILTERS: usize = 3;
+
+/// The lines a `head` or `tail` prints when the command names no count.
+const DEFAULT_LINES: u32 = 10;
 
 /// Single-letter `grep` switches that change only which lines of standard
 /// input are printed and how. Recursion (`-r`), pattern files (`-f`), file
@@ -96,13 +100,21 @@ pub(in crate::pretool) fn matcher_stage(program: &str, arguments: &[String]) -> 
 /// The bound one `head`/`tail` stage keeps: the count, and whether it counts
 /// bytes rather than lines.
 ///
-/// `head -40`, `head -n 40` and `head -c 1500` all bound the text the stage
-/// prints and read nothing but standard input, so the sink applies each of
-/// them in process. A byte count truncates the captured bytes exactly where
+/// `head`, `head -40`, `head -n 40` and `head -c 1500` all bound the text the
+/// stage prints and read nothing but standard input, so the sink applies each
+/// of them in process. A bare `head` or `tail` is the spelling an agent
+/// reaches for when it wants a glance at a runner's output and does not care
+/// how many lines it gets; it is bounded by the program's own default rather
+/// than by a word on the line. A byte count truncates the captured bytes exactly where
 /// the program would, which may be mid-character; the sink keeps those bytes
 /// as they stand rather than rounding to a character boundary.
 pub(in crate::pretool) fn head_tail_bound(arguments: &[String]) -> Option<(u32, bool)> {
     let (digits, bytes) = match arguments {
+        // No count at all is the bound both programs already carry: POSIX
+        // fixes the default at ten lines, and GNU and BSD both ship it. The
+        // peel writes the stage back with that count, so the sink applies
+        // the same ten lines the pipeline would have printed.
+        [] => return Some((DEFAULT_LINES, false)),
         [single] => match single.strip_prefix("-c").filter(|rest| !rest.is_empty()) {
             Some(digits) => (digits, true),
             None => (single.strip_prefix('-')?, false),

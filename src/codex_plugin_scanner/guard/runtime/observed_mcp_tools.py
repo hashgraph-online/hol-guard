@@ -6,15 +6,12 @@ endpoint. Catalog discovery never grants authority or invents a launch command.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from hashlib import sha256
 from typing import TYPE_CHECKING
 
-from ..adapters.contracts import display_name_for
 from ..local_cli_errors import LocalCliCatalogLimitError
-from ..native_policy_snapshot_codec import _normalized_harness_selector_v3
+from ..setup_contracts import display_name_for
 from ..store_local_cli_retention import LocalCliReplaySkippedError
 from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, LocalCliCommand
 from .local_cli_identity import UnlistedCliIdentity
@@ -25,7 +22,6 @@ if TYPE_CHECKING:
 
 OBSERVED_MCP_PREFIX = "observed-mcp:"
 MAX_OBSERVED_MCP_TOOLS = min(128, MAX_LOCAL_CLI_COMMANDS - 1)
-_TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,120}\Z")
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,11 +31,6 @@ class ObservedMcpTool:
     name: str
     qualified_name: str
     server_name: str
-
-    @property
-    def command_id(self) -> str:
-        # Names that slug to the same text must retain separate permissions.
-        return "tool-" + sha256(self.qualified_name.encode()).hexdigest()[:24]
 
     @property
     def server_identity(self) -> McpServerIdentity:
@@ -60,41 +51,6 @@ class ObservedMcpTool:
             identity_hash=server.identity_hash,
             example_label=self.namespace,
         )
-
-
-def observed_mcp_tool(harness: object, tool_name: object) -> ObservedMcpTool | None:
-    """Parse a fully qualified MCP name; retain the connector boundary."""
-
-    if not isinstance(harness, str) or not isinstance(tool_name, str):
-        return None
-    harness = harness.strip().lower()
-    if not _TOKEN.fullmatch(harness) or not tool_name.startswith("mcp__") or len(tool_name) > 160:
-        return None
-    canonical_harness = _normalized_harness_selector_v3(harness)
-    if canonical_harness is None:
-        return None
-    harness = canonical_harness
-    parts = tool_name[5:].split("__")
-    if len(parts) < 2 or any(not _TOKEN.fullmatch(part) for part in parts):
-        return None
-    server = parts[0]
-    split = 1
-    if server == "codex_apps" and len(parts) >= 3:
-        server = parts[1]
-        split = 2
-    name = "__".join(parts[split:])
-    if len(name) > 120:
-        return None
-    namespace = "mcp__" + "__".join(parts[:split]) + "__"
-    if len(namespace) > 155:
-        return None
-    return ObservedMcpTool(
-        harness=harness,
-        namespace=namespace,
-        name=name,
-        qualified_name=tool_name,
-        server_name="Codex Apps" if server == "codex_apps" else server,
-    )
 
 
 def discover_observed_mcp_tools(
@@ -118,19 +74,24 @@ def discover_observed_mcp_tools(
     groups = store.observed_mcp_discovery(configured_servers=configured)
     saturated = 0
     for group in groups:
+        # The resident names each tool's command by its exact qualified name,
+        # so names that slug alike keep separate permissions.
         tools = [
-            ObservedMcpTool(
-                harness=group["harness"],
-                namespace=group["namespace"],
-                name=tool["name"],
-                qualified_name=tool["qualified_name"],
-                server_name=group["server_name"],
+            (
+                tool["command_id"],
+                ObservedMcpTool(
+                    harness=group["harness"],
+                    namespace=group["namespace"],
+                    name=tool["name"],
+                    qualified_name=tool["qualified_name"],
+                    server_name=group["server_name"],
+                ),
             )
             for tool in group["tools"]
         ]
         if not tools:
             continue
-        first = tools[0]
+        first = tools[0][1]
         server = first.server_identity
         # Replay records each connector at its own history time, so it can age
         # out and stays forgotten until the harness uses it again.
@@ -150,12 +111,12 @@ def discover_observed_mcp_tools(
             continue
         catalog = [
             LocalCliCommand(
-                command_id=tool.command_id,
+                command_id=command_id,
                 name=tool.name,
                 usage=tool.qualified_name,
                 description="Detected from this harness. Recommended keeps the usual review.",
             )
-            for tool in tools
+            for command_id, tool in tools
         ]
         # There is no allow-all fallback for an observed connector. Its catalog
         # is incomplete; unseen tools must retain their normal review.

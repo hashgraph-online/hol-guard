@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from typing import Protocol
 
-from ..adapters.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..store import GuardStore
 from .command_queue_activation import command_queue_long_poll_enabled, nonnegative_env_float
 from .command_queue_protocol import retry_wait_seconds
@@ -16,6 +17,7 @@ from .runner import GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredEr
 COMMAND_QUEUE_POLL_INTERVAL_ENV = "GUARD_CLOUD_COMMAND_QUEUE_POLL_INTERVAL_SECONDS"
 COMMAND_QUEUE_ERROR_BACKOFF_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ERROR_BACKOFF_SECONDS"
 
+_LOGGER = logging.getLogger(__name__)
 _DEFAULT_POLL_INTERVAL_SECONDS = 2.0
 _DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 _LONG_POLL_EMPTY_MIN_WAIT_SECONDS = 0.05
@@ -44,10 +46,8 @@ def run_command_queue_loop(
     stop_event: StopEvent,
     enabled: Callable[[GuardStore], bool],
     poll_once: Callable[[GuardStore, HarnessContext], dict[str, object]],
-    load_state: Callable[[GuardStore], dict[str, object]],
-    save_state: Callable[[GuardStore, dict[str, object]], None],
+    record_failure: Callable[[GuardStore, str, str], None],
     format_error: Callable[[BaseException], str],
-    now: Callable[[], str],
 ) -> None:
     if not enabled(store):
         return
@@ -86,18 +86,12 @@ def run_command_queue_loop(
             empty_streak = 0
             error_streak += 1
             state = "auth_expired" if isinstance(error, GuardSyncAuthorizationExpiredError) else "not_configured"
-            save_state(
-                store,
-                {**load_state(store), "state": state, "last_error": format_error(error), "last_poll_at": now()},
-            )
+            _record_failure_safely(record_failure, store, state, format_error(error))
             wait_seconds = retry_wait_seconds(poll_interval, error_backoff, error_streak)
         except Exception as error:
             empty_streak = 0
             error_streak += 1
-            save_state(
-                store,
-                {**load_state(store), "state": "error", "last_error": format_error(error), "last_poll_at": now()},
-            )
+            _record_failure_safely(record_failure, store, "error", format_error(error))
             wait_seconds = retry_wait_seconds(poll_interval, error_backoff, error_streak)
             error_wait = True
         if error_wait:
@@ -105,6 +99,23 @@ def run_command_queue_loop(
                 return
         elif stop_event.wait(wait_seconds):
             return
+
+
+def _record_failure_safely(
+    record_failure: Callable[[GuardStore, str, str], None],
+    store: GuardStore,
+    failed_state: str,
+    error: str,
+) -> None:
+    """Record a caught poll failure without letting a storage outage end the worker.
+
+    The step is a native store write, so it fails while the runtime is down. The
+    worker must still back off and retry, so that failure is logged, not raised.
+    """
+    try:
+        record_failure(store, failed_state, error)
+    except Exception as record_error:
+        _LOGGER.warning("Guard command queue could not record a poll failure: %s", type(record_error).__name__)
 
 
 def _wait_out_error_backoff(stop_event: StopEvent, seconds: float) -> bool:

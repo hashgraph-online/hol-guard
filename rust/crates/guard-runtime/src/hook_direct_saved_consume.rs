@@ -1,10 +1,10 @@
 //! The daemon's approve-once retry for a reviewed `PreToolUse`.
 //!
 //! When no saved exact-action decision answers a review, the daemon spends a
-//! five-minute "allow once" the user gave the same request in the approval
+//! one-hour "allow once" the user gave the same request in the approval
 //! inbox: `native_review_settle` (`hook_native_review_binding.py`)
-//! with the review identity `native_review_binding`
-//! (`hook_native_exact_action.py`) derives and the launch target of
+//! with the review identity the edge proves in `native_exact_action_op`
+//! and the launch target of
 //! `_native_review_launch_target` (`hook_native_review_approval.py`). The
 //! resident runs the same `settle_native_review_reuse` store operation the
 //! daemon asks it for, under the same shared storage gate: a matching Keep
@@ -55,13 +55,9 @@ pub(super) fn answer(
     )
     .ok_or(HookDirectDefer::SavedDecision)?;
     let launch_target = launch_target(context.payload)?;
-    let mut allowed = result.clone();
-    for key in ["decision", "minimum_action", "policy_action"] {
-        allowed.insert(key.to_owned(), json!("allow"));
-    }
     // Rendered before the spend, so a spent approval always reaches the hook.
-    let response =
-        render(context.harness, &allowed, "accepted").ok_or(HookDirectDefer::SavedDecision)?;
+    let response = reuse_response(context.harness, result, "allowed", render)
+        .ok_or(HookDirectDefer::SavedDecision)?;
     let guard_home = Path::new(context.guard_home);
     let _gate = storage_gate(guard_home)?;
     let mut args = Map::new();
@@ -91,19 +87,8 @@ pub(super) fn answer(
         busy_timeout_ms: BUSY_TIMEOUT_MS,
         args,
     };
-    let mut blocked = result.clone();
-    for key in ["minimum_action", "policy_action"] {
-        blocked.insert(key.to_owned(), json!("block"));
-    }
-    blocked.insert("decision".to_owned(), json!("deny"));
-    blocked.insert("reason_code".to_owned(), json!("native_review_user_block"));
-    blocked.insert("reason".to_owned(), json!("The user chose Keep blocked for this action. Do not retry it; continue with a permitted alternative."));
-    let mut blocked_response =
-        render(context.harness, &blocked, "blocked").ok_or(HookDirectDefer::SavedDecision)?;
-    blocked_response
-        .as_object_mut()
-        .ok_or(HookDirectDefer::SavedDecision)?
-        .insert("prompted".to_owned(), json!(false));
+    let blocked_response = reuse_response(context.harness, result, "blocked", render)
+        .ok_or(HookDirectDefer::SavedDecision)?;
     let settled = crate::guard_store_op::evaluate(&request).map(|(payload, _)| payload);
     repair_store_permissions(guard_home);
     match settled {
@@ -112,6 +97,36 @@ pub(super) fn answer(
         Ok(Value::String(outcome)) if outcome == "allowed" => Ok(Some(response)),
         _ => Err(HookDirectDefer::SavedDecision),
     }
+}
+
+/// Render the native store's answer for a settled retry.
+pub(crate) fn reuse_response(
+    harness: &str,
+    result: &Map<String, Value>,
+    outcome: &str,
+    render_response: impl FnOnce(&str, &Map<String, Value>, &str) -> Option<Value>,
+) -> Option<Value> {
+    let (decision, action, status) = match outcome {
+        "allowed" => ("allow", "allow", "accepted"),
+        "blocked" => ("deny", "block", "blocked"),
+        _ => return None,
+    };
+    let mut verdict = result.clone();
+    verdict.insert("decision".to_owned(), json!(decision));
+    for key in ["minimum_action", "policy_action"] {
+        verdict.insert(key.to_owned(), json!(action));
+    }
+    if action == "block" {
+        verdict.insert("reason_code".to_owned(), json!("native_review_user_block"));
+        verdict.insert("reason".to_owned(), json!("The user chose Keep blocked for this action. Do not retry it; continue with a permitted alternative."));
+    }
+    let mut response = render_response(harness, &verdict, status)?;
+    if action == "block" {
+        response
+            .as_object_mut()?
+            .insert("prompted".to_owned(), json!(false));
+    }
+    Some(response)
 }
 
 /// `_native_review_launch_target`: the command as sent, else the first

@@ -15,10 +15,9 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner import cli
-from codex_plugin_scanner.guard.cli.cloud_actions_host_apply import backups_dir
 from codex_plugin_scanner.guard.cli.cloud_actions_host_config import CLOUD_ACTIONS_SERVER_NAME
-from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
-from tests.cloud_actions_pairing_support import WS, FakeCloud, pair
+from tests.cloud_actions_pairing_support import WS, FakeCloud, backups_dir, pair
+from tests.codex_toml_support import parse_toml_object
 
 CODEX_WITH_GUARD = """[features]
 codex_hooks = true

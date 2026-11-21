@@ -130,3 +130,17 @@ with or without it. Release builds do not yet package binding artifacts, so
 merging a binding does not make any action available in Guard Cloud. Making a
 hosted action available is a separate, reviewed step; a contribution never
 turns one on.
+
+## Bindings and packs
+
+A binding has two routes. A `portable-policy` binding lets hosted policy
+recognize and decide on the action, and nothing runs it. A `cloud-executable`
+binding on a reviewed remote MCP server lets a host call that server's tool,
+with the endpoint taken from the server contribution and the capabilities
+listed above. To let a host run a provider's own API actions, or to bound a
+tool's arguments and derive facts from them, write a cloud action pack; it
+states the exact request, argument bounds and facts for each action. The
+[trust ladder](../extensions/cloud-action-pack-contributing.md#trust-ladder)
+shows how an action moves from `portable-policy` to `cloud-executable` and
+`verified-publisher`, and the same guide covers drafting a pack with
+`hol-guard extensions generate --cloud`.

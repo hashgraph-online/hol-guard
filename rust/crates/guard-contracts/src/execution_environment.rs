@@ -90,6 +90,58 @@ pub fn cargo_home_default(home: Option<&str>, cargo_home: Option<&str>) -> bool 
     !home.is_empty() && trimmed(cargo_home) == format!("{home}/.cargo")
 }
 
+/// Configuration keys an editor's Git integration hands every child process
+/// through `GIT_CONFIG_COUNT` that change only how Git prints paths. None of
+/// them names a program, a hook, a file Git reads or a place it writes. Cursor
+/// and VS Code export `core.quotePath=false` in every terminal they open.
+pub const INERT_GIT_CONFIG_ENVIRONMENT_KEYS: &[&str] = &["core.quotepath"];
+
+/// More entries than this are not judged; no editor exports that many.
+pub const MAX_INERT_GIT_CONFIG_ENVIRONMENT_ENTRIES: usize = 8;
+
+/// Whether the `GIT_CONFIG_COUNT` entries `lookup` sees only set keys in
+/// [`INERT_GIT_CONFIG_ENVIRONMENT_KEYS`]. Git reads `GIT_CONFIG_KEY_<n>` and
+/// `GIT_CONFIG_VALUE_<n>` for every `n` below the count and ignores the rest.
+///
+/// The count must be plain decimal digits: Git also accepts unit suffixes such
+/// as `1k`, which would read entries this never looked at. A missing key makes
+/// Git refuse to start, but it is still not judged inert. Values are not
+/// checked: a value Git cannot parse as a boolean stops Git before it reads
+/// anything.
+pub fn git_config_environment_inert<'a>(lookup: impl Fn(&str) -> Option<&'a str>) -> bool {
+    let Some(count) = lookup("GIT_CONFIG_COUNT") else {
+        return false;
+    };
+    if count.is_empty() || count.len() > 2 || !count.bytes().all(|byte| byte.is_ascii_digit()) {
+        return false;
+    }
+    let Ok(count) = count.parse::<usize>() else {
+        return false;
+    };
+    if count > MAX_INERT_GIT_CONFIG_ENVIRONMENT_ENTRIES {
+        return false;
+    }
+    (0..count).all(|index| {
+        lookup(&format!("GIT_CONFIG_KEY_{index}")).is_some_and(|key| {
+            INERT_GIT_CONFIG_ENVIRONMENT_KEYS.contains(&key.to_ascii_lowercase().as_str())
+        }) && lookup(&format!("GIT_CONFIG_VALUE_{index}")).is_some()
+    })
+}
+
+/// Whether `name` is one of the variables Git reads for `GIT_CONFIG_COUNT`:
+/// the count itself, `GIT_CONFIG_KEY_<n>` or `GIT_CONFIG_VALUE_<n>`.
+pub fn git_config_count_entry(name: &str) -> bool {
+    let name = name.to_ascii_uppercase();
+    name == "GIT_CONFIG_COUNT"
+        || ["GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"]
+            .iter()
+            .any(|prefix| {
+                name.strip_prefix(prefix).is_some_and(|index| {
+                    !index.is_empty() && index.bytes().all(|byte| byte.is_ascii_digit())
+                })
+            })
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct GuardExecutionEnvironmentV1 {
@@ -119,6 +171,10 @@ pub struct GuardExecutionEnvironmentV1 {
     /// accepts. The value itself is never stamped.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub cargo_home_default: bool,
+    /// The hook saw `GIT_CONFIG_COUNT` entries that
+    /// [`git_config_environment_inert`] accepts. The values are never stamped.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub git_config_environment_inert: bool,
 }
 
 impl GuardExecutionEnvironmentV1 {
@@ -158,6 +214,7 @@ impl GuardExecutionEnvironmentV1 {
             library_search_paths: BTreeMap::new(),
             node_options_inert: false,
             cargo_home_default: false,
+            git_config_environment_inert: false,
         }
     }
 }

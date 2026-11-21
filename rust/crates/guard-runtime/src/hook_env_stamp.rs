@@ -289,6 +289,9 @@ pub(crate) fn collect_hook_execution_environment(environment: &DecodedEnvironmen
     ) {
         stamp.push(("cargo_home_default".to_owned(), PyVal::Bool(true)));
     }
+    if guard_contracts::git_config_environment_inert(|name| lookup(environment, name)) {
+        stamp.push(("git_config_environment_inert".to_owned(), PyVal::Bool(true)));
+    }
     PyVal::Dict(stamp)
 }
 

@@ -30,8 +30,8 @@ impl EvidenceErasureScope {
             for id in store.root.ids()? {
                 let record = store.load_locked(&id)?.read()?;
                 for binding in [&record.source_release, &record.target_release] {
-                    if let EvidenceProducerBinding::Enrolled(binding) = binding {
-                        measured.insert(binding.approval.worker_sha256.clone());
+                    if let Some(worker) = binding.worker_sha256() {
+                        measured.insert(worker.to_owned());
                     }
                 }
             }

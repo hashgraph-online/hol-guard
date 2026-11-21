@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.krusch-fs",
+  "version": "1.0.0",
+  "name": "Krusch-FS MCP",
+  "description": "Local OS filesystem and optional SSH-fleet page-anchored memory MCP server (kruschdev/krusch-fs-mcp v0.3.1) with SHA-256 PageMemory drift checks and automatic .env secret-value redaction. Indexed page-tree, glob locate, and bounded page reads inherit Guard policy; hybrid search, page memory writes, and incremental local/SSH sync require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/krusch-fs-mcp"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniFolder",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://krusch.dev/articles/krusch-fs-architecture.html",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "krusch-fs-mcp"
+  },
+  "riskClasses": [
+    "local-file-read",
+    "local-sqlite-write",
+    "external-embedding-request",
+    "external-command-execution"
+  ],
+  "tools": [
+    {
+      "name": "krusch_fs_locate",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_fs_page_tree",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_fs_read_page",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_fs_search",
+      "state": "review"
+    },
+    {
+      "name": "krusch_fs_remember_on_page",
+      "state": "review"
+    },
+    {
+      "name": "krusch_fs_sync",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/krusch-fs-mcp",
+    "https://github.com/kruschdev/krusch-fs-mcp/blob/main/src/krusch_fs/mcp.py",
+    "https://github.com/kruschdev/krusch-fs-mcp/blob/main/pyproject.toml",
+    "https://krusch.dev/articles/krusch-fs-architecture.html"
+  ],
+  "saferAlternatives": [
+    "Use krusch_fs_locate, krusch_fs_page_tree, and krusch_fs_read_page to inspect already-indexed pages without triggering filesystem crawls or SSH fleet syncs.",
+    "Keep krusch_fs_sync and krusch_fs_remember_on_page on Review: sync crawls configured local or SSH-reachable paths into fs_memory.db, and remember_on_page writes durable notes."
+  ]
+}

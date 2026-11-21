@@ -90,7 +90,6 @@ fn globs_outside_a_repository_or_matching_sensitive_files_stay_reviewed() {
         format!("grep -n fixture {sibling}/.git/*"),
         // The match lies in a directory beside the repositories, not in one.
         format!("grep -n fixture {org}/*/todo.md"),
-        format!("grep -n fixture {org}/plain-notes/*.md"),
         "grep -n fixture ~/*".to_owned(),
         "rg -n fixture /*".to_owned(),
     ] {

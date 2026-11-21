@@ -1,5 +1,6 @@
 use super::*;
 use crate::context_assistance_engine::PickedExcerpt;
+use crate::context_assistance_prompt_files::walk;
 use serde_json::json;
 
 fn excerpt(path: &str, text: &str) -> PickedExcerpt {
@@ -236,6 +237,15 @@ fn context_is_appended_after_any_existing_context() {
         existing["hookSpecificOutput"]["additionalContext"],
         "notice\n\ncode"
     );
+}
+
+#[test]
+fn an_advisory_panic_keeps_the_settled_harness_response() {
+    let fallback = json!({"decision": "allow", "reason_code": "guard_settled"});
+    let response = advisory_or_fallback(Some(fallback.clone()), || -> Option<Value> {
+        panic!("CIGAR fixture failure")
+    });
+    assert_eq!(response, Some(fallback));
 }
 
 #[test]

@@ -351,7 +351,7 @@ assert.match(
   remainingProtectionRepairMessage(normalizeProtectionHealth(payload(noManagedChecks)), (harness) => harness).message,
   /Connect an AI app to start local protection/,
 );
-assert.match(harnessSetupSource, /SetupMetric label="Install state" value=\{installStateLabel\(active, props\.status\)\}/);
+assert.match(harnessSetupSource, /SetupMetric label="Install state" value=\{installStateLabel\(active, props\.status, hasLeftover\)\}/);
 assert.match(appDetailSource, /protectionHealthFor\(runtime, harness\)/);
 assert.match(appDetailSource, /useProtectionPresentationState\(appProtection\)/);
 assert.match(fleetSource, /useProtectionPresentationState\(protectionHealth\)/);

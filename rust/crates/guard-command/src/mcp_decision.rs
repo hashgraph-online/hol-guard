@@ -605,7 +605,7 @@ pub fn package_token(command_name: &str, args: &[String]) -> Option<String> {
 
 /// `_split_package_token` (:297-316) — `(name, version)` out of a package
 /// specifier.
-fn split_package_token(value: &str) -> (Option<String>, Option<String>) {
+pub(crate) fn split_package_token(value: &str) -> (Option<String>, Option<String>) {
     let (pip_style_name, pip_style_version) = split_pip_style_specifier(value);
     if pip_style_name.is_some() {
         return (pip_style_name, pip_style_version);

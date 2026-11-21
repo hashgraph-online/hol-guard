@@ -25,6 +25,13 @@ fn an_inert_assignment_is_carried_off_the_front() {
 }
 
 #[test]
+fn a_pytest_autoload_switch_is_carried_into_the_run() {
+    let (core, carried) = split(&["PYTEST_DISABLE_PLUGIN_AUTOLOAD=1", "pytest"], false);
+    let switch: (String, String) = ("PYTEST_DISABLE_PLUGIN_AUTOLOAD".into(), "1".into());
+    assert_eq!((core, carried), (words(&["pytest"]), vec![switch]));
+}
+
+#[test]
 fn a_localisation_setting_is_carried_by_its_prefix() {
     let (core, carried) = split(&["LC_ALL=C", "pytest"], false);
 

@@ -76,6 +76,8 @@ fn the_composed_routes_leave_the_dispatch() {
         "/v1/cloud-review",
         "/v1/cloud-actions/status",
         "/v1/context-assistance",
+        "/v1/context-assistance/installations",
+        "/v1/context-assistance/jobs",
         "/v1/context-assistance/usage",
         "/v1/policy/cloud-exception-requests",
         "/v1/supply-chain/workspace-findings",
@@ -85,4 +87,36 @@ fn the_composed_routes_leave_the_dispatch() {
         assert!(!dispatch::get_routed(path));
     }
     assert!(!routed("/v1/policy/cloud-exceptions"));
+}
+
+/// The dashboard reads every CIGAR route with its session. A composed read
+/// the session cannot reach answers 401 there, and the page shows only that
+/// it could not load (the Usage tab did this for every user).
+#[test]
+fn every_composed_cigar_read_is_open_to_the_dashboard_session() {
+    let engine_reads = [
+        "/v1/context-assistance",
+        "/v1/context-assistance/installations",
+        "/v1/context-assistance/jobs",
+        "/v1/context-assistance/usage",
+    ];
+    for path in engine_reads {
+        assert!(super::super::writes::context_assistance::reads(path));
+        assert!(routed(path));
+    }
+    for path in HANDLER_READS
+        .iter()
+        .copied()
+        .filter(|path| path.starts_with("/v1/context-assistance"))
+        .chain(engine_reads)
+    {
+        assert!(
+            crate::daemon_route_paths::session_path("GET", path),
+            "{path} is composed but a dashboard session cannot read it"
+        );
+        assert!(
+            crate::daemon_route_paths::requires_header_token(path),
+            "{path}"
+        );
+    }
 }

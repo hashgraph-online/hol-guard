@@ -7,7 +7,7 @@ import type { useCigarOneClick } from "./use-one-click";
 import { cigarWaking, type CigarTab } from "./workspace-model";
 
 export type CigarOneClick = ReturnType<typeof useCigarOneClick>;
-const ALL_STAGES: CigarSetupStage[] = ["python", "download", "check", "start"];
+const ALL_STAGES: CigarSetupStage[] = ["check", "start"];
 
 type ActionProps = {
   setup: CigarOneClick;
@@ -107,7 +107,7 @@ export function CigarSetupProof({ setup, gate }: ProofProps) {
   const run = setup.run;
   return <SettingsSaveProofModal open={run.phase === "proof"} mode="verify-save" gate={gate}
     title="Approve turning on CIGAR"
-    detail="Guard will download CIGAR, make sure it is the approved copy and start it on this computer. After that, each prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few files from that project that match it. CIGAR skips secrets, keys, generated folders and anything the project's .gitignore files leave out. Turn off Context for AI apps in Settings to stop it. One approval covers everything."
+    detail="Guard will start CIGAR, which is built into Guard, on this computer. After that, each prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few files from that project that match it. CIGAR skips secrets, keys, generated folders and anything the project's .gitignore files leave out. Turn off Context for AI apps in Settings to stop it. One approval covers everything."
     confirmLabel="Turn on CIGAR" error={run.phase === "proof" ? run.error : null} pending={false}
     onCancel={setup.cancelProof} onConfirm={(proof) => setup.confirm({ currentPassword: proof.currentPassword, totpCode: proof.totpCode })} />;
 }

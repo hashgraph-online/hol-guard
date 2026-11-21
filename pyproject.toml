@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.59.0"
-description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
+version = "3.60.0"
+description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs. It covers the agent events listed in its support matrix and does not cover actions an agent runs outside its hooks."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -55,7 +55,6 @@ dependencies = [
     "tomli>=2.0; python_version < '3.11'",
     "typing_extensions>=4.15.0",
     "mcp>=1.30.0,<2; python_version >= '3.10'",
-    "tomlkit>=0.13.3,<1",
 ]
 
 [project.optional-dependencies]
@@ -69,6 +68,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.15",
+    "tomlkit>=0.13.3,<1",
 ]
 mdm-build = [
     "pyinstaller>=6.16,<7",
@@ -86,6 +86,7 @@ ci-test = [
     "pytest-xdist>=3.8.0",
     "pytest-rerunfailures>=14.0",
     "ruff>=0.15.15",
+    "tomlkit>=0.13.3,<1",
 ]
 cisco-mcp = [
     "cisco-ai-mcp-scanner==4.8.1; python_full_version >= '3.11.4'",
@@ -157,7 +158,6 @@ only-include = [
     "src",
     "scripts",
     "rust",
-    "integrations/cigar/bridge.py",
     "contracts",
     "contributions",
     "tests/fixtures",
@@ -233,9 +233,13 @@ markers = [
   "fault_injection: destructive store fault tests; only run with GUARD_FAULT_INJECTION=1",
   "installed: requires verification through an installed package artifact",
   "integration: verifies multiple Guard subsystems together",
-  "native_codex_hook_bridge: installs Codex hooks through the native runtime bridge when it is available",
-  "native_bounded_hook_bridge: installs bounded CLI hooks through the native runtime bridge when it is available",
-  "native_mcp_relay: installs Guard-managed MCP proxies through the native relay when it is available",
+  "native_runtime_session: posts the runtime session with the native cloud-event-sync command instead of the urllib test double",
+  "native_guard_events: uploads Guard events and pain signals with the native cloud-event-sync command instead of answering an empty queue",
+  "native_receipt_upload: uploads receipts with the native cloud-event-sync command instead of the urllib test double",
+  "native_cloud_json_request: sends Guard Cloud requests with the native cloud-event-sync command instead of the urllib test double",
+  "native_command_lease: leases Guard command jobs with the native cloud-event-sync command instead of the command queue test double",
+  "native_command_report: sends Guard command acks and results with the native cloud-event-sync command instead of the command queue test double",
+  "native_oauth_refresh: sends Guard OAuth refresh exchanges with the native cloud-event-sync command instead of the urllib test double",
   "native_pi_hook_bridge: generates Pi and Oh My Pi extensions that use the native runtime hook bridge when it is available",
   "parser: verifies parsing or normalization security semantics",
   "policy: verifies policy composition or enforcement semantics",

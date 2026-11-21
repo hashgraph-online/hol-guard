@@ -2,7 +2,7 @@
 
 Status: wave-zero baseline. Audience: execution-assurance gate reviewers. Source evidence snapshot: `origin/release/3.1` at `10348fd40fa53ef60d9363bb6c37591b8bb60a61`; release identity migrated to 3.0 and revalidated in PR #1901.
 
-Superseded: contained execution now runs in the Rust runtime (`rust/crates/guard-command/src/contained_execution.rs` and `contained_runner/`), reached through the resident's `contained_execute` operation. `runtime/containment_executor.py` and `runtime/containment_backend_status.py` have been deleted; the Python paths below describe the snapshot named above, not current code.
+Superseded: contained execution now runs in the Rust runtime (`rust/crates/guard-command/src/contained_execution.rs` and `contained_runner/`), reached through the resident's `contained_execute` operation. `runtime/containment_executor.py`, `runtime/containment_backend_status.py` and the `contained_node_execution.py`, `contained_package_script_execution.py` and `contained_typescript_execution.py` runners have been deleted; the Python paths below describe the snapshot named above, not current code.
 
 Characterizes every isolation implementation by actual enforced behavior, then records the macOS/Linux containment guarantee matrix. Guarantees are derived from the enforcement code, never inferred from class or file names.
 

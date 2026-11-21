@@ -6,8 +6,7 @@ import { canCommitCigarJob, cigarJobPending } from "./versions-actions";
 import type { CigarVersionJob } from "./versions-jobs";
 import { versionButton, versionHeading, versionLead, versionPrimary, type CigarVersionActionHandler } from "./versions-view";
 type Props = { jobs: CigarVersionJob[]; status: ContextAssistanceStatus | null; disabled: boolean; selectionDisabled: boolean; onAction: CigarVersionActionHandler };
-const operation = { install: "Download CIGAR", verify: "Check CIGAR", setup_interpreter: "Set up Python for CIGAR", refresh_catalog: "Look for new versions",
-  switch: "Switch CIGAR version", rollback: "Go back to the earlier version", select: "Choose a CIGAR version", recover: "Clean up a version switch" };
+const operation = { switch: "Switch CIGAR version", rollback: "Go back to the earlier version", select: "Choose a CIGAR version", recover: "Clean up a version switch" };
 const phaseWords: Record<string, string> = { ready: "Ready", completed: "Done", cancelled: "Cancelled", failed: "Did not finish", recovery_required: "Needs cleanup" };
 export function cigarJobPhaseLabel(job: CigarVersionJob): string {
   // Guard keeps a prepared switch's worker alive while it waits for the person to choose Switch now.

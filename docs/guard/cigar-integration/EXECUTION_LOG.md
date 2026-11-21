@@ -28,7 +28,7 @@ Latest installed product: `95657b30`, with shared clients prepared during human 
 - `git status --short --branch`: clean `feature/integrate-cigar-0.14.1` before new goal files.
 - `git log -3 --oneline`: analysis `f69fd57e` directly follows the requested release base.
 - Native settings use a fixed editable-key list and Rust load/update/coercion; Python GuardConfig is a projection. The new optional section must be added consistently rather than relying on a Python-only setting.
-- `rustc --version`: compiler not on this shell's PATH. Installed Rust 1.88 and 1.92 toolchains were located under `/Users/construct/.rustup/toolchains/`; all builds use exact compiler paths and temporary target directories.
+- `rustc --version`: compiler not on this shell's PATH. Installed Rust 1.88 and 1.92 toolchains were located under `~/.rustup/toolchains/`; all builds use exact compiler paths and temporary target directories.
 - At goal creation, no package installation or SDK/worker verification had run. The later runtime checkpoint below adds isolated candidate evidence. No live Guard process, installation, settings or CIGAR candidate source has been changed.
 
 ## Native contracts checkpoint
@@ -44,19 +44,19 @@ The lockfile change adds only the new local crate and its existing serde depende
 Run from this checkout's `rust/` directory. Exact command forms:
 
 ```sh
-env RUSTC=/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/rustc RUSTDOC=/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-msrv-target /Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance
+env RUSTC=$HOME/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/rustc RUSTDOC=$HOME/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-msrv-target $HOME/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance
 ```
 
 Result: 10 passed, 0 failed. This covers the workspace's declared minimum Rust version.
 
 ```sh
-env RUSTC=/Users/construct/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=/Users/construct/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target /Users/construct/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance
+env RUSTC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target $HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance
 ```
 
 Result: 10 passed, 0 failed.
 
 ```sh
-env PATH=/Users/construct/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin:/usr/bin:/bin CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target /Users/construct/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo clippy --locked --offline -p guard-context-assistance --all-targets -- -D warnings
+env PATH=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin:/usr/bin:/bin CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target $HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo clippy --locked --offline -p guard-context-assistance --all-targets -- -D warnings
 ```
 
 Result: passed, no warnings. The new source files were formatted with Rust 1.92 rustfmt. Goal/log local links were checked. Full application/native ownership/integration checks remain for the production wiring.
@@ -81,7 +81,7 @@ Verification completed:
 Python test command from the checkout root:
 
 ```sh
-env PYTHONPATH=/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/src PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HOL_GUARD_TEST_HOME_BASE=/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/.pytest_cache/private-homes /Users/construct/Documents/projects/hol-guard-refinement/gauntlet-rust-integration-20261020/.venv/bin/python -B -m pytest -o addopts='' tests/test_context_assistance_settings_projection.py
+env PYTHONPATH=<checkout>/src PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 HOL_GUARD_TEST_HOME_BASE=<checkout>/.pytest_cache/private-homes <older-venv>/bin/python -B -m pytest -o addopts='' tests/test_context_assistance_settings_projection.py
 ```
 
 The initial pytest attempts stopped during setup: first because the test helper wrote its private home under the real user's read-only cache, then because generated command-catalog resources were absent in this new checkout. Added the test-only `HOL_GUARD_TEST_HOME_BASE` option to place isolation inside the ignored workspace cache, without changing production home resolution. Built the matching `guard-command-source` compiler and ran the maintained `build_native_command_program.py --projections-only` flow. It generated six ignored package resources from this checkout's authored inputs. No test assertion was bypassed. Future pytest commands should also select a task-specific `--basetemp` to avoid unrelated stale temporary-directory cleanup warnings.
@@ -134,7 +134,7 @@ For the next control API, reuse the existing native `managed_policy_load`, `mana
 Reproduce the installed native test from `rust/`:
 
 ```sh
-env RUSTC=/Users/construct/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=/Users/construct/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target GUARD_CIGAR_TEST_SELECTION=/private/tmp/hol-guard-cigar-runtime-validation/selection.json GUARD_CIGAR_TEST_OLDER_PYTHON=/Users/construct/Documents/projects/hol-guard-refinement/gauntlet-rust-integration-20261020/.venv/bin/python /Users/construct/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance installed_candidate_handshake_and_interpreter_refusal -- --ignored --nocapture
+env RUSTC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target GUARD_CIGAR_TEST_SELECTION=/private/tmp/hol-guard-cigar-runtime-validation/selection.json GUARD_CIGAR_TEST_OLDER_PYTHON=<older-venv>/bin/python $HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance installed_candidate_handshake_and_interpreter_refusal -- --ignored --nocapture
 ```
 
 ## Native enrollment and resident controls checkpoint — 2026-10-23
@@ -161,7 +161,7 @@ Next: connect the native controls to Protection setup/settings with truthful ava
 Reproduce the actual native control test from `rust/`:
 
 ```sh
-env CARGO_INCREMENTAL=0 RUSTC=/Users/construct/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=/Users/construct/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target GUARD_CIGAR_TEST_SELECTION=/private/tmp/hol-guard-cigar-runtime-validation/selection.json GUARD_CIGAR_TEST_APPROVAL=/private/tmp/hol-guard-cigar-runtime-validation/approval.json /Users/construct/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p hol-guard-runtime --lib context_assistance -- --include-ignored --nocapture
+env CARGO_INCREMENTAL=0 RUSTC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target GUARD_CIGAR_TEST_SELECTION=/private/tmp/hol-guard-cigar-runtime-validation/selection.json GUARD_CIGAR_TEST_APPROVAL=/private/tmp/hol-guard-cigar-runtime-validation/approval.json $HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p hol-guard-runtime --lib context_assistance -- --include-ignored --nocapture
 ```
 
 Native lifecycle implementation committed as `4a350799`. Native authority ownership passes against release base `35180b995cb27fdc9f92e1f68307a756c785f154`, checking 70 committed branch files.

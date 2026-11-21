@@ -1,6 +1,8 @@
 use serde_json::json;
 
-use super::{dispatch, parent_directory, version_ordinal};
+#[cfg(unix)]
+use super::parent_directory;
+use super::{dispatch, version_ordinal};
 
 const PIPX: &str = "/home/u/.local/pipx/venvs/hol-guard/lib/python3.14/site-packages/codex_plugin_scanner/guard/contracts/catalog.json";
 const UV: &str = "/home/u/.local/share/uv/tools/hol-guard/lib/python3.12/site-packages/codex_plugin_scanner/guard/contracts/catalog.json";

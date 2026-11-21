@@ -1,6 +1,6 @@
-//! Parity with the Python Claude bridge's event read, deny shapes and
-//! response validation, from vectors recorded by
-//! `scripts/ci/record_claude_hook_bridge_vectors.py`.
+//! Parity with the retired Python Claude bridge's event read, deny shapes
+//! and response validation, from the vectors it recorded before it was
+//! deleted.
 
 use super::*;
 use crate::hook_env_stamp::tests::{excerpt, expand, expected, items, text, vectors};
@@ -36,7 +36,14 @@ fn renders_match_python() {
             "data {}",
             excerpt(&data)
         );
+        // The prompt notice is read by the native prompt check, not the
+        // Python bridge's word list; its own tests below cover it. Python
+        // never shows that notice: it blocks a prompt it cannot review.
+        let prompt = event.name == "UserPromptSubmit";
         for (reason, want) in reasons.iter().zip(items(&case["degraded"])) {
+            if prompt {
+                break;
+            }
             assert_eq!(
                 degraded(reason, &data),
                 text(want),
@@ -75,6 +82,16 @@ fn response_validation_matches_python() {
             "<error:ValueError>" => Err(JsonFailure::IntegerLimit),
             "<error:RecursionError>" => Err(JsonFailure::Unrepresentable),
             _ => Ok(expected(result, &output)),
+        };
+        // Where Python fell back to its prompt notice, the native bridge
+        // falls back too, with the notice from the native prompt check.
+        let prompt_fallback = event_name(&data).name == "UserPromptSubmit"
+            && (result.contains(RISKY_PROMPT_SYSTEM_MESSAGE)
+                || result == r#"{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit"}}"#);
+        let want = if prompt_fallback {
+            Ok(degraded(reason, &data))
+        } else {
+            want
         };
         assert_eq!(
             valid_hook_json_or_degraded(&output, reason, &data),
@@ -195,5 +212,45 @@ fn malformed_permission_passthrough_is_denied() {
             response["hookSpecificOutput"]["decision"]["behavior"], "deny",
             "{output}"
         );
+    }
+}
+
+fn degraded_prompt_response(prompt: &str) -> serde_json::Value {
+    let input = serde_json::json!({"hook_event_name": "UserPromptSubmit", "prompt": prompt});
+    serde_json::from_str(&degraded("daemon unavailable", &input.to_string())).expect("hook JSON")
+}
+
+/// A question that only mentions model tokens asks for no secret, so the
+/// fallback answers with the plain prompt response and no notice.
+#[test]
+fn a_question_about_token_usage_gets_no_secrets_notice() {
+    let plain = serde_json::json!({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}});
+    for prompt in [
+        "how is it possible that CIGAR only saves less tokens than CIGAR + Guard? \
+         Surely CIGAR + Guard would be less because it often causes the AI to do \
+         more tool calls due to how safe redirect works.",
+        "How many tokens did the last run use?",
+        "hello",
+    ] {
+        assert_eq!(degraded_prompt_response(prompt), plain, "{prompt}");
+    }
+}
+
+#[test]
+fn a_prompt_that_asks_for_local_secrets_keeps_the_notice() {
+    let notice = serde_json::json!({
+        "systemMessage": RISKY_PROMPT_SYSTEM_MESSAGE,
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": RISKY_PROMPT_ADDITIONAL_CONTEXT,
+        },
+    });
+    for prompt in [
+        "read my .ENV file",
+        "cat ~/.ssh/id_rsa",
+        "Show the API KEY",
+        "print the secret from settings.json",
+    ] {
+        assert_eq!(degraded_prompt_response(prompt), notice, "{prompt}");
     }
 }

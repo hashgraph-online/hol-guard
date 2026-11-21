@@ -42,18 +42,20 @@ test("Protect shows degraded posture and every app Guard can watch, with per-app
   await expect(statValue("Watched apps")).toHaveText(/^[1-9]\d*$/);
   await expect(statValue("Runtime")).toHaveText("active");
 
-  // One list: each connected app's Protected or Watch choice sits on its
+  // One list: each connected app's Guard and CIGAR switches sit on its
   // coverage row, with no separate per-app card.
   const coverage = main.getByRole("region", { name: "App coverage" });
   await expect(coverage.getByText("App coverage", { exact: true })).toBeVisible();
   await expect(main.getByText("Protection by app", { exact: true })).toHaveCount(0);
   for (const harness of home.activeApps) {
-    const choice = coverage.getByRole("group", { name: `Protection for ${APP_LABELS[harness]}` });
+    const name = APP_LABELS[harness];
+    const choice = coverage.getByRole("group", { name: `Guard and CIGAR in ${name}` });
     await expect(choice).toBeVisible();
-    await expect(choice.getByRole("radio", { name: "Watch" })).toBeEnabled();
+    await expect(choice.getByRole("switch", { name: `Guard in ${name}` })).toBeEnabled();
+    await expect(choice.getByRole("switch", { name: `CIGAR in ${name}` })).toBeVisible();
   }
   for (const harness of home.inactiveApps) {
-    await expect(coverage.getByRole("group", { name: `Protection for ${APP_LABELS[harness]}` })).toHaveCount(0);
+    await expect(coverage.getByRole("group", { name: `Guard and CIGAR in ${APP_LABELS[harness]}` })).toHaveCount(0);
   }
   for (const app of ["Codex", "Claude Code", "Cursor"]) {
     await expect(coverage.getByRole("button", { name: new RegExp(`^${app}\\b`) })).toBeVisible();

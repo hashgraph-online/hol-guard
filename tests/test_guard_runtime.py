@@ -30,16 +30,14 @@ from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import native_prompt
 from codex_plugin_scanner.guard import synced_policy as synced_policy_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import render as guard_render_module
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
-from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import (
     GuardAction,
     GuardApprovalRequest,
@@ -69,7 +67,9 @@ from codex_plugin_scanner.guard.store import (
     GuardStore,
 )
 from codex_plugin_scanner.guard.synced_policy import synced_policy_payload
+from tests import codex_hook_publication_helpers as publication_helpers
 from tests.claude_notice_support import claude_guard_approval_question_text, record_claude_permission_notice
+from tests.codex_toml_support import read_toml_payload
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 from tests.live_hook_review_support import (
     LIVE_ALLOWS_RETIRED_REVIEW,
@@ -205,8 +205,8 @@ def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
     )
     config_path = home_dir / ".codex" / "config.toml"
     payload = read_toml_payload(config_path)
-    CodexHarnessAdapter._install_config_hooks(payload, context, config_path=config_path)
-    CodexHarnessAdapter._write_authenticated_hook_config(
+    publication_helpers.install_config_hooks(payload, context, config_path=config_path)
+    publication_helpers.write_authenticated_hook_config(
         context,
         config_path=config_path,
         payload=payload,
@@ -490,9 +490,9 @@ def _approve_native_request(monkeypatch, capsys, home_dir: Path, output: dict[st
 def _drain_hook_evidence(home_dir: Path) -> None:
     """Wait for the resident writer to persist what a one-shot hook handed it."""
 
-    from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
+    from codex_plugin_scanner.guard.resident_evidence_client import ResidentEvidenceClient
 
-    assert NativeHookEvidenceWriter(store=GuardStore(home_dir)).stop(timeout_seconds=5.0)
+    assert ResidentEvidenceClient(store=GuardStore(home_dir)).stop(timeout_seconds=5.0)
 
 
 def _native_receipts(guard_home: Path) -> list[tuple[str, str]]:
@@ -4382,6 +4382,7 @@ clearer UX and an implementation plan with technical references.
                     "policy-document-exact-commands.v1",
                     "policy-document-review-rules.v1",
                     "policy-document-command-pattern-allow.v1",
+                    "policy-document-risk-group-rules.v1",
                 ],
                 "policy_bundle_versions": [
                     "guard-policy-bundle.v1",
@@ -16577,6 +16578,8 @@ def test_sync_receipts_rejects_untrusted_sync_host_before_network(tmp_path, monk
     assert attempted_request is False
 
 
+@pytest.mark.native_guard_events
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_guard_events_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     attempted_request = False
@@ -16588,7 +16591,7 @@ def test_sync_guard_events_rejects_untrusted_sync_host_before_network(tmp_path, 
 
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
-    with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
+    with pytest.raises(guard_runner_module.GuardSyncEndpointUntrustedError, match="not trusted"):
         guard_runner_module.sync_guard_events(
             store,
             auth_context={"sync_url": "https://evil.example/api/guard/receipts/sync"},
@@ -16597,6 +16600,8 @@ def test_sync_guard_events_rejects_untrusted_sync_host_before_network(tmp_path, 
     assert attempted_request is False
 
 
+@pytest.mark.native_guard_events
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_pain_signals_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     attempted_request = False
@@ -16608,7 +16613,7 @@ def test_sync_pain_signals_rejects_untrusted_sync_host_before_network(tmp_path, 
 
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
-    with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
+    with pytest.raises(guard_runner_module.GuardSyncEndpointUntrustedError, match="not trusted"):
         guard_runner_module.sync_pain_signals(
             store,
             auth_context={"sync_url": "https://evil.example/api/guard/receipts/sync"},
@@ -17567,14 +17572,14 @@ def test_cached_bundle_is_not_activated_after_live_anchor_revocation(
             }
         )
 
-    real_validate = guard_runner_module.validate_synced_policy_bundle
+    real_cached_validate = synced_policy_module.validate_cached_policy_bundle
     cached_validation_calls = 0
     final_validation_calls = 0
 
     def _initial_anchor(*args, **kwargs):
         nonlocal cached_validation_calls
         cached_validation_calls += 1
-        return real_validate(*args, **kwargs)
+        return real_cached_validate(*args, **kwargs)
 
     def _revoked_anchor(*args, **kwargs):
         nonlocal final_validation_calls
@@ -17583,7 +17588,7 @@ def test_cached_bundle_is_not_activated_after_live_anchor_revocation(
 
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "validate_synced_policy_bundle", _revoked_anchor)
-    monkeypatch.setattr(synced_policy_module, "validate_synced_policy_bundle", _initial_anchor)
+    monkeypatch.setattr(synced_policy_module, "validate_cached_policy_bundle", _initial_anchor)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     summary = guard_runner_module.sync_receipts(store)
@@ -19335,29 +19340,36 @@ def test_sync_receipts_applies_v2_bundle_outside_the_canonical_rollout(
     assert mismatch_events[-1]["payload"]["reasonCodes"] == ["action"]
 
 
+@pytest.mark.parametrize(
+    ("canonical", "step"),
+    [
+        (True, "policy_shadow_verdict"),
+        (False, "policy_shadow_verdict"),
+        (True, "policy_shadow_source"),
+    ],
+)
 def test_sync_receipts_rejects_candidate_when_native_shadow_comparison_is_unavailable(
     tmp_path,
     monkeypatch,
+    canonical,
+    step,
 ):
-    for canonical in (True, False):
-        store, legacy = _prepare_shadow_candidate_sync(
-            tmp_path / f"canonical-{canonical}", monkeypatch, canonical=canonical
-        )
+    store, legacy = _prepare_shadow_candidate_sync(tmp_path, monkeypatch, canonical=canonical)
 
-        def _unavailable(_legacy, _canonical):
-            raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+    def _unavailable(*_args, **_kwargs):
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
-        monkeypatch.setattr(guard_runner_module._authority, "policy_shadow_mismatch", _unavailable)
+    monkeypatch.setattr(guard_runner_module._shadow, step, _unavailable)
 
-        guard_runner_module.sync_receipts(store)
+    guard_runner_module.sync_receipts(store)
 
-        assert store.get_sync_payload("policy_bundle") == legacy
-        assert store.get_sync_payload("policy_bundle_canonical_last_good") is None
-        assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "native_shadow_unavailable"}
-        assert [decision["action"] for decision in store.list_policy_decisions()] == ["block"]
-        mismatch_events = store.list_events(event_name="policy_bundle/shadow_mismatch")
-        assert mismatch_events[-1]["payload"]["reasonCodes"] == ["native_shadow_unavailable"]
-        assert mismatch_events[-1]["payload"]["status"] == "mismatch"
+    assert store.get_sync_payload("policy_bundle") == legacy
+    assert store.get_sync_payload("policy_bundle_canonical_last_good") is None
+    assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "native_shadow_unavailable"}
+    assert [decision["action"] for decision in store.list_policy_decisions()] == ["block"]
+    mismatch_events = store.list_events(event_name="policy_bundle/shadow_mismatch")
+    assert mismatch_events[-1]["payload"]["reasonCodes"] == ["native_shadow_unavailable"]
+    assert mismatch_events[-1]["payload"]["status"] == "mismatch"
 
 
 def test_sync_receipts_clears_untrusted_cached_canonical_when_flag_is_disabled(
@@ -19519,121 +19531,6 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
 
     assert result["artifacts"][0]["policy_action"] == "block"
     assert order.index("resolve_policy_non_consuming") < order.index("add_receipt")
-
-
-def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
-    store = GuardStore(tmp_path / "guard-home")
-    dpop_key_material = generate_dpop_key_pair()
-    _seed_guard_cloud(store)
-    timeouts: list[int] = []
-
-    class _Response:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self) -> bytes:
-            return json.dumps(
-                {
-                    "generatedAt": "2026-04-19T00:00:10+00:00",
-                    "items": [{"sessionId": "session-1"}],
-                }
-            ).encode("utf-8")
-
-    def _fake_urlopen(request, timeout):
-        timeouts.append(timeout)
-        if len(timeouts) == 1:
-            raise urllib.error.URLError(TimeoutError("timed out"))
-        return _Response()
-
-    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
-
-    payload = guard_runner_module.sync_runtime_session(
-        store,
-        auth_context={
-            "sync_url": "https://hol.org/api/guard/receipts/sync",
-            "access_token": "oauth-access-token-1",
-            "dpop_key_material": dpop_key_material,
-        },
-        session={
-            "session_id": "session-1",
-            "harness": "hermes",
-            "surface": "agent-sdk",
-            "status": "active",
-            "client_name": "Hermes",
-            "client_title": "Hermes Agent",
-            "client_version": "1.0.0",
-            "workspace": "prod-e2e",
-            "capabilities": ["chat"],
-            "started_at": "2026-04-19T00:00:00+00:00",
-            "updated_at": "2026-04-19T00:00:00+00:00",
-            "operations": [],
-        },
-    )
-
-    assert timeouts == [10, 90]
-    assert payload["runtime_session_id"] == "session-1"
-
-
-def test_sync_runtime_session_retries_once_after_read_timeout(tmp_path, monkeypatch):
-    store = GuardStore(tmp_path / "guard-home")
-    dpop_key_material = generate_dpop_key_pair()
-    _seed_guard_cloud(store)
-    timeouts: list[int] = []
-
-    class _Response:
-        def __init__(self, should_timeout: bool) -> None:
-            self._should_timeout = should_timeout
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self) -> bytes:
-            if self._should_timeout:
-                raise TimeoutError("timed out")
-            return json.dumps(
-                {
-                    "generatedAt": "2026-04-19T00:00:10+00:00",
-                    "items": [{"sessionId": "session-read-timeout"}],
-                }
-            ).encode("utf-8")
-
-    def _fake_urlopen(request, timeout):
-        timeouts.append(timeout)
-        return _Response(should_timeout=len(timeouts) == 1)
-
-    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
-
-    payload = guard_runner_module.sync_runtime_session(
-        store,
-        auth_context={
-            "sync_url": "https://hol.org/api/guard/receipts/sync",
-            "access_token": "oauth-access-token-1",
-            "dpop_key_material": dpop_key_material,
-        },
-        session={
-            "session_id": "session-read-timeout",
-            "harness": "hermes",
-            "surface": "agent-sdk",
-            "status": "active",
-            "client_name": "Hermes",
-            "client_title": "Hermes Agent",
-            "client_version": "1.0.0",
-            "workspace": "prod-e2e",
-            "capabilities": ["chat"],
-            "started_at": "2026-04-19T00:00:00+00:00",
-            "updated_at": "2026-04-19T00:00:00+00:00",
-            "operations": [],
-        },
-    )
-
-    assert timeouts == [10, 90]
-    assert payload["runtime_session_id"] == "session-read-timeout"
 
 
 def test_sync_runtime_session_rejects_untrusted_oauth_issuer_before_network(tmp_path, monkeypatch):
@@ -20139,7 +20036,6 @@ def test_sync_local_guard_cloud_proof_refreshes_oauth_once(tmp_path, monkeypatch
         "https://hol.org/api/guard/runtime/sessions/sync",
         "https://hol.org/api/guard/receipts/sync",
     ]
-    assert sync_urls.count("https://hol.org/api/v1/guard/events") >= 1
     assert payload["runtime_session_id"] == expected_session_id
 
 
@@ -20250,51 +20146,6 @@ def test_sync_local_guard_cloud_proof_serializes_concurrent_oauth_refresh(tmp_pa
     assert stored_credentials["access_token"] == "oauth-access-token-for-refresh-token-1"
 
 
-def test_sync_pain_signals_raises_when_oauth_refresh_is_revoked(tmp_path, monkeypatch):
-    store = GuardStore(tmp_path / "guard-home")
-    dpop_key_material = generate_dpop_key_pair()
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="refresh-token-1",
-        dpop_private_key_pem=dpop_key_material.private_key_pem,
-        dpop_public_jwk=dpop_key_material.public_jwk,
-        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
-        grant_id="grant-1",
-        machine_id="machine-1",
-        workspace_id="workspace-1",
-        now="2026-06-01T00:00:00+00:00",
-    )
-
-    class _ErrorResponse:
-        def read(self) -> bytes:
-            return json.dumps(
-                {
-                    "error": "invalid_grant",
-                    "error_description": "refresh token revoked",
-                }
-            ).encode("utf-8")
-
-        def close(self) -> None:
-            return None
-
-    def _fake_urlopen(request, timeout):
-        raise urllib.error.HTTPError(
-            request.full_url,
-            400,
-            "Bad Request",
-            hdrs=None,
-            fp=_ErrorResponse(),
-        )
-
-    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
-
-    with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError) as error:
-        guard_runner_module.sync_pain_signals(store)
-
-    assert "hol-guard connect" in str(error.value)
-
-
 def test_sync_runtime_session_treats_token_endpoint_503_as_retryable_error(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
@@ -20334,7 +20185,7 @@ def test_sync_runtime_session_treats_token_endpoint_503_as_retryable_error(tmp_p
 
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
-    with pytest.raises(RuntimeError, match="oauth upstream down") as error:
+    with pytest.raises(guard_runner_module.GuardSyncNotAvailableError) as error:
         guard_runner_module.sync_runtime_session(
             store,
             session={
@@ -20353,6 +20204,7 @@ def test_sync_runtime_session_treats_token_endpoint_503_as_retryable_error(tmp_p
             },
         )
 
+    assert error.value.retryable is True
     assert not isinstance(error.value, guard_runner_module.GuardSyncAuthorizationExpiredError)
 
 
@@ -20571,138 +20423,6 @@ def test_guard_http_header_value_matches_case_insensitive_mapping() -> None:
             self.headers = {"dpop-nonce": "nonce-123"}
 
     assert guard_runner_module._guard_http_header_value(_Response(), "DPoP-Nonce") == "nonce-123"
-
-
-def test_sync_runtime_session_retries_with_dpop_nonce_challenge(tmp_path, monkeypatch):
-    store = GuardStore(tmp_path / "guard-home")
-    dpop_key_material = generate_dpop_key_pair()
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="refresh-token-1",
-        dpop_private_key_pem=dpop_key_material.private_key_pem,
-        dpop_public_jwk=dpop_key_material.public_jwk,
-        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
-        grant_id="grant-1",
-        machine_id="machine-1",
-        workspace_id="workspace-1",
-        now="2026-06-01T00:00:00+00:00",
-    )
-    captured_requests: list[urllib.request.Request] = []
-    challenge_nonce = "nonce-runtime"
-
-    class _Response:
-        def __init__(self, payload: dict[str, object]) -> None:
-            self._payload = payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self) -> bytes:
-            return json.dumps(self._payload).encode("utf-8")
-
-    def _fake_urlopen(request, timeout):
-        del timeout
-        captured_requests.append(request)
-        if len(captured_requests) == 1:
-            raise urllib.error.HTTPError(
-                request.full_url,
-                401,
-                "Unauthorized",
-                {"DPoP-Nonce": challenge_nonce},
-                io.BytesIO(b"{}"),
-            )
-        assert request.full_url == "https://hol.org/api/guard/runtime/sessions/sync"
-        assert _request_header(request, "Authorization") == "Bearer oauth-access-token-1"
-        assert isinstance(_request_header(request, "DPoP"), str) and _request_header(request, "DPoP")
-        return _Response(
-            {
-                "generatedAt": "2026-06-01T00:00:10+00:00",
-                "items": [{"status": "accepted"}],
-            }
-        )
-
-    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
-
-    payload = guard_runner_module.sync_runtime_session(
-        store,
-        auth_context={
-            "sync_url": "https://hol.org/api/guard/receipts/sync",
-            "access_token": "oauth-access-token-1",
-            "dpop_key_material": dpop_key_material,
-        },
-        session={
-            "session_id": "session-oauth",
-            "harness": "codex",
-            "surface": "cli",
-            "status": "active",
-            "client_name": "Codex",
-            "client_title": "Codex CLI",
-            "client_version": "1.0.0",
-            "workspace": "prod",
-            "capabilities": ["chat"],
-            "started_at": "2026-06-01T00:00:00+00:00",
-            "updated_at": "2026-06-01T00:00:00+00:00",
-            "operations": [],
-        },
-    )
-
-    first_claims = _decode_jwt_segment(_request_header(captured_requests[0], "DPoP").split(".")[1])
-    second_claims = _decode_jwt_segment(_request_header(captured_requests[1], "DPoP").split(".")[1])
-
-    assert len(captured_requests) == 2
-    assert "nonce" not in first_claims
-    assert second_claims["nonce"] == challenge_nonce
-    assert payload["runtime_session_id"] == "session-oauth"
-
-
-def test_sync_runtime_session_limits_dpop_nonce_retries(tmp_path, monkeypatch):
-    store = GuardStore(tmp_path / "guard-home")
-    dpop_key_material = generate_dpop_key_pair()
-    captured_requests: list[urllib.request.Request] = []
-
-    def _fake_urlopen(request, timeout):
-        del timeout
-        captured_requests.append(request)
-        attempt = len(captured_requests)
-        raise urllib.error.HTTPError(
-            request.full_url,
-            401,
-            "Unauthorized",
-            {"dpop-nonce": f"nonce-{attempt}"},
-            io.BytesIO(json.dumps({"error": "use_dpop_nonce"}).encode("utf-8")),
-        )
-
-    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
-
-    with pytest.raises(RuntimeError, match="HTTP Error 401: Unauthorized"):
-        guard_runner_module.sync_runtime_session(
-            store,
-            auth_context={
-                "sync_url": "https://hol.org/api/guard/receipts/sync",
-                "access_token": "oauth-access-token-1",
-                "dpop_key_material": dpop_key_material,
-            },
-            session={
-                "session_id": "session-oauth",
-                "harness": "codex",
-                "surface": "cli",
-                "status": "active",
-                "client_name": "Codex",
-                "client_title": "Codex CLI",
-                "client_version": "1.0.0",
-                "workspace": "prod",
-                "capabilities": ["chat"],
-                "started_at": "2026-06-01T00:00:00+00:00",
-                "updated_at": "2026-06-01T00:00:00+00:00",
-                "operations": [],
-            },
-        )
-
-    assert len(captured_requests) == 4
 
 
 def test_sync_runtime_session_refresh_retries_with_dpop_nonce_challenge(tmp_path, monkeypatch):

@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.desktop_core_currency import (
     superseded_desktop_core,
 )
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
+from codex_plugin_scanner.guard.runtime import contained_test_request
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 
 _OLD = "3.50.0a3-5a0c7c2e1d9b4f68a3c0e2f7b19d46c85e03a7f1d2b6c94e8a05f3d7b1c2e960"
@@ -158,7 +159,8 @@ def _stale(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         desktop_core_currency, "superseded_desktop_core", lambda *a, **k: SupersededCore(running=_OLD, current=_NEW)
     )
-    monkeypatch.setattr(sink, "superseded_desktop_core", desktop_core_currency.superseded_desktop_core)
+    stale = desktop_core_currency.superseded_desktop_core
+    monkeypatch.setattr(contained_test_request, "superseded_desktop_core", stale)
 
 
 def test_a_contained_run_from_a_superseded_cli_stops_before_asking_authority(
@@ -187,7 +189,7 @@ def test_a_contained_run_from_a_superseded_cli_stops_before_asking_authority(
 def test_an_unanswered_authority_ask_names_the_skew_instead_of_the_host(monkeypatch: pytest.MonkeyPatch) -> None:
     unavailable = {"reason_code": "native_pre_tool_unavailable"}
 
-    monkeypatch.setattr(sink, "superseded_desktop_core", lambda *a, **k: None)
+    monkeypatch.setattr(contained_test_request, "superseded_desktop_core", lambda *a, **k: None)
     plain = sink._reject(unavailable)
     assert isinstance(plain, RestrictedPytestError)
     assert plain.reason_code == "contained_run_authorization_failed"

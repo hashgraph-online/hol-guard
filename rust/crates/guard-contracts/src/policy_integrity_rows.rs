@@ -33,6 +33,7 @@ pub const POLICY_INTEGRITY_GENERATION_FEATURE: &str = "policy-integrity-generati
 /// Capability advertised by the runtime when the request may carry a
 /// `reconcile` section.
 pub const POLICY_INTEGRITY_RECONCILE_FEATURE: &str = "policy-integrity-reconcile-v1";
+pub const POLICY_INTEGRITY_FINALIZE_FEATURE: &str = "policy-integrity-finalize-v1";
 
 /// Largest canonical request serialization the op will accept.
 pub const POLICY_INTEGRITY_ROWS_MAX_BYTES: usize = 4 * 1024 * 1024;
@@ -70,6 +71,23 @@ pub struct PolicyIntegrityRowsRequestV1 {
     /// key; answered in the payload's `reconcile` section.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reconcile: Option<PolicyIntegrityReconcileRequestV1>,
+    /// Decide whether a prepared control state can replace the one read
+    /// from the secret store under the generation lock.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finalize: Option<PolicyIntegrityFinalizeRequestV1>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyIntegrityFinalizeRequestV1 {
+    pub current_state: Option<Value>,
+    pub next_state: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyIntegrityFinalizeOutcomeV1 {
+    pub next_state: Option<Value>,
 }
 
 /// Decide the startup policy-integrity control state from the local rows of
@@ -196,6 +214,8 @@ pub struct PolicyIntegrityRowsPayloadV1 {
     pub generation: Option<PolicyIntegrityGenerationOutcomeV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reconcile: Option<PolicyIntegrityReconcileOutcomeV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finalize: Option<PolicyIntegrityFinalizeOutcomeV1>,
 }
 
 /// `PolicyIntegrityVerificationResult` fields, one per verify item in order.

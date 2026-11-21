@@ -111,10 +111,89 @@ fn grok_lists_and_searches_project_folders_without_review() {
 fn grok_searches_keep_review_when_a_secret_is_reachable() {
     let (home, workspace, project) = fixture();
     // Grok searches a gitignored file its glob matches, so an ignore rule
-    // does not take the file out of reach.
+    // does not take the file out of reach. A glob holding a separator, or a
+    // list left standing once braces expand, is not modeled, so every file
+    // below the folder is screened. A brace list that names the secret
+    // selects it.
     write(&project.join(".gitignore"), ".env\n");
     write(&project.join("docs/.env"), "TOKEN=canary\n");
-    for glob in ["*", "*.md"] {
+    for glob in [
+        "*",
+        ".env",
+        ".e*",
+        "**/*.md",
+        "*.{md,env}",
+        "{*.md,.env}",
+        "*.md,.env",
+        "*.{md",
+        "*.md}",
+        "*.{md,{txt,env}}",
+        "}*.md,.env{",
+    ] {
+        let decision = grok(
+            "Grep",
+            json!({"pattern": "TOKEN", "path": text(&project.join("docs")), "glob": glob}),
+            &home,
+            &workspace,
+        );
+        assert_ne!(decision.0, "allow", "{glob}");
+    }
+}
+
+#[test]
+fn grok_searches_only_the_files_a_name_glob_selects() {
+    let (home, workspace, project) = fixture();
+    // The search pattern is in the secret, but `*.md` never opens it: Grok's
+    // ripgrep search reads only the files its glob names.
+    write(&project.join(".gitignore"), ".env\n");
+    write(&project.join("docs/.env"), "TOKEN=canary\n");
+    write(
+        &project.join("docs/notes/.hidden/plan.md"),
+        "TOKEN rotation\n",
+    );
+    for folder in [project.clone(), project.join("docs")] {
+        let decision = grok(
+            "Grep",
+            json!({"pattern": "TOKEN", "path": text(&folder), "glob": "*.md"}),
+            &home,
+            &workspace,
+        );
+        assert!(allowed(&decision, SEARCH_SCOPE), "{folder:?} {decision:?}");
+    }
+    // A selected file that leads to a secret still holds the search.
+    #[cfg(unix)]
+    {
+        write(&home.join(".aws/credentials"), "TOKEN=canary\n");
+        std::os::unix::fs::symlink(home.join(".aws/credentials"), project.join("docs/creds.md"))
+            .unwrap();
+        let decision = grok(
+            "Grep",
+            json!({"pattern": "TOKEN", "path": text(&project), "glob": "*.md"}),
+            &home,
+            &workspace,
+        );
+        assert_ne!(decision.0, "allow", "{decision:?}");
+    }
+}
+
+#[test]
+fn grok_searches_only_the_files_a_brace_list_selects() {
+    let (home, workspace, project) = fixture();
+    // Grok hands the glob to `rg --glob`, so `*.{mjs,js,md}` opens only files
+    // with one of those three endings. The secrets file beside them is never
+    // read, even though the search pattern is in it.
+    write(&project.join("docs/app.secrets.json"), "TOKEN=canary\n");
+    write(&project.join("docs/.env"), "TOKEN=canary\n");
+    for glob in ["*.{mjs,js,md}", "{README,guide}.md", "*.{md}"] {
+        let decision = grok(
+            "Grep",
+            json!({"pattern": "TOKEN", "path": text(&project.join("docs")), "glob": glob}),
+            &home,
+            &workspace,
+        );
+        assert!(allowed(&decision, SEARCH_SCOPE), "{glob} {decision:?}");
+    }
+    for glob in ["*.{md,json}", "*.{md,*}", "{*.md,*.secrets.*}"] {
         let decision = grok(
             "Grep",
             json!({"pattern": "TOKEN", "path": text(&project.join("docs")), "glob": glob}),

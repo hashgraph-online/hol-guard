@@ -34,7 +34,7 @@ fn the_prewarm_asks_the_resident_for_its_health() {
 #[test]
 fn the_prewarm_asks_the_resident_to_warm_cigar_for_its_guard_home() {
     let guard_home = test_directory("warm");
-    let payload = warm_payload(&guard_home.join("native-runtime"))
+    let payload = warm_payload(&guard_home.join("native-runtime"), None)
         .expect("an absolute Guard home has a warm request");
     let value = crate::strict_json_value(&payload).expect("the payload should be a request");
     assert_eq!(value["request"]["query"]["kind"], "warm");
@@ -52,8 +52,15 @@ fn the_prewarm_asks_the_resident_to_warm_cigar_for_its_guard_home() {
         ),
         "the warm goes to the CIGAR control surface: {operation:?}"
     );
+    let restarted = warm_payload(&guard_home.join("native-runtime"), Some("5f0c-11"))
+        .expect("a restarted session rides on the warm");
+    let restarted = crate::strict_json_value(&restarted).expect("the payload should be a request");
+    assert_eq!(
+        restarted["request"]["query"]["input"],
+        serde_json::json!({"restarted_session": "5f0c-11"})
+    );
     assert!(
-        warm_payload(Path::new("native-runtime")).is_none(),
+        warm_payload(Path::new("native-runtime"), None).is_none(),
         "a relative state base names no Guard home the resident could match"
     );
     let _ = fs::remove_dir_all(&guard_home);

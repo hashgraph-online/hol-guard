@@ -1,7 +1,7 @@
 //! The exact-action query the daemon asks for a reviewed `PreToolUse`.
 //!
-//! This ports `native_exact_action` (`hook_native_exact_action.py`) for the
-//! reviews whose token the daemon can bind: `native_review_policy_binding`
+//! The direct lane supplies the inputs needed to prove the token:
+//! `native_review_policy_binding`
 //! (`hook_native_review_binding.py`) on the edge's own receipt, the request
 //! fields as `hook_request_parsing.py` reads them, and the environment and
 //! extension-control digest the daemon published. Every other shape defers.

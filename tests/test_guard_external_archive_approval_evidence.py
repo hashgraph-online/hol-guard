@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_supply_chain_eval
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.local_supply_chain import (
     build_package_protect_payload,
     evaluate_package_request_artifact,

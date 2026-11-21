@@ -6,7 +6,6 @@ from dataclasses import replace
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.codex import _hook_manifest_spec
 from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -14,14 +13,15 @@ from codex_plugin_scanner.guard.approval_gate import (
     update_settings,
 )
 from codex_plugin_scanner.guard.cli import commands_lifecycle_gate as lifecycle
+from codex_plugin_scanner.guard.codex_harness_client import _hook_manifest_spec
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.codex_publication_inverse_authorization import authorize_codex_publication_inverse
 from codex_plugin_scanner.guard.codex_publication_inverse_plan import (
     PUBLICATION_INVERSE_ACTION,
     bind_codex_publication_inverse_verification,
     prepare_authenticated_hook_publication_inverse,
 )
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
@@ -178,7 +178,7 @@ def test_new_owner_cannot_borrow_previous_authorization(inverse):
 
 
 def test_inverse_authorization_preserves_parent_deadline(inverse, monkeypatch):
-    from codex_plugin_scanner.guard import codex_publication_inverse_authorization as module
+    from codex_plugin_scanner.guard import native_transition_files as module
 
     context, config, _manifest, _unbound, plan = inverse
     with codex_install_transaction(context.guard_home, config, actor=PUBLICATION_INVERSE_ACTION) as owner:

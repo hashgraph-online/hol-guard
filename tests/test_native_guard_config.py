@@ -127,8 +127,11 @@ def test_concurrent_first_loads_share_one_native_process(tmp_path: Path, monkeyp
     real_spawn = native_guard_config._spawn
 
     def slow_spawn(request_text: str, *args: object) -> dict[str, object]:
-        calls.append(request_text)
-        time.sleep(0.2)
+        # A background thread left by an earlier test on this worker can load its
+        # own Guard home through the same patched spawn; count only this test's.
+        if json.loads(request_text)["guard_home"] == str(tmp_path):
+            calls.append(request_text)
+            time.sleep(0.2)
         return real_spawn(request_text, *args)
 
     monkeypatch.setattr(native_guard_config, "_spawn", slow_spawn)
@@ -156,7 +159,10 @@ def test_freshly_written_config_is_never_memoized(tmp_path: Path, monkeypatch: p
     load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
     load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
 
-    assert len(calls) == 2
+    # A daemon thread left by an earlier test on this worker may load its own
+    # home meanwhile; count only this test's loads.
+    own = [text for text in calls if json.loads(text).get("guard_home") == str(tmp_path)]
+    assert len(own) == 2
 
 
 def test_unreadable_config_metadata_is_never_memoized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -209,7 +215,7 @@ def test_directory_permission_change_invalidates_memo(tmp_path: Path, monkeypatc
 
 
 def test_every_harness_id_and_alias_keeps_its_posture_override(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS, contract_for
+    from codex_plugin_scanner.guard.setup_contracts import HARNESS_CONTRACTS, contract_for
 
     names = {contract.harness for contract in HARNESS_CONTRACTS}
     for contract in HARNESS_CONTRACTS:

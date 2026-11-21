@@ -34,3 +34,34 @@ def test_bounded_host_task_metadata_decodes_at_the_transport_edge(operation: str
     _sync_receipt(edge)
     assert _decode_edge(edge) == edge
     assert _decode_pre_tool(result, command="ignored") == result
+
+
+def _legacy_reply(**overrides: object) -> dict[str, object]:
+    reply: dict[str, object] = {
+        "decision": "deny",
+        "minimum_action": "require-reapproval",
+        "reason_code": "native_git_execution_context_review",
+        "reason": "Synthetic git execution context needs review.",
+        "explicitly_benign": False,
+        "command_model": {"normalized_text": "git status"},
+    }
+    reply.update(overrides)
+    return reply
+
+
+@pytest.mark.parametrize("native_action", ["require-reapproval", "sandbox-required"])
+def test_review_tier_native_actions_keep_their_floor(native_action: str) -> None:
+    decoded = _decode_pre_tool(_legacy_reply(minimum_action=native_action), command="git status")
+    assert decoded is not None
+    assert decoded["minimum_action"] == native_action
+    assert decoded["decision"] == "deny"
+
+
+@pytest.mark.parametrize("native_action", ["require-reapproval", "sandbox-required"])
+def test_review_tier_native_actions_never_decode_as_allow(native_action: str) -> None:
+    reply = _legacy_reply(decision="allow", minimum_action=native_action)
+    assert _decode_pre_tool(reply, command="git status") is None
+
+
+def test_unknown_native_actions_still_fail_safe() -> None:
+    assert _decode_pre_tool(_legacy_reply(minimum_action="escalate"), command="git status") is None

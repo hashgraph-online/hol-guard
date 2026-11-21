@@ -11,7 +11,10 @@
 //!
 //! GNU grep includes a file that matches neither list when an `--exclude`
 //! comes before the first `--include`, so any `--exclude` beside an
-//! `--include` keeps the review.
+//! `--include` keeps the review. `--exclude-dir` is a list of its own: GNU and
+//! BSD grep match an include against files, never against a directory, so an
+//! excluded directory stays out of the walk whatever the includes say and
+//! stays part of the proof beside them.
 //!
 //! An exclusion written after the pattern or a path, as in
 //! `grep -rln needle src --exclude-dir=fixtures`, is read twice. GNU and BSD
@@ -91,10 +94,11 @@ impl<'a> Exclusions<'a> {
         self.pending.is_some()
     }
 
-    /// Whether an `--include` list can be read as the whole walk: no
-    /// exclusion could change which files it selects.
+    /// Whether an `--include` list can be read as the whole walk: no file
+    /// exclusion could change which files it selects. A directory exclusion
+    /// only prunes the walk, so it can stand beside one.
     pub(super) fn leave_includes_exact(&self) -> bool {
-        self.files.is_empty() && self.directories.is_empty() && !self.file_seen
+        self.files.is_empty() && !self.file_seen
     }
 
     fn record(&mut self, directory: bool, value: &'a str) {

@@ -5,12 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .adapters.base import HarnessContext
 from .aibom_models import (
     _AIBOM_AUTO_SYNC_INTERVAL_SECONDS,
     AibomCliOptions,
     AibomExportFormat,
 )
+from .harness_context import HarnessContext
 
 
 def build_inventory_json_payload(

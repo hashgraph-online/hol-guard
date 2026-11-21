@@ -14,11 +14,11 @@ import pytest
 from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import native_artifact_content_hash as content_hash_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.product import build_guard_status_payload
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import detect_all
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -894,6 +894,7 @@ args = ["workspace-skill.js", "--changed"]
         daemon.start()
         try:
             _wait_for_runtime_heartbeat(GuardStore(home_dir), daemon.port)
+            _wait_for_verified_endpoint(home_dir, daemon.port)
             status_rc = main(
                 [
                     "guard",
@@ -1037,7 +1038,6 @@ args = ["workspace-skill.js", "--changed"]
                     "PYTHONPATH": str(runtime_pythonpath),
                     "HOL_GUARD_NATIVE": "force",
                     "HOL_GUARD_NATIVE_BINARY": os.environ["HOL_GUARD_NATIVE_BINARY"],
-                    "HOL_GUARD_CODEX_HOOK_BRIDGE": os.environ["HOL_GUARD_CODEX_HOOK_BRIDGE"],
                 },
                 check=False,
                 timeout=15,
@@ -1057,8 +1057,6 @@ args = ["workspace-skill.js", "--changed"]
 
 
 def test_harness_summary_survives_an_unavailable_registration_check(tmp_path: Path, monkeypatch) -> None:
-    from types import SimpleNamespace
-
     from codex_plugin_scanner.guard.cli import product as product_module
     from codex_plugin_scanner.guard.models import HarnessDetection
     from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
@@ -1068,7 +1066,7 @@ def test_harness_summary_survives_an_unavailable_registration_check(tmp_path: Pa
 
     monkeypatch.setattr(product_module, "artifacts_use_guard", unavailable)
     monkeypatch.setattr(product_module, "count_review_artifacts", lambda *_args: 0)
-    monkeypatch.setattr(product_module, "get_adapter", lambda _h: SimpleNamespace(approval_flow=lambda **_k: {}))
+    monkeypatch.setattr(product_module, "harness_approval_flow", lambda _harness, **_kwargs: {})
     detection = HarnessDetection(
         harness="cursor", installed=True, command_available=False, config_paths=(), artifacts=()
     )
@@ -1088,3 +1086,21 @@ def _wait_for_runtime_heartbeat(store: GuardStore, port: int) -> None:
             return
         time.sleep(0.05)
     raise AssertionError("the daemon recorded no runtime heartbeat")
+
+
+def _wait_for_verified_endpoint(guard_home: Path, port: int) -> None:
+    """Status reports the runtime active only once its endpoint answers health.
+
+    The heartbeat can land before the loopback listener answers a verified
+    health check, so a status read in between reports a running daemon as
+    stale. Wait for the same verified endpoint `guard status` reads.
+    """
+    from codex_plugin_scanner.guard.native_daemon_peer import load_guard_daemon_endpoint_url
+
+    expected = f"http://127.0.0.1:{port}"
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        if load_guard_daemon_endpoint_url(guard_home) == expected:
+            return
+        time.sleep(0.05)
+    raise AssertionError("the daemon endpoint never passed its health check")

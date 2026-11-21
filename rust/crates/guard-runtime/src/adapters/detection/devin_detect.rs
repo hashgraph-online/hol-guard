@@ -102,7 +102,7 @@ pub(crate) fn guard_managed(command: &str) -> bool {
             && command.contains("--harness', 'devin'"))
         || (command.contains("bounded_cli_hook_bridge")
             && normalized.contains("\"harness\":\"devin\""))
-        || (command.contains("__guard-bounded-hook")
+        || ((command.contains("__guard-bounded-hook") || command.contains("bounded-hook-bridge"))
             && normalized.contains("\"harness\":\"devin\""))
         || normalized
             .replace('\\', "/")

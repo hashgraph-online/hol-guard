@@ -19,7 +19,7 @@ function buttonDisabled(html: string, label: string): boolean {
   return /\sdisabled(?:=|\s|$)/.test(attributes);
 }
 
-assert.match(render(), /CIGAR uses its own copy of Python 3\.14\. Guard sets it up for you/);
+assert.match(render(), /CIGAR is built into Guard and needs no Python\. Guard gets it ready/);
 assert.match(render(), /Ready\./);
 assert.equal(buttonDisabled(render(), "Turn off now"), false);
 assert.equal(buttonDisabled(render({ locked: true }), "Turn off now"), false,

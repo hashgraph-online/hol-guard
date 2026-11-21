@@ -11,12 +11,12 @@ from pathlib import Path
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.contracts import HarnessSetupContract
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 from codex_plugin_scanner.guard.cli.install_commands import list_harness_setup_items
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.setup_contracts import HarnessSetupContract
 from codex_plugin_scanner.guard.store import GuardStore
 
 SUPPORTED_HARNESSES = (
@@ -72,12 +72,11 @@ def _request(
 
 @pytest.mark.parametrize("harness", SUPPORTED_HARNESSES)
 def test_adapter_exposes_guided_setup_contract(harness: str) -> None:
-    adapter = get_adapter(harness)
 
-    contract = adapter.setup_contract()
+    contract = harness_ops.setup_contract(harness)
 
     assert isinstance(contract, HarnessSetupContract)
-    assert contract.harness == adapter.harness
+    assert contract.harness == harness_ops.canonical_harness(harness)
     assert contract.setup_steps
     assert contract.verify_steps
     assert contract.repair_steps
@@ -91,11 +90,11 @@ def test_adapter_exposes_guided_setup_contract(harness: str) -> None:
 
 
 def test_every_adapter_has_setup_methods() -> None:
-    for adapter in list_adapters():
-        assert adapter.setup_steps()
-        assert adapter.verify_steps()
-        assert adapter.repair_steps()
-        assert adapter.coverage_summary().blind_spots
+    for harness in harness_ops.list_harnesses():
+        assert harness_ops.setup_steps(harness)
+        assert harness_ops.verify_steps(harness)
+        assert harness_ops.repair_steps(harness)
+        assert harness_ops.setup_contract(harness).coverage.blind_spots
 
 
 def test_daemon_lists_harness_setup_contracts(tmp_path: Path) -> None:
@@ -471,17 +470,16 @@ def test_apps_connect_keeps_install_payload_when_cloud_launch_fails(
     assert payload["cloud_app"]["error"] == "daemon did not start"
 
 
-def test_apps_inventory_uses_adapter_command_resolution(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_apps_inventory_uses_adapter_command_resolution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     context = _context(tmp_path)
-    adapter = get_adapter("claude-code")
-
-    def resolved_executable(_context: HarnessContext) -> str | None:
-        return str(tmp_path / "home" / ".claude" / "local" / "claude")
-
-    monkeypatch.setattr(adapter, "resolved_executable", resolved_executable)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
+    # No `claude` on PATH, so availability can only come from the local candidate.
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+    local = tmp_path / "home" / ".claude" / "local" / "claude"
+    local.parent.mkdir(parents=True)
+    local.write_text("#!/bin/sh\n", encoding="utf-8")
+    local.chmod(0o755)
 
     items = list_harness_setup_items(context, GuardStore(tmp_path / "guard-home"))
 

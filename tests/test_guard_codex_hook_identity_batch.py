@@ -6,10 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_hook_identity
-from codex_plugin_scanner.guard import native_codex_hook_identity as bridge
-from codex_plugin_scanner.guard.adapters import codex
-from codex_plugin_scanner.guard.codex_hook_inventory import (
+from tests.python_oracles import codex_hook_identity
+from tests.python_oracles import native_codex_hook_identity as bridge
+from tests.python_oracles.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_DEFINITION_TOO_DEEP,
     CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE,
     enumerate_codex_hooks,
@@ -184,34 +183,6 @@ def test_an_unavailable_resident_leaves_no_inventory(monkeypatch: pytest.MonkeyP
     assert [issue.reason_code for issue in inventory.issues] == [CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE]
     assert inventory.issues[0].source_path == str(_SOURCE)
     assert not inventory.complete
-
-
-def test_an_unavailable_resident_stops_an_install_before_it_activates(monkeypatch: pytest.MonkeyPatch) -> None:
-    _resident(monkeypatch)
-    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda _home: False)
-    inventory = _walk(_payload_with_three_handlers())
-    with pytest.raises(RuntimeError, match=CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE):
-        codex._require_complete_preactivation_inventory(inventory)
-
-
-def test_an_unavailable_resident_stops_a_migration_instead_of_merging(monkeypatch: pytest.MonkeyPatch) -> None:
-    _resident(monkeypatch)
-    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda _home: False)
-    with pytest.raises(RuntimeError, match=CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE):
-        codex._append_unique_hook_groups(
-            [{"matcher": "*", "hooks": [{"type": "command", "command": "echo one"}]}],
-            [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo two"}]}],
-            event_name="PreToolUse",
-            source_scope="user",
-            source_hooks_enabled=True,
-        )
-
-
-def test_an_unavailable_resident_stops_a_readback_instead_of_passing_it(monkeypatch: pytest.MonkeyPatch) -> None:
-    _resident(monkeypatch)
-    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda _home: False)
-    with pytest.raises(RuntimeError, match=CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE):
-        codex._canonical_hook_semantics(_payload_with_three_handlers(), source_scope="user")
 
 
 def _group_questions() -> list[codex_hook_identity.CodexHookGroupQuestion]:

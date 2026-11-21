@@ -8,9 +8,9 @@ import { CigarWorkspace } from "./workspace";
 import { CigarVersionsPanel } from "./versions-panel";
 import { CigarSetupProof } from "./one-click-setup";
 import { CodexLeanSessions } from "./codex-lean";
+import { CodexShortReplies } from "./codex-short-replies";
 import { useCigarOneClick } from "./use-one-click";
 import { CigarAllowFilesProof, useCigarAllowFiles } from "./allow-files";
-import { commitDashboardLocation } from "../dashboard-location";
 import { sameCigarPreferences } from "./selection-settings";
 import { cigarWaking } from "./workspace-model";
 
@@ -190,13 +190,12 @@ export function ContextAssistanceSettings(props: Props) {
     loading={loading} busy={busy} disabled={props.disabled} locked={props.locked}
     dirty={dirty} error={workspace ? null : error}
     headerControls={workspace}
-    lean={workspace ? <CodexLeanSessions gate={props.gate ?? null} disabled={props.disabled} /> : undefined}
+    lean={workspace ? <>
+      <CodexShortReplies gate={props.gate ?? null} disabled={props.disabled} cigarOn={props.savedValue?.enabled === true} />
+      <CodexLeanSessions gate={props.gate ?? null} disabled={props.disabled} />
+    </> : undefined}
     onChange={props.onChange} onRefresh={() => void refresh()}
-    onChooseRuntime={() => void perform("installations")} onControl={(action) => void perform(action)}
-    onManageVersions={workspace ? () => {
-      const url = new URL(window.location.href); url.searchParams.set("section", "versions");
-      commitDashboardLocation(url.pathname + url.search + url.hash);
-    } : undefined} />;
+    onChooseRuntime={() => void perform("installations")} onControl={(action) => void perform(action)} />;
   const access = <ContextWorkspacesPanel ready={status?.effective_enabled === true} waking={cigarWaking(status)} generation={status?.generation ?? null}
       dirty={dirty} documentsAllowed={status?.effective_preferences.sources.workspace_documents === true}
       agentsAllowed={status?.effective_preferences.features.agent_context === true}

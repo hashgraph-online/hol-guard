@@ -8,16 +8,21 @@ from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..native_policy_snapshot_constants import NativePolicySnapshotError
-from ..native_policy_snapshot_harness_postures import recording_only_for_binding
-from ..native_resident_client import native_resident_client_failure_code
-from .hook_native_review_fence import native_review_fence, published_binding_token
-from .hook_policy_fence_window import (
+from ..native_hook_render import native_recording_only_for_binding
+from ..native_payload_facts import native_hook_facts
+from ..native_policy_fence_window import (
+    POLICY_SOURCE_FENCE_ERROR,
+    POLICY_UPDATE_PENDING_REASON,
     POLICY_UPDATE_PENDING_REASON_CODE,
     PolicySourceFenceBusyError,
     PolicySourceFenceWait,
-    policy_update_pending_reason,
 )
+from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from ..native_resident_client import native_resident_client_failure_code
+from ..resident_evidence_dispatch import run_resident_evidence
+from .hook_native_review_approval import _native_review_artifact_id
+from .hook_native_review_binding import native_review_settle
+from .hook_native_review_fence import native_review_fence, published_binding_token
 
 if TYPE_CHECKING:
     from .hook_worker_native import _HookWorkerNativeHost
@@ -103,7 +108,7 @@ def review_native_edge(
 
     snapshot = policy_snapshot
     refreshed_once = False
-    fence_wait = PolicySourceFenceWait(deadline, store=getattr(worker, "store", None))
+    fence_wait = PolicySourceFenceWait(deadline, guard_home=guard_home)
     try:
         while True:
             try:
@@ -123,7 +128,7 @@ def review_native_edge(
                     claimed_approval_request_id=claimed_approval_request_id,
                     policy_snapshot=snapshot,
                 )
-            except PolicySourceFenceBusyError as busy:
+            except PolicySourceFenceBusyError:
                 # The fence refused admission before any evaluation, so the same
                 # request is retried as-is once it clears, within the deadline.
                 if fence_wait.pause():
@@ -135,9 +140,9 @@ def review_native_edge(
                     event_name=event_name,
                     reason_code=POLICY_UPDATE_PENDING_REASON_CODE,
                     guard_home=guard_home,
-                    reason=policy_update_pending_reason(),
+                    reason=POLICY_UPDATE_PENDING_REASON,
                 )
-                response["native_failure_code"] = busy.code
+                response["native_failure_code"] = POLICY_SOURCE_FENCE_ERROR
                 return response
             except NativePolicyBindingRefreshError as error:
                 # The native engine rejected admission; no tool or approval result
@@ -209,10 +214,13 @@ def _review_native_edge_once(
     # posture. A local Watch edit cannot weaken an enforcing snapshot
     # before its replacement is accepted. A missing binding takes the
     # unavailable route and cannot establish recording-only authority.
-    recording_only = recording_only_for_binding(policy_snapshot, harness)
+    recording_only = native_recording_only_for_binding(
+        policy_snapshot, harness, guard_home=guard_home, deadline=deadline
+    )
     fenced: bool | None = None
     unleased_binding: tuple[object, ...] | None = None
     capture_receipts: list[Mapping[str, object]] = []
+    deferred_receipts: list[Mapping[str, object]] = []
     try:
         with native_review_fence(
             policy_snapshot=policy_snapshot,
@@ -222,7 +230,15 @@ def _review_native_edge_once(
             deadline=deadline,
         ) as fenced:
             if fenced is None:
-                unleased_binding = published_binding_token(worker.policy_snapshot_publisher)
+                unleased_binding = published_binding_token(worker.policy_snapshot_publisher, deadline=deadline)
+            # A claimed saved approval is only peeked here. Spend it after the
+            # final binding check below, so a superseded binding cannot consume
+            # an approval whose allow we refuse to deliver.
+            claim_for_review = (
+                claim_saved_approval
+                and claimed_saved_allow_hash is None
+                and not (fenced is None and unleased_binding is None)
+            )
             response, native_used = worker._review_native_edge_with_snapshot(
                 payload=payload,
                 harness=harness,
@@ -234,10 +250,12 @@ def _review_native_edge_once(
                 deadline=deadline,
                 policy_snapshot=policy_snapshot,
                 recording_only=recording_only,
-                claim_saved_approval=claim_saved_approval,
+                claim_saved_approval=claim_for_review,
                 claimed_saved_allow_hash=claimed_saved_allow_hash,
                 claimed_approval_request_id=claimed_approval_request_id,
                 capture_receipts=capture_receipts,
+                defer_accepted_recording=claimed_saved_allow_hash is not None,
+                deferred_receipts=deferred_receipts,
             )
             # A deadline that passed while this decision was being reached
             # says the host was busy, not that the answer is stale, and
@@ -263,7 +281,58 @@ def _review_native_edge_once(
                 event_name=event_name,
                 guard_home=guard_home,
                 workspace=workspace,
+                deadline=deadline,
             )
+        deferred_receipt = deferred_receipts[0] if deferred_receipts else None
+        if deferred_receipt is not None:
+            submit = getattr(worker.activity_writer, "submit_native_decision_receipt", None)
+            if callable(submit):
+                with suppress(Exception):
+                    run_resident_evidence(worker, lambda receipt=deferred_receipt: submit(receipt=receipt))
+        if claimed_saved_allow_hash is not None:
+            from .hook_worker_native import _record_native_pre_activity
+
+            if not claim_saved_approval:
+                # Live-decision revalidation must record the fresh native
+                # answer, but it is never allowed to spend the saved approval.
+                response = _record_native_pre_activity(worker, harness, payload, response, deferred_receipt)
+            else:
+                accepted = response.get("approval_reuse_status") == "accepted"
+                if not accepted:
+                    response = _record_native_pre_activity(worker, harness, payload, response, deferred_receipt)
+                else:
+                    facts = native_hook_facts(payload, guard_home, deadline=deadline)
+                    spent = None
+                    if facts is not None:
+                        spent = native_review_settle(
+                            worker.store,
+                            harness=harness,
+                            tool_name=facts.tool_name,
+                            artifact_id=_native_review_artifact_id(harness, facts.tool_name),
+                            launch_target=facts.launch_target,
+                            workspace=workspace,
+                            identity=claimed_saved_allow_hash,
+                            spend=True,
+                            claimed_saved_allow_hash=claimed_saved_allow_hash,
+                            claimed_approval_request_id=claimed_approval_request_id,
+                        )
+                    if spent != "allowed":
+                        return worker._apply_structured_unavailable_overlay(
+                            _record_unavailable_native(
+                                worker,
+                                payload,
+                                harness=harness,
+                                event_name=event_name,
+                                reason_code="native_saved_approval_unavailable",
+                                guard_home=guard_home,
+                            ),
+                            harness=harness,
+                            event_name=event_name,
+                            guard_home=guard_home,
+                            workspace=workspace,
+                            deadline=deadline,
+                        )
+                    response = _record_native_pre_activity(worker, harness, payload, response, deferred_receipt)
         if capture_receipts and worker.capture_writer is not None:
             with suppress(Exception):
                 _ = worker.capture_writer.submit_native_capture(
@@ -286,6 +355,7 @@ def _review_native_edge_once(
             event_name=event_name,
             guard_home=guard_home,
             workspace=workspace,
+            deadline=deadline,
         )
     except (OSError, NativePolicySnapshotError):
         if fenced is False:
@@ -303,4 +373,5 @@ def _review_native_edge_once(
             event_name=event_name,
             guard_home=guard_home,
             workspace=workspace,
+            deadline=deadline,
         )

@@ -72,3 +72,32 @@ fn a_predicate_on_a_credential_store_keeps_its_review() {
         assert_decision(&cwd, home, &command, false);
     }
 }
+
+#[test]
+fn a_metadata_predicate_answers_through_a_parent_component() {
+    let layout = layout("predicate-parent-component");
+    let (home, org) = (&layout.home, &layout.org);
+    std::fs::write(org.join("kubeconfig.digitalocean"), "clusters: []\n").unwrap();
+    std::fs::create_dir_all(home.join(".ssh")).unwrap();
+    std::fs::write(home.join(".ssh/id_rsa"), "synthetic\n").unwrap();
+    let cwd = org.join("app-portal");
+    // A script names the file beside the directory it runs in. The kernel
+    // resolves the parent component against that directory, and the answer is
+    // the same one bit the absolute spelling gets.
+    for command in [
+        "test -f ../kubeconfig.digitalocean && echo VISIBLE",
+        "[ -f ../kubeconfig.digitalocean ]",
+        "test -f ./../kubeconfig.digitalocean",
+        "ls -la ../kubeconfig.digitalocean",
+    ] {
+        assert_decision(&cwd, home, command, true);
+    }
+    // The resolved path still decides: a parent component that climbs into a
+    // credential store keeps the store's review.
+    for command in [
+        "test -f ../../../.ssh/id_rsa",
+        "ls -la ../../../.ssh/id_rsa",
+    ] {
+        assert_decision(&cwd, home, command, false);
+    }
+}

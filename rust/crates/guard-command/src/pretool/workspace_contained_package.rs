@@ -419,7 +419,8 @@ pub(super) fn local_package_work(
             // admits whatever is not a package tool, which a runner is not,
             // so a manager's local verb beside it must not carry it in.
             return !PACKAGE_RUNNERS.contains(&name.as_str())
-                && !super::super::generic::executable_is_package_tool(executable);
+                && !super::super::generic::executable_is_package_tool(executable)
+                && !super::super::generic::installs_from_registry(segment);
         }
         let all_arguments: Vec<&str> = segment.arguments.iter().map(String::as_str).collect();
         let arguments: Vec<&str> = all_arguments

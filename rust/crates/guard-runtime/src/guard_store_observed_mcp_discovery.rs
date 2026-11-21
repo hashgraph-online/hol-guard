@@ -16,8 +16,8 @@ use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
 use super::{
-    observed_mcp_history, observed_mcp_tool, token, ObservedTool, FLATTENED_NAME_HARNESSES,
-    MAX_NAMESPACE_CHARS, MAX_NAME_CHARS, MAX_TOOL_NAME_CHARS,
+    observed_mcp_history, observed_mcp_tool, token, tool_command_id, ObservedTool,
+    FLATTENED_NAME_HARNESSES, MAX_NAMESPACE_CHARS, MAX_NAME_CHARS, MAX_TOOL_NAME_CHARS,
 };
 use crate::cloud_request_text::py_truthy;
 use crate::guard_store_args::Args;
@@ -163,6 +163,18 @@ fn configured_flattened(harness: &str, tool_name: &str, configured: &[&str]) -> 
 /// `observed_mcp_tool(harness, label, configured)`.
 fn observed_tool(harness: &str, tool_name: &str, configured: &Configured<'_>) -> Option<Tool> {
     let canonical = canonical_harness(harness)?;
+    // Grok names an MCP tool `<server>__<tool>`, without the `mcp__` the
+    // other harnesses write; its calls are matched under the prefixed name.
+    let grok_name;
+    let tool_name = match tool_name.split_once("__") {
+        Some((server, tool))
+            if canonical == "grok" && server != "mcp" && !server.is_empty() && !tool.is_empty() =>
+        {
+            grok_name = format!("mcp__{tool_name}");
+            grok_name.as_str()
+        }
+        _ => tool_name,
+    };
     let rest = tool_name.strip_prefix("mcp__")?;
     if tool_name.chars().count() > MAX_TOOL_NAME_CHARS {
         return None;
@@ -309,7 +321,13 @@ pub(crate) fn observed_mcp_discovery(
                 "tools": connector
                     .tools
                     .into_iter()
-                    .map(|(name, qualified_name)| json!({"name": name, "qualified_name": qualified_name}))
+                    .map(|(name, qualified_name)| {
+                        json!({
+                            "command_id": tool_command_id(&qualified_name),
+                            "name": name,
+                            "qualified_name": qualified_name,
+                        })
+                    })
                     .collect::<Vec<_>>(),
             })
         })

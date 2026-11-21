@@ -37,6 +37,19 @@ const RULES: &[(&str, &str)] = &[
     ("reflog", "command.git.reflog"),
 ];
 
+/// The name Git itself resolves this subcommand to. `git-stage(1)` is
+/// documented as a synonym of `git-add(1)`: the same builtin, the same
+/// options, the same effect on the index. Every proof below reads the
+/// subcommand word, so without this a user's Git Allow covered `git add -A`
+/// and still asked about `git stage -A`.
+pub(crate) fn canonical_subcommand(word: &str) -> &str {
+    if word == "stage" {
+        "add"
+    } else {
+        word
+    }
+}
+
 pub(crate) fn command_index(arguments: &[String]) -> Option<usize> {
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
@@ -643,7 +656,13 @@ pub(super) fn observe_with_contexts(
             command_index != 0 && inspection.is_none() && !routed_remote,
         );
     } else if !matches!(
-        command,
+        // `git stage` is `git add` under Git's own documented second name, so
+        // it reaches the same declarative owner. Reading the word literally
+        // left it unowned here, and every Git rule was attributed as
+        // uncertain instead: a full Git Allow settled all of them and the
+        // shipped default permissions did not, so a user with the Git
+        // extension enabled had `git add -A` run and `git stage -A` ask.
+        canonical_subcommand(command),
         "switch"
             | "checkout"
             | "restore"

@@ -23,6 +23,8 @@ from ..version import __version__
 from .fork_safety import forget_in_child
 from .live_process_identity import process_start_token as _process_start_marker
 from .mdm.file_lock import release_file_lock
+from .native_daemon_failure import NATIVE_RUNTIME_UNAVAILABLE
+from .native_daemon_failure import with_failure_code as coded
 from .private_file_io import read_private_regular_text
 
 GUARD_DAEMON_COMPATIBILITY_VERSION = 2
@@ -397,7 +399,7 @@ def _ensure_request_extra(
 
     serve_executable = native_serve_executable(guard_home) if executable is None else None
     if executable is None and serve_executable is None:
-        raise RuntimeError("Guard daemon requires the native runtime.")
+        raise coded(RuntimeError("Guard daemon requires the native runtime."), NATIVE_RUNTIME_UNAVAILABLE)
     if executable is not None:
         launch_executable = Path(executable)
         if not launch_executable.is_absolute() or not launch_executable.is_file():
@@ -448,19 +450,20 @@ class GuardDaemonStillStartingError(RuntimeError):
 def _daemon_url_from_answer(answer: Mapping[str, object] | None, deadline: float) -> str:
     if answer is None:
         if time.monotonic() >= deadline:
-            raise TimeoutError("Guard daemon operation deadline exceeded.")
-        raise RuntimeError("Guard daemon start requires the native runtime.")
+            raise coded(TimeoutError("Guard daemon operation deadline exceeded."), "daemon_start_timeout")
+        raise coded(RuntimeError("Guard daemon start requires the native runtime."), NATIVE_RUNTIME_UNAVAILABLE)
     url = answer.get("url")
     if isinstance(url, str) and url:
         return url
     message = answer.get("error")
     text = message if isinstance(message, str) and message else "Guard approval center did not start."
+    code = answer.get("code")
     if answer.get("kind") == "value":
-        raise ValueError(text)
+        raise coded(ValueError(text), code)
     if answer.get("kind") == "timeout":
         # Another launcher holds the start lock: the daemon is still starting.
-        raise GuardDaemonStillStartingError(text)
-    raise RuntimeError(text)
+        raise coded(GuardDaemonStillStartingError(text), code or "daemon_still_starting")
+    raise coded(RuntimeError(text), code)
 
 
 # --- start, recovery and retirement --------------------------------------------------------------
@@ -910,10 +913,26 @@ def load_daemon_lifecycle_events(guard_home: Path, *, limit: int = 20) -> list[d
     return _lifecycle_events(guard_home, limit=limit, incident=False)[0]
 
 
-def load_bounded_incident_lifecycle_events(guard_home: Path, *, limit: int = 20) -> tuple[list[dict[str, object]], str]:
-    """A small journal snapshot for incident reports, with why entries are missing."""
+def daemon_reliability_report(
+    guard_home: Path,
+    *,
+    days: int = 30,
+    crash_reports_dir: Path | None = None,
+    processes: bool = False,
+) -> dict[str, object]:
+    """The native reliability report for ``guard_home``; raises without the native runtime."""
 
-    return _lifecycle_events(guard_home, limit=limit, incident=True)
+    args: dict[str, object] = {"days": days, "processes": processes}
+    if crash_reports_dir is not None:
+        args["crash_reports_dir"] = str(crash_reports_dir)
+    return _ask("reliability", guard_home, **args)
+
+
+def record_daemon_repair(guard_home: Path) -> None:
+    """Notes in the lifecycle journal that a daemon repair ran; best effort."""
+
+    with suppress(RuntimeError, ValueError, OSError):
+        _ask("record_repair", guard_home)
 
 
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:
@@ -1102,6 +1121,10 @@ def _trusted_frozen_bootloader_parent_pid(guard_home: Path) -> int | None:
 # --- locks ---------------------------------------------------------------------------------------
 
 
+class GuardDaemonStartLockTimeoutError(RuntimeError):
+    """Another process kept the daemon start lock for the whole wait."""
+
+
 def _lock_file(handle: BinaryIO, deadline: float | None) -> bool:
     """Take the exclusive lock on `handle`, waiting until `deadline` (forever when `None`)."""
 
@@ -1144,13 +1167,13 @@ def guard_daemon_start_lock(guard_home: Path, *, deadline: float | None = None) 
                     _ = _START_DEPTHS.pop(depth_key, None)
         return
     if not thread_lock.acquire(timeout=-1 if deadline is None else max(0.0, deadline - time.monotonic())):
-        raise RuntimeError("Timed out waiting to start the Guard daemon.")
+        raise GuardDaemonStartLockTimeoutError("Timed out waiting to start the Guard daemon.")
     try:
         lock_path = guard_home / _START_LOCK_FILE
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         with lock_path.open("a+b") as handle:
             if not _lock_file(handle, deadline):
-                raise RuntimeError("Timed out waiting to start the Guard daemon.")
+                raise GuardDaemonStartLockTimeoutError("Timed out waiting to start the Guard daemon.")
             try:
                 with _LOCKS_GUARD:
                     _START_DEPTHS[depth_key] = 1

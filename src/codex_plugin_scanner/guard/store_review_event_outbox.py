@@ -167,6 +167,83 @@ class StoreReviewEventOutboxMixin:
             )
         )
 
+    def receipt_redaction_bookkeeping(
+        self,
+        action: str,
+        *,
+        now: str,
+        level: str | None = None,
+        local_level: str | None = None,
+    ) -> int | None:
+        """Run one receipt-redaction bookkeeping action in a native write transaction."""
+        result = self._native_store_call(
+            "receipt_redaction_bookkeeping",
+            {"action": action, "now": now, "level": level, "local_level": local_level},
+        )
+        return int(result) if isinstance(result, int) else None
+
+    def record_policy_bundle_activation(
+        self,
+        policy_bundle: Mapping[str, object],
+        *,
+        now: str,
+        local_level: str,
+        rollback_reason: str | None = None,
+    ) -> None:
+        """Store the activated bundle's last-good copy, rollback event and redaction level in one write."""
+        self._native_store_call(
+            "record_policy_bundle_activation",
+            {
+                "bundle": dict(policy_bundle),
+                "now": now,
+                "local_level": local_level,
+                "rollback_reason": rollback_reason,
+            },
+        )
+
+    def record_policy_bundle_rejection(
+        self,
+        payload: Mapping[str, object],
+        *,
+        now: str,
+        persist_last_error: bool = False,
+        gate_blocked: Mapping[str, object] | None = None,
+    ) -> None:
+        """Record a rejected policy bundle, and optionally its last error and approval-gate block, in one write."""
+        self._native_store_call(
+            "record_policy_bundle_rejection",
+            {
+                "payload_json": json.dumps(dict(payload)),
+                "now": now,
+                "persist_last_error": persist_last_error,
+                "gate_blocked_payload_json": None if gate_blocked is None else json.dumps(dict(gate_blocked)),
+            },
+        )
+
+    def record_sync_summary(
+        self,
+        summary: dict[str, object],
+        *,
+        now: str,
+        persist_summary: bool = True,
+        record_connect: bool = True,
+    ) -> dict[str, object] | None:
+        """Store a successful sync's summary and mark the latest connect state synced, in one write.
+
+        Returns the connect state when ``record_connect`` found one to update.
+        """
+
+        state = self._native_store_call(
+            "record_sync_summary",
+            {
+                "summary_json": json.dumps(summary),
+                "now": now,
+                "persist_summary": persist_summary,
+                "record_connect": record_connect,
+            },
+        )
+        return state if isinstance(state, dict) else None
+
     def list_pending_review_request_ids(
         self,
         *,

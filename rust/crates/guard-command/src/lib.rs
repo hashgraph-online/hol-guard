@@ -46,11 +46,77 @@ pub mod cloud_action;
 pub mod cloud_action_activation;
 pub mod cloud_action_binding;
 pub mod cloud_action_canonical;
+pub mod cloud_action_classifier;
+pub mod cloud_action_inspect;
+mod cloud_action_inspect_pii;
+#[cfg(test)]
+mod cloud_action_inspect_tests;
 pub mod cloud_action_policy;
 pub mod cloud_action_serve;
 #[cfg(test)]
 mod cloud_action_tests;
+pub mod cloud_action_v2;
+pub mod cloud_action_v2_consent;
+pub mod cloud_action_v2_unclassified;
 pub mod cloud_catalog;
+pub mod cloud_pack;
+pub mod cloud_pack_artifact;
+pub mod cloud_pack_cli;
+pub mod cloud_pack_connection;
+#[cfg(test)]
+mod cloud_pack_connection_tests;
+#[cfg(test)]
+mod cloud_pack_corpus_tests;
+pub mod cloud_pack_diff;
+pub mod cloud_pack_explain;
+#[cfg(test)]
+mod cloud_pack_explain_tests;
+pub mod cloud_pack_facts;
+pub mod cloud_pack_fixtures;
+mod cloud_pack_form;
+pub mod cloud_pack_generate;
+#[cfg(test)]
+mod cloud_pack_generate_edge_tests;
+mod cloud_pack_generate_mcp;
+mod cloud_pack_generate_openapi;
+mod cloud_pack_generate_response;
+#[cfg(test)]
+mod cloud_pack_generate_tests;
+#[cfg(test)]
+mod cloud_pack_keyed_tests;
+pub mod cloud_pack_mail;
+#[cfg(test)]
+mod cloud_pack_mail_tests;
+#[cfg(test)]
+mod cloud_pack_mcp_tests;
+mod cloud_pack_money;
+#[cfg(test)]
+mod cloud_pack_money_tests;
+pub mod cloud_pack_pattern;
+#[cfg(test)]
+mod cloud_pack_reconcile_tests;
+pub mod cloud_pack_request;
+pub mod cloud_pack_response;
+#[cfg(test)]
+mod cloud_pack_review_tests;
+#[cfg(test)]
+mod cloud_pack_shape_tests;
+pub mod cloud_pack_simulate;
+#[cfg(test)]
+mod cloud_pack_simulate_tests;
+pub mod cloud_pack_sql;
+mod cloud_pack_sql_lex;
+#[cfg(test)]
+mod cloud_pack_sql_tests;
+#[cfg(test)]
+mod cloud_pack_tests;
+pub mod cloud_pack_transport;
+#[cfg(test)]
+mod cloud_pack_transport_tests;
+pub mod cloud_pack_validate;
+mod cloud_pack_validate_facts;
+mod cloud_pack_validate_request;
+pub mod cloud_policy_pack;
 pub mod cloud_scrub;
 mod cloud_scrub_shell;
 mod cloud_scrub_source_search;
@@ -116,6 +182,7 @@ mod command_workspace_write_candidates;
 pub mod content_sensitivity;
 pub mod contributed_mcp_decision;
 mod contributed_mcp_url;
+mod shell_comment_lines;
 pub use contributed_mcp_url::normalized_remote_mcp_url;
 mod data_flow;
 pub mod dep_map;
@@ -192,6 +259,8 @@ pub mod network_url;
 pub mod node_build_output;
 pub mod npm_source_spec;
 pub mod ordered_json;
+pub mod output_endpoint_lure;
+pub mod output_injection;
 #[cfg(unix)]
 pub mod package_context_build;
 pub mod package_execution_context;
@@ -410,6 +479,9 @@ mod shell_secret_read_glob_tests;
 mod shell_secret_read_script_operand_tests;
 #[cfg(test)]
 mod shell_secret_read_search_reader_tests;
+mod shell_secret_read_stdin_search;
+#[cfg(test)]
+mod shell_secret_read_stdin_search_tests;
 mod shell_secret_read_support;
 pub mod shell_secret_reads;
 mod shell_structure;
@@ -493,6 +565,7 @@ pub mod composition_rules;
 pub mod contained_argv;
 #[cfg(unix)]
 pub mod contained_execution;
+mod contained_expectation;
 mod contained_git;
 mod contained_inline_target;
 

@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,

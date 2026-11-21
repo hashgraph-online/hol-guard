@@ -9,12 +9,14 @@ daemon answers an unmarked sink route in a workspace with the host outage.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import zcode_contained_tests
+from codex_plugin_scanner.guard import contained_sink_command, native_hook_direct_route
 from codex_plugin_scanner.guard.hook_review import hook_worker_native
 from codex_plugin_scanner.guard.hook_review.hook_worker_native import HookWorkerNativeMixin
 from codex_plugin_scanner.guard.native_hook_edge import (
@@ -115,6 +117,7 @@ def _status(tmp_path: Path) -> NativeRuntimeStatus:
             "native-resident-client-v1",
             "pre-tool-generic-authority-v1",
             "git-execution-context-v1",
+            "hook-payload-facts-v1",
         ),
     )
     return NativeRuntimeStatus(
@@ -169,7 +172,7 @@ def test_the_envelope_carries_the_sink_argv_only_for_a_tool_call_in_a_workspace(
     assert isinstance(encoded, bytes)
     sink = json.loads(encoded).get("containment_sink")
     if sent:
-        assert sink == {"sink_command": list(zcode_contained_tests.contained_sink_command_prefix())}
+        assert sink == {"sink_command": list(contained_sink_command.contained_sink_command_prefix())}
     else:
         # Without a workspace there is no snapshot to write.
         assert sink is None
@@ -214,6 +217,17 @@ def test_only_a_cursor_envelope_offers_the_runtime_sink(
 def _no_saved_command_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
     # The fixture daemon has no store; saved command blocks are tested elsewhere.
     monkeypatch.setattr(hook_worker_native, "native_exact_command_block_response", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        hook_worker_native,
+        "native_hook_facts",
+        lambda *_a, **_k: SimpleNamespace(
+            event_name="PreToolUse",
+            command_only=True,
+            command="make build",
+            tool_name="Bash",
+            launch_target="make build",
+        ),
+    )
 
 
 class _Metrics:
@@ -242,18 +256,32 @@ class _SinkRouteFixture(HookWorkerNativeMixin):
         raise AssertionError("a PreToolUse sink route reads no structured view")
 
 
-def _review(fixture: _SinkRouteFixture, tmp_path: Path, *, workspace: Path | None) -> tuple[dict[str, object], bool]:
+def _review(
+    fixture: _SinkRouteFixture,
+    tmp_path: Path,
+    *,
+    workspace: Path | None,
+    harness: str = "claude-code",
+    capture_receipts: list[Mapping[str, object]] | None = None,
+    deferred_receipts: list[Mapping[str, object]] | None = None,
+    defer_accepted_recording: bool = False,
+    claim_saved_approval: bool = True,
+) -> tuple[dict[str, object], bool]:
     return fixture._review_native_edge_with_snapshot(
         payload=dict(_PAYLOAD),
-        harness="claude-code",
+        harness=harness,
         event_name="PreToolUse",
-        default_harness="claude-code",
+        default_harness=harness,
         home_dir=tmp_path / "home",
         guard_home=tmp_path / "guard",
         workspace=workspace,
         deadline=None,
         policy_snapshot={"mode": "enforce"},
         recording_only=False,
+        capture_receipts=capture_receipts,
+        deferred_receipts=deferred_receipts,
+        defer_accepted_recording=defer_accepted_recording,
+        claim_saved_approval=claim_saved_approval,
     )
 
 
@@ -268,6 +296,89 @@ def test_the_daemon_answers_with_the_edge_rewrite_in_one_resident_call(
     answer, native = _review(fixture, tmp_path, workspace=tmp_path)
     assert native is True
     assert answer == response
+    assert [call["containment_sink"] for call in fixture.captured] == [True]
+
+
+def test_the_worker_uses_a_direct_resident_edge_before_the_daemon_edge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = _SinkRouteFixture(edge=_edge(harness_response=dict(_ROUTED_RESPONSE), containment_rewrite="routed"))
+    monkeypatch.setattr(native_hook_direct_route, "native_hook_direct", lambda **_kwargs: fixture.edge)
+
+    answer, native = _review(fixture, tmp_path, workspace=tmp_path)
+
+    assert native is True
+    assert answer == _ROUTED_RESPONSE
+    assert fixture.captured == []
+
+
+def test_a_direct_saved_allow_does_not_reenter_python_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    edge = _edge(
+        result={"decision": "review", "minimum_action": "review", "policy_action": "review"},
+        harness_response={"policy_action": "allow", "permissionDecision": "allow"},
+        containment_route="none",
+    )
+    fixture = _SinkRouteFixture(edge=edge)
+    monkeypatch.setattr(native_hook_direct_route, "native_hook_direct", lambda **_kwargs: edge)
+
+    answer, native = _review(fixture, tmp_path, workspace=tmp_path)
+
+    assert native is True
+    assert answer == edge["harness_response"]
+    assert fixture.captured == []
+
+
+def test_a_direct_receipt_reaches_capture_and_deferred_callers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    edge = _edge(
+        result={"decision": "review", "minimum_action": "review", "policy_action": "review"},
+        harness_response={"policy_action": "allow", "permissionDecision": "allow"},
+        containment_route="none",
+    )
+    edge["harness"] = "codex"
+    fixture = _SinkRouteFixture(edge=edge)
+    monkeypatch.setattr(native_hook_direct_route, "native_hook_direct", lambda **_kwargs: edge)
+    capture: list[Mapping[str, object]] = []
+    deferred: list[Mapping[str, object]] = []
+
+    _review(
+        fixture,
+        tmp_path,
+        workspace=tmp_path,
+        harness="codex",
+        capture_receipts=capture,
+        deferred_receipts=deferred,
+        defer_accepted_recording=True,
+    )
+
+    assert capture == [edge["receipt"]]
+    assert deferred == [edge["receipt"]]
+
+
+def test_a_direct_resident_defer_keeps_the_daemon_edge_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = _SinkRouteFixture(edge=_edge(containment_rewrite="routed"))
+    monkeypatch.setattr(
+        native_hook_direct_route,
+        "native_hook_direct",
+        lambda **_kwargs: {"outcome": "defer", "reason": "review_queue"},
+    )
+
+    _review(fixture, tmp_path, workspace=tmp_path)
+
+    assert [call["containment_sink"] for call in fixture.captured] == [True]
+
+
+def test_unclaimed_saved_approval_uses_the_daemon_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fixture = _SinkRouteFixture(edge=_edge(containment_rewrite="routed"))
+    monkeypatch.setattr(
+        native_hook_direct_route,
+        "native_hook_direct",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("unclaimed direct route")),
+    )
+
+    _review(fixture, tmp_path, workspace=tmp_path, claim_saved_approval=False)
+
     assert [call["containment_sink"] for call in fixture.captured] == [True]
 
 

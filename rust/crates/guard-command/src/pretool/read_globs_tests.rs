@@ -254,3 +254,22 @@ fn a_pattern_that_matches_nothing_reads_nothing() {
 
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_loose_match_covers_every_locale_reading_of_a_non_ascii_name() {
+    // A UTF-8 `?` takes the two-byte `é`; a C-locale `??` takes its bytes.
+    for (pattern, name) in [
+        ("*x?config*", ".x\u{e9}config"),
+        ("x??config", "x\u{e9}config"),
+        ("*k*", "\u{212a}ey"),
+        ("caf\u{e9}", "CAF\u{c9}"),
+    ] {
+        assert!(super::wildcard_may_match(pattern, name), "{pattern} {name}");
+    }
+    for (pattern, name) in [("*pr7519*", ".x\u{e9}config"), ("a*", "b\u{e9}")] {
+        assert!(
+            !super::wildcard_may_match(pattern, name),
+            "{pattern} {name}"
+        );
+    }
+}

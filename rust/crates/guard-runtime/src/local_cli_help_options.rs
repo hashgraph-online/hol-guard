@@ -31,7 +31,8 @@ use script::ScriptState;
 
 #[path = "local_cli_help_script_facts.rs"]
 mod facts;
-pub(super) use facts::{Facts, HelpHandler};
+pub(super) use facts::Facts;
+pub(crate) use facts::HelpHandler;
 
 /// Most option variations one read reports. The catalog keeps room for its
 /// root and other rows and for subcommands a source read finds.

@@ -11,6 +11,7 @@ from typing import Any
 
 from .catalog import Scenario
 from .command_outputs import _text
+from .goal_budget_scope import GOAL_BUDGET_CASE, goal_budget_scope_error
 from .input_evidence import post_input_matches
 from .parent_fixtures import PARENT_DIRECTORY, PARENT_WORKSPACE_CASE
 from .proofs import _edit_path, _path
@@ -32,6 +33,40 @@ WINDOWS_TEMP_ROOT = "{{home}}/AppData/Local/Temp/"
 SCRATCH_NAME = "scratch-notes.txt"
 # A harness read inside a scratch checkout under /tmp, which macOS resolves to
 # /private/tmp; the evidence redacts both spellings to ``{{scratch}}``.
+# The read tool takes a line range, a bare ``:raw``, or both in either order,
+# the same spellings ``post_input_matches`` resolves. Strip whichever one a
+# path carries so the file it names is what gets compared.
+READ_SELECTOR = re.compile(
+    r"(.+?):(?:[1-9][0-9]*(?:-[1-9][0-9]*)?(?::raw)?|raw(?::[1-9][0-9]*(?:-[1-9][0-9]*)?)?)"
+)
+GITDIR_POINTER_CASE = "read-linked-worktree-gitdir-pointer"
+# The realistic fixture puts the agent in the linked worktree, whose ``.git``
+# is a pointer file rather than a directory, so only a path through the main
+# checkout names the administrative pointer. ``_path`` folds the home alias, so
+# the absolute and ``~`` spellings both arrive here as one string.
+GITDIR_POINTER_FILES = ("{{home}}/project/.git/worktrees/project-feature/gitdir",)
+METRIC_WINDOW_WRITE_CASE = "native-metric-window-names-write"
+# The realistic fixture puts the agent in a linked worktree, and redaction
+# folds that directory to ``{{workspace}}``, which ``_path`` reduces to the
+# bare relative spelling. The absolute entry is the main checkout beside it,
+# which a model that resolves the project name itself may write instead; both
+# carry the value the rule turns on.
+METRIC_WINDOW_WRITE_FILES = (
+    "src/connectors/metrics.ts",
+    "{{home}}/project/src/connectors/metrics.ts",
+)
+# The value under test is the window-carrying metric name under a key-shaped
+# field name. The two have to meet in one assignment: a write that only
+# mentions them separately, in a comment or in unrelated code, never reaches
+# the rule this case exists for.
+# A model may write the property either bare or quoted, and either as an object
+# member or as an assignment, so accept a matching optional quote around the key
+# and require that the name is not the tail of a longer identifier.
+METRIC_WINDOW_WRITE_ASSIGNMENT = re.compile(
+    r"""(?<![\w$])(?P<key_quote>['"`]?)metricKey(?P=key_quote)"""
+    r"""\s*[:=]\s*(?P<quote>['"`])downloads_30d(?P=quote)"""
+)
+
 TMP_ALIAS_READ_CASE = "omp-native-read-tmp-alias-worktree-file"
 SCRATCH_READ_TARGET = "{{scratch}}/notes.md"
 # The checkout file a session opened in a plain folder reads and edits through its absolute path.
@@ -39,6 +74,11 @@ SESSION_EDIT_TARGET = f"{{{{home}}}}/{CHECKOUT}/src/report.ts"
 # A background shell job started with `async`, then its output read back through the host's own
 # `proc://<job id>` selector, which names the job table rather than a file.
 BACKGROUND_READ_CASE = "omp-native-read-background-job-output"
+# A glob whose selector walks a Next.js dynamic route segment. The case exists
+# for the bracket directory, so a listing that leaves the brackets out is other
+# work rather than this scenario.
+ROUTE_SEGMENT_GLOB_CASE = "omp-native-glob-dynamic-route-segment"
+ROUTE_SEGMENT_DIRECTORY = ("app", "items", "[slug]")
 JOB_OUTPUT_PATH = re.compile(r"proc://(?P<job>[A-Za-z0-9_][A-Za-z0-9_.-]*)(?::[1-9][0-9]*-[1-9][0-9]*)?")
 # The scenario's one command is `git hash-object README.md`, so its output is a single object id.
 # Holding the read to it keeps a read of some other job, or of an empty table row, from passing.
@@ -390,6 +430,36 @@ def _temp_write_error(calls: list[dict[str, Any]]) -> str | None:
     return None
 
 
+def _metric_window_write_error(calls: list[dict[str, Any]], *, require_write: bool = True) -> str | None:
+    """Hold the metric-name case to one write of the named file with the named value.
+
+    The ``native-tools`` oracle on its own only counts a ``write`` call, so a
+    write of any other file, or of this file without the metric literal, would
+    satisfy the scenario without exercising the rule. ``require_write`` also
+    demands the write, which only makes sense once Guard has not stopped it.
+    """
+    wrote = False
+    for call in calls:
+        name = call["name"]
+        if name not in {"read", "edit", "write"}:
+            continue
+        path = _edit_path(call["args"]) if name == "edit" else _path(call["args"])
+        # Evidence from a Windows lane spells the path with backslashes, which
+        # leaves the workspace prefix on it. Fold both here rather than in the
+        # shared helper, which other checks compare against unfolded spellings.
+        if isinstance(path, str):
+            path = path.replace("\\", "/").removeprefix("{{workspace}}/").removeprefix("./")
+        if name != "write" or path not in METRIC_WINDOW_WRITE_FILES:
+            return "the model used a file other than the metrics source"
+        content = call["args"].get("content")
+        if not isinstance(content, str) or not METRIC_WINDOW_WRITE_ASSIGNMENT.search(content):
+            return "the write did not assign the metric name under test"
+        wrote = True
+    if require_write and not wrote:
+        return "the model did not write the metrics source"
+    return None
+
+
 def _linked_worktree_error(calls: list[dict[str, Any]], *, require_steps: bool = True) -> str | None:
     """Hold every file call to the worktree and, with ``require_steps``, require the requested steps.
 
@@ -463,6 +533,34 @@ def _session_edit_error(calls: list[dict[str, Any]], *, require_steps: bool = Tr
     edit = steps.index("edit")
     if "read" not in steps[:edit] or "read" not in steps[edit:]:
         return "the model did not read the report before and after editing it"
+    return None
+
+
+def _gitdir_pointer_error(calls: list[dict[str, Any]], *, require_read: bool = True) -> str | None:
+    """Hold the pointer scenario to the one administrative file it names.
+
+    The behaviour under test is a read of the linked worktree's ``gitdir``
+    pointer, so a read of any other file leaves it unexercised. ``require_read``
+    also demands that read, which only makes sense once Guard has not stopped it.
+    """
+    read_pointer = False
+    for call in calls:
+        name = call["name"]
+        if name not in {"read", "edit", "write"}:
+            continue
+        path = _edit_path(call["args"]) if name == "edit" else _path(call["args"])
+        if isinstance(path, str):
+            # A Windows lane spells the pointer with backslashes. Fold them
+            # here rather than in the shared helper, which other checks compare
+            # against unfolded spellings.
+            path = path.replace("\\", "/")
+        if name == "read" and isinstance(path, str) and (selector := READ_SELECTOR.fullmatch(path)):
+            path = selector.group(1)
+        if name != "read" or path not in GITDIR_POINTER_FILES:
+            return "the model used a file other than the worktree gitdir pointer"
+        read_pointer = True
+    if require_read and not read_pointer:
+        return "the model did not read the worktree gitdir pointer"
     return None
 
 
@@ -590,6 +688,48 @@ def _credential_report_error(calls: list[dict[str, Any]], delegated: set[str], r
         if any(_reported_credential_answers(report) for report in reports):
             return None
     return "delegated report did not answer the token and password fields"
+
+
+def _route_segment_glob_path(value: object) -> bool:
+    """Require complete bracketed route components, not a token in a basename.
+
+    Native glob paths may be relative, workspace-redacted or absolute on POSIX
+    and Windows. Traversal and unrelated relative directories cannot prove
+    this scenario was exercised.
+    """
+    if not isinstance(value, str) or not value or "\x00" in value:
+        return False
+    path = value.replace("\\", "/")
+    if "//" in path:
+        return False
+    parts = path.split("/")
+    if any(part in (".", "..") for part in parts):
+        return False
+    if path.startswith("{{workspace}}/"):
+        return tuple(path[len("{{workspace}}/"):].split("/")[:3]) == ROUTE_SEGMENT_DIRECTORY
+    if path.startswith("/") or re.match(r"^[A-Za-z]:/", path):
+        return any(
+            tuple(parts[i:i + 3]) == ROUTE_SEGMENT_DIRECTORY
+            and not any(re.search(r"[*?\[\]{}]", part) for part in parts[:i])
+            for i in range(len(parts) - 2)
+        )
+    return tuple(parts[:3]) == ROUTE_SEGMENT_DIRECTORY
+
+
+def _route_segment_glob_error(calls: list[dict[str, Any]]) -> str | None:
+    """Whether a glob call really selected through the dynamic route directory.
+
+    The scenario's point is the bracket in the directory name, so a listing of
+    some other folder leaves the behaviour untested. Report it as scope rather
+    than a Guard verdict, which retries the case.
+    """
+
+    globs = [call for call in calls if call["name"] == "glob"]
+    if not globs:
+        return None
+    if any(not _route_segment_glob_path(call["args"].get("path")) for call in globs):
+        return "the glob call did not select through the dynamic route directory"
+    return None
 
 
 def native_tools_scope_error(
@@ -722,11 +862,27 @@ def native_tools_scope_error(
         return scope
     if scenario.id == GITHUB_LOOKUP_CASE and (scope := _github_lookup_error(calls, require_call=False)):
         return scope
+    if scenario.id == GOAL_BUDGET_CASE and (
+        scope := goal_budget_scope_error(calls, guard_denied=guard_denied)
+    ):
+        return scope
     if scenario.id == BACKGROUND_READ_CASE and (scope := _background_read_error(calls, require_steps=False)):
+        return scope
+    if scenario.id == ROUTE_SEGMENT_GLOB_CASE and (scope := _route_segment_glob_error(calls)):
+        return scope
+    if scenario.id == GITDIR_POINTER_CASE and (scope := _gitdir_pointer_error(calls, require_read=False)):
+        return scope
+    if scenario.id == METRIC_WINDOW_WRITE_CASE and (
+        scope := _metric_window_write_error(calls, require_write=False)
+    ):
         return scope
     if guard_denied:
         return None
     if scenario.id == GITHUB_LOOKUP_CASE and (scope := _github_lookup_error(calls)):
+        return scope
+    if scenario.id == GITDIR_POINTER_CASE and (scope := _gitdir_pointer_error(calls)):
+        return scope
+    if scenario.id == METRIC_WINDOW_WRITE_CASE and (scope := _metric_window_write_error(calls)):
         return scope
     if not set(scenario.required_tools) <= {call["name"] for call in calls}:
         return "the model did not use every tool the scenario names"

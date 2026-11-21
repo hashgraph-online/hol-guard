@@ -54,6 +54,7 @@ fn run(root: &Path, cached: Option<Value>) -> Value {
 
 fn relative_names(root: &Path) -> Vec<String> {
     identity_paths(root)
+        .0
         .iter()
         .map(|path| relative(root, path).replace('\\', "/"))
         .collect()
@@ -374,3 +375,6 @@ fn a_symlinked_cache_file_is_ignored() {
     assert_eq!(answer["reused"], false);
     assert_eq!(answer["fingerprint"], expected["fingerprint"]);
 }
+
+#[path = "runtime_fingerprint_installed_tests.rs"]
+mod installed;

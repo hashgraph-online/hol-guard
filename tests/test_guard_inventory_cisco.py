@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.inventory_cisco as inventory_cisco
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_cisco import run_cisco_inventory_scans
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_inventory_scan_targets import (
@@ -143,9 +143,7 @@ def test_a_pass_with_both_scanners_off_asks_the_resident_nothing(
     assert asked == []
 
 
-def test_the_resident_is_asked_once_with_the_passs_own_context(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_the_resident_is_asked_once_with_the_passs_own_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     context = _ctx(tmp_path)
     artifact = GuardArtifact(
         artifact_id="codex:skill:reviewer",
@@ -301,9 +299,7 @@ def test_a_findings_target_is_the_label_the_resident_chose_not_the_path(
     assert run.metadata["target"] == ".mcp.json"
 
 
-def test_every_chosen_skill_collection_is_walked(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_every_chosen_skill_collection_is_walked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     context = _ctx(tmp_path)
     home_dir = context.home_dir
     assert home_dir is not None
@@ -366,9 +362,7 @@ def test_a_scanners_own_timeout_status_is_reported_as_it_came_back(
     assert run.metadata["targetsScanned"] == 0
 
 
-def test_one_timeout_budget_is_shared_across_the_whole_pass(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_one_timeout_budget_is_shared_across_the_whole_pass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     context = _ctx(tmp_path)
     workspace_dir = context.workspace_dir
     home_dir = context.home_dir

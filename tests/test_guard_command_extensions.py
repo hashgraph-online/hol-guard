@@ -410,7 +410,7 @@ def test_command_cli_emits_stable_json_without_creating_guard_state(
     requests: list[dict[str, str]] = []
 
     class NativeInspectionClient:
-        def inspect_command(self, request: dict[str, str]) -> dict[str, object]:
+        def inspect_command(self, request: dict[str, str], timeout: float | None = None) -> dict[str, object]:
             requests.append(request)
             return inspect_command(
                 request["command"],

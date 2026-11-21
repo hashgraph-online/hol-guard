@@ -15,7 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ...version import __version__
-from ..adapters.base import HarnessContext
+from ..harness_context import HarnessContext
 from .acknowledgements import clear_acknowledgements, record_acknowledgement
 from .compatibility import OBSERVATION_MAX_AGE_SECONDS, STATE_UNTESTED, decide_compatibility
 from .discovery import VersionObservation, current_platform, observation_identity_changed, observe_harness_version

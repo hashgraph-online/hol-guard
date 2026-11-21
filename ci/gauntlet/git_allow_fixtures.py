@@ -15,9 +15,9 @@ with ``refs/remotes/origin/main`` one commit ahead, so a fast-forward merge
 runs without network. Chains that reach the network (``git fetch``/``git
 pull``) need a reachable origin and are not covered here.
 
-The unmodelled-read case is the exception: it builds its own origin as a
-bare repository beside the checkout, so ``git ls-remote`` answers from the
-filesystem with no network and no credential.
+The unmodelled-read and new-checkout cases are the exception: each builds its
+own origin as a bare repository beside the checkout, so ``git ls-remote`` and
+``git fetch`` answer from the filesystem with no network and no credential.
 """
 
 from __future__ import annotations
@@ -39,6 +39,8 @@ GIT_ALLOW_REF_READS_CASE = "git-allow-ref-reads-after-checkout"
 GIT_ALLOW_NAMED_CHECKOUT_CASE = "git-allow-guard-named-checkout"
 # The worktree permission allows an ordinary sibling checkout...
 GIT_ALLOW_WORKTREE_CASE = "git-allow-worktree-sibling-then-status"
+# The same sibling worktree chain, ending with a step that only prints.
+GIT_ALLOW_ECHO_WORKTREE_CASE = "git-allow-worktree-sibling-then-status-and-echo"
 # ...but never settles a checkout into a folder Git runs code from.
 GIT_ALLOW_HOOKS_WORKTREE_CASE = "git-allow-worktree-into-hooks-folder"
 # An allowed step never carries a blocked step in the same compound with it.
@@ -69,6 +71,11 @@ GIT_ALLOW_ROUTED_REFRESH_CASE = "git-allow-routed-refresh-then-reads"
 # its own protected destination and no git ALLOW could settle the ordinary
 # sibling worktree it started.
 GIT_ALLOW_RELATIVE_HOOKS_CASE = "git-allow-worktree-from-repo-relative-hooks-path"
+# A refresh whose origin the whole-command proof will not vouch for, an add,
+# and a read of the checkout the add creates. The add writes only into a
+# destination that does not exist yet, so the read opens what the repository
+# supplies at the ref the add named, and the user's ALLOW has to carry it.
+GIT_ALLOW_READ_NEW_CHECKOUT_CASE = "git-allow-worktree-add-then-read-new-checkout"
 GIT_ALLOW_CASES = frozenset(
     {
         GIT_ALLOW_MERGE_CASE,
@@ -77,6 +84,7 @@ GIT_ALLOW_CASES = frozenset(
         GIT_ALLOW_REF_READS_CASE,
         GIT_ALLOW_NAMED_CHECKOUT_CASE,
         GIT_ALLOW_WORKTREE_CASE,
+        GIT_ALLOW_ECHO_WORKTREE_CASE,
         GIT_ALLOW_HOOKS_WORKTREE_CASE,
         GIT_ALLOW_MIXED_WORKTREE_CASE,
         GIT_ALLOW_UNMODELLED_CASE,
@@ -85,6 +93,7 @@ GIT_ALLOW_CASES = frozenset(
         GIT_ALLOW_CONFIG_PATTERN_CASE,
         GIT_ALLOW_ROUTED_REFRESH_CASE,
         GIT_ALLOW_RELATIVE_HOOKS_CASE,
+        GIT_ALLOW_READ_NEW_CHECKOUT_CASE,
     }
 )
 GIT_EXTENSION_ID = "command.git"
@@ -100,11 +109,13 @@ NAMED_FILE = "scripts/hol-guard.wxs"
 NAMED_COMMITTED = "<Wix />\n"
 NAMED_WORKTREE = "pr/hol-guard-pr-12"
 SIBLING_WORKTREE = "review-wt"
+ECHO_WORKTREE = "report-wt"
 HOOKS_WORKTREE = ".git/hooks/review-wt"
 MIXED_WORKTREE = "mixed-wt"
 CONFIG_WORKTREE = "cfg-wt"
 ROUTED_WORKTREE = "routed-wt"
 RELATIVE_HOOKS_WORKTREE = "relhooks-wt"
+READ_WORKTREE = "read-wt"
 # Repo-relative, like the value husky and lefthook write.
 RELATIVE_HOOKS_DIR = ".githooks"
 UNMODELLED_ORIGIN = "origin.git"
@@ -143,7 +154,12 @@ def add_git_allow_shape(workspace: Path, environment: dict[str, str], scenario_i
     if scenario_id == GIT_ALLOW_NAMED_CHECKOUT_CASE:
         _add_named_checkout(workspace, environment)
         return
-    if scenario_id == GIT_ALLOW_UNMODELLED_CASE:
+    if scenario_id in (GIT_ALLOW_UNMODELLED_CASE, GIT_ALLOW_READ_NEW_CHECKOUT_CASE):
+        # A bare origin beside the checkout, so `git ls-remote` and `git fetch`
+        # answer offline. Its URL is a filesystem path rather than a host the
+        # whole-command proof vouches for, which is what leaves the refresh in
+        # the new-checkout case to the user's ALLOW and makes the read after
+        # the add stand on its own.
         _add_local_origin(workspace, environment)
         return
     if scenario_id == GIT_ALLOW_STASH_CASE:
@@ -158,6 +174,12 @@ def add_git_allow_shape(workspace: Path, environment: dict[str, str], scenario_i
         # what used to make the checkout its own floor.
         (workspace / RELATIVE_HOOKS_DIR).mkdir(parents=True, exist_ok=True)
         _git(workspace, environment, "config", "core.hooksPath", RELATIVE_HOOKS_DIR)
+    if scenario_id == GIT_ALLOW_ECHO_WORKTREE_CASE:
+        # The pipe in this chain keeps Oh My Pi from rewriting the worktree add,
+        # so real Git runs it. Branching from origin/main would then record
+        # tracking for the new branch in .git/config, which the lane guards as a
+        # protected file. The chain never asked for tracking; turn it off.
+        _git(workspace, environment, "config", "branch.autoSetupMerge", "false")
     add_fast_forward_origin(workspace, workspace, environment)
     if scenario_id == GIT_ALLOW_ROUTED_REFRESH_CASE:
         # The checkout the chain routes into. It shares this repository, so the
@@ -229,6 +251,10 @@ def git_allow_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
         sibling = workspace.parent / SIBLING_WORKTREE
         heads = _heads(sibling) if (sibling / ".git").is_file() else None
         return {"git-allow-sibling-worktree-at-origin": heads is not None and heads[0] == heads[1]}
+    if scenario_id == GIT_ALLOW_ECHO_WORKTREE_CASE:
+        sibling = workspace.parent / ECHO_WORKTREE
+        heads = _heads(sibling) if (sibling / ".git").is_file() else None
+        return {"git-allow-echo-worktree-at-origin": heads is not None and heads[0] == heads[1]}
     if scenario_id == GIT_ALLOW_HOOKS_WORKTREE_CASE:
         return {"git-allow-hooks-worktree-absent": not (workspace / HOOKS_WORKTREE).exists()}
     if scenario_id == GIT_ALLOW_PLUMBING_CASE:

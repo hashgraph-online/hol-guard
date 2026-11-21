@@ -193,6 +193,8 @@ impl CloudContext<'_> {
 
     /// The pre-request failures of `_resolve_guard_sync_auth_context`.
     fn auth_resolution_failure(&self, error: &EvalError) -> CloudOutcome {
+        let outage = super::cloud_failures::refresh_outage_as_validation(error);
+        let error = outage.as_ref().unwrap_or(error);
         match error {
             EvalError::Validation(reason) => {
                 if self.can_fallback_from_cloud_failure() {

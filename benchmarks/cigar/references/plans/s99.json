@@ -1,0 +1,89 @@
+{
+ "repo": "moreit",
+ "seed": 99,
+ "steps": [
+  {
+   "kind": "stub",
+   "prompt": "`zip_broadcast` in more_itertools/more.py was stubbed out during a refactor and now raises NotImplementedError. Implement it again so it does what its docstring says and the existing tests pass.",
+   "stub": {
+    "body": "    def is_scalar(obj):\n        if scalar_types and isinstance(obj, scalar_types):\n            return True\n        try:\n            iter(obj)\n        except TypeError:\n            return True\n        else:\n            return False\n\n    size = len(objects)\n    if not size:\n        return\n\n    new_item = [None] * size\n    iterables, iterable_positions = [], []\n    for i, obj in enumerate(objects):\n        if is_scalar(obj):\n            new_item[i] = obj\n        else:\n            iterables.append(iter(obj))\n            iterable_positions.append(i)\n\n    if not iterables:\n        yield tuple(objects)\n        return\n\n    zipper = _zip_equal if strict else zip\n    for item in zipper(*iterables):\n        for i, new_item[i] in zip(iterable_positions, item):\n            pass\n        yield tuple(new_item)\n",
+    "body_start": 4449,
+    "end": 4480,
+    "failing": [
+     "tests/test_more.py::ZipBroadcastTests::test_scalar_types",
+     "tests/test_more.py::ZipBroadcastTests::test_zip"
+    ],
+    "indent": 4,
+    "path": "more_itertools/more.py",
+    "qual": "zip_broadcast"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "`tests/test_recipes.py::TailTests::test_sized_equal` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_recipes.py::TailTests::test_sized_equal",
+      "tests/test_recipes.py::TailTests::test_sized_greater",
+      "tests/test_recipes.py::TailTests::test_sized_less"
+     ],
+     "line": 145,
+     "new": "        yield from islice(iterable, max(0, len(iterable) + n), None)\n",
+     "orig": "        yield from islice(iterable, max(0, len(iterable) - n), None)\n",
+     "path": "more_itertools/recipes.py",
+     "qual": "tail"
+    }
+   ]
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_get_by_index` to `_get_by_index_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 8,
+    "files": [
+     "more_itertools/more.py"
+    ],
+    "new": "_get_by_index_impl",
+    "old": "_get_by_index",
+    "path": "more_itertools/more.py"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `callback_iter.__exit__` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_more.py::CallbackIterTests::test_abort"
+     ],
+     "line": 3906,
+     "new": "        self._aborted = False\n",
+     "orig": "        self._aborted = True\n",
+     "path": "more_itertools/more.py",
+     "qual": "callback_iter.__exit__"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_more.py::NthOrLastTests::test_basic"
+     ],
+     "line": 267,
+     "new": "    return last(islice(iterable, n - 1), default=default)\n",
+     "orig": "    return last(islice(iterable, n + 1), default=default)\n",
+     "path": "more_itertools/more.py",
+     "qual": "nth_or_last"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

@@ -91,10 +91,10 @@ def test_resolve_job_mirrors_build_alpha_version_rules() -> None:
         assert token in build
 
 
-def test_windows_alpha_compile_lowers_only_workspace_opt_level() -> None:
+def test_alpha_compile_lowers_workspace_opt_level_for_every_target() -> None:
     prepare = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
     expression = prepare["env"]["ALPHA_WORKSPACE_OPT_LEVEL"]
-    assert expression == "${{ endsWith(matrix.target, '-pc-windows-msvc') && '1' || '' }}"
+    assert expression == "${{ inputs.fast_codegen == true && '1' || '' }}"
     legs = native_target_matrix(prepare)[""]
     assert len(legs) == 5
     targets = [leg["target"] for leg in legs]

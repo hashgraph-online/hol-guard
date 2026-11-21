@@ -19,7 +19,7 @@ from ..runtime.fleet_posture_aibom import fleet_inventory_rows
 from ..runtime.fleet_posture_inventory import reportable_inventory_rows, store_home
 
 if TYPE_CHECKING:
-    from ..adapters.base import HarnessContext
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 # Guard command name -> (parser attribute naming the subcommand, inventory kind, kinds listed).
@@ -132,7 +132,7 @@ def run_inventory_list_command(
         from ..native_daemon_peer import load_guard_daemon_endpoint_url
 
         if context is not None:
-            from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
+            from ..mcp_discovery_client import observe_configured_mcp_servers
 
             # Listing changes no grant: record remote declarations only.
             observe_configured_mcp_servers(store, context=context, seen_at=generated_at, stdio=False)

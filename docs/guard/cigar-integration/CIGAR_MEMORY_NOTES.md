@@ -26,7 +26,7 @@ Context79 pass on stable and Rust1.88 (13 SDK-gated cases), and native Service11
 
 Retained development failures include internal validator visibility, a fixture that requested a SQLite doctor in memory mode, and a rendering assertion that incorrectly required every query to return every note. The final test replaces that last assumption with complete SDK-proven vector digests for both apps, plus relevant retrieval and isolation checks. No original acceptance assertion, SDK deadline or mutation-retry policy was weakened.
 
-[Explicit memory rollback](CIGAR_ROLLBACK_RECOVERY.md) now preserves latest reviewed data, removals, both app vectors and original expiry through the live Service; it creates no saved-evidence store.
+Explicit memory rollback now preserves latest reviewed data, removals, both app vectors and original expiry through the live Service; it creates no saved-evidence store.
 
 ## Remaining work
 

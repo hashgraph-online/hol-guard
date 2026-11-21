@@ -85,9 +85,24 @@ fn a_binding_without_posture_overrides_still_answers() {
     bound["home_dir"] = json!(HOME);
     bound["local_cli_block_rules"] = json!(false);
     bound["evidence_drain"] = json!(true);
+    bound["review_oauth_source"] = json!("default");
     bound.as_object_mut().unwrap().remove("harness_postures");
     push(&lane.fixture, Some(bound)).unwrap();
     assert_eq!(run(&lane, allowed_payload(&lane))["outcome"], "answer");
+}
+
+#[test]
+fn a_direct_lane_without_a_native_writer_source_defers() {
+    let lane = lane("missing-writer-source", json!({}));
+    let mut bound = binding(&lane.fixture, &lane.workspace);
+    bound["home_dir"] = json!(HOME);
+    bound["local_cli_block_rules"] = json!(false);
+    bound["evidence_drain"] = json!(true);
+    push(&lane.fixture, Some(bound)).unwrap();
+    assert_eq!(
+        deferred(&run(&lane, allowed_payload(&lane))),
+        "direct_hook_evidence_undrained"
+    );
 }
 
 #[test]
@@ -106,6 +121,7 @@ fn daemon_only_state_in_the_binding_defers() {
         bound["harness_postures"] = json!({});
         bound["local_cli_block_rules"] = json!(false);
         bound["evidence_drain"] = json!(true);
+        bound["review_oauth_source"] = json!("default");
         bound.as_object_mut().unwrap().remove(missing);
         push(&lane.fixture, Some(bound)).unwrap();
         assert_eq!(

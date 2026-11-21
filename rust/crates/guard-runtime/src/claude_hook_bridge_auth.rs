@@ -154,7 +154,7 @@ fn read_private_text(file: File, label: &str) -> Result<String, String> {
 }
 
 /// The `UnicodeDecodeError` text `read_text(encoding="utf-8")` raises.
-fn utf8_error_message(bytes: &[u8], error: std::str::Utf8Error) -> String {
+pub(crate) fn utf8_error_message(bytes: &[u8], error: std::str::Utf8Error) -> String {
     let start = error.valid_up_to();
     let (end, reason) = match error.error_len() {
         None => (bytes.len(), "unexpected end of data"),

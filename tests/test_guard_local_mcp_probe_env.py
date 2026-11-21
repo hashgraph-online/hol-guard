@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.mcp_discovery_client import (
     discover_harness_mcp_servers,
     extra_env_for_mcp_launch,
 )
-from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.local_cli_commands import OTHER_COMMAND_ID, LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity

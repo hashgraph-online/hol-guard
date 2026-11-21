@@ -103,3 +103,60 @@ def test_human_block_output_names_the_denial(capsys):
         False,
     )
     assert "Approval blocked" in capsys.readouterr().out
+
+
+def _paired(store):
+    store.get_review_event_oauth_binding = lambda: {"oauth_subject_hash": "subject"}
+    return store
+
+
+def test_an_unanswered_cloud_review_request_says_it_expired(tmp_path):
+    store = _paired(GuardStore(tmp_path / "guard"))
+    store.add_approval_request(_request("req-1"), "2026-10-22T11:00:00Z")
+    payload, code = run_approval_wait_command(argparse.Namespace(request_id="req-1", timeout=0), store=store)
+    assert code == 2
+    assert (payload["error"], payload["status"]) == ("approval_expired", "expired")
+    assert "expired" in payload["body"] and "stays blocked" in payload["body"]
+    assert store.get_approval_request("req-1")["status"] == "pending"
+
+
+def test_a_cloud_review_request_inside_its_window_is_still_waiting(tmp_path):
+    from datetime import datetime, timezone
+
+    store = _paired(GuardStore(tmp_path / "guard"))
+    store.add_approval_request(_request("req-1"), datetime.now(timezone.utc).isoformat())
+    payload, code = run_approval_wait_command(argparse.Namespace(request_id="req-1", timeout=0), store=store)
+    assert (payload["error"], code) == ("approval_wait_timeout", 2)
+
+
+def test_an_answer_after_the_window_is_still_reported(tmp_path):
+    store = _paired(GuardStore(tmp_path / "guard"))
+    store.add_approval_request(_request("req-1"), "2026-10-22T11:00:00Z")
+    store.resolve_approval_request(
+        "req-1",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="test",
+        resolved_at="2026-10-22T12:00:00Z",
+    )
+    payload, code = run_approval_wait_command(argparse.Namespace(request_id="req-1", timeout=0), store=store)
+    assert (payload["resolution_action"], code) == ("allow", 0)
+
+
+def _raise_store_error():
+    import sqlite3
+
+    raise sqlite3.OperationalError("locked")
+
+
+@pytest.mark.parametrize(
+    "binding, row",
+    [
+        (_raise_store_error, {"status": "pending", "created_at": "2026-10-22T11:00:00Z"}),
+        (lambda: {"oauth_subject_hash": "subject"}, {"status": "pending", "created_at": "not-a-time"}),
+    ],
+)
+def test_an_unreadable_deadline_keeps_the_plain_timeout(binding, row):
+    store = SimpleNamespace(get_approval_request=lambda _id: dict(row), get_review_event_oauth_binding=binding)
+    payload, code = run_approval_wait_command(argparse.Namespace(request_id="req-1", timeout=0), store=store)
+    assert (payload["error"], payload["status"], code) == ("approval_wait_timeout", "pending", 2)

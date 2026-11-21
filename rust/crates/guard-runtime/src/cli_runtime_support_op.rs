@@ -180,6 +180,13 @@ pub(crate) fn dispatch(args: &Value) -> Result<Value, &'static str> {
 
 pub(super) fn evaluate(operation: &str, params: &Value) -> Result<Value, &'static str> {
     let result = match operation {
+        "harness_protection_contract" => crate::harness_protection_contract::check_payload_at(
+            params.get("now").and_then(Value::as_str),
+        )?,
+        "harness_claim_promotion" => crate::harness_protection_contract::promotion_payload(params)?,
+        "native_readiness" => {
+            crate::native_readiness::readiness_payload(text(params, "reason_code")?)
+        }
         "resolve_tool" => crate::cli_copilot_resolution::resolve_tool(params)?,
         "server_identity" => crate::cli_copilot_resolution::server_identity(params)?,
         "workspace_root" => crate::cli_copilot_resolution::workspace_root(params)?,

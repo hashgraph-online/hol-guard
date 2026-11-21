@@ -71,6 +71,17 @@ fn cwd_compounds_validate_reads_and_one_bounded_write() {
             ("&& file one.txt", true),
             ("&& basename one.txt", true),
             ("&& realpath one.txt", true),
+            // `[ … ]` is `test` spelled with brackets and takes the same
+            // file-predicate proof, so a check written either way behind the
+            // `cd` gets the same decision, including inside an `if`.
+            ("&& test -f one.txt; cat one.txt", true),
+            ("&& [ -f one.txt ]; cat one.txt", true),
+            ("&& [ -d . ] && [ -r one.txt ]; wc -l one.txt", true),
+            ("&& if [ -f one.txt ]; then wc -l one.txt; fi", true),
+            ("&& [ -f one.txt ]; cat .env", false),
+            ("&& [ -f one.txt ]; rm one.txt", false),
+            ("&& if [ -f one.txt ]; then rm one.txt; fi", false),
+            ("&& [ -f one.txt; cat one.txt", false),
             // Programs whose own proof can authorize an effect stay out of the
             // generic branch: a write belongs to the bounded two-segment form
             // above, and a process stop has no bounded form at all.

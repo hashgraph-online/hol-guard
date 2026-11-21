@@ -163,3 +163,21 @@ def test_inspection_native_evaluation_failure_preserves_block_without_reparsing(
         }
     ]
     assert reviewed.payload == original
+
+
+@pytest.mark.parametrize("floor", ["require-reapproval", "sandbox-required"])
+def test_inspection_trace_shows_the_resident_pre_tool_floor(
+    floor: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from dataclasses import replace
+
+    from tests.native_command_test_support import real_native_command_evaluation
+
+    reviewed = real_native_command_evaluation("git status", cwd=tmp_path, home_dir=tmp_path)
+    reviewed = replace(reviewed, payload={**reviewed.payload, "minimum_action": floor})
+    monkeypatch.setattr(command_inspection, "review_command_native", lambda *_args, **_kwargs: reviewed)
+    result = command_inspection.inspect_command("git status", cwd=tmp_path, home_dir=tmp_path, guard_home=tmp_path)
+
+    assert result["status"] != "native_unavailable"
+    floors = [step for step in result["trace"] if step["step"] == "native-pre-tool-floor"]
+    assert [step["result"] for step in floors] == [floor]

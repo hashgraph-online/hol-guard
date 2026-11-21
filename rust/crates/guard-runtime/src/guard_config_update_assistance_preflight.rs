@@ -91,6 +91,7 @@ pub(super) fn write(request: &UpdateRequest, value: &PyVal) -> Result<Value, Fai
         request.managed.as_ref(),
         request.cloud_sync_entitled,
         &now_iso(),
+        &crate::cigar_apps::cigar_apps(home),
     )?;
     fence(stored.as_deref(), &mut computed.text, false)?;
     let mut lease = None;
@@ -107,8 +108,6 @@ pub(super) fn write(request: &UpdateRequest, value: &PyVal) -> Result<Value, Fai
                     .map_err(Failure::Error)?,
             );
             identity.check(home)?;
-            crate::guard_config_load::cigar_updates::check_target(home, &id)
-                .map_err(Failure::Error)?;
             verify_assistance_opt_in(home, stored.as_deref(), &computed.text)?;
         }
     }

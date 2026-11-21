@@ -9,18 +9,19 @@ from pathlib import Path
 import pytest
 
 from ci.native_daemon_harness import NativeGuardDaemon
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, grok_runtime_hooks_verified
 from codex_plugin_scanner.guard.approvals import _live_hook_verification
 from codex_plugin_scanner.guard.cli.install_commands import (
     _grok_hook_command_is_guard,
-    _grok_managed_config_is_active,
+    _grok_protection_checks,
     apply_managed_install,
     grok_hooks_protection_ready,
 )
+from codex_plugin_scanner.guard.cli.native_install_checks import grok_runtime_hooks_verified
 from codex_plugin_scanner.guard.cloud_control.server_control_connect_flow import (
     _repair_command_activity_persistence_health,
 )
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.managed_install_proof import (
     bind_managed_install_proof,
     verify_managed_install_proof,
@@ -29,6 +30,9 @@ from codex_plugin_scanner.guard.runtime_artifact_reconciliation import (
     repair_failing_managed_harness_hooks,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import harness_ops_support as harness_support
+
+from .grok_test_support import grok_hook_command_parts, grok_paths
 
 _NOW = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
 
@@ -49,7 +53,7 @@ def _ctx(tmp_path: Path) -> HarnessContext:
 
 def _native_grok_command(context: HarnessContext) -> str:
     """Use the real generated bridge rather than a non-executable marker command."""
-    return _shell_command(GrokHarnessAdapter._hook_command_parts(context))
+    return _shell_command(grok_hook_command_parts(context))
 
 
 def _stale_pretool_payload() -> dict[str, object]:
@@ -245,25 +249,18 @@ def test_grok_hook_command_rejects_placeholder_invocations(tmp_path: Path) -> No
     assert _grok_hook_command_is_guard("true") is False
 
 
-def test_grok_managed_config_rejects_inline_commented_rule(tmp_path: Path) -> None:
-    import tomlkit
-
-    from codex_plugin_scanner.guard.adapters.grok_user_config import prepare_user_config_text
-
+def test_grok_managed_config_is_active_only_for_the_installed_permission_floor(tmp_path: Path) -> None:
+    """The native check accepts the installed config; its rejections are Rust unit tests."""
     context = _ctx(tmp_path)
-    command = _shell_command(GrokHarnessAdapter._hook_command_parts(context))
-    valid, _ = prepare_user_config_text("", command, previous_state={})
-    assert _grok_managed_config_is_active(valid, context) is True
-    assert (
-        _grok_managed_config_is_active(
-            "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
-            'deny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n'
-        )
-        is False
+    harness_support.install("grok", context)
+    config = grok_paths(context)["config"]
+    assert _grok_protection_checks(context)["managed_config_installed"] is True
+    config.write_text(
+        "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
+        'deny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n',
+        encoding="utf-8",
     )
-    document = tomlkit.parse(valid)
-    document["permission"]["deny"] = tomlkit.array().comment("Read(**/.grok/auth/**)")
-    assert _grok_managed_config_is_active(tomlkit.dumps(document), context) is False
+    assert _grok_protection_checks(context)["managed_config_installed"] is False
 
 
 def test_live_grok_hooks_reject_placeholder_command_and_marker_only_config(

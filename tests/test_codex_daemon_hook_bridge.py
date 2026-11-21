@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import http.client
-import io
 import json
 import os
 import secrets
@@ -21,8 +20,6 @@ import pytest
 from ci.native_daemon_harness import NativeGuardDaemon as GuardDaemonServer
 from codex_plugin_scanner.guard import hook_deadline as runtime_hook_deadline_module
 from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
 from codex_plugin_scanner.guard.store import GuardStore
@@ -32,6 +29,7 @@ from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
     _DaemonHandler,
     _write_authenticated_daemon_files,
+    signed_native_bridge_argv,
 )
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -135,16 +133,14 @@ def _native_bridge_response(
 
     config = _bridge_config(guard_home, 0)
     event_name = str(payload.get("hook_event_name", "PreToolUse"))
-    argv = bridge._native_argv(
-        runtime,
-        state_path=config["state_path"],
-        fallback_command=config["fallback_command"],
-        start_command=config["start_command"],
-        query=query,
-        hook_timeouts={event_name: timeout_seconds},
-        manifest_path=guard_home / "managed" / "codex" / "hooks.manifest.json",
-        config_json=None,
-    )
+    registered = {
+        "state_path": str(config["state_path"]),
+        "fallback_command": list(config["fallback_command"]),
+        "start_command": list(config["start_command"]),
+        "query": query,
+        "hook_timeouts": {event_name: timeout_seconds},
+    }
+    argv = signed_native_bridge_argv(runtime, guard_home, registered)
     completed = subprocess.run(
         argv,
         input=stamp_hook_input_text(json.dumps(payload)),
@@ -190,12 +186,6 @@ def _authenticated_daemon_request(
         data=json.dumps(payload),
         timeout_seconds=timeout_seconds,
     )
-
-
-def _without_a_native_runtime(monkeypatch: pytest.MonkeyPatch, payload: dict[str, object]) -> None:
-    """An install whose native runtime cannot be resolved, with one hook body to review."""
-    monkeypatch.setattr(bridge, "_native_bridge_executable", lambda _guard_home: None)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
 
 
 def test_assert_loopback_http_url_rejects_remote_and_credentialed_urls() -> None:
@@ -245,152 +235,6 @@ def test_daemon_url_requires_authenticated_guard_owned_state(tmp_path: Path) -> 
     )
     with pytest.raises(ValueError, match="identity is incomplete"):
         hook_auth._daemon_url(guard_home / "daemon-state.json")
-
-
-def test_fail_closed_uses_supported_codex_deny_shapes() -> None:
-    pretool = bridge._fail_closed("PreToolUse", "review failed")
-    permission = bridge._fail_closed("PermissionRequest", "review failed")
-    posttool = bridge._fail_closed("PostToolUse", "review failed")
-    prompt = bridge._fail_closed("UserPromptSubmit", "review failed")
-
-    assert pretool["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert permission["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-    assert posttool["continue"] is True
-    assert prompt["continue"] is True
-
-
-def test_unresolvable_native_runtime_does_not_stop_user_prompt(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    _without_a_native_runtime(monkeypatch, {"hook_event_name": "UserPromptSubmit", "prompt": "resume"})
-
-    assert bridge.main(**_bridge_config(guard_home, 5474)) == 0
-    assert json.loads(capsys.readouterr().out) == {
-        "continue": True,
-        "systemMessage": bridge._NATIVE_RUNTIME_UNAVAILABLE,
-    }
-
-
-def test_unresolvable_native_runtime_denies_pretool_use(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    _without_a_native_runtime(
-        monkeypatch,
-        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git push"}},
-    )
-
-    assert bridge.main(**_bridge_config(guard_home, 5474)) == 0
-    response = json.loads(capsys.readouterr().out)
-    assert response["hookSpecificOutput"] == {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": "deny",
-        "permissionDecisionReason": bridge._NATIVE_RUNTIME_UNAVAILABLE,
-    }
-
-
-def test_denial_before_the_runtime_names_its_reason_code(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A denial the shim makes itself still reports why, on the evidence channel."""
-    guard_home = tmp_path / "guard-home"
-    _without_a_native_runtime(
-        monkeypatch,
-        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git push"}},
-    )
-
-    assert bridge.main(**_bridge_config(guard_home, 5474)) == 0
-    captured = capsys.readouterr()
-    assert json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert json.loads(captured.err) == {
-        "schema": "hol-guard.codex-bridge-failure.v1",
-        "causes": [{"reason_code": "codex_hook_native_runtime_missing"}],
-    }
-
-
-def test_unauthenticated_registration_reports_the_validator_reason(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """The validator's own reason reaches the evidence channel, not a guess at it."""
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(bridge, "_native_bridge_executable", lambda _guard_home: Path("/nonexistent/runtime"))
-    monkeypatch.setattr(
-        bridge,
-        "trusted_hook_launch",
-        _refusing_launch(CodexHookIntegrityError("codex_hook_manifest_missing", "no manifest")),
-    )
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"})))
-    config = _bridge_config(guard_home, 5474)
-    config["manifest_path"] = str(guard_home / "managed" / "codex" / "hooks.manifest.json")
-    config["config_json"] = "{}"
-
-    assert bridge.main(**config) == 0
-    captured = capsys.readouterr()
-    assert json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert json.loads(captured.err)["causes"] == [{"reason_code": "codex_hook_manifest_missing"}]
-
-
-def test_a_runtime_that_cannot_be_started_denies_the_hook(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A runtime resolved but unlaunchable denies rather than answering nothing.
-
-    Codex reads a non-zero exit with no JSON as a non-blocking error and runs
-    the tool anyway, so a spawn failure has to produce the deny itself.
-    """
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(bridge, "_native_bridge_executable", lambda _guard_home: Path("/nonexistent/runtime"))
-    monkeypatch.setattr(subprocess, "run", _refusing_to_start(OSError(13, "Permission denied")))
-    hook = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git push"}}
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(hook)))
-
-    assert bridge.main(**_bridge_config(guard_home, 5474)) == 0
-    captured = capsys.readouterr()
-    assert json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert json.loads(captured.err)["causes"] == [{"reason_code": "codex_hook_native_runtime_launch_failed"}]
-
-
-def _refusing_to_start(error: Exception):
-    """A spawn that fails the way an unlaunchable executable fails."""
-
-    def refuse(*_args: object, **_kwargs: object) -> None:
-        raise error
-
-    return refuse
-
-
-def _refusing_launch(error: Exception):
-    """A launch validator that refuses every registration with ``error``."""
-
-    def refuse(**_kwargs: object) -> None:
-        raise error
-
-    return refuse
-
-
-def test_unresolvable_native_runtime_denies_permission_request(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    _without_a_native_runtime(monkeypatch, {"hook_event_name": "PermissionRequest", "tool_name": "Bash"})
-
-    assert bridge.main(**_bridge_config(guard_home, 5474)) == 0
-    response = json.loads(capsys.readouterr().out)
-    assert response["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-    assert response["hookSpecificOutput"]["decision"]["message"] == bridge._NATIVE_RUNTIME_UNAVAILABLE
 
 
 @pytest.mark.parametrize(

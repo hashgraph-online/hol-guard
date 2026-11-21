@@ -32,6 +32,7 @@ unmaintained = "all"
 ignore = [
     { id = "RUSTSEC-2023-0071", reason = "the Marvin attack recovers a key from the timing of RSA private-key operations; Guard only ever verifies signatures with rsa, so no private key and no decryption reaches the crate outside its own tests, and the advisory has no fixed release" },
     { id = "RUSTSEC-2026-0459", reason = "the stale-page read needs a crafted -wal file planted beside a database the victim opens; every database Guard opens is its own store inside the Guard home, so planting one needs write access to the Guard home, which already lets the writer change the store directly. The fixed libsqlite3-sys 0.39 ships with rusqlite 0.41, which needs rustc 1.89, above the workspace's 1.88 toolchain" },
+    { id = "RUSTSEC-2026-0543", reason = "chrono is marked unmaintained, with no known vulnerability. oauth2 5 needs it for the timestamps in its token responses, and no oauth2 release drops it yet. guard-runtime also uses it directly, for the local calendar day the usage meter files each model request under, since the standard library cannot read the local time zone. Remove this entry once oauth2 moves to jiff or time and the usage meter moves with it" },
 ]
 
 [licenses]
@@ -81,11 +82,18 @@ deny = [
 skip = [
     { crate = "base64@0.22.1", reason = "transitive, pending the dependents that still pin 0.22" },
     { crate = "bitflags@1.3.2", reason = "transitive, dependents still on the 1.x API" },
+    { crate = "block-buffer@0.10.4", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
+    { crate = "const-oid@0.9.6", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
+    { crate = "cpufeatures@0.2.17", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
+    { crate = "crypto-common@0.1.7", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
+    { crate = "digest@0.10.7", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
     { crate = "fancy-regex@0.16.2", reason = "transitive, pending a dependent upgrade" },
     { crate = "getrandom@0.2.17", reason = "transitive, dependents still on the 0.2 API" },
     { crate = "getrandom@0.3.4", reason = "transitive, dependents still on the 0.3 API" },
+    { crate = "hmac@0.12.1", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
     { crate = "roxmltree@0.20.0", reason = "transitive, pending a dependent upgrade" },
     { crate = "serde_spanned@0.6.9", reason = "transitive through the toml 0.8 line" },
+    { crate = "sha2@0.10.9", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
     { crate = "shlex@1.3.0", reason = "transitive, dependents still on the 1.x API" },
     { crate = "syn@2.0.119", reason = "transitive, proc-macro dependents still on syn 2" },
     { crate = "thiserror@1.0.69", reason = "transitive, dependents still on the 1.x API" },

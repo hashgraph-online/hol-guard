@@ -262,7 +262,7 @@ fn a_busy_window_is_capped_instead_of_choosing_the_newest_row() {
     );
 }
 
-fn build_database(path: &Path) {
+pub(crate) fn build_database(path: &Path) {
     let vectors: Value = serde_json::from_str(VECTORS).unwrap();
     let connection = Connection::open(path).unwrap();
     connection

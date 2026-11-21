@@ -39,8 +39,12 @@ pub(crate) fn mark_cancel(home: &Path, job: &SwitchJob) -> Result<(), String> {
     .map_err(|_| error("switch_job_write_failed"))
 }
 pub(crate) fn cancelled(home: &Path, job: &SwitchJob) -> Result<bool, String> {
-    let marker: Option<Marker> =
-        preparation::lifecycle_read(home, &cancel_path(home, &job.request.job_id)?, 4096)?;
+    let marker: Option<Marker> = lifecycle::private_read(
+        home,
+        &cancel_path(home, &job.request.job_id)?,
+        4096,
+        "cigar_switch_job",
+    )?;
     let Some(marker) = marker else {
         return Ok(false);
     };

@@ -10,18 +10,32 @@
 //!   "command_absence_proves_uninstalled", "runtime_probe", "detection"}`
 //!   answers `{"warnings": [...]}`, the warnings to append to the detection's
 //!   own, in order. `runtime_probe` is `null` when the adapter ran no probe,
-//!   else `{"timed_out", "failed", "reported_no_artifacts"}`: whether the probe
-//!   timed out, exited unsuccessfully, and listed no MCP servers.
+//!   else the adapter's own report; the facts read from it are whether the
+//!   probe timed out (`timed_out`), exited unsuccessfully (`ok` is false),
+//!   listed no MCP servers (`reported_artifacts` is zero), and whether a
+//!   managed install exists (`managed_install_present`) with its runtime hook
+//!   registered (`runtime_hook_registered`).
 //! - `{"op": "setup_status", "command_absence_proves_uninstalled",
 //!   "detection", "warnings"}` answers `{"setup_status": "active" | "broken" |
 //!   "partial" | "not_found"}`.
 //! - `{"op": "uses_guard", "artifacts"}` answers `{"uses_guard": bool}`.
+//! - `{"op": "readiness", "setup_status", "runtime_probe"}` answers the
+//!   doctor's runtime readiness; `harness_diagnostics_readiness` has it.
+//! - `{"op": "launcher_artifact", ...}` answers the artifact for the Guard
+//!   launcher shim a harness installed; `harness_launcher_artifact` has the
+//!   request and answer.
+//! - `{"op": "diagnostics", ...}` answers the whole doctor report for one
+//!   harness; `harness_diagnostics_report` has the request and answer.
+//! - `{"op": "shell_command", ...}` answers an argument vector as one shell
+//!   command line; `harness_shell_command` has the request and answer.
 //!
 //! A detection is `{"config_paths", "command_available", "artifacts"}` and an
 //! artifact is `{"artifact_type", "command", "args", "harness"}`. The native
 //! request parser refuses any array wider than 4096 entries, so every list
 //! (config paths, artifacts, an artifact's args, warnings) crosses as a list
 //! of chunks that join back here in order.
+
+use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
@@ -39,7 +53,7 @@ const SETUP_FAILURE_MARKERS: [&str; 4] = [
 ];
 const GUARD_LAUNCHER_SHIM: &str = "guard_launcher_shim";
 
-type Fields = Map<String, Value>;
+pub(crate) type Fields = Map<String, Value>;
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
     let fields = args.as_object().ok_or(ERR_INVALID)?;
@@ -92,51 +106,102 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
             let listed = artifacts(fields.get("artifacts"))?;
             Ok(json!({ "uses_guard": listed.iter().any(Artifact::uses_guard) }))
         }
+        "launcher_artifact" => crate::harness_launcher_artifact::answer(fields),
+        "diagnostics" => crate::harness_diagnostics_report::answer(fields),
+        "shell_command" => crate::harness_shell_command::answer(fields),
+        "readiness" => {
+            expect_keys(fields, &["op", "setup_status", "runtime_probe"])?;
+            crate::harness_diagnostics_readiness::answer(fields)
+        }
         _ => Err(ERR_INVALID),
     }
 }
 
-struct Adapter<'a> {
-    harness: &'a str,
-    executable: &'a str,
-    command_absence_proves_uninstalled: bool,
+/// Whether `path` is a launcher shim Guard wrote: a readable UTF-8 file that
+/// names its CLI module and the `guard run` command.
+pub(crate) fn is_launcher_shim(path: &Path) -> bool {
+    path.is_file()
+        && std::fs::read_to_string(path).is_ok_and(|text| {
+            ["codex_plugin_scanner.cli", "guard", "run"]
+                .iter()
+                .all(|needle| text.contains(needle))
+        })
+}
+
+pub(crate) struct Adapter<'a> {
+    pub(crate) harness: &'a str,
+    pub(crate) executable: &'a str,
+    pub(crate) command_absence_proves_uninstalled: bool,
 }
 
 #[derive(Clone, Copy, Default)]
-struct Probe {
+pub(crate) struct Probe {
     timed_out: bool,
     failed: bool,
     reported_no_artifacts: bool,
+    managed_install_present: bool,
+    runtime_hook_registered: bool,
 }
 
 impl Probe {
-    /// `None` when the adapter ran no probe.
-    fn parse(value: Option<&Value>) -> Result<Option<Self>, &'static str> {
+    /// What the adapter's runtime probe reported: `None` when it ran no probe.
+    ///
+    /// The probe is the adapter's own report. A fact counts only when the
+    /// report states it as a JSON boolean (or, for the artifact count, as a
+    /// zero), so a report that omits a field never claims it.
+    pub(crate) fn parse(value: Option<&Value>) -> Result<Option<Self>, &'static str> {
         let value = value.ok_or(ERR_INVALID)?;
         if value.is_null() {
             return Ok(None);
         }
         let fields = value.as_object().ok_or(ERR_INVALID)?;
-        expect_keys(fields, &["timed_out", "failed", "reported_no_artifacts"])?;
+        let stated = |key: &str, expected: bool| fields.get(key) == Some(&Value::Bool(expected));
         Ok(Some(Self {
-            timed_out: flag(fields, "timed_out")?,
-            failed: flag(fields, "failed")?,
-            reported_no_artifacts: flag(fields, "reported_no_artifacts")?,
+            timed_out: stated("timed_out", true),
+            failed: stated("ok", false),
+            reported_no_artifacts: reports_zero(fields.get("reported_artifacts")),
+            managed_install_present: stated("managed_install_present", true),
+            runtime_hook_registered: stated("runtime_hook_registered", true),
         }))
     }
 }
 
-struct Artifact<'a> {
-    artifact_type: &'a str,
+/// Python's `value == 0`: a zero count, or `False`.
+fn reports_zero(value: Option<&Value>) -> bool {
+    match value {
+        Some(Value::Bool(stated)) => !stated,
+        Some(Value::Number(count)) => count.as_f64() == Some(0.0),
+        _ => false,
+    }
+}
+
+pub(crate) struct Artifact<'a> {
+    pub(crate) artifact_type: &'a str,
     command: Option<&'a str>,
     args: Vec<&'a str>,
     harness: &'a str,
 }
 
 impl<'a> Artifact<'a> {
-    fn parse(value: &'a Value) -> Result<Self, &'static str> {
+    /// An artifact is `{artifact_type, command, args, harness}`; a request
+    /// that also wants the artifact back whole adds `serialized`.
+    pub(crate) fn parse(value: &'a Value) -> Result<Self, &'static str> {
         let fields = value.as_object().ok_or(ERR_INVALID)?;
-        expect_keys(fields, &["artifact_type", "command", "args", "harness"])?;
+        if fields.contains_key("serialized") {
+            if !fields["serialized"].is_object() {
+                return Err(ERR_INVALID);
+            }
+            if fields.len() != 5 {
+                return Err(ERR_INVALID);
+            }
+        } else {
+            expect_keys(fields, &["artifact_type", "command", "args", "harness"])?;
+        }
+        for key in ["artifact_type", "command", "args", "harness"] {
+            if !fields.contains_key(key) {
+                return Err(ERR_INVALID);
+            }
+        }
         let command = match fields.get("command") {
             Some(Value::Null) => None,
             Some(Value::String(command)) => Some(command.as_str()),
@@ -168,10 +233,10 @@ impl<'a> Artifact<'a> {
     }
 }
 
-struct Detection<'a> {
-    config_paths: Vec<&'a str>,
-    command_available: bool,
-    artifacts: Vec<Artifact<'a>>,
+pub(crate) struct Detection<'a> {
+    pub(crate) config_paths: Vec<&'a str>,
+    pub(crate) command_available: bool,
+    pub(crate) artifacts: Vec<Artifact<'a>>,
 }
 
 impl<'a> Detection<'a> {
@@ -228,7 +293,7 @@ impl<'a> Detection<'a> {
     }
 }
 
-fn added_warnings(
+pub(crate) fn added_warnings(
     detection: &Detection<'_>,
     adapter: &Adapter<'_>,
     probe: Option<Probe>,
@@ -288,12 +353,22 @@ fn added_warnings(
                     .to_owned(),
             );
         }
+        "hermes" if probe.managed_install_present && !probe.runtime_hook_registered => warnings
+            .push(
+            "Hermes runtime hook is not registered. Shell and tool calls are launch-review only. \
+             Run `hol-guard install hermes` to write a fail-closed hooks.pre_tool_call entry."
+                .to_owned(),
+        ),
         _ => {}
     }
     warnings
 }
 
-fn setup_status(detection: &Detection<'_>, warnings: &[&str], proves: bool) -> &'static str {
+pub(crate) fn setup_status(
+    detection: &Detection<'_>,
+    warnings: &[&str],
+    proves: bool,
+) -> &'static str {
     let guard_managed = detection.guard_managed();
     if guard_managed && warnings_include_setup_failure(warnings) {
         if proves && detection.only_tool_command_missing(warnings) {
@@ -325,7 +400,7 @@ fn warnings_include_setup_failure(warnings: &[&str]) -> bool {
 /// Whether any warning remains once the one about the missing tool command is
 /// set aside. Adapters word their own faults, so anything the missing command
 /// does not already explain keeps the setup broken.
-fn setup_failures_besides_missing_command(warnings: &[&str]) -> bool {
+pub(crate) fn setup_failures_besides_missing_command(warnings: &[&str]) -> bool {
     warnings
         .iter()
         .any(|warning| !warning.to_lowercase().contains(MISSING_COMMAND_MARKER))
@@ -350,11 +425,11 @@ fn value_mentions_guard(value: &str) -> bool {
     lowered.contains("codex_plugin_scanner.cli") || lowered.contains("hol-guard")
 }
 
-fn artifacts(value: Option<&Value>) -> Result<Vec<Artifact<'_>>, &'static str> {
+pub(crate) fn artifacts(value: Option<&Value>) -> Result<Vec<Artifact<'_>>, &'static str> {
     chunked(value)?.into_iter().map(Artifact::parse).collect()
 }
 
-fn strings(value: Option<&Value>) -> Result<Vec<&str>, &'static str> {
+pub(crate) fn strings(value: Option<&Value>) -> Result<Vec<&str>, &'static str> {
     chunked(value)?
         .into_iter()
         .map(|item| item.as_str().ok_or(ERR_INVALID))
@@ -362,7 +437,7 @@ fn strings(value: Option<&Value>) -> Result<Vec<&str>, &'static str> {
 }
 
 /// A list that crossed as chunks, joined back in order.
-fn chunked(value: Option<&Value>) -> Result<Vec<&Value>, &'static str> {
+pub(crate) fn chunked(value: Option<&Value>) -> Result<Vec<&Value>, &'static str> {
     let mut items = Vec::new();
     for chunk in value.and_then(Value::as_array).ok_or(ERR_INVALID)? {
         items.extend(chunk.as_array().ok_or(ERR_INVALID)?);
@@ -370,7 +445,7 @@ fn chunked(value: Option<&Value>) -> Result<Vec<&Value>, &'static str> {
     Ok(items)
 }
 
-fn expect_keys(fields: &Fields, keys: &[&str]) -> Result<(), &'static str> {
+pub(crate) fn expect_keys(fields: &Fields, keys: &[&str]) -> Result<(), &'static str> {
     if fields.len() == keys.len() && keys.iter().all(|key| fields.contains_key(*key)) {
         Ok(())
     } else {
@@ -378,11 +453,11 @@ fn expect_keys(fields: &Fields, keys: &[&str]) -> Result<(), &'static str> {
     }
 }
 
-fn text<'a>(fields: &'a Fields, key: &str) -> Result<&'a str, &'static str> {
+pub(crate) fn text<'a>(fields: &'a Fields, key: &str) -> Result<&'a str, &'static str> {
     fields.get(key).and_then(Value::as_str).ok_or(ERR_INVALID)
 }
 
-fn flag(fields: &Fields, key: &str) -> Result<bool, &'static str> {
+pub(crate) fn flag(fields: &Fields, key: &str) -> Result<bool, &'static str> {
     fields.get(key).and_then(Value::as_bool).ok_or(ERR_INVALID)
 }
 

@@ -87,6 +87,7 @@ fn sibling_jq_reads_admit_builtins_and_objects() {
         "\".queries | to_entries[] | .key\"",
         "\"{\\\"a\\\": .queries|has(\\\"x\\\"), \\\"b\\\": .queries|has(\\\"y\\\")}\"",
         "\".queries | has(\\\"x\\\")\"",
+        "'{(.a): .b}'",
     ] {
         let command = format!("jq -r {filter} {file}");
         assert!(allowed(&fixture, &command), "{command}");
@@ -105,12 +106,12 @@ fn sibling_jq_reads_keep_reaching_forms_reviewed() {
         format!("jq -r '$ENV' {file}"),
         format!("jq -r '{{a: $__loc__}}' {file}"),
         format!("jq -r 'input_filename' {file}"),
-        format!("jq -r '{{(.a): .b}}' {file}"),
         format!("jq -r '@sh' {file}"),
         format!("jq -r 'keys' {sibling}/.env"),
         format!("jq -r '{{a: .x}}' {sibling}/.env"),
         format!("jq --rawfile a {sibling}/.env 'keys' {file}"),
-        format!("jq --slurpfile a {file} 'keys' {file}"),
+        format!("jq --slurpfile a {sibling}/.env '$a' {file}"),
+        format!("jq --arg a x '$b' {file}"),
         format!("jq -f {file} {file}"),
         format!("jq -r 'keys | @sh' {file} | sh"),
     ] {

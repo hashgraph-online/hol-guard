@@ -170,6 +170,7 @@ pub(super) fn run(
         state.epoch.invalidate();
         state.generation = generation;
         state.settings = snapshot.settings.source_settings().clone();
+        publish_chosen(&state);
         let mut checked = actor.status();
         checked.active = false;
         state.last_check = Some(checked);

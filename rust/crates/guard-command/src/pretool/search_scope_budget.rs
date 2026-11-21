@@ -39,6 +39,8 @@ const INCLUDE_SCOPE_BUDGET: Duration = Duration::from_millis(75);
 /// evaluation. Past this point a walk is not started and a running one stops,
 /// which leaves half the evaluation for everything after the walks.
 const INCLUDE_SCOPE_CEILING: Duration = Duration::from_millis(250);
+/// How far past that ceiling a walk that only words a review may still run.
+const ADVICE_GRACE: Duration = Duration::from_millis(100);
 
 thread_local! {
     /// When the include walks of the evaluation running on this thread must
@@ -135,6 +137,16 @@ fn include_scope_deadline() -> Instant {
     INCLUDE_SCOPE_SPENT
         .with(std::cell::Cell::get)
         .map_or(deadline, |(ceiling, _)| deadline.min(ceiling))
+}
+
+/// When a walk that only words an already-decided review must stop: a little
+/// past the include walks' ceiling in the open evaluation, and no clock
+/// outside one, where a test drives the walk directly. The decision is made
+/// by then, so the time left after it is what the advice may use.
+pub(in crate::pretool) fn advice_walk_deadline() -> Option<Instant> {
+    INCLUDE_SCOPE_SPENT
+        .with(std::cell::Cell::get)
+        .map(|(ceiling, _)| ceiling + ADVICE_GRACE)
 }
 
 /// What the include walks of the open evaluation have left to spend.

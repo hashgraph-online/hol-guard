@@ -64,6 +64,8 @@ fn plans_match_the_retired_python() {
         }
         let mut want = expected.clone();
         want.as_object_mut().unwrap().remove("status");
+        // No recorded review carried a package key.
+        want["package_decision"] = Value::Null;
         // The retired Python saved nothing for a "do not remember" allow, even when
         // the request can only run on a one-shot grant. It now gets that grant.
         let one_shot_only = request.action == "allow"
@@ -247,4 +249,105 @@ fn a_do_not_remember_allow_grants_one_shot_only_to_requests_that_need_it() {
     let plan = evaluate(&request).unwrap();
     assert_eq!(plan["persistence"], "none");
     assert!(plan["local_once"].is_null());
+}
+
+#[test]
+fn an_always_allow_on_a_package_review_is_saved_under_its_package_key() {
+    use guard_contracts::{
+        ApprovalResolutionPlanEnvelopeV1, ContextDigestComponentsV1, PackageApprovalKeyV1,
+    };
+    use serde_json::json;
+    let token = crate::context_digest::build_context_token(&ContextDigestComponentsV1 {
+        identity: json!({}),
+        content: json!({}),
+        capabilities: json!({}),
+        policy: json!({}),
+        sandbox: json!({}),
+        extension_control_digest: "b".repeat(64),
+    })
+    .unwrap();
+    let vectors = gunzip_json(VECTORS);
+    let mut wire = vectors["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| {
+            let wire = &case["wire"];
+            case["expected"]["status"] != "error"
+                && wire["action"] == "allow"
+                && wire["scope"] == "artifact"
+                && wire["persist_policy"] == Value::Bool(true)
+                && wire["approval"]["harness"].is_string()
+        })
+        .expect("an Always allow vector")["wire"]
+        .clone();
+    wire["schema"] = Value::String(APPROVAL_RESOLUTION_PLAN_REQUEST_SCHEMA.to_owned());
+    let mut request: ApprovalResolutionPlanRequestV1 = serde_json::from_value(wire).unwrap();
+    let harness = request.approval.harness.clone().unwrap();
+    let key = PackageApprovalKeyV1 {
+        harness: harness.clone(),
+        artifact_id: format!("{harness}:project:package-request:{}", "c".repeat(64)),
+        artifact_hash: token.clone(),
+    };
+    let mut envelope = request.approval.envelope.clone().unwrap_or_default();
+    envelope.package_approval = Some(key.clone());
+    request.approval.envelope = Some(envelope);
+    let plan = evaluate(&request).unwrap();
+    assert_eq!(plan["persistence"], "persisted");
+    assert_eq!(
+        plan["package_decision"],
+        json!({
+            "harness": harness,
+            "scope": "artifact",
+            "action": "allow",
+            "artifact_id": key.artifact_id,
+            "artifact_hash": token,
+            "workspace": null,
+            "publisher": null,
+        })
+    );
+
+    // Allow once, Do not remember, a block, or a broader scope saves no key.
+    for change in [
+        |request: &mut ApprovalResolutionPlanRequestV1| request.persist_policy = None,
+        |request: &mut ApprovalResolutionPlanRequestV1| request.persist_policy = Some(false),
+        |request: &mut ApprovalResolutionPlanRequestV1| request.action = "block".to_owned(),
+        |request: &mut ApprovalResolutionPlanRequestV1| request.scope = "workspace".to_owned(),
+    ] {
+        let mut changed = request.clone();
+        change(&mut changed);
+        if let Ok(plan) = evaluate(&changed) {
+            assert!(plan["package_decision"].is_null(), "{plan}");
+        }
+    }
+    // Only this harness's own package request, keyed by a context token.
+    for bad in [
+        PackageApprovalKeyV1 {
+            harness: "other".to_owned(),
+            ..key.clone()
+        },
+        PackageApprovalKeyV1 {
+            artifact_id: format!("other:project:package-request:{}", "c".repeat(64)),
+            ..key.clone()
+        },
+        PackageApprovalKeyV1 {
+            artifact_id: format!("{harness}:native-pretool:bash"),
+            ..key.clone()
+        },
+        PackageApprovalKeyV1 {
+            artifact_id: format!("{harness}:project:package-request:"),
+            ..key.clone()
+        },
+        PackageApprovalKeyV1 {
+            artifact_hash: "sha256:abc".to_owned(),
+            ..key.clone()
+        },
+    ] {
+        let mut changed = request.clone();
+        changed.approval.envelope = Some(ApprovalResolutionPlanEnvelopeV1 {
+            package_approval: Some(bad),
+            ..ApprovalResolutionPlanEnvelopeV1::default()
+        });
+        assert!(evaluate(&changed).unwrap()["package_decision"].is_null());
+    }
 }

@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands, update_native_wheel
 from codex_plugin_scanner.guard.cli.update_resident_barrier import (
     release_before_post_update_repair,
     subprocess_failure_summary,
 )
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_resident_update_lock import NativeResidentUpdateLockError
 from tests.update_context_test_support import build_legacy_status_distribution, build_legacy_update_context
 

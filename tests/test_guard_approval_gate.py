@@ -18,8 +18,8 @@ import pytest
 from rich.console import Console
 
 from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard import approval_hook_copy as approval_hook_copy_module
 from codex_plugin_scanner.guard import store as guard_store_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -41,6 +41,7 @@ from codex_plugin_scanner.guard.cli.commands import run_guard_command
 from codex_plugin_scanner.guard.cli.commands_support_permission_store import _write_claude_native_permission_plan
 from codex_plugin_scanner.guard.config import editable_guard_settings, load_guard_config, reset_guard_settings
 from codex_plugin_scanner.guard.consumer.service import record_policy
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_tool_calls import allow_tool_call
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
@@ -652,6 +653,96 @@ def test_approval_gate_cli_noninteractive_uses_active_cooldown(
 
     assert payload["resolved"] is True
     assert store.get_approval_request("req-cli-cooldown")["status"] == "resolved"
+
+
+def _approve_inline(store: GuardStore, request_id: str) -> dict[str, object]:
+    """Approve the way the package shim's y/a prompt does."""
+
+    return run_approval_command(
+        SimpleNamespace(
+            approvals_command="approve",
+            request_id=request_id,
+            approval_action="allow",
+            scope="artifact",
+            reason="Approved in the terminal that ran the install.",
+            remember=False,
+            trust_local_tool=False,
+            fresh_approval_gate=True,
+        ),
+        store=store,
+        workspace=None,
+    )
+
+
+def test_inline_install_approval_asks_for_the_password_inside_an_open_cooldown(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store, cooldown_seconds=900)
+    _add_request(store, "req-inline-prime")
+    _approve(
+        store,
+        "req-inline-prime",
+        gate_input=ApprovalGateInput(password=PASSWORD, use_cooldown=True),
+        now=datetime.now(timezone.utc).isoformat(),
+    )
+    assert public_config(store.guard_home).cooldown_active is True
+    _add_request(store, "req-inline")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    asked: list[str] = []
+    answers = iter((WRONG_PASSWORD, PASSWORD))
+
+    def fake_getpass(prompt: str) -> str:
+        asked.append(prompt)
+        return next(answers)
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.cli.approval_gate_prompt.getpass.getpass", fake_getpass)
+
+    rejected = _approve_inline(store, "req-inline")
+
+    assert rejected.get("resolved") is not True
+    assert str(rejected["error"]).startswith("approval_gate_")
+    assert store.get_approval_request("req-inline")["status"] == "pending"
+
+    accepted = _approve_inline(store, "req-inline")
+
+    assert accepted["resolved"] is True
+    assert store.get_approval_request("req-inline")["status"] == "resolved"
+    assert asked == ["Approval password: ", "Approval password: "]
+
+
+def test_inline_install_approval_asks_for_a_new_code_after_a_recent_one(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
+    now = datetime.now(timezone.utc).isoformat()
+    _add_request(store, "req-totp-prime")
+    _approve(
+        store,
+        "req-totp-prime",
+        gate_input=ApprovalGateInput(totp_code=totp_code_at_counter(secret=secret, counter=_counter(now))),
+        now=now,
+    )
+    _add_request(store, "req-totp-inline")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    asked: list[str] = []
+
+    def fake_getpass(prompt: str) -> str:
+        asked.append(prompt)
+        return "000000"
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.cli.approval_gate_prompt.getpass.getpass", fake_getpass)
+
+    payload = _approve_inline(store, "req-totp-inline")
+
+    assert asked == ["Authenticator code: "]
+    assert payload.get("resolved") is not True
+    assert str(payload["error"]).startswith("approval_gate_totp")
+    assert store.get_approval_request("req-totp-inline")["status"] == "pending"
 
 
 def test_approval_gate_cli_noninteractive_block_without_strict_mode_does_not_prompt(
@@ -2110,6 +2201,7 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
     opened_urls: list[str] = []
     monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:5474")
     monkeypatch.setattr(runtime_mcp_module, "load_guard_daemon_auth_token", lambda _guard_home: "secret-token")
+    monkeypatch.setattr(approval_hook_copy_module, "load_guard_daemon_auth_token", lambda _guard_home: "secret-token")
     monkeypatch.setattr(runtime_mcp_module, "open_browser_url", lambda url: opened_urls.append(url) or True)
 
     response, event = proxy._allow_and_forward(
@@ -2129,8 +2221,13 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
 
     assert event["decision"] == "queue-approval"
     assert response["error"]["message"].startswith("HOL Guard stopped tool call dangerous-tool")
-    assert response["error"]["data"]["reviewUrl"].startswith("http://127.0.0.1:5474/requests/")
-    assert response["error"]["data"]["reviewUrl"] in response["error"]["message"]
+    review_url = response["error"]["data"]["reviewUrl"]
+    assert review_url.startswith("http://127.0.0.1:5474/requests/")
+    assert review_url in response["error"]["message"]
+    # The agent relays this link, so it must open signed in: a bare
+    # /requests/<id> page has no session and cannot show the request.
+    request_id = store.list_approval_requests(limit=10)[0]["request_id"]
+    assert review_url.startswith(f"http://127.0.0.1:5474/requests/{request_id}/"), review_url
     assert opened_urls == []
     assert len(store.list_approval_requests(limit=10)) == 1
     assert store.list_policy_decisions("codex") == []
@@ -2230,3 +2327,30 @@ def test_approval_gate_password_material_stays_out_of_public_payloads(tmp_path: 
     assert "approval_password" not in combined_public
     assert "approval_totp_code" not in combined_public
     assert "otpauth://" not in combined_public
+
+
+def test_public_config_keeps_the_pulse_fields_the_resident_reports() -> None:
+    from codex_plugin_scanner.guard.approval_gate_types import config_from_wire
+
+    wire = {
+        "enabled": True,
+        "configured": True,
+        "cooldown_seconds": 0,
+        "cooldown_active": False,
+        "fail_closed": False,
+        "strict_all_decisions": False,
+        "totp_enabled": False,
+        "totp_pending": False,
+        "pulse_enabled": True,
+        "pulse_cooldown_seconds": 900,
+    }
+    config = config_from_wire(wire)
+    assert config is not None
+    assert config.pulse_enabled is True
+    assert config.pulse_cooldown_seconds == 900
+    assert config.to_dict()["pulse_enabled"] is True
+
+    without_pulse = config_from_wire({k: v for k, v in wire.items() if not k.startswith("pulse_")})
+    assert without_pulse is not None
+    assert without_pulse.pulse_enabled is False
+    assert without_pulse.pulse_cooldown_seconds == 0

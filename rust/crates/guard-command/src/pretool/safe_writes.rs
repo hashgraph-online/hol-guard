@@ -4,15 +4,19 @@ mod checkout_floor;
 mod copies;
 #[path = "hooks_path_writes.rs"]
 mod hooks_path;
+#[path = "mkdir_targets.rs"]
+mod mkdir_targets;
 #[path = "plan_note_writes.rs"]
 mod plan_notes;
 #[path = "write_target_screens.rs"]
-mod screens;
+pub(super) mod screens;
+#[path = "temporary_directories.rs"]
+mod temporary_directories;
 use super::read_paths::{
     existing_regular_read_target, expand_home_read_path, resolved_location_allowed,
 };
 pub(crate) use checkout_floor::protected_checkout_destination;
-pub(super) use copies::{safe_copy_arguments, safe_copy_arguments_into};
+pub(super) use copies::{new_temporary_tree_target, safe_copy_arguments, safe_copy_arguments_into};
 pub(crate) use plan_notes::plan_note_write_sources;
 pub(super) use plan_notes::plan_note_write_target;
 pub(super) use screens::autostart_write_target;
@@ -70,6 +74,8 @@ pub(super) fn bounded_native_temporary_write_target(
     bounded_temporary_copy_target(
         value,
         super::PathContext {
+            literal_words: &[],
+            guard_home: None,
             home_dir,
             cwd,
             cdpath_unset: false,
@@ -77,6 +83,7 @@ pub(super) fn bounded_native_temporary_write_target(
             cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
+            python_environment_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
             gem_config_absent: false,
@@ -248,10 +255,7 @@ pub(super) fn safe_file_mutation_arguments(
         ("mktemp", [flag]) if flag == "-d" => {
             super::safe_reads::verified_path_context(context.home_dir, context.cwd)
         }
-        ("mkdir", [target]) => !target.starts_with('-') && creatable_target(target, context, true),
-        ("mkdir", [flag, target]) if matches!(flag.as_str(), "-p" | "--parents" | "--") => {
-            !target.starts_with('-') && creatable_target(target, context, true)
-        }
+        ("mkdir", operands) => mkdir_targets::mkdir_arguments(operands, context),
         ("touch", [target]) => !target.starts_with('-') && creatable_target(target, context, false),
         ("touch", [flag, target]) if flag == "--" => {
             !target.starts_with('-') && creatable_target(target, context, false)
@@ -284,7 +288,7 @@ pub(super) fn creatable_target(
 ) -> bool {
     bounded_write_target(value, context.home_dir, context.cwd, directory, true, false)
         || (std::path::Path::new(value).is_absolute()
-            && bounded_temporary_copy_target(value, context))
+            && bounded_temporary_target(value, context, directory))
 }
 
 pub(super) fn absent_move_destination(value: &str, context: super::PathContext<'_>) -> bool {
@@ -305,8 +309,13 @@ pub(super) fn absent_move_destination(value: &str, context: super::PathContext<'
 }
 
 #[cfg(unix)]
-fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
-    use super::read_paths::resolved_path_allowed_in_scope;
+pub(super) fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
+    bounded_temporary_target(value, context, false)
+}
+
+/// For `mkdir -p` (`directory`), an existing leaf must be the user's own private directory.
+#[cfg(unix)]
+fn bounded_temporary_target(value: &str, context: super::PathContext<'_>, directory: bool) -> bool {
     use std::os::unix::fs::MetadataExt;
     use std::path::Path;
 
@@ -336,9 +345,8 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
         return false;
     };
     let roots = [Path::new("/tmp"), Path::new("/var/tmp")];
-    // macOS mktemp uses the user's configured Darwin temp root, outside /tmp.
-    // Admit only that exact root after proving private ownership, not the
-    // entire /var/folders tree or another user's temporary directories.
+    // macOS mktemp uses the user's own Darwin temp root, outside /tmp. Admit
+    // only that exact private root, not the rest of /var/folders.
     #[cfg(target_os = "macos")]
     let darwin_temp = std::fs::canonicalize(std::env::temp_dir())
         .ok()
@@ -354,18 +362,18 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
         .iter()
         .filter_map(|root| std::fs::canonicalize(root).ok())
         .chain(darwin_temp)
-        .any(|root| {
-            parent.starts_with(&root)
-                && (parent == root
-                    || (parent_metadata.uid() == owner && parent_metadata.mode() & 0o022 == 0))
-        });
+        .any(|root| temporary_directories::private_chain(&root, &parent, owner));
     if !in_scope || !parent_metadata.is_dir() {
         return false;
     }
     // Do not follow a pre-existing leaf symlink or overwrite another user's
     // file (including a hard-link alias) in a shared temporary directory.
     match path.symlink_metadata() {
-        Ok(metadata) if !metadata.is_file() || metadata.uid() != owner || metadata.nlink() != 1 => {
+        Ok(metadata) if metadata.uid() != owner => return false,
+        Ok(metadata) if directory && (!metadata.is_dir() || metadata.mode() & 0o022 != 0) => {
+            return false
+        }
+        Ok(metadata) if !directory && (!metadata.is_file() || metadata.nlink() != 1) => {
             return false
         }
         Ok(_) => {}
@@ -375,25 +383,12 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
     let Some(target) = path.file_name().map(|name| parent.join(name)) else {
         return false;
     };
-    // The temporary carve-out must never sidestep the ordinary home or
-    // workspace boundaries when either happens to live under a temporary
-    // root (ephemeral runners, tests, installer sandboxes).
-    let inside_home = context
-        .home_dir
-        .and_then(|home| std::fs::canonicalize(home).ok())
-        .is_some_and(|home| target.starts_with(home));
-    let inside_workspace = context
-        .cwd
-        .map(|cwd| expand_home_read_path(cwd, context.home_dir).unwrap_or_else(|| cwd.to_owned()))
-        .and_then(|cwd| std::fs::canonicalize(cwd).ok())
-        .is_some_and(|workspace| target.starts_with(workspace));
-    if inside_home || inside_workspace {
-        return false;
-    }
-    resolved_path_allowed_in_scope(&target, context.home_dir, context.cwd, true)
-        && guard_secure_fs::hidden_write_parts_allowed(&target)
-        && !autostart_write_target(&target)
-        && !hooks_path::configured_hooks_write(&target, context.home_dir, context.cwd)
+    temporary_directories::temporary_target_allowed(&target, context)
+}
+
+#[cfg(not(unix))]
+fn bounded_temporary_target(value: &str, context: super::PathContext<'_>, _: bool) -> bool {
+    bounded_temporary_copy_target(value, context)
 }
 
 /// Windows `mktemp -d` (Git Bash `/tmp`) creates its directory in the user's
@@ -405,7 +400,7 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
 /// that tree, and the exact-spelling checks reject junctions, short names and
 /// case aliases on the way there.
 #[cfg(windows)]
-fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
+pub(super) fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
     use super::directory_targets::exact_drive_spelling;
     use super::read_paths::resolved_path_allowed_in_scope;
     use std::path::Path;
@@ -463,7 +458,10 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
 }
 
 #[cfg(all(not(unix), not(windows)))]
-fn bounded_temporary_copy_target(_value: &str, _context: super::PathContext<'_>) -> bool {
+pub(super) fn bounded_temporary_copy_target(
+    _value: &str,
+    _context: super::PathContext<'_>,
+) -> bool {
     false
 }
 

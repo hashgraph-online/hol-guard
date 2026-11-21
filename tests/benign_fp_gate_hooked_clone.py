@@ -11,6 +11,10 @@ answers Git's credential prompt from a shell function, two settings a
 developer keeps in a long-lived checkout's own configuration. Neither reaches
 into its worktree, so an ordinary edit there is contained as in
 ``app-portal-fix``.
+
+A third clone is a main checkout that turns every hook off with
+``core.hooksPath = /dev/null``, as scripted and throwaway checkouts often do.
+Staging and committing there is contained like in any other checkout.
 """
 
 from __future__ import annotations
@@ -34,7 +38,11 @@ def hooked_worktree_path(org: Path) -> Path:
 
 
 def hooked_cwds(org: Path) -> dict[str, Path]:
-    return {"org_hooked": hooked_worktree_path(org), "org_home_hooks": org.parent / "app-portal-home-hooks-fix"}
+    return {
+        "org_hooked": hooked_worktree_path(org),
+        "org_home_hooks": org.parent / "app-portal-home-hooks-fix",
+        "org_null_hooks": org.parent / "app-portal-null-hooks",
+    }
 
 
 def write_hooked_clone(org: Path, home: Path, git: Callable[..., str]) -> None:
@@ -64,3 +72,9 @@ def write_hooked_clone(org: Path, home: Path, git: Callable[..., str]) -> None:
     git(home_hooks, "update-ref", "refs/remotes/origin/main", "HEAD", home=home)
     (worktree / "docs").mkdir()
     (worktree / "docs" / "release-notes.md").write_text("Draft release notes.\n", encoding="utf-8")
+    null_hooks = hooked_cwds(org)["org_null_hooks"]
+    git(home, "clone", "--quiet", str(org / "app-portal"), str(null_hooks), home=home)
+    git(null_hooks, "remote", "set-url", "origin", ORIGIN_URL, home=home)
+    git(null_hooks, "config", "core.hooksPath", "/dev/null", home=home)
+    (null_hooks / "docs").mkdir(exist_ok=True)
+    (null_hooks / "docs" / "notes.md").write_text("Working notes.\n", encoding="utf-8")

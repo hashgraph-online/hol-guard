@@ -173,3 +173,73 @@ fn a_payload_reference_needs_version_one_a_path_and_a_digest() {
         Err(())
     );
 }
+
+#[test]
+fn a_refused_working_directory_that_does_not_exist_is_answered_at_once() {
+    let root = tempfile::tempdir().expect("temporary directory");
+    let present = root.path().to_string_lossy().into_owned();
+    let mistyped = root.path().join("projects-gfull-s171").join("pluggy");
+    let mistyped = mistyped.to_string_lossy().into_owned();
+    let outside = Rejection {
+        parameter: "workspace".to_owned(),
+        reason: "unexpected_root".to_owned(),
+    };
+
+    let reason = missing_workdir(
+        "PreToolUse",
+        &outside,
+        &[Some(&mistyped), Some(&present), None],
+    )
+    .expect("a missing working directory is named");
+    assert!(reason.contains("working directory does not exist"));
+    assert!(reason.contains(&mistyped));
+    // The payload `cwd` is the one refused when no workdir was named.
+    assert!(missing_workdir("PreToolUse", &outside, &[None, Some(&mistyped), None]).is_some());
+}
+
+#[test]
+fn a_refused_working_directory_that_exists_still_goes_to_review() {
+    let root = tempfile::tempdir().expect("temporary directory");
+    let present = root.path().to_string_lossy().into_owned();
+    let missing = root.path().join("absent").to_string_lossy().into_owned();
+    let rejection = |parameter: &str, reason: &str| Rejection {
+        parameter: parameter.to_owned(),
+        reason: reason.to_owned(),
+    };
+    let outside = rejection("workspace", "unexpected_root");
+
+    assert_eq!(
+        missing_workdir(
+            "PreToolUse",
+            &outside,
+            &[Some(&present), Some(&missing), None]
+        ),
+        None
+    );
+    assert_eq!(
+        missing_workdir("PreToolUse", &outside, &[None, Some("relative/dir"), None]),
+        None
+    );
+    assert_eq!(
+        missing_workdir("PreToolUse", &outside, &[None, None, None]),
+        None
+    );
+    assert_eq!(
+        missing_workdir("UserPromptSubmit", &outside, &[Some(&missing), None, None]),
+        None
+    );
+    assert_eq!(
+        missing_workdir("PostToolUse", &outside, &[Some(&missing), None, None]),
+        None
+    );
+    let home = rejection("home", "unexpected_root");
+    assert_eq!(
+        missing_workdir("PreToolUse", &home, &[Some(&missing), None, None]),
+        None
+    );
+    let unresolvable = rejection("workspace", "invalid_action_workdir");
+    assert_eq!(
+        missing_workdir("PreToolUse", &unresolvable, &[Some(&missing), None, None]),
+        None
+    );
+}

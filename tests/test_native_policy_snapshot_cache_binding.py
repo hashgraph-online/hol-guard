@@ -33,7 +33,7 @@ class _TimeoutPublisher:
     def start(self) -> None:
         return
 
-    def register_workspace(self, workspace: Path | None) -> bool:
+    def register_workspace(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
         del workspace
         return True
 
@@ -63,7 +63,7 @@ class _PoisonPublisher(_TimeoutPublisher):
     def start(self) -> None:
         raise AssertionError("CLI hook workers must not start a competing publisher")
 
-    def register_workspace(self, workspace: Path | None) -> bool:
+    def register_workspace(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
         del workspace
         raise AssertionError("CLI hook workers must not request a competing publish")
 
@@ -72,7 +72,7 @@ class _StartupWorkspacePublisher(_TimeoutPublisher):
     def __init__(self) -> None:
         self.events: list[tuple[str, Path | None]] = []
 
-    def register_workspace(self, workspace: Path | None) -> bool:
+    def register_workspace(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
         self.events.append(("register", workspace))
         return True
 

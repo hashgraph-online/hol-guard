@@ -2,6 +2,31 @@ use serde_json::json;
 
 use super::*;
 
+#[test]
+fn a_malformed_coverage_reply_is_refused() {
+    let valid = json!({
+        "schema": COVERAGE_SCHEMA,
+        "catalog_digest": "catalog",
+        "compound": false,
+        "segments": [{"index": 0}],
+    });
+    assert_eq!(validated_coverage(valid.clone()), Some(valid.clone()));
+    for (field, wrong) in [
+        ("schema", json!("guard.approval-extension-coverage.v2")),
+        ("segments", json!([])),
+        ("compound", json!(1)),
+        ("extra", json!(true)),
+    ] {
+        let mut malformed = valid.clone();
+        malformed[field] = wrong;
+        assert_eq!(validated_coverage(malformed), None, "{field}");
+    }
+    let mut no_catalog = valid;
+    no_catalog.as_object_mut().unwrap().remove("catalog_digest");
+    assert_eq!(validated_coverage(no_catalog), None);
+    assert_eq!(validated_coverage(json!("coverage")), None);
+}
+
 fn pending(extra: Value) -> Map<String, Value> {
     let mut row = json!({"request_id": "r1", "status": "pending"});
     for (key, value) in extra.as_object().unwrap() {
@@ -17,6 +42,64 @@ fn view(health: &str, revision: u64, managed: u64) -> ApprovalExtensionControlVi
         "registry_catalog_digest": "d",
     }))
     .unwrap()
+}
+
+fn coverage_hint(digest: &str) -> Value {
+    json!({
+        "schema": "guard.extension-coverage-hint.v1",
+        "catalog_digest": digest,
+        "segment_total": 1,
+        "segments": [{
+            "index": 0,
+            "executable": "git",
+            "extension_ids": ["command.git"],
+            "rule_ids": ["command.git.example"],
+            "permission_ids": [],
+        }],
+    })
+}
+
+fn allow_hint() -> Value {
+    json!({
+        "schema": "guard.extension-allow-hint.v1",
+        "permission_ids": ["command.git.permission.example"],
+        "rule_ids": ["command.git.example"],
+        "extension_ids": ["command.git"],
+        "relied_permission_ids": [],
+        "catalog_digest": "b".repeat(64),
+    })
+}
+
+#[test]
+fn stored_coverage_stays_attached_to_a_recovered_allow() {
+    let stored = coverage_hint(&"a".repeat(64));
+    let mut live = allow_hint();
+    live["coverage"] = coverage_hint(&"c".repeat(64));
+
+    let result = recovered(stored.clone(), || Some(live));
+
+    assert_eq!(shape(&result, "allow"), shape(&allow_hint(), "allow"));
+    assert_eq!(shape(&result, "coverage"), Some(stored));
+}
+
+#[test]
+fn existing_settlement_and_connector_hints_skip_recovery() {
+    let mut combined = allow_hint();
+    combined["coverage"] = coverage_hint(&"a".repeat(64));
+    let connector =
+        json!({"schema": "guard.connector-setup-hint.v1", "cli_id": "local-cli.example"});
+    for stored in [combined, allow_hint(), connector] {
+        assert_eq!(
+            recovered(stored.clone(), || panic!("stored hint was reviewed again")),
+            stored
+        );
+    }
+}
+
+#[test]
+fn a_row_without_a_hint_uses_the_live_answer_when_available() {
+    assert_eq!(recovered(Value::Null, || Some(allow_hint())), allow_hint());
+    assert_eq!(recovered(Value::Null, || None), Value::Null);
 }
 
 #[test]

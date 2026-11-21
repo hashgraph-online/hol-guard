@@ -1,10 +1,22 @@
-"""Isolated, resource-bounded subprocesses for managed Codex hooks."""
+"""Client for the native hook launcher.
+
+The native runtime owns isolated hook process launch: the process group or
+Windows Job Object, resource limits, the output bound, the deadline, the
+quarantine retry, the command contracts and the environment allowlist. This
+module only starts the native ``hook-launch`` op, holds its stdin open for the
+run (closing it is the stop signal), and renders the one JSON answer.
+
+Python is the only process that exists before the launcher does, so starting
+the launcher, pumping its stdin and stdout, and bounding the wait on it are the
+one thing that cannot move into Rust.
+"""
 
 from __future__ import annotations
 
+import functools
+import json
+import math
 import os
-import signal
-import stat
 import subprocess
 import threading
 import time
@@ -12,75 +24,27 @@ from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
 
-from .codex_hook_process_runtime import (
-    _HOOK_PROCESS_FINAL_IO_JOIN_TIMEOUT_SECONDS,
-    _HOOK_PROCESS_FINAL_REAP_TIMEOUT_SECONDS,
-    join_and_cleanup_hook_process,
-    start_hook_io,
-    wait_for_hook_process,
-)
-from .codex_hook_windows_job import (
-    WindowsHookJob,
-    close_windows_hook_job,
-    spawn_windows_hook_process,
-)
 from .native_process_stop_scope import scoped_native_stop_event
 
 _HOOK_SUBPROCESS_OUTPUT_LIMIT = 1_000_000
-_HOOK_ENVIRONMENT_KEYS = frozenset(
-    {
-        "CODEX_HOME",
-        "COMSPEC",
-        "HOME",
-        "HOL_GUARD_HOOK_FAILURE_KIND",
-        "HOL_GUARD_NATIVE",
-        "HOL_GUARD_NATIVE_BINARY",
-        # A source checkout names its source compiler; the compiler refuses
-        # either override when a packaged compiler is present.
-        "HOL_GUARD_NATIVE_SOURCE_COMPILER",
-        "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER",
-        # Test-mode and non-production diagnostic markers forwarded so a
-        # contained hook process keeps the same boundary as its parent.
-        "HOL_GUARD_TEST_MODE",
-        "HOL_GUARD_NATIVE_DIAGNOSTIC",
-        # Dedicated opt-in for the resident's supply-chain test seams. Kept
-        # separate from diagnostics so diagnostics alone never enable them.
-        "HOL_GUARD_RESIDENT_TEST_SEAMS",
-        "LANG",
-        "PATH",
-        "PATHEXT",
-        "SYSTEMROOT",
-        "TEMP",
-        "TMP",
-        "TMPDIR",
-        "USERPROFILE",
-        "WINDIR",
-    }
-)
+LAUNCHER_ARGS = ("hook-launch", "--stdin")
+# The launcher enforces the deadline itself and needs a moment to reap and
+# settle; past this the launcher is the thing that is stuck.
+_ANSWER_GRACE_SECONDS = 5.0
+_SHORT_OP_TIMEOUT_SECONDS = 10.0
+_STOP_POLL_SECONDS = 0.02
+_CREATE_NO_WINDOW = 0x08000000
 
-
-def _truncate_decoded_output(value: str, limit: int) -> str:
-    """Keep decoded output within a byte budget after replacement decoding."""
-
-    encoded = value.encode("utf-8")
-    if len(encoded) <= limit:
-        return value
-    return encoded[: max(0, limit)].decode("utf-8", errors="ignore")
-
-
-def _decode_combined_output(
-    stdout_bytes: bytearray,
-    stderr_bytes: bytearray,
-    output_limit: int,
-) -> tuple[str, str]:
-    """Decode both streams while preserving their shared byte bound."""
-
-    remaining = max(0, output_limit)
-    stdout = _truncate_decoded_output(bytes(stdout_bytes).decode("utf-8", errors="replace"), remaining)
-    remaining = max(0, remaining - len(stdout.encode("utf-8")))
-    stderr = _truncate_decoded_output(bytes(stderr_bytes).decode("utf-8", errors="replace"), remaining)
-    return stdout, stderr
+# Survivors a launch reported that the launcher could not settle, by pid. A
+# later launch that contained its own child says nothing about them, so an entry
+# leaves only once its process is confirmed gone (the old quarantine kept the
+# handle and cleared only when the retry reaped it). ``_UNKNOWN_SURVIVOR`` is a
+# survivor the launcher could not name: nothing can confirm it stopped.
+_UNKNOWN_SURVIVOR = -1
+_HOOK_PROCESS_SURVIVORS: set[int] = set()
+_HOOK_PROCESS_SURVIVORS_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,106 +62,123 @@ class BoundedHookProcessResult:
     stderr_bytes: bytes = b""
 
 
-@dataclass(slots=True)
-class _QuarantinedHookProcess:
-    process: subprocess.Popen[bytes]
-    windows_job: WindowsHookJob | None
-    io_threads: tuple[threading.Thread, ...]
-
-
-_HOOK_PROCESS_CONTAINMENT_FAILED = threading.Event()
-_HOOK_PROCESS_QUARANTINE_LOCK = threading.Lock()
-_HOOK_PROCESS_QUARANTINE: list[_QuarantinedHookProcess] = []
-
-
-def _retry_quarantined_hook_processes(*, deadline_monotonic: float | None = None) -> bool:
-    if deadline_monotonic is None:
-        _ = _HOOK_PROCESS_QUARANTINE_LOCK.acquire()
-    elif not _HOOK_PROCESS_QUARANTINE_LOCK.acquire(timeout=max(0.0, deadline_monotonic - time.monotonic())):
-        return False
-    retry_deadline = time.monotonic() + _HOOK_PROCESS_FINAL_IO_JOIN_TIMEOUT_SECONDS
-    if deadline_monotonic is not None:
-        retry_deadline = min(retry_deadline, deadline_monotonic)
-    try:
-        survivors: list[_QuarantinedHookProcess] = []
-        for index, quarantined in enumerate(_HOOK_PROCESS_QUARANTINE):
-            if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
-                # Leave unvisited helpers quarantined for the next retry.
-                survivors.extend(_HOOK_PROCESS_QUARANTINE[index:])
-                break
-            contained = _kill_hook_process(quarantined.process, quarantined.windows_job)
-            remaining = max(0.0, retry_deadline - time.monotonic())
-            try:
-                _ = quarantined.process.wait(timeout=min(_HOOK_PROCESS_FINAL_REAP_TIMEOUT_SECONDS, remaining))
-            except subprocess.TimeoutExpired:
-                contained = False
-            for thread in quarantined.io_threads:
-                _ = thread.join(timeout=max(0.0, retry_deadline - time.monotonic()))
-            if any(thread.is_alive() for thread in quarantined.io_threads):
-                contained = False
-            elif quarantined.windows_job is not None and contained:
-                try:
-                    close_windows_hook_job(quarantined.windows_job)
-                except OSError:
-                    contained = False
-                else:
-                    quarantined.windows_job = None
-            if not any(thread.is_alive() for thread in quarantined.io_threads):
-                _close_process_streams(quarantined.process)
-            contained = (
-                contained
-                and quarantined.process.poll() is not None
-                and all(not thread.is_alive() for thread in quarantined.io_threads)
-            )
-            if not contained:
-                survivors.append(quarantined)
-        _HOOK_PROCESS_QUARANTINE[:] = survivors
-        if survivors:
-            _HOOK_PROCESS_CONTAINMENT_FAILED.set()
-            return False
-        _HOOK_PROCESS_CONTAINMENT_FAILED.clear()
-        return True
-    finally:
-        _HOOK_PROCESS_QUARANTINE_LOCK.release()
-
-
 def hook_processes_contained(*, deadline_monotonic: float | None = None) -> bool:
-    """Confirm no quarantined hook process survives, retrying the quarantine once."""
-    if not _HOOK_PROCESS_CONTAINMENT_FAILED.is_set():
-        return True
-    if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+    """Whether no launch left a survivor the native launcher could not settle."""
+    del deadline_monotonic
+    return not _containment_failed()
+
+
+def _process_stopped(pid: int) -> bool:
+    """Whether ``pid`` is confirmed gone. Only a POSIX probe is safe: ``os.kill`` terminates on Windows."""
+    if pid <= 0 or os.name == "nt":
         return False
-    return _retry_quarantined_hook_processes(deadline_monotonic=deadline_monotonic)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    return False
 
 
-def _quarantine_hook_process(
-    process: subprocess.Popen[bytes],
-    windows_job: WindowsHookJob | None,
-    io_threads: Sequence[threading.Thread],
-) -> None:
-    with _HOOK_PROCESS_QUARANTINE_LOCK:
-        if any(quarantined.process is process for quarantined in _HOOK_PROCESS_QUARANTINE):
-            _HOOK_PROCESS_CONTAINMENT_FAILED.set()
-            return
-        _HOOK_PROCESS_QUARANTINE.append(
-            _QuarantinedHookProcess(
-                process=process,
-                windows_job=windows_job,
-                io_threads=tuple(io_threads),
-            )
+def _containment_failed() -> bool:
+    """Whether an unsettled survivor is still tracked; confirmed-stopped ones are dropped."""
+    with _HOOK_PROCESS_SURVIVORS_LOCK:
+        _HOOK_PROCESS_SURVIVORS.difference_update([pid for pid in _HOOK_PROCESS_SURVIVORS if _process_stopped(pid)])
+        return bool(_HOOK_PROCESS_SURVIVORS)
+
+
+def _track_survivors(answer: Mapping[str, object] | None) -> None:
+    named = answer.get("survivors") if answer is not None else None
+    pids = (
+        [pid for pid in named if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0]
+        if isinstance(named, list)
+        else []
+    )
+    with _HOOK_PROCESS_SURVIVORS_LOCK:
+        _HOOK_PROCESS_SURVIVORS.update(pids or [_UNKNOWN_SURVIVOR])
+
+
+def native_launcher_path(launcher: str | os.PathLike[str] | None = None) -> str | None:
+    """The validated native runtime that serves ``hook-launch``, or ``None``."""
+    if launcher is not None:
+        return os.fspath(launcher)
+    from .native_runtime import native_runtime_status
+
+    status = native_runtime_status()
+    if not status.available or not status.compatible or status.identity is None:
+        return None
+    return os.fspath(status.identity.path)
+
+
+class PopenOptions(TypedDict, total=False):
+    """The process-creation options a launcher takes."""
+
+    creationflags: int
+    start_new_session: bool
+
+
+def launcher_popen_options() -> PopenOptions:
+    """Process-creation options of a launcher: detached from our console and session."""
+    if os.name == "nt":
+        return {"creationflags": _CREATE_NO_WINDOW}
+    return {"start_new_session": True}
+
+
+def _launcher_environment() -> dict[str, str]:
+    from .native_runtime import _isolated_environment
+
+    return _isolated_environment()
+
+
+def native_launcher_call(operation: Mapping[str, object]) -> dict[str, object] | None:
+    """Run one short launcher op on the validated native runtime and return its answer object, or ``None``."""
+    path = native_launcher_path()
+    if path is None:
+        return None
+    try:
+        completed = subprocess.run(
+            [path, *LAUNCHER_ARGS],
+            input=json.dumps(operation).encode("utf-8") + b"\n",
+            capture_output=True,
+            timeout=_SHORT_OP_TIMEOUT_SECONDS,
+            env=_launcher_environment(),
+            check=False,
+            **launcher_popen_options(),
         )
-        _HOOK_PROCESS_CONTAINMENT_FAILED.set()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    return _decode_answer(completed.stdout)
 
 
-def _close_process_streams(process: subprocess.Popen[bytes]) -> None:
-    for stream in (
-        getattr(process, "stdin", None),
-        getattr(process, "stdout", None),
-        getattr(process, "stderr", None),
-    ):
-        if stream is not None:
-            with suppress(OSError):
-                stream.close()
+def _decode_answer(payload: bytes) -> dict[str, object] | None:
+    try:
+        answer = json.loads(payload)
+    except ValueError:
+        return None
+    return answer if isinstance(answer, dict) else None
+
+
+def _command_answer(operation: Mapping[str, object]) -> tuple[str, ...]:
+    answer = native_launcher_call(operation)
+    command = None if answer is None else answer.get("command")
+    if not isinstance(command, list) or not all(isinstance(part, str) for part in command):
+        raise RuntimeError("the native runtime is unavailable to build the isolated command")
+    return tuple(command)
+
+
+@functools.lru_cache(maxsize=64)
+def _guard_cli_command(python_executable: str, package_root: str, guard_args: tuple[str, ...]) -> tuple[str, ...]:
+    return _command_answer(
+        {
+            "op": "guard_cli_command",
+            "python": python_executable,
+            "package_root": package_root,
+            "guard_args": list(guard_args),
+        }
+    )
 
 
 def isolated_guard_cli_command(
@@ -206,14 +187,25 @@ def isolated_guard_cli_command(
     guard_args: Sequence[str],
 ) -> tuple[str, ...]:
     """Build the exact isolated fallback contract pinned to one package root."""
+    return _guard_cli_command(python_executable, str(package_root), tuple(guard_args))
 
-    bootstrap = (
-        "import sys;"
-        f"sys.path.insert(0, {str(package_root.resolve())!r});"
-        "from codex_plugin_scanner.cli import main;"
-        "raise SystemExit(main(sys.argv[1:]))"
+
+@functools.lru_cache(maxsize=64)
+def _daemon_start_command(
+    python_executable: str,
+    package_root: str,
+    guard_home: str,
+    home_dir: str,
+) -> tuple[str, ...]:
+    return _command_answer(
+        {
+            "op": "daemon_start_command",
+            "python": python_executable,
+            "package_root": package_root,
+            "guard_home": guard_home,
+            "home_dir": home_dir,
+        }
     )
-    return (python_executable, "-I", "-c", bootstrap, *guard_args)
 
 
 def isolated_daemon_start_command(
@@ -227,122 +219,184 @@ def isolated_daemon_start_command(
     ``home_dir`` remains optional for callers using the pre-2.1 signature.
     Managed manifests always bind the authenticated canonical home explicitly.
     """
-
     resolved_home_dir = Path.home() if home_dir is None else home_dir
-
-    bootstrap = (
-        "import os,sys;"
-        f"sys.path.insert(0, {str(package_root.resolve())!r});"
-        "from pathlib import Path;"
-        "from codex_plugin_scanner.guard.native_daemon_manage import schedule_guard_daemon_recovery;"
-        "failure_kind=os.environ.get('HOL_GUARD_HOOK_FAILURE_KIND','transport-failure');"
-        "failure_kind=failure_kind if failure_kind in"
-        " {'overload','transport-failure','authenticated-control-plane-failure'}"
-        " else 'transport-failure';"
-        f"schedule_guard_daemon_recovery(Path({str(guard_home)!r}),"
-        f"home_dir=Path({str(resolved_home_dir)!r}),failure_kind=failure_kind)"
-    )
-    return (python_executable, "-I", "-c", bootstrap)
+    return _daemon_start_command(python_executable, str(package_root), str(guard_home), str(resolved_home_dir))
 
 
-def desktop_hook_proxy_context(environment: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Retain only the signed Desktop proxy selectors across hook boundaries."""
-
-    source = os.environ if environment is None else environment
-    if source.get("HOL_GUARD_DESKTOP") != "1":
-        return {}
-    proxy = source.get("HOL_GUARD_DESKTOP_HOOK_PROXY", "")
-    if not proxy or "\x00" in proxy or not Path(proxy).is_absolute():
-        return {}
-    return {
-        "HOL_GUARD_DESKTOP": "1",
-        "HOL_GUARD_DESKTOP_HOOK_PROXY": proxy,
-    }
+@functools.lru_cache(maxsize=16)
+def _hook_environment(source: tuple[tuple[str, str], ...]) -> tuple[tuple[str, str], ...]:
+    answer = native_launcher_call({"op": "hook_environment", "source": dict(source)})
+    environment = None if answer is None else answer.get("environment")
+    if not isinstance(environment, dict):
+        return ()
+    return tuple((str(name), str(value)) for name, value in environment.items())
 
 
 def isolated_hook_environment(environment: Mapping[str, str] | None = None) -> dict[str, str]:
     """Keep OS, user-home, locale, temp, PATH, Codex, native, and signed proxy state."""
-
     source = os.environ if environment is None else environment
-    result = {
-        name: value
-        for name, value in source.items()
-        if name.upper() in _HOOK_ENVIRONMENT_KEYS or name.upper().startswith("LC_")
-    }
-    result.update(desktop_hook_proxy_context(source))
-    return result
+    return dict(_hook_environment(tuple(sorted(source.items()))))
 
 
 def private_hook_runtime_cwd(manifest_path: Path) -> Path:
     """Return the authenticated manifest's private Guard-owned directory."""
+    answer = native_launcher_call({"op": "private_runtime_cwd", "manifest_path": str(manifest_path)})
+    if answer is None:
+        raise ValueError("managed Codex hook runtime directory is unavailable")
+    message = answer.get("error")
+    if isinstance(message, str):
+        raise ValueError(message)
+    path = answer.get("path")
+    if not isinstance(path, str):
+        raise ValueError("managed Codex hook runtime directory is unavailable")
+    return Path(path)
 
-    parent = manifest_path.parent
-    try:
-        parent_metadata = parent.lstat()
-        resolved = parent.resolve(strict=True)
-        resolved_metadata = resolved.lstat()
-    except (OSError, RuntimeError) as exc:
-        raise ValueError("managed Codex hook runtime directory is unavailable") from exc
-    if stat.S_ISLNK(parent_metadata.st_mode) or not stat.S_ISDIR(parent_metadata.st_mode):
-        raise ValueError("managed Codex hook runtime directory is not a regular directory")
-    if (parent_metadata.st_dev, parent_metadata.st_ino) != (resolved_metadata.st_dev, resolved_metadata.st_ino):
-        raise ValueError("managed Codex hook runtime directory changed during validation")
+
+def windows_system_executable_path(filename: str) -> str:
+    """Resolve a system executable without trusting PATH or environment variables."""
     if os.name != "nt":
-        current_uid = os.getuid() if hasattr(os, "getuid") else None
-        if current_uid is not None and parent_metadata.st_uid != current_uid:
-            raise ValueError("managed Codex hook runtime directory has an unexpected owner")
-        if stat.S_IMODE(parent_metadata.st_mode) & 0o077:
-            raise ValueError("managed Codex hook runtime directory is not owner-only")
-    return resolved
+        raise OSError("Windows system APIs are unavailable")
+    answer = native_launcher_call({"op": "system_executable", "filename": filename})
+    if answer is None:
+        raise OSError("Windows system APIs are unavailable")
+    message = answer.get("error")
+    if isinstance(message, str):
+        if "filename" in message:
+            raise ValueError(message)
+        raise OSError(message)
+    path = answer.get("path")
+    if not isinstance(path, str):
+        raise OSError("Windows system APIs are unavailable")
+    return path
 
 
-def _spawn_hook_process(
-    command: Sequence[str],
+def _close_stdin(process: subprocess.Popen[bytes]) -> None:
+    if process.stdin is not None:
+        with suppress(OSError, ValueError):
+            process.stdin.close()
+
+
+def _reap_launcher(process: subprocess.Popen[bytes], *, graceful_seconds: float) -> None:
+    """End the launcher after its stdin closed; kill it only once it will not leave."""
+    _close_stdin(process)
+    try:
+        _ = process.wait(timeout=graceful_seconds)
+    except subprocess.TimeoutExpired:
+        with suppress(OSError):
+            process.kill()
+        with suppress(subprocess.TimeoutExpired):
+            _ = process.wait(timeout=1.0)
+    if process.stdout is not None:
+        with suppress(OSError, ValueError):
+            process.stdout.close()
+
+
+def _raw_bytes(text: object) -> bytes:
+    """The exact bytes of a hex stream a ``raw_output`` launch carries."""
+    try:
+        return bytes.fromhex(text) if isinstance(text, str) else b""
+    except ValueError:
+        return b""
+
+
+def _result_from_answer(answer: Mapping[str, object] | None) -> tuple[BoundedHookProcessResult, bool]:
+    """The launch result and whether the launcher settled its quarantine."""
+    # An answer the launcher gave but this cannot read: nothing vouches for the child.
+    failed = BoundedHookProcessResult(None, "", False, False, containment_failed=True)
+    if answer is None:
+        return failed, False
+    returncode = answer.get("returncode")
+    stdout = answer.get("stdout")
+    stderr = answer.get("stderr")
+    raw = [_raw_bytes(answer.get(name)) for name in ("stdout_hex", "stderr_hex")]
+    flags = [answer.get(name) for name in ("output_limit_exceeded", "timed_out", "containment_failed")]
+    if (
+        (returncode is not None and (not isinstance(returncode, int) or isinstance(returncode, bool)))
+        or not isinstance(stdout, str)
+        or not isinstance(stderr, str)
+        or not all(isinstance(flag, bool) for flag in flags)
+    ):
+        return failed, False
+    return (
+        BoundedHookProcessResult(
+            returncode=returncode,
+            stdout=stdout,
+            output_limit_exceeded=bool(flags[0]),
+            timed_out=bool(flags[1]),
+            containment_failed=bool(flags[2]),
+            stderr=stderr,
+            capture_incomplete=answer.get("capture_incomplete") is True,
+            stdout_bytes=raw[0],
+            stderr_bytes=raw[1],
+        ),
+        answer.get("quarantine_settled") is not False,
+    )
+
+
+def _exchange(
+    launcher: str,
+    launch: Mapping[str, object],
     *,
     cwd: Path,
     environment: Mapping[str, str],
-    allow_windows_breakaway: bool,
-    windows_kill_on_job_close: bool,
-    parent_liveness: bool,
-) -> tuple[subprocess.Popen[bytes], WindowsHookJob | None, int | None]:
-    windows_job: WindowsHookJob | None = None
-    liveness_read_fd: int | None = None
-    liveness_write_fd: int | None = None
+    deadline: float,
+    stop_event: threading.Event | None,
+) -> tuple[dict[str, object] | None, bool]:
+    """Run one ``launch`` request: the answer (``None`` when none came) and whether the launcher started."""
     try:
-        if os.name == "nt":
-            process, windows_job = spawn_windows_hook_process(
-                list(command),
-                cwd=cwd,
-                environment=dict(environment),
-                allow_breakaway=allow_windows_breakaway,
-                kill_on_close=windows_kill_on_job_close,
-            )
-        else:
-            child_environment = dict(environment)
-            pass_fds: tuple[int, ...] = ()
-            if parent_liveness:
-                liveness_read_fd, liveness_write_fd = os.pipe()
-                os.set_inheritable(liveness_read_fd, True)
-                child_environment["HOL_GUARD_PARENT_LIVENESS_FD"] = str(liveness_read_fd)
-                pass_fds = (liveness_read_fd,)
-            process = subprocess.Popen(
-                list(command),
-                cwd=cwd,
-                env=child_environment,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                start_new_session=True,
-                pass_fds=pass_fds,
-            )
+        process = subprocess.Popen(
+            [launcher, *LAUNCHER_ARGS],
+            cwd=cwd,
+            env=dict(environment),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            **launcher_popen_options(),
+        )
     except OSError:
-        for descriptor in (liveness_read_fd, liveness_write_fd):
-            if descriptor is not None:
-                os.close(descriptor)
+        return None, False
+    chunks: list[bytes] = []
+    answered = threading.Event()
+
+    def read_answer() -> None:
+        try:
+            if process.stdout is not None:
+                chunks.append(process.stdout.read())
+        except (OSError, ValueError):
+            pass
+        finally:
+            answered.set()
+
+    reader = threading.Thread(target=read_answer, daemon=True)
+    reader.start()
+    try:
+        body = dict(launch)
+        body["timeout_millis"] = max(0, math.ceil((deadline - time.monotonic()) * 1000))
+        if process.stdin is None:
+            raise OSError("hook launcher stdin is unavailable")
+        process.stdin.write(json.dumps(body).encode("utf-8") + b"\n")
+        process.stdin.flush()
+        hard_deadline = deadline + _ANSWER_GRACE_SECONDS
+        while not answered.wait(_STOP_POLL_SECONDS):
+            if stop_event is not None and stop_event.is_set():
+                # EOF is the stop signal; the launcher still owes the answer.
+                _close_stdin(process)
+                stop_event = None
+            if time.monotonic() >= hard_deadline:
+                break
+    except OSError:
+        pass
+    except BaseException:
+        # An interrupt must not leave the child running with nobody enforcing
+        # its deadline: end the launcher through its own stop path.
+        _reap_launcher(process, graceful_seconds=2.0)
         raise
-    if liveness_read_fd is not None:
-        os.close(liveness_read_fd)
-    return process, windows_job, liveness_write_fd
+    got_answer = answered.is_set()
+    _reap_launcher(process, graceful_seconds=1.0 if got_answer else 0.0)
+    reader.join(timeout=1.0)
+    if not got_answer or process.returncode != 0 or not chunks:
+        return None, True
+    return _decode_answer(chunks[0]), True
 
 
 def run_isolated_hook_process(
@@ -353,23 +407,28 @@ def run_isolated_hook_process(
     environment: Mapping[str, str],
     timeout_seconds: float | None = None,
     output_limit: int = _HOOK_SUBPROCESS_OUTPUT_LIMIT,
+    raw_output: bool = False,
     allow_windows_breakaway: bool = False,
     windows_kill_on_job_close: bool = True,
+    windows_job_memory_limit_bytes: int | None = None,
+    windows_active_process_limit: int | None = None,
     stop_event: threading.Event | None = None,
     parent_liveness: bool = False,
     deadline_monotonic: float | None = None,
+    launcher: str | os.PathLike[str] | None = None,
 ) -> BoundedHookProcessResult:
-    """Run one child with bounded input lifetime and combined output bytes.
+    """Run one child through the native launcher with bounded input lifetime and output bytes.
 
     ``stop_event`` lets a long-lived reviewed helper terminate through the same
-    process-group / Windows Job containment path used for deadlines. Existing
-    one-shot callers do not need to supply it. Without one, the stop event
-    bound by ``native_process_stop_scope`` applies, and once it is set no
-    child starts.
+    process-group / Windows Job containment path used for deadlines. Without
+    one, the stop event bound by ``native_process_stop_scope`` applies, and
+    once it is set no child starts.
 
-    When ``deadline_monotonic`` is supplied it is authoritative. The deadline
-    is captured before process creation so startup and stream cleanup consume
-    the caller's existing budget instead of receiving a new minimum timeout.
+    When ``deadline_monotonic`` is supplied it is authoritative: startup and
+    stream cleanup consume the caller's existing budget instead of receiving a
+    new minimum timeout. ``raw_output`` also returns the exact bytes each stream
+    wrote. ``launcher`` names the native runtime when the caller
+    already holds its validated path; otherwise the current runtime serves.
     """
     if stop_event is None:
         stop_event = scoped_native_stop_event()
@@ -382,106 +441,59 @@ def run_isolated_hook_process(
     else:
         deadline = deadline_monotonic
     if time.monotonic() >= deadline:
-        return BoundedHookProcessResult(
-            None, "", False, True, containment_failed=_HOOK_PROCESS_CONTAINMENT_FAILED.is_set()
-        )
-    if _HOOK_PROCESS_CONTAINMENT_FAILED.is_set() and not _retry_quarantined_hook_processes():
+        return BoundedHookProcessResult(None, "", False, True, containment_failed=_containment_failed())
+    if _containment_failed():
+        # An earlier survivor is not confirmed stopped: refuse the launch, as the in-process quarantine did.
         return BoundedHookProcessResult(None, "", False, False, containment_failed=True)
-    try:
-        process, windows_job, liveness_write_fd = _spawn_hook_process(
-            command,
-            cwd=cwd,
-            environment=environment,
-            allow_windows_breakaway=allow_windows_breakaway,
-            windows_kill_on_job_close=windows_kill_on_job_close,
-            parent_liveness=parent_liveness,
-        )
-    except OSError:
+    path = native_launcher_path(launcher)
+    if path is None:
         return BoundedHookProcessResult(None, "", False, False)
-    try:
-        stdout_bytes, stderr_bytes, output_limit_exceeded, capture_error, output_lock, io_threads = start_hook_io(
-            process,
-            input_text=input_text,
-            output_limit=output_limit,
-        )
-        returncode, timed_out, containment_confirmed, termination_requested = wait_for_hook_process(
-            process,
-            windows_job,
-            deadline=deadline,
-            stop_event=stop_event,
-            output_limit_exceeded=output_limit_exceeded,
-            terminate=_kill_hook_process,
-        )
-        windows_job, containment_confirmed, job_cleanup_failed = join_and_cleanup_hook_process(
-            process,
-            windows_job,
-            io_threads,
-            containment_confirmed=containment_confirmed,
-            termination_requested=termination_requested,
-            terminate=_kill_hook_process,
-            quarantine=_quarantine_hook_process,
-            close_streams=_close_process_streams,
-            close_job=close_windows_hook_job,
-        )
-    except BaseException:
-        # An interrupt (Ctrl-C) must not leave the child's group running with
-        # nobody enforcing its deadline; the child is in its own session.
-        _ = _kill_hook_process(process, windows_job)
-        raise
-    finally:
-        if liveness_write_fd is not None:
-            os.close(liveness_write_fd)
-    with output_lock:
-        stdout_decoded, stderr_decoded = _decode_combined_output(stdout_bytes, stderr_bytes, output_limit)
-        stdout_raw, stderr_raw = bytes(stdout_bytes), bytes(stderr_bytes)
-    return BoundedHookProcessResult(
-        returncode=None if job_cleanup_failed or not containment_confirmed else returncode,
-        stdout=stdout_decoded,
-        output_limit_exceeded=output_limit_exceeded.is_set(),
-        timed_out=timed_out,
-        containment_failed=not containment_confirmed,
-        stderr=stderr_decoded,
-        capture_incomplete=capture_error.is_set(),
-        stdout_bytes=stdout_raw,
-        stderr_bytes=stderr_raw,
+    answer, started = _exchange(
+        path,
+        {
+            "op": "launch",
+            "command": list(command),
+            "input_text": input_text,
+            "cwd": str(cwd),
+            "environment": dict(environment),
+            "output_limit": output_limit,
+            "raw_output": raw_output,
+            "parent_liveness": parent_liveness,
+            "allow_breakaway": allow_windows_breakaway,
+            "kill_on_close": windows_kill_on_job_close,
+            "job_memory_limit_bytes": windows_job_memory_limit_bytes,
+            "active_process_limit": windows_active_process_limit,
+        },
+        cwd=cwd,
+        environment=environment,
+        deadline=deadline,
+        stop_event=stop_event,
     )
-
-
-def _kill_hook_process(process: subprocess.Popen[bytes], windows_job: WindowsHookJob | None) -> bool:
-    if windows_job is not None:
-        try:
-            windows_job.terminate()
-            return True
-        except OSError:
-            pass
-    if os.name != "nt":
-        return _kill_hook_process_group(process)
-    if process.poll() is not None:
-        return windows_job is None
-    try:
-        process.kill()
-    except (OSError, ProcessLookupError):
-        return False
-    return windows_job is None
-
-
-def _kill_hook_process_group(process: subprocess.Popen[bytes]) -> bool:
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-        return True
-    except (OSError, ProcessLookupError):
-        if process.poll() is None:
-            with suppress(OSError, ProcessLookupError):
-                process.kill()
-            return False
-        return True
+    if answer is None and not started:
+        # The launcher never ran: the child never started, the same "could not
+        # start" result a failed spawn always was.
+        return BoundedHookProcessResult(None, "", False, False)
+    if answer is None and time.monotonic() >= deadline + _ANSWER_GRACE_SECONDS:
+        # The launcher itself stopped answering: nothing vouches for its child.
+        _track_survivors(None)
+        return BoundedHookProcessResult(None, "", False, True, containment_failed=True)
+    result, settled = _result_from_answer(answer)
+    if result.containment_failed and not settled:
+        _track_survivors(answer)
+    return result
 
 
 __all__ = [
+    "LAUNCHER_ARGS",
     "BoundedHookProcessResult",
+    "hook_processes_contained",
     "isolated_daemon_start_command",
     "isolated_guard_cli_command",
     "isolated_hook_environment",
+    "launcher_popen_options",
+    "native_launcher_call",
+    "native_launcher_path",
     "private_hook_runtime_cwd",
     "run_isolated_hook_process",
+    "windows_system_executable_path",
 ]

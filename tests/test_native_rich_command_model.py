@@ -12,8 +12,9 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import native_rich_command_model as client
-from codex_plugin_scanner.guard.runtime import command_model, command_tokens
+from codex_plugin_scanner.guard.runtime import command_model
 from tests import env_wrapper_test_support as env_wrapper
+from tests.python_oracles import command_tokens
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures/native_rich_command_model.json").read_text())
 

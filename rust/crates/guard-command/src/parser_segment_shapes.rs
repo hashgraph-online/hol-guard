@@ -394,6 +394,7 @@ fn quoted_word_end(chars: &[char], open: usize) -> Option<usize> {
 
 /// A list of top-level groups the splitter can blank, rather than one group
 /// that is the whole command. The decision reads that list.
+#[cfg(unix)]
 pub(crate) fn command_has_top_level_group_list(command: &str) -> bool {
     blanked_top_level_group_list(command).is_some()
 }
@@ -409,6 +410,7 @@ pub(crate) fn command_has_top_level_group_list(command: &str) -> bool {
 /// group does not move the next element, which the blanked text no longer
 /// says. A plan built from it must therefore grant nothing outside the
 /// workspace.
+#[cfg(unix)]
 pub(crate) fn blanked_top_level_group_list(command: &str) -> Option<String> {
     let chars: Vec<char> = command.chars().collect();
     if sole_command_group(&chars).is_some() {

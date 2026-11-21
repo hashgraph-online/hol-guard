@@ -626,6 +626,10 @@
     right: calc(var(--spacing) * 3);
   }
 
+  .right-4 {
+    right: calc(var(--spacing) * 4);
+  }
+
   .right-6 {
     right: calc(var(--spacing) * 6);
   }
@@ -740,6 +744,10 @@
 
   .col-start-2 {
     grid-column-start: 2;
+  }
+
+  .row-start-2 {
+    grid-row-start: 2;
   }
 
   .container {
@@ -1324,6 +1332,10 @@
     max-height: 90dvh;
   }
 
+  .max-h-\[90vh\] {
+    max-height: 90vh;
+  }
+
   .max-h-\[92vh\] {
     max-height: 92vh;
   }
@@ -1672,6 +1684,10 @@
     max-width: 62ch;
   }
 
+  .max-w-\[65ch\] {
+    max-width: 65ch;
+  }
+
   .max-w-\[68ch\] {
     max-width: 68ch;
   }
@@ -1796,10 +1812,6 @@
     flex: 16rem;
   }
 
-  .flex-\[1_1_18rem\] {
-    flex: 18rem;
-  }
-
   .flex-\[1_1_20rem\] {
     flex: 20rem;
   }
@@ -1839,6 +1851,11 @@
 
   .translate-x-0 {
     --tw-translate-x: 0;
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+
+  .translate-x-4 {
+    --tw-translate-x: calc(var(--spacing) * 4);
     translate: var(--tw-translate-x) var(--tw-translate-y);
   }
 
@@ -1974,6 +1991,10 @@
     grid-template-columns: auto 1fr;
   }
 
+  .grid-cols-\[auto_minmax\(0\,1fr\)\] {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
   .grid-cols-\[auto_minmax\(0\,1fr\)_auto\] {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
@@ -1984,6 +2005,10 @@
 
   .grid-cols-\[minmax\(0\,1fr\)\] {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .grid-cols-\[minmax\(5\.5rem\,auto\)_minmax\(0\,1fr\)\] {
+    grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
   }
 
   .grid-rows-7 {
@@ -2024,6 +2049,10 @@
 
   .items-start {
     align-items: flex-start;
+  }
+
+  .items-stretch {
+    align-items: stretch;
   }
 
   .justify-between {
@@ -3454,6 +3483,16 @@
     }
   }
 
+  .bg-brand-attention\/40 {
+    background-color: var(--brand-attention);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-attention\/40 {
+      background-color: color-mix(in oklab, var(--brand-attention) 40%, transparent);
+    }
+  }
+
   .bg-brand-attention\/60 {
     background-color: var(--brand-attention);
   }
@@ -3501,6 +3540,26 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-brand-attention\/\[0\.06\] {
       background-color: color-mix(in oklab, var(--brand-attention) 6%, transparent);
+    }
+  }
+
+  .bg-brand-attention\/\[0\.07\] {
+    background-color: var(--brand-attention);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-attention\/\[0\.07\] {
+      background-color: color-mix(in oklab, var(--brand-attention) 7.0%, transparent);
+    }
+  }
+
+  .bg-brand-attention\/\[0\.08\] {
+    background-color: var(--brand-attention);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-attention\/\[0\.08\] {
+      background-color: color-mix(in oklab, var(--brand-attention) 8%, transparent);
     }
   }
 
@@ -5989,6 +6048,11 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
+  .shadow-\[0_1px_2px_rgba\(15\,23\,42\,0\.2\)\] {
+    --tw-shadow: 0 1px 2px var(--tw-shadow-color, #0f172a33);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
   .shadow-\[0_1px_2px_rgba\(15\,23\,42\,0\.04\)\,0_8px_20px_rgba\(15\,23\,42\,0\.04\)\] {
     --tw-shadow: 0 1px 2px var(--tw-shadow-color, #0f172a0a), 0 8px 20px var(--tw-shadow-color, #0f172a0a);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
@@ -6177,8 +6241,16 @@
     }
   }
 
+  .ring-emerald-200 {
+    --tw-ring-color: var(--color-emerald-200);
+  }
+
   .ring-orange-200 {
     --tw-ring-color: var(--color-orange-200);
+  }
+
+  .ring-rose-200 {
+    --tw-ring-color: var(--color-rose-200);
   }
 
   .ring-slate-100 {
@@ -6355,7 +6427,7 @@
     rotate: 180deg;
   }
 
-  .group-open\/import\:rotate-90:is(:where(.group\/import):is([open], :popover-open, :open) *), .group-open\/prev\:rotate-90:is(:where(.group\/prev):is([open], :popover-open, :open) *) {
+  .group-open\/prev\:rotate-90:is(:where(.group\/prev):is([open], :popover-open, :open) *) {
     rotate: 90deg;
   }
 
@@ -7322,6 +7394,16 @@
     }
   }
 
+  .focus\:ring-brand-blue\/40:focus {
+    --tw-ring-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus\:ring-brand-blue\/40:focus {
+      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 40%, transparent);
+    }
+  }
+
   .focus\:ring-rose-600\/30:focus {
     --tw-ring-color: #e700444d;
   }
@@ -7493,6 +7575,10 @@
 
   .focus-visible\:outline-offset-2:focus-visible {
     outline-offset: 2px;
+  }
+
+  .focus-visible\:outline-brand-attention:focus-visible {
+    outline-color: var(--brand-attention);
   }
 
   .focus-visible\:outline-brand-blue:focus-visible {
@@ -7799,12 +7885,24 @@
       grid-column: span 2 / span 2;
     }
 
+    .sm\:col-start-3 {
+      grid-column-start: 3;
+    }
+
     .sm\:col-start-auto {
       grid-column-start: auto;
     }
 
+    .sm\:row-start-1 {
+      grid-row-start: 1;
+    }
+
     .sm\:-mx-6 {
       margin-inline: calc(var(--spacing) * -6);
+    }
+
+    .sm\:mx-5 {
+      margin-inline: calc(var(--spacing) * 5);
     }
 
     .sm\:mt-0 {
@@ -7877,10 +7975,6 @@
 
     .sm\:w-56 {
       width: calc(var(--spacing) * 56);
-    }
-
-    .sm\:w-72 {
-      width: calc(var(--spacing) * 72);
     }
 
     .sm\:w-auto {
@@ -7957,6 +8051,10 @@
 
     .sm\:grid-cols-\[8rem_minmax\(0\,1fr\)\] {
       grid-template-columns: 8rem minmax(0, 1fr);
+    }
+
+    .sm\:grid-cols-\[auto_minmax\(0\,1fr\)_auto\] {
+      grid-template-columns: auto minmax(0, 1fr) auto;
     }
 
     .sm\:grid-cols-\[minmax\(0\,1fr\)_auto\] {
@@ -8054,6 +8152,10 @@
       :where(.sm\:divide-brand-dark\/12 > :not(:last-child)) {
         border-color: color-mix(in oklab, var(--brand-dark) 12%, transparent);
       }
+    }
+
+    .sm\:self-auto {
+      align-self: auto;
     }
 
     .sm\:self-end {
@@ -8603,6 +8705,10 @@
 
     .lg\:grid-cols-\[1fr_340px\] {
       grid-template-columns: 1fr 340px;
+    }
+
+    .lg\:grid-cols-\[240px_minmax\(0\,1fr\)\] {
+      grid-template-columns: 240px minmax(0, 1fr);
     }
 
     .lg\:grid-cols-\[340px_minmax\(0\,1fr\)\] {
@@ -9564,6 +9670,23 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 .guard-extension-mark svg {
   block-size: 55%;
   inline-size: 55%;
+}
+
+.guard-extension-mark[data-kind="letter"] {
+  font-weight: 600;
+  line-height: 1;
+}
+
+.guard-extension-mark[data-kind="letter"][data-size="sm"] {
+  font-size: .6875rem;
+}
+
+.guard-extension-mark[data-kind="letter"][data-size="md"] {
+  font-size: 1.0625rem;
+}
+
+.guard-extension-mark[data-kind="letter"][data-size="lg"] {
+  font-size: 1.375rem;
 }
 
 .guard-extension-mark img {
@@ -12398,6 +12521,31 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 .cigar-usage-recent li { display: grid; gap: .1rem; min-width: 0; }
 .cigar-usage-recent li strong { color: var(--brand-dark); font-weight: 600; overflow-wrap: anywhere; }
 .cigar-usage-foot { max-width: 52rem; font-size: .75rem; line-height: 1.75; color: #64748b; }
+.cigar-savings { display: grid; gap: 1rem; padding: 1.5rem; border: 1px solid #e3e7f0; border-radius: .95rem; background: #fff; min-width: 0; }
+.cigar-savings h3 { max-width: 40rem; font-size: 1.35rem; line-height: 1.3; font-weight: 600; letter-spacing: -.01em; color: var(--brand-dark); text-wrap: balance; }
+.cigar-savings h3 strong { font-weight: 750; color: #2f6fd6; font-variant-numeric: tabular-nums; }
+.cigar-savings-lede, .cigar-savings-quiet p, .cigar-savings-how p { max-width: 65ch; font-size: .85rem; line-height: 1.7; color: #475569; }
+.cigar-savings-quiet h3 { font-size: 1rem; }
+.cigar-savings-bar { display: flex; height: .9rem; margin-top: .35rem; border-radius: 999px; overflow: hidden; background: #eef1f6; }
+.cigar-savings-used { flex: 0 0 var(--used); background: var(--brand-dark); }
+.cigar-savings-saved { flex: 1 1 auto; background: repeating-linear-gradient(135deg, #5599fe 0 3px, #d6e5ff 3px 7px); }
+@media (prefers-reduced-motion: no-preference) {
+  .cigar-savings-bar { animation: cigar-savings-grow .9s cubic-bezier(.16, 1, .3, 1) both; }
+}
+@keyframes cigar-savings-grow { from { clip-path: inset(0 100% 0 0 round 999px); } to { clip-path: inset(0 0 0 0 round 999px); } }
+.cigar-savings-key { display: flex; flex-wrap: wrap; gap: .4rem 1.25rem; font-size: .75rem; color: #475569; }
+.cigar-savings-key li { display: inline-flex; align-items: center; gap: .45rem; }
+.cigar-savings-swatch { width: .8rem; height: .8rem; border-radius: .2rem; }
+.cigar-savings-swatch.is-used { background: var(--brand-dark); }
+.cigar-savings-swatch.is-saved { background: repeating-linear-gradient(135deg, #5599fe 0 2px, #d6e5ff 2px 4px); }
+.cigar-savings-facts { display: grid; gap: .45rem; padding-top: 1rem; border-top: 1px solid #eef1f6; font-size: .85rem; color: var(--brand-dark); }
+.cigar-savings-facts li { display: flex; gap: .6rem; align-items: baseline; }
+.cigar-savings-facts li::before { content: ""; flex: none; width: .4rem; height: .4rem; border-radius: 50%; background: #5599fe; transform: translateY(-.1rem); }
+.cigar-savings-apps { max-width: 30rem; margin-top: 0; }
+.cigar-savings-apps thead th:first-child { text-align: left; }
+.cigar-savings-how { margin-top: 0; }
+.cigar-savings-how p + p { margin-top: .6rem; }
+.cigar-savings-how p:last-child { padding-bottom: .5rem; }
 @media (max-width: 64rem) {
   .cigar-home { grid-template-columns: minmax(0, 1fr); }
   .cigar-usage-grid { grid-template-columns: minmax(0, 1fr); }
@@ -12413,7 +12561,8 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   .cigar-step-icon { position: absolute; left: 0; top: 0; }
   .cigar-steps h3 { margin-top: .6rem; }
   .cigar-demo { padding: .85rem; }
-  .cigar-card { padding: 1.15rem; }
+  .cigar-card, .cigar-savings { padding: 1.15rem; }
+  .cigar-savings h3 { font-size: 1.15rem; }
   .cigar-tabs [role="tab"] { padding-inline: .6rem; }
   .cigar-footer { flex-wrap: wrap; }
   .cigar-footer > span { flex: 1; }
@@ -12422,6 +12571,13 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 @media (prefers-reduced-motion: reduce) { .cigar-tabs [role="tab"], .cigar-explore-row, .cigar-explore-arrow { transition: none; } .cigar-demo-files li[data-match] { animation: none; } }
 @media (forced-colors: active) {
   .cigar-usage-table th, .cigar-usage-table td { border-color: CanvasText; }
+  .cigar-savings { background: Canvas; color: CanvasText; border-color: CanvasText; }
+  .cigar-savings :is(h3, strong, p, li) { color: CanvasText; }
+  .cigar-savings-bar { background: Canvas; border: 1px solid CanvasText; }
+  .cigar-savings-used, .cigar-savings-swatch.is-used { background: CanvasText; }
+  .cigar-savings-saved, .cigar-savings-swatch.is-saved { background: repeating-linear-gradient(135deg, CanvasText 0 2px, Canvas 2px 5px); forced-color-adjust: none; }
+  .cigar-savings-swatch { border: 1px solid CanvasText; }
+  .cigar-savings-facts li::before { background: CanvasText; }
   .cigar-home, .cigar-card, .cigar-note, .cigar-demo { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
   .cigar-home :is(h2, p, li, span, button, svg, code) { color: CanvasText; }
   .cigar-demo-files li { animation: none; }

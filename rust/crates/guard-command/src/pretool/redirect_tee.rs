@@ -7,11 +7,17 @@
 //!
 //! The rewrite is textual: `A | tee P | B` becomes `A > P | B`, which the
 //! redirect projection then models as `A | B` with `P` among the written
-//! targets, under every check a redirect's target gets. Anything the
-//! rewrite cannot read exactly — a substitution, a glob, a `$`, an unknown
-//! flag, a `-` operand, a heredoc, a merged stderr stream, a redirection on
-//! the stage itself — leaves the command untouched, so the existing
-//! fail-closed path still sees it.
+//! targets, under every check a redirect's target gets.
+//!
+//! A stage fed both streams, `A 2>&1 | tee P` or `A |& tee P`, writes A's
+//! output and its errors to `P`, which is what `A > P 2>&1` writes. The
+//! merge moves onto the redirect, so the shell's `2>&1` comes after the
+//! target and sends stderr to the same file.
+//!
+//! Anything the rewrite cannot read exactly — a substitution, a glob, a `$`,
+//! an unknown flag, a `-` operand, a heredoc, any other stream merge or
+//! duplication, a redirection on the stage itself — leaves the command
+//! untouched, so the existing fail-closed path still sees it.
 
 /// `raw` with every plain `| tee PATH...` stage rewritten as the output
 /// redirects it performs, or `None` when no stage was rewritten.
@@ -19,15 +25,18 @@ pub(super) fn as_redirects(raw: &str) -> Option<String> {
     if !raw.contains("tee") {
         return None;
     }
-    // A form the stage scanner below cannot read exactly. `|&`, `2>&1` and
-    // `&>` carry stderr into the stage, so the redirect that replaces it
-    // would have to move too, and the two spellings have to decide alike.
-    // A `$` stands for text this scan never reads, wherever it sits. The
-    // rest hide text from a plain left-to-right read.
-    for form in ["$", "`", "<(", ">(", "|&", ">&", "&>", "<<"] {
+    // A form the stage scanner below cannot read exactly. A `$` stands for
+    // text this scan never reads, wherever it sits. The rest hide text from
+    // a plain left-to-right read, or move a stream somewhere the rewrite
+    // does not follow. The one merge it does follow is a `2>&1 |` or `|&`
+    // that feeds a `tee` stage directly.
+    for form in ["$", "`", "<(", ">(", "&>", "<<"] {
         if raw.contains(form) {
             return None;
         }
+    }
+    if !stream_merges_feed_tee(raw) {
+        return None;
     }
 
     let chars: Vec<char> = raw.chars().collect();
@@ -80,17 +89,30 @@ pub(super) fn as_redirects(raw: &str) -> Option<String> {
                 if out.trim().is_empty() {
                     return None;
                 }
-                if let Some(stage) = read_tee_stage(&chars, index + 1) {
+                let both_streams = chars.get(index + 1) == Some(&'&');
+                let stage_start = index + 1 + usize::from(both_streams);
+                if let Some(stage) = read_tee_stage(&chars, stage_start) {
                     while out.ends_with(' ') || out.ends_with('\t') {
                         out.pop();
+                    }
+                    let merged = both_streams || strip_stderr_merge(&mut out);
+                    if out.ends_with(">&1") {
+                        // A merge this rewrite could not lift off the stage.
+                        return None;
                     }
                     for target in &stage.targets {
                         out.push_str(if stage.append { " >> " } else { " > " });
                         out.push_str(target);
                     }
+                    if merged {
+                        out.push_str(" 2>&1");
+                    }
                     rewrote = true;
                     index = stage.end;
                     continue;
+                }
+                if both_streams {
+                    return None;
                 }
                 if leads_with_tee(&chars, index + 1) {
                     // A `tee` stage this rewrite cannot read exactly keeps
@@ -104,6 +126,69 @@ pub(super) fn as_redirects(raw: &str) -> Option<String> {
         index += 1;
     }
     rewrote.then_some(out)
+}
+
+/// Whether every `>&` and `|&` in `raw` is a `2>&1 |` or a `|&` standing
+/// directly in front of a `tee` stage. The scan below rewrites exactly those,
+/// and any other duplication moves a stream the rewrite does not follow.
+fn stream_merges_feed_tee(raw: &str) -> bool {
+    let bytes = raw.as_bytes();
+    let mut index = 0usize;
+    while index + 1 < bytes.len() {
+        let rest = match &bytes[index..index + 2] {
+            b">&" => {
+                let merge = index >= 2
+                    && matches!(bytes[index - 2], b' ' | b'\t')
+                    && bytes[index - 1] == b'2'
+                    && bytes.get(index + 2) == Some(&b'1');
+                if !merge {
+                    return false;
+                }
+                let after = skip_blank_bytes(bytes, index + 3);
+                if bytes.get(after) != Some(&b'|') || bytes.get(after + 1) == Some(&b'|') {
+                    return false;
+                }
+                after + 1
+            }
+            b"|&" if index == 0 || bytes[index - 1] != b'|' => index + 2,
+            b"|&" => return false,
+            _ => {
+                index += 1;
+                continue;
+            }
+        };
+        let word = skip_blank_bytes(bytes, rest);
+        if !bytes[word..].starts_with(b"tee") || !matches!(bytes.get(word + 3), Some(b' ' | b'\t'))
+        {
+            return false;
+        }
+        index = word;
+    }
+    true
+}
+
+fn skip_blank_bytes(bytes: &[u8], mut index: usize) -> usize {
+    while matches!(bytes.get(index), Some(b' ' | b'\t')) {
+        index += 1;
+    }
+    index
+}
+
+/// Removes a trailing `2>&1` word from the text before a `tee` stage, so it
+/// can follow the redirect that replaces the stage. A `2` the shell joins to
+/// the word before it, as in `a\ 2>&1`, is no merge and stays.
+fn strip_stderr_merge(out: &mut String) -> bool {
+    let Some(before) = out.strip_suffix("2>&1") else {
+        return false;
+    };
+    let mut prefix = before.chars().rev();
+    let separated = matches!(prefix.next(), Some(' ' | '\t')) && prefix.next() != Some('\\');
+    if !separated {
+        return false;
+    }
+    let keep = before.trim_end_matches([' ', '\t']).len();
+    out.truncate(keep);
+    true
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -291,11 +376,50 @@ mod tests {
     }
 
     #[test]
-    fn refuses_both_spellings_of_a_merged_stderr_stream() {
+    fn moves_a_merged_stderr_stream_onto_the_redirect() {
         // The two spellings name the same pipeline, so they decide alike.
-        assert_eq!(as_redirects("npm run build |& tee out.log"), None);
-        assert_eq!(as_redirects("npm run build 2>&1 | tee out.log"), None);
+        assert_eq!(
+            as_redirects("cargo test 2>&1 | tee out.log").as_deref(),
+            Some("cargo test > out.log 2>&1")
+        );
+        assert_eq!(
+            as_redirects("cargo test |& tee out.log").as_deref(),
+            Some("cargo test > out.log 2>&1")
+        );
+        assert_eq!(
+            as_redirects("gh run view 1 --log 2>&1 | tee run.log | rg -n FAILED").as_deref(),
+            Some("gh run view 1 --log > run.log 2>&1 | rg -n FAILED")
+        );
+        assert_eq!(
+            as_redirects("make 2>&1 | tee -a a.log b.log").as_deref(),
+            Some("make >> a.log >> b.log 2>&1")
+        );
+        assert_eq!(
+            as_redirects("make 2>&1| tee out.log").as_deref(),
+            Some("make > out.log 2>&1")
+        );
+        // Only the stage the merge feeds carries it.
+        assert_eq!(
+            as_redirects("ls 2>&1 | tee a.log | sort | tee b.log").as_deref(),
+            Some("ls > a.log 2>&1 | sort > b.log")
+        );
+    }
+
+    #[test]
+    fn refuses_a_stream_merge_it_does_not_follow() {
+        // A merge that feeds another program, or any other duplication.
         assert_eq!(as_redirects("npm run build &> all.log | tee out.log"), None);
+        assert_eq!(as_redirects("make 2>&1 | sort | tee out.log"), None);
+        assert_eq!(as_redirects("make |& sort | tee out.log"), None);
+        assert_eq!(as_redirects("make 1>&2 | tee out.log"), None);
+        assert_eq!(as_redirects("make 3>&1 | tee out.log"), None);
+        assert_eq!(as_redirects("make 2>&1 || tee out.log"), None);
+        assert_eq!(as_redirects("ls | tee out.log 2>&1"), None);
+        assert_eq!(as_redirects("make 2>&1 | tee out.log >&2"), None);
+        assert_eq!(as_redirects("make 2>&1 | teeth out.log"), None);
+        assert_eq!(as_redirects("make 2>&1 | tee -p out.log"), None);
+        // A `2` joined to the word before it is an argument, not a merge.
+        assert_eq!(as_redirects("echo a\\ 2>&1 | tee out.log"), None);
     }
 
     #[test]

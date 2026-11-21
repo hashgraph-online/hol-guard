@@ -100,6 +100,23 @@ pub(in crate::pretool) fn committed_document(path: &Path) -> bool {
         })
 }
 
+/// Whether `path` is a raster image listed in the index of whichever
+/// repository holds it, outside every credential store, whose bytes open with
+/// the signature its extension names. A search that walks into a committed
+/// screenshot such as `auth-login.png` reads compressed pixels, and grep and
+/// rg print no line from a binary file; the head of the image, where a text
+/// chunk or comment would sit, is still scanned for credentials.
+pub(in crate::pretool) fn committed_image(path: &Path) -> bool {
+    !path
+        .components()
+        .any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
+        && guard_secure_fs::sensitive_path_family(path).is_none()
+        && WALK.with(|walk| match walk.borrow_mut().as_mut() {
+            Some(tracked) => tracked.tracked_image(path),
+            None => TrackedFiles::default().tracked_image(path),
+        })
+}
+
 /// Whether `value`, a path as a command or tool spelled it, resolves to a
 /// document [`tracked_document`] proves.
 pub(in crate::pretool) fn resolves_to_tracked(value: &str, cwd: Option<&str>) -> bool {
@@ -289,3 +306,7 @@ fn json_secret_kind(value: &Value) -> bool {
 #[cfg(test)]
 #[path = "tracked_credential_names_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tracked_image_tests.rs"]
+mod image_tests;

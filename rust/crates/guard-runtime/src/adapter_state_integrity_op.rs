@@ -7,8 +7,8 @@
 //! back out of an adapter manifest was one Guard itself had written, which
 //! made the Python edge the thing standing between an edited manifest and the
 //! file Guard restores over during install, repair and uninstall. The runtime
-//! now owns the canonical message, the MAC and every field check; the caller
-//! resolves the key file and applies the verdict.
+//! now owns the canonical message, the MAC and every field check, and reads
+//! or creates the key file under `key_home`; the caller applies the verdict.
 
 use guard_contracts::{
     adapter_state_action_supported, AdapterStateIntegrityRequestV1, AdapterStateIntegrityResultV1,
@@ -22,6 +22,7 @@ use hmac::{Hmac, Mac};
 use serde_json::{json, Map, Value};
 use sha2::Sha256;
 
+use crate::adapter_state_key::{self, AdapterStateKey};
 use crate::guard_store_json::dumps_sorted;
 use crate::package_authority_op::request_digest_with_limit;
 
@@ -76,19 +77,34 @@ fn refusal(request: &AdapterStateIntegrityRequestV1) -> Option<&'static str> {
     {
         return Some("native_adapter_state_integrity_invalid");
     }
+    // A relative home would resolve against the resident's own working
+    // directory, which names a key the caller never meant.
+    if request
+        .key_home
+        .as_deref()
+        .is_some_and(|home| !std::path::Path::new(home).is_absolute())
+    {
+        return Some("native_adapter_state_integrity_invalid");
+    }
     None
 }
 
 fn evaluate(request: &AdapterStateIntegrityRequestV1) -> Result<Value, &'static str> {
     match request.action.as_str() {
         ADAPTER_STATE_ACTION_AUTHENTICATE => authenticate(request),
-        ADAPTER_STATE_ACTION_VERIFY => Ok(json!({
-            "authenticated": is_authenticated(request),
-        })),
-        ADAPTER_STATE_ACTION_FIELD => Ok(json!({
-            "authenticated": is_authenticated(request),
-            "value": authenticated_field(request),
-        })),
+        ADAPTER_STATE_ACTION_VERIFY => {
+            let key = signing_key(request, false).ok();
+            Ok(json!({
+                "authenticated": is_authenticated(request, key.as_ref()),
+            }))
+        }
+        ADAPTER_STATE_ACTION_FIELD => {
+            let key = signing_key(request, false).ok();
+            Ok(json!({
+                "authenticated": is_authenticated(request, key.as_ref()),
+                "value": authenticated_field(request, key.as_ref()),
+            }))
+        }
         _ => Err("native_adapter_state_integrity_action_unsupported"),
     }
 }
@@ -97,31 +113,40 @@ fn evaluate(request: &AdapterStateIntegrityRequestV1) -> Result<Value, &'static 
 /// later `verify` recomputes. The MAC covers the payload *without* the block,
 /// so stamping and verifying see the same bytes.
 fn authenticate(request: &AdapterStateIntegrityRequestV1) -> Result<Value, &'static str> {
-    let key = decode_key(request.integrity_key_b64.as_deref())
-        .ok_or("native_adapter_state_integrity_key_unavailable")?;
-    let key_id = request
-        .integrity_key_id
-        .as_deref()
-        .ok_or("native_adapter_state_integrity_key_unavailable")?;
-    let mut payload = object(&request.payload)?.clone();
+    let create = request.create_key.unwrap_or(true);
+    let key = signing_key(request, create)
+        .map_err(|_| "native_adapter_state_integrity_key_unavailable")?;
+    stamp(&key, &request.harness, object(&request.payload)?.clone())
+}
+
+fn stamp(
+    key: &AdapterStateKey,
+    harness: &str,
+    mut payload: Map<String, Value>,
+) -> Result<Value, &'static str> {
     payload.remove(ADAPTER_STATE_AUTHENTICATION_KEY);
-    let mac = mac_hex(&key, &request.harness, &payload)?;
-    let mut authenticated = payload;
-    authenticated.insert(
+    let mac = mac_hex(&key.bytes, harness, &payload)?;
+    payload.insert(
         ADAPTER_STATE_AUTHENTICATION_KEY.to_owned(),
         json!({
             "algorithm": ADAPTER_STATE_INTEGRITY_MAC_ALGORITHM,
-            "key_id": key_id,
+            "key_id": key.id,
             "mac": mac,
             "schema_version": ADAPTER_STATE_INTEGRITY_SCHEMA_VERSION,
         }),
     );
-    Ok(Value::Object(authenticated))
+    Ok(Value::Object(payload))
 }
 
 /// `adapter_state_is_authenticated` (:89-128). Every mismatch is the same
 /// answer - false - so a caller cannot tell a wrong key from a wrong MAC.
-fn is_authenticated(request: &AdapterStateIntegrityRequestV1) -> bool {
+fn is_authenticated(
+    request: &AdapterStateIntegrityRequestV1,
+    key: Option<&AdapterStateKey>,
+) -> bool {
+    let Some(key) = key else {
+        return false;
+    };
     let Ok(payload) = object(&request.payload) else {
         return false;
     };
@@ -140,21 +165,15 @@ fn is_authenticated(request: &AdapterStateIntegrityRequestV1) -> bool {
     let Some(stored_key_id) = block.get("key_id").and_then(Value::as_str) else {
         return false;
     };
-    let Some(key_id) = request.integrity_key_id.as_deref() else {
-        return false;
-    };
-    if !constant_time_equal(stored_key_id.as_bytes(), key_id.as_bytes()) {
+    if !constant_time_equal(stored_key_id.as_bytes(), key.id.as_bytes()) {
         return false;
     }
     let Some(supplied_mac) = block.get("mac").and_then(Value::as_str) else {
         return false;
     };
-    let Some(key) = decode_key(request.integrity_key_b64.as_deref()) else {
-        return false;
-    };
     let mut unsigned = payload.clone();
     unsigned.remove(ADAPTER_STATE_AUTHENTICATION_KEY);
-    let Ok(expected) = mac_hex(&key, &request.harness, &unsigned) else {
+    let Ok(expected) = mac_hex(&key.bytes, &request.harness, &unsigned) else {
         return false;
     };
     constant_time_equal(supplied_mac.as_bytes(), expected.as_bytes())
@@ -164,8 +183,11 @@ fn is_authenticated(request: &AdapterStateIntegrityRequestV1) -> bool {
 /// Resolution stays with the caller: Rust's `canonicalize` fails on a path
 /// that does not exist yet, and an adapter's recorded backup target often
 /// does not, so moving it here would change which manifests still work.
-fn authenticated_field(request: &AdapterStateIntegrityRequestV1) -> Value {
-    if !is_authenticated(request) {
+fn authenticated_field(
+    request: &AdapterStateIntegrityRequestV1,
+    key: Option<&AdapterStateKey>,
+) -> Value {
+    if !is_authenticated(request, key) {
         return Value::Null;
     }
     let Some(field) = request.field.as_deref() else {
@@ -235,9 +257,110 @@ fn object(value: &Value) -> Result<&Map<String, Value>, &'static str> {
         .ok_or("native_adapter_state_integrity_invalid")
 }
 
-fn decode_key(encoded: Option<&str>) -> Option<Vec<u8>> {
+/// The key the request is answered with: the file under `key_home` when the
+/// caller names one, otherwise the key material an older caller sent.
+fn signing_key(
+    request: &AdapterStateIntegrityRequestV1,
+    create: bool,
+) -> Result<AdapterStateKey, &'static str> {
+    if let Some(home) = request.key_home.as_deref() {
+        let home = std::path::Path::new(home);
+        return if create {
+            adapter_state_key::load_or_create(home)
+        } else {
+            adapter_state_key::load(home)
+        };
+    }
     use base64ct::{Base64UrlUnpadded, Encoding};
-    Base64UrlUnpadded::decode_vec(encoded?).ok()
+    let bytes = request
+        .integrity_key_b64
+        .as_deref()
+        .and_then(|encoded| Base64UrlUnpadded::decode_vec(encoded).ok())
+        .ok_or("adapter_state_key_unavailable")?;
+    let id = request
+        .integrity_key_id
+        .clone()
+        .ok_or("adapter_state_key_unavailable")?;
+    Ok(AdapterStateKey { id, bytes })
+}
+
+/// An in-process request against the key under `key_home`, for adapters the
+/// runtime itself drives.
+fn local_request(
+    key_home: &std::path::Path,
+    harness: &str,
+    action: &str,
+    payload: Value,
+    field: Option<&str>,
+    create: bool,
+) -> AdapterStateIntegrityRequestV1 {
+    AdapterStateIntegrityRequestV1 {
+        schema: ADAPTER_STATE_INTEGRITY_REQUEST_SCHEMA.to_owned(),
+        request_id: String::new(),
+        action: action.to_owned(),
+        harness: harness.to_owned(),
+        payload,
+        field: field.map(str::to_owned),
+        integrity_key_b64: None,
+        integrity_key_id: None,
+        key_home: Some(key_home.to_string_lossy().into_owned()),
+        create_key: Some(create),
+    }
+}
+
+/// `authenticate_adapter_state`. The error is the key loader's code, so the
+/// caller can tell a missing key from an unusable one.
+pub(crate) fn sign_state(
+    key_home: &std::path::Path,
+    harness: &str,
+    payload: Map<String, Value>,
+    create: bool,
+) -> Result<Value, &'static str> {
+    let request = local_request(
+        key_home,
+        harness,
+        ADAPTER_STATE_ACTION_AUTHENTICATE,
+        Value::Object(payload),
+        None,
+        create,
+    );
+    let key = signing_key(&request, create)?;
+    stamp(&key, harness, object(&request.payload)?.clone())
+}
+
+/// `adapter_state_is_authenticated`.
+pub(crate) fn state_verified(key_home: &std::path::Path, harness: &str, payload: &Value) -> bool {
+    let request = local_request(
+        key_home,
+        harness,
+        ADAPTER_STATE_ACTION_VERIFY,
+        payload.clone(),
+        None,
+        false,
+    );
+    let key = signing_key(&request, false).ok();
+    is_authenticated(&request, key.as_ref())
+}
+
+/// `authenticated_adapter_path` before its final resolve.
+pub(crate) fn state_field(
+    key_home: &std::path::Path,
+    harness: &str,
+    payload: &Value,
+    field: &str,
+) -> Option<String> {
+    let request = local_request(
+        key_home,
+        harness,
+        ADAPTER_STATE_ACTION_FIELD,
+        payload.clone(),
+        Some(field),
+        false,
+    );
+    let key = signing_key(&request, false).ok();
+    authenticated_field(&request, key.as_ref())
+        .as_str()
+        .map(str::to_owned)
 }
 
 fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {

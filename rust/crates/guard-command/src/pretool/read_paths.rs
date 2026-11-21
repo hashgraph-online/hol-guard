@@ -18,8 +18,9 @@ mod omp_json_query;
 #[path = "omp_read_targets.rs"]
 pub(super) mod omp_targets;
 pub(super) use hidden_listing::{
-    home_hidden_content_read, home_hidden_directory, home_hidden_tool_directory,
-    home_hidden_walk_clears_stores, repository_hidden_directory,
+    absent_probe_hidden_ancestor, home_hidden_content_read, home_hidden_directory,
+    home_hidden_size_summary, home_hidden_tool_directory, home_hidden_walk_clears_stores,
+    repository_hidden_directory,
 };
 use hidden_listing::{resolved_home_hidden_content_read, resolved_home_hidden_listing};
 #[path = "private_temporary_workspace.rs"]
@@ -421,7 +422,8 @@ fn path_gate(
                     || hidden_listing::repository_hidden_source_document(
                         canonical, home_dir, cwd,
                     )
-                    || hidden_listing::repository_hidden_marker_file(canonical, home_dir, cwd)))
+                    || hidden_listing::repository_hidden_marker_file(canonical, home_dir, cwd)
+                    || super::cursor_session_outputs::own_output(canonical, home_dir)))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;

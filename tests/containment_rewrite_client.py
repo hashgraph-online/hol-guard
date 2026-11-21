@@ -18,7 +18,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_sink_command_prefix
+from codex_plugin_scanner.guard.contained_sink_command import contained_sink_command_prefix
 from codex_plugin_scanner.guard.native_execution import _resident_request
 from codex_plugin_scanner.guard.native_hook_containment_route import _routed_shape
 from codex_plugin_scanner.guard.native_hook_decision import (

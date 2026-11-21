@@ -372,7 +372,8 @@ pub fn delete_private_file_handle(handle: &std::fs::File) -> io::Result<()> {
     mark_handle_for_delete(handle)
 }
 
-pub(super) fn mark_handle_for_delete(handle: &std::fs::File) -> io::Result<()> {
+/// Delete one open file by its handle; the handle needs DELETE access.
+pub fn mark_handle_for_delete(handle: &std::fs::File) -> io::Result<()> {
     let mut disposition = FILE_DISPOSITION_INFO { DeleteFile: 1 };
     // SAFETY: The handle was opened with DELETE access; the disposition buffer
     // remains valid for this synchronous call.
@@ -390,7 +391,8 @@ pub(super) fn mark_handle_for_delete(handle: &std::fs::File) -> io::Result<()> {
     Ok(())
 }
 
-pub(super) fn rename_into_directory(
+/// Rename an open file into the directory `parent` is a handle to.
+pub fn rename_into_directory(
     parent: &std::fs::File,
     source: &std::fs::File,
     destination: &OsStr,

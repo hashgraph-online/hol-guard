@@ -8,6 +8,7 @@ fn context() -> super::super::PathContext<'static> {
     super::super::PathContext {
         npm_config_inert: true,
         pip_config_inert: true,
+        python_environment_inert: true,
         ..Default::default()
     }
 }
@@ -32,6 +33,7 @@ fn a_configuration_the_session_can_write_refuses_the_probe() {
     let written = super::super::PathContext {
         npm_config_inert: true,
         pip_config_inert: true,
+        python_environment_inert: true,
         shell_home_matches: true,
         home_dir: Some(&home),
         cwd: Some(&project),
@@ -315,6 +317,7 @@ fn a_verb_belonging_to_another_manager_is_refused() {
 fn a_redirected_manager_configuration_keeps_the_question() {
     let npm_moved = super::super::PathContext {
         pip_config_inert: true,
+        python_environment_inert: true,
         ..Default::default()
     };
     assert!(!safe_help_probe(

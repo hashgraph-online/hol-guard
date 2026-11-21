@@ -144,6 +144,7 @@ fn write_locked(
         request.managed.as_ref(),
         request.cloud_sync_entitled,
         &now_iso(),
+        &crate::cigar_apps::cigar_apps(home),
     )?;
     // This locked path is reserved for explicit Stop, which must persist an
     // ordering change even if the on-disk enabled preference was already off.
@@ -166,6 +167,36 @@ pub(crate) fn disable_context_assistance(home: &Path) -> Result<(), String> {
     let mut config = assistance_preferences(stored.as_deref().unwrap_or_default())
         .map_err(|_| "native_context_assistance_settings_unavailable")?;
     config.enabled = false;
+    let value_text = serde_json::to_string(&json!({"context_assistance": config}))
+        .map_err(|_| "native_context_assistance_settings_invalid".to_owned())?;
+    let value = pyjson::parse(&value_text)
+        .map_err(|_| "native_context_assistance_settings_invalid".to_owned())?;
+    let request = UpdateRequest {
+        schema: SCHEMA.into(),
+        guard_home: home.into(),
+        kind: "settings".into(),
+        value_text,
+        managed: None,
+        cloud_sync_entitled: false,
+    };
+    write_locked(&request, &value, &lock)
+        .map(|_| ())
+        .map_err(|_| "native_context_assistance_settings_write_failed".to_owned())
+}
+
+/// Moves a profile that chose a retired engine onto the built-in engine,
+/// keeping the user's on/off choice and every other CIGAR preference.
+pub(crate) fn select_builtin_context_assistance(home: &Path) -> Result<(), String> {
+    let lock = io::WriteLock::acquire(home)
+        .map_err(|_| "native_context_assistance_settings_write_busy")?;
+    let stored =
+        read_home_config(home).map_err(|_| "native_context_assistance_settings_unavailable")?;
+    let mut config = assistance_preferences(stored.as_deref().unwrap_or_default())
+        .map_err(|_| "native_context_assistance_settings_unavailable")?;
+    if config.runtime_id == crate::policy_store::context_assistance_registry::BUILTIN_ID {
+        return Ok(());
+    }
+    config.runtime_id = crate::policy_store::context_assistance_registry::BUILTIN_ID.into();
     let value_text = serde_json::to_string(&json!({"context_assistance": config}))
         .map_err(|_| "native_context_assistance_settings_invalid".to_owned())?;
     let value = pyjson::parse(&value_text)
@@ -254,6 +285,7 @@ pub(crate) fn compute(
     managed: Option<&ManagedInput>,
     cloud_sync_entitled: bool,
     now: &str,
+    cigar_apps: &[&str],
 ) -> Result<Computed, Failure> {
     let channel_value = match kind {
         "channel" => Some(channel(value)?),
@@ -311,6 +343,7 @@ pub(crate) fn compute(
                 managed,
                 cloud_sync_entitled,
                 now,
+                cigar_apps,
             )
             .map_err(Failure::Invalid)?;
             Ok(Computed {

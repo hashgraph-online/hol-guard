@@ -10,9 +10,9 @@ import uuid
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import desktop_qualification as qualification
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.runtime_transition import TransitionError

@@ -18,7 +18,7 @@
 
 use std::sync::{mpsc, Arc};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
@@ -101,8 +101,19 @@ const IDLE_POLL: Duration = seconds(1);
 const IDLE_HOLD: Duration = seconds(5);
 /// The longest startup waits for the worker host's first policy publication.
 const HOST_READY_WAIT: Duration = seconds(15);
+/// The longest a starting daemon waits on the artifact reconcile, counted
+/// from when the reconcile began, before it reports ready anyway. A reconcile
+/// normally takes a few seconds; one held by its library call could keep the
+/// daemon from answering hooks for that call's whole timeout.
+const RECONCILE_READY_WAIT: Duration = seconds(30);
+/// How long the reconcile's library call waits for its answer. It stays under
+/// the library's own call timeout, so a reconcile that gives up leaves the
+/// shared resident running: by then the daemon may be serving hooks through
+/// that same process.
+const RECONCILE_CALL_WAIT: Duration = seconds(110);
 
 /// What the heartbeat records for this daemon.
+#[derive(Clone)]
 pub(super) struct Registration {
     pub(super) session_id: String,
     pub(super) host: String,
@@ -111,13 +122,10 @@ pub(super) struct Registration {
     pub(super) guard_home: std::path::PathBuf,
 }
 
-/// Starts every job, the heartbeat and, when `idle_timeout` is set, the idle
-/// shutdown. Threads end with the process.
-pub(super) fn start(
-    reads: &Arc<NativeReads>,
-    registration: Registration,
-    idle_timeout: Option<Duration>,
-) {
+/// Starts every job, the heartbeat and the worker host. Threads end with the
+/// process. The idle shutdown starts separately, through `exit_when_idle`,
+/// once the rest of the start has finished.
+pub(super) fn start(reads: &Arc<NativeReads>, registration: Registration) {
     for job in &JOBS {
         let reads = Arc::clone(reads);
         let _ = thread::Builder::new()
@@ -125,11 +133,6 @@ pub(super) fn start(
             .spawn(move || run_job(&reads, job, thread::sleep));
     }
     let heartbeat_reads = Arc::clone(reads);
-    let lifecycle = (
-        registration.guard_home.clone(),
-        registration.session_id.clone(),
-        registration.port,
-    );
     let args = json!({
         "session_id": registration.session_id,
         "host": registration.host,
@@ -152,23 +155,48 @@ pub(super) fn start(
         // the worker host owns that publication now.
         let _ = host_ready.recv_timeout(HOST_READY_WAIT);
     }
-    if let Some(timeout) = idle_timeout {
-        let idle_reads = Arc::clone(reads);
-        let _ = thread::Builder::new()
-            .name("daemon-idle".into())
-            .spawn(move || {
-                watch_idle(&idle_reads, timeout, thread::sleep);
-                let (home, session_id, port) = &lifecycle;
-                super::super::lifecycle::record(
-                    home,
-                    "shutdown_requested",
-                    Some("idle_timeout"),
-                    Some(session_id),
-                    Some(*port),
-                );
-                std::process::exit(0);
-            });
-    }
+}
+
+/// Exits the process once it has been idle for `timeout`. Startup work such as
+/// the artifact reconcile holds no connection, so the daemon calls this only
+/// after that work is done; started earlier, a slow reconcile could outlast
+/// the timeout and the daemon would exit before it reported ready. The idle
+/// clock restarts here for the same reason: a start that took longer than the
+/// timeout is not idle time.
+///
+/// A reconcile still running when the daemon reported ready is passed as
+/// `pending`: the idle clock starts only once it finishes, so an idle daemon
+/// never exits partway through one.
+pub(super) fn exit_when_idle(
+    reads: &Arc<NativeReads>,
+    registration: &Registration,
+    timeout: Duration,
+    pending: Option<Reconcile>,
+) {
+    reads.touch();
+    let idle_reads = Arc::clone(reads);
+    let (home, session_id, port) = (
+        registration.guard_home.clone(),
+        registration.session_id.clone(),
+        registration.port,
+    );
+    let _ = thread::Builder::new()
+        .name("daemon-idle".into())
+        .spawn(move || {
+            if let Some(pending) = pending {
+                pending.finish();
+                idle_reads.touch();
+            }
+            watch_idle(&idle_reads, timeout, thread::sleep);
+            super::super::lifecycle::record(
+                &home,
+                "shutdown_requested",
+                Some("idle_timeout"),
+                Some(&session_id),
+                Some(port),
+            );
+            std::process::exit(0);
+        });
 }
 
 fn run_job(reads: &NativeReads, job: &Job, mut sleep: impl FnMut(Duration)) -> ! {
@@ -190,12 +218,115 @@ pub(super) fn next_wait(job: &Job, answer: Option<Value>) -> Duration {
 
 /// Refreshes the artifacts Guard already manages for the active runtime
 /// (`reconcile_runtime_artifacts`). A failure leaves them for the next start.
-pub(super) fn reconcile_artifacts(reads: &NativeReads, user_home: Option<&str>) {
-    let _ = pass(
-        reads,
-        "worker.reconcile_artifacts",
-        json!({ "home": user_home }),
+///
+/// The call names this daemon's own loopback URL. The daemon has not reported
+/// ready while the reconcile runs, so a hook artifact that records the daemon
+/// URL would otherwise ask this daemon whether it is live and wait out the
+/// health probe on every cold start.
+pub(super) fn reconcile_artifacts(reads: &NativeReads, user_home: Option<&str>, port: u16) {
+    let Some(config) = reads.config() else {
+        return;
+    };
+    let args = reconcile_args(user_home, port);
+    let call = "worker.reconcile_artifacts";
+    if ticks::native(reads, &config, call, &args).is_some() {
+        return;
+    }
+    let _ = library::call_resident_within(&config, call, args, RECONCILE_CALL_WAIT);
+}
+
+/// The reconcile call's arguments: the user's home and this daemon's own URL.
+fn reconcile_args(user_home: Option<&str>, port: u16) -> Value {
+    json!({ "home": user_home, "daemon_url": format!("http://127.0.0.1:{port}") })
+}
+
+/// A reconcile running on its own thread. The thread signals `done` once the
+/// reconcile has finished and its `reconciled` record is written; the sender
+/// is dropped without a signal if the thread ends any other way.
+pub(super) struct Reconcile {
+    done: mpsc::Receiver<()>,
+    started: Instant,
+}
+
+impl Reconcile {
+    /// Waits until the reconcile finishes or `budget` has passed since it
+    /// started. Returns `None` once it has finished, or the reconcile itself
+    /// while it is still running, so the caller can report ready and wait on
+    /// it later.
+    pub(super) fn wait_until(self, budget: Duration) -> Option<Self> {
+        let left = budget.saturating_sub(self.started.elapsed());
+        match self.done.recv_timeout(left) {
+            Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => None,
+            Err(mpsc::RecvTimeoutError::Timeout) => Some(self),
+        }
+    }
+
+    /// Blocks until the reconcile thread ends.
+    fn finish(self) {
+        let _ = self.done.recv();
+    }
+}
+
+/// Starts `reconcile_artifacts` on its own thread, so it runs while the
+/// worker host starts and a cold start pays for the slower of the two rather
+/// than both. The daemon waits on it, up to `RECONCILE_READY_WAIT`, before it
+/// reports ready. Without a thread the reconcile runs here and `None` is
+/// returned.
+pub(super) fn reconcile_beside(
+    reads: &Arc<NativeReads>,
+    user_home: Option<String>,
+    guard_home: std::path::PathBuf,
+    port: u16,
+) -> Option<Reconcile> {
+    let (worker_reads, worker_user, worker_home) =
+        (Arc::clone(reads), user_home.clone(), guard_home.clone());
+    let (done, finished) = mpsc::channel();
+    let started = Instant::now();
+    let spawned = thread::Builder::new()
+        .name("daemon-reconcile".into())
+        .spawn(move || {
+            reconciled(&worker_reads, worker_user.as_deref(), &worker_home, port);
+            let _ = done.send(());
+        });
+    match spawned {
+        Ok(_) => Some(Reconcile {
+            done: finished,
+            started,
+        }),
+        Err(_) => {
+            reconciled(reads, user_home.as_deref(), &guard_home, port);
+            None
+        }
+    }
+}
+
+/// Waits on a reconcile started by `reconcile_beside`, up to
+/// `RECONCILE_READY_WAIT` from its start. One still running then keeps
+/// running: it is journaled as `reconcile_deferred` and returned, so the
+/// daemon reports ready rather than leave every hook waiting on it.
+pub(super) fn settle_before_ready(
+    reconcile: Option<Reconcile>,
+    guard_home: &std::path::Path,
+) -> Option<Reconcile> {
+    let pending = reconcile?.wait_until(RECONCILE_READY_WAIT)?;
+    super::super::lifecycle::record(
+        guard_home,
+        "reconcile_deferred",
+        Some("ready_wait_elapsed"),
+        None,
+        None,
     );
+    Some(pending)
+}
+
+fn reconciled(
+    reads: &NativeReads,
+    user_home: Option<&str>,
+    guard_home: &std::path::Path,
+    port: u16,
+) {
+    reconcile_artifacts(reads, user_home, port);
+    super::super::lifecycle::record(guard_home, "reconciled", None, None, None);
 }
 
 fn pass(reads: &NativeReads, call: &str, args: Value) -> Option<Value> {

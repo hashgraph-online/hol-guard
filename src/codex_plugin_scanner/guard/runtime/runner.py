@@ -2,26 +2,23 @@
 
 from __future__ import annotations
 
-import base64
 import errno
 import hashlib
 import importlib.metadata
 import io
 import json
 import logging
+import math
 import os
 import socket
 import time
 import urllib.error
-import urllib.parse
-import urllib.request
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ...version import __version__
-from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..cli.oauth_client import (
     GuardDpopKeyMaterial,
@@ -31,8 +28,8 @@ from ..cli.oauth_client import (
 from ..config import VALID_RECEIPT_REDACTION_LEVELS
 from ..dpop_key_binding import signed_dpop_proof
 from ..edge_events import build_runtime_session_event
+from ..harness_context import HarnessContext
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
-from ..mdm.network import managed_urlopen
 from ..models import PolicyDecision
 from ..native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
@@ -42,36 +39,32 @@ from ..native_policy_bundle import (
 )
 from ..native_prompt import request_from_dict as _prompt_request_from_dict  # noqa: F401
 from ..native_runner_authority import NativeRunnerAuthorityError
-from ..native_supply_chain_bundle import (
-    MAX_SUPPLY_CHAIN_BUNDLE_RESPONSE_BYTES,
-    VerifiedSupplyChainBundle,
-    native_verify_supply_chain_bundle_response,
+from ..oauth_token_claims import (
+    oauth_access_token_expires_at,
+    oauth_binding_from_credentials,
+    oauth_effective_binding,
 )
-from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
-from ..oauth_token_claims import oauth_binding_from_credentials, oauth_binding_metadata, oauth_refresh_binding
 from ..package_firewall_defaults import extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
     reconcile_connect_state_with_oauth_entitlement,
 )
-from ..policy_bundle_activation import activate_with_reason, persist_activation_rejection
+from ..policy_bundle_activation import activate_with_reason
 from ..policy_bundle_decisions import build_policy_bundle_decisions as _materialize_policy_bundle_decisions
 from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
     is_failed_policy_bundle_acknowledgement,
+    reportable_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
-    CANONICAL_COMPILE_DOCUMENT_CODES,
     CANONICAL_COMPILE_REJECTION_PREFIX,
-    non_empty_string,
     policy_bundle_acceptance_checkpoint,
-    policy_bundle_cloud_exceptions_hash,
+    policy_bundle_admission_rejection,
+    policy_bundle_downgrade_verdict,
     policy_bundle_is_enforceable,
-    policy_bundle_is_version_downgrade,
-    policy_bundle_rejection_message,
 )
 from ..policy_bundle_parser import (
-    policy_bundle_daemon_version_supported as _daemon_version_supported,
+    policy_bundle_rejection_payload as _policy_bundle_rejection_payload,
 )
 from ..policy_bundle_trusted_keys import (
     MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
@@ -81,8 +74,6 @@ from ..policy_bundle_trusted_keys import (
 )
 from ..policy_bundle_v2 import (
     POLICY_BUNDLE_V2_CONTRACT,
-    validate_policy_bundle_v2_transition,
-    validated_policy_bundle_v2_acknowledgement,
 )
 from ..policy_document_io import PolicyCompilationError, compile_policy_bundle_document
 from ..redaction import redact_sensitive_text
@@ -92,7 +83,7 @@ from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
 from . import runner_native_authority as _authority
 from . import runner_native_sync as _sync
-from .cloud_request_native import cloud_sync_receipt_payloads
+from . import runner_policy_shadow as _shadow
 from .extension_catalog_handshake import (
     catalog_runtime_unavailable_summary,
     prepare_extension_catalog_handshake,
@@ -114,8 +105,6 @@ from .fleet_posture import (
     FleetPostureBuild,
     FleetPostureSettings,
     build_fleet_posture_state,
-    commit_fleet_posture_sent,
-    request_full_inventory,
 )
 from .fleet_posture_tools import device_display_name
 from .guard_run_evaluation import _get_default_detector_registry as _get_default_detector_registry
@@ -135,28 +124,9 @@ from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
 from .policy_bundle_failure_ack import cached_bundle_failure_acknowledgement, failed_acknowledgement
-from .supply_chain_bundle import (
-    SupplyChainBundleError,
-    SupplyChainVerificationKey,
-    load_supply_chain_verification_keys,
-)
-from .supply_chain_support import ecosystem_support_matrix
-from .sync_retry_delay import (
-    parse_retry_after_header as _parse_retry_after_header,
-)
-from .sync_retry_delay import (
-    retry_after_sleep_seconds as _retry_after_sleep_seconds,
-)
-from .sync_retry_delay import (
-    retryable_gateway_http_error as _retryable_gateway_http_error,
-)
-from .workspace_assessment_sync import (
-    MAX_REQUEST_BYTES as _WORKSPACE_ASSESSMENT_REQUEST_BYTES,
-)
+from .sync_retry_delay import parse_retry_after_value
 from .workspace_assessment_sync import (
     build_workspace_assessment_sync_safely,
-    fit_workspace_assessment_to_request,
-    record_workspace_assessment_delivery,
 )
 
 _POLICY_DOCUMENT_VERSIONS = ("guard.hashgraphonline.com/v1alpha1",)
@@ -173,6 +143,9 @@ POLICY_EXACT_COMMAND_RULES_CAPABILITY = "policy-document-exact-commands.v1"
 POLICY_DOCUMENT_REVIEW_RULES_CAPABILITY = "policy-document-review-rules.v1"
 # The hook applies a v2 bundle's command-pattern Allow rule to a simple command.
 POLICY_COMMAND_PATTERN_ALLOW_CAPABILITY = "policy-document-command-pattern-allow.v1"
+# The hook asks or blocks every command in a risk group a v2 bundle rule names
+# (``match.riskGroups``), such as every command that deletes files.
+POLICY_RISK_GROUP_RULES_CAPABILITY = "policy-document-risk-group-rules.v1"
 # Accepts Cloud exceptions signed into a v2 bundle (``cloudExceptions``).
 POLICY_BUNDLE_V2_CLOUD_EXCEPTIONS_CAPABILITY = "policy-bundle-v2-cloud-exceptions.v1"
 # Re-exported for the supply-chain services; the resident derives the endpoint.
@@ -213,39 +186,12 @@ def _guard_sync_auth_lock(store: GuardStore):
         yield
 
 
-_INSTALL_TIME_STOP_EVENTS = frozenset(
-    {
-        "install_time_block",
-        "install_time_review",
-        "install_time_require-reapproval",
-        "install_time_sandbox-required",
-    }
-)
-_PAIN_SIGNAL_EVENTS = frozenset(
-    {
-        "changed_artifact_caught",
-        *_INSTALL_TIME_STOP_EVENTS,
-        "install_time_warn",
-        "supply_chain_bundle_refresh_requested",
-        "approval_gate/remote_policy_sync_blocked",
-    }
-)
 _LOGGER = logging.getLogger(__name__)
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
 _SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
-_SYNC_RETRYABLE_GATEWAY_MAX_ATTEMPTS = 2
 _RUNTIME_SYNC_TIMEOUT_SECONDS = 10
 _RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS = 90
-_RECEIPT_SYNC_BATCH_SIZE = 50
-# Serialized size of the `, "workspaceAssessments": ` key the summary adds to the sync context.
-_WORKSPACE_ASSESSMENT_KEY_OVERHEAD = 32
-_RECEIPT_SYNC_CURSOR_PAGE_SIZE = 200
-_RECEIPT_SYNC_CURSOR_BACKFILL_ROWS = 200
-_RECEIPT_COMMAND_DETAIL_BACKFILL_DAYS = 30
-_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT = 200
-_PAIN_SIGNAL_TIMEOUT_SECONDS = 10
-_PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS = 90
 _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES = 5  # single 404 shouldn't disable sync for a full day
 
 
@@ -277,43 +223,21 @@ def _policy_bundle_is_version_downgrade(
     *,
     expected_last_good_bundle: dict[str, object] | None = None,
 ) -> bool:
-    if next_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-        current_version = existing_bundle.get("bundleVersion") if isinstance(existing_bundle, dict) else None
-        current_hash = existing_bundle.get("bundleHash") if isinstance(existing_bundle, dict) else None
-        expected_version = (
-            expected_last_good_bundle.get("bundleVersion") if isinstance(expected_last_good_bundle, dict) else None
-        )
-        expected_hash = (
-            expected_last_good_bundle.get("bundleHash") if isinstance(expected_last_good_bundle, dict) else None
-        )
-        current_exceptions_issued_at = (
-            existing_bundle.get("cloudExceptionsIssuedAt") if isinstance(existing_bundle, dict) else None
-        )
-        transition_error = validate_policy_bundle_v2_transition(
-            next_bundle,
-            current_bundle_version=(
-                current_version if isinstance(current_version, int) and not isinstance(current_version, bool) else None
-            ),
-            current_bundle_hash=(current_hash if isinstance(current_hash, str) else None),
-            expected_last_good_bundle_version=(
-                expected_version
-                if isinstance(expected_version, int) and not isinstance(expected_version, bool)
-                else None
-            ),
-            expected_last_good_bundle_hash=(expected_hash if isinstance(expected_hash, str) else None),
-            current_cloud_exceptions_issued_at=(
-                current_exceptions_issued_at if isinstance(current_exceptions_issued_at, str) else None
-            ),
-            current_cloud_exceptions_hash=(
-                policy_bundle_cloud_exceptions_hash(existing_bundle) if isinstance(existing_bundle, dict) else None
-            ),
-        )
-        if transition_error == NATIVE_UNAVAILABLE_REJECTION:
-            # The resident could not decide. That is an outage, never a
-            # downgrade verdict and never an implicit allow.
-            raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION)
-        return transition_error is not None
-    return policy_bundle_is_version_downgrade(existing_bundle, next_bundle)
+    return policy_bundle_downgrade_verdict(
+        existing_bundle,
+        next_bundle,
+        expected_last_good=expected_last_good_bundle,
+    )
+
+
+def _policy_bundle_admission_rejection(
+    store: GuardStore,
+    existing_bundle: dict[str, object] | None,
+    candidate: dict[str, object],
+) -> str | None:
+    """The first gate a validated synced candidate fails, or ``None``."""
+
+    return policy_bundle_admission_rejection(candidate, _policy_bundle_downgrade_reference(store, existing_bundle))
 
 
 def _policy_bundle_acceptance_checkpoint(policy_bundle: Mapping[str, object]) -> dict[str, object]:
@@ -341,20 +265,6 @@ def _validate_cached_policy_bundle(
     """Revalidate cached policy authority before any rule is made effective."""
 
     return cached_policy_bundle_validation(store, policy_bundle)
-
-
-def _policy_bundle_rejection_payload(reason: str | None, rule_id: str | None = None) -> dict[str, object]:
-    resolved_reason = reason or "invalid_policy_bundle"
-    payload: dict[str, object] = {"reason": resolved_reason}
-    remediation = policy_bundle_rejection_message(resolved_reason)
-    if remediation is not None:
-        payload["message"] = remediation
-    # One rule refuses to compile and the whole bundle stays unapplied, so the
-    # rejection names that rule: without it an administrator sees only that a
-    # published policy never arrived.
-    if rule_id:
-        payload["ruleId"] = rule_id[:128]
-    return payload
 
 
 def _build_canonical_policy_bundle_decisions(
@@ -387,15 +297,6 @@ def _build_canonical_policy_bundle_decisions(
     ]
 
 
-def _policy_bundle_is_evaluating(policy_bundle: dict[str, object]) -> bool:
-    """Whether the bundle rolls its rules out to watch them, not to enforce them."""
-
-    payload = policy_bundle.get("payload")
-    spec = payload.get("spec") if isinstance(payload, dict) else None
-    defaults = spec.get("defaults") if isinstance(spec, dict) else None
-    return isinstance(defaults, dict) and defaults.get("mode") == "observe"
-
-
 def _build_policy_bundle_decisions(
     policy_bundle: dict[str, object],
     *,
@@ -416,19 +317,6 @@ def _build_policy_bundle_decisions(
         device_id=device_id,
         device_name=device_name,
     )
-
-
-def _legacy_shadow_predates_candidate(legacy: Mapping[str, object], candidate: Mapping[str, object]) -> bool:
-    """Whether the stored v1 bundle was issued for an older publication than the candidate.
-
-    Cloud issues a publication's v1 bundle at or after the publication itself,
-    so one issued earlier carries a different policy and cannot show whether
-    the candidate's compiler agrees. Unreadable times keep the comparison.
-    """
-
-    legacy_issued = _parse_iso_timestamp(str(legacy.get("issuedAt") or ""))
-    candidate_issued = _parse_iso_timestamp(str(candidate.get("issuedAt") or ""))
-    return legacy_issued is not None and candidate_issued is not None and legacy_issued < candidate_issued
 
 
 def policy_bundle_candidate_decisions(
@@ -469,21 +357,25 @@ def policy_bundle_candidate_decisions(
             device_name=device_name,
         )
     except PolicyCompilationError as error:
-        rule_id = None if error.code in CANONICAL_COMPILE_DOCUMENT_CODES else error.rule_id
-        return [], f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}", rule_id
+        # The stored record drops the rule id for a code about the whole document.
+        return [], f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}", error.rule_id
     except PolicyBundleNativeError as error:
         return [], native_rejection_code(error), None
 
-    legacy_payload = store.get_sync_payload("policy_bundle_legacy_last_good")
-    if not isinstance(legacy_payload, dict):
-        legacy_payload = (
-            existing_policy_bundle
-            if isinstance(existing_policy_bundle, dict)
-            and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
-            else None
+    stored_legacy = store.get_sync_payload("policy_bundle_legacy_last_good")
+    try:
+        shadow_source, evaluating = _shadow.policy_shadow_source(
+            policy_bundle,
+            stored_legacy=stored_legacy,
+            existing=existing_policy_bundle,
         )
-    if isinstance(legacy_payload, dict) and _legacy_shadow_predates_candidate(legacy_payload, policy_bundle):
-        legacy_payload = None
+    except NativeRunnerAuthorityError:
+        # Rust picks the shadow. Without that choice the candidate cannot be
+        # proven equivalent, so it is held like a missing comparison below.
+        shadow_source, evaluating, native_shadow_unavailable = None, False, True
+    else:
+        native_shadow_unavailable = False
+    legacy_payload = {"stored": stored_legacy, "existing": existing_policy_bundle}.get(shadow_source or "")
     try:
         legacy_decisions = (
             _build_policy_bundle_decisions(
@@ -502,25 +394,29 @@ def policy_bundle_candidate_decisions(
     except PolicyBundleNativeError as error:
         return [], native_rejection_code(error), None
 
-    native_shadow_unavailable = False
-    try:
-        # An Evaluate bundle compiles to no rows on purpose, so an older
-        # bundle's rows say nothing about its drift.
-        mismatch_reasons = (
-            ()
-            if _policy_bundle_is_evaluating(policy_bundle)
-            else _authority.policy_shadow_mismatch(
+    mismatch_reasons: tuple[str, ...] = ("native_shadow_unavailable",)
+    rejection: str | None = "native_shadow_unavailable"
+    if not native_shadow_unavailable and evaluating:
+        # An Evaluate bundle keeps its canonical rows empty on purpose, so it
+        # has nothing to drift from and needs no verdict from the resident.
+        # This is the answer the Rust policy_shadow_verdict kind gives for an
+        # evaluating candidate; test_policy_bundle_v2 pins that answer, so the
+        # two stay in step. Asking anyway would refuse the bundle whenever the
+        # resident is unreachable, which the Evaluate rollout must not do.
+        mismatch_reasons, rejection = (), None
+    elif not native_shadow_unavailable:
+        try:
+            mismatch_reasons, rejection = _shadow.policy_shadow_verdict(
                 legacy_decisions,
                 canonical_decisions,
+                evaluating=evaluating,
+                canonical_enforcement=canonical_enforcement,
             )
-        )
-    except NativeRunnerAuthorityError:
-        # Rust owns the shadow comparison. Without its verdict the candidate
-        # cannot be proven equivalent, so treat it as a blocking mismatch: keep
-        # the existing policy and never activate the new bundle.
-        native_shadow_unavailable = True
-        mismatch_reasons = ("native_shadow_unavailable",)
-    blocking_mismatch_reasons = tuple(reason for reason in mismatch_reasons if reason != "legacy_unavailable")
+        except NativeRunnerAuthorityError:
+            # Rust owns the shadow comparison. Without its verdict the candidate
+            # cannot be proven equivalent, so treat it as a blocking mismatch:
+            # keep the existing policy and never activate the new bundle.
+            mismatch_reasons, rejection = ("native_shadow_unavailable",), "native_shadow_unavailable"
     if mismatch_reasons:
         store.add_event(
             "policy_bundle/shadow_mismatch",
@@ -532,11 +428,7 @@ def policy_bundle_candidate_decisions(
             },
             now,
         )
-    if native_shadow_unavailable:
-        return canonical_decisions, "native_shadow_unavailable", None
-    if canonical_enforcement and blocking_mismatch_reasons:
-        return canonical_decisions, "canonical_shadow_mismatch", None
-    return canonical_decisions, None, None
+    return canonical_decisions, rejection, None
 
 
 def sync_receipts(
@@ -554,34 +446,12 @@ def sync_receipts(
     """Push local receipts to the configured sync endpoint."""
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _sync.normalized_receipts_sync_url(
-        _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
-    )
+    _sync.normalized_receipts_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
     local_guard_online_at = _now()
     redaction_level = _resolve_cloud_receipt_redaction_level(store)
     _ensure_cloud_review_privacy_projection(store, level=redaction_level, synced_at=local_guard_online_at)
     _ensure_relaxed_receipt_redaction_resync(store, level=redaction_level, synced_at=local_guard_online_at)
-    prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
-    receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
-    cursor_receipt_ids = {item.get("receipt_id") for item in receipts if isinstance(item.get("receipt_id"), str)}
-    receipts, command_detail_backfill_marker = _receipt_sync_rows_with_command_detail_backfill(
-        store,
-        receipts=receipts,
-        redaction_level=redaction_level,
-        synced_at=local_guard_online_at,
-    )
     inventory = store.list_inventory()
-    payload: dict[str, object] = {}
-    receipts_stored_total = 0
-    advisories_payload: list[dict[str, object]] = []
-    policy_bundle_payload: dict[str, object] | None = None
-    policy_bundle_sync_payload: dict[str, object] | None = None
-    policy_bundle_delivery_payload: object = None
-    policy_bundle_delivery_field_provided = False
-    policy_bundle_field_provided = False
-    policy_bundle_field_malformed = False
-    alert_preferences_payload: dict[str, object] | None = None
-    review_verification_keys_payload: object | None = None
     remote_decisions: set[PolicyDecision] = set()
     device_id, device_name = _guard_device_metadata(store)
     sync_context = _receipt_sync_context(
@@ -590,164 +460,54 @@ def sync_receipts(
         device_id=device_id,
         device_name=device_name,
     )
-    latest_uploaded_rowid: int | None = None
-    auth_refresh_retried = False
-    persisted_command_detail_backfill_marker = command_detail_backfill_marker
     # The posture rides on the first request of the cycle only; later batches
     # carry receipts and the plain context.
-    pending_fleet_posture = _build_fleet_posture_for_sync(
+    fleet_posture = _build_fleet_posture_for_sync(
         store,
         sync_context=sync_context,
         home_dir=home_dir,
         workspace_dir=workspace_dir,
     )
-    pending_workspace_assessments = build_workspace_assessment_sync_safely(store)
+    workspace_assessments = build_workspace_assessment_sync_safely(store)
     bundle_hash_sent = _sync_context_bundle_hash(sync_context)
-    for receipt_batch in _iter_receipt_sync_batches(receipts):
-        batch_sync_context = dict(sync_context)
-        batch_fleet_posture = pending_fleet_posture
-        pending_fleet_posture = None
-        if batch_fleet_posture is not None:
-            batch_sync_context["fleetPosture"] = batch_fleet_posture.payload
-        unfitted_workspace_assessments = pending_workspace_assessments
-        pending_workspace_assessments = None
-        batch_workspace_assessments = unfitted_workspace_assessments
-        batch_receipts_payload = _cloud_sync_receipts_payload(
-            receipt_batch,
-            device_id=device_id,
-            device_name=device_name,
-            redaction_level=redaction_level,
-        )
-        if batch_workspace_assessments is not None:
-            # The summary gets what the receipts and fleet posture leave of the request budget.
-            base_size = len(
-                json.dumps({"receipts": batch_receipts_payload, "syncContext": batch_sync_context}).encode("utf-8")
-            )
-            batch_workspace_assessments = fit_workspace_assessment_to_request(
-                batch_workspace_assessments,
-                _WORKSPACE_ASSESSMENT_REQUEST_BYTES - base_size - _WORKSPACE_ASSESSMENT_KEY_OVERHEAD,
-            )
-            if batch_workspace_assessments is None:
-                # A later, smaller receipt batch may leave room for it.
-                pending_workspace_assessments = unfitted_workspace_assessments
-        if batch_workspace_assessments is not None:
-            batch_sync_context["workspaceAssessments"] = batch_workspace_assessments.payload
-        body = json.dumps({"receipts": batch_receipts_payload, "syncContext": batch_sync_context}).encode("utf-8")
-        request = _guard_sync_request(
-            resolved_auth_context,
-            request_url=sync_url,
-            method="POST",
-            data=body,
-            extra_headers=None,
-        )
-        try:
-            payload = _urlopen_json_with_timeout_retry(
-                request=request,
-                timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
-                retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
-            )
-        except urllib.error.HTTPError as error:
-            if error.code == 401:
-                edge_block = _cloud_edge_block_from_http_error(error)
-                if edge_block is not None:
-                    raise RuntimeError(edge_block) from error
-                if auth_context is None and not auth_refresh_retried:
-                    auth_refresh_retried = True
-                    resolved_auth_context = _resolve_guard_sync_auth_context(store, force_refresh=True)
-                    sync_url = _sync.normalized_receipts_sync_url(
-                        _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
-                    )
-                    request = _guard_sync_request(
-                        resolved_auth_context,
-                        request_url=sync_url,
-                        method="POST",
-                        data=body,
-                        extra_headers=None,
-                    )
-                    try:
-                        payload = _urlopen_json_with_timeout_retry(
-                            request=request,
-                            timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
-                            retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
-                        )
-                    except urllib.error.HTTPError as retry_error:
-                        if retry_error.code == 401:
-                            edge_block = _cloud_edge_block_from_http_error(retry_error)
-                            if edge_block is not None:
-                                raise RuntimeError(edge_block) from retry_error
-                            raise GuardSyncAuthorizationExpiredError(
-                                _guard_oauth_reauthorization_message()
-                            ) from retry_error
-                        if retry_error.code == 403:
-                            _is_plan, _msg = _check_plan_restriction_403(retry_error)
-                            if _is_plan:
-                                raise GuardSyncNotAvailableError(_msg) from retry_error
-                            raise RuntimeError(_msg) from retry_error
-                        raise RuntimeError(_sync_http_error_message(retry_error)) from retry_error
-                    except OSError as retry_error:
-                        raise RuntimeError(_sync_url_error_message(retry_error)) from retry_error
-                else:
-                    raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message()) from error
-            elif error.code == 403:
-                _is_plan, _msg = _check_plan_restriction_403(error)
-                if _is_plan:
-                    raise GuardSyncNotAvailableError(_msg) from error
-                raise RuntimeError(_msg) from error
-            else:
-                raise RuntimeError(_sync_http_error_message(error)) from error
-        except OSError as error:
-            raise RuntimeError(_sync_url_error_message(error)) from error
-        _record_fleet_posture_delivery(store, batch_fleet_posture, payload)
-        record_workspace_assessment_delivery(store, batch_workspace_assessments)
-        cursor_batch_rowids = _receipt_sync_cursor_rowids_from_batch(
-            receipt_batch,
-            cursor_receipt_ids=cursor_receipt_ids,
-        )
-        for rowid in cursor_batch_rowids:
-            if isinstance(rowid, int) and (latest_uploaded_rowid is None or rowid > latest_uploaded_rowid):
-                latest_uploaded_rowid = rowid
-        batch_synced_at = _sync_timestamp(payload)
-        updated_command_detail_backfill_marker = _advance_command_detail_backfill_marker(
-            persisted_command_detail_backfill_marker,
-            receipt_batch=receipt_batch,
-            synced_at=batch_synced_at,
-        )
-        if updated_command_detail_backfill_marker is not None:
-            persisted_command_detail_backfill_marker = updated_command_detail_backfill_marker
-            store.set_sync_payload(
-                _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
-                persisted_command_detail_backfill_marker,
-                batch_synced_at,
-            )
-        if latest_uploaded_rowid is not None:
-            _persist_receipt_sync_cursor(
-                store=store,
-                latest_uploaded_rowid=latest_uploaded_rowid,
-                synced_at=batch_synced_at,
-            )
-        batch_receipts_stored = payload.get("receiptsStored")
-        if isinstance(batch_receipts_stored, int):
-            receipts_stored_total += batch_receipts_stored
-        advisories = payload.get("advisories")
-        if isinstance(advisories, list):
-            advisories_payload.extend(item for item in advisories if isinstance(item, dict))
-        if "policyBundle" in payload:
-            policy_bundle_field_provided = True
-            policy_bundle = payload.get("policyBundle")
-            if isinstance(policy_bundle, dict):
-                if policy_bundle or policy_bundle_payload is None:
-                    policy_bundle_payload = policy_bundle
-                    policy_bundle_sync_payload = payload
-                    policy_bundle_delivery_field_provided = "policyBundleDelivery" in payload
-                    policy_bundle_delivery_payload = payload.get("policyBundleDelivery")
-            else:
-                policy_bundle_field_malformed = True
-        alert_preferences = payload.get("alertPreferences")
-        if isinstance(alert_preferences, dict) and (alert_preferences or alert_preferences_payload is None):
-            alert_preferences_payload = alert_preferences
-        if "reviewVerificationKeys" in payload:
-            review_verification_keys_payload = payload.get("reviewVerificationKeys")
-    now = _sync_timestamp(payload)
+    from .cloud_bundle_sync import ReceiptUploadAnswer, cloud_receipt_upload
+
+    uploaded = cloud_receipt_upload(
+        Path(store.guard_home),
+        {
+            "redactionLevel": redaction_level,
+            "deviceId": device_id,
+            "deviceName": device_name,
+            "now": local_guard_online_at,
+            "syncContext": sync_context,
+            "fleetPosture": None
+            if fleet_posture is None
+            else {
+                "payload": fleet_posture.payload,
+                "nextState": fleet_posture.next_state,
+                "advancedInventory": fleet_posture.advanced_inventory,
+            },
+            "workspaceAssessments": None
+            if workspace_assessments is None
+            else {"payload": workspace_assessments.payload, "digest": workspace_assessments.digest},
+            # A sign-in the caller supplied is never refreshed here.
+            "allowAuthRefresh": auth_context is None,
+        },
+        auth_context=resolved_auth_context,
+    )
+    if not isinstance(uploaded, dict):
+        raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
+    if uploaded.get("auth_refreshed") is True:
+        resolved_auth_context = _resolve_guard_sync_auth_context(store)
+    upload_answer = ReceiptUploadAnswer.from_native(uploaded)
+    now = upload_answer.now
+    policy_bundle_field_provided = upload_answer.policy_bundle_provided
+    policy_bundle_field_malformed = upload_answer.policy_bundle_malformed
+    policy_bundle_payload = upload_answer.policy_bundle
+    policy_bundle_sync_payload = upload_answer.policy_bundle_sync_payload
+    policy_bundle_delivery_field_provided = upload_answer.policy_bundle_delivery_provided
+    policy_bundle_delivery_payload = upload_answer.policy_bundle_delivery
+    review_verification_keys_payload = upload_answer.review_verification_keys
     aibom_context: dict[str, object] = {}
     if home_dir is not None:
         aibom_context["home_dir"] = str(home_dir)
@@ -758,27 +518,14 @@ def sync_receipts(
             aibom_context["workspace_id"] = workspace_id
     if aibom_context:
         store.set_sync_payload("aibom_inventory_context", aibom_context, now)
-    if persisted_command_detail_backfill_marker is not None:
-        store.set_sync_payload(
-            _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
-            persisted_command_detail_backfill_marker,
-            now,
-        )
-    persisted_cursor_rowid = latest_uploaded_rowid if latest_uploaded_rowid is not None else prior_receipt_cursor
-    _persist_receipt_sync_cursor(
-        store=store,
-        latest_uploaded_rowid=persisted_cursor_rowid,
-        synced_at=now,
-    )
-    deduped_advisories = _dedupe_sync_payload_items(advisories_payload)
     # Top-level ``policy``, ``teamPolicyPack``, and ``exceptions`` fields are
     # legacy unsigned siblings. They may be present on an authenticated HTTPS
     # response, but they are not covered by the pinned policy-bundle signature
     # and therefore cannot be persisted or materialized as local authority.
     # Only decisions and exceptions inside a validated signed bundle are used.
-    advisories_stored = 0
-    if deduped_advisories:
-        advisories_stored = store.cache_advisories(deduped_advisories, now)
+    # The native upload already cached the advisories, stored the alert
+    # preferences and recorded the advisory events.
+    advisories_stored = upload_answer.advisories_stored
     cloud_workspace_id = store.get_cloud_workspace_id()
     canonical_enforcement = _sync.canonical_policy_enforcement_enabled(
         device_id=device_id,
@@ -830,18 +577,14 @@ def sync_receipts(
             validated_policy_bundle = None
             policy_bundle_rejection_reason = NATIVE_UNAVAILABLE_REJECTION
         try:
-            if validated_policy_bundle is not None and not _daemon_version_supported(validated_policy_bundle):
+            admission_rejection = (
+                None
+                if validated_policy_bundle is None
+                else _policy_bundle_admission_rejection(store, existing_policy_bundle, validated_policy_bundle)
+            )
+            if admission_rejection is not None:
                 validated_policy_bundle = None
-                policy_bundle_rejection_reason = "unsupported_daemon_version"
-            if validated_policy_bundle is not None and not policy_bundle_is_enforceable(validated_policy_bundle):
-                validated_policy_bundle = None
-                policy_bundle_rejection_reason = "inactive_rollout_state"
-            if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(
-                _policy_bundle_downgrade_reference(store, existing_policy_bundle),
-                validated_policy_bundle,
-            ):
-                validated_policy_bundle = None
-                policy_bundle_rejection_reason = "bundle_version_downgrade"
+                policy_bundle_rejection_reason = admission_rejection
         except PolicyBundleNativeError as error:
             validated_policy_bundle = None
             policy_bundle_rejection_reason = native_rejection_code(error)
@@ -907,11 +650,7 @@ def sync_receipts(
             )
             failed_policy_bundle = policy_bundle_payload
             failed_policy_bundle_reason = str(activation_last_error["reason"])
-            store.add_event(
-                "policy_bundle/rejected",
-                activation_last_error,
-                now,
-            )
+            store.record_policy_bundle_rejection(activation_last_error, now=now)
     else:
         effective_policy_bundle = existing_policy_bundle
         if effective_policy_bundle is None:
@@ -929,15 +668,11 @@ def sync_receipts(
                 activation_last_error = _policy_bundle_rejection_payload(rejection_reason)
                 failed_policy_bundle = existing_policy_bundle_payload
                 failed_policy_bundle_reason = rejection_reason
-                store.add_event("policy_bundle/rejected", activation_last_error, now)
+                store.record_policy_bundle_rejection(activation_last_error, now=now)
         if not activation_last_error:
             stored_last_error = store.get_sync_payload("policy_bundle_last_error")
             if isinstance(stored_last_error, dict):
                 activation_last_error = stored_last_error
-    if alert_preferences_payload is not None:
-        store.set_sync_payload("alert_preferences", alert_preferences_payload, now)
-    else:
-        store.set_sync_payload("alert_preferences", {}, now)
     cloud_exception_items: list[dict[str, object]] = []
     remote_policies_stored = 0
     remote_policy_sync_blocked = False
@@ -975,7 +710,7 @@ def sync_receipts(
             activation_reason = native_rejection_code(error)
         if activation_bundle is None:
             activation_last_error = _policy_bundle_rejection_payload(activation_reason)
-            store.add_event("policy_bundle/rejected", activation_last_error, now)
+            store.record_policy_bundle_rejection(activation_last_error, now=now)
             if failed_policy_bundle is None:
                 failed_policy_bundle = effective_policy_bundle
                 failed_policy_bundle_reason = str(activation_last_error["reason"])
@@ -999,7 +734,7 @@ def sync_receipts(
                 )
                 if managed_error is not None:
                     activation_last_error = _policy_bundle_rejection_payload(managed_error)
-                    store.add_event("policy_bundle/rejected", activation_last_error, now)
+                    store.record_policy_bundle_rejection(activation_last_error, now=now)
                     effective_policy_bundle = None
                     retain_existing_policy_authority = True
     if effective_policy_bundle is None and activation_last_error.get("reason") == NATIVE_UNAVAILABLE_REJECTION:
@@ -1045,7 +780,7 @@ def sync_receipts(
             # outage keeps the prior authority; a deterministic native rejection
             # is a verdict, so it must not leave a stale bundle in force.
             activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))
-            store.add_event("policy_bundle/rejected", activation_last_error, now)
+            store.record_policy_bundle_rejection(activation_last_error, now=now)
             rejected_policy_bundle = effective_policy_bundle
             effective_policy_bundle = None
             if not isinstance(error, PolicyBundleNativeUnavailableError) and not retain_existing_policy_authority:
@@ -1103,71 +838,41 @@ def sync_receipts(
                 if activated is None:
                     cloud_exception_items = []
                     activation_last_error = _policy_bundle_rejection_payload(activation_rejection_reason)
-                    persist_activation_rejection(store, activation_last_error, now)
+                    store.record_policy_bundle_rejection(activation_last_error, now=now, persist_last_error=True)
                 else:
                     remote_policies_stored = len(remote_decisions)
-                    if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-                        canonical_last_good = store.get_sync_payload("policy_bundle_canonical_last_good")
-                        if isinstance(canonical_last_good, dict) and canonical_last_good.get(
-                            "bundleHash"
-                        ) != effective_policy_bundle.get("bundleHash"):
-                            store.set_sync_payload(
-                                "policy_bundle_canonical_previous_good",
-                                canonical_last_good,
-                                now,
-                            )
-                        store.set_sync_payload(
-                            "policy_bundle_canonical_last_good",
-                            effective_policy_bundle,
-                            now,
-                        )
-                    else:
-                        store.set_sync_payload(
-                            "policy_bundle_legacy_last_good",
-                            effective_policy_bundle,
-                            now,
-                        )
-                    if validated_policy_bundle is None and policy_bundle_field_provided:
-                        store.add_event(
-                            "policy_bundle/rollback",
-                            {
-                                "reason": activation_last_error.get("reason", "invalid_policy_bundle"),
-                                "restored": "policy_bundle_last_good",
-                            },
-                            now,
-                        )
-                    cloud_redaction_level = non_empty_string(effective_policy_bundle.get("receiptRedactionLevel"))
-                    if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
-                        _persist_cloud_receipt_redaction_level(
-                            store,
-                            level=cloud_redaction_level,
-                            synced_at=now,
-                        )
-                    else:
-                        _reset_cloud_receipt_redaction_authority(store, synced_at=now)
+                    store.record_policy_bundle_activation(
+                        effective_policy_bundle,
+                        now=now,
+                        local_level=local_receipt_redaction_level(store.guard_home),
+                        rollback_reason=(
+                            str(activation_last_error.get("reason", "invalid_policy_bundle"))
+                            if validated_policy_bundle is None and policy_bundle_field_provided
+                            else None
+                        ),
+                    )
             except PolicyBundleNativeError as error:
                 cloud_exception_items = []
                 activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))
-                persist_activation_rejection(store, activation_last_error, now)
+                store.record_policy_bundle_rejection(activation_last_error, now=now, persist_last_error=True)
             except ApprovalGateError as error:
                 cloud_exception_items = []
                 remote_policy_sync_blocked = True
                 activation_last_error = _policy_bundle_rejection_payload(error.code)
-                persist_activation_rejection(store, activation_last_error, now)
-                store.add_event(
-                    "approval_gate/remote_policy_sync_blocked",
-                    {
+                store.record_policy_bundle_rejection(
+                    activation_last_error,
+                    now=now,
+                    persist_last_error=True,
+                    gate_blocked={
                         "error": error.code,
                         "remote_policies_count": len(remote_decisions),
                     },
-                    now,
                 )
     _send_policy_ack_followup(
         store,
         sync_context=sync_context,
         bundle_hash_sent=bundle_hash_sent,
         auth_context=resolved_auth_context,
-        sync_url=sync_url,
         device_id=device_id,
         device_name=device_name,
         local_guard_online_at=local_guard_online_at,
@@ -1185,12 +890,9 @@ def sync_receipts(
         if review_verification_keys_payload is not None
         else None
     )
-    _record_synced_alert_events(
-        store=store,
-        advisories=deduped_advisories,
-        alert_preferences=alert_preferences_payload,
-        now=now,
-    )
+    if upload_answer.answers_error is not None:
+        # Raised once the policy bundle the same answer carried has been handled.
+        raise RuntimeError(upload_answer.answers_error)
     try:
         pain_signals_uploaded = sync_pain_signals(store, auth_context=resolved_auth_context)
     except RuntimeError as pain_signal_error:
@@ -1200,29 +902,25 @@ def sync_receipts(
             raise
     value_metrics, weekly_digest = _sync.value_metrics(store.list_events(limit=_sync.VALUE_METRIC_EVENT_LIMIT), now)
     summary: dict[str, object] = {
-        "synced_at": payload.get("syncedAt"),
-        "receipts_stored": receipts_stored_total,
+        "synced_at": upload_answer.synced_at,
+        "receipts_stored": upload_answer.receipts_stored,
         "advisories_stored": advisories_stored,
         "exceptions_stored": 0,
         "cloud_exceptions_stored": len(cloud_exception_items),
         "remote_policies_stored": remote_policies_stored,
         "pain_signals_uploaded": pain_signals_uploaded,
-        "receipts": len(receipts),
-        "receipt_cursor_rowid": persisted_cursor_rowid,
-        "receipt_cursor_backfill": bool(
-            prior_receipt_cursor is not None
-            and len(receipts) > 0
-            and not any(
-                (receipt_rowid := _int_value(item.get("receipt_rowid"))) is not None
-                and receipt_rowid > prior_receipt_cursor
-                for item in receipts
-            )
-        ),
+        "receipts": upload_answer.receipts,
+        "receipt_cursor_rowid": upload_answer.receipt_cursor_rowid,
+        "receipt_cursor_backfill": upload_answer.receipt_cursor_backfill,
         "inventory": 0,
         "inventory_tracked": len(inventory),
         "value_metrics": value_metrics,
         "weekly_digest": weekly_digest,
     }
+    if upload_answer.receipts_skipped:
+        # Too large for any request; the cursor has moved past them.
+        summary["receipts_skipped"] = upload_answer.receipts_skipped
+        _LOGGER.warning("Guard sync skipped %d receipt(s) too large to upload.", upload_answer.receipts_skipped)
     if remote_policy_sync_blocked:
         summary["remote_policy_sync_blocked"] = True
     if review_verification_keys_rejection is not None:
@@ -1249,172 +947,16 @@ def sync_receipts(
                 "run hol-guard sync --deep to refresh now."
             ),
         }
-    if persist_sync_summary:
-        store.set_sync_payload("sync_summary", summary, now)
-    if persist_connect_state:
-        store.record_latest_guard_connect_sync_success(sync_payload=summary, now=now)
+    if persist_sync_summary or persist_connect_state:
+        store.record_sync_summary(
+            summary, now=now, persist_summary=persist_sync_summary, record_connect=persist_connect_state
+        )
     return summary
 
 
 def _guard_cloud_http_error_details(error: urllib.error.HTTPError) -> tuple[str, bool]:
     answer = _cloud_http_error(error)
     return answer.message, answer.retryable
-
-
-class _GuardBundleUnauthorizedError(RuntimeError):
-    """Guard Cloud refused the bundle fetch's access token."""
-
-
-def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[str, object]:
-    try:
-        # Stop at what the verifier can be asked about. A larger response could
-        # only be carried to a verifier that would refuse the request, so
-        # failing the fetch keeps the reason where the caller can report it.
-        return _urlopen_json_with_timeout_retry(
-            request=request,
-            timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
-            retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
-            max_response_bytes=MAX_SUPPLY_CHAIN_BUNDLE_RESPONSE_BYTES,
-        )
-    except urllib.error.HTTPError as error:
-        if error.code == 403:
-            is_plan_restricted, message = _check_plan_restriction_403(error)
-            if is_plan_restricted:
-                raise GuardSyncNotAvailableError(message) from error
-            raise RuntimeError(message) from error
-        answer = _cloud_http_error(error)
-        if answer.retryable:
-            raise GuardSyncNotAvailableError(answer.message, retryable=True) from error
-        if error.code == 401 and answer.edge_block is None:
-            raise _GuardBundleUnauthorizedError(answer.message) from error
-        raise RuntimeError(answer.message) from error
-    except OSError as error:
-        if _is_guard_cloud_unreachable_error(error):
-            raise GuardSyncNotAvailableError(_GUARD_CLOUD_UNREACHABLE_MESSAGE, retryable=True) from error
-        raise RuntimeError(_sync_url_error_message(error)) from error
-
-
-def _verified_supply_chain_bundle_response(
-    payload: dict[str, object],
-    *,
-    trusted_keys: tuple[SupplyChainVerificationKey, ...],
-    cached_bundle_version: str | None,
-    store: GuardStore,
-) -> VerifiedSupplyChainBundle:
-    """Have the resident verify one bundle response.
-
-    The resident reads the response and recomputes the canonical payload over
-    ``payload`` itself and owns every verdict about it: the payload hash, the
-    keyring the signing key anchors to, that key's rotation state, freshness,
-    rollback and the signature. A resident that cannot answer raises, so an
-    unverified bundle is never treated as verified.
-    """
-
-    return native_verify_supply_chain_bundle_response(
-        payload,
-        trusted_keys=[key.to_dict() for key in trusted_keys] or None,
-        cached_bundle_version=cached_bundle_version,
-        guard_home=store.guard_home,
-        store=store,
-    )
-
-
-def _sync_supply_chain_bundle_incremental(
-    *,
-    bundle_url: str,
-    cached_bundle_version: str | None,
-    auth_context: dict[str, object],
-    store: GuardStore,
-    trusted_keys: tuple[SupplyChainVerificationKey, ...],
-    workspace_id: str,
-) -> dict[str, object] | None:
-    index_request = _guard_sync_request(
-        auth_context,
-        request_url=_sync.normalized_supply_chain_bundle_index_url(bundle_url),
-        method="GET",
-        data=None,
-        extra_headers={"Accept-Encoding": "identity"},
-    )
-    try:
-        index_payload = _fetch_supply_chain_bundle_payload(index_request)
-    except RuntimeError:
-        return None
-    if not isinstance(index_payload, dict):
-        return None
-    raw_partitions = index_payload.get("partitions")
-    if not isinstance(raw_partitions, list) or len(raw_partitions) == 0:
-        return None
-    cached_partition_payload = store.get_sync_payload("supply_chain_bundle_partition_cache")
-    cached_partitions = {}
-    if isinstance(cached_partition_payload, dict):
-        raw_cached_partitions = cached_partition_payload.get("partitions")
-        if isinstance(raw_cached_partitions, dict):
-            cached_partitions = raw_cached_partitions
-    next_partition_cache: dict[str, object] = {}
-    refreshed_partitions = 0
-    for descriptor in raw_partitions:
-        if not isinstance(descriptor, dict):
-            continue
-        ecosystem = descriptor.get("ecosystem")
-        partition = descriptor.get("partition")
-        payload_hash = descriptor.get("payloadHash")
-        if not isinstance(ecosystem, str) or not isinstance(partition, int) or not isinstance(payload_hash, str):
-            continue
-        cache_key = f"{ecosystem}:{partition}"
-        cached_partition = cached_partitions.get(cache_key)
-        response = None
-        if isinstance(cached_partition, dict) and cached_partition.get("payload_hash") == payload_hash:
-            raw_cached_response = cached_partition.get("response")
-            if isinstance(raw_cached_response, dict):
-                try:
-                    response = _verified_supply_chain_bundle_response(
-                        raw_cached_response,
-                        trusted_keys=trusted_keys,
-                        cached_bundle_version=cached_bundle_version,
-                        store=store,
-                    )
-                except SupplyChainBundleError:
-                    response = None
-        if response is None:
-            try:
-                partition_request = _guard_sync_request(
-                    auth_context,
-                    request_url=_sync.supply_chain_partition_bundle_url(
-                        bundle_url, ecosystem=ecosystem, partition=partition
-                    ),
-                    method="GET",
-                    data=None,
-                    extra_headers={"Accept-Encoding": "identity"},
-                )
-                partition_payload = _fetch_supply_chain_bundle_payload(partition_request)
-                response = _verified_supply_chain_bundle_response(
-                    partition_payload,
-                    trusted_keys=trusted_keys,
-                    cached_bundle_version=cached_bundle_version,
-                    store=store,
-                )
-            except (RuntimeError, SupplyChainBundleError):
-                return None
-            refreshed_partitions += 1
-        next_partition_cache[cache_key] = {
-            "payload_hash": payload_hash,
-            "response": response.response,
-        }
-    if not next_partition_cache:
-        return None
-    bundle_version = index_payload.get("bundleVersion")
-    resolved_bundle_version = bundle_version if isinstance(bundle_version, str) and bundle_version else None
-    if resolved_bundle_version is None:
-        resolved_bundle_version = cached_bundle_version or ""
-    return {
-        "cache_payload": {
-            "bundle_version": resolved_bundle_version,
-            "partitions": next_partition_cache,
-            "workspace_id": workspace_id,
-        },
-        "refreshed_partitions": refreshed_partitions,
-        "total_partitions": len(next_partition_cache),
-    }
 
 
 def sync_supply_chain_bundle(
@@ -1424,131 +966,10 @@ def sync_supply_chain_bundle(
 ) -> dict[str, object]:
     """Fetch, verify, and persist the active supply-chain bundle for the cloud workspace."""
 
-    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is None:
-        raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
-    bundle_url = _sync.normalized_supply_chain_bundle_url(str(resolved_auth_context["sync_url"]), workspace_id)
-    cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
-    cached_bundle_version = None
-    if isinstance(cached_bundle, dict):
-        cached_payload = cached_bundle.get("bundle")
-        if isinstance(cached_payload, dict):
-            existing_version = cached_payload.get("bundleVersion")
-            if isinstance(existing_version, str) and existing_version:
-                cached_bundle_version = existing_version
-    trusted_keys = load_supply_chain_verification_keys(store.get_sync_payload("supply_chain_bundle_keyring"))
-    try:
-        partition_sync: dict[str, object] | None = _sync_supply_chain_bundle_incremental(
-            bundle_url=bundle_url,
-            cached_bundle_version=cached_bundle_version,
-            auth_context=resolved_auth_context,
-            store=store,
-            trusted_keys=trusted_keys,
-            workspace_id=workspace_id,
-        )
-    except (RuntimeError, SupplyChainBundleError):
-        partition_sync = None
-    if (
-        partition_sync is not None
-        and partition_sync.get("refreshed_partitions") == 0
-        and isinstance(cached_bundle, dict)
-    ):
-        try:
-            response = _verified_supply_chain_bundle_response(
-                cached_bundle,
-                trusted_keys=trusted_keys,
-                cached_bundle_version=cached_bundle_version,
-                store=store,
-            )
-        except SupplyChainBundleError:
-            try:
-                request = _guard_sync_request(
-                    resolved_auth_context,
-                    request_url=bundle_url,
-                    method="GET",
-                    data=None,
-                    extra_headers={"Accept-Encoding": "identity"},
-                )
-                payload = _fetch_supply_chain_bundle_payload(request)
-                response = _verified_supply_chain_bundle_response(
-                    payload,
-                    trusted_keys=trusted_keys,
-                    cached_bundle_version=cached_bundle_version,
-                    store=store,
-                )
-            except GuardSyncNotAvailableError:
-                raise
-            except (RuntimeError, SupplyChainBundleError) as error:
-                raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
-    else:
-        request = _guard_sync_request(
-            resolved_auth_context,
-            request_url=bundle_url,
-            method="GET",
-            data=None,
-            extra_headers={"Accept-Encoding": "identity"},
-        )
-        payload = _fetch_supply_chain_bundle_payload(request)
-        try:
-            response = _verified_supply_chain_bundle_response(
-                payload,
-                trusted_keys=trusted_keys,
-                cached_bundle_version=cached_bundle_version,
-                store=store,
-            )
-        except SupplyChainBundleError as error:
-            raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
-    synced_at = _now()
-    store.cache_supply_chain_bundle(workspace_id, response.response, synced_at)
-    verified = response.summary
-    store.set_sync_payload(
-        "supply_chain_bundle_keyring",
-        {
-            "workspace_id": workspace_id,
-            "keys": [item.to_dict() for item in response.verification_keys],
-        },
-        synced_at,
-    )
-    store.set_sync_payload(
-        "supply_chain_bundle_entitlement",
-        {
-            "bundle_version": verified.get("bundle_version"),
-            "key_id": verified.get("key_id"),
-            "policy_hash": verified.get("policy_hash"),
-            "tier": verified.get("tier"),
-            "workspace_id": workspace_id,
-        },
-        synced_at,
-    )
-    if partition_sync is not None:
-        cache_payload = partition_sync.get("cache_payload")
-        if isinstance(cache_payload, dict):
-            store.set_sync_payload(
-                "supply_chain_bundle_partition_cache",
-                cache_payload,
-                synced_at,
-            )
-    summary: dict[str, object] = {
-        "advisory_count": verified.get("advisory_count"),
-        "bundle_version": verified.get("bundle_version"),
-        "ecosystem_support": list(ecosystem_support_matrix()),
-        "feed_snapshot_hash": verified.get("feed_snapshot_hash"),
-        "package_count": verified.get("package_count"),
-        "policy_hash": verified.get("policy_hash"),
-        "status": "synced",
-        "synced_at": synced_at,
-        "tier": verified.get("tier"),
-        "workspace_id": workspace_id,
-    }
-    if partition_sync is not None:
-        summary["partition_sync"] = {
-            "enabled": True,
-            "refreshed": _int_value(partition_sync.get("refreshed_partitions")) or 0,
-            "total": _int_value(partition_sync.get("total_partitions")) or 0,
-        }
-    store.set_sync_payload("supply_chain_bundle_summary", summary, synced_at)
-    return summary
+    from .cloud_bundle_sync import cloud_bundle_sync
+
+    result = cloud_bundle_sync(Path(store.guard_home), "supply_chain", auth_context=auth_context)
+    return result if isinstance(result, dict) else {}
 
 
 def sync_network_protection_bundle(
@@ -1558,80 +979,10 @@ def sync_network_protection_bundle(
 ) -> dict[str, object]:
     """Fetch, verify, and save the workspace's signed network protection bundle."""
 
-    from ..native_network_protection_bundle import native_verify_network_protection_response
-    from .network_protection_bundle import (
-        NETWORK_PROTECTION_SYNC_STATE_KEY,
-        NetworkProtectionBundleError,
-        network_protection_status,
-    )
+    from .cloud_bundle_sync import cloud_bundle_sync
 
-    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is None:
-        raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
-    bundle_url = _sync.sync_url(
-        "network_protection_bundle",
-        str(resolved_auth_context["sync_url"]),
-        workspace_id=workspace_id,
-    )
-    saved = store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
-    cached_bundle_version = None
-    saved_bundle = saved.get("bundle") if isinstance(saved, dict) else None
-    if isinstance(saved_bundle, dict) and saved_bundle.get("workspaceId") != workspace_id:
-        # Another workspace's rules must not stay in force, or anchor its
-        # rollback check, once this device is connected elsewhere.
-        store.delete_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
-        saved_bundle = None
-    if isinstance(saved_bundle, dict):
-        existing_version = saved_bundle.get("bundleVersion")
-        if isinstance(existing_version, str) and existing_version:
-            cached_bundle_version = existing_version
-    try:
-        payload = _fetch_network_protection_bundle_payload(resolved_auth_context, bundle_url)
-    except _GuardBundleUnauthorizedError:
-        # Access tokens live five minutes, and a full sync reaches this step
-        # minutes after its auth context was resolved, so the token it was
-        # handed may have lapsed on the way. Refresh once; a second refusal
-        # stands. A refresh that finds the device signed out reports that here
-        # rather than reading as a workspace that was never connected.
-        try:
-            resolved_auth_context = _resolve_guard_sync_auth_context(store, force_refresh=True)
-        except GuardSyncNotConfiguredError as error:
-            raise RuntimeError(str(error)) from error
-        bundle_url = _sync.sync_url(
-            "network_protection_bundle",
-            str(resolved_auth_context["sync_url"]),
-            workspace_id=workspace_id,
-        )
-        payload = _fetch_network_protection_bundle_payload(resolved_auth_context, bundle_url)
-    try:
-        verified = native_verify_network_protection_response(
-            payload,
-            workspace_id=workspace_id,
-            # The saved keyring goes over as it was stored; the resident parses
-            # and anchors it, so Python never decides which key is trusted.
-            trusted_keys=store.get_sync_payload("supply_chain_bundle_keyring"),
-            cached_bundle_version=cached_bundle_version,
-        )
-    except NetworkProtectionBundleError as error:
-        raise RuntimeError(f"Guard network protection bundle sync failed: {error}") from error
-    synced_at = _now()
-    store.set_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY, verified, synced_at)
-    return {**network_protection_status(verified), "status": "synced", "synced_at": synced_at}
-
-
-def _fetch_network_protection_bundle_payload(
-    auth_context: dict[str, object],
-    bundle_url: str,
-) -> dict[str, object]:
-    request = _guard_sync_request(
-        auth_context,
-        request_url=bundle_url,
-        method="GET",
-        data=None,
-        extra_headers={"Accept-Encoding": "identity"},
-    )
-    return _fetch_supply_chain_bundle_payload(request)
+    result = cloud_bundle_sync(Path(store.guard_home), "network", auth_context=auth_context)
+    return result if isinstance(result, dict) else {}
 
 
 def sync_network_protection_bundle_best_effort(
@@ -1645,13 +996,13 @@ def sync_network_protection_bundle_best_effort(
     with the error when the fetch or verification fails.
     """
 
+    from .cloud_bundle_sync import cloud_bundle_sync
+
     try:
-        return sync_network_protection_bundle(store, auth_context=auth_context)
-    except GuardSyncNotConfiguredError:
-        return None
-    except (RuntimeError, OSError, ValueError) as error:
-        _LOGGER.warning("Guard network protection bundle sync failed: %s", error)
+        result = cloud_bundle_sync(Path(store.guard_home), "network_best_effort", auth_context=auth_context)
+    except RuntimeError as error:
         return {"status": "failed", "error": str(error)}
+    return result if isinstance(result, dict) else None
 
 
 def sync_guard_events(
@@ -1659,140 +1010,12 @@ def sync_guard_events(
     *,
     auth_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    """Push pending GuardEventV1 envelopes to Guard Cloud."""
+    """Push pending GuardEventV1 envelopes to Guard Cloud through the native runtime."""
 
-    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _sync.guard_events_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
-    previous_summary = store.get_sync_payload("guard_events_v1_summary")
-    total_events = 0
-    total_accepted = 0
-    synced_at = _now()
-    while True:
-        pending_events = store.list_guard_events_v1(uploaded=False, limit=200)
-        if not pending_events:
-            if (
-                total_events == 0
-                and isinstance(previous_summary, dict)
-                and previous_summary.get("sync_reason") == "guard_events_endpoint_unavailable"
-                and _guard_events_endpoint_unavailable_recently(store)
-            ):
-                return previous_summary
-            break
-        body = json.dumps({"events": [event["payload"] for event in pending_events]}).encode("utf-8")
-        request = _guard_sync_request(
-            resolved_auth_context,
-            request_url=sync_url,
-            method="POST",
-            data=body,
-            extra_headers=None,
-        )
-        try:
-            payload = _urlopen_json_with_timeout_retry(
-                request=request,
-                timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
-                retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
-            )
-        except urllib.error.HTTPError as error:
-            if error.code == 404:
-                pending_count = len(pending_events)
-                summary: dict[str, object] = {
-                    "synced_at": synced_at,
-                    "events": total_events,
-                    "accepted": total_accepted,
-                    "skipped": 0,
-                    "sync_skipped": True,
-                    "sync_reason": "guard_events_endpoint_unavailable",
-                    "pending_count": pending_count,
-                }
-                store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
-                return summary
-            if error.code == 429:
-                retry_after_seconds = _parse_retry_after_header(error)
-                summary: dict[str, object] = {
-                    "synced_at": synced_at,
-                    "events": total_events,
-                    "accepted": total_accepted,
-                    "skipped": 0,
-                    "sync_skipped": True,
-                    "sync_reason": "guard_events_rate_limited",
-                    "pending_count": len(pending_events),
-                    "retry_after_seconds": retry_after_seconds,
-                }
-                store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
-                return summary
-            if error.code == 403:
-                is_plan, message = _check_plan_restriction_403(error)
-                if is_plan:
-                    raise GuardSyncNotAvailableError(message) from error
-                _record_guard_events_sync_failure(
-                    store,
-                    total_events=total_events,
-                    total_accepted=total_accepted,
-                    pending_count=len(pending_events),
-                    error_type=type(error).__name__,
-                    message=message,
-                )
-                raise RuntimeError(message) from error
-            message = _sync_http_error_message(error)
-            _record_guard_events_sync_failure(
-                store,
-                total_events=total_events,
-                total_accepted=total_accepted,
-                pending_count=len(pending_events),
-                error_type=type(error).__name__,
-                message=message,
-            )
-            raise RuntimeError(_redact_sync_text(message)) from error
-        except OSError as error:
-            message = _sync_url_error_message(error)
-            _record_guard_events_sync_failure(
-                store,
-                total_events=total_events,
-                total_accepted=total_accepted,
-                pending_count=len(pending_events),
-                error_type=type(error).__name__,
-                message=message,
-            )
-            raise RuntimeError(_redact_sync_text(message)) from error
-        completed_ids = _sync.completed_guard_event_ids(payload)
-        synced_at = _sync_timestamp(payload)
-        uploaded = store.mark_guard_events_v1_uploaded(completed_ids, synced_at)
-        total_events += len(pending_events)
-        total_accepted += uploaded
-        if uploaded == 0 or len(pending_events) < 200:
-            break
-    summary: dict[str, object] = {"synced_at": synced_at, "events": total_events, "accepted": total_accepted}
-    store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
-    return summary
+    from .cloud_bundle_sync import cloud_event_sync
 
-
-def _request_for_gateway_retry(request: urllib.request.Request) -> urllib.request.Request:
-    return _refresh_guard_sync_request(request) or request
-
-
-def _record_guard_events_sync_failure(
-    store: GuardStore,
-    *,
-    total_events: int,
-    total_accepted: int,
-    pending_count: int,
-    error_type: str,
-    message: str,
-) -> None:
-    recorded_at = _now()
-    next_retry_after = (datetime.now(timezone.utc) + timedelta(seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS)).isoformat()
-    summary: dict[str, object] = {
-        "synced_at": None,
-        "status": "failed",
-        "events": total_events,
-        "accepted": total_accepted,
-        "pending_events": pending_count,
-        "error_type": error_type,
-        "message": _redact_sync_text(message),
-        "retry_after_seconds": _SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
-        "next_retry_after": next_retry_after,
-    }
-    store.set_sync_payload("guard_events_v1_summary", summary, recorded_at)
+    result = cloud_event_sync(Path(store.guard_home), "guard_events", auth_context=auth_context)
+    return result if isinstance(result, dict) else {}
 
 
 def _guard_events_endpoint_unavailable_recently(store: GuardStore) -> bool:
@@ -1824,65 +1047,24 @@ def sync_runtime_session(
     can finish the rest of its sync before reporting it.
     """
 
+    from .cloud_bundle_sync import cloud_event_sync
+
     resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
     sync_url = _sync.normalized_runtime_sessions_sync_url(
         _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
     )
     session_payload = _cloud_runtime_session_payload(store, session)
-    body = json.dumps({"session": session_payload}).encode("utf-8")
-    request = _guard_sync_request(
-        resolved_auth_context,
-        request_url=sync_url,
-        method="POST",
-        data=body,
-        extra_headers=None,
+    answer = cloud_event_sync(
+        Path(store.guard_home),
+        "runtime_session",
+        auth_context=resolved_auth_context,
+        session=session_payload,
     )
-    try:
-        payload = _urlopen_json_with_timeout_retry(
-            request=request,
-            timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
-            retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
-        )
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            recorded_at = _now()
-            summary = {
-                "synced_at": None,
-                "runtime_session_synced_at": None,
-                "runtime_session_id": session_payload["sessionId"],
-                "runtime_sessions_visible": 0,
-                "runtime_session_sync_skipped": True,
-                "runtime_session_sync_reason": "runtime_session_endpoint_unavailable",
-                "local_guard_online_at": recorded_at,
-                "runtime_harness": session_payload["harness"],
-                "runtime_surface": session_payload["surface"],
-                "runtime_workspace": session_payload["workspace"],
-                "runtime_device_id": session_payload["deviceId"],
-            }
-            store.set_sync_payload("runtime_session_summary", summary, recorded_at)
-            return summary
-        if error.code == 429:
-            retry_after_seconds = _parse_retry_after_header(error)
-            recorded_at = _now()
-            summary = {
-                "synced_at": None,
-                "runtime_session_synced_at": None,
-                "runtime_session_id": session_payload["sessionId"],
-                "runtime_sessions_visible": 0,
-                "runtime_session_sync_skipped": True,
-                "runtime_session_sync_reason": "runtime_session_rate_limited",
-                "local_guard_online_at": recorded_at,
-                "runtime_harness": session_payload["harness"],
-                "runtime_surface": session_payload["surface"],
-                "runtime_workspace": session_payload["workspace"],
-                "runtime_device_id": session_payload["deviceId"],
-                "retry_after_seconds": retry_after_seconds,
-            }
-            store.set_sync_payload("runtime_session_summary", summary, recorded_at)
-            return summary
-        raise RuntimeError(_sync_http_error_message(error)) from error
-    except OSError as error:
-        raise RuntimeError(_sync_url_error_message(error)) from error
+    if not isinstance(answer, dict):
+        raise RuntimeError("Invalid sync response")
+    if answer.get("status") == "skipped" and isinstance(answer.get("summary"), dict):
+        return dict(answer["summary"])
+    payload = answer.get("response")
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
     catalog_sync: dict[str, object]
@@ -1948,6 +1130,7 @@ def _local_guard_runtime_session(
         POLICY_EXACT_COMMAND_RULES_CAPABILITY,
         POLICY_DOCUMENT_REVIEW_RULES_CAPABILITY,
         POLICY_COMMAND_PATTERN_ALLOW_CAPABILITY,
+        POLICY_RISK_GROUP_RULES_CAPABILITY,
     ]
     session: dict[str, object] = {
         "harness": "hol-guard",
@@ -2032,8 +1215,7 @@ def sync_local_guard_cloud_proof(
             }
         )
         recorded_at = str(summary.get("synced_at") or summary.get("runtime_session_synced_at") or _now())
-        store.set_sync_payload("sync_summary", summary, recorded_at)
-        store.record_latest_guard_connect_sync_success(sync_payload=summary, now=recorded_at)
+        store.record_sync_summary(summary, now=recorded_at)
         return summary
 
 
@@ -2042,62 +1224,12 @@ def sync_pain_signals(
     *,
     auth_context: dict[str, object] | None = None,
 ) -> int:
-    try:
-        resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
-    except GuardSyncAuthorizationExpiredError:
-        raise
-    except GuardSyncNotConfiguredError:
-        return 0
-    normalized_sync_url = _sync.normalized_receipts_sync_url(
-        _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
-    )
-    cursor_payload = store.get_sync_payload("pain_signal_cursor")
-    last_event_id = _last_uploaded_event_id(cursor_payload)
-    uploaded_count = 0
-    current_event_id = last_event_id
-    warn_occurrences: dict[tuple[str, str], int] = {}
-    while True:
-        candidates = store.list_events_after(
-            current_event_id,
-            limit=500,
-            event_names=tuple(sorted(_PAIN_SIGNAL_EVENTS)),
-        )
-        if not candidates:
-            break
-        last_processed_event_id = _int_value(candidates[-1].get("event_id")) or current_event_id
-        signal_items, warn_occurrences = _sync.pain_signal_batch(candidates, warn_occurrences)
-        if signal_items:
-            request = _guard_sync_request(
-                resolved_auth_context,
-                request_url=_sync.pain_signal_sync_url(normalized_sync_url),
-                method="POST",
-                data=json.dumps({"items": signal_items}).encode("utf-8"),
-                extra_headers=None,
-            )
-            try:
-                _urlopen_with_timeout_retry(
-                    request=request,
-                    timeout_seconds=_PAIN_SIGNAL_TIMEOUT_SECONDS,
-                    retry_timeout_seconds=_PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS,
-                )
-            except urllib.error.HTTPError as error:
-                if error.code == 404:
-                    return uploaded_count
-                if error.code == 429:
-                    return uploaded_count
-                raise RuntimeError(_sync_http_error_message(error)) from error
-            except OSError as error:
-                raise RuntimeError(_sync_url_error_message(error)) from error
-            uploaded_count += len(signal_items)
-        current_event_id = last_processed_event_id
-        store.set_sync_payload(
-            "pain_signal_cursor",
-            {"event_id": current_event_id},
-            _now(),
-        )
-        if len(candidates) < 500:
-            break
-    return uploaded_count
+    """Upload the cloud pain signals through the native runtime; the count uploaded."""
+
+    from .cloud_bundle_sync import cloud_event_sync
+
+    result = cloud_event_sync(Path(store.guard_home), "pain_signals", auth_context=auth_context or None)
+    return result if isinstance(result, int) and not isinstance(result, bool) else 0
 
 
 def _policy_bundle_cloud_exception_items(
@@ -2214,76 +1346,6 @@ def _dpop_nonce_from_http_error(error: urllib.error.HTTPError, payload: object) 
     return nonce
 
 
-_GUARD_DPOP_REQUEST_CONTEXTS: dict[str, dict[str, object]] = {}
-_GUARD_DPOP_REQUEST_CONTEXT_LIMIT = 1000
-
-
-def _remember_guard_dpop_request_context(dpop_header: str, context: dict[str, object]) -> None:
-    if len(_GUARD_DPOP_REQUEST_CONTEXTS) >= _GUARD_DPOP_REQUEST_CONTEXT_LIMIT:
-        oldest_header = next(iter(_GUARD_DPOP_REQUEST_CONTEXTS), None)
-        if isinstance(oldest_header, str):
-            _GUARD_DPOP_REQUEST_CONTEXTS.pop(oldest_header, None)
-    _GUARD_DPOP_REQUEST_CONTEXTS[dpop_header] = context
-
-
-def _guard_sync_request(
-    auth_context: dict[str, object],
-    *,
-    request_url: str,
-    method: str,
-    data: bytes | None = None,
-    extra_headers: dict[str, str] | None = None,
-    dpop_nonce: str | None = None,
-) -> urllib.request.Request:
-    headers = _guard_sync_headers(
-        auth_context,
-        request_url=request_url,
-        method=method,
-        extra_headers=extra_headers,
-        dpop_nonce=dpop_nonce,
-    )
-    request = urllib.request.Request(
-        request_url,
-        data=data,
-        method=method,
-        headers=headers,
-    )
-    object.__setattr__(
-        request,
-        "_guard_dpop_retry_context",
-        {
-            "auth_context": auth_context,
-            "request_url": request_url,
-            "method": method,
-            "extra_headers": None if extra_headers is None else dict(extra_headers),
-            "dpop_nonce": dpop_nonce,
-        },
-    )
-    return request
-
-
-def _oauth_refresh_error_message(error: urllib.error.HTTPError) -> str:
-    try:
-        raw_body = error.read().decode("utf-8")
-    except OSError:
-        raw_body = ""
-    try:
-        payload = json.loads(raw_body) if raw_body else None
-    except json.JSONDecodeError:
-        payload = None
-    if isinstance(payload, dict):
-        description = _optional_string(payload.get("error_description"))
-        if description is not None:
-            return description
-        error_code = _optional_string(payload.get("error"))
-        if error_code is not None:
-            return error_code
-    normalized_body = raw_body.strip()
-    if normalized_body:
-        return normalized_body
-    return f"HTTP Error {error.code}: {error.reason}"
-
-
 def _guard_oauth_reauthorization_message() -> str:
     return "Guard authorization expired. Run `hol-guard connect` to sign in again."
 
@@ -2319,24 +1381,6 @@ def _guard_runtime_upgrade_restart_message() -> str:
     return (
         "HOL Guard was upgraded while this process was running. Restart the agent application "
         "before Guard Cloud access resumes."
-    )
-
-
-def _invalid_grant_oauth_payload(payload: object) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    return _invalid_grant_oauth_error_details(
-        _optional_string(payload.get("error")),
-        _optional_string(payload.get("error_description")),
-    )
-
-
-def _invalid_grant_oauth_error_details(
-    error_code: str | None,
-    description: str | None,
-) -> bool:
-    return error_code == "invalid_grant" or (
-        description is not None and "missing, expired, or already consumed" in description.lower()
     )
 
 
@@ -2417,6 +1461,38 @@ def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str
         raise GuardSyncEndpointUntrustedError(f"{_guard_sync_reconnect_message()} {error}") from error
 
 
+def _refreshed_oauth_payload(answer: dict[str, object]) -> dict[str, object]:
+    """The token response of a native refresh, or the error its outcome names."""
+
+    outcome = answer.get("outcome")
+    reason = _optional_string(answer.get("reason")) or "Guard Cloud did not say why."
+    if outcome == "refreshed":
+        payload = answer.get("payload")
+        if not isinstance(payload, dict):
+            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+        return payload
+    if outcome == "rate_limited":
+        # The header as sent keeps an HTTP date and a long wait; the runner's
+        # rate-limit circuit applies its own bound.
+        header = answer.get("retryAfter")
+        if isinstance(header, str) and header.strip():
+            raise _GuardOAuthRefreshRateLimitedError(parse_retry_after_value(header.strip()))
+        retry_after = answer.get("retryAfterSeconds")
+        seconds = 60
+        if isinstance(retry_after, int | float) and not isinstance(retry_after, bool):
+            seconds = max(1, math.ceil(retry_after))
+        raise _GuardOAuthRefreshRateLimitedError(seconds)
+    if outcome == "dead_grant":
+        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
+    if outcome == "rejected":
+        raise _GuardOAuthRefreshRejectedError(f"{_guard_oauth_reauthorization_message()} {reason}")
+    if outcome == "unusable":
+        raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {reason}")
+    if outcome == "unreachable":
+        raise GuardSyncNotAvailableError(_GUARD_CLOUD_UNREACHABLE_MESSAGE, retryable=True)
+    raise RuntimeError(f"Guard OAuth token refresh failed: {reason}")
+
+
 def _refresh_guard_oauth_access_token_once(
     *,
     token_endpoint: str,
@@ -2426,85 +1502,53 @@ def _refresh_guard_oauth_access_token_once(
 ) -> dict[str, object]:
     if _guard_runtime_was_upgraded():
         raise GuardSyncNotAvailableError(_guard_runtime_upgrade_restart_message(), retryable=True)
-    request_body = urllib.parse.urlencode(
-        {
-            "grant_type": "refresh_token",
-            "client_id": client_id,
-            "refresh_token": refresh_token,
-        }
-    ).encode("utf-8")
-    dpop_nonce: str | None = None
-    nonce_retry_count = 0
-    while True:
-        try:
-            dpop_proof = _sign_guard_dpop_proof(
-                request_url=token_endpoint,
-                method="POST",
-                dpop_key_material=dpop_key_material,
-                nonce=dpop_nonce,
-            )
-        except GuardSyncNotAvailableError:
-            raise
-        except (RuntimeError, TypeError, ValueError) as error:
-            raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
-        request = urllib.request.Request(
-            token_endpoint,
-            data=request_body,
-            method="POST",
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json",
-                "User-Agent": _GUARD_SYNC_USER_AGENT,
-                "DPoP": dpop_proof,
-            },
+    from . import cloud_bundle_sync
+
+    try:
+        answer = cloud_bundle_sync.cloud_oauth_refresh(
+            {
+                "tokenEndpoint": token_endpoint,
+                "clientId": client_id,
+                "refreshToken": refresh_token,
+                "dpopKey": {
+                    "privateKeyPem": dpop_key_material.private_key_pem,
+                    "publicJwk": dict(dpop_key_material.public_jwk),
+                    "algorithm": dpop_key_material.algorithm,
+                },
+            }
         )
-        try:
-            with managed_urlopen(request, timeout=_SYNC_HTTP_TIMEOUT_SECONDS) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as error:
-            payload = _http_error_payload(error) if error.code in {400, 401, 403, 429} else None
-            challenge_nonce = _dpop_nonce_from_http_error(error, payload)
-            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
-                dpop_nonce = challenge_nonce
-                nonce_retry_count += 1
-                continue
-            if error.code == 429:
-                raise _GuardOAuthRefreshRateLimitedError(_parse_retry_after_header(error)) from error
-            if error.code in {400, 401, 403}:
-                if _invalid_grant_oauth_payload(payload):
-                    raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message()) from error
-                refresh_error_message = _oauth_refresh_error_message(error)
-                raise _GuardOAuthRefreshRejectedError(
-                    f"{_guard_oauth_reauthorization_message()} {refresh_error_message}"
-                ) from error
-            refresh_error_message = _oauth_refresh_error_message(error)
-            raise RuntimeError(f"Guard OAuth token refresh failed: {refresh_error_message}") from error
-        except OSError as error:
-            if _is_guard_cloud_unreachable_error(error):
-                raise GuardSyncNotAvailableError(_GUARD_CLOUD_UNREACHABLE_MESSAGE, retryable=True) from error
-            raise RuntimeError(_sync_url_error_message(error)) from error
-        if not isinstance(payload, dict):
-            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-        access_token = _optional_string(payload.get("access_token"))
-        token_type = _optional_string(payload.get("token_type"))
-        if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
-            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-        access_token_expires_at = _oauth_access_token_expires_at(
+    except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError):
+        raise
+    except RuntimeError as error:
+        # The native runtime was missing or did not answer: an outage the
+        # caller retries, not a refusal of this grant.
+        raise GuardSyncNotAvailableError(str(error), retryable=True) from error
+    payload = _refreshed_oauth_payload(answer)
+    access_token = _optional_string(payload.get("access_token"))
+    token_type = _optional_string(payload.get("token_type"))
+    if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
+        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+    try:
+        access_token_expires_at = oauth_access_token_expires_at(
             access_token,
-            payload=payload,
+            expires_in=payload.get("expires_in"),
             now=datetime.now(timezone.utc),
         )
-        return {
-            "access_token": access_token,
-            "access_token_expires_at": access_token_expires_at,
-            "package_firewall_entitlement": build_oauth_package_firewall_entitlement(
-                payload,
-                now=datetime.now(timezone.utc),
-            ),
-            "cloud_user_profile": extract_cloud_user_profile(payload),
-            "had_guard_local_entitlement": isinstance(payload.get("guard_local_entitlement"), dict),
-            "refresh_token": _optional_string(payload.get("refresh_token")) or refresh_token,
-        }
+    except (NativeRunnerAuthorityError, OSError):
+        # The refreshed token still works; without an expiry it is only
+        # refreshed again before reuse instead of being served from cache.
+        access_token_expires_at = None
+    return {
+        "access_token": access_token,
+        "access_token_expires_at": access_token_expires_at,
+        "package_firewall_entitlement": build_oauth_package_firewall_entitlement(
+            payload,
+            now=datetime.now(timezone.utc),
+        ),
+        "cloud_user_profile": extract_cloud_user_profile(payload),
+        "had_guard_local_entitlement": isinstance(payload.get("guard_local_entitlement"), dict),
+        "refresh_token": _optional_string(payload.get("refresh_token")) or refresh_token,
+    }
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
@@ -2543,110 +1587,48 @@ class _GuardOAuthRefreshRejectedError(GuardSyncAuthorizationExpiredError):
     """The token endpoint rejected the refresh request with an error other than invalid_grant."""
 
 
-_OAUTH_REFRESH_CIRCUIT_STATE_KEY = "guard_oauth_refresh_circuit"
-_OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_ENV = "GUARD_OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_SECONDS"
-_OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_ENV = "GUARD_OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_SECONDS"
-_OAUTH_REFRESH_CIRCUIT_DEFAULT_BASE_BACKOFF_SECONDS = 30.0
-_OAUTH_REFRESH_CIRCUIT_DEFAULT_MAX_BACKOFF_SECONDS = 300.0
 _OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED = "revoked"
 _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED = "rejected"
-_OAUTH_REFRESH_CIRCUIT_MAX_RATE_LIMIT_SECONDS = 3600.0
 
 
-_OAUTH_REFRESH_CIRCUIT_FINGERPRINT_SALT_KEY = "guard_oauth_refresh_circuit_fingerprint_salt"
-# OWASP-recommended PBKDF2-HMAC-SHA256 work factor; the fingerprint only needs
-# non-reversibility and determinism, but a strong work factor defeats offline
-# brute force against the truncated digest if state ever leaks.
-_OAUTH_REFRESH_CIRCUIT_FINGERPRINT_ITERATIONS = 600_000
+def _oauth_refresh_circuit(store: GuardStore, call: Mapping[str, object]) -> dict[str, object]:
+    """Run one call against the native refresh circuit."""
+    from .cloud_bundle_sync import cloud_oauth_refresh_circuit
+
+    return cloud_oauth_refresh_circuit(Path(store.guard_home), call)
 
 
-def _oauth_refresh_circuit_salt(store: GuardStore) -> bytes:
-    payload = store.get_sync_payload(_OAUTH_REFRESH_CIRCUIT_FINGERPRINT_SALT_KEY)
-    encoded = _optional_string(payload.get("salt")) if isinstance(payload, dict) else None
-    if encoded:
-        try:
-            return base64.b64decode(encoded.encode("ascii"), validate=True)
-        except ValueError:
-            pass
-    salt = os.urandom(32)
-    store.set_sync_payload(
-        _OAUTH_REFRESH_CIRCUIT_FINGERPRINT_SALT_KEY,
-        {"salt": base64.b64encode(salt).decode("ascii")},
-        _now(),
-    )
-    # Two racing processes can both land here; converging on whatever the
-    # winning write stored keeps every caller's fingerprints consistent.
-    persisted = store.get_sync_payload(_OAUTH_REFRESH_CIRCUIT_FINGERPRINT_SALT_KEY)
-    persisted_encoded = _optional_string(persisted.get("salt")) if isinstance(persisted, dict) else None
-    if persisted_encoded:
-        try:
-            return base64.b64decode(persisted_encoded.encode("ascii"), validate=True)
-        except ValueError:
-            pass
-    return salt
-
-
-def _oauth_refresh_circuit_fingerprint(refresh_token: str, salt: bytes) -> str:
-    """Deterministic, non-reversible fingerprint for circuit-state matching.
-
-    PBKDF2-HMAC-SHA256 with a persisted per-installation salt; truncation to
-    32 hex chars (128 bits) is a lookup key, not a credential, so truncation
-    is safe while the work factor keeps brute-force recovery impractical.
-    """
-    return hashlib.pbkdf2_hmac(
-        "sha256",
-        refresh_token.encode("utf-8"),
-        salt,
-        _OAUTH_REFRESH_CIRCUIT_FINGERPRINT_ITERATIONS,
-    ).hex()[:32]
-
-
-def _oauth_refresh_circuit_backoff_seconds(env_key: str, default: float) -> float:
-    raw = os.environ.get(env_key, "").strip()
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
-
-
-def _load_oauth_refresh_circuit(store: GuardStore) -> dict[str, object]:
-    payload = store.get_sync_payload(_OAUTH_REFRESH_CIRCUIT_STATE_KEY)
-    return payload if isinstance(payload, dict) else {}
-
-
-def _save_oauth_refresh_circuit(store: GuardStore, state: Mapping[str, object]) -> None:
-    store.set_sync_payload(_OAUTH_REFRESH_CIRCUIT_STATE_KEY, dict(state), _now())
-
-
-def _oauth_refresh_circuit_check(
-    *,
-    store: GuardStore,
-    refresh_token: str,
-    now: datetime,
-) -> None:
+def _oauth_refresh_circuit_check(*, store: GuardStore, refresh_token: str) -> None:
     """Fast-fail refresh while a known-dead or rate-limited grant is in backoff.
 
     Stops every sync/poll caller from hammering the token endpoint once the
-    grant proved invalid. Clears automatically when the stored refresh token no
-    longer matches the fingerprint that failed (a peer process re-paired), and
-    lets one probe through each time the backoff window elapses.
+    grant proved invalid. The native circuit clears itself when the stored
+    refresh token no longer matches the one that failed (a peer process
+    re-paired), and lets one probe through each time the backoff elapses.
+    A circuit that cannot be read fails closed with a retryable error.
     """
-    state = _load_oauth_refresh_circuit(store)
-    fingerprint = _optional_string(state.get("refresh_token_fingerprint"))
-    if fingerprint is None:
+    try:
+        answer = _oauth_refresh_circuit(store, {"op": "check", "refreshToken": refresh_token})
+    except RuntimeError as error:
+        # Keep the native reason: an older runtime says to run `hol-guard update`.
+        raise GuardSyncNotAvailableError(
+            str(error) or "Guard could not read its sign-in refresh state. Try again shortly.",
+            retryable=True,
+        ) from error
+    state = answer.get("state")
+    if state == "open":
         return
-    if fingerprint != _oauth_refresh_circuit_fingerprint(refresh_token, _oauth_refresh_circuit_salt(store)):
-        _oauth_refresh_circuit_clear(store)
-        return
-    next_allowed = _parse_iso_timestamp(str(state.get("next_refresh_allowed_at") or ""))
-    if next_allowed is None or next_allowed <= now:
-        return
-    if bool(state.get("needs_reauthorization")):
-        if state.get("failure_kind") == _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED:
+    if state == "parked":
+        if answer.get("failureKind") == _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED:
             raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
-    raise _GuardOAuthRefreshRateLimitedError(max(1, int((next_allowed - now).total_seconds())))
+    wait = answer.get("retryAfterSeconds")
+    if state == "rate_limited" and isinstance(wait, int) and not isinstance(wait, bool):
+        raise _GuardOAuthRefreshRateLimitedError(max(1, wait))
+    raise GuardSyncNotAvailableError(
+        "Guard could not read its sign-in refresh state. Try again shortly.",
+        retryable=True,
+    )
 
 
 def _oauth_refresh_circuit_record_dead_grant(
@@ -2654,7 +1636,6 @@ def _oauth_refresh_circuit_record_dead_grant(
     store: GuardStore,
     refresh_token: str,
     issuer: str,
-    now: datetime,
     failure_kind: str = _OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED,
 ) -> None:
     """Mark the grant permanently invalid and schedule the next probe.
@@ -2666,44 +1647,22 @@ def _oauth_refresh_circuit_record_dead_grant(
     so the fast-fail keeps their reauthorization error instead of the revoked
     one, which would let sign-in cleanup wipe credentials after one bad 400.
     A rejection sends the notice only once the next probe is rejected too.
+    The caller's own error propagates even when the circuit cannot record.
     """
-    fingerprint = _oauth_refresh_circuit_fingerprint(refresh_token, _oauth_refresh_circuit_salt(store))
-    state = _load_oauth_refresh_circuit(store)
-    if _optional_string(state.get("refresh_token_fingerprint")) != fingerprint:
-        state = {}
-    previous_failures = state.get("consecutive_failures")
-    failures = previous_failures + 1 if isinstance(previous_failures, int) else 1
-    previous_backoff = state.get("backoff_seconds")
-    backoff = (
-        min(
-            _oauth_refresh_circuit_backoff_seconds(
-                _OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_ENV,
-                _OAUTH_REFRESH_CIRCUIT_DEFAULT_MAX_BACKOFF_SECONDS,
-            ),
-            previous_backoff * 2,
+    try:
+        answer = _oauth_refresh_circuit(
+            store,
+            {"op": "record_dead_grant", "refreshToken": refresh_token, "failureKind": failure_kind},
         )
-        if isinstance(previous_backoff, (int, float)) and previous_backoff > 0
-        else _oauth_refresh_circuit_backoff_seconds(
-            _OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_ENV,
-            _OAUTH_REFRESH_CIRCUIT_DEFAULT_BASE_BACKOFF_SECONDS,
-        )
-    )
-    notice_sent = bool(state.get("notice_sent"))
-    if not notice_sent and (failure_kind != _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED or failures > 1):
-        notice_sent = _notify_oauth_reauthorization_required(issuer=issuer, fingerprint=fingerprint)
-    _save_oauth_refresh_circuit(
-        store,
-        {
-            "refresh_token_fingerprint": fingerprint,
-            "consecutive_failures": failures,
-            "needs_reauthorization": True,
-            "failure_kind": failure_kind,
-            "notice_sent": notice_sent,
-            "backoff_seconds": backoff,
-            "next_refresh_allowed_at": (now + timedelta(seconds=backoff)).isoformat(),
-            "last_error_at": now.isoformat(),
-        },
-    )
+    except RuntimeError:
+        return
+    fingerprint = _optional_string(answer.get("fingerprint"))
+    if fingerprint is None or answer.get("noticeDue") is not True:
+        return
+    if not _notify_oauth_reauthorization_required(issuer=issuer, fingerprint=fingerprint):
+        return
+    with suppress(RuntimeError):
+        _oauth_refresh_circuit(store, {"op": "notice_sent", "fingerprint": fingerprint})
 
 
 def _oauth_refresh_circuit_record_rate_limit(
@@ -2711,40 +1670,22 @@ def _oauth_refresh_circuit_record_rate_limit(
     store: GuardStore,
     refresh_token: str,
     retry_after_seconds: int,
-    now: datetime,
 ) -> None:
     """Park refresh attempts until the server-provided Retry-After elapses."""
-    fingerprint = _oauth_refresh_circuit_fingerprint(refresh_token, _oauth_refresh_circuit_salt(store))
-    state = _load_oauth_refresh_circuit(store)
-    if _optional_string(state.get("refresh_token_fingerprint")) != fingerprint:
-        state = {}
-    bounded_retry_after = max(
-        1,
-        min(
-            int(retry_after_seconds),
-            int(_OAUTH_REFRESH_CIRCUIT_MAX_RATE_LIMIT_SECONDS),
-        ),
-    )
-    _save_oauth_refresh_circuit(
-        store,
-        {
-            "refresh_token_fingerprint": fingerprint,
-            "consecutive_failures": state.get("consecutive_failures")
-            if isinstance(state.get("consecutive_failures"), int)
-            else 0,
-            "needs_reauthorization": bool(state.get("needs_reauthorization")),
-            **({"failure_kind": state["failure_kind"]} if isinstance(state.get("failure_kind"), str) else {}),
-            "notice_sent": bool(state.get("notice_sent")),
-            "backoff_seconds": bounded_retry_after,
-            "next_refresh_allowed_at": (now + timedelta(seconds=bounded_retry_after)).isoformat(),
-            "last_error_at": now.isoformat(),
-        },
-    )
+    with suppress(RuntimeError):
+        _oauth_refresh_circuit(
+            store,
+            {
+                "op": "record_rate_limit",
+                "refreshToken": refresh_token,
+                "retryAfterSeconds": int(retry_after_seconds),
+            },
+        )
 
 
 def _oauth_refresh_circuit_clear(store: GuardStore) -> None:
-    if _load_oauth_refresh_circuit(store):
-        _save_oauth_refresh_circuit(store, {"cleared_at": _now()})
+    with suppress(RuntimeError):
+        _oauth_refresh_circuit(store, {"op": "clear"})
 
 
 def _notify_oauth_reauthorization_required(*, issuer: str, fingerprint: str) -> bool:
@@ -2840,32 +1781,6 @@ def _persist_recovered_oauth_binding(store: GuardStore, credentials: dict[str, o
     return True
 
 
-def _oauth_access_token_expires_at(
-    access_token: str,
-    *,
-    payload: dict[str, object],
-    now: datetime,
-) -> str | None:
-    claims = _decode_oauth_access_token_claims(access_token)
-    exp = claims.get("exp")
-    if isinstance(exp, (int, float)) and not isinstance(exp, bool) and float(exp) > 0:
-        return datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
-    expires_in = payload.get("expires_in")
-    parsed_expires_in: int | None
-    if isinstance(expires_in, (int, float)) and not isinstance(expires_in, bool):
-        parsed_expires_in = int(expires_in)
-    elif isinstance(expires_in, str):
-        try:
-            parsed_expires_in = int(expires_in)
-        except ValueError:
-            parsed_expires_in = None
-    else:
-        parsed_expires_in = None
-    if parsed_expires_in is None or parsed_expires_in <= 0:
-        return None
-    return (now + timedelta(seconds=parsed_expires_in)).isoformat()
-
-
 def _cached_oauth_access_token(credentials: dict[str, object], *, now: datetime) -> str | None:
     access_token = _optional_string(credentials.get("access_token"))
     access_token_expires_at = _optional_string(credentials.get("access_token_expires_at"))
@@ -2918,15 +1833,7 @@ def _persist_rotated_oauth_refresh_token(
             credentials_supply_chain_firewall if isinstance(credentials_supply_chain_firewall, bool) else None
         )
     effective_access_token = access_token or _optional_string(credentials.get("access_token"))
-    if access_token is not None:
-        recovered_binding = oauth_binding_metadata(access_token, issuer=issuer)
-    else:
-        recovered_binding = oauth_binding_from_credentials({**credentials, "access_token": effective_access_token})
-    effective_binding = oauth_refresh_binding(
-        credentials,
-        recovered_binding,
-        refreshed=access_token is not None,
-    )
+    effective_binding = oauth_effective_binding(credentials, access_token=access_token, issuer=issuer)
     store.set_oauth_local_credentials(
         issuer=issuer,
         client_id=client_id,
@@ -3002,11 +1909,7 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         effective_credentials_ref["value"] = reloaded_credentials
         return reloaded_refresh_token, _oauth_dpop_key_material(reloaded_credentials)
 
-    _oauth_refresh_circuit_check(
-        store=store,
-        refresh_token=refresh_token,
-        now=datetime.now(timezone.utc),
-    )
+    _oauth_refresh_circuit_check(store=store, refresh_token=refresh_token)
     try:
         refreshed = _refresh_guard_oauth_access_token(
             token_endpoint=oauth_client.token_endpoint,
@@ -3023,7 +1926,6 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
             store=store,
             refresh_token=failed_refresh_token,
             retry_after_seconds=error.retry_after_seconds,
-            now=datetime.now(timezone.utc),
         )
         raise
     except GuardSyncAuthorizationExpiredError as error:
@@ -3040,7 +1942,6 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
             store=store,
             refresh_token=failed_refresh_token,
             issuer=issuer,
-            now=datetime.now(timezone.utc),
             failure_kind=failure_kind,
         )
         raise
@@ -3248,99 +2149,9 @@ def _guard_sync_headers(
             nonce=dpop_nonce,
         )
         headers["DPoP"] = dpop_header
-        _remember_guard_dpop_request_context(
-            dpop_header,
-            {
-                "auth_context": auth_context,
-                "request_url": request_url,
-                "method": method,
-                "extra_headers": None if extra_headers is None else dict(extra_headers),
-                "dpop_nonce": dpop_nonce,
-            },
-        )
     if isinstance(extra_headers, dict):
         headers.update(extra_headers)
     return headers
-
-
-def _guard_sync_request_with_nonce(
-    request: urllib.request.Request,
-    dpop_nonce: str,
-) -> urllib.request.Request | None:
-    request_context = _resolve_guard_dpop_retry_context(request)
-    if request_context is None:
-        return None
-    auth_context = request_context.get("auth_context")
-    request_url = request_context.get("request_url")
-    method = request_context.get("method")
-    extra_headers = request_context.get("extra_headers")
-    current_dpop_nonce = request_context.get("dpop_nonce")
-    if not isinstance(auth_context, dict) or not isinstance(request_url, str) or not isinstance(method, str):
-        return None
-    if extra_headers is not None and not isinstance(extra_headers, dict):
-        return None
-    if current_dpop_nonce == dpop_nonce:
-        return None
-    return _guard_sync_request(
-        auth_context,
-        request_url=request_url,
-        method=method,
-        data=_request_data_bytes(request.data),
-        extra_headers=None if extra_headers is None else {str(key): str(value) for key, value in extra_headers.items()},
-        dpop_nonce=dpop_nonce,
-    )
-
-
-def _resolve_guard_dpop_retry_context(
-    request: urllib.request.Request,
-) -> dict[str, object] | None:
-    request_context = getattr(request, "_guard_dpop_retry_context", None)
-    if isinstance(request_context, dict):
-        return request_context
-    current_dpop = request.get_header("DPoP")
-    if not isinstance(current_dpop, str):
-        for header_name, header_value in request.header_items():
-            if header_name.lower() == "dpop":
-                current_dpop = header_value
-                break
-    if not isinstance(current_dpop, str):
-        return None
-    request_context = _GUARD_DPOP_REQUEST_CONTEXTS.get(current_dpop)
-    if not isinstance(request_context, dict):
-        return None
-    return request_context
-
-
-def _refresh_guard_sync_request(
-    request: urllib.request.Request,
-) -> urllib.request.Request | None:
-    """Build a new request with a fresh DPoP proof for timeout retries.
-
-    Reusing the same DPoP proof after a timeout triggers server-side replay
-    detection because the original request may have already been consumed.
-    Preserves any server-provided DPoP nonce from the current request so
-    nonce-challenged endpoints do not lose their nonce state across retries.
-    """
-    request_context = _resolve_guard_dpop_retry_context(request)
-    if request_context is None:
-        return None
-    auth_context = request_context.get("auth_context")
-    request_url = request_context.get("request_url")
-    method = request_context.get("method")
-    extra_headers = request_context.get("extra_headers")
-    current_dpop_nonce = request_context.get("dpop_nonce")
-    if not isinstance(auth_context, dict) or not isinstance(request_url, str) or not isinstance(method, str):
-        return None
-    if extra_headers is not None and not isinstance(extra_headers, dict):
-        return None
-    return _guard_sync_request(
-        auth_context,
-        request_url=request_url,
-        method=method,
-        data=_request_data_bytes(request.data),
-        extra_headers=None if extra_headers is None else {str(key): str(value) for key, value in extra_headers.items()},
-        dpop_nonce=current_dpop_nonce if isinstance(current_dpop_nonce, str) else None,
-    )
 
 
 # Bounds the body shipped to the resident well inside its request cap; Guard
@@ -3471,135 +2282,6 @@ def _is_timeout_error(error: OSError) -> bool:
     return reason_text == "timed out" or reason_text.endswith(" timed out") or "timed out" in reason_text
 
 
-def _urlopen_with_sync_retries(
-    *,
-    request: urllib.request.Request,
-    timeout_seconds: int,
-    retry_timeout_seconds: int,
-    parse_json_response: bool,
-    nonce_fast_path: bool,
-    max_response_bytes: int | None = None,
-    unhinted_gateway_retry_seconds: float | None = None,
-) -> object:
-    """Drive one Guard Cloud request through the shared sync retry policies.
-
-    Retry order is deliberate: an optional DPoP nonce fast path for raw
-    requests, then bounded 429 rate-limit waits with a freshly signed
-    request, then bounded gateway retries, then the generic DPoP nonce
-    challenge retry, and finally one timeout retry at the longer budget.
-    """
-
-    current_request = request
-    current_timeout_seconds = timeout_seconds
-    retried_timeout = False
-    nonce_retry_count = 0
-    rate_limit_retry_count = 0
-    gateway_retry_count = 0
-    while True:
-        try:
-            with managed_urlopen(current_request, timeout=current_timeout_seconds) as response:
-                if parse_json_response:
-                    raw = response.read() if max_response_bytes is None else response.read(max_response_bytes + 1)
-                    if max_response_bytes is not None and len(raw) > max_response_bytes:
-                        raise RuntimeError("Guard Cloud sync response exceeds its byte budget.")
-                    return json.loads(raw.decode("utf-8"))
-                return None
-        except urllib.error.HTTPError as error:
-            if nonce_fast_path and error.code == 401:
-                error_payload = _http_error_payload(error)
-                dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
-                if dpop_nonce is not None and nonce_retry_count < 3:
-                    nonce_retry_count += 1
-                    retry_request = _guard_sync_request_with_nonce(current_request, dpop_nonce)
-                    if retry_request is not None:
-                        current_request = retry_request
-                        current_timeout_seconds = timeout_seconds
-                        retried_timeout = False
-                        continue
-            if error.code == 429 and rate_limit_retry_count < 2:
-                retry_after = _parse_retry_after_header(error)
-                time.sleep(min(retry_after, 120))
-                rate_limit_retry_count += 1
-                refreshed_request = _refresh_guard_sync_request(current_request)
-                if refreshed_request is None:
-                    raise
-                current_request = refreshed_request
-                current_timeout_seconds = timeout_seconds
-                retried_timeout = False
-                continue
-            if _retryable_gateway_http_error(error) and gateway_retry_count < _SYNC_RETRYABLE_GATEWAY_MAX_ATTEMPTS:
-                retry_after = _retry_after_sleep_seconds(
-                    error, retry_timeout_seconds, unhinted_gateway_retry_seconds=unhinted_gateway_retry_seconds
-                )
-                time.sleep(retry_after)
-                gateway_retry_count += 1
-                current_request = _request_for_gateway_retry(current_request)
-                current_timeout_seconds = timeout_seconds
-                retried_timeout = False
-                continue
-            error_payload = _http_error_payload(error) if error.code in {400, 401} else None
-            dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
-            retry_request = (
-                None
-                if dpop_nonce is None or nonce_retry_count >= 3
-                else _guard_sync_request_with_nonce(current_request, dpop_nonce)
-            )
-            if retry_request is not None:
-                nonce_retry_count += 1
-                current_request = retry_request
-                current_timeout_seconds = timeout_seconds
-                retried_timeout = False
-                continue
-            raise
-        except OSError as error:
-            if not retried_timeout and _is_timeout_error(error):
-                refreshed_request = _refresh_guard_sync_request(current_request)
-                if refreshed_request is None:
-                    raise
-                current_request = refreshed_request
-                current_timeout_seconds = retry_timeout_seconds
-                retried_timeout = True
-                continue
-            raise
-
-
-def _urlopen_json_with_timeout_retry(
-    *,
-    request: urllib.request.Request,
-    timeout_seconds: int,
-    retry_timeout_seconds: int,
-    max_response_bytes: int | None = None,
-    unhinted_gateway_retry_seconds: float | None = None,
-) -> dict[str, object]:
-    payload = _urlopen_with_sync_retries(
-        request=request,
-        timeout_seconds=timeout_seconds,
-        retry_timeout_seconds=retry_timeout_seconds,
-        parse_json_response=True,
-        nonce_fast_path=False,
-        max_response_bytes=max_response_bytes,
-        unhinted_gateway_retry_seconds=unhinted_gateway_retry_seconds,
-    )
-    if not isinstance(payload, dict):
-        raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
-    return payload
-
-
-def _urlopen_with_timeout_retry(
-    *,
-    request: urllib.request.Request,
-    timeout_seconds: int,
-    retry_timeout_seconds: int,
-) -> None:
-    _urlopen_with_sync_retries(
-        request=request,
-        timeout_seconds=timeout_seconds,
-        retry_timeout_seconds=retry_timeout_seconds,
-        parse_json_response=False,
-        nonce_fast_path=True,
-    )
-
-
 def _optional_string(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
@@ -3625,216 +2307,11 @@ def _string_items(value: object) -> tuple[str, ...]:
     return tuple(item for item in value if isinstance(item, str))
 
 
-def _request_data_bytes(value: object) -> bytes | None:
-    if isinstance(value, bytes):
-        return value
-    return None
-
-
 def _auth_context_sync_url(auth_context: dict[str, object]) -> str:
     sync_url = _optional_string(auth_context.get("sync_url"))
     if sync_url is None:
         raise RuntimeError("Guard sync URL is unavailable.")
     return sync_url
-
-
-def _normalized_timestamp_string(value: object) -> str | None:
-    raw_value = _optional_string(value)
-    if raw_value is None:
-        return None
-    parsed = _parse_iso_timestamp(raw_value)
-    if parsed is None:
-        return None
-    return parsed.isoformat()
-
-
-def _last_uploaded_event_id(payload: dict[str, object] | list[object] | None) -> int:
-    if not isinstance(payload, dict):
-        return 0
-    event_id = payload.get("event_id")
-    return event_id if isinstance(event_id, int) and event_id > 0 else 0
-
-
-def _cloud_sync_receipts_payload(
-    receipts: list[dict[str, object]],
-    *,
-    device_id: str,
-    device_name: str,
-    redaction_level: str = "full",
-) -> list[dict[str, object]]:
-    return cloud_sync_receipt_payloads(
-        receipts,
-        device_id=device_id,
-        device_name=device_name,
-        redaction_level=redaction_level,
-        now=_now(),
-    )
-
-
-def _dedupe_sync_payload_items(items: list[dict[str, object]]) -> list[dict[str, object]]:
-    seen: set[str] = set()
-    deduped: list[dict[str, object]] = []
-    for item in items:
-        fingerprint = json.dumps(item, sort_keys=True)
-        if fingerprint in seen:
-            continue
-        seen.add(fingerprint)
-        deduped.append(item)
-    return deduped
-
-
-def _iter_receipt_sync_batches(receipts: list[dict[str, object]]) -> tuple[list[dict[str, object]], ...]:
-    if not receipts:
-        return ([],)
-    return tuple(
-        receipts[index : index + _RECEIPT_SYNC_BATCH_SIZE]
-        for index in range(0, len(receipts), _RECEIPT_SYNC_BATCH_SIZE)
-    )
-
-
-def _receipt_sync_cursor_rowid(store: GuardStore) -> int | None:
-    payload = store.get_sync_payload("receipt_sync_cursor")
-    if not isinstance(payload, dict):
-        return None
-    value = payload.get("last_rowid")
-    if isinstance(value, int) and not isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        stripped = value.strip()
-        if stripped.isdigit():
-            return int(stripped)
-    return None
-
-
-def _receipt_sync_window_floor(receipts: list[dict[str, object]]) -> int | None:
-    """Return the rowid just below the oldest receipt in a newest-first page."""
-
-    rowids = [
-        value
-        for value in (item.get("receipt_rowid") for item in receipts)
-        if isinstance(value, int) and not isinstance(value, bool)
-    ]
-    if not rowids:
-        return None
-    return max(min(rowids) - 1, 0)
-
-
-def _receipt_sync_rows_for_upload(store: GuardStore, *, cursor_rowid: int | None) -> list[dict[str, object]]:
-    if cursor_rowid is None:
-        # The first page reads its window in rowid order rather than newest
-        # first, because the cursor saved after it is the highest rowid it
-        # uploaded. A newest-first page that the store shortened would drop its
-        # oldest rows below that cursor, where no later page looks for them.
-        # The window starts at the oldest receipt the newest page names, not at
-        # an arithmetic distance below the latest rowid: cleanup leaves gaps in
-        # the rowids, and an interval that wide can hold far fewer receipts than
-        # a page while the cursor still moves past every one it skipped.
-        newest = store.list_receipts(limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
-        first_after = _receipt_sync_window_floor(newest)
-        if first_after is None:
-            return newest
-        return store.list_receipts_since_rowid(after_rowid=first_after, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
-    latest_rowid = store.latest_receipt_rowid()
-    if latest_rowid is None:
-        return []
-    if cursor_rowid > latest_rowid:
-        backfill_after = max(latest_rowid - _RECEIPT_SYNC_CURSOR_BACKFILL_ROWS, 0)
-        return store.list_receipts_since_rowid(after_rowid=backfill_after, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
-    return store.list_receipts_since_rowid(after_rowid=cursor_rowid, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
-
-
-def _receipt_sync_rows_with_command_detail_backfill(
-    store: GuardStore,
-    *,
-    receipts: list[dict[str, object]],
-    redaction_level: str,
-    synced_at: str,
-) -> tuple[list[dict[str, object]], dict[str, object] | None]:
-    if _receipt_redaction_level_rank(redaction_level) <= _receipt_redaction_level_rank("full"):
-        return receipts, None
-    marker = store.get_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER)
-    before_rowid = _receipt_command_detail_backfill_before_rowid(marker, redaction_level=redaction_level)
-    if isinstance(marker, dict) and marker.get("level") == redaction_level and marker.get("complete") is True:
-        return receipts, None
-    backfill_rows = store.list_receipts_for_command_detail_backfill(
-        limit=_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT,
-        days=_RECEIPT_COMMAND_DETAIL_BACKFILL_DAYS,
-        before_rowid=before_rowid,
-    )
-    seen_receipt_ids = {item.get("receipt_id") for item in receipts if isinstance(item.get("receipt_id"), str)}
-    merged = list(receipts)
-    added = 0
-    for row in backfill_rows:
-        receipt_id = row.get("receipt_id")
-        if not isinstance(receipt_id, str) or receipt_id in seen_receipt_ids:
-            continue
-        merged.append({**row, _RECEIPT_COMMAND_DETAIL_BACKFILL_FLAG: True})
-        seen_receipt_ids.add(receipt_id)
-        added += 1
-    backfill_rowids: list[int] = []
-    for row in backfill_rows:
-        receipt_rowid = row.get("receipt_rowid")
-        if isinstance(receipt_rowid, int):
-            backfill_rowids.append(receipt_rowid)
-    next_before_rowid = min(backfill_rowids) if backfill_rowids else before_rowid
-    # Only an empty page ends the backfill. A page can come back short because
-    # the store shortened it to a size the runtime can reply with, and reading
-    # that as the end would leave every older receipt without its command
-    # detail for good. Each page moves `before_rowid` down, so the walk still
-    # finishes.
-    complete = not backfill_rows
-    return merged, {
-        "level": redaction_level,
-        "updated_at": synced_at,
-        "days": _RECEIPT_COMMAND_DETAIL_BACKFILL_DAYS,
-        "limit": _RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT,
-        "receipts": added,
-        "queried": len(backfill_rows),
-        "before_rowid": next_before_rowid,
-        "complete": complete,
-    }
-
-
-def _receipt_command_detail_backfill_before_rowid(marker: object, *, redaction_level: str) -> int | None:
-    if not isinstance(marker, dict) or marker.get("level") != redaction_level:
-        return None
-    value = marker.get("before_rowid")
-    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
-        return value
-    if isinstance(value, str) and value.strip().isdigit():
-        parsed = int(value.strip())
-        return parsed if parsed > 0 else None
-    return None
-
-
-def _advance_command_detail_backfill_marker(
-    marker: dict[str, object] | None,
-    *,
-    receipt_batch: Sequence[Mapping[str, object]],
-    synced_at: str,
-) -> dict[str, object] | None:
-    if marker is None:
-        return None
-    backfill_rowids = [
-        receipt_rowid
-        for item in receipt_batch
-        if item.get(_RECEIPT_COMMAND_DETAIL_BACKFILL_FLAG) is True
-        and isinstance((receipt_rowid := item.get("receipt_rowid")), int)
-    ]
-    if not backfill_rowids:
-        return None
-    updated_marker = dict(marker)
-    updated_marker["before_rowid"] = min(backfill_rowids)
-    updated_marker["updated_at"] = synced_at
-    return updated_marker
-
-
-def _receipt_sync_cursor_rowids_from_batch(
-    receipt_batch: Sequence[Mapping[str, object]],
-    *,
-    cursor_receipt_ids: set[object],
-) -> list[object]:
-    return [item.get("receipt_rowid") for item in receipt_batch if item.get("receipt_id") in cursor_receipt_ids]
 
 
 def _stored_policy_bundle_acknowledgement(store: GuardStore) -> object:
@@ -3892,31 +2369,12 @@ def _validated_policy_bundle_acknowledgement(
     )
     if failure is not None:
         return failure or None
-    if acknowledgement.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-        validated, _error = validated_policy_bundle_v2_acknowledgement(acknowledgement)
-        return validated
-
-    policy_bundle = validated_synced_policy_bundle(store)
-    if policy_bundle is None:
-        return None
-
-    bundle_hash = non_empty_string(policy_bundle.get("bundleHash"))
-    bundle_version = non_empty_string(policy_bundle.get("bundleVersion"))
-    if bundle_hash is None or bundle_version is None:
-        return None
-    if acknowledgement.get("bundleHash") != bundle_hash:
-        return None
-    if acknowledgement.get("bundleVersion") != bundle_version:
-        return None
-    if acknowledgement.get("deviceId") != device_id:
-        return None
-    if acknowledgement.get("deviceName") != device_name:
-        return None
-    if acknowledgement.get("status") != "synced":
-        return None
-    if _normalized_timestamp_string(acknowledgement.get("appliedAt")) is None:
-        return None
-    return acknowledgement
+    return reportable_policy_bundle_acknowledgement(
+        acknowledgement,
+        device_id=device_id,
+        device_name=device_name,
+        validated_bundle=lambda: validated_synced_policy_bundle(store),
+    )
 
 
 def _sync_context_acknowledgement(sync_context: dict[str, object]) -> dict[str, object] | None:
@@ -3947,8 +2405,8 @@ def _build_fleet_posture_for_sync(
     """Build the posture for one request. Never raises: posture is best-effort."""
 
     try:
-        from ..adapters import list_adapters
         from ..config import load_guard_config
+        from ..native_harness_ops import list_harnesses
 
         guard_home = store.guard_home
         try:
@@ -3963,7 +2421,7 @@ def _build_fleet_posture_for_sync(
         runtime = "python"
         return build_fleet_posture_state(
             store,
-            list_adapters(),
+            list_harnesses(),
             FleetPostureSettings(context=context, guard_config=guard_config, runtime=runtime),
             acknowledgement=_sync_context_acknowledgement(sync_context),
         )
@@ -3972,34 +2430,12 @@ def _build_fleet_posture_for_sync(
         return None
 
 
-def _record_fleet_posture_delivery(
-    store: GuardStore,
-    built: FleetPostureBuild | None,
-    response: dict[str, object],
-) -> None:
-    """Commit the sent snapshot and honour a ``fleetPostureRequest`` in the reply."""
-
-    stamp = _sync_timestamp(response)
-    if built is not None:
-        try:
-            commit_fleet_posture_sent(store, built, now=stamp)
-        except Exception:
-            _LOGGER.debug("Fleet posture snapshot could not be recorded", exc_info=True)
-    request = response.get("fleetPostureRequest")
-    if isinstance(request, dict) and request.get("inventory") == "full":
-        try:
-            request_full_inventory(store, source="cloud", now=stamp)
-        except Exception:
-            _LOGGER.debug("Fleet posture full-inventory request could not be recorded", exc_info=True)
-
-
 def _send_policy_ack_followup(
     store: GuardStore,
     *,
     sync_context: dict[str, object],
     bundle_hash_sent: str | None,
     auth_context: dict[str, object],
-    sync_url: str,
     device_id: str,
     device_name: str,
     local_guard_online_at: str,
@@ -4045,23 +2481,31 @@ def _send_policy_ack_followup(
             home_dir=home_dir,
             workspace_dir=workspace_dir,
         )
-        followup_context = dict(sync_context)
-        if built is not None:
-            followup_context["fleetPosture"] = built.payload
-        request = _guard_sync_request(
-            auth_context,
-            request_url=sync_url,
-            method="POST",
-            data=json.dumps({"receipts": [], "syncContext": followup_context}).encode("utf-8"),
-            extra_headers=None,
+        from .cloud_bundle_sync import cloud_receipt_upload
+
+        # One request with no receipts; the native upload sends the posture on
+        # it and records its delivery.
+        cloud_receipt_upload(
+            Path(store.guard_home),
+            {
+                "contextOnly": True,
+                "redactionLevel": "full",
+                "deviceId": device_id,
+                "deviceName": device_name,
+                "now": now,
+                "syncContext": sync_context,
+                "fleetPosture": None
+                if built is None
+                else {
+                    "payload": built.payload,
+                    "nextState": built.next_state,
+                    "advancedInventory": built.advanced_inventory,
+                },
+                "workspaceAssessments": None,
+                "allowAuthRefresh": False,
+            },
+            auth_context=auth_context,
         )
-        response = _urlopen_json_with_timeout_retry(
-            request=request,
-            timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
-            retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
-        )
-        if isinstance(response, dict):
-            _record_fleet_posture_delivery(store, built, response)
     except Exception:
         _LOGGER.debug("Policy acknowledgement follow-up sync failed", exc_info=True)
 
@@ -4111,141 +2555,40 @@ def _receipt_sync_context(
     return context
 
 
-def _persist_receipt_sync_cursor(
-    *,
-    store: GuardStore,
-    latest_uploaded_rowid: int | None,
-    synced_at: str,
-) -> None:
-    if latest_uploaded_rowid is None:
-        return
-    payload: dict[str, object] = {
-        "last_rowid": latest_uploaded_rowid,
-        "synced_at": synced_at,
-    }
-    store.set_sync_payload("receipt_sync_cursor", payload, synced_at)
-
-
-_RECEIPT_REDACTION_LEVEL_RANK: dict[str, int] = {
-    "full": 0,
-    "partial": 1,
-    "none": 2,
-}
 _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER = "cloud_receipt_redaction_relaxed_resync_v1"
 _CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER = "cloud_review_privacy_projection_v2"
 _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER = "cloud_receipt_command_detail_backfill_v2"
-_RECEIPT_COMMAND_DETAIL_BACKFILL_FLAG = "__command_detail_backfill"
-
-
-def _receipt_redaction_level_rank(level: str | None) -> int:
-    if level is None:
-        return _RECEIPT_REDACTION_LEVEL_RANK["full"]
-    return _RECEIPT_REDACTION_LEVEL_RANK.get(level, _RECEIPT_REDACTION_LEVEL_RANK["full"])
-
-
-def _stored_cloud_receipt_redaction_level(store: GuardStore) -> str | None:
-    payload = store.get_sync_payload("cloud_receipt_redaction_level")
-    if not isinstance(payload, dict):
-        return None
-    level = payload.get("level")
-    return level if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS else None
 
 
 def _persist_cloud_receipt_redaction_level(store: GuardStore, *, level: str, synced_at: str) -> None:
-    previous_level = _stored_cloud_receipt_redaction_level(store) or local_receipt_redaction_level(store.guard_home)
-    if _receipt_redaction_level_rank(level) > _receipt_redaction_level_rank(previous_level):
-        store.set_sync_payload(
-            "receipt_sync_cursor",
-            {
-                "last_rowid": 0,
-                "synced_at": synced_at,
-                "reason": "cloud_receipt_redaction_level_relaxed",
-                "receipt_redaction_level": level,
-            },
-            synced_at,
-        )
-    store.set_sync_payload(
-        "cloud_receipt_redaction_level",
-        {"level": level, "updated_at": synced_at},
-        synced_at,
+    store.receipt_redaction_bookkeeping(
+        "persist",
+        now=synced_at,
+        level=level,
+        local_level=local_receipt_redaction_level(store.guard_home),
     )
-    if level != previous_level:
-        _requeue_cloud_review_privacy_projection(store, level=level, changed_at=synced_at)
-    if _receipt_redaction_level_rank(level) > _receipt_redaction_level_rank("full"):
-        store.set_sync_payload(
-            _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
-            {"level": level, "updated_at": synced_at},
-            synced_at,
-        )
 
 
 def _reset_cloud_receipt_redaction_authority(store: GuardStore, *, synced_at: str) -> None:
     """Reset relaxation bookkeeping when no signed override is effective."""
 
-    previous_level = _stored_cloud_receipt_redaction_level(store)
-    local_level = local_receipt_redaction_level(store.guard_home)
-    store.set_sync_payload(
-        "cloud_receipt_redaction_level",
-        {"level": local_level, "updated_at": synced_at},
-        synced_at,
-    )
-    if previous_level is not None and previous_level != local_level:
-        _requeue_cloud_review_privacy_projection(store, level=local_level, changed_at=synced_at)
-    store.delete_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER)
-    store.delete_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER)
-
-
-def _ensure_cloud_review_privacy_projection(
-    store: GuardStore,
-    *,
-    level: str,
-    synced_at: str,
-) -> None:
-    marker = store.get_sync_payload(_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER)
-    if isinstance(marker, dict) and marker.get("level") == level:
-        return
-    _requeue_cloud_review_privacy_projection(store, level=level, changed_at=synced_at)
-
-
-def _requeue_cloud_review_privacy_projection(
-    store: GuardStore,
-    *,
-    level: str,
-    changed_at: str,
-) -> int:
-    return store.requeue_pending_review_events_with_marker(
-        changed_at=changed_at,
-        marker_key=_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER,
-        marker_payload={"level": level, "updated_at": changed_at},
+    store.receipt_redaction_bookkeeping(
+        "reset",
+        now=synced_at,
+        local_level=local_receipt_redaction_level(store.guard_home),
     )
 
 
-def _ensure_relaxed_receipt_redaction_resync(
-    store: GuardStore,
-    *,
-    level: str,
-    synced_at: str,
-) -> None:
-    if _receipt_redaction_level_rank(level) <= _receipt_redaction_level_rank("full"):
-        return
-    marker = store.get_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER)
-    if isinstance(marker, dict) and marker.get("level") == level:
-        return
-    store.set_sync_payload(
-        "receipt_sync_cursor",
-        {
-            "last_rowid": 0,
-            "synced_at": synced_at,
-            "reason": "cloud_receipt_redaction_level_relaxed_existing",
-            "receipt_redaction_level": level,
-        },
-        synced_at,
-    )
-    store.set_sync_payload(
-        _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
-        {"level": level, "updated_at": synced_at},
-        synced_at,
-    )
+def _ensure_cloud_review_privacy_projection(store: GuardStore, *, level: str, synced_at: str) -> None:
+    store.receipt_redaction_bookkeeping("ensure_projection", now=synced_at, level=level)
+
+
+def _requeue_cloud_review_privacy_projection(store: GuardStore, *, level: str, changed_at: str) -> int:
+    return store.receipt_redaction_bookkeeping("requeue_projection", now=changed_at, level=level) or 0
+
+
+def _ensure_relaxed_receipt_redaction_resync(store: GuardStore, *, level: str, synced_at: str) -> None:
+    store.receipt_redaction_bookkeeping("ensure_resync", now=synced_at, level=level)
 
 
 def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
@@ -4277,9 +2620,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         version=__version__,
     )
     updated_at = str(payload["updatedAt"])
-    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
-    payload["localIdentity"] = local_identity
-    payload["localIdentitySource"] = _cloud_local_identity_source_payload(local_identity)
+    payload["localIdentity"], payload["localIdentitySource"] = _cloud_local_identity(observed_at=updated_at)
     payload["packageManagerCoverage"] = _cloud_package_manager_coverage(
         store,
         workspace=str(payload["workspace"]),
@@ -4300,6 +2641,7 @@ def _sync_extension_catalog_from_runtime_handshake(
 ) -> dict[str, object]:
     """Upload the canonical catalog only after a digest-bound Cloud request."""
 
+    from .cloud_bundle_sync import cloud_json_request
     from .extension_catalog_pages import observed_view
     from .extension_catalog_sync import ExtensionCatalogUnavailableError, build_v1_catalog_from_view
     from .extension_catalog_transfer import catalog_sync_plan, sync_catalog_view
@@ -4311,19 +2653,13 @@ def _sync_extension_catalog_from_runtime_handshake(
         def send_page(url: str, body: bytes) -> object:
             nonlocal sent
             sent = True
-            request = _guard_sync_request(
-                auth_context,
-                request_url=url,
-                method="POST",
-                data=body,
-                extra_headers=None,
-            )
             try:
-                return _urlopen_json_with_timeout_retry(
-                    request=request,
+                return cloud_json_request(
+                    auth_context,
+                    url=url,
+                    body=body,
                     timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
                     retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
-                    max_response_bytes=4096,
                 )
             except urllib.error.HTTPError as error:
                 raise RuntimeError(_sync_http_error_message(error)) from error
@@ -4387,16 +2723,11 @@ def _sync_extension_catalog_from_runtime_handshake(
     )
     if upload is None:
         return summary
-    request = _guard_sync_request(
-        auth_context,
-        request_url=upload.url,
-        method="POST",
-        data=upload.body,
-        extra_headers=None,
-    )
     try:
-        response = _urlopen_json_with_timeout_retry(
-            request=request,
+        response = cloud_json_request(
+            auth_context,
+            url=upload.url,
+            body=upload.body,
             timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
             retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
         )
@@ -4411,67 +2742,21 @@ def _sync_extension_catalog_from_runtime_handshake(
     return summary if unverified is None else unverified
 
 
-def _cloud_local_identity_payload(*, observed_at: str) -> dict[str, object]:
-    hostname = _safe_hostname()
-    private_ip = _safe_private_ip()
-    if private_ip is None:
-        private_ip = _safe_private_ipv6()
-    payload: dict[str, object] = {"lastSyncedAt": observed_at}
-    if hostname is not None:
-        payload["hostname"] = hostname
-    if private_ip is not None:
-        payload["ipAddress"] = private_ip
-        payload["privateIpAddress"] = private_ip
-    return payload
+def _cloud_local_identity(*, observed_at: str) -> tuple[dict[str, object], dict[str, str]]:
+    """The host name and private address the session reports, and their source.
 
-
-def _cloud_local_identity_source_payload(local_identity: dict[str, object]) -> dict[str, str]:
-    source: dict[str, str] = {
-        "daemonId": "local-guard",
-        "daemonVersion": "local-guard",
-        "daemonStatus": "local-guard",
-        "relayState": "local-guard",
-    }
-    if "hostname" in local_identity:
-        source["hostname"] = "local-guard"
-    if "ipAddress" in local_identity:
-        source["ipAddress"] = "local-guard"
-    if "privateIpAddress" in local_identity:
-        source["privateIpAddress"] = "local-guard"
-    if "publicIpAddress" in local_identity:
-        source["publicIpAddress"] = "local-guard"
-    return source
-
-
-def _safe_hostname() -> str | None:
-    with suppress(OSError):
-        hostname = socket.gethostname().strip()
-        if hostname:
-            return hostname[:255]
-    return None
-
-
-def _safe_private_ip() -> str | None:
-    with suppress(OSError), socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.connect(("8.8.8.8", 80))
-        address = sock.getsockname()[0]
-        if isinstance(address, str) and address and not address.startswith("127."):
-            return address[:128]
-    with suppress(OSError):
-        address = socket.gethostbyname(socket.gethostname())
-        if address and not address.startswith("127."):
-            return address[:128]
-    return None
-
-
-def _safe_private_ipv6() -> str | None:
-    with suppress(OSError):
-        addresses = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)
-        for entry in addresses:
-            candidate = entry[4][0]
-            if isinstance(candidate, str) and candidate and candidate != "::1":
-                return candidate[:128]
-    return None
+    The runtime reads both. Without an answer the session still syncs with
+    only its sync time, which every field's absence already means.
+    """
+    try:
+        return _authority.local_identity(observed_at)
+    except NativeRunnerAuthorityError:
+        return {"lastSyncedAt": observed_at}, {
+            "daemonId": "local-guard",
+            "daemonVersion": "local-guard",
+            "daemonStatus": "local-guard",
+            "relayState": "local-guard",
+        }
 
 
 def _cloud_package_manager_coverage(
@@ -4503,33 +2788,6 @@ def _cloud_package_manager_coverage(
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:
     metadata = store.get_device_metadata()
     return str(metadata["installation_id"]), device_display_name(store, str(metadata["device_label"]))
-
-
-def _record_synced_alert_events(
-    *,
-    store: GuardStore,
-    advisories: Sequence[dict[str, object]],
-    alert_preferences: dict[str, object] | None,
-    now: str,
-) -> None:
-    advisories_enabled = not (
-        isinstance(alert_preferences, dict) and alert_preferences.get("advisoriesEnabled") is False
-    )
-    if advisories_enabled:
-        for item in advisories:
-            artifact_id = _optional_string(item.get("artifactId"))
-            if artifact_id is None:
-                continue
-            store.add_event(
-                "premium_advisory",
-                {
-                    "artifact_id": artifact_id,
-                    "artifact_name": _optional_string(item.get("artifactName")) or artifact_id,
-                    "severity": _optional_string(item.get("severity")),
-                    "reason": _optional_string(item.get("reason")),
-                },
-                now,
-            )
 
 
 def _sync_timestamp(payload: dict[str, object]) -> str:

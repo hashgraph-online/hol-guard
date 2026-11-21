@@ -29,6 +29,7 @@ struct StrictJsonParser<'a> {
     bytes: &'a [u8],
     index: usize,
     max_collection_items: usize,
+    max_depth: usize,
 }
 
 impl StrictJsonParser<'_> {
@@ -51,7 +52,7 @@ impl StrictJsonParser<'_> {
     }
 
     fn value(&mut self, depth: usize) -> Result<Value, &'static str> {
-        if depth > MAX_JSON_DEPTH {
+        if depth > self.max_depth {
             return Err("native_json_depth_exceeded");
         }
         self.whitespace();
@@ -191,10 +192,21 @@ pub(crate) fn parse_with_collection_limit(
     bytes: &[u8],
     max_collection_items: usize,
 ) -> Result<Value, String> {
+    parse_with_limits(bytes, max_collection_items, MAX_JSON_DEPTH)
+}
+
+/// [`parse_with_collection_limit`] with a different nesting cap, for a peer
+/// message whose own depth rule is not the request frame's.
+pub(crate) fn parse_with_limits(
+    bytes: &[u8],
+    max_collection_items: usize,
+    max_depth: usize,
+) -> Result<Value, String> {
     let mut parser = StrictJsonParser {
         bytes,
         index: 0,
         max_collection_items,
+        max_depth,
     };
     let value = parser.value(0).map_err(str::to_owned)?;
     parser.whitespace();

@@ -305,7 +305,9 @@ pub(super) fn client_request_with_deadline(
             // exposes this bounded diagnostic separately on stderr, followed
             // by the original registered failure from main(). No request data
             // or filesystem paths are included.
-            eprintln!("native_resident_recovery_previous_failure={cause}");
+            crate::runtime_output::stderr_line(format_args!(
+                "native_resident_recovery_previous_failure={cause}"
+            ));
         }
     })
 }

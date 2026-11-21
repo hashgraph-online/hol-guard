@@ -26,6 +26,7 @@ fn settings(
         managed.as_ref(),
         false,
         "2026-10-23T00:00:00+00:00",
+        &crate::cigar_apps::CIGAR_APPS,
     )
 }
 
@@ -113,6 +114,7 @@ fn clearing_and_resetting_context_preferences_does_not_change_base_guard_setting
         None,
         false,
         "2026-10-23T00:00:00+00:00",
+        &crate::cigar_apps::CIGAR_APPS,
     )
     .unwrap();
     assert!(!reset.text.contains("context_assistance"));

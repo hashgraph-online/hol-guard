@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime.contained_authority import authority_unavailable, settled_authority
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import PYTEST_INVALID_COMMAND_REASON_CODE
+from tests.restricted_native_clients import contained_expectation_reply
 
 UNAVAILABLE = {
     "decision": "block",
@@ -207,6 +208,8 @@ def test_only_a_command_that_never_named_pytest_loses_the_planner_error(
     names_pytest = (("pytest",), ("python3", "-m", "pytest"), ("python3", "-Im", "pytest"))
 
     def native(operation: str, fields: dict[str, object], _expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         if operation == "pytest_command":
             words: list[str] = fields["command"]  # type: ignore[assignment]
             return any(tuple(words[: len(named)]) == named for named in names_pytest)
@@ -256,10 +259,16 @@ def test_a_later_contained_receipt_waits_for_the_resident(tmp_path: Path, monkey
     monkeypatch.setattr(contained_authority.time, "sleep", lambda _seconds: None)
 
     def native(operation: str, fields: dict[str, object], _expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         # `command_words` is the sink's reading of every contained command, and
         # a kind mapping returned in its place reads as the command's words.
         if operation == "command_words":
             return str(fields["command_text"]).split()
+        # The sink asks again for the argv the plan runs; a Node test plan
+        # runs the argv it was routed for.
+        if operation == "planned_route_argv":
+            return list(fields["command"])
         return {
             "inline_eval": False,
             "node_test": True,

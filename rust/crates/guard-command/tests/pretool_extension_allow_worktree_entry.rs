@@ -278,6 +278,7 @@ fn an_allowed_chain_inspects_the_worktree_it_creates() {
         format!(
             "{ADD} && git -C ../app-review status && git -C ../app-review push -u origin review"
         ),
+        format!("{ADD} && cd ../app-review && git status --porcelain | head -3 && echo CLEAN"),
     ] {
         let result = evaluate(&home, &repository, "omp", &command, &controls);
         if result.minimum_action != "allow" {
@@ -468,3 +469,9 @@ fn an_entry_below_new_parent_folders_runs_in_the_worktree_it_creates() {
         );
     }
 }
+
+#[path = "pretool_extension_allow_worktree/leading.rs"]
+mod leading_entry;
+
+#[path = "pretool_extension_allow_worktree/reads.rs"]
+mod reads_beside_the_add;

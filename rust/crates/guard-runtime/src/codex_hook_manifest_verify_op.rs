@@ -13,19 +13,13 @@
 //! its own package roots, and how it splits each handler's command line. This
 //! op reads every file the answer turns on and renders the integrity state.
 //!
-//! Whether a POSIX group is private to a file's owner needs the account
-//! database. An answer that turns on one assumes it is and lists it under
-//! `private_group_questions`; the caller asks again with its answers, and an
-//! answer that says it is not refuses the file where Python refuses it.
+//! Whether a POSIX group is private to a file's owner is read from the
+//! account database here; `private_group_questions` stays empty on the wire.
 
 use std::fs;
 use std::path::Path;
 
-use guard_contracts::{
-    CodexHookManifestExpectedV1, CodexHookManifestVerifyRequestV1, CodexHookManifestVerifyResultV1,
-    CODEX_HOOK_MANIFEST_VERIFY_MAX_BYTES, CODEX_HOOK_MANIFEST_VERIFY_REQUEST_SCHEMA,
-    CODEX_HOOK_MANIFEST_VERIFY_RESULT_SCHEMA,
-};
+use guard_contracts::{CodexHookManifestExpectedV1, CodexHookManifestVerifyRequestV1};
 use serde_json::{json, Map, Value};
 
 use rules::{
@@ -35,8 +29,8 @@ use rules::{
 };
 
 use crate::codex_hook_file_identity_op::{identity_answer, FileFacts, IdentityAsk};
+use crate::cursor_hook_command::Syntax;
 use crate::guard_config_update_value::py_eq;
-use crate::package_authority_op::request_digest_with_limit;
 
 /// `MANAGED_CODEX_HOOK_EVENTS`, in its order.
 const MANAGED_EVENTS: [&str; 4] = [
@@ -49,45 +43,11 @@ const MANAGED_EVENTS: [&str; 4] = [
 /// Each packaged-file role with the last identity the manifest gave it.
 type RoleIdentities = Vec<(String, Map<String, Value>)>;
 
-pub(crate) fn evaluate_codex_hook_manifest_verify_request(
-    request: &CodexHookManifestVerifyRequestV1,
-) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest_with_limit(request, CODEX_HOOK_MANIFEST_VERIFY_MAX_BYTES)
-        .map_err(|_| "native_codex_hook_manifest_verify_too_large".to_owned())?;
-    let (status, code, payload) = match refusal(request) {
-        Some(code) => ("error", code, None),
-        None => ("ok", "ok", Some(evaluate_request(request))),
-    };
-    crate::encode_response(&CodexHookManifestVerifyResultV1 {
-        schema: CODEX_HOOK_MANIFEST_VERIFY_RESULT_SCHEMA.to_owned(),
-        request_id: request.request_id.clone(),
-        request_sha256,
-        status: status.to_owned(),
-        code: code.to_owned(),
-        payload,
-    })
-}
-
-fn refusal(request: &CodexHookManifestVerifyRequestV1) -> Option<&'static str> {
-    if request.schema != CODEX_HOOK_MANIFEST_VERIFY_REQUEST_SCHEMA {
-        return Some("native_codex_hook_manifest_verify_schema_mismatch");
-    }
-    // A POSIX asker always has a uid; one that states none would skip the
-    // owner checks rather than fail them.
-    if request.posix && request.current_uid.is_none() {
-        return Some("native_codex_hook_manifest_verify_current_uid_missing");
-    }
-    if request.failure.is_none() && (request.manifest.is_none() || request.expected.is_none()) {
-        return Some("native_codex_hook_manifest_verify_incomplete");
-    }
-    None
-}
-
+/// The integrity state of `request`, as `{"state", "private_group_questions"}`.
 pub(crate) fn evaluate_request(request: &CodexHookManifestVerifyRequestV1) -> Value {
     let mut verifier = Verifier {
         request,
         matches: [false; 4],
-        questions: Vec::new(),
     };
     let outcome = match (&request.failure, &request.manifest, &request.expected) {
         (Some(failure), _, _) => Err(Failure {
@@ -101,12 +61,7 @@ pub(crate) fn evaluate_request(request: &CodexHookManifestVerifyRequestV1) -> Va
         Ok(valid) => valid,
         Err(failure) => verifier.failure_state(&failure),
     };
-    let questions: Vec<Value> = verifier
-        .questions
-        .iter()
-        .map(|(owner_uid, group_gid)| json!({ "owner_uid": owner_uid, "group_gid": group_gid }))
-        .collect();
-    json!({ "state": state, "private_group_questions": questions })
+    json!({ "state": state, "private_group_questions": [] })
 }
 
 struct Verifier<'a> {
@@ -114,8 +69,6 @@ struct Verifier<'a> {
     /// Which managed events hold their authenticated group, as far as the
     /// walk got; a failure reports the partial answer.
     matches: [bool; 4],
-    /// The private-group questions this answer assumed, unanswered so far.
-    questions: Vec<(u32, u32)>,
 }
 
 impl Verifier<'_> {
@@ -249,8 +202,8 @@ impl Verifier<'_> {
         self.request.canonical_paths.get(path).map(String::as_str)
     }
 
-    /// Settles one file answer: a private-group question the caller has
-    /// answered is applied, and one it has not is recorded and assumed.
+    /// Settles one file answer, settling its private-group question from the
+    /// account database.
     fn settle(&mut self, answer: Value) -> Result<(), Failure> {
         let role = answer.get("role").and_then(Value::as_str).unwrap_or("file");
         if let Some(question) = answer.get("private_group_question") {
@@ -262,18 +215,9 @@ impl Verifier<'_> {
             ) else {
                 return Err(file_failure(role, "permissions_unsafe"));
             };
-            let known = self
-                .request
-                .private_groups
-                .iter()
-                .find(|known| known.owner_uid == owner && known.group_gid == group);
-            match known {
-                Some(known) if !known.private => {
-                    return Err(file_failure(role, "permissions_unsafe"));
-                }
-                Some(_) => {}
-                None if self.questions.contains(&(owner, group)) => {}
-                None => self.questions.push((owner, group)),
+            let question = json!({ "owner_uid": owner, "group_gid": group });
+            if !crate::codex_hook_bridge_trust_files::private_group(&question) {
+                return Err(file_failure(role, "permissions_unsafe"));
             }
         }
         if answer.get("outcome").and_then(Value::as_str) == Some("verified") {
@@ -449,7 +393,8 @@ impl Verifier<'_> {
             }
             let split = match field(handler, "command") {
                 Value::String(command) => {
-                    self.request.command_argvs.get(command).cloned().flatten()
+                    Syntax::new(self.request.windows, self.request.long_paths.clone())
+                        .split_hook(command)
                 }
                 _ => None,
             };

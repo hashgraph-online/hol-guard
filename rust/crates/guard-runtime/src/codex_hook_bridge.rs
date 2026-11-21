@@ -1,7 +1,6 @@
-//! Native Codex hook bridge: the fast path of `main` in
-//! `adapters/codex_daemon_hook_bridge.py`. Codex runs
-//! `guard-runtime codex-hook-bridge <python> -I <bridge.py> <config>` once
-//! per hook. The native bridge forwards the hook to the authenticated
+//! Native Codex hook bridge. Codex runs
+//! `guard-runtime codex-hook-bridge <config>` once per hook; older installs
+//! put a Python launcher argv before the config, which is ignored. The native bridge forwards the hook to the authenticated
 //! loopback Guard daemon and shapes its answer for Codex.
 //!
 //! A clean daemon answer is rendered here. A daemon that is down, does not
@@ -28,7 +27,7 @@ use std::time::{Duration, Instant};
 use crate::claude_hook_bridge_render::py_strip;
 use crate::codex_hook_identity::current_process_identity;
 use crate::codex_hook_response::{
-    codex_hook_response, fail_closed, runtime_hook_event_name, PRE_TOOL_USE,
+    codex_hook_response, fail_closed, runtime_hook_event_name, unavailable, PRE_TOOL_USE,
 };
 use crate::hook_env_stamp::{current_environment, dumps, set_member, stamp_hook_input_text, Stamp};
 use crate::pyjson::{self, in_surrogate_plane, PyVal};
@@ -70,7 +69,7 @@ fn non_empty_strings(value: Option<&PyVal>) -> bool {
 /// `decode_bridge_config_argument`: POSIX installs pass the JSON itself,
 /// Windows installs unpadded base64url of its UTF-8. Anything Python
 /// refuses is `None`.
-fn decode_config_argument(argument: &str) -> Option<Cow<'_, str>> {
+pub(crate) fn decode_config_argument(argument: &str) -> Option<Cow<'_, str>> {
     if argument.starts_with('{') {
         return Some(Cow::Borrowed(argument));
     }
@@ -375,7 +374,10 @@ pub(crate) fn route_hook(
             contain::settle(config, &prepared, response, mapped, deadline)
         }
         Some(route) => route,
-        None => Route::Respond(fail_closed(&prepared.event_name)),
+        // No verdict at all: only a command that repairs the daemon runs, and
+        // everything else is refused with the typed recovery state.
+        None => recovery::bootstrap_route(&prepared)
+            .unwrap_or_else(|| Route::Respond(unavailable(&prepared.event_name))),
     };
     (route, Some(prepared))
 }
@@ -387,9 +389,10 @@ fn write_stdout(text: &str) {
         .and_then(|()| stdout.flush());
 }
 
-/// `guard-runtime codex-hook-bridge <python argv...> <config>`: the exit
-/// code Codex sees.
-pub(crate) fn run(python_argv: &[String]) -> i32 {
+/// `guard-runtime codex-hook-bridge [lane flags] [legacy argv...] <config>`:
+/// the exit code Codex sees (see `desktop` for the lane flags).
+pub(crate) fn run(argv: &[String]) -> i32 {
+    let (mut lane, python_argv) = desktop::split_lane(argv);
     let mut raw = Vec::new();
     let read = io::stdin()
         .lock()
@@ -412,7 +415,15 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
         write_stdout(&fail_closed(PRE_TOOL_USE));
         return 0;
     };
+    if lane.unvouched() {
+        if let Some(reason) = trust::registration_failure(config_argument) {
+            lane.refuse(reason);
+        }
+    }
     let input_ready = Instant::now();
+    if let Some(code) = desktop::settle(&lane, &config, &raw_data, input_ready) {
+        return code;
+    }
     match route_hook(&config, &raw_data, input_ready) {
         (Route::Respond(text), _) => {
             write_stdout(&text);
@@ -452,12 +463,18 @@ mod approval;
 mod client;
 #[path = "codex_hook_bridge_contain.rs"]
 pub(crate) mod contain;
+#[path = "codex_hook_bridge_desktop.rs"]
+mod desktop;
 #[path = "codex_hook_bridge_handoff.rs"]
 mod handoff;
 #[path = "codex_hook_bridge_observation.rs"]
 mod observation;
+#[path = "codex_hook_bridge_recovery.rs"]
+mod recovery;
 #[path = "codex_hook_bridge_restart.rs"]
 mod restart;
+#[path = "codex_hook_bridge_trust.rs"]
+pub(crate) mod trust;
 
 #[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_tests.rs"]

@@ -27,7 +27,8 @@
 //! itself is written into the projection and the screens downstream read the
 //! words the shell passes. It is recognised only as a whole double-quoted
 //! word, where the value is neither split nor matched, and only when the body
-//! spells nothing that could reopen the shell.
+//! spells nothing that could reopen the shell. An apostrophe is literal there,
+//! so `it's` in a message is message text.
 //!
 //! A line break between commands separates them as `;` does. A heredoc body
 //! is not shell text: one with a quoted delimiter (`<<'EOF'`, `<<"EOF"`) is
@@ -64,11 +65,10 @@ const DATE_CONVERSIONS: &str = "FHMSTYdjmsuwy";
 /// refuses its text as a command of its own, or a temporary path could be
 /// steered (`TMPDIR`) or climbed out of (`..`).
 pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<String> {
-    if !command.is_ascii()
-        || command.len() > MAX_COMMAND_CHARS
+    if command.len() > MAX_COMMAND_CHARS
         || command
-            .bytes()
-            .any(|b| b.is_ascii_control() && !matches!(b, b'\t' | b'\n'))
+            .chars()
+            .any(|c| c.is_control() && !matches!(c, '\t' | '\n'))
     {
         return None;
     }
@@ -78,6 +78,27 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
     }
     let chars: Vec<char> = command.chars().collect();
     let masked: Vec<char> = masked.chars().collect();
+    let messages: Vec<bool> = substitutions
+        .iter()
+        .map(|substitution| commit_message::message_slot(&masked, &substitutions, substitution))
+        .collect();
+    // Text outside ASCII may stand only in a commit message, which the
+    // projection writes without it.
+    let in_message = |at: usize| {
+        substitutions
+            .iter()
+            .zip(&messages)
+            .any(|(substitution, message)| {
+                *message && substitution.body_start <= at && at < substitution.body_end
+            })
+    };
+    if chars
+        .iter()
+        .enumerate()
+        .any(|(at, character)| !character.is_ascii() && !in_message(at))
+    {
+        return None;
+    }
     // Each substitution's own text, replaced by a character that is neither a
     // pattern nor a word break. The word around a substitution is read from
     // this: what the substitution prints is one value, so a `[` the inner
@@ -93,12 +114,15 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         }
     }
     let mut out = String::with_capacity(command.len());
+    // The command as it runs when every Git lookup prints nothing.
+    let mut unfound = String::with_capacity(command.len());
+    let mut looked_up = false;
     // The projection's shell text, heredoc bodies still blanked.
     let mut shell = String::with_capacity(command.len());
     let mut cursor = 0usize;
     let mut judged: Vec<String> = Vec::new();
     let mut temporary = false;
-    for substitution in &substitutions {
+    for (substitution, &message) in substitutions.iter().zip(&messages) {
         let (open, close) = match substitution.kind {
             "dollar" => ("$(", ")"),
             _ => ("`", "`"),
@@ -106,10 +130,12 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         if substitution.start < cursor || patterned_word(&patterned, substitution) {
             return None;
         }
-        let (value, judged_text) = match heredoc_value(&chars, &masked, substitution) {
+        let (value, judged_text) = match heredoc_value(&chars, &masked, substitution, message) {
             // The heredoc is the whole of what the `cat` reads, so judging
             // the bare `cat` is judging the command the shell runs.
             Some(value) => (value, "cat".to_owned()),
+            // A message the heredoc form does not read is never a stand-in.
+            None if !substitution.body.is_ascii() => return None,
             None => {
                 let text: String = chars
                     .get(substitution.start..substitution.end)?
@@ -127,17 +153,35 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
                 )
             }
         };
+        // A lookup can print nothing; only a Git command reads a missing
+        // revision as the same kind of operation.
+        if value == git_value::COMMIT_VALUE
+            && !(git_value::in_git_command(&masked, &substitutions, substitution.start)
+                && git_value::standalone(&masked, substitution))
+        {
+            return None;
+        }
         if !judged.contains(&judged_text) {
             judged.push(judged_text);
         }
         temporary |= value == TEMPORARY_VALUE;
+        looked_up |= value == git_value::COMMIT_VALUE;
         out.extend(&chars[cursor..substitution.start]);
+        unfound.extend(&chars[cursor..substitution.start]);
         out.push_str(&value);
+        if value != git_value::COMMIT_VALUE {
+            unfound.push_str(&value);
+        }
         shell.extend(&masked[cursor..substitution.start]);
         cursor = substitution.end;
     }
     out.extend(&chars[cursor..]);
+    unfound.extend(&chars[cursor..]);
     shell.extend(&masked[cursor..]);
+    // An empty lookup shifts the words after it, so that command must pass too.
+    if looked_up {
+        judged.push(unfound);
+    }
     // A substitution the scan did not delimit is still in the text.
     if shell.contains("$(") || shell.contains('`') {
         return None;
@@ -153,6 +197,35 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         .iter()
         .all(|text| allowed(text.as_str()))
         .then_some(out)
+}
+
+/// Whether a bare `cat`, judged as a command of its own, runs without any
+/// control refusing it.
+///
+/// It is the program a `$(cat <<'EOF' ...)` substitution runs, it reads only
+/// the literal heredoc the projection already read, and no rule names it. On
+/// a host with a workspace sandbox it therefore runs contained. A host with
+/// no sandbox, Cursor's among them, has nowhere to contain it, so it gets the
+/// plain review every command no rule proves gets, with nothing matched. That
+/// review is not a refusal: the same `cat` prints the same message either
+/// way, and judging the projected command is what decides the chain. A
+/// control that did refuse it matches a rule or blocks, which this keeps.
+pub(super) fn cat_unrefused(verdict: &guard_contracts::PreToolResultV1) -> bool {
+    let contained = verdict.minimum_action == "sandbox-required"
+        && verdict.reason_code == "native_workspace_containment_required";
+    let unmatched = verdict
+        .command_extensions
+        .as_ref()
+        .is_some_and(|extensions| {
+            extensions.observations.is_empty()
+                && extensions.permission_observations.is_empty()
+                && extensions.evaluation_error.is_none()
+                && extensions.binding.uncertainty_count == 0
+        });
+    contained
+        || (verdict.minimum_action == "review"
+            && verdict.reason_code == "native_command_review_required"
+            && unmatched)
 }
 
 /// The literal text a `$(cat <<'EOF' ... EOF)` prints, when that is the whole
@@ -173,10 +246,14 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
 /// heredoc inside one is read from the substitution's own text. Everything
 /// outside that heredoc has to be the word `cat` and whitespace, which leaves
 /// nowhere for a second `<<`, a redirect or another command to hide.
+///
+/// As the value of `git commit -m`, the message keeps its shape and each
+/// character it may not carry is written as `_` (`commit_message`).
 fn heredoc_value(
     chars: &[char],
     quote_scan: &[char],
     substitution: &ShellCommandSubstitution,
+    message: bool,
 ) -> Option<String> {
     if substitution.kind != "dollar" || !double_quoted_word(quote_scan, substitution) {
         return None;
@@ -209,18 +286,31 @@ fn heredoc_value(
     }
     let body = &heredoc.body;
     if body.chars().count() > MAX_HEREDOC_VALUE_CHARS
-        || !body.chars().all(|character| {
-            (character == '\n' || character == ' ' || character.is_ascii_graphic())
-                && !matches!(
-                    character,
-                    '"' | '\'' | '`' | '$' | '\\' | '*' | '?' | '[' | ']' | '{' | '}' | '~'
-                )
-        })
+        || !(message || body.chars().all(message_character))
     {
         return None;
     }
+    let value = commit_message::projected(body, message_character);
     // A substitution drops every line break at the end of what it read.
-    Some(body.trim_end_matches('\n').to_owned())
+    Some(value.trim_end_matches('\n').to_owned())
+}
+
+/// A character the value may carry into the double-quoted word as it is.
+///
+/// An apostrophe is literal inside double quotes, so `it's` or `'in'` reaches
+/// the program as written: the projection is the command an agent would get
+/// by typing the message out. `"`, `` ` ``, `$` and `\` would end the word or
+/// reopen the shell there, and the screens downstream read a pattern
+/// character as a glob, so those stay refused, or are written as `_` in a
+/// `git commit -m` message.
+fn message_character(character: char) -> bool {
+    character == '\n'
+        || character == ' '
+        || (character.is_ascii_graphic()
+            && !matches!(
+                character,
+                '"' | '`' | '$' | '\\' | '*' | '?' | '[' | ']' | '{' | '}' | '~'
+            ))
 }
 
 /// Whether the substitution is the whole of one double-quoted word, so its
@@ -323,6 +413,9 @@ fn patterned_word(chars: &[char], substitution: &ShellCommandSubstitution) -> bo
 /// The stand-in for a substitution body that is one simple value-producing
 /// command with literal arguments.
 fn stand_in(body: &str) -> Option<&'static str> {
+    if let Some(value) = git_value::stand_in(body) {
+        return Some(value);
+    }
     if body.len() > MAX_BODY_CHARS
         || !body.chars().all(|c| {
             c.is_ascii_alphanumeric() || matches!(c, ' ' | '+' | '%' | '_' | ':' | '.' | '-')
@@ -392,6 +485,12 @@ fn date_arguments(arguments: &[&str]) -> bool {
     }
     true
 }
+
+#[path = "chain_literals_commit_message.rs"]
+mod commit_message;
+
+#[path = "chain_literals_git_value.rs"]
+mod git_value;
 
 #[path = "chain_literals_temp_cd.rs"]
 pub(crate) mod temp_cd;

@@ -49,17 +49,12 @@ def test_release_please_job_is_pinned_and_least_privilege() -> None:
     assert mint_token["with"]["private-key"] == "${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}"
     assert mint_token["with"]["permission-contents"] == "write"
     assert mint_token["with"]["permission-pull-requests"] == "write"
-    assert mint_token["with"]["fallback-on-error"] == "true"
     require_token = next(s for s in release["steps"] if s.get("name") == "Require a token that can open pull requests")
-    assert "Neither the release App nor RELEASE_PLEASE_TOKEN is configured." in require_token["run"]
+    assert "The release GitHub App token is not available." in require_token["run"]
     assert require_token["env"]["APP_TOKEN_SOURCE"] == "${{ steps.release-token.outputs.source }}"
-    assert require_token["env"]["RELEASE_PLEASE_TOKEN"] == "${{ secrets.RELEASE_PLEASE_TOKEN }}"
     step = next(s for s in release["steps"] if s.get("id") == "release")
     assert step["uses"] == PINNED_RELEASE_PLEASE_ACTION
-    assert step["with"]["token"] == (
-        "${{ steps.release-token.outputs.source == 'app' "
-        "&& steps.release-token.outputs.token || secrets.RELEASE_PLEASE_TOKEN }}"
-    )
+    assert step["with"]["token"] == "${{ steps.release-token.outputs.token }}"
     assert step["with"]["target-branch"] == "main"
     assert step["with"]["config-file"] == "release-please-config.json"
     assert step["with"]["manifest-file"] == ".release-please-manifest.json"
@@ -259,3 +254,38 @@ def test_alpha_deletion_is_maintainer_only_and_limited_to_prereleases() -> None:
     assert 'tag="alpha/v${VERSION}"' in release
     assert "--cleanup-tag --yes" in release
     assert "gone" not in steps["Explain the PyPI follow-up"]
+
+
+def test_alpha_deletion_falls_the_core_feed_back_to_the_last_good_alpha() -> None:
+    workflow = load_workflow(ROOT / ".github" / "workflows" / "delete-alpha-release.yml")
+    job = workflow["jobs"]["restore-alpha-feed"]
+    steps = {step["name"]: step for step in job["steps"]}
+    names = [step["name"] for step in job["steps"]]
+
+    assert job["needs"] == "delete"
+    assert job["permissions"] == {"actions": "write", "contents": "read"}
+    assert job["timeout-minutes"] >= 70
+    assert names.index("Route gh through the rate-limit retry wrapper") < names.index("Find the newest live main alpha")
+    find = steps["Find the newest live main alpha"]["run"]
+    assert 'grep -vxF "$VERSION"' in find
+    assert "sort -rV" in find
+    assert '"$status" == "ahead" || "$status" == "identical"' in find
+    assert '"$release" == "true false"' in find
+    dispatch = steps["Dispatch missing Desktop Core sidecars for the fallback alpha"]
+    assert dispatch["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert "event=workflow_dispatch&branch=main&head_sha=${SOURCE_SHA}" in dispatch["run"]
+    assert "status=success" not in dispatch["run"]
+    assert '.name == "Publish alpha to PyPI" and .conclusion == "success"' in dispatch["run"]
+    assert "desktop_core_alpha_feed.py inspect-assets" in dispatch["run"]
+    assert "partial Core asset set" in dispatch["run"]
+    checkout = job["steps"][0]["with"]["sparse-checkout"]
+    assert "scripts/release/desktop_core_alpha_feed.py" in checkout
+    assert "desktop-core-alpha-feed.yml" in dispatch["run"]
+    assert "desktop-core-linux-feed.yml" in dispatch["run"]
+    assert "-f release_channel=alpha" in dispatch["run"]
+    assert "--ref main" in dispatch["run"]
+    assert steps["Report the PyPI yank state"]["if"] == "${{ !cancelled() }}"
+    report = steps["Report the PyPI yank state"]["run"]
+    assert '[[ -z "$FALLBACK" ]]' in report
+    assert "all(.urls[]; .yanked)" in report
+    assert "::warning title=Yank ${VERSION} on PyPI::" in report

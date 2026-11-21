@@ -9,60 +9,91 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_hook_recovery
-from codex_plugin_scanner.guard.adapters import codex
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter, codex_native_hook_state
+from codex_plugin_scanner.guard import codex_hook_integrity, codex_hook_recovery
+from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import (
+from codex_plugin_scanner.guard.codex_hook_recovery import recover_hook_publication
+from codex_plugin_scanner.guard.codex_hook_rollback import rollback_file_identity
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
+from tests import harness_ops_support as harness_support
+from tests.codex_hook_integrity_fixtures import restore_private_file
+from tests.codex_hook_paths_support import (
     canonical_manifest_bytes,
+    hook_authority_receipt_path,
     hook_manifest_path,
     hook_secret_path,
 )
-from codex_plugin_scanner.guard.codex_hook_recovery import recover_hook_publication
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
-from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
+from tests.codex_publication_steps import use_stepwise_publication
+from tests.transition_fault_support import STEPWISE_PUBLICATION
 
-CRASHING_INSTALLER = r"""
+CRASHING_INSTALLER = (
+    STEPWISE_PUBLICATION
+    + r"""
 import os, sys
 from pathlib import Path
-from codex_plugin_scanner.guard.adapters import codex
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import codex_harness_client as codex
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 home = Path(sys.argv[1])
 phase = sys.argv[2]
 context = HarnessContext(home_dir=home, guard_home=home / ".hol-guard", workspace_dir=None)
 if phase == "commit_cleanup":
     from codex_plugin_scanner.guard import codex_hook_recovery
+    _stepwise_publication()
     codex_hook_recovery._remove_record = lambda *_: os._exit(17)
-    codex.CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     raise RuntimeError("commit cleanup was not reached")
-name = {"prepared": "prepare_hook_publication", "manifest": "write_hook_manifest",
-        "config": "atomic_write_text", "committed": "commit_hook_publication"}[phase]
-original = getattr(codex, name)
-def crash_after(*args, **kwargs):
-    original(*args, **kwargs)
-    os._exit(17)
-setattr(codex, name, crash_after)
-codex.CodexHarnessAdapter().install(context)
+if phase == "manifest":
+    from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
+    _stepwise_publication()
+    original_write = RuntimeTransition._write_file
+    def crash_after_manifest(change, generation):
+        original_write(change, generation)
+        if generation == "after" and str(change["path"]).endswith(".manifest.json"):
+            os._exit(17)
+    RuntimeTransition._write_file = staticmethod(crash_after_manifest)
+else:
+    from codex_plugin_scanner.guard import codex_hook_recovery
+    _stepwise_publication()
+    owner = codex_hook_recovery
+    name = {"prepared": "prepare_hook_publication", "config": "record_owned_hook_config_publication",
+            "committed": "commit_hook_publication"}[phase]
+    original = getattr(owner, name)
+    def crash_after(*args, **kwargs):
+        original(*args, **kwargs)
+        os._exit(17)
+    setattr(owner, name, crash_after)
+harness_support.install("codex", context)
 raise RuntimeError("crash boundary was not reached")
 """
+)
 
-UNRECORDED_CONFIG_INSTALLER = r"""
+UNRECORDED_CONFIG_INSTALLER = (
+    STEPWISE_PUBLICATION
+    + r"""
 import os, sys
 from pathlib import Path
-from codex_plugin_scanner.guard.adapters import codex
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import codex_harness_client as codex
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 home = Path(sys.argv[1])
 context = HarnessContext(home_dir=home, guard_home=home / '.hol-guard', workspace_dir=None)
-original = codex.atomic_write_text
-def publish_without_record(*args, **kwargs):
-    kwargs.pop('on_publish', None)
-    original(*args, **kwargs)
-    os._exit(17)
-codex.atomic_write_text = publish_without_record
-codex.CodexHarnessAdapter().install(context)
+# Drop the installed hooks so this install must publish a new config inode.
+(home / '.codex/config.toml').write_text('[features]\nhooks = true\n', encoding='utf-8')
+from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
+_stepwise_publication()
+original = RuntimeTransition._write_file
+def publish_without_record(change, generation):
+    original(change, generation)
+    if generation == 'after' and str(change['path']).endswith('config.toml'):
+        os._exit(17)
+RuntimeTransition._write_file = staticmethod(publish_without_record)
+harness_support.install("codex", context)
 raise RuntimeError('unrecorded publication boundary was not reached')
 """
+)
 
 
 @pytest.fixture
@@ -74,7 +105,7 @@ def installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     context = HarnessContext(home_dir=home, guard_home=home / ".hol-guard", workspace_dir=None)
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     return context, config, hook_manifest_path(context.guard_home, config)
 
 
@@ -134,19 +165,27 @@ def test_live_conflict_preserves_every_participant_after_process_exit(installed,
     context, config, _manifest = installed
     foreign = config.parent / "foreign.toml"
     foreign.write_bytes(b"# competing config\n")
-    script = r"""
+    script = (
+        STEPWISE_PUBLICATION
+        + r"""
 import hashlib, json, os, sys
 from pathlib import Path
 from codex_plugin_scanner.guard import codex_hook_recovery as recovery
-from codex_plugin_scanner.guard.adapters import codex
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import codex_harness_client as codex
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
+from tests.codex_hook_paths_support import hook_manifest_path, hook_secret_path
 home, substitution = Path(sys.argv[1]), sys.argv[2]
 config = home / '.codex/config.toml'
-original_write = codex.atomic_write_text
-def competing_write(*args, **kwargs):
-    manifest = codex.hook_manifest_path(home / '.hol-guard', config)
+from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
+_stepwise_publication()
+original_write = RuntimeTransition._write_file
+def competing_write(*args):
+    if args[1] != 'after' or Path(str(args[0]['path'])) != config:
+        return original_write(*args)
+    manifest = hook_manifest_path(home / '.hol-guard', config)
     receipt = manifest.with_name(manifest.name.replace('.manifest.json', '.authority-receipt.json'))
-    participants = [manifest, receipt, codex.hook_secret_path(home / '.hol-guard')]
+    participants = [manifest, receipt, hook_secret_path(home / '.hol-guard')]
     hashes = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in participants}
     snapshot = home / 'participant-digests.json'
     snapshot.write_text(json.dumps(hashes))
@@ -158,7 +197,7 @@ def competing_write(*args, **kwargs):
         config.unlink()
     elif substitution in ('matching_original', 'matching_after'):
         if substitution == 'matching_after':
-            original_write(*args, **kwargs)
+            original_write(*args)
         replacement = config.parent / 'foreign-replacement.toml'
         replacement.write_bytes(config.read_bytes())
         replacement.chmod(0o600)
@@ -166,17 +205,22 @@ def competing_write(*args, **kwargs):
     else:
         config.write_bytes(b'# competing config\n')
     raise OSError('injected publication failure')
-codex.atomic_write_text = competing_write
-original_record_write = recovery.atomic_write_bytes
-def crash_after_conflict_record(*args, **kwargs):
-    original_record_write(*args, **kwargs)
-    if json.loads(args[1])['phase'] == 'config_conflict':
+RuntimeTransition._write_file = staticmethod(competing_write)
+from codex_plugin_scanner.guard import native_transition_files
+original_record_op = native_transition_files.publication
+def crash_after_conflict_record(op, *args, **kwargs):
+    if op != 'abort':
+        return original_record_op(op, *args, **kwargs)
+    try:
+        original_record_op(op, *args, **kwargs)
+    finally:
         os._exit(17)
-recovery.atomic_write_bytes = crash_after_conflict_record
+native_transition_files.publication = crash_after_conflict_record
 context = HarnessContext(home_dir=home, guard_home=home / '.hol-guard', workspace_dir=None)
-codex.CodexHarnessAdapter().install(context)
+harness_support.install("codex", context)
 raise RuntimeError('conflict record boundary was not reached')
 """
+    )
     result = subprocess.run(
         [sys.executable, "-c", script, str(context.home_dir), substitution],
         env={**os.environ, "HOME": str(context.home_dir), "USERPROFILE": str(context.home_dir)},
@@ -256,7 +300,7 @@ def test_successful_publication_retains_exact_authority_receipt(installed):
         verify_local_authority_payload(
             payload,
             authentication,
-            key=secret.key,
+            key_home=str(secret.guard_home),
             key_id=secret.key_id,
             purpose="codex-hook-authority-receipt",
         ).status
@@ -266,7 +310,7 @@ def test_successful_publication_retains_exact_authority_receipt(installed):
         verify_local_authority_payload(
             payload,
             authentication,
-            key=secret.key,
+            key_home=str(secret.guard_home),
             key_id=secret.key_id,
             purpose="codex-hook-publication-inverse",
         ).status
@@ -346,7 +390,7 @@ def test_new_owner_cannot_register_a_previous_publishers_config_inode(installed)
     crash(context, "config")
     record = context.guard_home / "managed/codex/pending-hook-publication.json"
     before = record.read_bytes()
-    identity = codex.rollback_file_identity(config)
+    identity = rollback_file_identity(config)
     assert identity is not None
     with codex_install_transaction(context.guard_home, config, actor="foreign-publication-owner"):
         with pytest.raises(CodexHookIntegrityError) as failure:
@@ -364,33 +408,15 @@ def test_exit_after_inverse_config_replacement_retains_unknown_inode_for_recover
         config.read_text().replace("hooks = true", "hooks = false")
         + "\n# Preserve this original config comment during inverse.\n"
     )
-    crash(context, "config")
-    inverse = r"""
-import os, sys
-from pathlib import Path
-from codex_plugin_scanner.guard import codex_hook_recovery as recovery
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
-home, config = Path(sys.argv[1]), Path(sys.argv[2])
-original = recovery.restore_private_file
-def restore_then_exit(path, value):
-    original(path, value)
-    if path == config:
-        os._exit(17)
-recovery.restore_private_file = restore_then_exit
-with codex_install_transaction(home, config, actor='interrupted-inverse'):
-    recovery.recover_hook_publication(home)
-raise RuntimeError('inverse config boundary was not reached')
-"""
-    result = subprocess.run(
-        [sys.executable, "-c", inverse, str(context.guard_home), str(config)],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    assert result.returncode == 17, result.stderr
-    record = context.guard_home / "managed/codex/pending-hook-publication.json"
     receipt = manifest.with_name(manifest.name.replace(".manifest.json", ".authority-receipt.json"))
+    before = {path: (path.read_bytes() if path.exists() else None) for path in (manifest, receipt, config)}
+    crash(context, "config")
+    # An inverse interrupted right after it replaced the config: the authority
+    # participants and the config hold their predecessors, on a new config inode.
+    with codex_install_transaction(context.guard_home, config, actor="interrupted-inverse"):
+        for path, value in before.items():
+            restore_private_file(path, value)
+    record = context.guard_home / "managed/codex/pending-hook-publication.json"
     participants = (config, manifest, receipt, hook_secret_path(context.guard_home), record)
     digests = {path: hashlib.sha256(path.read_bytes()).digest() for path in participants}
     with codex_install_transaction(context.guard_home, config, actor="resume-interrupted-inverse"):
@@ -413,21 +439,13 @@ def test_committed_pair_is_not_undone_after_process_exit(installed, phase: str):
     assert codex_native_hook_state(context)["protection_active"]
 
 
-def test_recovery_resumes_after_first_file_was_restored(installed, monkeypatch: pytest.MonkeyPatch):
+def test_recovery_resumes_after_first_file_was_restored(installed):
     context, config, manifest = installed
     before = config.read_bytes(), manifest.read_bytes()
     crash(context, "config")
-    original_restore = codex_hook_recovery.restore_private_file
-
-    def interrupted_restore(target, payload):
-        original_restore(target, payload)
-        raise OSError("injected recovery interruption")
-
+    # An interrupted recovery restores the manifest before the config.
+    manifest.write_bytes(before[1])
     with codex_install_transaction(context.guard_home, config, actor="recovery"):
-        with monkeypatch.context() as patch:
-            patch.setattr(codex_hook_recovery, "restore_private_file", interrupted_restore)
-            with pytest.raises(OSError, match="interruption"):
-                recover_hook_publication(context.guard_home)
         assert recover_hook_publication(context.guard_home)
     assert (config.read_bytes(), manifest.read_bytes()) == before
     assert codex_native_hook_state(context)["protection_active"]
@@ -436,7 +454,7 @@ def test_recovery_resumes_after_first_file_was_restored(installed, monkeypatch: 
 def test_next_install_recovers_before_loading_manifest_baseline(installed):
     context, _config, _manifest = installed
     crash(context, "manifest")
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     assert codex_native_hook_state(context)["protection_active"]
     assert not (context.guard_home / "managed/codex/pending-hook-publication.json").exists()
 
@@ -444,15 +462,16 @@ def test_next_install_recovers_before_loading_manifest_baseline(installed):
 def test_preparation_failure_after_durable_write_uses_authenticated_inverse(installed, monkeypatch: pytest.MonkeyPatch):
     context, config, manifest = installed
     before = config.read_bytes(), manifest.read_bytes()
-    original_prepare = codex.prepare_hook_publication
+    original_prepare = codex_hook_recovery.prepare_hook_publication
 
     def prepared_then_failed(*args, **kwargs):
         original_prepare(*args, **kwargs)
         raise OSError("injected preparation completion failure")
 
-    monkeypatch.setattr(codex, "prepare_hook_publication", prepared_then_failed)
+    use_stepwise_publication(monkeypatch)
+    monkeypatch.setattr(codex_hook_recovery, "prepare_hook_publication", prepared_then_failed)
     with pytest.raises(OSError, match="completion failure"):
-        CodexHarnessAdapter().install(context)
+        harness_support.install("codex", context)
     assert (config.read_bytes(), manifest.read_bytes()) == before
     assert codex_native_hook_state(context)["protection_active"]
     assert not (context.guard_home / "managed/codex/pending-hook-publication.json").exists()
@@ -469,16 +488,17 @@ def test_recovery_without_ownership_cannot_read_or_create_state(tmp_path: Path):
 def test_foreign_edit_during_preparation_is_preserved(installed, monkeypatch: pytest.MonkeyPatch):
     context, config, manifest = installed
     before_manifest = manifest.read_bytes()
-    original_prepare = codex.prepare_hook_publication
+    original_prepare = codex_hook_recovery.prepare_hook_publication
     edited_config = config.read_bytes() + b"\n# edit while install is preparing\n"
 
     def prepare_after_edit(*args, **kwargs):
         config.write_bytes(edited_config)
         return original_prepare(*args, **kwargs)
 
-    monkeypatch.setattr(codex, "prepare_hook_publication", prepare_after_edit)
+    use_stepwise_publication(monkeypatch)
+    monkeypatch.setattr(codex_hook_recovery, "prepare_hook_publication", prepare_after_edit)
     with pytest.raises(CodexHookIntegrityError) as failure:
-        CodexHarnessAdapter().install(context)
+        harness_support.install("codex", context)
     assert failure.value.reason == "codex_hook_recovery_generation_changed"
     assert config.read_bytes() == edited_config
     assert manifest.read_bytes() == before_manifest
@@ -502,9 +522,9 @@ def test_first_install_crash_restores_absence_without_retaining_new_key(
         assert recover_hook_publication(context.guard_home)
     assert config.read_bytes() == before_config
     assert not hook_manifest_path(context.guard_home, config).exists()
-    assert not codex_hook_recovery.hook_authority_receipt_path(context.guard_home, config).exists()
+    assert not hook_authority_receipt_path(context.guard_home, config).exists()
     assert not hook_secret_path(context.guard_home).exists()
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     assert codex_native_hook_state(context)["protection_active"]
 
 
@@ -512,7 +532,7 @@ def test_first_install_crash_restores_absence_without_retaining_new_key(
 def test_recovery_preserves_foreign_edit_before_restoring_either_file(installed, edited):
     context, config, manifest = installed
     crash(context, "manifest")
-    receipt = codex_hook_recovery.hook_authority_receipt_path(context.guard_home, config)
+    receipt = hook_authority_receipt_path(context.guard_home, config)
     target = config if edited == "config" else receipt
     target.write_bytes(target.read_bytes() + b"\n# a later user edit\n")
     current = config.read_bytes(), manifest.read_bytes(), receipt.read_bytes()
@@ -528,9 +548,9 @@ def test_recovery_preserves_foreign_edit_before_restoring_either_file(installed,
 
 def test_uninstall_revokes_retained_authority_receipt(installed):
     context, config, _manifest = installed
-    receipt = codex_hook_recovery.hook_authority_receipt_path(context.guard_home, config)
+    receipt = hook_authority_receipt_path(context.guard_home, config)
     assert receipt.exists()
-    CodexHarnessAdapter().uninstall(context)
+    harness_support.uninstall("codex", context)
     assert not receipt.exists()
 
 
@@ -560,10 +580,10 @@ def test_legacy_signed_record_without_config_identity_preserves_participants(ins
     payload.pop("authentication")
     payload.pop("before_config_identity")
     payload.pop("after_config_identity")
-    secret = codex_hook_recovery.load_hook_secret(context.guard_home)
+    secret = codex_hook_integrity.load_hook_secret(context.guard_home)
     payload["authentication"] = sign_local_authority_payload(
         payload,
-        key=secret.key,
+        key_home=str(secret.guard_home),
         key_id=secret.key_id,
         purpose="codex-hook-publication-inverse",
         signed_at=payload["operation_id"],

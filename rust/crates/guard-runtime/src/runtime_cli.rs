@@ -3,13 +3,13 @@ use super::*;
 pub(super) fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
-        [command, flag] if command == "context-assistance-install-operator" && flag == "--stdin" => {
-            let response = policy_store::context_assistance_registry::run_operator_command(io::stdin().lock())?;
-            write_bytes_response(&response)
+        [command, flag] if command == cloud_bundle_command::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&cloud_bundle_command::run_command(&bytes))
         }
-        [command, flag] if command == "context-assistance-enroll-local" && flag == "--stdin" => {
-            let response = policy_store::context_assistance_registry::run_enroll_command(io::stdin().lock())?;
-            write_bytes_response(&response)
+        [command, flag] if command == cloud_event_command::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&cloud_event_command::run_command(&bytes))
         }
         [command, flag] if command == "pack-lifecycle" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
@@ -26,6 +26,12 @@ pub(super) fn run() -> Result<(), String> {
         #[cfg(unix)]
         [command, rest @ ..] if command == contained_workspace_sink::LAUNCH_COMMAND => {
             std::process::exit(contained_workspace_sink::launch(rest))
+        }
+        [command, rest @ ..] if command == context_cli::COMMAND => {
+            std::process::exit(context_cli::run(rest))
+        }
+        [command, rest @ ..] if command == context_mcp::COMMAND => {
+            std::process::exit(context_mcp::run(rest))
         }
         [command, rest @ ..] if command == codex_sandbox_check::CHECK_COMMAND => {
             std::process::exit(codex_sandbox_check::run(rest))
@@ -70,7 +76,7 @@ pub(super) fn run() -> Result<(), String> {
             std::process::exit(codex_hook_bridge::run(python_argv))
         }
         [command, python_argv @ ..]
-            if command == bounded_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
+            if command == bounded_hook_bridge::BRIDGE_COMMAND && !python_argv.is_empty() =>
         {
             std::process::exit(bounded_hook_bridge::run(python_argv))
         }
@@ -97,6 +103,10 @@ pub(super) fn run() -> Result<(), String> {
             let bytes = read_stdin_bounded()?;
             let response = oneshot::evaluate_hook_bytes(&bytes)?;
             write_bytes_response(&response)
+        }
+        [command, flag] if native_error_code::is_command(command) && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_bytes_response(&native_error_code::run(&bytes)?)
         }
         [command, flag] if command == "native-bash-host-context" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
@@ -195,6 +205,18 @@ pub(super) fn run() -> Result<(), String> {
             let response = guard_config_load::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if command_state::is_command(command) && flag == "--stdin" => {
+            let response = command_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if command_result::is_command(command) && flag == "--stdin" => {
+            let response = command_result::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if auto_update_state::is_command(command) && flag == "--stdin" => {
+            let response = auto_update_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if guard_config_update::is_command(command) && flag == "--stdin" => {
             let response = guard_config_update::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -235,6 +257,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = hermes_file_inspect::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if runtime_transition_record::is_command(command) && flag == "--stdin" => {
+            let response = runtime_transition_record::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if codex_hook_authority_record::is_command(command) && flag == "--stdin" => {
             let response = codex_hook_authority_record::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -253,6 +279,26 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if cloud_actions_host_config::is_command(command) && flag == "--stdin" => {
             let response = cloud_actions_host_config::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if codex_app_server_target_op::is_command(command) && flag == "--stdin" => {
+            let response = codex_app_server_target_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if codex_hook_paths_op::is_command(command) && flag == "--stdin" => {
+            let response = codex_hook_paths_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if workspace_skills_scan_op::is_command(command) && flag == "--stdin" => {
+            let response = workspace_skills_scan_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if hook_exit_code_op::is_command(command) && flag == "--stdin" => {
+            let response = hook_exit_code_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if codex_mcp_setup::is_command(command) && flag == "--stdin" => {
+            let response = codex_mcp_setup::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if local_skill_index::is_command(command) && flag == "--stdin" => {
@@ -294,6 +340,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = daemon_manage::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if hook_launch_cli::is_command(command) && flag == "--stdin" => {
+            let response = hook_launch_cli::run_command(io::stdin())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if posix_processes::is_command(command) && flag == "--stdin" => {
             let response = posix_processes::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -330,6 +380,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if proxy_credentials::is_command(command) && flag == "--stdin" => {
             let response = proxy_credentials::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if background_loop_gate::is_command(command) && flag == "--stdin" => {
+            let response = background_loop_gate::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if native_install_verdict::is_command(command) && flag == "--stdin" => {
@@ -494,6 +548,20 @@ pub(super) fn run() -> Result<(), String> {
         {
             managed_resident::client_stream(std::path::Path::new(state_dir))
         }
+        [command, flag, state_dir, retire_flag, hold_flag, guard_home]
+            if command == "resident-stop"
+                && flag == "--state-dir"
+                && retire_flag == "--retire-clients"
+                && hold_flag == "--hold-install-lock" =>
+        {
+            // Held until the stop returns: an install that holds its lease
+            // finishes first, and none can take one while the resident goes.
+            let _install = crate::transition_files::hold_install_lock(
+                std::path::Path::new(guard_home),
+                std::time::Duration::from_secs(1),
+            )?;
+            managed_resident::stop_managed(std::path::Path::new(state_dir), true)
+        }
         [command, flag, state_dir, retire_flag]
             if command == "resident-stop"
                 && flag == "--state-dir"
@@ -505,7 +573,14 @@ pub(super) fn run() -> Result<(), String> {
             managed_resident::stop_managed(std::path::Path::new(state_dir), false)
         }
         [command, flag, state_dir] if command == "resident-prewarm" && flag == "--state-dir" => {
-            managed_resident::prewarm(std::path::Path::new(state_dir))
+            managed_resident::prewarm(std::path::Path::new(state_dir), None)
+        }
+        [command, flag, state_dir, session_flag, session]
+            if command == "resident-prewarm"
+                && flag == "--state-dir"
+                && session_flag == claude_session_start::RESTARTED_SESSION_FLAG =>
+        {
+            managed_resident::prewarm(std::path::Path::new(state_dir), Some(session.as_str()))
         }
         [command, flag, state_dir]
             if command == "resident-reset-restart-budget" && flag == "--state-dir" =>
@@ -619,6 +694,14 @@ pub(super) fn run() -> Result<(), String> {
             let bytes = read_stdin_bounded()?;
             write_json(&guard_plugin_kit::run_request(&bytes))
         }
+        [command, flag] if command == crate::local_cli_discover::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&crate::local_cli_discover::run_command(&bytes))
+        }
+        [command, flag] if command == plugin_telemetry_host::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&plugin_telemetry_host::run_command(&bytes))
+        }
         [command, flag] if command == guard_plugin_telemetry::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&guard_plugin_telemetry::run_request(&bytes))
@@ -713,7 +796,7 @@ pub(super) fn run() -> Result<(), String> {
             )
         }
         _ => Err(
-            "usage: hol-guard-runtime compile-business-policy --stdin | capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | enroll-workspace-review-authority --state-dir STATE_DIR --record RECORD | workspace-review-decision --stdin STATE_DIR --request-id REQUEST_ID | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | archive-inspect --stdin | content-decode --stdin | secrets-cli --stdin | context-digest --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR [--retire-clients] | resident-prewarm --state-dir STATE_DIR | resident-reset-restart-budget --state-dir STATE_DIR | resident-health --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
+            "usage: hol-guard-runtime compile-business-policy --stdin | capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | enroll-workspace-review-authority --state-dir STATE_DIR --record RECORD | workspace-review-decision --stdin STATE_DIR --request-id REQUEST_ID | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | archive-inspect --stdin | content-decode --stdin | secrets-cli --stdin | context-digest --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR [--retire-clients] | resident-prewarm --state-dir STATE_DIR [--restarted-session ID] | resident-reset-restart-budget --state-dir STATE_DIR | resident-health --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
                 .into(),
         ),
     }

@@ -138,6 +138,25 @@ def _seconds_until(timestamp: object) -> float | None:
     return max(0.0, (due_at - datetime.now(timezone.utc)).total_seconds())
 
 
+def _record_loop_failure(
+    store: GuardStore,
+    error: BaseException,
+    error_code: str,
+    *,
+    keep_auth_code: bool = False,
+) -> None:
+    from . import cloud_review_sync as sync
+
+    sync._transition_sync_state(
+        store,
+        {},
+        "failed",
+        error=sync._redacted_error(error),
+        error_code=error_code,
+        keep_auth_code=keep_auth_code,
+    )
+
+
 def _cloud_sync_sync_loop(
     store: GuardStore,
     stop_event: threading.Event,
@@ -212,45 +231,24 @@ def _cloud_sync_sync_loop(
         except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
             error_streak += 1
             stalled_streak = 0
-            state = sync._load_sync_state(store)
-            state.update(
-                {
-                    "state": "error",
-                    "last_error": sync._redacted_error(error),
-                    "last_error_code": (
-                        "cloud_auth_expired"
-                        if isinstance(error, GuardSyncAuthorizationExpiredError)
-                        else "cloud_connect_required"
-                    ),
-                    "last_error_at": sync._now(),
-                }
+            auth_code = (
+                "cloud_auth_expired"
+                if isinstance(error, GuardSyncAuthorizationExpiredError)
+                else "cloud_connect_required"
             )
-            sync._save_sync_state(store, state)
+            _record_loop_failure(store, error, auth_code)
         except Exception as error:
             error_streak += 1
             stalled_streak = 0
             _LOGGER.exception("Unexpected error in Cloud Review sync loop")
-            state = sync._load_sync_state(store)
             # A sync attempt clears the stored code when it starts, so a surviving
             # auth code means authentication has not succeeded since it was recorded.
-            # Keep it when a transient failure (for example a token refresh timeout)
-            # would otherwise hide that sign-in is still required.
-            previous_code = state.get("last_error_code")
+            # The store keeps it when a transient failure (for example a token
+            # refresh timeout) would otherwise hide that sign-in is still required.
             if isinstance(error, urllib.error.HTTPError) and error.code == 401:
-                error_code = "cloud_auth_expired"
-            elif previous_code in {"cloud_auth_expired", "cloud_connect_required"}:
-                error_code = previous_code
+                _record_loop_failure(store, error, "cloud_auth_expired")
             else:
-                error_code = "cloud_delivery_error"
-            state.update(
-                {
-                    "state": "error",
-                    "last_error": sync._redacted_error(error),
-                    "last_error_code": error_code,
-                    "last_error_at": sync._now(),
-                }
-            )
-            sync._save_sync_state(store, state)
+                _record_loop_failure(store, error, "cloud_delivery_error", keep_auth_code=True)
 
         wait = _bounded_error_wait(error_backoff_base, error_backoff, error_streak) if error_streak else poll_interval
         if not error_streak:

@@ -7,19 +7,19 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
+from codex_plugin_scanner.guard.resident_evidence_client import ResidentEvidenceClient
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
 
 
-def _writer(store: GuardStore) -> NativeHookEvidenceWriter:
+def _writer(store: GuardStore) -> ResidentEvidenceClient:
     """The writer these tests record through, held by the resident.
 
     Every test that builds one takes ``native_hook_force`` first, so the
     caller-pinned runtime is the authority behind the handoff.
     """
 
-    return NativeHookEvidenceWriter(store=store)
+    return ResidentEvidenceClient(store=store)
 
 
 def _valid_native_receipt() -> dict[str, object]:
@@ -220,7 +220,7 @@ def test_the_daemon_records_a_pre_tool_activity_only_when_the_edge_did_not_queue
     monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native", edge)
     # Evidence is submitted behind the answer; run it in line to observe it.
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.hook_review.hook_worker_native.run_hook_evidence", lambda _host, act: act()
+        "codex_plugin_scanner.guard.hook_review.hook_worker_native.run_resident_evidence", lambda _host, act: act()
     )
     activities: list[object] = []
     writer = _ReceiptWriter()
@@ -270,11 +270,10 @@ def test_native_pre_and_post_keep_authoritative_decision(
             succeeded=True,
             policy_action="warn",
         )
-        assert writer.submit_command_activity(
+        assert writer.submit_post_tool_activity(
             harness=harness,
             event="PostToolUse",
             payload=payload,
-            succeeded=True,
         )
         assert writer.submit_command_activity(
             harness=harness,

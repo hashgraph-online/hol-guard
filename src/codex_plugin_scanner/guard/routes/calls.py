@@ -78,20 +78,20 @@ def _path_parts(path: str) -> list[str]:
 def handler_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Runs the handler the daemon dispatches ``POST path`` to."""
 
-    from ..adapters.base import HarnessContext
+    from ..daemon.swarm_http import WRITE_PATHS as SWARM_WRITE_PATHS
+    from ..daemon.swarm_http import respond as respond_swarm
+    from ..harness_context import HarnessContext
     from ..harness_version_api import WRITE_PATHS as HARNESS_VERSION_WRITE_PATHS
     from ..harness_version_api import handle_harness_version_write
     from ..library_calls import LibraryCallError
-    from .context_assistance_http import WRITE_PATHS as CONTEXT_ASSISTANCE_WRITE_PATHS
-    from .context_assistance_http import respond as respond_context_assistance
     from .mcp_policy_decisions import handle_mcp_policy_decision
     from .workspace_assessment_api import handle_workspace_assessment_post
 
     path, payload = _arguments(args)
     recorder = _Recorder(store)
     parts = _path_parts(path)
-    if path in CONTEXT_ASSISTANCE_WRITE_PATHS:
-        respond_context_assistance(recorder, CONTEXT_ASSISTANCE_WRITE_PATHS[path], payload)
+    if path in SWARM_WRITE_PATHS:
+        respond_swarm(recorder, SWARM_WRITE_PATHS[path], payload)
     elif path in HARNESS_VERSION_WRITE_PATHS:
         context = HarnessContext(home_dir=Path.home().resolve(), workspace_dir=None, guard_home=store.guard_home)
         handle_harness_version_write(recorder, path, payload, context)
@@ -105,9 +105,8 @@ def handler_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
 def handler_get(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Runs the handler the daemon dispatches ``GET path?query`` to."""
 
+    from ..daemon.swarm_http import respond as respond_swarm
     from ..library_calls import LibraryCallError
-    from .context_assistance_http import READ_PATHS as CONTEXT_ASSISTANCE_READ_PATHS
-    from .context_assistance_http import respond as respond_context_assistance
     from .workspace_assessment_api import handle_workspace_assessment_get
 
     path = args.get("path")
@@ -115,8 +114,8 @@ def handler_get(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
     if not isinstance(path, str) or not isinstance(query, str):
         raise LibraryCallError("invalid_arguments")
     recorder = _Recorder(store)
-    if path in CONTEXT_ASSISTANCE_READ_PATHS:
-        respond_context_assistance(recorder, CONTEXT_ASSISTANCE_READ_PATHS[path])
+    if path == "/v1/swarm":
+        respond_swarm(recorder)
     elif path == "/v1/policy/cloud-exception-requests":
         _cloud_exception_request_list(recorder, store)
     elif not handle_workspace_assessment_get(recorder, path, query):

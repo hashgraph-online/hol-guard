@@ -77,6 +77,8 @@ fn shell(home: &Path, command: &str) -> String {
             None,
             None,
             PathContext {
+                literal_words: &[],
+                guard_home: None,
                 home_dir: home.to_str(),
                 cwd: project.to_str(),
                 cdpath_unset: false,
@@ -84,6 +86,7 @@ fn shell(home: &Path, command: &str) -> String {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
@@ -119,6 +122,8 @@ fn size_and_comparison_reads_proceed() {
         "diff -u src/one.ts old/one.ts",
         "diff -ru src old",
         "diff --brief src old",
+        "diff -u /dev/null README.md",
+        "diff -u src/one.ts /dev/null",
         "cmp src/one.ts old/one.ts",
         "cmp -s README.md src/one.ts",
         "cmp -l -n 64 src/one.ts old/one.ts",
@@ -138,7 +143,7 @@ fn unproven_size_and_comparison_reads_still_ask() {
         "du -sh ~/.ssh",
         "du -ah src",
         "du -h src",
-        "du -h -d 1 src",
+        "du -h -d 2 src",
         "du -shL src",
         "du -L -s src",
         "df -h $(cat list)",
@@ -147,6 +152,11 @@ fn unproven_size_and_comparison_reads_still_ask() {
         "diff - README.md",
         "diff --from-file=README.md src/one.ts old/one.ts",
         "diff README.md",
+        // The empty side only shows the other file, which is still screened.
+        "diff -u /dev/null src/.env",
+        "diff -u /dev/null ~/.ssh/id_ed25519",
+        "diff -u /dev/null/x README.md",
+        "diff -u /dev/zero README.md",
         "cmp src/.env README.md",
         "cmp - README.md",
         "cmp README.md",
@@ -338,5 +348,17 @@ fn file_type_probes_proceed_but_magic_loads_and_secrets_ask() {
         "file /etc/passwd",
     ] {
         assert!(!shell(&home, command).contains("allow"), "{command}");
+    }
+}
+
+/// GNU stat reads `-f` and `-t` as flags, so the argument after one is still
+/// a file operand that must pass its own read proof.
+#[cfg(target_os = "linux")]
+#[test]
+fn gnu_stat_short_flags_do_not_hide_the_next_file_operand() {
+    let home = home();
+    for flag in ["-f", "-t"] {
+        let command = format!("stat {flag} /etc/shadow README.md");
+        assert!(!shell(&home, &command).contains("allow"), "{command}");
     }
 }

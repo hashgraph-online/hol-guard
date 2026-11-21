@@ -181,6 +181,16 @@ pub(super) fn opening<'a>(lines: &[&'a str], section: &Section) -> &'a str {
         .unwrap_or_default()
 }
 
+/// Whether `opening` starts a test class that gets its tests from the classes
+/// it inherits, as `class MRUDecoratorTest(TestCase, DecoratorTestMixin):`
+/// does. Its own body is what names the code those tests run.
+pub(super) fn inheriting_test_class(opening: &str) -> bool {
+    let name = written_name(opening).unwrap_or_default();
+    opening.trim_start().starts_with("class ")
+        && opening.contains('(')
+        && (name.ends_with("Test") || name.ends_with("Tests"))
+}
+
 /// Whether an attribute over the section marks it as a test, as Rust's
 /// `#[test]` or `#[tokio::test]` and Java's `@Test` do, whatever its name.
 pub(super) fn marked_test(lines: &[&str], section: &Section) -> bool {

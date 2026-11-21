@@ -45,7 +45,7 @@ def test_only_the_recorded_findings_compose_a_verdict_in_python() -> None:
     `_run_guard_protect_command` was the second finding and is gone: PR #6320
     deleted the rewrite once a probe showed the resident reads the approval-gate
     row for itself. `_script_free_watch` was the first; the resident now settles
-    the script-free watch and `native_package_review_response` renders its answer.
+    and renders the script-free watch.
     """
 
     composed = sorted(str(site["func"]) for site in _baseline()["sites"] if site["reading"] == "composes-in-python")
@@ -117,12 +117,19 @@ def from_constant():
     assert from_constant == {"allow"}
 
 
-def test_python_carried_as_a_script_template_is_scanned() -> None:
-    """The generated hook clients run on the hook path; their verdicts count."""
+def test_python_carried_as_a_script_template_is_scanned(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A hook client written out as a script runs on the hook path; its verdicts count."""
 
-    found = {str(site["func"]) for site in audit.discover()}
-    assert "BOUNDED_HOOK_NATIVE_TEMPLATE:_to_native" in found
-    assert "BOUNDED_HOOK_SCRIPT_TEMPLATE:_rewrite_grok_decision" in found
+    package = tmp_path / "package"
+    package.mkdir()
+    (package / "client.py").write_text(
+        'CLIENT_TEMPLATE = "def decide():\\n    return {\\"decision\\": \\"block\\"}\\n"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(audit, "REPO_ROOT", tmp_path)
+
+    found = {str(site["func"]) for site in audit.discover(package)}
+    assert "CLIENT_TEMPLATE:decide" in found
 
 
 def test_an_unnamed_template_keeps_its_label_when_lines_move() -> None:

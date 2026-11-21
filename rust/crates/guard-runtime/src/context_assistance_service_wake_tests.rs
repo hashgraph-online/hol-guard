@@ -257,3 +257,137 @@ fn changed_settings_may_wake_the_worker_again_at_once() {
         "turning a feature on or off starts a new retry window"
     );
 }
+
+#[test]
+fn a_busy_lock_keeps_the_last_project_context_choice() {
+    let service = Service::default();
+    let mut settings = saved_on(&service);
+    settings.effective.features.agent_context = true;
+    settings.effective.sources.workspace_documents = true;
+    settings.verification_permitted = true;
+    service.configure(settings.clone()).unwrap();
+    let guard = lock(&service.state).unwrap();
+    assert!(
+        service.prompt_context_chosen(),
+        "a prompt that lands while other hooks hold the lock still gets its note"
+    );
+    drop(guard);
+    settings.effective.features.agent_context = false;
+    service.configure(settings.clone()).unwrap();
+    let guard = lock(&service.state).unwrap();
+    assert!(
+        !service.prompt_context_chosen(),
+        "a choice turned off reads as off while the lock is busy"
+    );
+    drop(guard);
+    settings.effective.features.agent_context = true;
+    service.configure(settings.clone()).unwrap();
+    service.stop().unwrap();
+    let guard = lock(&service.state).unwrap();
+    assert!(
+        !service.prompt_context_chosen(),
+        "stop publishes off for a prompt that finds the lock busy"
+    );
+    drop(guard);
+    let closing = Service::default();
+    saved_on(&closing);
+    closing.configure(settings).unwrap();
+    closing.shutdown();
+    let guard = lock(&closing.state).unwrap();
+    assert!(!closing.prompt_context_chosen(), "so does shutdown");
+    drop(guard);
+}
+
+fn chosen_on(service: &Service) {
+    let mut settings = saved_on(service);
+    settings.effective.features.agent_context = true;
+    settings.effective.sources.workspace_documents = true;
+    settings.verification_permitted = true;
+    service.configure(settings).unwrap();
+}
+
+#[test]
+fn a_prompt_never_waits_on_a_busy_lock_to_wake_the_worker() {
+    let home = home();
+    let service = Service::default();
+    chosen_on(&service);
+    assert!(wake::resting(&lock(&service.state).unwrap()));
+    let (sent, got) = std::sync::mpsc::channel();
+    std::thread::scope(|scope| {
+        let guard = lock(&service.state).unwrap();
+        scope.spawn(|| {
+            service.warm_prompt_lane(home.path());
+            let soon = Instant::now() + Duration::from_millis(150);
+            let lane = service.prompt_lane(home.path(), soon);
+            sent.send(matches!(lane, Err(LaneMiss::Starting))).unwrap();
+        });
+        let answered = got.recv_timeout(Duration::from_secs(2));
+        drop(guard);
+        assert_eq!(
+            answered,
+            Ok(true),
+            "the prompt gave up at its deadline instead of queueing on the lock"
+        );
+    });
+    assert!(
+        lock(&service.state).unwrap().woke.is_none(),
+        "nothing was woken while the lock was busy; a later prompt wakes it"
+    );
+}
+
+#[test]
+fn old_engine_folders_are_removed_on_every_start() {
+    let home = tempfile::tempdir().unwrap();
+    let root = home.path().join("context-assistance");
+    for name in ["interpreters", "downloads", "work"] {
+        std::fs::create_dir_all(root.join(name).join("inner")).unwrap();
+    }
+    std::fs::write(root.join("staging"), b"not a folder").unwrap();
+
+    retire_old_engine(home.path());
+    retire_old_engine(home.path());
+
+    assert!(!root.join("interpreters").exists());
+    assert!(!root.join("downloads").exists());
+    assert!(root.join("work/inner").is_dir());
+    assert!(root.join("staging").is_file());
+}
+
+/// Follows saved settings until project context reads `want`, for 5 s at most.
+fn follows_to(service: &Service, home: &std::path::Path, want: bool) -> bool {
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        service.follow_saved_settings(home);
+        let enabled = lock(&service.state).unwrap().settings.requested.enabled;
+        if enabled == want || Instant::now() >= until {
+            return enabled == want;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn a_prompt_follows_settings_saved_since_the_last_one() {
+    let home = home();
+    let service = Service::default();
+    assert!(
+        follows_to(&service, home.path(), true),
+        "a saved opt-in reaches the prompt lane without a status request"
+    );
+    std::fs::write(
+        home.path().join("config.toml"),
+        "[context_assistance]\nenabled=false\nruntime_id='selected'\n",
+    )
+    .unwrap();
+    assert!(
+        follows_to(&service, home.path(), false),
+        "turning project context off reaches the next prompt"
+    );
+    let generation = service.configuration_generation().unwrap();
+    service.follow_saved_settings(home.path());
+    assert_eq!(
+        service.configuration_generation().unwrap(),
+        generation,
+        "unchanged settings are not loaded again"
+    );
+}

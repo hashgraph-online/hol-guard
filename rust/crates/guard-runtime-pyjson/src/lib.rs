@@ -233,6 +233,28 @@ pub fn parse_unique(text: &str) -> Result<PyVal, JsonFailure> {
     parse_with(text, true, char::REPLACEMENT_CHARACTER)
 }
 
+/// Parse like [`parse_unique`], naming the repeated key a
+/// [`JsonFailure::Duplicate`] reports: the first one repeated in the object
+/// that closed first, the key Python's `object_pairs_hook` sees.
+pub fn parse_unique_naming(text: &str) -> Result<PyVal, (JsonFailure, Option<String>)> {
+    let mut parser = Parser::new(text, true, char::REPLACEMENT_CHARACTER, false);
+    parser.skip_space();
+    let parsed = parser.value(0).and_then(|value| {
+        parser.skip_space();
+        if parser.position == parser.text.len() {
+            Ok(value)
+        } else {
+            Err(JsonFailure::Syntax)
+        }
+    });
+    parsed.map_err(|failure| {
+        let key = (failure == JsonFailure::Duplicate)
+            .then(|| parser.duplicate.take())
+            .flatten();
+        (failure, key)
+    })
+}
+
 fn parse_with(text: &str, unique: bool, lone_surrogate: char) -> Result<PyVal, JsonFailure> {
     parse_parser(Parser::new(text, unique, lone_surrogate, false)).map(|(value, _)| value)
 }
@@ -291,6 +313,8 @@ struct Parser<'a> {
     map_surrogates: bool,
     mapped: bool,
     plane_collision: bool,
+    /// The key a [`JsonFailure::Duplicate`] names.
+    duplicate: Option<String>,
 }
 
 impl<'a> Parser<'a> {
@@ -304,6 +328,7 @@ impl<'a> Parser<'a> {
             map_surrogates,
             mapped: false,
             plane_collision: false,
+            duplicate: None,
         }
     }
 
@@ -518,7 +543,7 @@ impl<'a> Parser<'a> {
         }
         self.position += 1;
         let mut entries: Vec<(String, PyVal)> = Vec::new();
-        let mut duplicate = false;
+        let mut duplicate: Option<String> = None;
         // Key -> entries index, so a duplicate member replaces the value at its
         // original position without rescanning every parsed key.
         let mut positions: std::collections::HashMap<String, usize> =
@@ -547,8 +572,8 @@ impl<'a> Parser<'a> {
             self.saw_lone_surrogate = false;
             match positions.get(key.as_str()) {
                 Some(&index) => {
-                    if self.unique {
-                        duplicate = true;
+                    if self.unique && duplicate.is_none() {
+                        duplicate = Some(key);
                     }
                     entries[index].1 = value;
                 }
@@ -562,7 +587,8 @@ impl<'a> Parser<'a> {
                 Some(b',') => self.position += 1,
                 Some(b'}') => {
                     self.position += 1;
-                    if duplicate {
+                    if duplicate.is_some() {
+                        self.duplicate = duplicate;
                         return Err(JsonFailure::Duplicate);
                     }
                     return Ok(PyVal::Dict(entries));

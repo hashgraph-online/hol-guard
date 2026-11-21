@@ -20,10 +20,10 @@ from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_
 from codex_plugin_scanner.guard import package_firewall_entitlement as package_firewall_entitlement_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli.connect_flow import GuardOAuthTokenExchangeResult
 from codex_plugin_scanner.guard.cloud_control import server_control_connect_state as _ctl_connect_state
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_daemon_handler import native_headless_action_error
@@ -2795,7 +2795,7 @@ def test_headless_policy_sync_explains_rejected_downgrade(tmp_path: Path, monkey
         "2026-05-19T00:00:00Z",
     )
     bundle = sign_policy_bundle(build_cloud_exception_policy_bundle(workspace_id="workspace-1"))
-    monkeypatch.setattr(runner_module, "_policy_bundle_is_version_downgrade", lambda *_args: True)
+    monkeypatch.setattr(runner_module, "_policy_bundle_admission_rejection", lambda *_args: "bundle_version_downgrade")
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

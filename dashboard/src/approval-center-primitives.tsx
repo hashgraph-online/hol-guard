@@ -34,7 +34,7 @@ import { EMPTY_QUEUE_TITLE } from "./approval-center-utils";
 import { GuardUpdatePanel } from "./guard-update-panel";
 import { CloudUserMenu } from "./cloud-user-menu";
 import type { GuardApprovalGatePublicConfig, GuardCloudUserProfile } from "./guard-types";
-import type { GuardUpdateChannelProof } from "./guard-api";
+import type { GuardUpdateChannelProof, GuardUpdateMode } from "./guard-api";
 import { GITHUB_ISSUE_BUTTON_LABEL, GITHUB_ISSUE_LINK } from "./github-issue-link";
 import { OpenGuardCloudAction } from "./open-guard-cloud-action";
 import type { GuardUpdatePhase, GuardUpdateStatus } from "./guard-types";
@@ -46,6 +46,7 @@ export type AppView =
   | "evidence"
   | "settings"
   | "cigar"
+  | "swarm"
   | "extensions"
   | "app-detail"
   | "supply-chain"
@@ -170,6 +171,7 @@ const sidebarLinks = [
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/protect", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/cigar", label: "CIGAR", view: "cigar", icon: HiMiniCircleStack },
+  { href: "/swarm", label: "Swarm", view: "swarm", icon: HiMiniSquares2X2 },
   { href: "/extensions", label: "Extensions", view: "extensions", icon: HiMiniPuzzlePiece },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },
@@ -189,6 +191,7 @@ export function ShellSidebar(props: {
   onReinstallGuard?: () => void;
   approvalGate?: GuardApprovalGatePublicConfig | null;
   onSetUpdateChannel?: (channel: "stable" | "alpha", proof?: GuardUpdateChannelProof) => void | Promise<void>;
+  onSetUpdateMode?: (mode: GuardUpdateMode, proof?: GuardUpdateChannelProof) => void | Promise<void>;
   updatePhase?: GuardUpdatePhase;
   cloudUserProfile?: GuardCloudUserProfile | null;
   workspaceId?: string | null;
@@ -310,6 +313,7 @@ export function ShellSidebar(props: {
                   onUpdateGuard={props.onUpdateGuard}
                   onReinstallGuard={props.onReinstallGuard}
                   onSetUpdateChannel={props.onSetUpdateChannel}
+                  onSetUpdateMode={props.onSetUpdateMode}
                   approvalGate={props.approvalGate}
                 />
               </div>

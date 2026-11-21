@@ -7,11 +7,13 @@ exactly as before, and must never show a value Guard did not write.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
+import tomllib
 
 from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import cloud_actions_host_config
@@ -21,7 +23,6 @@ from codex_plugin_scanner.guard.cli.cloud_actions_host_config import (
     plan_host_config,
     settings_path,
 )
-from codex_plugin_scanner.guard.codex_config import tomllib
 from tests.cloud_actions_pairing_support import URL, WS, FakeCloud, entry, pair, wanted
 
 CANARY = "sk-test-CANARY-7f3a9c"
@@ -134,9 +135,8 @@ def test_preview_adds_only_the_guard_entry_and_writes_nothing(
     plan = plan_host_config(tool, path=path, entry=entry(tool), url=URL)
     assert plan.action == "add"
     assert plan.after is not None
-    assert plan.before is not None
-    assert plan.before == path.read_bytes()
-    before, after = _parse(tool, plan.before), _parse(tool, plan.after)
+    assert plan.before_sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
+    before, after = _parse(tool, path.read_bytes()), _parse(tool, plan.after)
     assert _without_guard_entry(tool, after) == _without_guard_entry(tool, before)
     assert after[_table(tool)][CLOUD_ACTIONS_SERVER_NAME] == wanted(tool)
 
@@ -147,7 +147,7 @@ def test_preview_adds_only_the_guard_entry_and_writes_nothing(
     payload = json.loads(json_out)
     assert payload["action"] == "add"
     assert payload["written"] is False
-    assert payload["other_entries"] == len(_parse(tool, plan.before)[_table(tool)])
+    assert payload["other_entries"] == len(before[_table(tool)])
     assert payload["url"] == URL
     assert "cloud-actions" in text_out and "bridge" in text_out and "Nothing was written." in text_out
     assert "does not sign in separately" in text_out
@@ -425,6 +425,4 @@ def test_without_the_native_runtime_the_preview_changes_nothing(
     assert plan.after is None
     assert plan.problem is not None and "native runtime" in plan.problem
     with pytest.raises(cloud_actions_host_config.HostConfigNativeUnavailableError):
-        _ = cloud_actions_host_config.render_entry_undo(
-            "cursor", current=path.read_bytes(), written=entry("cursor"), prior=None
-        )
+        _ = settings_path("cursor", home=tmp_path, environ=None)

@@ -5,6 +5,17 @@ use super::substitution::{bounded_substitutions, reviewable_substitutions};
 use super::tests::{controls, decision, github};
 
 const FAILED: &str = "native_command_extension_evaluation_failed";
+/// A `#` comment ends at newline even when it contains an apostrophe.
+/// The next line's command substitution must not be hidden as a single quote.
+#[test]
+fn apostrophe_in_comment_cannot_erase_live_backticks_on_next_line() {
+    let command = "printf 'header\\n' # it's documentation\nprintf '%s\\n' `printf marker`\n# '";
+    let rewritten = super::substitution::without_escaped_backticks(command);
+    assert!(
+        rewritten.contains("`printf marker`"),
+        "live backticks must remain visible to the fail-closed classifier: {rewritten}"
+    );
+}
 
 #[test]
 fn a_named_substitution_reads_as_the_words_it_prints() {

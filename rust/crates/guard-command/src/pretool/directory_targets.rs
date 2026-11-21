@@ -447,6 +447,29 @@ pub(crate) fn exact_drive_target_with_absent_tail(target: &str) -> bool {
 const MAX_ABSENT_NAMES: usize = 32;
 
 impl<'a> super::PathContext<'a> {
+    /// Whether the shell expands `~` to the declared home. The shell reads
+    /// its own HOME: the stamped one, or the runtime's when no environment
+    /// was stamped.
+    pub(crate) fn shell_home_matches_for(
+        home_dir: Option<&str>,
+        execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> bool {
+        let shell_home = match execution_environment {
+            Some(environment) if environment.has_valid_shape() => environment.home.clone(),
+            Some(_) => None,
+            None => std::env::var("HOME").ok(),
+        };
+        let canonical = |path: &str| {
+            std::path::Path::new(path)
+                .is_absolute()
+                .then(|| std::fs::canonicalize(path).ok())
+                .flatten()
+        };
+        home_dir.zip(shell_home).is_some_and(|(declared, shell)| {
+            canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
+        })
+    }
+
     /// `cdpath_unset` is set only from a harness-stamped environment that
     /// declares no CDPATH, so a bare relative `cd` operand cannot be
     /// redirected by a CDPATH search.
@@ -527,6 +550,8 @@ impl<'a> super::PathContext<'a> {
         // is pip's own surface, so [`super::pip_reads`] reads it.
         let pip_config_inert =
             super::pip_reads::environment_configuration_inert(execution_environment);
+        let python_environment_inert =
+            super::python_filter::environment_inert(execution_environment);
         // ripgrep reads RIPGREP_CONFIG_PATH unless the command passes
         // `--no-config`, and ignores it only when it is empty. A stamped
         // environment carries names without values, so any name counts.
@@ -628,25 +653,11 @@ impl<'a> super::PathContext<'a> {
                 .iter()
                 .all(|name| std::env::var_os(name).is_none_or(|value| value.is_empty())),
         };
-        // The shell expands `~` from its own HOME: the stamped one, or the
-        // runtime's when no environment was stamped.
-        let shell_home = match execution_environment {
-            Some(environment) if environment.has_valid_shape() => environment.home.clone(),
-            Some(_) => None,
-            None => std::env::var("HOME").ok(),
-        };
-        let canonical = |path: &str| {
-            std::path::Path::new(path)
-                .is_absolute()
-                .then(|| std::fs::canonicalize(path).ok())
-                .flatten()
-        };
-        let shell_home_matches = home_dir.zip(shell_home).is_some_and(|(declared, shell)| {
-            canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
-        });
+        let shell_home_matches = Self::shell_home_matches_for(home_dir, execution_environment);
         let psql_environment =
             super::safe_scalar::psql_environment(execution_environment, shell_home_matches);
         Self {
+            literal_words: &[],
             home_dir,
             cwd,
             cdpath_unset,
@@ -654,6 +665,7 @@ impl<'a> super::PathContext<'a> {
             cargo_config_inert,
             npm_config_inert,
             pip_config_inert,
+            python_environment_inert,
             shell_home_matches,
             ripgrep_config_absent,
             gem_config_absent,
@@ -664,6 +676,8 @@ impl<'a> super::PathContext<'a> {
             // command model is in hand.
             creates_nothing: false,
             psql_environment,
+            // Only the hook knows which Guard home it reported.
+            guard_home: None,
         }
     }
 }

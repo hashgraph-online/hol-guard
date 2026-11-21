@@ -1,0 +1,165 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.toll",
+  "version": "1.0.0",
+  "name": "Toll",
+  "description": "Robinhood Chain (4663) checks for agents: coins, wallets, hooks, ERC-8004 agents, x402 payees and pre-sign checks of transactions and signatures. Toll never signs or sends. Reads only, except four watch tools that add or remove alerts tied to the caller's Toll key; those ask for review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "xyz.t0ll",
+    "displayName": "Toll",
+    "url": "https://t0ll.xyz"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://t0ll.xyz",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://t0ll.xyz/mcp",
+    "serverNames": [
+      "toll"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "financial-data-read",
+    "external-shared-state-write"
+  ],
+  "tools": [
+    {
+      "name": "check_coin",
+      "state": "inherit"
+    },
+    {
+      "name": "pre_buy_check",
+      "state": "inherit"
+    },
+    {
+      "name": "check_coins",
+      "state": "inherit"
+    },
+    {
+      "name": "larp_check",
+      "state": "inherit"
+    },
+    {
+      "name": "dev_record",
+      "state": "inherit"
+    },
+    {
+      "name": "wallet_privacy",
+      "state": "inherit"
+    },
+    {
+      "name": "wallet_approvals",
+      "state": "inherit"
+    },
+    {
+      "name": "fresh_launches",
+      "state": "inherit"
+    },
+    {
+      "name": "chain_pulse",
+      "state": "inherit"
+    },
+    {
+      "name": "launch_record",
+      "state": "inherit"
+    },
+    {
+      "name": "check_agent",
+      "state": "inherit"
+    },
+    {
+      "name": "find_paid_api",
+      "state": "inherit"
+    },
+    {
+      "name": "find_job",
+      "state": "inherit"
+    },
+    {
+      "name": "check_hook",
+      "state": "inherit"
+    },
+    {
+      "name": "check_tx",
+      "state": "inherit"
+    },
+    {
+      "name": "presign_risk_report",
+      "state": "inherit"
+    },
+    {
+      "name": "stock_token",
+      "state": "inherit"
+    },
+    {
+      "name": "stock_tokens",
+      "state": "inherit"
+    },
+    {
+      "name": "fundamentals",
+      "state": "inherit"
+    },
+    {
+      "name": "insider_trades",
+      "state": "inherit"
+    },
+    {
+      "name": "institutions",
+      "state": "inherit"
+    },
+    {
+      "name": "guidance",
+      "state": "inherit"
+    },
+    {
+      "name": "macro",
+      "state": "inherit"
+    },
+    {
+      "name": "stock_events",
+      "state": "inherit"
+    },
+    {
+      "name": "my_watches",
+      "state": "inherit"
+    },
+    {
+      "name": "watch_coin",
+      "state": "review"
+    },
+    {
+      "name": "watch_wallet",
+      "state": "review"
+    },
+    {
+      "name": "unwatch_coin",
+      "state": "review"
+    },
+    {
+      "name": "unwatch_wallet",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://t0ll.xyz/docs",
+    "https://github.com/t0ll-xyz/toll-plugins",
+    "https://www.npmjs.com/package/@tollxyz/mcp"
+  ],
+  "saferAlternatives": [
+    "Send only public addresses and unsigned transactions or messages; never send a seed, private key or signing permission. Toll does not need them.",
+    "check_tx answers ALLOW, WARN or BLOCK; pre_buy_check also answers WAIT while a coin is still being read: call it again after the seconds given, and do not buy before it settles.",
+    "Treat BLOCK as a stop and show every WARN to the person before they sign or buy.",
+    "Chain checks read Robinhood Chain; Stock Token company data comes from SEC filings and larp_check reads a project's own site, posts and code. Each answer names its source and time.",
+    "Findings are facts at the time shown, not financial advice or a guarantee of safety."
+  ]
+}

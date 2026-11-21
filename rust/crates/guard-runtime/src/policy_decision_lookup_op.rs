@@ -1343,7 +1343,7 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
 /// bundle it came from. A request that carries them, one that never
 /// reads policy rows (a local-once peek, a grant probe with nothing to lift),
 /// or one `evaluate` refuses before opening the store, is left as sent.
-fn with_bundle_identities(
+pub(crate) fn with_bundle_identities(
     request: &PolicyDecisionLookupRequestV1,
 ) -> Result<Cow<'_, PolicyDecisionLookupRequestV1>, String> {
     let grant = request

@@ -49,6 +49,8 @@ fn parse(command: &str) -> crate::CanonicalCommandV1 {
 
 fn context<'a>(home: &'a Path, cwd: &'a Path, shell_home_matches: bool) -> PathContext<'a> {
     PathContext {
+        literal_words: &[],
+        guard_home: None,
         home_dir: home.to_str(),
         cwd: cwd.to_str(),
         shell_home_matches,
@@ -57,6 +59,7 @@ fn context<'a>(home: &'a Path, cwd: &'a Path, shell_home_matches: bool) -> PathC
         cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
+        python_environment_inert: false,
         ripgrep_config_absent: false,
         gem_config_absent: false,
         http_config_absent: false,

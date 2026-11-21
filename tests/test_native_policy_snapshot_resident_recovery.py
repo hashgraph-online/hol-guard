@@ -10,7 +10,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.hook_review.hook_policy_admission import _native_policy_not_ready_reason
 from codex_plugin_scanner.guard.hook_review.hook_worker_readiness import prepare_workspace_policy
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.native_policy_snapshot_resident_recovery import (
@@ -316,13 +315,13 @@ class _StuckPublisher:
     def start(self) -> None:
         return None
 
-    def register_workspace(self, _workspace: object) -> None:
+    def register_workspace(self, _workspace: object, *, deadline: float | None = None) -> None:
         return None
 
     def workspace_policy_pending(self, _workspace: object) -> bool:
         return False
 
-    def workspace_admissible_without_overlay(self, _workspace: object) -> bool:
+    def workspace_admissible_without_overlay(self, _workspace: object, *, deadline: float | None = None) -> bool:
         return False
 
     def resident_failure_streak(self) -> int:
@@ -434,28 +433,3 @@ def test_wait_gives_up_when_the_failures_repeat_midway(tmp_path: Path) -> None:
 
     assert len(publisher.waits) == 1
     assert time.monotonic() - started < 2.0
-
-
-def _daemon_with(publisher: object) -> SimpleNamespace:
-    return SimpleNamespace(hook_worker=SimpleNamespace(policy_snapshot_publisher=publisher))
-
-
-def test_not_ready_reason_sends_the_user_to_repair_once_failures_repeat() -> None:
-    reason = _native_policy_not_ready_reason(_daemon_with(_StuckPublisher(streak=RESIDENT_FAIL_FAST_STREAK)))
-
-    assert "native_client_timed_out" in reason
-    assert "hol-guard repair" in reason
-    assert "Retry once more" in reason
-
-
-def test_not_ready_reason_keeps_plain_retry_advice_for_a_first_failure() -> None:
-    reason = _native_policy_not_ready_reason(_daemon_with(_StuckPublisher(streak=1)))
-
-    assert "Retry this action." in reason
-    assert "hol-guard repair" not in reason
-
-
-def test_not_ready_reason_ignores_the_streak_for_other_failures() -> None:
-    publisher = _StuckPublisher(streak=RESIDENT_FAIL_FAST_STREAK, last_error="native_policy_snapshot_ack_mismatch")
-
-    assert "hol-guard repair" not in _native_policy_not_ready_reason(_daemon_with(publisher))

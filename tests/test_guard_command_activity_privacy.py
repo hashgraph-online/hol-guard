@@ -11,12 +11,12 @@ from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     COMMAND_ACTIVITY_MATCH_FIELDS,
     CorrelationKind,
 )
-from codex_plugin_scanner.guard.runtime.command_activity_privacy import (
+from tests.command_activity_privacy_support import FORBIDDEN_ACTIVITY_FIELD_NAMES
+from tests.python_oracles.command_activity_privacy import (
     InstallationCorrelationKey,
     StrongHarnessIdentifier,
     derive_correlation_handle,
 )
-from tests.command_activity_privacy_support import FORBIDDEN_ACTIVITY_FIELD_NAMES
 
 
 def _identifier(

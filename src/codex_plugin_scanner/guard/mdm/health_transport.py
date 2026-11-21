@@ -13,6 +13,7 @@ from .health_lease_contract import HealthLeaseBinding, HealthLeaseOutbox
 from .protection_lease_contract import ProtectionLeaseChallenge
 
 _CHALLENGE_SCHEMA = "guard-protection-attestation-challenge.v1"
+_RESPONSE_LIMIT_BYTES = 4096
 _CHALLENGE_KEYS = {
     "challengeId",
     "deviceId",
@@ -48,18 +49,18 @@ class GuardCloudMachineHealthTransport:
     def __init__(self, guard_home: Path) -> None:
         from ..store import GuardStore
 
+        self._guard_home = guard_home
         self._store = GuardStore(guard_home, prime_policy_integrity=False, source="machine-health")
 
     def configured(self) -> bool:
         return self._store.get_cloud_sync_profile() is not None
 
     def _request(self, method: str, path: str, body: bytes | None = None) -> tuple[int, bytes]:
-        from ..runtime.runner import (
-            _guard_sync_request,
-            _resolve_guard_sync_auth_context,
-        )
-        from .network import managed_urlopen
+        from ..runtime.cloud_bundle_sync import CloudResponseOversizedError, cloud_raw_request
+        from ..runtime.runner import _resolve_guard_sync_auth_context
 
+        if (method == "GET") != (body is None):
+            raise OSError("health_lease_delivery_request_invalid")
         auth_context = _resolve_guard_sync_auth_context(self._store)
         sync_url = auth_context.get("sync_url")
         if not isinstance(sync_url, str):
@@ -71,20 +72,24 @@ class GuardCloudMachineHealthTransport:
             raise OSError("health_lease_delivery_auth_invalid")
         api_prefix = parsed.path[: -len(sync_suffix)]
         request_url = f"{origin}{api_prefix}{path}"
-        request = _guard_sync_request(
-            auth_context,
-            request_url=request_url,
-            method=method,
-            data=body,
-        )
         try:
-            with managed_urlopen(request, timeout=15) as response:
-                status = int(getattr(response, "status", 200))
-                payload = response.read(4097)
+            status, payload = cloud_raw_request(
+                auth_context,
+                self._guard_home,
+                url=request_url,
+                body=body,
+                timeout_seconds=15,
+                retry_timeout_seconds=15,
+                max_response_bytes=_RESPONSE_LIMIT_BYTES,
+            )
         except urllib.error.HTTPError as exc:
             bounded = exc.read(1025)
             raise OSError(f"health_lease_delivery_http_{exc.code}:{_cloud_error_code(bounded)}") from exc
-        if len(payload) > 4096:
+        except CloudResponseOversizedError as exc:
+            raise OSError("health_lease_delivery_response_oversized") from exc
+        except RuntimeError as exc:
+            raise OSError("health_lease_delivery_unavailable") from exc
+        if len(payload) > _RESPONSE_LIMIT_BYTES:
             raise OSError("health_lease_delivery_response_oversized")
         return status, payload
 

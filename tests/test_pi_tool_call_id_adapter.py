@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from tests.pi_extension_support import managed_extension_source
 
 
 def _managed_source(tmp_path: Path) -> str:

@@ -124,6 +124,7 @@ request with the case that exposed it.
 | False-positive fix | A safe variant that incorrectly triggers a rule | A scoped native predicate and regressions for the affected rule and independent protections |
 | New native operation | Semantics the existing matcher graph cannot express | Reviewed Rust contract, validation, lowering, evaluation, identity, and parity tests |
 | MCP server | A package or hosted MCP service with tool defaults | Follow the separate [MCP server guide](../mcp-server-contributions.md) |
+| Cloud action pack | A provider's hosted actions, run by a host from a reviewed pack | Follow the separate [cloud action pack guide](cloud-action-pack-contributing.md) |
 | Documentation or publisher listing | Examples, references, public presentation, or attribution | Docs or an optional listing sidecar, plus public directory checks |
 
 For a new Extension or a material authority change, open a draft pull request with the

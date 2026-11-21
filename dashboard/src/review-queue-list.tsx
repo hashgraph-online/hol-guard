@@ -1,6 +1,5 @@
 import { forwardRef, useCallback, useMemo, useState, type ChangeEvent } from "react";
 import { EmptyState, SectionLabel } from "./approval-center-primitives";
-import { harnessDisplayName } from "./approval-center-utils";
 import type { GuardApprovalRequest } from "./guard-types";
 import {
   resolveQueueCategory,
@@ -20,12 +19,13 @@ export function ReviewHeader({
   count,
   filteredCount,
   progress,
-  activeHarness,
+  requester,
 }: {
   count: number;
   filteredCount: number;
   progress: string;
-  activeHarness: string;
+  /** The app that asked for the open request, as people know it. */
+  requester: string;
 }) {
   const isFiltered = filteredCount !== count;
   return (
@@ -37,7 +37,7 @@ export function ReviewHeader({
         </p>
       </div>
       <p className="text-sm text-muted-foreground">
-        {progress}{isFiltered ? ` · ${filteredCount} of ${count} shown` : ""} · from {harnessDisplayName(activeHarness)}
+        {progress}{isFiltered ? ` · ${filteredCount} of ${count} shown` : ""} · from {requester}
       </p>
     </div>
   );

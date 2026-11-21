@@ -11,11 +11,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install, list_harness_setup_items
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cursor_test_support import cursor_agent_on_path
 from tests.update_context_test_support import build_legacy_update_context
 
 
@@ -583,14 +584,11 @@ def test_doctor_reports_partial_setup_for_found_unprotected_harness(
     config_path = context.home_dir / ".cursor" / "mcp.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps({"mcpServers": {"local": {"command": "node"}}}), encoding="utf-8")
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: False,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=False)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = harness_ops.diagnostics("cursor", context)
 
     assert payload["setup_status"] == "partial"
     assert payload["command_available"] is False
@@ -606,14 +604,11 @@ def test_doctor_does_not_mark_harness_command_presence_as_guard_active(
     config_path = context.home_dir / ".cursor" / "mcp.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps({"mcpServers": {"local": {"command": "node"}}}), encoding="utf-8")
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: True,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = harness_ops.diagnostics("cursor", context)
 
     assert payload["setup_status"] == "partial"
     assert payload["installed"] is True
@@ -651,9 +646,9 @@ def test_codex_doctor_marks_partial_native_hook_install_as_broken(tmp_path: Path
         encoding="utf-8",
     )
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("codex").diagnostics(context)
+    payload = harness_ops.diagnostics("codex", context)
 
     assert payload["setup_status"] == "broken"
     assert payload["native_hook_state"]["managed_pre_tool_hook_installed"] is False
@@ -669,10 +664,7 @@ def test_doctor_treats_guard_launcher_shim_as_active_install(
 ) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: True,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
     install_payload = apply_managed_install(
         "install",
@@ -684,9 +676,9 @@ def test_doctor_treats_guard_launcher_shim_as_active_install(
         "2026-05-13T00:00:00Z",
     )
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = harness_ops.diagnostics("cursor", context)
 
     assert Path(str(install_payload["managed_install"]["shim_path"])).is_file()
     assert payload["setup_status"] == "active"
@@ -709,14 +701,11 @@ def test_doctor_marks_guard_launcher_shim_without_harness_command_broken(
         str(context.workspace_dir),
         "2026-05-13T00:00:00Z",
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: False,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=False)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = harness_ops.diagnostics("cursor", context)
 
     assert payload["setup_status"] == "broken"
     assert any("command is not available" in warning for warning in payload["warnings"])
@@ -730,14 +719,11 @@ def test_doctor_ignores_non_utf8_guard_launcher_shim(
     shim_path = context.guard_home / "bin" / "guard-cursor"
     shim_path.parent.mkdir(parents=True, exist_ok=True)
     shim_path.write_bytes(b"\xff\xfe\x00")
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: False,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=False)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = harness_ops.diagnostics("cursor", context)
 
     assert payload["setup_status"] == "not_found"
 
@@ -757,9 +743,9 @@ def test_doctor_recognizes_legacy_guard_launcher_shim(
         ),
         encoding="utf-8",
     )
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("claude-code").diagnostics(context)
+    payload = harness_ops.diagnostics("claude-code", context)
 
     assert payload["setup_status"] not in {"not_found", "partial"}
     assert any(artifact["name"] == "guard-claude-code" for artifact in payload["artifacts"])
@@ -777,14 +763,11 @@ def test_doctor_treats_guard_command_artifact_as_managed(
         json.dumps({"mcpServers": {"wrapped": {"command": "guard-cursor", "args": ["--flag"]}}}),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: True,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = harness_ops.diagnostics("cursor", context)
 
     assert payload["setup_status"] == "active"
     assert not any("Guard is not installed" in warning for warning in payload["warnings"])
@@ -805,20 +788,16 @@ def test_doctor_keeps_active_setup_status_for_runtime_probe_timeout(
         str(context.workspace_dir),
         "2026-05-13T00:00:00Z",
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: True,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
-    from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    def runtime_probe_timeout(self: CursorHarnessAdapter, context: HarnessContext) -> dict[str, object]:
+    def runtime_probe_timeout(_harness: str, context: HarnessContext) -> dict[str, object]:
         return {"timed_out": True}
 
-    monkeypatch.setattr(CursorHarnessAdapter, "runtime_probe", runtime_probe_timeout)
+    monkeypatch.setattr(harness_ops, "runtime_probe", runtime_probe_timeout)
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = harness_ops.diagnostics("cursor", context)
 
     assert payload["setup_status"] == "active"
     assert any("timed out" in warning for warning in payload["warnings"])

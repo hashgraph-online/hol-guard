@@ -140,6 +140,7 @@ Conditions:
 | `packages` | no | [stringSet](#stringset) |
 | `paths` | no | [stringSet](#stringset) |
 | `publishers` | no | [stringSet](#stringset) |
+| `riskGroups` | no | array of one of `deletes`, `bulk_changes`, `sending_and_sharing`, `secrets`, `code_and_deploys`, `packages_and_scripts` (min items 1, max items 6, unique items) |
 | `repositories` | no | [stringSet](#stringset) |
 | `secretTypes` | no | [stringSet](#stringset) |
 | `skills` | no | [stringSet](#stringset) |

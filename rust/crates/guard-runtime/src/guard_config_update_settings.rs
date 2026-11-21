@@ -10,16 +10,19 @@ use serde_json::{json, Map, Value};
 
 use crate::guard_config_managed::{apply_managed_policy, ManagedInput};
 use crate::guard_config_update_coerce::{
-    coerce_editable, coerce_harness_patch, invalid, normalize_posture,
+    coerce_cigar_patch, coerce_editable, coerce_harness_patch, invalid, normalize_posture,
 };
-use crate::guard_config_update_harness::{apply_harness_patch, apply_named_policy, string_table};
+use crate::guard_config_update_harness::{
+    apply_cigar_patch, apply_harness_patch, apply_named_policy, settle_untimed_watch, string_table,
+    wants_untimed_watch, WatchSettle,
+};
 use crate::guard_config_update_value::{
     get, is_str, py_eq, py_json_eq_int, py_str, remove, set, table_to_json, to_json, truthy, Table,
     Tv,
 };
 use crate::pyjson::PyVal;
 
-pub(crate) const EDITABLE_KEYS: [&str; 28] = [
+pub(crate) const EDITABLE_KEYS: [&str; 30] = [
     "mode",
     "presentation_mode",
     "presentation_mode_explicit",
@@ -28,6 +31,7 @@ pub(crate) const EDITABLE_KEYS: [&str; 28] = [
     "protection_posture_explicit",
     "watch_auto_revert_hours",
     "harness_postures",
+    "harness_cigar",
     "security_level",
     "default_action",
     "unknown_publisher_action",
@@ -43,6 +47,7 @@ pub(crate) const EDITABLE_KEYS: [&str; 28] = [
     "approval_browser_immediate_severity",
     "desktop_notifications",
     "update_channel",
+    "update_mode",
     "telemetry",
     "sync",
     "billing",
@@ -361,6 +366,7 @@ pub(crate) fn update(
     managed: Option<&ManagedInput>,
     cloud_sync_entitled: bool,
     now: &str,
+    cigar_apps: &[&str],
 ) -> Result<SettingsWrite, String> {
     if has(payload, WATCH_STAMP_REPAIR_KEY) {
         return Ok(repair_watch_stamp(stored, current, now));
@@ -380,6 +386,7 @@ pub(crate) fn update(
     apply_named_policy(&mut next, payload);
     let locked: &[String] = managed.map_or(&[], |policy| &policy.locked_settings);
     let mut harness_patch = Vec::new();
+    let mut cigar_patch = Vec::new();
     for (key, value) in payload {
         if !EDITABLE_KEYS.contains(&key.as_str()) {
             continue;
@@ -398,6 +405,10 @@ pub(crate) fn update(
                     "Managed policy locks prevent per-harness protection overrides.",
                 ));
             }
+            continue;
+        }
+        if key == "harness_cigar" {
+            cigar_patch = coerce_cigar_patch(value)?;
             continue;
         }
         if PRESENTATION_KEYS.contains(&key.as_str()) {
@@ -426,9 +437,21 @@ pub(crate) fn update(
         &current_or(&next, "security_level", current),
     );
     sync_posture(&mut next, current, payload, selected, now);
+    let untimed = wants_untimed_watch(payload);
     if !harness_patch.is_empty() {
-        apply_harness_patch(&mut next, &harness_patch, now);
+        apply_harness_patch(&mut next, &harness_patch, now, untimed);
     }
+    if !cigar_patch.is_empty() {
+        apply_cigar_patch(&mut next, &cigar_patch);
+    }
+    let save = WatchSettle {
+        postures: &harness_patch,
+        untimed,
+        cigar: &cigar_patch,
+        context_changed: has(payload, "context_assistance"),
+        apps: cigar_apps,
+    };
+    settle_untimed_watch(&mut next, now, &save, managed);
     let next_json = table_to_json(&next);
     let effective = match managed {
         Some(policy) => {

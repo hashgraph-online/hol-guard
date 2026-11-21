@@ -24,6 +24,12 @@ class StoreApprovalsMixin:
     def settle_native_review_reuse(self, **identity: object) -> object:
         return self._native_store_call("settle_native_review_reuse", identity)
 
+    def record_native_admitted_call(self, *, harness: str, payload: object, now: str) -> object:
+        # The resident derives the call's witness key; see native_admitted_call.rs.
+        return self._native_store_call(
+            "record_native_admitted_call", {"harness": harness, "payload": payload, "now": now}
+        )
+
     def consume_native_review_approval(
         self,
         *,
@@ -84,9 +90,10 @@ class StoreApprovalsMixin:
         same call, and reads the row back in the queue write's own
         transaction. A row it could not read is read separately.
 
-        ``hint`` (``native_review_hint_ask``) bounds the time the resident may
-        spend deciding the review's extension or connector setup hint before
-        the write; ``None`` stores no hint.
+        ``hint`` carries the hook's remaining time in milliseconds, or a null
+        deadline for the resident's default budget. The resident reserves
+        time for the write before deciding the review's extension or connector
+        setup hint. A null ``hint`` skips hint computation.
 
         ``silent`` queues a review the agent never sees: its
         ``approval.created`` event is written in the same transaction, best
@@ -109,7 +116,7 @@ class StoreApprovalsMixin:
         hook renders it itself.
 
         ``connector_lookup`` is the launch of a review Guard did not recognise
-        (``native_review_connector_lookup``). The resident looks up the
+        (``native_connector_lookup``). The resident looks up the
         connector it waits on, queues the review under that connector's group
         with its setup hint and wording, and keeps the review's context with
         it in the same write. The row carries what it found as

@@ -2,48 +2,57 @@
 
 from __future__ import annotations
 
-import os
-import stat
-from pathlib import Path, PureWindowsPath
+import time
+import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .native_guard_config import WORKSPACE_CONFIG_FILENAMES
+from .native_context import ensure_resident_prerequisite
+from .native_execution import _resident_request
+from .native_runtime import native_runtime_status
 
 if TYPE_CHECKING:
     from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 
 
-def _spelled_without_links(candidate: Path) -> bool:
-    """True when ``candidate`` reaches its directory through no link.
+_OVERLAY_READINESS_BUDGET_SECONDS = 0.15
 
-    The overlay checks walk ``candidate`` and its parents as spelled, so a
-    symlink, junction or substituted drive would hide the real ancestors.
-    Windows also spells one directory several ways with no link between:
-    8.3 short names, such as the ``RUNNER~1`` temp root of hosted CI
-    runners, and letter case. ``realpath`` re-spells those, so there a path
-    also counts when it resolves on the same drive to as many components and
-    none of the components it names is a reparse point.
-    """
 
+def _workspace_overlay_readiness(
+    publisher: NativePolicySnapshotPublisher, candidate: Path, deadline: float | None
+) -> object:
+    now = time.monotonic()
+    probe_deadline = now + _OVERLAY_READINESS_BUDGET_SECONDS
+    if deadline is not None:
+        probe_deadline = min(probe_deadline, deadline)
+    if probe_deadline <= now:
+        return None
+    guard_home = publisher.guard_home
+    if not ensure_resident_prerequisite(guard_home, store=publisher.store):
+        return None
+    status = native_runtime_status(deadline_monotonic=probe_deadline)
+    timeout_seconds = probe_deadline - time.monotonic()
+    if timeout_seconds <= 0:
+        return None
+    request_id = uuid.uuid4().hex
     try:
-        final = os.path.realpath(candidate)
-    except (OSError, ValueError):
-        return False
-    if final == os.fspath(candidate):
-        return True
-    if os.name != "nt":
-        return False
-    resolved = PureWindowsPath(final)
-    if resolved.drive.upper() != candidate.drive.upper() or len(resolved.parts) != len(candidate.parts):
-        return False
-    for component in (candidate, *candidate.parents):
-        try:
-            attributes = os.lstat(component).st_file_attributes
-        except (AttributeError, OSError, ValueError):
-            return False
-        if attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT:
-            return False
-    return True
+        result = _resident_request(
+            operation="hook_workspace_overlay_readiness",
+            request={
+                "schema": "guard-hook-workspace-overlay-readiness-request.v1",
+                "request_id": request_id,
+                "workspace": str(candidate),
+            },
+            guard_home=guard_home,
+            timeout_seconds=timeout_seconds,
+            required_feature="hook-workspace-overlay-readiness-v1",
+            response_schema="guard-hook-workspace-overlay-readiness-result.v1",
+            record_resilience=False,
+            status=status,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+    return result.get("readiness") if result and result.get("request_id") == request_id else None
 
 
 class NativePolicySnapshotWorkspaceReadinessMixin:
@@ -57,7 +66,7 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
     in-flight ACKs so a stream of new workspaces can starve readiness.
     """
 
-    def register_workspace(self, workspace: Path | None) -> bool:
+    def register_workspace(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
         """Track workspace override files without reading them on a hook."""
 
         publisher = cast("NativePolicySnapshotPublisher", self)
@@ -68,8 +77,10 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
             # Only a new or deferred workspace needs the overlay scans below.
             if candidate in publisher._workspace_paths and candidate not in publisher._deferred_workspace_paths:
                 return False
-        file_less = publisher._file_less_canonical_workspace(candidate)
-        free_ancestors = file_less and publisher._overlay_free_ancestors(candidate)
+            can_reuse_snapshot = publisher._acked or publisher._under_settled_workspace_locked(candidate)
+        readiness = _workspace_overlay_readiness(publisher, candidate, deadline) if can_reuse_snapshot else None
+        file_less = readiness in ("directory_only", "directory_and_ancestors")
+        free_ancestors = readiness == "directory_and_ancestors"
         with publisher._condition:
             if candidate in publisher._workspace_paths:
                 if candidate not in publisher._deferred_workspace_paths or (
@@ -108,7 +119,7 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
         with publisher._condition:
             return candidate in publisher._pending_workspace_paths
 
-    def workspace_admissible_without_overlay(self, workspace: Path | None) -> bool:
+    def workspace_admissible_without_overlay(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
         """True when the ACKed snapshot already holds this pending workspace's policy.
 
         A workspace config reads only that directory's own overlay files, and
@@ -129,12 +140,12 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
         with publisher._condition:
             if candidate not in publisher._deferred_workspace_paths:
                 return False
-        if not publisher._file_less_canonical_workspace(candidate):
+        readiness = _workspace_overlay_readiness(publisher, candidate, deadline)
+        if readiness not in ("directory_only", "directory_and_ancestors"):
             return False
-        free_ancestors = publisher._overlay_free_ancestors(candidate)
         with publisher._condition:
             return candidate in publisher._deferred_workspace_paths and publisher._covered_by_ack_locked(
-                candidate, free_ancestors=free_ancestors
+                candidate, free_ancestors=readiness == "directory_and_ancestors"
             )
 
     def _covered_by_ack_locked(self, candidate: Path, *, free_ancestors: bool) -> bool:
@@ -147,30 +158,6 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
         publisher = cast("NativePolicySnapshotPublisher", self)
         settled = publisher._workspace_paths - publisher._pending_workspace_paths
         return any(candidate != parent and candidate.is_relative_to(parent) for parent in settled)
-
-    @staticmethod
-    def _file_less_canonical_workspace(candidate: Path) -> bool:
-        if not _spelled_without_links(candidate):
-            return False
-        return NativePolicySnapshotWorkspaceReadinessMixin._overlay_absent(candidate)
-
-    @staticmethod
-    def _overlay_free_ancestors(candidate: Path) -> bool:
-        return candidate.is_absolute() and all(
-            NativePolicySnapshotWorkspaceReadinessMixin._overlay_absent(parent) for parent in candidate.parents
-        )
-
-    @staticmethod
-    def _overlay_absent(directory: Path) -> bool:
-        for name in WORKSPACE_CONFIG_FILENAMES:
-            try:
-                _ = os.lstat(directory / name)
-            except FileNotFoundError:
-                continue
-            except (OSError, ValueError):
-                return False
-            return False
-        return True
 
     def _queue_pending_workspace_publish_locked(self) -> None:
         publisher = cast("NativePolicySnapshotPublisher", self)

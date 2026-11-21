@@ -442,14 +442,18 @@ def native_command_capability_runtime(
     artifact skip, like the other compiled-runtime fixtures.
     """
 
-    from codex_plugin_scanner.guard import native_command_capability, native_command_envelope
+    from codex_plugin_scanner.guard import (
+        native_command_capability,
+        native_command_envelope,
+        native_command_job_plan,
+    )
 
     binary = _context_digest_runtime_binary()
     if binary is None:
         pytest.skip("command capability tests require the compiled Rust runtime")
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(binary.resolve()))
-    for module in (native_command_capability, native_command_envelope):
+    for module in (native_command_capability, native_command_envelope, native_command_job_plan):
         monkeypatch.setattr(
             module,
             "_resolve_digest_home",
@@ -465,14 +469,15 @@ def native_adapter_state_integrity_runtime(
 ) -> Path:
     """Answer adapter-state authentication requests from the shared resident.
 
-    The ``adapter_state_integrity`` op reads the manifest and the key off the
-    wire, so the Guard home it is asked about only has to name a resident that
-    is already keyed and warm.  Tests keep their own ``tmp_path`` guard home
-    for the adapter state key file, which stays Python-side, and borrow the
-    session home for the runtime call.
+    The ``adapter_state_integrity`` op reads the manifest off the wire and the
+    key from the ``key_home`` it names, so the Guard home it is asked about
+    only has to name a resident that is already keyed and warm.  Tests keep
+    their own ``tmp_path`` guard home for the adapter state key file, which
+    the runtime reads and creates there, and borrow the session home for the
+    runtime call.
     """
 
-    from codex_plugin_scanner.guard import native_adapter_state_integrity
+    from tests.python_oracles import native_adapter_state_integrity
 
     binary = _context_digest_runtime_binary()
     if binary is None:
@@ -687,3 +692,28 @@ def native_route_policy_with_hooks_off(monkeypatch: pytest.MonkeyPatch) -> Path:
         pinned_provision,
     )
     return runtime
+
+
+_BUILT_RUNTIME = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+
+
+@pytest.fixture(autouse=True)
+def _hook_launcher_is_the_built_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serve ``hook-launch`` from the compiled runtime, whatever binary a test names.
+
+    The native launcher is the runtime itself, so a test that stands up a fake
+    runtime (a shell script, or a bare interpreter) has no ``hook-launch`` to
+    answer. The compiled runtime the suite was given at start serves the launch
+    while the command it runs is still the test's own binary.
+    """
+
+    if not _BUILT_RUNTIME or not Path(_BUILT_RUNTIME).is_file():
+        return
+    from codex_plugin_scanner.guard import codex_hook_launch_runtime, codex_hook_windows_job
+
+    def built_runtime(launcher: str | os.PathLike[str] | None = None) -> str | None:
+        del launcher
+        return _BUILT_RUNTIME
+
+    monkeypatch.setattr(codex_hook_launch_runtime, "native_launcher_path", built_runtime)
+    monkeypatch.setattr(codex_hook_windows_job, "native_launcher_path", built_runtime)

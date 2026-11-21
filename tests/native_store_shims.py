@@ -37,11 +37,9 @@ from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
     CommandShadowObservation,
 )
 from codex_plugin_scanner.guard.runtime.composio_contract import composio_tool_role
-from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioActionSchema
-from codex_plugin_scanner.guard.runtime.composio_workflows import ComposioWorkflowProposal
 from codex_plugin_scanner.guard.runtime.effect_contract import UncertaintyKind
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
-from codex_plugin_scanner.guard.runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
+from codex_plugin_scanner.guard.runtime.observed_mcp_tools import ObservedMcpTool
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_command_activity import _validate_command_activity_write
 from codex_plugin_scanner.guard.store_command_activity_display_schema import INVOCATION_PREVIEW_MAX_CHARS
@@ -55,6 +53,9 @@ from codex_plugin_scanner.guard.store_command_activity_wire import (
 from codex_plugin_scanner.guard.store_local_cli_retention import utc_now_iso
 from codex_plugin_scanner.guard.store_local_mcp import _notify_legacy_mcp_denial
 from codex_plugin_scanner.guard.store_sessions import _guard_attachment_row, _guard_item_row
+from tests.python_oracles.composio_discovery import ComposioActionSchema
+from tests.python_oracles.composio_workflows import ComposioWorkflowProposal
+from tests.python_oracles.observed_mcp_tools import observed_mcp_tool
 
 
 def record_command_activity(

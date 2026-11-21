@@ -10,6 +10,7 @@ use super::cloud_action_envelope::{
 use super::cloud_request_text::{
     first_optional_string, optional_string, py_strip, scrubbed_command, scrubbed_text,
 };
+use super::command_risk_groups::command_risk_groups;
 
 const PAYLOAD_KEYS: [&str; 25] = [
     "request_id",
@@ -156,6 +157,14 @@ pub(crate) fn cloud_safe_local_request_payload(
     };
     let mut safe_envelope = cloud_safe_action_envelope(envelope.as_ref(), &context)?;
     let command_text = local_request_command_text(item, envelope.as_ref());
+    if let Some(command) = command_text.as_deref() {
+        // Group names only: the command itself stays under the redaction rules.
+        let groups = command_risk_groups(command)
+            .into_iter()
+            .map(|group| Value::String(group.to_owned()))
+            .collect();
+        payload.insert("risk_groups".to_owned(), Value::Array(groups));
+    }
     let scrubbed = command_text.as_deref().map(scrubbed_command);
     if redaction_enabled {
         for key in ["raw_command_text", "rawCommandText"] {

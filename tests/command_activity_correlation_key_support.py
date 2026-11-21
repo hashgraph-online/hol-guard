@@ -14,11 +14,11 @@ import os
 import secrets
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
+from tests.python_oracles.command_activity_correlation import (
     COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
     COMMAND_ACTIVITY_CORRELATION_KEY_SCHEMA_VERSION,
 )
-from codex_plugin_scanner.guard.runtime.command_activity_privacy import InstallationCorrelationKey
+from tests.python_oracles.command_activity_privacy import InstallationCorrelationKey
 
 
 def write_correlation_key(guard_home: Path) -> InstallationCorrelationKey:

@@ -153,11 +153,6 @@ fn run(shared: Weak<Mutex<State>>, recovery: Recovery) {
         cold::check(&shared, &source, &signal)?;
         target.check()?;
         let installation = registry::load(&home, &job.request.target_runtime_id)?;
-        crate::guard_config_load::cigar_updates::check_installation(
-            &home,
-            target.rules(),
-            &installation,
-        )?;
         let mut sdk =
             PrivateRuntime::start(&installation, &home, &target.settings().effective, &signal)?;
         #[cfg(test)]

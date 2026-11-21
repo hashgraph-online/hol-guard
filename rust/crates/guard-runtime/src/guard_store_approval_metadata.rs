@@ -3,12 +3,159 @@
 //! `approval_desktop_notified_at`, `mark_approval_desktop_notified` and
 //! `oldest_approval_request_created_at`.
 
-use rusqlite::Connection;
-use serde_json::Value;
+use std::collections::BTreeSet;
+use std::time::{Duration, Instant};
 
+use guard_contracts::RUNNER_AUTHORITY_MAX_BYTES;
+use rusqlite::Connection;
+use serde_json::{json, Value};
+
+use crate::approval_extension_recommendation_op::is_caution_risk_class;
+use crate::guard_store_approval_page_reads::ORDER;
 use crate::guard_store_approval_read_rows::json_object;
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{exec, query_all, query_one, StoreResult};
+use crate::guard_store_db::{exec, query_all, query_one, Row, StoreResult};
+use crate::guard_store_local_cli_inventory::{awaiting_connector_setup, connector_setup_item};
+use crate::hook_direct::saved_decision::review_queue::connector::validated_setup_hint;
+
+const CONNECTOR_GROUP_SCAN_LIMIT: usize = 2000;
+const CONNECTOR_HINT_SCAN_BUDGET: Duration = Duration::from_secs(8);
+
+/// Read connector members among the newest pending requests. The extra row
+/// distinguishes a complete scan from one that must show a caution in the
+/// recommendation, even when all the rows beyond the budget are unrelated.
+pub(crate) fn pending_connector_group_rows(
+    connection: &Connection,
+    args: &Args<'_>,
+) -> StoreResult<Value> {
+    let (rows, complete) = scan_connector_group(connection, args.str("identity_hash")?)?;
+    Ok(json!({"rows": rows, "complete": complete}))
+}
+
+fn scan_connector_group(
+    connection: &Connection,
+    identity_hash: &str,
+) -> StoreResult<(Vec<Row>, bool)> {
+    let prefix = format!("connector:{identity_hash}:");
+    let pending = query_all(
+        connection,
+        &format!(
+            "select request_id, status, queue_group_id from approval_requests \
+             where status = 'pending' {ORDER} limit ?"
+        ),
+        &[Value::from(CONNECTOR_GROUP_SCAN_LIMIT + 1)],
+    )?;
+    let complete = pending.len() <= CONNECTOR_GROUP_SCAN_LIMIT;
+    let rows: Vec<_> = pending
+        .into_iter()
+        .take(CONNECTOR_GROUP_SCAN_LIMIT)
+        .filter(|row| {
+            row.get("queue_group_id")
+                .and_then(Value::as_str)
+                .is_some_and(|group| group.starts_with(&prefix))
+        })
+        .collect();
+    Ok((rows, complete))
+}
+
+/// Read and validate the sibling hints under the same snapshot as the queue
+/// scan. A hint skipped because of size or time keeps the recommendation
+/// cautious, while an absent or structurally invalid hint contributes no classes.
+fn connector_group_caution(
+    connection: &Connection,
+    args: &Args<'_>,
+) -> StoreResult<(BTreeSet<String>, bool)> {
+    let identity_hash = args.str("identity_hash")?;
+    let mut risk_classes: BTreeSet<String> = args
+        .strings("risk_classes")?
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|class| is_caution_risk_class(class))
+        .map(str::to_owned)
+        .collect();
+    let (rows, mut complete) = scan_connector_group(connection, identity_hash)?;
+    if !rows.is_empty() && has_allow_hint_column(connection)? {
+        let deadline = Instant::now() + CONNECTOR_HINT_SCAN_BUDGET;
+        for row in rows {
+            if Instant::now() >= deadline {
+                complete = false;
+                break;
+            }
+            let hint = query_one(
+                connection,
+                "select case when byte_len <= ?2 then hint end as hint, \
+                 byte_len > ?2 as oversized from ( \
+                   select extension_allow_hint_json as hint, \
+                     length(cast(extension_allow_hint_json as blob)) as byte_len \
+                   from approval_requests where request_id = ?1 \
+                     and typeof(extension_allow_hint_json) = 'text' \
+                 )",
+                &[
+                    row["request_id"].clone(),
+                    Value::from(RUNNER_AUTHORITY_MAX_BYTES),
+                ],
+            )?;
+            let Some(hint) = hint else {
+                continue;
+            };
+            if hint.get("oversized").and_then(Value::as_i64) == Some(1) {
+                complete = false;
+                continue;
+            }
+            let Some(hint) = validated_setup_hint(&json_object(&hint, "hint")?)
+                .filter(|value| value["identity_hash"].as_str() == Some(identity_hash))
+            else {
+                continue;
+            };
+            risk_classes.extend(
+                hint["risk_classes"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .filter(|class| is_caution_risk_class(class))
+                    .map(str::to_owned),
+            );
+        }
+    }
+    Ok((risk_classes, complete))
+}
+
+/// Check the approval, connector and its siblings inside the one store
+/// snapshot. A resolved or moved request must no longer offer setup.
+pub(crate) fn connector_setup_advice(
+    connection: &Connection,
+    args: &Args<'_>,
+) -> StoreResult<Value> {
+    let identity_hash = args.str("identity_hash")?;
+    let pending = query_one(
+        connection,
+        "select queue_group_id from approval_requests where request_id = ? and status = 'pending'",
+        &[Value::from(args.str("request_id")?)],
+    )?;
+    let prefix = format!("connector:{identity_hash}:");
+    if !pending
+        .as_ref()
+        .and_then(|row| row.get("queue_group_id"))
+        .and_then(Value::as_str)
+        .is_some_and(|group| group.starts_with(&prefix))
+    {
+        return Ok(Value::Null);
+    }
+    let item = connector_setup_item(connection, args)?;
+    if !awaiting_connector_setup(&item, args.str("surface")?) {
+        return Ok(Value::Null);
+    }
+    let (caution, complete) = connector_group_caution(connection, args)?;
+    Ok(json!({"item": item, "caution_risk_classes": caution, "complete": complete}))
+}
+
+fn has_allow_hint_column(connection: &Connection) -> StoreResult<bool> {
+    let columns = query_all(connection, "pragma table_info(approval_requests)", &[])?;
+    Ok(columns.iter().any(|column| {
+        column.get("name").and_then(Value::as_str) == Some("extension_allow_hint_json")
+    }))
+}
 
 /// `get_approval_extension_allow_hint`: the private queue-time hint as an
 /// object, or `None` when the row, the column (a store from before it
@@ -18,12 +165,7 @@ pub(crate) fn get_approval_extension_allow_hint(
     connection: &Connection,
     args: &Args<'_>,
 ) -> StoreResult<Value> {
-    let has_column = query_all(connection, "pragma table_info(approval_requests)", &[])?
-        .iter()
-        .any(|column| {
-            column.get("name").and_then(Value::as_str) == Some("extension_allow_hint_json")
-        });
-    if !has_column {
+    if !has_allow_hint_column(connection)? {
         return Ok(Value::Null);
     }
     match query_one(

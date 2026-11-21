@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from typing import cast
 
 # ruff: noqa: F403,F405
-from .managed_install_revision import bump_managed_install_revision
 from .store_base import *
 
 
@@ -22,32 +21,30 @@ class StoreCloudEventsMixin:
         manifest: dict[str, object],
         now: str,
     ) -> None:
-        from .codex_install_transaction import codex_install_transaction
+        from .native_owned import codex_install_transaction
         from .runtime_transition import assert_transition_mutation_allowed
 
-        try:
-            with codex_install_transaction(self.guard_home, self.path, actor="managed-install-record"):
-                assert_transition_mutation_allowed(self.guard_home)
-                self._set_managed_install_owned(harness, active, workspace, manifest, now)
-        finally:
-            bump_managed_install_revision()
+        with codex_install_transaction(self.guard_home, self.path, actor="managed-install-record"):
+            assert_transition_mutation_allowed(self.guard_home)
+            self._set_managed_install_owned(harness, active, workspace, manifest, now)
+
+    def managed_install_revision(self) -> int:
+        """How many writes the managed-install table has seen, as the runtime counts them."""
+        return int(self._native_store_call("get_managed_install_revision", {}))
 
     def _set_managed_install_owned(
         self, harness: str, active: bool, workspace: str | None, manifest: dict[str, object], now: str
     ) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into managed_installs (harness, active, workspace, manifest_json, updated_at)
-                values (?, ?, ?, ?, ?)
-                on conflict(harness) do update set
-                  active = excluded.active,
-                  workspace = excluded.workspace,
-                  manifest_json = excluded.manifest_json,
-                  updated_at = excluded.updated_at
-                """,
-                (harness, 1 if active else 0, workspace, json.dumps(manifest), now),
-            )
+        self._native_store_call(
+            "set_managed_install",
+            {
+                "harness": harness,
+                "active": active,
+                "workspace": workspace,
+                "manifest_json": json.dumps(manifest),
+                "now": now,
+            },
+        )
 
     def compare_and_set_managed_installs(
         self,
@@ -60,96 +57,76 @@ class StoreCloudEventsMixin:
         A crash during the callback rolls SQLite back. The signed file plan
         can then recover its independently durable before/after byte states.
         """
-        try:
-            from .codex_install_transaction import require_codex_install_owner
+        from .native_owned import require_codex_install_owner
 
-            require_codex_install_owner(self.guard_home)
-            harnesses = [change[0] for change in changes]
-            if len(harnesses) != len(set(harnesses)):
-                raise ValueError("Duplicate managed-install transition target")
-            with self._connect() as connection:
-                # These rows participate in the durable file inverse. Preserve
-                # them across power loss as well as process interruption.
-                connection.execute("pragma synchronous=FULL")
-                connection.execute("begin immediate")
-                for harness, allowed, replacement in changes:
-                    if not allowed or (replacement is not None and replacement.get("harness") != harness):
-                        raise ValueError("Invalid managed-install transition target")
-                    row = connection.execute(
-                        "select harness, active, workspace, manifest_json, updated_at "
-                        "from managed_installs where harness = ?",
-                        (harness,),
-                    ).fetchone()
-                    current = (
-                        None
-                        if row is None
-                        else {
-                            "harness": str(row["harness"]),
-                            "active": bool(row["active"]),
-                            "workspace": row["workspace"],
-                            "manifest": json.loads(str(row["manifest_json"])),
-                            "updated_at": str(row["updated_at"]),
-                        }
+        require_codex_install_owner(self.guard_home)
+        harnesses = [change[0] for change in changes]
+        if len(harnesses) != len(set(harnesses)):
+            raise ValueError("Duplicate managed-install transition target")
+        with self._connect() as connection:
+            # These rows participate in the durable file inverse. Preserve
+            # them across power loss as well as process interruption.
+            connection.execute("pragma synchronous=FULL")
+            connection.execute("begin immediate")
+            for harness, allowed, replacement in changes:
+                if not allowed or (replacement is not None and replacement.get("harness") != harness):
+                    raise ValueError("Invalid managed-install transition target")
+                row = connection.execute(
+                    "select harness, active, workspace, manifest_json, updated_at "
+                    "from managed_installs where harness = ?",
+                    (harness,),
+                ).fetchone()
+                current = (
+                    None
+                    if row is None
+                    else {
+                        "harness": str(row["harness"]),
+                        "active": bool(row["active"]),
+                        "workspace": row["workspace"],
+                        "manifest": json.loads(str(row["manifest_json"])),
+                        "updated_at": str(row["updated_at"]),
+                    }
+                )
+                if current not in allowed:
+                    return False
+            before_mutation()
+            for harness, _allowed, replacement in changes:
+                if replacement is None:
+                    connection.execute("delete from managed_installs where harness = ?", (harness,))
+                else:
+                    connection.execute(
+                        """insert into managed_installs (harness, active, workspace, manifest_json, updated_at)
+                        values (?, ?, ?, ?, ?) on conflict(harness) do update set
+                        active = excluded.active, workspace = excluded.workspace,
+                        manifest_json = excluded.manifest_json, updated_at = excluded.updated_at""",
+                        (
+                            harness,
+                            1 if replacement["active"] else 0,
+                            replacement["workspace"],
+                            json.dumps(replacement["manifest"]),
+                            replacement["updated_at"],
+                        ),
                     )
-                    if current not in allowed:
-                        return False
-                before_mutation()
-                for harness, _allowed, replacement in changes:
-                    if replacement is None:
-                        connection.execute("delete from managed_installs where harness = ?", (harness,))
-                    else:
-                        connection.execute(
-                            """insert into managed_installs (harness, active, workspace, manifest_json, updated_at)
-                            values (?, ?, ?, ?, ?) on conflict(harness) do update set
-                            active = excluded.active, workspace = excluded.workspace,
-                            manifest_json = excluded.manifest_json, updated_at = excluded.updated_at""",
-                            (
-                                harness,
-                                1 if replacement["active"] else 0,
-                                replacement["workspace"],
-                                json.dumps(replacement["manifest"]),
-                                replacement["updated_at"],
-                            ),
-                        )
-            return True
-        finally:
-            bump_managed_install_revision()
+            connection.execute(
+                """insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)
+                on conflict(state_key) do update set
+                payload_json = json_object('revision',
+                    coalesce(json_extract(sync_state.payload_json, '$.revision'), 0) + 1),
+                updated_at = excluded.updated_at""",
+                (
+                    "managed_install_revision",
+                    '{"revision": 1}',
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+        return True
 
     def get_managed_install(self, harness: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                "select harness, active, workspace, manifest_json, updated_at from managed_installs where harness = ?",
-                (harness,),
-            ).fetchone()
-        if row is None:
-            return None
-        return {
-            "harness": str(row["harness"]),
-            "active": bool(row["active"]),
-            "workspace": row["workspace"],
-            "manifest": json.loads(str(row["manifest_json"])),
-            "updated_at": str(row["updated_at"]),
-        }
+        row = self._native_store_call("get_managed_install", {"harness": harness})
+        return None if row is None else _managed_install_row(row)
 
     def list_managed_installs(self) -> list[dict[str, object]]:
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
-                select harness, active, workspace, manifest_json, updated_at
-                from managed_installs
-                order by harness asc
-                """
-            ).fetchall()
-        return [
-            {
-                "harness": str(row["harness"]),
-                "active": bool(row["active"]),
-                "workspace": row["workspace"],
-                "manifest": json.loads(str(row["manifest_json"])),
-                "updated_at": str(row["updated_at"]),
-            }
-            for row in rows
-        ]
+        return [_managed_install_row(row) for row in self._native_store_call("list_managed_installs", {})]
 
     def cache_supply_chain_bundle(
         self,
@@ -216,6 +193,115 @@ class StoreCloudEventsMixin:
         if isinstance(payload, (dict, list)):
             return payload
         return None
+
+    def record_command_queue_lease_limit(self, state_key: str, limit: int, *, now: str) -> bool:
+        """Merge a queue lane's exact Review lease batch limit into its stored row.
+
+        Only the limit is written; every other field keeps its stored value.
+        Returns whether the row changed.
+        """
+
+        answer = self._native_store_call(
+            "record_command_queue_lease_limit", {"state_key": state_key, "limit": limit, "now": now}
+        )
+        return isinstance(answer, dict) and answer.get("saved") is True
+
+    def transition_command_queue_state(
+        self,
+        state_key: str,
+        transition: str,
+        *,
+        now: str,
+        at: str | None = None,
+        pending: dict[str, object] | None = None,
+        **detail: object,
+    ) -> dict[str, object]:
+        """Move a queue lane's stored row through one named job step.
+
+        The native store owns which fields each step sets and removes, and
+        merges them into the stored row so every other field keeps its stored
+        value. ``at`` is the time the step records, ``now`` the row's write
+        time. ``detail`` carries a step's other inputs (``job``,
+        ``failed_state``, ``error``) and ``route_error``, which is sent as
+        given: ``None`` clears the stored route error. Returns the merged row.
+        """
+
+        args: dict[str, object] = {"state_key": state_key, "transition": transition, "now": now, **detail}
+        if at is not None:
+            args["at"] = at
+        if pending is not None:
+            args["pending"] = pending
+        answer = self._native_store_call("transition_command_queue_state", args)
+        state = answer.get("state") if isinstance(answer, dict) else None
+        if not isinstance(state, dict):
+            raise RuntimeError("native queue state transition returned no state")
+        return dict(state)
+
+    def transition_cloud_review_sync_state(
+        self,
+        state_key: str,
+        transition: str,
+        *,
+        now: str,
+        **detail: object,
+    ) -> dict[str, object]:
+        """Move the Cloud Review sync state row through one named sync step.
+
+        The native store owns which fields each step sets and merges them into
+        the stored row, so every other field keeps its stored value. ``detail``
+        carries the step's inputs (``binding_key``, ``limits``, ``counts``,
+        ``outbox``, ``delivery_binding``, ``error``, ``error_code``,
+        ``keep_auth_code``). Returns the merged row.
+        """
+
+        answer = self._native_store_call(
+            "transition_cloud_review_sync_state",
+            {"state_key": state_key, "transition": transition, "now": now, **detail},
+        )
+        state = answer.get("state") if isinstance(answer, dict) else None
+        if not isinstance(state, dict):
+            raise RuntimeError("native review sync state transition returned no state")
+        return dict(state)
+
+    def workspace_review_enrollment_due(self, auth: dict[str, object], *, now: str) -> list[str] | None:
+        """The binding for ``auth`` when a workspace enrollment check is due.
+
+        The native store builds the binding from the connection fields and
+        reads the schedule row. ``None`` means no check is due, either because
+        the connection is incomplete or the last check is still fresh.
+        """
+
+        answer = self._native_store_call("workspace_review_enrollment_due", {"auth": auth, "now": now})
+        if not isinstance(answer, dict) or answer.get("due") is not True:
+            return None
+        binding = answer.get("binding")
+        if not isinstance(binding, list) or not all(isinstance(field, str) for field in binding):
+            raise RuntimeError("native workspace enrollment check returned no binding")
+        return [str(field) for field in binding]
+
+    def record_workspace_review_enrollment(
+        self,
+        binding: list[str],
+        *,
+        outcome: str,
+        now: str,
+        **detail: object,
+    ) -> dict[str, object]:
+        """Record one workspace enrollment check and schedule the next.
+
+        ``outcome`` is ``enrolled`` (with ``record``, the installed authority
+        text) or ``unavailable`` (with ``http_status``, or ``error_type`` and
+        an optional ``error_code``). Returns the stored row.
+        """
+
+        answer = self._native_store_call(
+            "record_workspace_review_enrollment",
+            {"binding": binding, "outcome": outcome, "now": now, **detail},
+        )
+        state = answer.get("state") if isinstance(answer, dict) else None
+        if not isinstance(state, dict):
+            raise RuntimeError("native workspace enrollment record returned no state")
+        return dict(state)
 
     def list_cloud_exceptions(self, harness: str | None = None) -> list[dict[str, object]]:
         from .native_runner_authority import NativeRunnerAuthorityError
@@ -379,3 +465,14 @@ class StoreCloudEventsMixin:
             "add_event",
             {"event_name": event_name, "payload_json": json.dumps(payload), "occurred_at": now},
         )
+
+
+def _managed_install_row(row: dict[str, object]) -> dict[str, object]:
+    """The native row with its manifest decoded as the SQLite read did."""
+    return {
+        "harness": str(row["harness"]),
+        "active": bool(row["active"]),
+        "workspace": row["workspace"],
+        "manifest": json.loads(str(row["manifest_json"])),
+        "updated_at": str(row["updated_at"]),
+    }

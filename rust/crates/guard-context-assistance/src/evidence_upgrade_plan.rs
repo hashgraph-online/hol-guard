@@ -94,41 +94,40 @@ impl EvidenceUpgradeInventory {
                 .collect(),
             authority_restored: false,
         };
-        let blocked =
-            if !to.activation_qualified() || requested.iter().any(|f| !to.features.contains(f)) {
-                Some((DataCompatibility::Incompatible, "cigar_feature_unqualified"))
-            } else if storage == StorageMode::Memory {
-                None
-            } else if !to.features.contains(&Feature::Persistence) {
-                Some((DataCompatibility::Incompatible, "cigar_feature_unqualified"))
-            } else if !from.supported_data_format()
-                || !to.supported_data_format()
-                || self
-                    .slots
-                    .iter()
-                    .any(|s| s.state == RecordState::UnknownSchema)
-            {
-                Some((
-                    DataCompatibility::Unknown,
-                    "cigar_storage_schema_unsupported",
-                ))
-            } else if self.slots.iter().any(|s| s.state == RecordState::Invalid) {
-                Some((
-                    DataCompatibility::Incompatible,
-                    "context_storage_repair_required",
-                ))
-            } else if self
+        let blocked = if requested.iter().any(|f| !to.features.contains(f)) {
+            Some((DataCompatibility::Incompatible, "cigar_feature_unqualified"))
+        } else if storage == StorageMode::Memory {
+            None
+        } else if !to.features.contains(&Feature::Persistence) {
+            Some((DataCompatibility::Incompatible, "cigar_feature_unqualified"))
+        } else if !from.metadata_preparation_qualified()
+            || !to.metadata_preparation_qualified()
+            || self
                 .slots
                 .iter()
-                .any(|s| s.state == RecordState::PendingWrite)
-            {
-                Some((
-                    DataCompatibility::Unknown,
-                    "context_storage_outcome_unknown",
-                ))
-            } else {
-                None
-            };
+                .any(|s| s.state == RecordState::UnknownSchema)
+        {
+            Some((
+                DataCompatibility::Unknown,
+                "cigar_storage_schema_unsupported",
+            ))
+        } else if self.slots.iter().any(|s| s.state == RecordState::Invalid) {
+            Some((
+                DataCompatibility::Incompatible,
+                "context_storage_repair_required",
+            ))
+        } else if self
+            .slots
+            .iter()
+            .any(|s| s.state == RecordState::PendingWrite)
+        {
+            Some((
+                DataCompatibility::Unknown,
+                "context_storage_outcome_unknown",
+            ))
+        } else {
+            None
+        };
         if let Some((compatibility, code)) = blocked {
             plan.compatibility = compatibility;
             plan.strategy = EvidenceUpgradeStrategy::Blocked;

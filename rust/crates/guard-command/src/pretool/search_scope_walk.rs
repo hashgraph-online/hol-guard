@@ -13,6 +13,7 @@ use super::search_scope_ignore::{
     holds_custom_ignore_file, is_ignored, link_ignored, load_custom_rules, load_ignore_file,
     slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
+use super::search_scope_plain_skips::PlainSkips;
 use super::search_scope_tracked::{Tracked, TrackedFiles};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -22,16 +23,18 @@ const MAX_SCOPE_ENTRIES: usize = 20_000;
 /// A names-only walk checks only entry metadata and links, never contents,
 /// so it may cover an ordinary mid-size repository in full.
 const MAX_NAME_SCOPE_ENTRIES: usize = 100_000;
-/// The entries an include walk may inspect.
+/// The entries an include walk may inspect: as many as a plain recursive
+/// walk.
 ///
-/// Every other reading of a recursive search answers before this one and
-/// walks the tree to do it, so an include walk spends what is left of a
-/// single evaluation's budget. A directory an include selects from -- the
-/// documentation or source tree the globs name -- fits well inside this
-/// count, and a larger tree leaves the reading unproven instead of spending
-/// the evaluation on it. Withholding it only returns the answer the readings
-/// above already reached.
-const MAX_INCLUDE_SCOPE_ENTRIES: usize = 2_000;
+/// The include walk inspects entry metadata only, like the plain walk, and it
+/// already stops on the shared wall clock in `search_scope_budget`, which is
+/// what keeps it inside the evaluation. A lower count bought no time on top of
+/// that clock. It only refused ordinary project folders -- a few thousand
+/// generated reports beside the documentation an agent searches -- that the
+/// clock would have let it finish. A tree too large for either still leaves
+/// the reading unproven, which only returns the answer the readings above
+/// already reached.
+pub(in crate::pretool) const MAX_INCLUDE_SCOPE_ENTRIES: usize = MAX_SCOPE_ENTRIES;
 /// Which ignore files a walk honors, matching the host that searches.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Ignores {
@@ -40,6 +43,10 @@ pub(super) enum Ignores {
     /// ripgrep: repository excludes, `.gitignore`, `.ignore` and `.rgignore`,
     /// and `.git` itself is skipped.
     Ripgrep,
+    /// ripgrep with `-g` inclusions, which also reach hidden and ignored
+    /// entries. A committed file that is neither is one plain `rg` searches
+    /// over the same root, so only the entries the globs add are screened.
+    RipgrepGlob,
     /// Only `.gitignore` files at or below the search root, inside a
     /// repository. Ancestor files, repository excludes and a global file rank
     /// below them and can only hide more, so leaving them out keeps the
@@ -144,6 +151,8 @@ struct PendingDirectory {
     relative: String,
     depth: usize,
     tiers: Rc<IgnoreTiers>,
+    /// Whether plain `rg` skips this directory as hidden or ignored.
+    beyond: bool,
 }
 
 /// Walks the modeled search scope. With `names`, the walk models a names-only
@@ -200,8 +209,17 @@ pub(super) fn include_scope_proven(
         globs.join("\u{0}"),
         home.map(str::to_owned),
     );
-    charged_include_walk(key, |deadline| {
-        walk_include_scope(root, filter, home, deadline).is_ok()
+    // The budget's own answers last one evaluation entry. A proof stands for
+    // the whole submission: the envelope passes and floors that re-read the
+    // command outside that entry ask the same tree, and walking it again for
+    // each of them is what ran the hook's decision budget out.
+    let proof = format!("include-walk\0{:?}\0{}\0{:?}", key.0, key.1, key.2);
+    super::search::memoized_proof(proof, || {
+        charged_include_walk(key, |deadline| {
+            #[cfg(test)]
+            super::search::count_walk("include-walk", root);
+            walk_include_scope(root, filter, home, deadline).is_ok()
+        })
     })
 }
 
@@ -296,12 +314,15 @@ fn walk_scope_inner(
 ) -> Result<(), ScopeUnproven> {
     let repository = repository_root(root).filter(|_| ignores != Ignores::None);
     let mut tiers = IgnoreTiers::default();
-    if ignores == Ignores::Ripgrep {
+    let ripgrep = matches!(ignores, Ignores::Ripgrep | Ignores::RipgrepGlob);
+    if ripgrep {
         if let Some(repository) = &repository {
             tiers.git = ancestor_git_rules(root, repository)?;
         }
         ancestor_custom_rules(root, &mut tiers)?;
     }
+    let mut skips = (ignores == Ignores::RipgrepGlob)
+        .then(|| PlainSkips::load(root, repository.as_deref(), home));
     if ignores == Ignores::Gitignore
         && root
             .ancestors()
@@ -312,9 +333,10 @@ fn walk_scope_inner(
     }
     let mut pending = vec![PendingDirectory {
         path: root.to_path_buf(),
-        relative: String::new(),
+        relative: filter.base().to_owned(),
         depth: 0,
         tiers: Rc::new(tiers),
+        beyond: false,
     }];
     let mut inspected = 0_usize;
     let mut tracked = TrackedFiles::default();
@@ -337,6 +359,7 @@ fn walk_scope_inner(
             if directory.depth > 0 && std::fs::symlink_metadata(directory.path.join(".git")).is_ok()
             {
                 tiers.git.clear();
+                PlainSkips::enter(&mut skips, &directory.path);
                 // The host walks a nested checkout too, so it stays in the
                 // proof; each one brings its own entry budget, a few at most.
                 nested_repositories += 1;
@@ -350,7 +373,7 @@ fn walk_scope_inner(
         if ignores == Ignores::Gitignore && holds_custom_ignore_file(&directory.path) {
             return Err(ScopeUnproven);
         }
-        if ignores == Ignores::Ripgrep {
+        if ripgrep {
             load_custom_rules(&directory.path, &mut tiers)?;
         }
         let tiers = Rc::new(tiers);
@@ -375,7 +398,7 @@ fn walk_scope_inner(
                 // Ripgrep's walk passes over .git unless an inclusion selects
                 // it, a names walk all but a link; a content walk inspects it.
                 if !filter.selects_git(name, &relative)
-                    && (ignores == Ignores::Ripgrep || (names && !metadata.is_symlink()))
+                    && (ripgrep || (names && !metadata.is_symlink()))
                 {
                     continue;
                 }
@@ -426,27 +449,34 @@ fn walk_scope_inner(
                 }
                 return Err(ScopeUnproven);
             }
-            let searched = match filter.override_for(name, &relative, is_directory) {
+            let rendered = slash_path(&path).ok_or(ScopeUnproven)?;
+            let (searched, selected) = match filter.override_for(name, &relative, is_directory) {
                 Override::Skipped => continue,
-                Override::Searched => true,
+                Override::Searched => (true, true),
                 Override::Undecided => {
-                    let rendered = slash_path(&path).ok_or(ScopeUnproven)?;
                     if ignores != Ignores::None && is_ignored(&tiers, &rendered, is_directory)? {
                         continue;
                     }
-                    is_directory || filter.type_allows(name)
+                    (is_directory || filter.type_allows(name), false)
                 }
             };
+            let beyond = ignores == Ignores::RipgrepGlob
+                && (directory.beyond
+                    || name.starts_with('.')
+                    || (selected && is_ignored(&tiers, &rendered, is_directory)?)
+                    || PlainSkips::hit(&skips, &rendered, is_directory));
             if is_directory {
                 pending.push(PendingDirectory {
                     path,
                     relative,
                     depth: directory.depth + 1,
                     tiers: Rc::clone(&tiers),
+                    beyond,
                 });
             } else if searched
                 && !names
                 && sensitive_scope_file(&path, home)
+                && !(ignores == Ignores::RipgrepGlob && !beyond && tracked.committed(&path))
                 && !match tracked.classify(&path) {
                     Tracked::Clean => true,
                     // A committed `Secret` manifest is held for the values it
@@ -457,7 +487,15 @@ fn walk_scope_inner(
                             || clearance
                                 .is_some_and(|clearance| clearance.clears_secret_manifest(&path))
                     }
-                    Tracked::Unproven => clearance.is_some_and(|clearance| clearance.clears(&path)),
+                    // A committed screenshot is past the document budget by
+                    // the nature of what it is, so the walk proves it as an
+                    // image instead: its chunk layout, then every byte of it
+                    // scanned for text, against the budget images have of
+                    // their own.
+                    Tracked::Unproven => {
+                        tracked.tracked_image(&path)
+                            || clearance.is_some_and(|clearance| clearance.clears(&path))
+                    }
                 }
             {
                 *blocker = Some(path);

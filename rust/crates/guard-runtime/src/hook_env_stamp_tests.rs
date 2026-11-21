@@ -1,5 +1,5 @@
 //! Parity with the Python hook stamp and remaining-time hint, from vectors
-//! recorded by `scripts/ci/record_claude_hook_bridge_vectors.py`.
+//! the retired Python Claude bridge recorded.
 
 use std::ffi::OsString;
 use std::sync::OnceLock;
@@ -300,5 +300,27 @@ fn only_a_default_cargo_home_is_marked() {
     assert!(marked("/Users/dev", "/Users/dev/.cargo/"));
     for cargo_home in ["/opt/cargo", ".cargo", "", "/Users/dev/.cargo/vendor"] {
         assert!(!marked("/Users/dev", cargo_home), "{cargo_home:?}");
+    }
+}
+
+#[test]
+fn only_quote_path_git_config_entries_are_marked() {
+    let marked = |key: &str| {
+        let environment = environment_of(&[
+            ("PATH", "/bin"),
+            ("GIT_CONFIG_COUNT", "1"),
+            ("GIT_CONFIG_KEY_0", key),
+            ("GIT_CONFIG_VALUE_0", "false"),
+        ]);
+        match collect_hook_execution_environment(&environment) {
+            PyVal::Dict(entries) => entries.iter().any(|entry| {
+                entry == &("git_config_environment_inert".to_owned(), PyVal::Bool(true))
+            }),
+            _ => panic!("stamp must be an object"),
+        }
+    };
+    assert!(marked("core.quotePath"));
+    for key in ["core.pager", "core.fsmonitor", "include.path", ""] {
+        assert!(!marked(key), "{key:?}");
     }
 }

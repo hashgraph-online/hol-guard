@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime import command_executors as command_executor_module
 from codex_plugin_scanner.guard.runtime.command_capability import CommandCapabilityError
 from codex_plugin_scanner.guard.runtime.command_queue_authority import authorize_command_queue_job
@@ -33,6 +33,9 @@ from tests.guard_exact_cloud_review_support import (
 from tests.guard_exact_cloud_review_support import (
     review_request as _request,
 )
+
+# Every job is planned by the native runtime before it runs.
+pytestmark = pytest.mark.usefixtures("native_command_capability_runtime")
 
 
 def test_exact_cloud_review_uses_local_time_not_forged_queue_admission(tmp_path: Path) -> None:
