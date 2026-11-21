@@ -36,6 +36,22 @@ class Store:
     def set_sync_payload(self, key: str, payload: object, now: str) -> None:
         self._payloads[key] = payload
 
+    def transition_cloud_review_sync_state(
+        self, state_key: str, transition: str, *, now: str, **detail: object
+    ) -> dict[str, object]:
+        """Mirror the native ``failed`` step, the only one the worker loop takes."""
+
+        assert transition == "failed"
+        stored = self._payloads.get(state_key)
+        state = dict(stored) if isinstance(stored, dict) else {}
+        state.update({"state": "error", "last_error": detail["error"], "last_error_at": now})
+        previous = state.get("last_error_code")
+        auth_codes = {"cloud_auth_expired", "cloud_connect_required"}
+        if not (detail.get("keep_auth_code") and previous in auth_codes):
+            state["last_error_code"] = detail["error_code"]
+        self._payloads[state_key] = state
+        return dict(state)
+
     def get_cloud_sync_profile(self) -> dict[str, str]:
         return {
             "auth_mode": "oauth",
