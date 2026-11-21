@@ -28,7 +28,13 @@ const FOLLOW_MAX_BYTES: u64 = 4 * 1024 * 1024;
 /// regular file or larger than [`FOLLOW_MAX_BYTES`].
 fn read_saved_settings(path: &std::path::Path) -> Option<Vec<u8>> {
     use std::io::Read;
-    let file = std::fs::File::open(path).ok()?;
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    // A FIFO in place of the file must not hold the prompt until a writer
+    // appears; the regular-file check below then turns it away.
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NONBLOCK);
+    let file = options.open(path).ok()?;
     let metadata = file.metadata().ok()?;
     if !metadata.is_file() || metadata.len() > FOLLOW_MAX_BYTES {
         return None;
