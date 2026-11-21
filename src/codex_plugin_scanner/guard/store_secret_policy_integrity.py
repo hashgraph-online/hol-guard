@@ -700,6 +700,8 @@ class StoreSecretPolicyIntegrityMixin:
         normalized = self._normalize_policy_integrity_control_state(payload)
         if normalized is None:
             return False
+        from .native_context import ensure_resident_prerequisite
+
         lock_options: dict[str, float] = {}
         if deadline is not None:
             remaining = deadline - time.monotonic()
@@ -712,6 +714,10 @@ class StoreSecretPolicyIntegrityMixin:
             try:
                 current = self._read_policy_integrity_control_state_uncached(strict=True)
             except Exception:
+                return False
+            # Setup can reach finalization before the publisher starts.
+            # Provision the resident from this store's own secret backend.
+            if not ensure_resident_prerequisite(self.guard_home, store=self):
                 return False
             try:
                 next_state = native_policy_integrity_finalization(
