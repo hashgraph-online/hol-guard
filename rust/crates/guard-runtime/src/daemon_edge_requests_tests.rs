@@ -341,3 +341,84 @@ fn a_standalone_edge_answers_rows_with_a_connector_setup_hint() {
     assert_eq!(body["request_id"], json!(request_id));
     assert!(body.get("extension_allow_hint").is_none());
 }
+
+#[test]
+fn local_connector_advice_uses_the_current_observation_and_pending_risks() {
+    let store = store("page_mixed");
+    let (_, page, _) = list("status=pending", true, &store.config, &store.reads).unwrap();
+    let request_id = page["items"][0]["request_id"].as_str().unwrap();
+    let identity = "a".repeat(64);
+    let cli_id = "local-cli.lanectl-0123abcd";
+    let hint = json!({
+        "schema": "guard.connector-setup-hint.v1", "identity_hash": identity,
+        "cli_id": cli_id, "surface": "cli", "display_name": "lanectl",
+        "deep_link": "/extensions/local-cli/local-cli.lanectl-0123abcd",
+        "card_recommendation": {"state": "allowed", "capabilities": []},
+        "risk_classes": ["destructive", "network_egress"],
+    });
+    let db = rusqlite::Connection::open(store.config.guard_home().join("guard.db")).unwrap();
+    db.execute(
+        "insert into local_cli_observation
+           (cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface)
+         values (?1, ?2, 'executable', 'lanectl', 'lanectl status', 1, '2026-10-17T10:00:00Z', 'cli')",
+        rusqlite::params![cli_id, identity],
+    )
+    .unwrap();
+    db.execute(
+        "update approval_requests set extension_allow_hint_json = ?1, queue_group_id = ?2
+         where request_id = ?3",
+        rusqlite::params![
+            hint.to_string(),
+            format!("connector:{identity}:fingerprint"),
+            request_id
+        ],
+    )
+    .unwrap();
+    store.reads.mark_standalone();
+    let view: guard_contracts::ApprovalExtensionControlViewV1 = serde_json::from_value(json!({
+        "snapshot": {"health": "protected", "revision": 7, "catalog_digest": "d", "layers": []},
+        "managed_revision": 1,
+        "registry_catalog_digest": "d",
+    }))
+    .unwrap();
+    let (_, hosted, _) = detail(request_id, "", true, LOCAL, &store.config, &store.reads).unwrap();
+    assert!(hosted.get("connector_recommendation").is_none());
+    assert!(hosted.get("extension_allow_hint").is_none());
+    let approval = hosted.as_object().unwrap();
+    let shaped = recommend::shape(&hint, "connector").unwrap();
+    let render = || {
+        recommend::connector_detail(
+            approval.clone(),
+            &shaped,
+            &store.config,
+            &store.reads,
+            Some(view.clone()),
+        )
+        .unwrap()
+    };
+    let result = render();
+    assert!(result.get("extension_allow_hint").is_none());
+    let advice = &result["connector_recommendation"];
+    assert_eq!(advice["status"], "approval_gate_required");
+    assert_eq!(advice["revision"], 7);
+    assert_eq!(advice["caution"], true);
+    assert_eq!(advice["caution_risk_classes"], json!(["destructive"]));
+    assert_eq!(
+        advice["setup_request"],
+        json!({
+            "cli_id": cli_id, "identity_hash": identity, "name": "lanectl",
+            "kind": "executable", "state": "allowed", "connector_group_request_id": request_id,
+            "example_label": "lanectl status",
+        })
+    );
+    assert_eq!(
+        advice["setup_href"],
+        format!("/extensions/local-cli/{cli_id}?setup={request_id}&identity={identity}")
+    );
+    db.execute(
+        "update local_cli_observation set identity_hash = ?1 where cli_id = ?2",
+        rusqlite::params!["b".repeat(64), cli_id],
+    )
+    .unwrap();
+    assert!(render().get("connector_recommendation").is_none());
+}

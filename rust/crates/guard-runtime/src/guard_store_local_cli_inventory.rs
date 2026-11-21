@@ -7,6 +7,7 @@
 //! same inventory that ensure would have produced.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 use guard_contracts::MAX_NATIVE_RESPONSE_BYTES;
 use rusqlite::Connection;
@@ -23,7 +24,7 @@ use crate::guard_store_local_cli_inventory_rows::{
 
 /// The observation columns the item shape needs, in `_observation_from_row`
 /// order.
-const OBSERVATION_COLUMNS: [&str; 16] = [
+const OBSERVATION_COLUMNS: [&str; 17] = [
     "cli_id",
     "identity_hash",
     "kind",
@@ -38,6 +39,7 @@ const OBSERVATION_COLUMNS: [&str; 16] = [
     "server_identity_hash",
     "source_label",
     "server_command",
+    "server_args_hash",
     "remote_origin",
     "declared_sources_json",
 ];
@@ -50,6 +52,51 @@ const GRANT_ONLY_PREFIX: &str = "local-cli.";
 /// framed in. Nothing is dropped: the page names the offset the caller reads
 /// from next, and the caller walks the offsets until the reply names none.
 const PAGE_BUDGET_BYTES: usize = MAX_NATIVE_RESPONSE_BYTES - 128 * 1024;
+
+/// The current observed connector, with the same grant and visibility rules
+/// as the inventory. Queued hints can name an identity that has since moved.
+pub(crate) fn connector_setup_item(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    let cli_id = args.str("cli_id")?;
+    let identity_hash = args.str("identity_hash")?;
+    let cwd = Path::new(args.str("cwd")?);
+    let observed = observations(connection)?;
+    let Some(row) = observed.iter().find(|row| {
+        row["cli_id"].as_str() == Some(cli_id)
+            && row["identity_hash"].as_str() == Some(identity_hash)
+    }) else {
+        return Ok(Value::Null);
+    };
+    let item = merge_item(observation_item(row), grants(connection)?.get(cli_id));
+    if !crate::package_script_memory::item_available(cwd, &item)
+        || hidden_legacy_connector(row, cli_id, identity_hash, &observed)
+    {
+        return Ok(Value::Null);
+    }
+    Ok(json!({
+        "surface": item.get("surface"),
+        "state": item.get("state"),
+        "stale": item.get("stale"),
+        "name": item.get("name"),
+        "kind": item.get("kind"),
+        "example_label": item.get("example_label"),
+        "interpreter_name": item.get("interpreter_name"),
+    }))
+}
+
+fn hidden_legacy_connector(row: &Row, cli_id: &str, identity_hash: &str, observed: &[Row]) -> bool {
+    row["surface"].as_str() == Some("mcp")
+        && row["server_identity_hash"].as_str() == Some(identity_hash)
+        && identity_hash
+            .get(..8)
+            .is_some_and(|suffix| cli_id == format!("local-cli.mcp-{suffix}"))
+        && observed.iter().any(|other| {
+            other["surface"].as_str() == Some("mcp")
+                && other["identity_hash"] != row["identity_hash"]
+                && other["server_identity_hash"] == row["server_identity_hash"]
+                && other["server_command"] == row["server_command"]
+                && other["server_args_hash"] == row["server_args_hash"]
+        })
+}
 
 /// `list_local_cli_items`: observations merged with grants, ranked,
 /// capability-annotated and, for MCP connectors, described.

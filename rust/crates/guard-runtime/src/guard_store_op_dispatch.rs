@@ -219,6 +219,7 @@ pub(crate) fn dispatch(
         }
         "read_local_cli_command_states" => local_cli_grants::read_command_states(connection, args),
         "list_local_cli_items" => local_cli_inventory::list_items(connection, args),
+        "connector_setup_item" => local_cli_inventory::connector_setup_item(connection, args),
         "cache_advisories" => advisory_cache::cache(connection, args),
         "list_cached_advisories" => advisory_cache::list(connection, args),
         "consume_native_review_approval" => native_review_consume::consume(connection, args),
@@ -348,6 +349,9 @@ pub(crate) fn dispatch(
         }
         "pending_connector_group_rows" => {
             approval_metadata::pending_connector_group_rows(connection, args)
+        }
+        "connector_group_risk_classes" => {
+            approval_metadata::connector_group_risk_classes(connection, args)
         }
         "approval_desktop_notified_at" => {
             approval_metadata::approval_desktop_notified_at(connection, args)

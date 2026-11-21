@@ -103,6 +103,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "get_next_pending_request"
         | "get_approval_extension_allow_hint"
         | "pending_connector_group_rows"
+        | "connector_group_risk_classes"
+        | "connector_setup_item"
         | "approval_desktop_notified_at"
         | "oldest_approval_request_created_at"
         | "cached_supply_chain_bundle"
