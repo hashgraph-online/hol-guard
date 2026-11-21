@@ -618,10 +618,9 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
           "src/codex_plugin_scanner/guard/hook_review/policy_authority_client.py"
         ],
-        "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; policy_authority_client is called from local_supply_chain; cursor_shell_route is called from hook_worker for Cursor's silent shell probe and its sink admission."
+        "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; policy_authority_client is called from local_supply_chain."
       },
       {
         "path": [

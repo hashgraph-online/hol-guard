@@ -353,14 +353,14 @@ class HookWorker(HookWorkerNativeMixin):
             # own approval prompt.
             return {"hookSpecificOutput": {"hookEventName": event_name}}
         if event_name == "PreToolUse" and harness.strip().lower() == "cursor":
-            from .cursor_shell_route import cursor_shell_route_response
+            from ..native_hook_render import native_cursor_shell_route
 
-            routed = cursor_shell_route_response(
-                self,
-                payload=payload,
+            routed = native_cursor_shell_route(
+                payload,
                 home_dir=home_dir,
                 guard_home=guard_home,
                 workspace=workspace,
+                binding=lambda: self._native_policy_snapshot(workspace, deadline=deadline),
                 deadline=deadline,
             )
             if routed is not None:
