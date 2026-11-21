@@ -11,9 +11,10 @@ use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{exec, query_one, text, value_error, StoreResult};
+use crate::guard_store_db::{exec, value_error, StoreResult};
 use crate::guard_store_json::dumps_default;
 use crate::guard_store_outbox_requeue::{requeue_pending, RequeueOptions};
+use crate::guard_store_sync_state::{read_payload, write_encoded};
 
 const LEVEL_KEY: &str = "cloud_receipt_redaction_level";
 const CURSOR_KEY: &str = "receipt_sync_cursor";
@@ -51,20 +52,13 @@ struct Store<'a> {
 
 impl Bookkeeping for Store<'_> {
     fn read(&mut self, key: &str) -> StoreResult<Option<Value>> {
-        let row = query_one(
-            self.connection,
-            "select payload_json from sync_state where state_key = ?",
-            &[Value::from(key)],
-        )?;
-        Ok(row
-            .and_then(|row| serde_json::from_str::<Value>(text(&row, "payload_json")).ok())
-            .filter(|payload| payload.is_object() || payload.is_array()))
+        read_payload(self.connection, key)
     }
 
     fn write(&mut self, key: &str, payload: &Value, now: &str) -> StoreResult<()> {
         let encoded =
             serde_json::to_string(payload).map_or_else(|_| value_error("invalid_payload"), Ok)?;
-        upsert(self.connection, key, &encoded, now)
+        write_encoded(self.connection, key, &encoded, now)
     }
 
     fn delete(&mut self, key: &str) -> StoreResult<()> {
@@ -87,7 +81,7 @@ impl Bookkeeping for Store<'_> {
         };
         let count = requeue_pending(self.connection, self.source, changed_at, &options)?;
         let marker = projection_marker(level, changed_at, count)?;
-        upsert(
+        write_encoded(
             self.connection,
             PRIVACY_PROJECTION_MARKER,
             &marker,
@@ -95,17 +89,6 @@ impl Bookkeeping for Store<'_> {
         )?;
         Ok(count)
     }
-}
-
-fn upsert(connection: &Connection, key: &str, encoded: &str, now: &str) -> StoreResult<()> {
-    exec(
-        connection,
-        "insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?) \
-         on conflict(state_key) do update set \
-         payload_json = excluded.payload_json, updated_at = excluded.updated_at",
-        &[Value::from(key), Value::from(encoded), Value::from(now)],
-    )?;
-    Ok(())
 }
 
 /// `json.dumps({"level": ..., "updated_at": ..., "requeued": n})`, the text the
