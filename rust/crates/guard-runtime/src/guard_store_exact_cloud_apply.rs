@@ -30,9 +30,9 @@ use crate::local_once_store::EXACT_CLOUD_AUTHORITY_KIND;
 use crate::policy_bundle_time::micros_to_utc_isoformat;
 use crate::policy_store::PolicySnapshotStore;
 
-const CAPABILITY_KEY: &str = "guard_exact_cloud_review_capability";
+pub(crate) const CAPABILITY_KEY: &str = "guard_exact_cloud_review_capability";
 const OAUTH_KEY: &str = "oauth_local_credentials";
-const REVOCATION_KEY: &str = "guard_exact_cloud_review_revocation";
+pub(crate) const REVOCATION_KEY: &str = "guard_exact_cloud_review_revocation";
 
 /// The local integrity key is the policy integrity secret; keep the bound the
 /// policy upsert puts on it.
@@ -65,7 +65,7 @@ fn transaction_now() -> StoreResult<String> {
 
 /// `_load_exact_state`: the parsed `sync_state` payload, or null when the row
 /// is missing or its text is not JSON.
-fn exact_state(connection: &Connection, state_key: &str) -> StoreResult<Value> {
+pub(crate) fn exact_state(connection: &Connection, state_key: &str) -> StoreResult<Value> {
     let Some(row) = query_one(
         connection,
         "select payload_json from sync_state where state_key = ?",
@@ -81,8 +81,24 @@ fn exact_state(connection: &Connection, state_key: &str) -> StoreResult<Value> {
         .unwrap_or(Value::Null))
 }
 
+/// The revocation row. A present row whose text is not JSON, or is JSON
+/// null, still revokes: it reads as `{"unreadable": true}`, never as no row.
+pub(crate) fn revocation_state(connection: &Connection) -> StoreResult<Value> {
+    let present = query_one(
+        connection,
+        "select 1 from sync_state where state_key = ?",
+        &[Value::from(REVOCATION_KEY)],
+    )?
+    .is_some();
+    let parsed = exact_state(connection, REVOCATION_KEY)?;
+    if present && parsed.is_null() {
+        return Ok(serde_json::json!({"unreadable": true}));
+    }
+    Ok(parsed)
+}
+
 /// `_record_exact_event`.
-fn record_event(
+pub(crate) fn record_event(
     connection: &Connection,
     event_name: &str,
     payload: &Value,
@@ -294,7 +310,7 @@ pub(crate) fn apply_signed_remote_exact_result(
         return exact_error("remote_exact_oauth_changed", &resolved_at);
     }
 
-    let revoked = !exact_state(connection, REVOCATION_KEY)?.is_null();
+    let revoked = !revocation_state(connection)?.is_null();
     let mut capability_expires_micros = None;
     if skip_exact_capability {
         if revoked {

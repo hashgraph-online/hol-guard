@@ -24,6 +24,12 @@ class Store:
     def set_sync_payload(self, key: str, payload: object, now: str) -> None:
         self._payloads[key] = payload
 
+    def exact_cloud_review_state(self) -> dict[str, object]:
+        return {
+            "capability": self._payloads.get("guard_exact_cloud_review_capability"),
+            "revocation": self._payloads.get("guard_exact_cloud_review_revocation"),
+        }
+
     def transition_cloud_review_sync_state(
         self, state_key: str, transition: str, *, now: str, **detail: object
     ) -> dict[str, object]:

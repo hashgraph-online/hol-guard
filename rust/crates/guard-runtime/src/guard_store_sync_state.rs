@@ -100,6 +100,9 @@ pub(crate) mod cloud_review_settings;
 #[path = "guard_store_sync_delivery_rows.rs"]
 pub(crate) mod sync_delivery_rows;
 
+#[path = "guard_store_exact_cloud_state.rs"]
+pub(crate) mod exact_cloud_state;
+
 #[cfg(test)]
 #[path = "guard_store_sync_state_tests.rs"]
 mod tests;

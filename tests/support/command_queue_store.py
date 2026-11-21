@@ -32,6 +32,12 @@ class FakeStore:
     def set_sync_payload(self, key: str, payload: dict[str, object] | list[object], now: str) -> None:
         self.payloads[key] = payload
 
+    def exact_cloud_review_state(self) -> dict[str, object]:
+        return {
+            "capability": self.payloads.get("guard_exact_cloud_review_capability"),
+            "revocation": self.payloads.get("guard_exact_cloud_review_revocation"),
+        }
+
     def record_command_queue_lease_limit(self, state_key: str, limit: int, *, now: str) -> bool:
         # The native store merges the limit alone into the stored row.
         stored = self.payloads.get(state_key)
