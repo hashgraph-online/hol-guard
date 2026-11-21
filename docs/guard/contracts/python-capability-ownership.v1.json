@@ -2175,6 +2175,21 @@
    ]
   },
   {
+   "path": "src/codex_plugin_scanner/guard/hook_review/approval_extension_recommendation.py",
+   "module": "codex_plugin_scanner.guard.hook_review.approval_extension_recommendation",
+   "source_sha256": "8e8175d3bb5cc22f5c70d7b1cc346b412e328cfbfa0ec714649508ae05a53f1a",
+   "forbidden_symbols": [
+    "build_approval_extension_recommendation",
+    "with_approval_extension_coverage",
+    "native_caution_risk_classes"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend.rs",
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op.rs",
+    "rust/crates/guard-runtime/src/approval_extension_coverage.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
    "module": "codex_plugin_scanner.guard.hook_review.hook_worker_structured",
    "source_sha256": "ccd0fcfbeedb1ad80b53e41c4be722bd7c66e48f956a03b4433dec9a99bd9f8c",
@@ -2190,6 +2205,7 @@
   }
  ],
  "retired_test_paths": [
+  "tests/test_native_approval_extension_recommendation.py",
   "tests/test_native_review_allow_hint.py",
   "tests/test_hook_direct_saved_decision_vectors.py",
   "tests/test_mcp_relay_evidence_drain.py",
@@ -2430,21 +2446,6 @@
    "native_replacements": [
     "rust/crates/guard-contracts/src/extension_allow_hint.rs",
     "rust/crates/guard-runtime/src/extension_allow_hint_op.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/hook_review/approval_extension_recommendation.py",
-   "source_sha256": "3eca7867e90f6a70a18078b299443f253f65dae7cacc4fcceb7d71b6f3febd71",
-   "forbidden_symbols": [
-    "CAUTION_RISK_CLASSES",
-    "_bounded",
-    "_caution_reason",
-    "_hint_ids",
-    "_layer_states"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-contracts/src/approval_extension_recommendation.rs",
-    "rust/crates/guard-runtime/src/approval_extension_recommendation_op.rs"
    ]
   },
   {

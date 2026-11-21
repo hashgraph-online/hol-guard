@@ -380,7 +380,6 @@
           "src/codex_plugin_scanner/guard/runtime/managed_policy_delivery.py",
           "src/codex_plugin_scanner/guard/policy_authority_api.py",
           "src/codex_plugin_scanner/guard/runtime_health/diagnostics.py",
-          "src/codex_plugin_scanner/guard/hook_review/approval_extension_recommendation.py",
           "src/codex_plugin_scanner/guard/local_clis/local_cli_connector_group.py",
           "src/codex_plugin_scanner/guard/local_clis/local_cli_reallow.py",
           "src/codex_plugin_scanner/guard/local_clis/local_cli_capability_api.py"
