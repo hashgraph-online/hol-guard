@@ -76,3 +76,21 @@ class StoreFleetPostureStateMixin:
             {"next_state": _chunked_items(next_state), "advanced_inventory": bool(advanced_inventory), "now": now},
         )
         return isinstance(answer, dict) and answer.get("cleared_full_inventory_request") is True
+
+    def fleet_posture_cached_diagnostics(
+        self: _NativeStore, *, now: str, ttl_seconds: int
+    ) -> dict[str, dict[str, Any]]:
+        """Every cached per-tool diagnostics summary still fresh at ``now``, keyed by harness."""
+
+        answer = self._native_store_call(
+            "fleet_posture_cached_diagnostics", {"now": now, "ttl_seconds": int(ttl_seconds)}
+        )
+        diagnostics = answer.get("diagnostics") if isinstance(answer, dict) else None
+        if not isinstance(diagnostics, dict):
+            raise RuntimeError("native fleet posture diagnostics cache returned no answer")
+        return {str(harness): dict(summary) for harness, summary in diagnostics.items() if isinstance(summary, dict)}
+
+    def record_fleet_posture_diagnostics(self: _NativeStore, *, entries: Mapping[str, object], now: str) -> None:
+        """Stamp new per-tool diagnostics summaries with ``now`` and merge them into the cache."""
+
+        self._native_store_call("record_fleet_posture_diagnostics", {"entries": dict(entries), "now": now})
