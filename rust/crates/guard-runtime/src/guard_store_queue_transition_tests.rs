@@ -199,7 +199,7 @@ fn an_unknown_step_or_lane_is_refused_and_writes_nothing() {
     put(&connection, MAIN, LEASED);
     let unknown = run(
         &connection,
-        json!({"state_key": MAIN, "transition": "leased", "now": NOW}),
+        json!({"state_key": MAIN, "transition": "bogus", "now": NOW}),
     );
     assert_eq!(error_code(unknown), "invalid_transition");
     let lane = run(
@@ -209,4 +209,123 @@ fn an_unknown_step_or_lane_is_refused_and_writes_nothing() {
     );
     assert_eq!(error_code(lane), "invalid_state_key");
     assert_eq!(row(&connection, MAIN).1, BEFORE);
+}
+
+#[test]
+fn a_lease_records_the_job_and_a_hand_over_also_restarts_the_poll() {
+    let connection = store();
+    put(
+        &connection,
+        MAIN,
+        r#"{"last_error":"old","exact_lease_batch_limit":3}"#,
+    );
+    let job = json!({"id": "k", "leaseId": "l"});
+    let leased = run(
+        &connection,
+        json!({"state_key": MAIN, "transition": "leased", "now": NOW, "at": AT, "job": job}),
+    )
+    .unwrap();
+    assert_eq!(
+        leased["state"],
+        json!({"state": "leased", "last_lease_at": AT, "active_job": job,
+               "last_poll_was_empty": false, "last_error": "old",
+               "exact_lease_batch_limit": 3})
+    );
+    let handed = run(
+        &connection,
+        json!({"state_key": DRAIN, "transition": "handed_over", "now": NOW, "job": job}),
+    )
+    .unwrap();
+    assert_eq!(
+        handed["state"],
+        json!({"state": "leased", "last_poll_at": NOW, "last_error": null,
+               "last_lease_at": NOW, "active_job": job, "last_poll_was_empty": false})
+    );
+    for name in ["leased", "handed_over"] {
+        let missing = run(
+            &connection,
+            json!({"state_key": MAIN, "transition": name, "now": NOW, "job": null}),
+        );
+        assert_eq!(error_code(missing), "invalid_job", "{name}");
+        // A job that is not an object fails the method's argument contract.
+        let malformed = run(
+            &connection,
+            json!({"state_key": MAIN, "transition": name, "now": NOW, "job": [1]}),
+        );
+        assert!(matches!(malformed, Err(StoreError::Invalid(_))), "{name}");
+    }
+}
+
+#[test]
+fn an_empty_poll_and_a_route_error_merge_into_the_row() {
+    let connection = store();
+    put(&connection, MAIN, LEASED);
+    let recorded = run(
+        &connection,
+        json!({"state_key": MAIN, "transition": "empty_poll", "now": NOW, "at": AT,
+               "route_error": {"error": "HTTP 404", "at": BEFORE}}),
+    )
+    .unwrap();
+    let state = &recorded["state"];
+    assert_eq!(state["state"], json!("idle"));
+    assert_eq!(state["last_empty_poll_at"], json!(AT));
+    assert_eq!(state["last_poll_at"], json!(AT));
+    assert_eq!(state["last_poll_was_empty"], json!(true));
+    assert_eq!(state["exact_review_route_error"], json!("HTTP 404"));
+    assert_eq!(state["exact_review_route_error_at"], json!(BEFORE));
+    let kept = transition(&connection, MAIN, "polling");
+    assert_eq!(kept["state"]["exact_review_route_error"], json!("HTTP 404"));
+    let cleared = run(
+        &connection,
+        json!({"state_key": MAIN, "transition": "empty_poll", "now": NOW,
+               "route_error": null}),
+    )
+    .unwrap();
+    assert!(cleared["state"].get("exact_review_route_error").is_none());
+    assert!(cleared["state"]
+        .get("exact_review_route_error_at")
+        .is_none());
+    for route_error in [
+        json!("x"),
+        json!({"error": "x"}),
+        json!({"error": 1, "at": AT}),
+    ] {
+        let result = run(
+            &connection,
+            json!({"state_key": MAIN, "transition": "empty_poll", "now": NOW,
+                   "route_error": route_error}),
+        );
+        assert_eq!(error_code(result), "invalid_route_error");
+    }
+}
+
+#[test]
+fn a_failed_poll_names_its_state_and_error() {
+    let connection = store();
+    put(&connection, MAIN, LEASED);
+    for failed_state in ["auth_expired", "not_configured", "error"] {
+        let answer = run(
+            &connection,
+            json!({"state_key": MAIN, "transition": "poll_failed", "now": NOW, "at": AT,
+                   "failed_state": failed_state, "error": "boom"}),
+        )
+        .unwrap();
+        let state = &answer["state"];
+        assert_eq!(state["state"], json!(failed_state));
+        assert_eq!(state["last_error"], json!("boom"));
+        assert_eq!(state["last_poll_at"], json!(AT));
+        assert_eq!(state["active_job"], json!({"id": "j"}));
+    }
+    let bad_state = run(
+        &connection,
+        json!({"state_key": MAIN, "transition": "poll_failed", "now": NOW,
+               "failed_state": "idle", "error": "boom"}),
+    );
+    assert_eq!(error_code(bad_state), "invalid_failed_state");
+    let no_error = run(
+        &connection,
+        json!({"state_key": MAIN, "transition": "poll_failed", "now": NOW,
+               "failed_state": "error"}),
+    );
+    assert_eq!(error_code(no_error), "invalid_error");
 }

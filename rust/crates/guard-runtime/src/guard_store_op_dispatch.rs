@@ -346,6 +346,9 @@ pub(crate) fn dispatch(
         "get_approval_extension_allow_hint" => {
             approval_metadata::get_approval_extension_allow_hint(connection, args)
         }
+        "pending_connector_group_rows" => {
+            approval_metadata::pending_connector_group_rows(connection, args)
+        }
         "approval_desktop_notified_at" => {
             approval_metadata::approval_desktop_notified_at(connection, args)
         }

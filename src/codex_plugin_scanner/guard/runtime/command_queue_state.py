@@ -129,23 +129,45 @@ def transition_command_queue_state(
     *,
     at: str | None = None,
     pending: dict[str, object] | None = None,
+    carry_route_error: bool = False,
+    **detail: object,
 ) -> None:
     """Apply one named job step to this lane's stored row and adopt the result.
 
     The native store decides the step's fields and merges them into the stored
     row. ``state`` becomes that merged row, so a caller must have saved every
-    in-memory change it means to keep before taking a step.
+    in-memory change it means to keep before taking a step. With
+    ``carry_route_error``, the exact route error the lease recorded or cleared
+    in ``state`` goes into the row with the step.
     """
 
+    if carry_route_error:
+        error = state.get("exact_review_route_error")
+        error_at = state.get("exact_review_route_error_at")
+        if isinstance(error, str):
+            if not isinstance(error_at, str):
+                error_at = command_queue_now()
+            detail["route_error"] = {"error": error, "at": error_at}
+        else:
+            detail["route_error"] = None
     merged = store.transition_command_queue_state(
         current_command_queue_lane().state_key,
         transition,
         now=command_queue_now(),
         at=at,
         pending=pending,
+        **detail,
     )
     state.clear()
     state.update(merged)
+
+
+def record_command_queue_failure(store: GuardStore, failed_state: str, error: str) -> None:
+    """Record a poll the worker loop caught, keeping every other stored field."""
+
+    transition_command_queue_state(
+        store, {}, "poll_failed", at=command_queue_now(), failed_state=failed_state, error=error
+    )
 
 
 def record_exact_route_failure(state: dict[str, object], error: urllib.error.HTTPError) -> None:
@@ -292,6 +314,7 @@ __all__ = [
     "default_command_context",
     "enter_command_queue_lane",
     "load_command_queue_state",
+    "record_command_queue_failure",
     "record_exact_route_failure",
     "repair_command_queue_state",
     "save_command_queue_state",

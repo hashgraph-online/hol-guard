@@ -24,6 +24,7 @@ _RETRYABLE_READS = frozenset(
         "list_approval_request_page",
         "list_approval_requests",
         "oldest_approval_request_created_at",
+        "pending_connector_group_rows",
     }
 )
 
@@ -54,6 +55,10 @@ def _cursor_marker(cursor: str | None) -> list[str] | None:
 
 
 class StoreApprovalQueriesMixin:
+    def pending_connector_group_rows(self, identity_hash: str) -> tuple[list[Mapping[str, object]], bool]:
+        scan = self._native_approval_read("pending_connector_group_rows", {"identity_hash": identity_hash})
+        return scan["rows"], scan["complete"]
+
     def list_approval_requests(
         self,
         *,

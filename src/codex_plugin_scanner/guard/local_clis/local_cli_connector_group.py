@@ -15,7 +15,6 @@ import sqlite3
 from collections.abc import Mapping
 
 from ..approval_gate_types import ApprovalGateError, ApprovalGateInput
-from ..hook_review.approval_connector_recommendation import pending_connector_group_rows
 from ..runtime.extension_allow_hint import validated_connector_setup_hint
 from ..store import GuardStore
 from .local_cli_api_contract import LocalCliApiError
@@ -60,7 +59,7 @@ def connector_group_request_ids(
     long queue can never hide it.
     """
 
-    rows, _complete = pending_connector_group_rows(store, identity_hash)
+    rows, _complete = store.pending_connector_group_rows(identity_hash)
     ids = [
         str(row.get("request_id"))
         for row in rows

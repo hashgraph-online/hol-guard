@@ -4,11 +4,43 @@
 //! `oldest_approval_request_created_at`.
 
 use rusqlite::Connection;
-use serde_json::Value;
+use serde_json::{json, Value};
 
+use crate::guard_store_approval_page_reads::ORDER;
 use crate::guard_store_approval_read_rows::json_object;
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_all, query_one, StoreResult};
+
+const CONNECTOR_GROUP_SCAN_LIMIT: usize = 2000;
+
+/// Read connector members among the newest pending requests. The extra row
+/// distinguishes a complete scan from one that must show a caution in the
+/// recommendation, even when all the rows beyond the budget are unrelated.
+pub(crate) fn pending_connector_group_rows(
+    connection: &Connection,
+    args: &Args<'_>,
+) -> StoreResult<Value> {
+    let prefix = format!("connector:{}:", args.str("identity_hash")?);
+    let pending = query_all(
+        connection,
+        &format!(
+            "select request_id, status, queue_group_id from approval_requests \
+             where status = 'pending' {ORDER} limit ?"
+        ),
+        &[Value::from(CONNECTOR_GROUP_SCAN_LIMIT + 1)],
+    )?;
+    let complete = pending.len() <= CONNECTOR_GROUP_SCAN_LIMIT;
+    let rows: Vec<_> = pending
+        .into_iter()
+        .take(CONNECTOR_GROUP_SCAN_LIMIT)
+        .filter(|row| {
+            row.get("queue_group_id")
+                .and_then(Value::as_str)
+                .is_some_and(|group| group.starts_with(&prefix))
+        })
+        .collect();
+    Ok(json!({"rows": rows, "complete": complete}))
+}
 
 /// `get_approval_extension_allow_hint`: the private queue-time hint as an
 /// object, or `None` when the row, the column (a store from before it

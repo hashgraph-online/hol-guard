@@ -62,6 +62,7 @@ from .command_queue_state import (
     command_queue_brief_status,
     default_command_context,  # noqa: F401 - public compatibility export
     lane_exact_lease_batch_limit,
+    record_command_queue_failure,
     record_exact_lease_batch_limit,
     repair_command_queue_state,  # noqa: F401 - public compatibility export
 )
@@ -69,9 +70,7 @@ from .command_queue_state import clear_exact_route_failure as _clear_exact_route
 from .command_queue_state import command_queue_now as _now
 from .command_queue_state import command_queue_status as _state_command_queue_status
 from .command_queue_state import current_command_queue_lane as _current_lane
-from .command_queue_state import load_command_queue_state as _load_state
 from .command_queue_state import record_exact_route_failure as _record_exact_route_failure
-from .command_queue_state import save_command_queue_state as _save_state
 from .command_queue_state import transition_command_queue_state as _transition
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
@@ -246,8 +245,7 @@ def _retry_pending_result(store: GuardStore, auth_context: dict[str, object], st
 
 
 def _record_leased_job(store: GuardStore, state: dict[str, object], item: dict[str, object]) -> None:
-    state.update({"state": "leased", "last_lease_at": _now(), "active_job": item, "last_poll_was_empty": False})
-    _save_state(store, state)
+    _transition(store, state, "leased", at=_now(), carry_route_error=True, job=item)
 
 
 def _lease_job_with_401_retry(
@@ -325,9 +323,8 @@ def poll_command_queue_once(
         # connection, which holds the storage gate, is opened.
         auth_context = _resolve_command_queue_auth_context(store)
         with _review_connection_scope(store, leased_item):
-            state = _load_state(store)
-            state.update({"last_poll_at": _now(), "last_error": None})
-            _record_leased_job(store, state, leased_item)
+            state = dict[str, object]()
+            _transition(store, state, "handed_over", at=_now(), job=leased_item)
         item = leased_item
     else:
         auth_context = _resolve_command_queue_auth_context(store)
@@ -346,16 +343,7 @@ def poll_command_queue_once(
             on_extra_jobs=extras.extend if batch_size > 1 else None,
         )
         if item is None:
-            empty_at = _now()
-            state.update(
-                {
-                    "state": "idle",
-                    "last_empty_poll_at": empty_at,
-                    "last_poll_at": empty_at,
-                    "last_poll_was_empty": True,
-                }
-            )
-            _save_state(store, state)
+            _transition(store, state, "empty_poll", at=_now(), carry_route_error=True)
             if not _current_lane().is_drain:
                 maybe_auto_update(store, context)
             return status(store)
@@ -484,8 +472,6 @@ def command_queue_loop(
             poll_once=partial(poll_command_queue_once, brief_status=True),
             format_error=_redacted_error,
         ),
-        load_state=_load_state,
-        save_state=_save_state,
+        record_failure=record_command_queue_failure,
         format_error=_redacted_error,
-        now=_now,
     )
