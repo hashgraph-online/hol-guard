@@ -622,6 +622,10 @@
         "reason": "Reviewed: reads a saved policy record by id and adds its integrity and source metadata for Guard's policy presentation."
       },
       {
+        "path": "src/codex_plugin_scanner/guard/store_policy_integrity_handoff.py",
+        "reason": "Reviewed: prepares the protected generation and persists Rust-validated control state in the host secret store. The native Claude writer imports it on the hook path, so its Python lines stay in runtime scope."
+      },
+      {
         "path": [
           "src/codex_plugin_scanner/guard/runtime/contained_authority.py",
           "src/codex_plugin_scanner/guard/runtime/contained_command_prefix.py",
