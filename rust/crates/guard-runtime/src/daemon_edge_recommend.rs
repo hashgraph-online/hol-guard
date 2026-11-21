@@ -356,7 +356,10 @@ fn coverage(hint: Value, config: &ReadConfig) -> Option<Value> {
     else {
         return None;
     };
-    let coverage = coverage?;
+    validated_coverage(coverage?)
+}
+
+fn validated_coverage(coverage: Value) -> Option<Value> {
     let fields = coverage.as_object()?;
     let shaped = fields.len() == 4
         && fields.get("schema").and_then(Value::as_str) == Some(COVERAGE_SCHEMA)
