@@ -10897,6 +10897,17 @@ def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(
         "message": "Claude needs your permission to use Read",
         "tool_name": "Read",
     }
+    # Exercise the Rust-lane outage response directly. The lifecycle bridge is
+    # no longer consulted for this notification, so a Python authority-state
+    # stub alone would leave the resident available and render the full notice.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_hook_direct._resident_request",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request",
+        lambda **_kwargs: None,
+    )
     notification_rc, notification_output = _run_guard_hook(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
