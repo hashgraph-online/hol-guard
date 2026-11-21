@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from .codex_resume import ResumeUnavailableError, defer_request_resume_to_live_hook, retry_request_resume
 from .codex_resume_response import project_codex_resume_response
 from .continuation_runtime import continue_request_after_application
-from .native_codex_live_hook_target import native_live_hook_target
+from .native_continuation_authority import native_live_hook_target
 from .store import GuardStore
 
 

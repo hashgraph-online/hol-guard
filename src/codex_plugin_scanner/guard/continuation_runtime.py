@@ -45,8 +45,7 @@ from .continuation_worker import (
     settle_without_harness,
 )
 from .desktop_notifications import DesktopApprovalNotification, notify_pending_approval_once
-from .native_codex_live_hook_target import native_live_hook_target
-from .native_continuation_authority import offer_wire, result_wire
+from .native_continuation_authority import native_live_hook_target, offer_wire, result_wire
 from .setup_contracts import contract_for
 from .store import GuardStore
 from .store_continuation import continuation_store_call
