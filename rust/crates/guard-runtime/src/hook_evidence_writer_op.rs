@@ -56,6 +56,8 @@ use std::sync::TryLockError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
+#[path = "hook_evidence_pre_tool.rs"]
+mod pre_tool;
 #[path = "hook_evidence_writer_registry.rs"]
 mod registry;
 
@@ -70,6 +72,7 @@ pub(crate) const HOOK_EVIDENCE_WRITER_RESULT_SCHEMA: &str = "guard-hook-evidence
 /// The feature advertised to callers that route evidence here.
 pub(crate) const HOOK_EVIDENCE_WRITER_FEATURE: &str = "hook-evidence-writer-v1";
 pub(crate) const HOOK_EVIDENCE_POST_TOOL_FEATURE: &str = "hook-evidence-post-tool-v1";
+pub(crate) const HOOK_EVIDENCE_PRE_TOOL_FEATURE: &str = "hook-evidence-pre-tool-v1";
 
 /// `submit_command_activity(approval_reuse_status=)` default (:153).
 const APPROVAL_REUSE_NOT_APPLICABLE: &str = "not-applicable";
@@ -112,6 +115,8 @@ pub(crate) enum HookEvidenceWriterActionV1 {
         #[serde(default = "approval_reuse_default")]
         approval_reuse_status: String,
     },
+    /// Project a finished pre-tool reply into command activity.
+    SubmitPreToolActivity(pre_tool::PreToolActivity),
     /// `submit_composio_discovery` (:197-203). The Python entry point reads
     /// the tool name out of the payload and refuses an unsuccessful call, so
     /// the same narrowing happens here rather than at each caller.
@@ -364,6 +369,9 @@ fn evaluate(request: &HookEvidenceWriterRequestV1) -> Result<Value, WriterError>
     }
     let started = |error: io::Error| WriterError("writer_unavailable", error.to_string());
     match &request.action {
+        HookEvidenceWriterActionV1::SubmitPreToolActivity(activity) => {
+            activity.submit(&guard_home, &request.source)
+        }
         HookEvidenceWriterActionV1::SubmitCommandActivity {
             harness,
             event,

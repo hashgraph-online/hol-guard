@@ -51,6 +51,7 @@ if TYPE_CHECKING:
 
 HOOK_EVIDENCE_WRITER_FEATURE: Final = "hook-evidence-writer-v1"
 _POST_TOOL_FEATURE: Final = "hook-evidence-post-tool-v1"
+_PRE_TOOL_FEATURE: Final = "hook-evidence-pre-tool-v1"
 _REQUEST_SCHEMA: Final = "guard-hook-evidence-writer-request.v1"
 _RESULT_SCHEMA: Final = "guard-hook-evidence-writer-result.v1"
 # The writer queues bounded records; the resident's own submission bound plus
@@ -175,13 +176,14 @@ class ResidentEvidenceClient:
         )
         runtime = native_runtime_status()
         identity = runtime.identity
+        activity_kind = {_PRE_TOOL_FEATURE: "pre_tool", _POST_TOOL_FEATURE: "post_tool"}.get(required_feature)
         if (
             response is None
-            and required_feature == _POST_TOOL_FEATURE
+            and activity_kind is not None
             and runtime.capabilities is not None
             and required_feature not in runtime.capabilities.features
         ):
-            raise _unavailable("resident_evidence_client_post_tool_feature_missing")
+            raise _unavailable(f"resident_evidence_client_{activity_kind}_feature_missing")
         if (
             response is None
             or response.get("request_id") != request["request_id"]
@@ -271,6 +273,32 @@ class ResidentEvidenceClient:
                 "prompted": prompted,
                 "approval_reuse_status": approval_reuse_status,
             }
+        )
+
+    def submit_pre_tool_activity(
+        self,
+        *,
+        harness: str,
+        payload: Mapping[str, object],
+        response: Mapping[str, object],
+        settled: bool,
+        receipt_id: object = None,
+    ) -> bool:
+        """Queue the Rust writer's projection of a finished PreToolUse response."""
+        return self._queued(
+            {
+                "action": "submit_pre_tool_activity",
+                "harness": harness,
+                "payload": dict(payload),
+                "response": {
+                    key: response[key]
+                    for key in ("policy_action", "prompted", "approval_reuse_status")
+                    if key in response
+                },
+                "receipt_id": receipt_id,
+                "settled": settled,
+            },
+            required_feature=_PRE_TOOL_FEATURE,
         )
 
     def submit_composio_discovery(

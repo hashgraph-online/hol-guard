@@ -201,8 +201,10 @@ def mark_owned_hook_publication_conflict(home: Path, config: Path) -> None:
     """Durably refuse an inverse after this live owner sees a competing config.
 
     Ordinary crash recovery cannot select this mode. Only the still-held
-    preparation owner may mark it. Every participant remains untouched and
-    automatic recovery must retain the unresolved record, even for equal bytes.
+    preparation owner may mark it. Every participant remains untouched: no
+    recovery restores the predecessor config over the foreign one. Automatic
+    recovery retires the record only while Guard's authority files still hold
+    this transaction's bytes, so the next install can publish again.
     """
     _publication("conflict", home, operation_id=_owned(home), config=_path_text(config))
 

@@ -267,7 +267,7 @@ def test_watch_unavailable_pretool_records_command_activity(
         workspace=tmp_path / "workspace",
     )
     assert result["decision"] == "deny"
-    writer.submit_command_activity.assert_called_once()
-    recorded = writer.submit_command_activity.call_args.kwargs
-    assert recorded["event"] == "PreToolUse"
-    assert recorded["succeeded"] is False
+    writer.submit_pre_tool_activity.assert_called_once()
+    recorded = writer.submit_pre_tool_activity.call_args.kwargs
+    assert recorded["response"]["policy_action"] == "block"
+    assert recorded["settled"] is False

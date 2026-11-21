@@ -224,7 +224,7 @@ def test_the_daemon_records_a_pre_tool_activity_only_when_the_edge_did_not_queue
     )
     activities: list[object] = []
     writer = _ReceiptWriter()
-    writer.submit_command_activity = lambda **kwargs: activities.append(kwargs["policy_action"]) or True  # pyright: ignore[reportAttributeAccessIssue]
+    writer.submit_pre_tool_activity = lambda **kwargs: activities.append(kwargs["response"]["policy_action"]) or True  # pyright: ignore[reportAttributeAccessIssue]
     worker = HookWorker(store=GuardStore(guard_home), activity_writer=writer)  # pyright: ignore[reportArgumentType]
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
     try:
@@ -263,24 +263,22 @@ def test_native_pre_and_post_keep_authoritative_decision(
     writer = _writer(store)
     payload = {id_field: "call_test_0123456789abcdef", input_field: {"command": "echo example"}}
     try:
-        assert writer.submit_command_activity(
+        assert writer.submit_pre_tool_activity(
             harness=harness,
-            event="PreToolUse",
             payload=payload,
-            succeeded=True,
-            policy_action="warn",
+            response={"policy_action": "warn"},
+            settled=True,
         )
         assert writer.submit_post_tool_activity(
             harness=harness,
             event="PostToolUse",
             payload=payload,
         )
-        assert writer.submit_command_activity(
+        assert writer.submit_pre_tool_activity(
             harness=harness,
-            event="PreToolUse",
             payload=payload,
-            succeeded=True,
-            policy_action="warn",
+            response={"policy_action": "warn"},
+            settled=True,
         )
     finally:
         assert writer.stop(timeout_seconds=5)

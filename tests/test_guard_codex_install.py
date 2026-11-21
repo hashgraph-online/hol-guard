@@ -1676,7 +1676,7 @@ def test_guard_install_codex_workspace_refuses_to_rebind_global_managed_hook(tmp
 
     assert global_install_rc == 0
     assert workspace_install_rc == 1
-    assert workspace_output.out == ""
+    assert json.loads(workspace_output.out)["status"] == "failed"
     assert home_hooks_path.exists() is False
     assert "hooks" not in workspace_config
     assert len(home_config["hooks"]["PreToolUse"]) == 1
@@ -1737,7 +1737,7 @@ def test_guard_install_codex_workspace_context_mismatch_preserves_all_global_hoo
 
     assert global_install_rc == 0
     assert workspace_install_rc == 1
-    assert workspace_output.out == ""
+    assert json.loads(workspace_output.out)["status"] == "failed"
     assert final_home_config["model"] == "gpt-5.3-codex"
     hooks = final_home_config["hooks"]
     assert hooks["SessionStart"] == [

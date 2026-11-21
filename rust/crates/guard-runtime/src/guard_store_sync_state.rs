@@ -97,6 +97,9 @@ pub(crate) mod fleet_posture_state;
 #[path = "guard_store_cloud_review_settings.rs"]
 pub(crate) mod cloud_review_settings;
 
+#[path = "guard_store_sync_delivery_rows.rs"]
+pub(crate) mod sync_delivery_rows;
+
 #[cfg(test)]
 #[path = "guard_store_sync_state_tests.rs"]
 mod tests;

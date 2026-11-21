@@ -140,6 +140,7 @@ def plan_native_wheel_update(
     runtime_missing: bool,
     platform_supported: bool,
     github_only: bool = False,
+    reinstall: bool = False,
 ) -> NativeWheelPlan | None:
     """Decide whether the update must install the native wheel from the GitHub release."""
 
@@ -151,7 +152,8 @@ def plan_native_wheel_update(
             return NativeWheelPlan(version=target_version, reason="upgrade") if include_alpha else None
         # PyPI already serves the stable native wheel unless this platform is GitHub-only.
         return NativeWheelPlan(version=target_version, reason="upgrade") if github_only else None
-    if runtime_missing:
+    # PyPI has only the pure wheel for alphas and GitHub-only hosts, so a reinstall from it drops the runtime.
+    if runtime_missing or (reinstall and (github_only or is_alpha_version(current_version))):
         return NativeWheelPlan(version=current_version.strip(), reason="repair")
     return None
 
