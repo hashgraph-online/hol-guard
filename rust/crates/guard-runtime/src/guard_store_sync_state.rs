@@ -82,6 +82,9 @@ pub(crate) mod queue_lease_limit;
 #[path = "guard_store_queue_transition.rs"]
 pub(crate) mod queue_transition;
 
+#[path = "guard_store_review_replay_marker.rs"]
+pub(crate) mod review_replay_marker;
+
 #[path = "guard_store_review_sync_transition.rs"]
 pub(crate) mod review_sync_transition;
 

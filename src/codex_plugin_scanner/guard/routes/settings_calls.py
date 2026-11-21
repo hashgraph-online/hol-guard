@@ -61,11 +61,18 @@ def _hand_settings_to_cigar(guard_home: Path) -> None:
     every prompt without context until something asks for CIGAR's status.
     """
 
-    from .. import native_context_assistance
-    from ..native_context_assistance import ContextAssistanceError
+    import subprocess
 
-    with suppress(ContextAssistanceError):
-        native_context_assistance.control("status", guard_home=guard_home)
+    from ..cli.runtime_forward import FEATURE
+    from ..native_recovery_store import recovery_runtime_path
+
+    with suppress(OSError, RuntimeError, subprocess.SubprocessError):
+        subprocess.run(
+            [recovery_runtime_path(FEATURE), "context", "--guard-home", str(guard_home), "--json", "status"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
 
 
 def _requeue_privacy_projection(store: GuardStore, level: str) -> None:

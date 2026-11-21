@@ -51,7 +51,7 @@ _RESIDENT_ROUND_TRIPS_PER_CLI_PRE_TOOL_HOOK = 25
 # still on the hook's clock — a one-shot CLI hook starts a worker that waits
 # for the publisher to report ready and closes it afterwards — so they are
 # counted on their own rather than exempted.
-_BACKGROUND_OPERATIONS = frozenset({"hook_direct_evidence_drain", "policy_snapshot_push"})
+_BACKGROUND_OPERATIONS = frozenset({"hook_direct_evidence_commit", "policy_snapshot_push"})
 
 # Each is bounded on its own, because they vary for different reasons and one
 # must not spend the other's room. Every allowance is per batch rather than per
@@ -107,7 +107,7 @@ def _assert_background_growth(samples: list[Counter[str]]) -> None:
 
     ceilings = {
         "policy_snapshot_push": _BATCH * _PUBLICATIONS_PER_CLI_PRE_TOOL_HOOK + _PUBLICATION_JITTER_PER_BATCH,
-        "hook_direct_evidence_drain": _BATCH * _DRAIN_ROUND_TRIPS_PER_CLI_PRE_TOOL_HOOK + _DRAIN_JITTER_PER_BATCH,
+        "hook_direct_evidence_commit": _BATCH * _DRAIN_ROUND_TRIPS_PER_CLI_PRE_TOOL_HOOK + _DRAIN_JITTER_PER_BATCH,
     }
     for name, ceiling in ceilings.items():
         _assert_growth_within([Counter({name: sample[name]}) for sample in samples], ceiling)
@@ -267,7 +267,7 @@ def _replay(
                 output.write(b"hook_decide\n" * _RESIDENT_ROUND_TRIPS_PER_CLI_PRE_TOOL_HOOK)
                 # What the background budgets account for per hook.
                 output.write(
-                    b"hook_direct_evidence_drain\n" * _DRAIN_ROUND_TRIPS_PER_CLI_PRE_TOOL_HOOK
+                    b"hook_direct_evidence_commit\n" * _DRAIN_ROUND_TRIPS_PER_CLI_PRE_TOOL_HOOK
                     + b"policy_snapshot_push\n" * _PUBLICATIONS_PER_CLI_PRE_TOOL_HOOK
                 )
                 if extra and ((batch, index) == (1, 0) if once else (batch, index) >= (1, 0)):

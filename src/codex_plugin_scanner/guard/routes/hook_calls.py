@@ -196,14 +196,6 @@ def hook_integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[
     return {"finalized": stored is True}
 
 
-def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """The argv prefix of the contained sink, for the daemon's Cursor sink admission."""
-
-    from ..contained_sink_command import contained_sink_command_prefix
-
-    return {"sink_command": list(contained_sink_command_prefix())}
-
-
 _LIVE_DECISION_REVIEW_SECONDS = 1.45
 
 
@@ -278,7 +270,6 @@ HOOK_CALLS = {
     "hook.integrity_key": hook_integrity_key,
     "hook.integrity_begin": hook_integrity_begin,
     "hook.integrity_finalize": hook_integrity_finalize,
-    "hook.sink_command": hook_sink_command,
     "hook.prepare": hook_prepare,
     "hook.ready": hook_ready,
     "hook.warm": hook_warm,

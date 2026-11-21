@@ -437,6 +437,20 @@ pub(crate) fn dispatch(
         "transition_cloud_review_sync_state" => {
             crate::guard_store_sync_state::review_sync_transition::method(connection, args)
         }
+        "native_workspace_review_replay_marker" => {
+            crate::guard_store_sync_state::review_replay_marker::read_method(connection, args)
+        }
+        "transition_native_workspace_review_replay_marker" => {
+            crate::guard_store_sync_state::review_replay_marker::step::method(connection, args)
+        }
+        "native_workspace_review_replay_scan" => {
+            crate::guard_store_sync_state::review_replay_marker::scan::read_method(connection, args)
+        }
+        "record_native_workspace_review_replay_scan" => {
+            crate::guard_store_sync_state::review_replay_marker::scan::record_method(
+                connection, args,
+            )
+        }
         "workspace_review_enrollment_due" => {
             crate::guard_store_sync_state::review_enrollment::due_method(connection, args)
         }

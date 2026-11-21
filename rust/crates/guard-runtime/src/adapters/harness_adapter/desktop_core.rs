@@ -67,6 +67,23 @@ fn core_root(executable: &Path) -> Option<PathBuf> {
     None
 }
 
+/// The Unix launcher used by the daemon when it checks a frozen sink command.
+pub(crate) fn frozen_sink_launcher(executable: &Path) -> PathBuf {
+    if let Some(root) = core_root(executable) {
+        let shim = root.join(CURRENT_HOL_GUARD_SHIM);
+        if shim.is_file() && which::executable(&shim) {
+            return shim;
+        }
+        if cfg!(target_os = "macos") {
+            let bundled = Path::new("/Applications/HOL Guard.app/Contents/MacOS/hol-guard");
+            if bundled.is_file() && which::executable(bundled) {
+                return bundled.to_path_buf();
+            }
+        }
+    }
+    executable.to_path_buf()
+}
+
 /// The stable `current-hol-guard` launcher next to a versioned or bundled Core.
 pub(super) fn shim_for_executable(ctx: &Ctx, executable: &Path) -> Option<PathBuf> {
     let root = core_root(executable)?;

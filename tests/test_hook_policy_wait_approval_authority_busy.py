@@ -25,7 +25,7 @@ def test_prepare_workspace_policy_waits_for_a_busy_approval_authority_lock(
         def start(self) -> None:
             return
 
-        def register_workspace(self, workspace: Path | None) -> bool:
+        def register_workspace(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
             del workspace
             return False
 

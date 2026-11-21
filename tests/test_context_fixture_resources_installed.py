@@ -10,10 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.native_context_assistance import control
 from codex_plugin_scanner.guard.native_resident_client import close_native_resident_clients
 from scripts.cigar_benchmark_processes import ProcessSampler
-from tests.context_persistence_installed_support import stop_resident
+from tests.context_persistence_installed_support import context_status, stop_resident
 
 
 @pytest.mark.integration
@@ -30,8 +29,8 @@ def test_private_native_fixture_closes_new_processes_without_excluding_baseline_
             before, baseline = sampler.sample_with_identities()
             report["before"] = before
             try:
-                state = control("status", guard_home=guard)
-                assert not state["effective_enabled"] and state["runtime"] is None
+                state = context_status(guard)
+                assert not state["effective_enabled"] and state.get("runtime") is None
             finally:
                 stop_resident(native_hook_force, guard)
                 assert close_native_resident_clients(guard, deadline_monotonic=time.monotonic() + 10)
