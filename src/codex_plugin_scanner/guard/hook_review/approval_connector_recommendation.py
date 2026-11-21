@@ -25,10 +25,6 @@ from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from .approval_extension_recommendation import native_caution_risk_classes
 
 CONNECTOR_RECOMMENDATION_SCHEMA = "guard.approval-connector-recommendation.v1"
-# Pending rows read per page, and the most the group scan reads in total. A
-# scan that stops early is cautioned: unread rows are never treated as safe.
-_GROUP_PAGE_ROWS = 200
-_MAX_GROUP_SCAN_ROWS = 2000
 # Total resident budget for checking every sibling hint in one scan.
 _SIBLING_SCAN_BUDGET_SECONDS = 8.0
 
@@ -60,39 +56,6 @@ def _awaiting_setup(item: Mapping[str, object]) -> bool:
     return item.get("state") == "allowed" and item.get("stale") is True and item.get("surface") == "cli"
 
 
-def pending_connector_group_rows(store: object, identity_hash: str) -> tuple[list[Mapping[str, object]], bool]:
-    """Pending rows queued on this connector identity, paging through the whole queue.
-
-    The queue cannot filter by group, so other groups' rows are skipped page by
-    page. Returns the rows and whether every pending row was read; the scan
-    stops after ``_MAX_GROUP_SCAN_ROWS`` rows.
-    """
-
-    pager = getattr(store, "list_approval_request_page", None)
-    if not callable(pager):
-        return [], False
-    prefix = f"connector:{identity_hash}:"
-    rows: list[Mapping[str, object]] = []
-    cursor: str | None = None
-    scanned = 0
-    while scanned < _MAX_GROUP_SCAN_ROWS:
-        page = pager(status="pending", limit=_GROUP_PAGE_ROWS, cursor=cursor, include_totals=False)
-        if not isinstance(page, Mapping):
-            return rows, False
-        items = page.get("items")
-        if not isinstance(items, list):
-            return rows, False
-        scanned += len(items)
-        for row in items:
-            if isinstance(row, Mapping) and str(row.get("queue_group_id") or "").startswith(prefix):
-                rows.append(row)
-        next_cursor = page.get("next_cursor")
-        if not items or not isinstance(next_cursor, str) or not next_cursor:
-            return rows, True
-        cursor = next_cursor
-    return rows, False
-
-
 def _group_risk_classes(
     store: object,
     identity_hash: str,
@@ -102,7 +65,8 @@ def _group_risk_classes(
     from ..native_runner_authority import NativeRunnerAuthorityError
 
     classes = set(current)
-    rows, complete = pending_connector_group_rows(store, identity_hash)
+    scan = getattr(store, "pending_connector_group_rows", None)
+    rows, complete = scan(identity_hash) if callable(scan) else ([], False)
     # One budget for the whole scan: a slow resident cannot hold the approval
     # read for a check per sibling. Checks past it fail without a resident call.
     deadline = time.monotonic() + _SIBLING_SCAN_BUDGET_SECONDS
@@ -227,6 +191,5 @@ def safe_connector_recommendation(
 __all__ = [
     "CONNECTOR_RECOMMENDATION_SCHEMA",
     "build_approval_connector_recommendation",
-    "pending_connector_group_rows",
     "safe_connector_recommendation",
 ]
