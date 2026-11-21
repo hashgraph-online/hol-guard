@@ -315,13 +315,13 @@ class _StuckPublisher:
     def start(self) -> None:
         return None
 
-    def register_workspace(self, _workspace: object) -> None:
+    def register_workspace(self, _workspace: object, *, deadline: float | None = None) -> None:
         return None
 
     def workspace_policy_pending(self, _workspace: object) -> bool:
         return False
 
-    def workspace_admissible_without_overlay(self, _workspace: object) -> bool:
+    def workspace_admissible_without_overlay(self, _workspace: object, *, deadline: float | None = None) -> bool:
         return False
 
     def resident_failure_streak(self) -> int:

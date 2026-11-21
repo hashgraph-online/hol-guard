@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import time
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .native_context import native_context_digest
+from .native_context import ensure_resident_prerequisite
+from .native_execution import _resident_request
+from .native_runtime import native_runtime_status
 
 if TYPE_CHECKING:
     from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
@@ -15,15 +18,41 @@ if TYPE_CHECKING:
 _OVERLAY_READINESS_BUDGET_SECONDS = 0.15
 
 
-def _workspace_overlay_readiness(guard_home: Path, candidate: Path) -> object:
-    result = native_context_digest(
-        "workspace_overlay_readiness",
-        {"workspace": str(candidate)},
-        guard_home=guard_home,
-        timeout_seconds=_OVERLAY_READINESS_BUDGET_SECONDS,
-        hard_deadline_monotonic=time.monotonic() + _OVERLAY_READINESS_BUDGET_SECONDS,
-    )
-    return result.get("workspace_overlay_readiness") if result and result.get("status") == "ok" else None
+def _workspace_overlay_readiness(
+    publisher: NativePolicySnapshotPublisher, candidate: Path, deadline: float | None
+) -> object:
+    now = time.monotonic()
+    probe_deadline = now + _OVERLAY_READINESS_BUDGET_SECONDS
+    if deadline is not None:
+        probe_deadline = min(probe_deadline, deadline)
+    if probe_deadline <= now:
+        return None
+    guard_home = publisher.guard_home
+    if not ensure_resident_prerequisite(guard_home, store=publisher.store):
+        return None
+    status = native_runtime_status(deadline_monotonic=probe_deadline)
+    timeout_seconds = probe_deadline - time.monotonic()
+    if timeout_seconds <= 0:
+        return None
+    request_id = uuid.uuid4().hex
+    try:
+        result = _resident_request(
+            operation="hook_workspace_overlay_readiness",
+            request={
+                "schema": "guard-hook-workspace-overlay-readiness-request.v1",
+                "request_id": request_id,
+                "workspace": str(candidate),
+            },
+            guard_home=guard_home,
+            timeout_seconds=timeout_seconds,
+            required_feature="hook-workspace-overlay-readiness-v1",
+            response_schema="guard-hook-workspace-overlay-readiness-result.v1",
+            record_resilience=False,
+            status=status,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+    return result.get("readiness") if result and result.get("request_id") == request_id else None
 
 
 class NativePolicySnapshotWorkspaceReadinessMixin:
@@ -37,7 +66,7 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
     in-flight ACKs so a stream of new workspaces can starve readiness.
     """
 
-    def register_workspace(self, workspace: Path | None) -> bool:
+    def register_workspace(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
         """Track workspace override files without reading them on a hook."""
 
         publisher = cast("NativePolicySnapshotPublisher", self)
@@ -49,7 +78,7 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
             if candidate in publisher._workspace_paths and candidate not in publisher._deferred_workspace_paths:
                 return False
             can_reuse_snapshot = publisher._acked or publisher._under_settled_workspace_locked(candidate)
-        readiness = _workspace_overlay_readiness(publisher.guard_home, candidate) if can_reuse_snapshot else None
+        readiness = _workspace_overlay_readiness(publisher, candidate, deadline) if can_reuse_snapshot else None
         file_less = readiness in ("directory_only", "directory_and_ancestors")
         free_ancestors = readiness == "directory_and_ancestors"
         with publisher._condition:
@@ -90,7 +119,7 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
         with publisher._condition:
             return candidate in publisher._pending_workspace_paths
 
-    def workspace_admissible_without_overlay(self, workspace: Path | None) -> bool:
+    def workspace_admissible_without_overlay(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
         """True when the ACKed snapshot already holds this pending workspace's policy.
 
         A workspace config reads only that directory's own overlay files, and
@@ -111,7 +140,7 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
         with publisher._condition:
             if candidate not in publisher._deferred_workspace_paths:
                 return False
-        readiness = _workspace_overlay_readiness(publisher.guard_home, candidate)
+        readiness = _workspace_overlay_readiness(publisher, candidate, deadline)
         if readiness not in ("directory_only", "directory_and_ancestors"):
             return False
         with publisher._condition:

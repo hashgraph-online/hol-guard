@@ -1,9 +1,7 @@
 use super::super::tests::{binding, fixture, push, write_current_ack, Fixture};
 use super::super::{DirectLaneDefer, DIRECT_LANE_ACK_DIRECTORY, DIRECT_LANE_ACK_FILE_NAME};
 use super::workspace_overlay_readiness;
-use guard_contracts::WorkspaceOverlayReadinessV1::{
-    DirectoryAndAncestors, DirectoryOnly, Unproven,
-};
+use super::WorkspaceOverlayReadiness::{DirectoryAndAncestors, DirectoryOnly, Unproven};
 use serde_json::json;
 use std::fs;
 use std::os::unix::fs::symlink;
@@ -76,6 +74,11 @@ fn publisher_overlay_readiness_checks_fresh_evidence_and_spelling() {
 
     let linked = root.join("linked");
     symlink(&workspace, &linked).unwrap();
+    // A trailing separator or dot must not hide the link from metadata.
+    for suffix in ["/", "/."] {
+        let spelling = format!("{}{suffix}", linked.display());
+        assert_eq!(workspace_overlay_readiness(Path::new(&spelling)), Unproven);
+    }
     assert_eq!(
         workspace_overlay_readiness(&linked.join("missing")),
         Unproven

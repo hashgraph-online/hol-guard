@@ -82,6 +82,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_FEATURE.into(),
         crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_WRITE_FEATURE.into(),
         crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_WAIT_FEATURE.into(),
+        crate::policy_store::policy_store_direct_lane::subdirectory::WORKSPACE_OVERLAY_READINESS_FEATURE.into(),
         crate::directory_trust::DIRECTORY_TRUST_FEATURE.into(),
         crate::directory_trust::HOOK_PATH_RULES_FEATURE.into(),
         crate::mcp_relay_decide::MCP_RELAY_DECIDE_FEATURE.into(),
@@ -264,6 +265,9 @@ pub(crate) enum ResidentOperationV1 {
     HookPolicyAdmission(crate::hook_policy_admission_op::HookPolicyAdmissionRequestV1),
     HookConnectorFacts(crate::hook_connector_facts_op::HookConnectorFactsRequestV1),
     HookPolicyFenceWindow(crate::hook_policy_fence_window_op::HookPolicyFenceWindowRequestV1),
+    HookWorkspaceOverlayReadiness(
+        crate::policy_store::policy_store_direct_lane::subdirectory::WorkspaceOverlayReadinessRequest,
+    ),
     GuardStore(GuardStoreRequestV1),
     HookEvidenceWriter(crate::hook_evidence_writer_op::HookEvidenceWriterRequestV1),
     ApprovalGate(ApprovalGateRequestV1),

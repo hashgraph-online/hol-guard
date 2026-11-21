@@ -85,7 +85,6 @@ _RESULT_OPTIONAL_KEYS = {
     "guard_run_launch",
     "package_runner_target",
     "transition_hook_observation",
-    "workspace_overlay_readiness",
     "publication_inverse_claim",
 }
 _RESULT_CODES = {
@@ -130,8 +129,6 @@ _UNCACHEABLE_DIGEST_KINDS = frozenset(
         "runtime_launch_identity_projection",
         "package_json_scripts",
         "local_cli_identify",
-        # An overlay or link can appear between two identical requests.
-        "workspace_overlay_readiness",
         # A claim is resident state: a replayed answer would hide a spent grant.
         "publication_inverse_claim",
     }

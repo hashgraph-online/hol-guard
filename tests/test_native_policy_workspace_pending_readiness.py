@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_policy_snapshot_workspace_readiness as readiness
 from codex_plugin_scanner.guard.hook_review import hook_worker as worker_module
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.store import GuardStore
@@ -294,6 +295,22 @@ def test_file_less_subdirectory_uses_the_current_ack_while_it_publishes(
 
         publisher._publish_once()
         assert not publisher.workspace_policy_pending(nested)
+    finally:
+        publisher.close()
+
+
+def test_expired_hook_deadline_skips_overlay_probes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    publisher, worker, existing = _subdirectory_worker(tmp_path, monkeypatch)
+    nested = existing / "src"
+    nested.mkdir()
+
+    def unexpected_probe(**_kwargs: object) -> None:
+        pytest.fail("an expired hook must not start an overlay probe")
+
+    monkeypatch.setattr(readiness, "_resident_request", unexpected_probe)
+    try:
+        assert worker.prepare_workspace_policy(nested, deadline=time.monotonic() - 1.0) is None
+        assert publisher.workspace_policy_pending(nested)
     finally:
         publisher.close()
 
