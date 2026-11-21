@@ -349,6 +349,7 @@ pub(crate) fn dispatch(
         "pending_connector_group_rows" => {
             approval_metadata::pending_connector_group_rows(connection, args)
         }
+        "connector_setup_advice" => approval_metadata::connector_setup_advice(connection, args),
         "approval_desktop_notified_at" => {
             approval_metadata::approval_desktop_notified_at(connection, args)
         }

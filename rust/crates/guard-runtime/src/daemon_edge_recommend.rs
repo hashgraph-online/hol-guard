@@ -23,6 +23,9 @@ use serde_json::{json, Map, Value};
 
 use super::{NativeReads, ReadConfig};
 
+#[path = "daemon_edge_connector_recommend.rs"]
+mod connector;
+
 const RECOMMENDATION_TIMEOUT: Duration = Duration::from_secs(3);
 /// The read-time review and its counterfactual, as the daemon budgeted them.
 const LIVE_BUDGET_MS: u64 = 1200;
@@ -54,8 +57,8 @@ const COMMAND_ONLY_INPUT_KEYS: [&str; 14] = [
 static REQUEST_IDS: AtomicU64 = AtomicU64::new(1);
 
 /// `_approval_with_extension_recommendation` for a local caller: the stored
-/// row with its private hint replaced by what still applies. `None` sends
-/// the read to the daemon, which owns connector-setup recommendations.
+/// row with its private hint replaced by what still applies. An edge in front
+/// of another daemon lets that daemon answer connector setup.
 pub(super) fn local_detail(
     mut approval: Map<String, Value>,
     config: &ReadConfig,
@@ -71,16 +74,16 @@ pub(super) fn local_detail(
         "get_approval_extension_allow_hint",
         json!({"request_id": request_id}),
     )?;
-    if shape(&stored, "connector").is_some() {
-        return None;
-    }
     approval.remove("extension_allow_hint");
+    if let Some(hint) = shape(&stored, "connector") {
+        return connector_detail(approval, &hint, config, reads, None);
+    }
     let Some(view) = control_view(config) else {
         return Some(approval);
     };
     let hint = recovered(stored, || live_hint(&approval, &view, config));
-    if shape(&hint, "connector").is_some() {
-        return None;
+    if let Some(hint) = shape(&hint, "connector") {
+        return connector_detail(approval, &hint, config, reads, Some(view));
     }
     if approval.get("status").and_then(Value::as_str) != Some("pending") {
         return Some(approval);
@@ -93,6 +96,26 @@ pub(super) fn local_detail(
     if hint.is_object() {
         if let Some(coverage) = coverage(hint, config) {
             approval.insert("extension_coverage".to_owned(), coverage);
+        }
+    }
+    Some(approval)
+}
+
+pub(super) fn connector_detail(
+    mut approval: Map<String, Value>,
+    hint: &Value,
+    config: &ReadConfig,
+    reads: &NativeReads,
+    view: Option<ApprovalExtensionControlViewV1>,
+) -> Option<Map<String, Value>> {
+    if !reads.is_standalone() {
+        return None;
+    }
+    if let Some(view) = view.or_else(|| control_view(config)) {
+        if let Some(recommendation) =
+            connector::recommendation(&approval, hint, &view, config, reads)
+        {
+            approval.insert("connector_recommendation".to_owned(), recommendation);
         }
     }
     Some(approval)

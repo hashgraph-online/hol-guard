@@ -139,7 +139,7 @@ fn is_dir(path: &Path) -> bool {
     fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
 }
 
-fn item_available(cwd: &Path, entry: &Map<String, Value>) -> bool {
+pub(crate) fn item_available(cwd: &Path, entry: &Map<String, Value>) -> bool {
     if matches!(
         entry.get("state").and_then(Value::as_str),
         Some("allowed" | "blocked")
