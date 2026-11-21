@@ -33,6 +33,18 @@ WINDOWS_TEMP_ROOT = "{{home}}/AppData/Local/Temp/"
 SCRATCH_NAME = "scratch-notes.txt"
 # A harness read inside a scratch checkout under /tmp, which macOS resolves to
 # /private/tmp; the evidence redacts both spellings to ``{{scratch}}``.
+# The read tool takes a line range, a bare ``:raw``, or both in either order,
+# the same spellings ``post_input_matches`` resolves. Strip whichever one a
+# path carries so the file it names is what gets compared.
+READ_SELECTOR = re.compile(
+    r"(.+?):(?:[1-9][0-9]*(?:-[1-9][0-9]*)?(?::raw)?|raw(?::[1-9][0-9]*(?:-[1-9][0-9]*)?)?)"
+)
+GITDIR_POINTER_CASE = "read-linked-worktree-gitdir-pointer"
+# The realistic fixture puts the agent in the linked worktree, whose ``.git``
+# is a pointer file rather than a directory, so only a path through the main
+# checkout names the administrative pointer. ``_path`` folds the home alias, so
+# the absolute and ``~`` spellings both arrive here as one string.
+GITDIR_POINTER_FILES = ("{{home}}/project/.git/worktrees/project-feature/gitdir",)
 TMP_ALIAS_READ_CASE = "omp-native-read-tmp-alias-worktree-file"
 SCRATCH_READ_TARGET = "{{scratch}}/notes.md"
 # The checkout file a session opened in a plain folder reads and edits through its absolute path.
@@ -472,6 +484,34 @@ def _session_edit_error(calls: list[dict[str, Any]], *, require_steps: bool = Tr
     return None
 
 
+def _gitdir_pointer_error(calls: list[dict[str, Any]], *, require_read: bool = True) -> str | None:
+    """Hold the pointer scenario to the one administrative file it names.
+
+    The behaviour under test is a read of the linked worktree's ``gitdir``
+    pointer, so a read of any other file leaves it unexercised. ``require_read``
+    also demands that read, which only makes sense once Guard has not stopped it.
+    """
+    read_pointer = False
+    for call in calls:
+        name = call["name"]
+        if name not in {"read", "edit", "write"}:
+            continue
+        path = _edit_path(call["args"]) if name == "edit" else _path(call["args"])
+        if isinstance(path, str):
+            # A Windows lane spells the pointer with backslashes. Fold them
+            # here rather than in the shared helper, which other checks compare
+            # against unfolded spellings.
+            path = path.replace("\\", "/")
+        if name == "read" and isinstance(path, str) and (selector := READ_SELECTOR.fullmatch(path)):
+            path = selector.group(1)
+        if name != "read" or path not in GITDIR_POINTER_FILES:
+            return "the model used a file other than the worktree gitdir pointer"
+        read_pointer = True
+    if require_read and not read_pointer:
+        return "the model did not read the worktree gitdir pointer"
+    return None
+
+
 def _background_read_error(calls: list[dict[str, Any]], *, require_steps: bool = True) -> str | None:
     """Hold every read to a background job's output, after the job started; ``require_steps`` also needs one.
 
@@ -778,9 +818,13 @@ def native_tools_scope_error(
         return scope
     if scenario.id == ROUTE_SEGMENT_GLOB_CASE and (scope := _route_segment_glob_error(calls)):
         return scope
+    if scenario.id == GITDIR_POINTER_CASE and (scope := _gitdir_pointer_error(calls, require_read=False)):
+        return scope
     if guard_denied:
         return None
     if scenario.id == GITHUB_LOOKUP_CASE and (scope := _github_lookup_error(calls)):
+        return scope
+    if scenario.id == GITDIR_POINTER_CASE and (scope := _gitdir_pointer_error(calls)):
         return scope
     if not set(scenario.required_tools) <= {call["name"] for call in calls}:
         return "the model did not use every tool the scenario names"

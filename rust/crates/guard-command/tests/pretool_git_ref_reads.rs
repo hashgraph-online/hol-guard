@@ -53,6 +53,11 @@ fn fixture() -> (PathBuf, PathBuf) {
             "0123456789abcdef0123456789abcdef01234567\n",
         ),
         (".git/worktrees/feature/gitdir", "/elsewhere/.git\n"),
+        // A pointer carrying more than the one path it is defined to hold.
+        (
+            ".git/worktrees/planted/gitdir",
+            "/elsewhere/.git\nexport TOKEN=synthetic\n",
+        ),
         (".git/refs/heads/feature/.hidden", "synthetic hidden ref\n"),
         (".github/.git/HEAD", "ref: refs/heads/main\n"),
     ] {
@@ -112,6 +117,9 @@ fn git_ref_files_are_readable_without_opening_other_git_state() {
             ".git/refs/tags/v1.0.0",
             ".git/refs/remotes/origin/main",
             ".git/worktrees/feature/HEAD",
+            // The pointer back to the worktree's own `.git` file, the inverse
+            // of the pointer a worktree's `.git` file already carries.
+            ".git/worktrees/feature/gitdir",
             // A credential-free repository config is plain settings.
             ".git/config",
         ] {
@@ -126,7 +134,7 @@ fn git_ref_files_are_readable_without_opening_other_git_state() {
             ".git/logs/HEAD",
             ".git/refs/stash",
             ".git/refs/heads/.hidden",
-            ".git/worktrees/feature/gitdir",
+            ".git/worktrees/planted/gitdir",
             ".github/.git/HEAD",
         ] {
             assert_ne!(
@@ -210,6 +218,7 @@ fn linked_worktree_reads_refs_in_its_common_git_directory() {
                 ".git/HEAD",
                 ".git/refs/heads/main",
                 ".git/worktrees/app-feature/HEAD",
+                ".git/worktrees/app-feature/gitdir",
             ] {
                 assert_eq!(
                     read(harness, &parent.join(path), &home, &cwd),
@@ -217,11 +226,7 @@ fn linked_worktree_reads_refs_in_its_common_git_directory() {
                     "{harness} {path}"
                 );
             }
-            for path in [
-                ".git/config",
-                ".git/logs/HEAD",
-                ".git/worktrees/app-feature/gitdir",
-            ] {
+            for path in [".git/config", ".git/logs/HEAD"] {
                 assert_ne!(
                     read(harness, &parent.join(path), &home, &cwd),
                     "allow",
