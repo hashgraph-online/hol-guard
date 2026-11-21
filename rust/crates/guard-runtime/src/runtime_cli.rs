@@ -155,6 +155,9 @@ pub(super) fn run() -> Result<(), String> {
             let response = hook_removal_sweep::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if command == hook_payload_facts_op::CLI_ADMISSION_COMMAND && flag == "--stdin" => {
+            write_json(&hook_payload_facts_op::cli_admission(&read_stdin_bounded()?)?)
+        }
         [command, flag] if macos_code_signing::is_command(command) && flag == "--stdin" => {
             let response = macos_code_signing::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

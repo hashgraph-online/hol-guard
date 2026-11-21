@@ -18,7 +18,6 @@ from urllib.parse import urlencode
 import pytest
 
 from ci.native_daemon_harness import NativeGuardDaemon as GuardDaemonServer
-from codex_plugin_scanner.guard import hook_deadline as runtime_hook_deadline_module
 from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
@@ -42,8 +41,7 @@ def _assert_bridge_denied(payload: dict[str, object]) -> None:
     assert hook_output.get("permissionDecision") == "deny"
 
 
-def _start_daemon(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(runtime_hook_deadline_module, "_MAX_BUDGET_SECONDS", 12.0)
+def _start_daemon(daemon: GuardDaemonServer) -> None:
     try:
         daemon.start()
         deadline = time.monotonic() + 5
@@ -368,7 +366,7 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    _start_daemon(daemon, monkeypatch)
+    _start_daemon(daemon)
     query = urlencode(
         {
             "guard-home": str(guard_home),
@@ -406,7 +404,7 @@ def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    _start_daemon(daemon, monkeypatch)
+    _start_daemon(daemon)
 
     try:
         response = _daemon_hook_response(
@@ -439,7 +437,7 @@ def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    _start_daemon(daemon, monkeypatch)
+    _start_daemon(daemon)
 
     try:
         response = _native_bridge_response(
@@ -489,7 +487,7 @@ def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
     )
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    _start_daemon(daemon, monkeypatch)
+    _start_daemon(daemon)
 
     try:
         response = _daemon_hook_response(
@@ -551,7 +549,7 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
     )
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    _start_daemon(daemon, monkeypatch)
+    _start_daemon(daemon)
 
     try:
         response = _daemon_hook_response(
@@ -661,7 +659,7 @@ def _bridge_github_read(
     session_workspace.mkdir()
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    _start_daemon(daemon, monkeypatch)
+    _start_daemon(daemon)
     query = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     payload: dict[str, object] = {
         "hook_event_name": "PreToolUse",
@@ -791,7 +789,7 @@ def test_bridge_real_daemon_keeps_unsafe_github_pipeline_companions_reviewed(
     session_workspace.mkdir()
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    _start_daemon(daemon, monkeypatch)
+    _start_daemon(daemon)
 
     try:
         response = _daemon_hook_response(
@@ -829,7 +827,7 @@ def test_bridge_real_daemon_uses_exec_command_workdir_for_verified_git_fetch(
     assert guard_config.mode == "prompt"
     assert guard_config.security_level == "balanced"
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    _start_daemon(daemon, monkeypatch)
+    _start_daemon(daemon)
 
     try:
         response = _daemon_hook_response(
@@ -859,7 +857,7 @@ def test_bridge_real_daemon_rejects_untrusted_exec_command_workdir(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    _start_daemon(daemon, monkeypatch)
+    _start_daemon(daemon)
 
     try:
         response = _daemon_hook_response(
@@ -893,7 +891,7 @@ def test_bridge_real_daemon_rejects_temp_root_workdir_without_falling_back_to_re
     )
     temporary_root = Path(tempfile.gettempdir()).resolve()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    _start_daemon(daemon, monkeypatch)
+    _start_daemon(daemon)
 
     try:
         response = _daemon_hook_response(
@@ -921,7 +919,7 @@ def test_bridge_real_daemon_ignores_workdir_for_opaque_tool(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    _start_daemon(daemon, monkeypatch)
+    _start_daemon(daemon)
 
     try:
         response = _daemon_hook_response(

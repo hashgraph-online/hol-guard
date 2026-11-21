@@ -7,6 +7,7 @@
   "src/codex_plugin_scanner/guard/cli/commands_support_hook_state.py",
   "src/codex_plugin_scanner/guard/cli/commands_support_permission_store.py",
   "src/codex_plugin_scanner/guard/muse_hook_render.py",
+  "src/codex_plugin_scanner/guard/hook_deadline.py",
   "src/codex_plugin_scanner/guard/hook_review/approval_connector_recommendation.py",
   "src/codex_plugin_scanner/guard/hook_review/native_review_allow_hint.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_native_exact_action.py",

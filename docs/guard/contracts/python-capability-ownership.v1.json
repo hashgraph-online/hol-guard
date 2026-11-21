@@ -127,6 +127,19 @@
    ]
   },
   {
+   "path": "src/codex_plugin_scanner/guard/hook_deadline.py",
+   "module": "codex_plugin_scanner.guard.hook_deadline",
+   "source_sha256": "fa98460e2747e26faa1566a34c1a73a17e19d703c2c209845c5b9c78abdb8462",
+   "forbidden_symbols": [
+    "RuntimeHookDeadline",
+    "remaining_hint_from_payload"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/daemon_edge_hook_admission.rs",
+    "rust/crates/guard-runtime/src/hook_payload_facts_op.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
    "module": "codex_plugin_scanner.guard.hook_review.hook_native_package_review",
    "source_sha256": "1250222cc52b2a2da9117255a97b5e2b7b589063af7fc282132216f065334a82",
