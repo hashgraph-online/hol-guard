@@ -237,6 +237,11 @@ def test_plan_covers_upgrade_repair_and_stable() -> None:
         "3.44.0", "upgrade"
     )
     assert plan(target_version="3.44.0", github_only=True, platform_supported=False) is None
+    assert plan(reinstall=True) == native.NativeWheelPlan("3.43.0a1", "repair")
+    assert plan(current_version="3.43.0", reinstall=True) is None
+    assert plan(current_version="3.43.0", reinstall=True, github_only=True) == native.NativeWheelPlan(
+        "3.43.0", "repair"
+    )
 
 
 def test_bundled_runtime_detection(tmp_path: Path) -> None:
@@ -310,14 +315,38 @@ class UpdateHarness:
         return subprocess.CompletedProcess(command, 0, "installed", "")
 
     def run(
-        self, *, dry_run: bool = False, include_alpha: bool = True, native_repair_only: bool = False
+        self,
+        *,
+        dry_run: bool = False,
+        include_alpha: bool = True,
+        native_repair_only: bool = False,
+        force_pypi_reinstall: bool = False,
     ) -> tuple[dict[str, Any], int]:
         return update_commands._run_guard_update_unlocked(
             dry_run=dry_run,
             include_alpha=include_alpha,
             guard_home=self.guard_home,
             native_repair_only=native_repair_only,
+            force_pypi_reinstall=force_pypi_reinstall,
         )
+
+
+@pytest.mark.parametrize(("current", "latest"), [("3.43.0a1", "3.43.0a2"), ("3.43.0a2", "3.43.0a2")])
+def test_forced_alpha_reinstall_keeps_the_native_wheel(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, current: str, latest: str
+) -> None:
+    # PyPI carries only the pure alpha wheel; a forced reinstall from it would drop the native runtime.
+    release = FakeRelease(_release_files("3.43.0a2"))
+    harness = UpdateHarness(
+        monkeypatch, tmp_path, current=current, latest_alpha=latest, runtime_missing=False, release=release
+    )
+
+    payload, exit_code = harness.run(force_pypi_reinstall=True)
+
+    assert exit_code == 0, payload
+    assert payload["upgrade_source"] == "github_alpha_release"
+    assert Path(harness.commands[0][-1]).name == _wheel_name(LINUX, "3.43.0a2")
+    assert not any(part.startswith("hol-guard==") for part in harness.commands[0])
 
 
 def test_alpha_update_installs_verified_native_wheel_not_the_pypi_pin(

@@ -647,8 +647,10 @@ def _run_guard_update_unlocked(
         ):
             payload["status"] = "skipped"
             payload["changed"] = False
-            published = "hol-guard update --alpha --force-pypi-reinstall" if include_alpha else (
-                "hol-guard update --force-pypi-reinstall"
+            published = (
+                "hol-guard update --alpha --force-pypi-reinstall"
+                if include_alpha
+                else ("hol-guard update --force-pypi-reinstall")
             )
             if bool(local_archive_install.get("path_exists")):
                 payload["error"] = (
@@ -724,8 +726,9 @@ def _run_guard_update_unlocked(
                 and not is_alpha_version(target_version)
                 and pypi_serves_native_wheel(target_version, network_policy=network_policy)
             ),
+            reinstall=force_pypi_reinstall,
         )
-        if requested_wheel_path is None and not force_pypi_reinstall and configured_index_url is None
+        if requested_wheel_path is None and configured_index_url is None
         else None
     )
     if native_repair_only and native_wheel_plan is None:
