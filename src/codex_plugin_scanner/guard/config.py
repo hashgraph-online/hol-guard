@@ -112,8 +112,8 @@ class GuardConfig:
     watch_entered_at: str | None = None
     harness_postures: dict[str, str] | None = None
     harness_watch_entered_at: dict[str, str] | None = None
-    # Apps whose CIGAR project context is off; an app without an entry follows CIGAR.
-    harness_cigar: dict[str, str] | None = None
+    # Settings only the native runtime acts on, passed through to the settings response.
+    native_settings: dict[str, object] | None = None
     security_level: str = DEFAULT_SECURITY_LEVEL
     default_action: GuardAction = "warn"
     unknown_publisher_action: GuardAction = "review"
@@ -322,7 +322,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "watch_auto_revert_hours": config.watch_auto_revert_hours,
         "harness_postures": dict(config.harness_postures or {}),
         "harness_watch_entered_at": dict(config.harness_watch_entered_at or {}),
-        "harness_cigar": dict(config.harness_cigar or {}),
+        **dict(config.native_settings or {}),
         "harness_postures_effective": effective_harness_postures(config),
         "harness_posture_status": harness_posture_status(config),
         "harness_postures_locked": managed_locks_harness_postures(config.managed_locked_settings),
