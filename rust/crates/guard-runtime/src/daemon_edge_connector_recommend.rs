@@ -50,87 +50,6 @@ pub(super) fn recommendation(
     ))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn advice_requires_a_pending_matching_group_and_respects_lockdown() {
-        let mut snapshot = ApprovalExtensionRecommendationSnapshotV1 {
-            health: "protected".to_owned(),
-            revision: 1,
-            catalog_digest: "d".to_owned(),
-            layers: Vec::new(),
-        };
-        let row = json!({
-            "request_id": "request", "status": "pending",
-            "queue_group_id": "connector:identity:command",
-        });
-        let approval = row.as_object().unwrap();
-        assert_eq!(
-            eligible_request_id(approval, "identity", &snapshot),
-            Some("request")
-        );
-        assert_eq!(eligible_request_id(approval, "ident", &snapshot), None);
-        let mut resolved = approval.clone();
-        resolved.insert("status".to_owned(), json!("resolved"));
-        assert_eq!(eligible_request_id(&resolved, "identity", &snapshot), None);
-        snapshot
-            .layers
-            .push(guard_contracts::NativeExtensionControlLayerV1 {
-                schema_version: "v1".to_owned(),
-                kind: "local".to_owned(),
-                catalog_digest: "d".to_owned(),
-                global_lockdown: true,
-                controls: Vec::new(),
-            });
-        assert_eq!(eligible_request_id(approval, "identity", &snapshot), None);
-    }
-
-    #[test]
-    fn stale_cli_setup_and_incomplete_risk_scans_remain_advisory() {
-        let snapshot = ApprovalExtensionRecommendationSnapshotV1 {
-            health: "tampered".to_owned(),
-            revision: 9,
-            catalog_digest: "d".to_owned(),
-            layers: Vec::new(),
-        };
-        for (surface, state, stale, expected) in [
-            ("cli", "allowed", true, true),
-            ("cli", "blocked", true, false),
-            ("cli", "allowed", false, false),
-            ("mcp", "allowed", true, false),
-            ("package-scripts", "allowed", true, false),
-            ("cli", "unset", false, true),
-        ] {
-            assert_eq!(
-                awaiting_setup(
-                    &json!({"surface": surface, "state": state, "stale": stale}),
-                    &json!({"surface": surface}),
-                ),
-                expected,
-                "{surface} {state} {stale}",
-            );
-        }
-        let hint = json!({"identity_hash": "identity", "deep_link": "/extensions/local-cli/id"});
-        let result = project(
-            "r +/1",
-            &hint,
-            &json!({}),
-            &snapshot,
-            true,
-            Vec::new(),
-            false,
-        );
-        assert_eq!(result["status"], "authority_unavailable");
-        assert_eq!(result["caution"], true);
-        assert_eq!(
-            result["setup_href"],
-            "/extensions/local-cli/id?setup=r+%2B%2F1&identity=identity"
-        );
-    }
-}
-
 fn eligible_request_id<'a>(
     approval: &'a Map<String, Value>,
     identity: &str,
@@ -211,4 +130,85 @@ fn project(
         "caution_risk_classes": caution,
         "revision": snapshot.revision,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn advice_requires_a_pending_matching_group_and_respects_lockdown() {
+        let mut snapshot = ApprovalExtensionRecommendationSnapshotV1 {
+            health: "protected".to_owned(),
+            revision: 1,
+            catalog_digest: "d".to_owned(),
+            layers: Vec::new(),
+        };
+        let row = json!({
+            "request_id": "request", "status": "pending",
+            "queue_group_id": "connector:identity:command",
+        });
+        let approval = row.as_object().unwrap();
+        assert_eq!(
+            eligible_request_id(approval, "identity", &snapshot),
+            Some("request")
+        );
+        assert_eq!(eligible_request_id(approval, "ident", &snapshot), None);
+        let mut resolved = approval.clone();
+        resolved.insert("status".to_owned(), json!("resolved"));
+        assert_eq!(eligible_request_id(&resolved, "identity", &snapshot), None);
+        snapshot
+            .layers
+            .push(guard_contracts::NativeExtensionControlLayerV1 {
+                schema_version: "v1".to_owned(),
+                kind: "local".to_owned(),
+                catalog_digest: "d".to_owned(),
+                global_lockdown: true,
+                controls: Vec::new(),
+            });
+        assert_eq!(eligible_request_id(approval, "identity", &snapshot), None);
+    }
+
+    #[test]
+    fn stale_cli_setup_and_incomplete_risk_scans_remain_advisory() {
+        let snapshot = ApprovalExtensionRecommendationSnapshotV1 {
+            health: "tampered".to_owned(),
+            revision: 9,
+            catalog_digest: "d".to_owned(),
+            layers: Vec::new(),
+        };
+        for (surface, state, stale, expected) in [
+            ("cli", "allowed", true, true),
+            ("cli", "blocked", true, false),
+            ("cli", "allowed", false, false),
+            ("mcp", "allowed", true, false),
+            ("package-scripts", "allowed", true, false),
+            ("cli", "unset", false, true),
+        ] {
+            assert_eq!(
+                awaiting_setup(
+                    &json!({"surface": surface, "state": state, "stale": stale}),
+                    &json!({"surface": surface}),
+                ),
+                expected,
+                "{surface} {state} {stale}",
+            );
+        }
+        let hint = json!({"identity_hash": "identity", "deep_link": "/extensions/local-cli/id"});
+        let result = project(
+            "r +/1",
+            &hint,
+            &json!({}),
+            &snapshot,
+            true,
+            Vec::new(),
+            false,
+        );
+        assert_eq!(result["status"], "authority_unavailable");
+        assert_eq!(result["caution"], true);
+        assert_eq!(
+            result["setup_href"],
+            "/extensions/local-cli/id?setup=r+%2B%2F1&identity=identity"
+        );
+    }
 }
