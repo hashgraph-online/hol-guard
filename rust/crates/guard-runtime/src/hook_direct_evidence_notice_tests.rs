@@ -107,3 +107,16 @@ fn a_call_raises_all_its_notices_in_order_or_none() {
     assert!(!raise_approvals("/nonexistent-guard-home", "test", &mixed));
     assert_eq!(approval_notices(&[]), Some(Vec::new()));
 }
+
+#[test]
+fn the_drain_only_reconstructs_notices_from_the_matching_pending_row() {
+    let pending = notice(json!({"status": "pending"}));
+    let shown = super::pending_approval_row(&pending, "req-1").unwrap();
+    assert_eq!(
+        shown.approval_url,
+        pending["approval_url"].as_str().unwrap()
+    );
+    assert!(super::pending_approval_row(&pending, "req-2").is_none());
+    let resolved = notice(json!({"status": "resolved"}));
+    assert!(super::pending_approval_row(&resolved, "req-1").is_none());
+}

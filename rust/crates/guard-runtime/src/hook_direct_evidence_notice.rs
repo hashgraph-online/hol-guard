@@ -57,6 +57,8 @@ pub(super) enum Notice {
     },
     /// A request an MCP call was blocked on, as its record names it.
     Approval(Shown),
+    /// An MCP notice left to the drain, read from the stored request.
+    StoredApproval(String),
 }
 
 /// `_QueuedNotice`: the persisted request fields a notice reads.
@@ -72,8 +74,8 @@ pub(super) struct Shown {
 }
 
 /// Raise the notice of the request an MCP call was just blocked on, from the
-/// persisted fields `_QueuedNotice` reads. A notice the daemon could not read
-/// is left to the daemon, and says so by returning `false`.
+/// persisted fields `_QueuedNotice` reads. A notice the resident cannot
+/// hand off is left to the drain.
 pub(crate) fn raise_approval(guard_home: &str, source: &str, notice: &Value) -> bool {
     raise_approvals(guard_home, source, std::slice::from_ref(notice))
 }
@@ -89,6 +91,18 @@ pub(crate) fn raise_approvals(guard_home: &str, source: &str, notices: &[Value])
         source,
         shown.into_iter().map(Notice::Approval).collect(),
     )
+}
+
+pub(crate) fn raise_stored_approvals(
+    guard_home: &str,
+    source: &str,
+    request_ids: impl Iterator<Item = String>,
+) {
+    raise(
+        guard_home,
+        source,
+        request_ids.map(Notice::StoredApproval).collect(),
+    );
 }
 
 /// Every notice of one call, in order, or none when any is unreadable.
@@ -148,8 +162,29 @@ fn notify(guard_home: &str, source: &str, notice: Notice) {
             None => return,
         },
         Notice::Approval(shown) => shown,
+        Notice::StoredApproval(request_id) => {
+            let Some(shown) = store(
+                guard_home,
+                source,
+                "get_approval_request",
+                &request_id,
+                None,
+            )
+            .as_ref()
+            .and_then(|row| pending_approval_row(row, &request_id)) else {
+                return;
+            };
+            shown
+        }
     };
     show(guard_home, source, shown);
+}
+
+fn pending_approval_row(row: &Value, request_id: &str) -> Option<Shown> {
+    if row["status"].as_str() != Some("pending") || row["request_id"].as_str() != Some(request_id) {
+        return None;
+    }
+    approval_notice(row)
 }
 
 /// The connector-setup notice of the stored row `request_id`.

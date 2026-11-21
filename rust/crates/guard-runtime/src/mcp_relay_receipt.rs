@@ -20,9 +20,8 @@
 //! written against the package request's artifact, which the resident
 //! rebuilds from the record (`mcp_relay_receipt_package.rs`).
 //!
-//! Remembered allows and records with a pending notice still leave the queue
-//! as page entries. The daemon polls and acknowledges pages, and these
-//! variants still need native policy or notice handling.
+//! For a pending notice, the drain reads the stored approval after it commits
+//! the receipt. Remembered allows still need native policy persistence.
 //!
 //! As in the Python drain, a record the resident cannot compose is dropped,
 //! never guessed. One the store cannot take goes back to the queue as an
@@ -49,6 +48,8 @@ use crate::local_store_read::STORE_FILE_NAME;
 
 #[path = "mcp_relay_receipt_event.rs"]
 mod event;
+#[path = "mcp_relay_receipt_notice.rs"]
+mod notice;
 #[path = "mcp_relay_receipt_package.rs"]
 mod package;
 #[path = "mcp_relay_receipt_record.rs"]
@@ -172,6 +173,7 @@ pub(crate) fn write(guard_home: &str, records: Vec<Value>) -> Vec<Value> {
                 if let Some(row) = row {
                     store(guard_home, busy_timeout_ms, QUEUE_METHOD, row);
                 }
+                notice::schedule(guard_home, &record);
                 None
             })
             .collect()
