@@ -11,6 +11,7 @@ use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use crate::guard_store_args::Args;
+use crate::guard_store_cloud_events::append_event;
 use crate::guard_store_db::{exec, value_error, StoreResult};
 use crate::guard_store_json::dumps_default;
 use crate::guard_store_outbox_requeue::{requeue_pending, RequeueOptions};
@@ -31,7 +32,7 @@ fn rank(level: Option<&str>) -> u8 {
     }
 }
 
-fn valid_level(level: &str) -> bool {
+pub(crate) fn valid_level(level: &str) -> bool {
     matches!(level, "full" | "partial" | "none")
 }
 
@@ -43,11 +44,14 @@ pub(crate) trait Bookkeeping {
     fn delete(&mut self, key: &str) -> StoreResult<()>;
     /// `_requeue_cloud_review_privacy_projection`: the requeued count.
     fn requeue_projection(&mut self, level: &str, changed_at: &str) -> StoreResult<i64>;
+    /// Append one `guard_events` row with already-encoded payload text.
+    fn add_event(&mut self, name: &str, payload_json: &str, now: &str) -> StoreResult<()>;
 }
 
-struct Store<'a> {
-    connection: &'a Connection,
-    source: &'a str,
+/// The store's `sync_state` and Review outbox, inside the caller's write.
+pub(crate) struct Store<'a> {
+    pub(crate) connection: &'a Connection,
+    pub(crate) source: &'a str,
 }
 
 impl Bookkeeping for Store<'_> {
@@ -88,6 +92,10 @@ impl Bookkeeping for Store<'_> {
             changed_at,
         )?;
         Ok(count)
+    }
+
+    fn add_event(&mut self, name: &str, payload_json: &str, now: &str) -> StoreResult<()> {
+        append_event(self.connection, name, payload_json, now, false)
     }
 }
 
@@ -262,4 +270,4 @@ pub(crate) fn method(connection: &Connection, source: &str, args: &Args<'_>) -> 
 
 #[cfg(test)]
 #[path = "guard_store_receipt_redaction_tests.rs"]
-mod tests;
+pub(crate) mod tests;
