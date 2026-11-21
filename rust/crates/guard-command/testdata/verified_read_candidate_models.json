@@ -1,0 +1,1781 @@
+[
+ {
+  "command": "cd src && rg pattern src/ tests/ | head -20",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "cd src && rg pattern src/ tests/ | head -20",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "cd src",
+     "tokens": [
+      "cd",
+      "src"
+     ],
+     "executable": "cd",
+     "arguments": [
+      "src"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 6
+     }
+    },
+    {
+     "text": "rg pattern src/ tests/",
+     "tokens": [
+      "rg",
+      "pattern",
+      "src/",
+      "tests/"
+     ],
+     "executable": "rg",
+     "arguments": [
+      "pattern",
+      "src/",
+      "tests/"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:1",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 10,
+      "end": 32
+     }
+    },
+    {
+     "text": "head -20",
+     "tokens": [
+      "head",
+      "-20"
+     ],
+     "executable": "head",
+     "arguments": [
+      "-20"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:1",
+     "pipeline_index": 1,
+     "span": {
+      "source": "normalized",
+      "start": 35,
+      "end": 43
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "pwd",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "pwd",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "pwd",
+     "tokens": [
+      "pwd"
+     ],
+     "executable": "pwd",
+     "arguments": [],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 3
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "ls src",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "ls src",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "ls src",
+     "tokens": [
+      "ls",
+      "src"
+     ],
+     "executable": "ls",
+     "arguments": [
+      "src"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 6
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "ls -la src tests",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "ls -la src tests",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "ls -la src tests",
+     "tokens": [
+      "ls",
+      "-la",
+      "src",
+      "tests"
+     ],
+     "executable": "ls",
+     "arguments": [
+      "-la",
+      "src",
+      "tests"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 16
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "head -5 src/main.rs",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "head -5 src/main.rs",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "head -5 src/main.rs",
+     "tokens": [
+      "head",
+      "-5",
+      "src/main.rs"
+     ],
+     "executable": "head",
+     "arguments": [
+      "-5",
+      "src/main.rs"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 19
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "head --lines=10 x.py",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "head --lines=10 x.py",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "head --lines=10 x.py",
+     "tokens": [
+      "head",
+      "--lines=10",
+      "x.py"
+     ],
+     "executable": "head",
+     "arguments": [
+      "--lines=10",
+      "x.py"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 20
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "tail -n 5 x.py",
+  "op": null,
+  "v1": {
+   "normalized_text": "tail -n 5 x.py",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "tail -n 5 x.py",
+     "tokens": [
+      "tail",
+      "-n",
+      "5",
+      "x.py"
+     ],
+     "executable": "tail",
+     "arguments": [
+      "-n",
+      "5",
+      "x.py"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 14
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "tail --bytes=20 f",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "tail --bytes=20 f",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "tail --bytes=20 f",
+     "tokens": [
+      "tail",
+      "--bytes=20",
+      "f"
+     ],
+     "executable": "tail",
+     "arguments": [
+      "--bytes=20",
+      "f"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 17
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "sed -n 1,10p src/a.rs",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "sed -n 1,10p src/a.rs",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "sed -n 1,10p src/a.rs",
+     "tokens": [
+      "sed",
+      "-n",
+      "1,10p",
+      "src/a.rs"
+     ],
+     "executable": "sed",
+     "arguments": [
+      "-n",
+      "1,10p",
+      "src/a.rs"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 21
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "sed -n 5p f",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "sed -n 5p f",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "sed -n 5p f",
+     "tokens": [
+      "sed",
+      "-n",
+      "5p",
+      "f"
+     ],
+     "executable": "sed",
+     "arguments": [
+      "-n",
+      "5p",
+      "f"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 11
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "fd . src",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "fd . src",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "fd . src",
+     "tokens": [
+      "fd",
+      ".",
+      "src"
+     ],
+     "executable": "fd",
+     "arguments": [
+      ".",
+      "src"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 8
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "fd pattern src",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "fd pattern src",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "fd pattern src",
+     "tokens": [
+      "fd",
+      "pattern",
+      "src"
+     ],
+     "executable": "fd",
+     "arguments": [
+      "pattern",
+      "src"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 14
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "rg pattern src tests",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "rg pattern src tests",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "rg pattern src tests",
+     "tokens": [
+      "rg",
+      "pattern",
+      "src",
+      "tests"
+     ],
+     "executable": "rg",
+     "arguments": [
+      "pattern",
+      "src",
+      "tests"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 20
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "git status --short",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "git status --short",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "git status --short",
+     "tokens": [
+      "git",
+      "status",
+      "--short"
+     ],
+     "executable": "git",
+     "arguments": [
+      "status",
+      "--short"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 18
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "git rev-parse --show-toplevel",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "git rev-parse --show-toplevel",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "git rev-parse --show-toplevel",
+     "tokens": [
+      "git",
+      "rev-parse",
+      "--show-toplevel"
+     ],
+     "executable": "git",
+     "arguments": [
+      "rev-parse",
+      "--show-toplevel"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 29
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "git diff --check",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "git diff --check",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "git diff --check",
+     "tokens": [
+      "git",
+      "diff",
+      "--check"
+     ],
+     "executable": "git",
+     "arguments": [
+      "diff",
+      "--check"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 16
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "git log -5 --oneline",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "git log -5 --oneline",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "git log -5 --oneline",
+     "tokens": [
+      "git",
+      "log",
+      "-5",
+      "--oneline"
+     ],
+     "executable": "git",
+     "arguments": [
+      "log",
+      "-5",
+      "--oneline"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 20
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "git show --stat --oneline HEAD",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "git show --stat --oneline HEAD",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "git show --stat --oneline HEAD",
+     "tokens": [
+      "git",
+      "show",
+      "--stat",
+      "--oneline",
+      "HEAD"
+     ],
+     "executable": "git",
+     "arguments": [
+      "show",
+      "--stat",
+      "--oneline",
+      "HEAD"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 30
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "git branch --show-current",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "git branch --show-current",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "git branch --show-current",
+     "tokens": [
+      "git",
+      "branch",
+      "--show-current"
+     ],
+     "executable": "git",
+     "arguments": [
+      "branch",
+      "--show-current"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 25
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "gh pr view 1 --repo o/r",
+  "op": "github-pull-request-read",
+  "v1": {
+   "normalized_text": "gh pr view 1 --repo o/r",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "gh pr view 1 --repo o/r",
+     "tokens": [
+      "gh",
+      "pr",
+      "view",
+      "1",
+      "--repo",
+      "o/r"
+     ],
+     "executable": "gh",
+     "arguments": [
+      "pr",
+      "view",
+      "1",
+      "--repo",
+      "o/r"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 23
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "gh pr checks 12 --repo o/r --json state",
+  "op": "github-pull-request-read",
+  "v1": {
+   "normalized_text": "gh pr checks 12 --repo o/r --json state",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "gh pr checks 12 --repo o/r --json state",
+     "tokens": [
+      "gh",
+      "pr",
+      "checks",
+      "12",
+      "--repo",
+      "o/r",
+      "--json",
+      "state"
+     ],
+     "executable": "gh",
+     "arguments": [
+      "pr",
+      "checks",
+      "12",
+      "--repo",
+      "o/r",
+      "--json",
+      "state"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 39
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "gh pr view 1 --repo bad",
+  "op": null,
+  "v1": {
+   "normalized_text": "gh pr view 1 --repo bad",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "gh pr view 1 --repo bad",
+     "tokens": [
+      "gh",
+      "pr",
+      "view",
+      "1",
+      "--repo",
+      "bad"
+     ],
+     "executable": "gh",
+     "arguments": [
+      "pr",
+      "view",
+      "1",
+      "--repo",
+      "bad"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 23
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "gh issue view 1 --repo o/r",
+  "op": null,
+  "v1": {
+   "normalized_text": "gh issue view 1 --repo o/r",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "gh issue view 1 --repo o/r",
+     "tokens": [
+      "gh",
+      "issue",
+      "view",
+      "1",
+      "--repo",
+      "o/r"
+     ],
+     "executable": "gh",
+     "arguments": [
+      "issue",
+      "view",
+      "1",
+      "--repo",
+      "o/r"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 26
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "fd -x rm f",
+  "op": null,
+  "v1": {
+   "normalized_text": "fd -x rm f",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "fd -x rm f",
+     "tokens": [
+      "fd",
+      "-x",
+      "rm",
+      "f"
+     ],
+     "executable": "fd",
+     "arguments": [
+      "-x",
+      "rm",
+      "f"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 10
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "rg --hidden p x",
+  "op": null,
+  "v1": {
+   "normalized_text": "rg --hidden p x",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "rg --hidden p x",
+     "tokens": [
+      "rg",
+      "--hidden",
+      "p",
+      "x"
+     ],
+     "executable": "rg",
+     "arguments": [
+      "--hidden",
+      "p",
+      "x"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 15
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "cat /etc/passwd",
+  "op": null,
+  "v1": {
+   "normalized_text": "cat /etc/passwd",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "cat /etc/passwd",
+     "tokens": [
+      "cat",
+      "/etc/passwd"
+     ],
+     "executable": "cat",
+     "arguments": [
+      "/etc/passwd"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 15
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "sudo ls src",
+  "op": null,
+  "v1": {
+   "normalized_text": "sudo ls src",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [
+    "sudo"
+   ],
+   "segments": [
+    {
+     "text": "sudo ls src",
+     "tokens": [
+      "sudo",
+      "ls",
+      "src"
+     ],
+     "executable": "ls",
+     "arguments": [
+      "src"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [
+      "sudo"
+     ],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 11
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "cd src && ls",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "cd src && ls",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "cd src",
+     "tokens": [
+      "cd",
+      "src"
+     ],
+     "executable": "cd",
+     "arguments": [
+      "src"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 6
+     }
+    },
+    {
+     "text": "ls",
+     "tokens": [
+      "ls"
+     ],
+     "executable": "ls",
+     "arguments": [],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:1",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 10,
+      "end": 12
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "cd && ls",
+  "op": null,
+  "v1": {
+   "normalized_text": "cd && ls",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "cd",
+     "tokens": [
+      "cd"
+     ],
+     "executable": "cd",
+     "arguments": [],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 2
+     }
+    },
+    {
+     "text": "ls",
+     "tokens": [
+      "ls"
+     ],
+     "executable": "ls",
+     "arguments": [],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:1",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 6,
+      "end": 8
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "cd ../ && ls",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "cd ../ && ls",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "cd ../",
+     "tokens": [
+      "cd",
+      "../"
+     ],
+     "executable": "cd",
+     "arguments": [
+      "../"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 6
+     }
+    },
+    {
+     "text": "ls",
+     "tokens": [
+      "ls"
+     ],
+     "executable": "ls",
+     "arguments": [],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:1",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 10,
+      "end": 12
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "rm -rf x",
+  "op": null,
+  "v1": {
+   "normalized_text": "rm -rf x",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "rm -rf x",
+     "tokens": [
+      "rm",
+      "-rf",
+      "x"
+     ],
+     "executable": "rm",
+     "arguments": [
+      "-rf",
+      "x"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 8
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "ls /tmp",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "ls /tmp",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "ls /tmp",
+     "tokens": [
+      "ls",
+      "/tmp"
+     ],
+     "executable": "ls",
+     "arguments": [
+      "/tmp"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 7
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "head -5 $FILE",
+  "op": null,
+  "v1": {
+   "normalized_text": "head -5 $FILE",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "head -5 $FILE",
+     "tokens": [
+      "head",
+      "-5",
+      "$FILE"
+     ],
+     "executable": "head",
+     "arguments": [
+      "-5",
+      "$FILE"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 13
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "rg p src/",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "rg p src/",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "rg p src/",
+     "tokens": [
+      "rg",
+      "p",
+      "src/"
+     ],
+     "executable": "rg",
+     "arguments": [
+      "p",
+      "src/"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 9
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "cd src && git status --short",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "cd src && git status --short",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "cd src",
+     "tokens": [
+      "cd",
+      "src"
+     ],
+     "executable": "cd",
+     "arguments": [
+      "src"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 6
+     }
+    },
+    {
+     "text": "git status --short",
+     "tokens": [
+      "git",
+      "status",
+      "--short"
+     ],
+     "executable": "git",
+     "arguments": [
+      "status",
+      "--short"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:1",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 10,
+      "end": 28
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "git status",
+  "op": null,
+  "v1": {
+   "normalized_text": "git status",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "git status",
+     "tokens": [
+      "git",
+      "status"
+     ],
+     "executable": "git",
+     "arguments": [
+      "status"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 10
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "ls -R",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "ls -R",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "ls -R",
+     "tokens": [
+      "ls",
+      "-R"
+     ],
+     "executable": "ls",
+     "arguments": [
+      "-R"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 5
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "rg p $(pwd)",
+  "op": null,
+  "v1": {
+   "normalized_text": "rg p $(pwd)",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "rg p $(pwd)",
+     "tokens": [
+      "rg",
+      "p",
+      "$(pwd)"
+     ],
+     "executable": "rg",
+     "arguments": [
+      "p",
+      "$(pwd)"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 11
+     }
+    },
+    {
+     "text": "pwd",
+     "tokens": [
+      "pwd"
+     ],
+     "executable": "pwd",
+     "arguments": [],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "substitution:0:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 7,
+      "end": 10
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "cd / && ls",
+  "op": "workspace-read",
+  "v1": {
+   "normalized_text": "cd / && ls",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "cd /",
+     "tokens": [
+      "cd",
+      "/"
+     ],
+     "executable": "cd",
+     "arguments": [
+      "/"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 4
+     }
+    },
+    {
+     "text": "ls",
+     "tokens": [
+      "ls"
+     ],
+     "executable": "ls",
+     "arguments": [],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:1",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 8,
+      "end": 10
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": null,
+   "parser_profile": "posix-simple-v1"
+  }
+ }
+]

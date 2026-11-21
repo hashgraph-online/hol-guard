@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.managed_controls.operations import (
+from tests.managed_controls.operations import (
     ManagedControlsHealth,
     ManagedControlsPerformanceBudget,
     health_snapshot,

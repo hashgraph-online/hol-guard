@@ -1,0 +1,295 @@
+{
+ "deselect": [],
+ "mutations": [
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "key_value_rule",
+   "line": 434,
+   "orig": "        out.flags.set(header + key, Flags.FROZEN, recursive=True)\n",
+   "new": "        out.flags.set(header - key, Flags.FROZEN, recursive=True)\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_invalid",
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_array_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_table_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_load"
+   ]
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "parse_inline_table",
+   "line": 545,
+   "orig": "            return pos + 1, nested_dict.dict\n",
+   "new": "            return pos - 1, nested_dict.dict\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_table_recursion_limit"
+   ]
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "parse_basic_str_escape",
+   "line": 568,
+   "orig": "            if char != \"\\n\":\n",
+   "new": "            if char == \"\\n\":\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_table_recursion_limit"
+   ]
+  },
+  {
+   "path": "src/tomli/_re.py",
+   "qual": "cached_tz",
+   "line": 94,
+   "orig": "    sign = 1 if sign_str == \"+\" else -1\n",
+   "new": "    sign = 1 if sign_str != \"+\" else -1\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_table_recursion_limit"
+   ]
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "NestedDict.get_or_create_nest",
+   "line": 287,
+   "orig": "            if access_lists and isinstance(cont, list):\n",
+   "new": "            if access_lists or isinstance(cont, list):\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_invalid",
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy"
+   ]
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "skip_chars",
+   "line": 312,
+   "orig": "        while src[pos] in chars:\n",
+   "new": "        while src[pos] not in chars:\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_invalid",
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_error.py::TestError::test_invalid_char_quotes",
+    "tests/test_error.py::TestError::test_invalid_parse_float",
+    "tests/test_error.py::TestError::test_line_and_col",
+    "tests/test_error.py::TestError::test_missing_value",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_array_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_table_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_load",
+    "tests/test_misc.py::TestMiscellaneous::test_parse_float"
+   ]
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "parse_multiline_str",
+   "line": 637,
+   "orig": "    return pos, result + (delim * 2)\n",
+   "new": "    return pos, result - (delim * 2)\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_invalid",
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy"
+   ]
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "parse_key",
+   "line": 464,
+   "orig": "        if char != \".\":\n",
+   "new": "        if char == \".\":\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_error.py::TestError::test_invalid_parse_float",
+    "tests/test_error.py::TestError::test_line_and_col",
+    "tests/test_error.py::TestError::test_missing_value",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_array_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_table_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_load",
+    "tests/test_misc.py::TestMiscellaneous::test_parse_float"
+   ]
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "parse_basic_str",
+   "line": 661,
+   "orig": "        if char == \"\\\\\":\n",
+   "new": "        if char != \"\\\\\":\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_error.py::TestError::test_invalid_parse_float",
+    "tests/test_error.py::TestError::test_line_and_col",
+    "tests/test_error.py::TestError::test_missing_value",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_array_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_table_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_load",
+    "tests/test_misc.py::TestMiscellaneous::test_parse_float"
+   ]
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "skip_comment",
+   "line": 348,
+   "orig": "            src, pos + 1, \"\\n\", error_on=ILLEGAL_COMMENT_CHARS, error_on_eof=False\n",
+   "new": "            src, pos - 1, \"\\n\", error_on=ILLEGAL_COMMENT_CHARS, error_on_eof=False\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_error.py::TestError::test_invalid_parse_float",
+    "tests/test_error.py::TestError::test_line_and_col",
+    "tests/test_error.py::TestError::test_missing_value",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_array_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_table_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_load",
+    "tests/test_misc.py::TestMiscellaneous::test_parse_float"
+   ]
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "skip_chars",
+   "line": 312,
+   "orig": "        while src[pos] in chars:\n",
+   "new": "        while src[pos] not in chars:\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_invalid",
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_error.py::TestError::test_invalid_char_quotes",
+    "tests/test_error.py::TestError::test_invalid_parse_float",
+    "tests/test_error.py::TestError::test_line_and_col",
+    "tests/test_error.py::TestError::test_missing_value",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_array_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_table_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_load",
+    "tests/test_misc.py::TestMiscellaneous::test_parse_float"
+   ]
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "parse_key",
+   "line": 464,
+   "orig": "        if char != \".\":\n",
+   "new": "        if char == \".\":\n",
+   "failing": [
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_error.py::TestError::test_invalid_parse_float",
+    "tests/test_error.py::TestError::test_line_and_col",
+    "tests/test_error.py::TestError::test_missing_value",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_array_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_table_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_load",
+    "tests/test_misc.py::TestMiscellaneous::test_parse_float"
+   ]
+  }
+ ],
+ "stubs": [
+  {
+   "path": "src/tomli/_parser.py",
+   "qual": "make_safe_parse_float",
+   "body_start": 761,
+   "end": 770,
+   "body": "    if parse_float is float:\n        return float\n\n    def safe_parse_float(float_str: str) -> Any:\n        float_value = parse_float(float_str)\n        if isinstance(float_value, (dict, list)):\n            raise ValueError(\"parse_float must not return dicts or lists\")\n        return float_value\n\n    return safe_parse_float\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_data.py::TestData::test_invalid",
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_error.py::TestError::test_invalid_char_quotes",
+    "tests/test_error.py::TestError::test_invalid_parse_float",
+    "tests/test_error.py::TestError::test_line_and_col",
+    "tests/test_error.py::TestError::test_missing_value",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_array_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_inline_table_recursion_limit",
+    "tests/test_misc.py::TestMiscellaneous::test_load",
+    "tests/test_misc.py::TestMiscellaneous::test_parse_float"
+   ]
+  },
+  {
+   "path": "src/tomli/_re.py",
+   "qual": "match_to_datetime",
+   "body_start": 60,
+   "end": 86,
+   "body": "    (\n        year_str,\n        month_str,\n        day_str,\n        hour_str,\n        minute_str,\n        sec_str,\n        micros_str,\n        zulu_time,\n        offset_sign_str,\n        offset_hour_str,\n        offset_minute_str,\n    ) = match.groups()\n    year, month, day = int(year_str), int(month_str), int(day_str)\n    if hour_str is None:\n        return date(year, month, day)\n    hour, minute, sec = int(hour_str), int(minute_str), int(sec_str)\n    micros = int(micros_str.ljust(6, \"0\")) if micros_str else 0\n    if offset_sign_str:\n        tz: tzinfo | None = cached_tz(\n            offset_hour_str, offset_minute_str, offset_sign_str\n        )\n    elif zulu_time:\n        tz = timezone.utc\n    else:  # local date-time\n        tz = None\n    return datetime(year, month, day, hour, minute, sec, micros, tzinfo=tz)\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_data.py::TestData::test_invalid",
+    "tests/test_data.py::TestData::test_valid",
+    "tests/test_misc.py::TestMiscellaneous::test_deepcopy"
+   ]
+  }
+ ],
+ "renames": [],
+ "docs": [
+  {
+   "path": "src/tomli/_parser.py",
+   "module": "tomli._parser",
+   "qual": "skip_comments_and_array_ws"
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "module": "tomli._parser",
+   "qual": "parse_basic_str"
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "module": "tomli._parser",
+   "qual": "parse_key_value_pair"
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "module": "tomli._parser",
+   "qual": "create_list_rule"
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "module": "tomli._parser",
+   "qual": "key_value_rule"
+  },
+  {
+   "path": "src/tomli/_re.py",
+   "module": "tomli._re",
+   "qual": "match_to_localtime"
+  },
+  {
+   "path": "src/tomli/_parser.py",
+   "module": "tomli._parser",
+   "qual": "parse_inline_table"
+  },
+  {
+   "path": "src/tomli/_re.py",
+   "module": "tomli._re",
+   "qual": "cached_tz"
+  }
+ ],
+ "questions": [
+  {
+   "sentence": "Parse TOML from a binary file object.",
+   "path": "src/tomli/_parser.py",
+   "qual": "load",
+   "name": "load"
+  },
+  {
+   "sentence": "Parse TOML from a string.",
+   "path": "src/tomli/_parser.py",
+   "qual": "loads",
+   "name": "loads"
+  },
+  {
+   "sentence": "Convert a `RE_DATETIME` match to `datetime.datetime` or `datetime.date`.",
+   "path": "src/tomli/_re.py",
+   "qual": "match_to_datetime",
+   "name": "match_to_datetime"
+  },
+  {
+   "sentence": "A decorator to make `parse_float` safe.",
+   "path": "src/tomli/_parser.py",
+   "qual": "make_safe_parse_float",
+   "name": "make_safe_parse_float"
+  }
+ ]
+}

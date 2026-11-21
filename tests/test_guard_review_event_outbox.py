@@ -2,85 +2,26 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import TypedDict
 
 import pytest
 
-from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard import native_runner_authority as authority
 from codex_plugin_scanner.guard.review_event_integrity import review_event_payload_digest
-from codex_plugin_scanner.guard.runtime.review_event_delivery import decode_stored_review_event
+from codex_plugin_scanner.guard.runtime.cloud_review_event_projection import project_cloud_review_event
+from codex_plugin_scanner.guard.runtime.review_event_delivery import StoredReviewEventError, decode_stored_review_event
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_review_event_outbox_schema import (
     REVIEW_EVENT_SCHEMA_VERSION,
     REVIEW_REQUEST_SNAPSHOT_COLUMNS,
     ensure_review_event_outbox_schema,
 )
-from tests.guard_review_event_outbox_test_support import as_int
+from tests.guard_review_event_outbox_test_support import _all_events, _connect, _request, as_int
+from tests.native_store_shims import refresh_review_event_outbox_binding
 
 # pyright: reportMissingImports=false
 
 _NOW = "2026-08-24T12:00:00+00:00"
 _LATER = "2026-08-24T12:00:01+00:00"
-
-
-class _DeliveryBinding(TypedDict):
-    oauth_subject_hash: str
-    workspace_id: str
-    machine_id: str
-    machine_installation_id: str
-
-
-def _request(request_id: str, *, summary: str = "Review test action") -> GuardApprovalRequest:
-    return GuardApprovalRequest(
-        request_id=request_id,
-        harness="codex",
-        artifact_id=f"codex:project:{request_id}",
-        artifact_name="Test action",
-        artifact_hash="hash-abc",
-        policy_action="require-reapproval",
-        recommended_scope="artifact",
-        changed_fields=("tool_action_request",),
-        source_scope="project",
-        config_path="/test/config.toml",
-        review_command=f"hol-guard approvals approve {request_id}",
-        approval_url=f"http://127.0.0.1:5474/requests/{request_id}",
-        action_identity=request_id,
-        queue_group_id=request_id,
-        trigger_summary=summary,
-        last_seen_at=_NOW,
-    )
-
-
-def _connect(
-    store: GuardStore,
-    *,
-    grant_id: str = "grant-1",
-    workspace_id: str = "workspace-1",
-    machine_id: str = "machine-1",
-) -> _DeliveryBinding:
-    state_key = (
-        "oauth_local_credentials"
-        if store.guard_source == "default"
-        else f"oauth_local_credentials:{store.guard_source}"
-    )
-    store.set_sync_payload(
-        state_key,
-        {"grant_id": grant_id, "workspace_id": workspace_id, "machine_id": machine_id},
-        _NOW,
-    )
-    binding = store.get_review_event_oauth_binding()
-    assert binding is not None
-    return {
-        "oauth_subject_hash": binding["oauth_subject_hash"],
-        "workspace_id": binding["workspace_id"],
-        "machine_id": binding["machine_id"],
-        "machine_installation_id": binding["machine_installation_id"],
-    }
-
-
-def _all_events(store: GuardStore) -> list[sqlite3.Row]:
-    with store._connect() as connection:
-        return connection.execute("select * from guard_review_outbox_events order by stream_sequence").fetchall()
 
 
 def test_identity_incomplete_event_is_quarantined_with_valid_hash(tmp_path) -> None:
@@ -361,11 +302,72 @@ def test_same_subject_refresh_updates_machine_binding_without_confirmation(tmp_p
     store.add_approval_request(_request("request-1"), _NOW)
     new_binding = _connect(store, machine_id="machine-new")
 
-    assert store.refresh_review_event_outbox_binding() == 1
+    assert refresh_review_event_outbox_binding(store) == 1
     assert store.list_ready_review_events(now=_NOW, limit=10, **old_binding) == []
     rows = store.list_ready_review_events(now=_NOW, limit=10, **new_binding)
     assert len(rows) == 1
     assert decode_stored_review_event(rows[0]).request_sequence == 1
+
+
+def test_a_native_outage_retries_the_event_instead_of_quarantining_it(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard")
+    binding = _connect(store)
+    store.add_approval_request(_request("request-1"), _NOW)
+    rows = store.list_ready_review_events(now=_NOW, limit=10, **binding)
+    decoded = decode_stored_review_event(rows[0])
+    assert decoded.wire_event_type == "request_created"
+    assert decoded.payload_json == rows[0]["payload_json"]
+
+    original = authority.native_runner_authority
+
+    def unavailable(kind: str, *args: object, **kwargs: object) -> dict[str, object]:
+        if kind == "review_event_decode":
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+        return original(kind, *args, **kwargs)
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    with pytest.raises(StoredReviewEventError) as raised:
+        decode_stored_review_event(rows[0])
+    assert raised.value.reason == "cloud_native_projection_unavailable"
+
+    projected = project_cloud_review_event(
+        store,
+        outbox_row=dict(rows[0]),
+        delivery_binding=binding,
+        redaction_level="full",
+        oauth=None,
+    )
+    assert projected is None
+    (saved,) = _all_events(store)
+    assert saved["binding_status"] == "ready"
+    assert saved["quarantine_reason"] is None
+    assert saved["attempt_count"] == 1
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "native_runner_authority_request_too_large",
+        "native_runner_authority_invalid",
+        "native_runner_authority_component_unencodable",
+    ],
+)
+def test_a_row_the_resident_refuses_is_quarantined_not_retried(tmp_path, monkeypatch, code: str) -> None:
+    store = GuardStore(tmp_path / "guard")
+    binding = _connect(store)
+    store.add_approval_request(_request("request-1"), _NOW)
+    rows = store.list_ready_review_events(now=_NOW, limit=10, **binding)
+    original = authority.native_runner_authority
+
+    def refused(kind: str, *args: object, **kwargs: object) -> dict[str, object]:
+        if kind == "review_event_decode":
+            raise authority.NativeRunnerAuthorityError(code)
+        return original(kind, *args, **kwargs)
+
+    monkeypatch.setattr(authority, "native_runner_authority", refused)
+    with pytest.raises(StoredReviewEventError) as raised:
+        decode_stored_review_event(rows[0])
+    assert raised.value.reason == "payload_snapshot_invalid"
 
 
 def test_cross_subject_or_workspace_change_requires_explicit_reassignment(tmp_path) -> None:

@@ -1,0 +1,85 @@
+{
+  "diagnostics": [
+    {
+      "code": "no_plugin_source",
+      "level": "error",
+      "message": "No plugin manifest, MCP server.json or SKILL.md was found.",
+      "path": ""
+    }
+  ],
+  "passed": false,
+  "plugin": {
+    "agents": [],
+    "author": null,
+    "base": "",
+    "commands": [],
+    "context_file": null,
+    "description": null,
+    "homepage": null,
+    "hooks": null,
+    "keywords": [],
+    "license": null,
+    "marketplaces": [],
+    "mcp_servers": {},
+    "name": null,
+    "repository": null,
+    "skills": [],
+    "version": null
+  },
+  "runtimes": [
+    {
+      "dropped": [],
+      "runtime": "claude-code",
+      "supported": false
+    },
+    {
+      "dropped": [],
+      "runtime": "codex",
+      "supported": false
+    },
+    {
+      "dropped": [],
+      "runtime": "gemini-cli",
+      "supported": false
+    },
+    {
+      "dropped": [],
+      "runtime": "cursor",
+      "supported": false
+    },
+    {
+      "dropped": [],
+      "runtime": "vscode",
+      "supported": false
+    },
+    {
+      "dropped": [],
+      "runtime": "opencode",
+      "supported": false
+    },
+    {
+      "dropped": [],
+      "runtime": "mcp-registry",
+      "supported": false
+    },
+    {
+      "dropped": [],
+      "runtime": "agent-skills",
+      "supported": false
+    },
+    {
+      "dropped": [],
+      "runtime": "agent-plugins",
+      "supported": false
+    }
+  ],
+  "sources": [],
+  "summary": {
+    "agents": 0,
+    "commands": 0,
+    "errors": 1,
+    "mcp_servers": 0,
+    "skills": 0,
+    "warnings": 0
+  }
+}

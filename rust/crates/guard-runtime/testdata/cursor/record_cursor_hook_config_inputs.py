@@ -1,0 +1,87 @@
+"""Hook commands the Cursor hook config recorder asks the original Python helpers about."""
+
+SCRIPT = "/var/guard-user/.cursor/hooks/hol-guard-cursor-hook.py"
+WIN_SCRIPT = r"C:\Users\guard-user\.cursor\hooks\hol-guard-cursor-hook.py"
+NATIVE = "/opt/guard/bin/guard-native"
+LONG_PATHS = {
+    r"C:\PROGRA~1\HOLGUA~1\guard-native.exe": r"C:\Program Files\HOL Guard\guard-native.exe",
+    r"C:\PYTHON~1\python.exe": r"C:\Python 312\python.exe",
+    r"C:\Users\GUARD-~1\.cursor\hooks\HOL-GU~1.PY": r"C:\Users\guard user\.cursor\hooks\hol-guard-cursor-hook.py",
+    r"C:\Users\GUARD-~1\bin\CURREN~1.EXE": r"C:\Users\guard user\bin\current-hol-guard.exe",
+}
+POSIX_COMMANDS = [
+    f"{NATIVE} cursor-hook-bridge /usr/bin/python3 -I {SCRIPT} --cursor-hook-event beforeShellExecution",
+    f"/usr/bin/python3 -I {SCRIPT} --cursor-hook-event preToolUse",
+    "'/var/guard user/bin/current-hol-guard' __guard-cursor-hook "
+    "'/var/guard user/.cursor/hooks/hol-guard-cursor-hook.py' --cursor-hook-event beforeReadFile",
+    f"/var/guard-user/bin/hol-guard __guard-cursor-hook {SCRIPT} --cursor-hook-event beforeMCPExecution",
+    f"/var/guard-user/bin/guard __guard-cursor-hook {SCRIPT}",
+    "hol-guard __guard-cursor-hook /var/guard-user/.cursor/hooks/other.py",
+    SCRIPT,
+    "/var/guard-user/managed/cursor/hol-guard-cursor-hook.py --cursor-hook-event stop",
+    "/usr/bin/python3 -m codex_plugin_scanner.cli hol-guard-hook-argv --harness cursor",
+    "/usr/bin/python3 -m codex_plugin_scanner.cli hol_guard_hook_argv --harness Cursor --json",
+    "node /opt/tools/hol-guard-hook-argv.js --harness cursor",
+    "python3 -m tool hol-guard-hook-argv --harness claude",
+    "node /opt/tools/audit.js --event beforeShellExecution",
+    "echo ok",
+    "npx some-tool --harness cursor",
+    "'/var/unclosed",
+    "",
+    "   ",
+    'python3 -c "print(1)" hol-guard-cursor-hook.py',
+    "python3 -X dev -I /var/guard-user/managed/cursor/hol-guard-cursor-hook.py",
+    "python3 -I -B",
+    "python3",
+    "/usr/bin/python3 -I '/var/gúard-üser/.cursor/hooks/HOL-GUARD-CURSOR-HOOK.PY'",
+    "/usr/bin/PYTHON3.12 -I /var/guard-user/.cursor/hooks/hol-guard-cursor-hoo\u212a.py",
+    "env /usr/bin/python3 -I /var/guard-user/.cursor/hooks/hol-guard-cursor-hook.py",
+    "'' cursor-hook-bridge /usr/bin/python3 -I /var/guard-user/.cursor/hooks/hol-guard-cursor-hook.py",
+    f"{NATIVE} cursor-hook-bridge",
+    f"{NATIVE} cursor-hook-bridge /var/guard-user/bin/current-hol-guard __guard-cursor-hook {SCRIPT}",
+    "python3\x1c-I\u00a0/var/guard-user/.cursor/hooks/hol-guard-cursor-hook.py 'unclosed",
+    "python3 -I /var/guard-user/./.cursor/hooks/./hol-guard-cursor-hook.py/",
+    'python3 -I "/var/guard user/.cursor/hooks/hol-guard-cursor-hook.py" \\',
+    'python3 -I "/var/guard \\"user\\"/x/hol-guard-cursor-hook.py"',
+    "\tpython3  -I\n/var/guard-user/.cursor/hooks/hol-guard-cursor-hook.py",
+]
+WINDOWS_COMMANDS = [
+    r"C:\PROGRA~1\HOLGUA~1\guard-native.exe cursor-hook-bridge C:\PYTHON~1\python.exe -I "
+    + WIN_SCRIPT
+    + " --cursor-hook-event beforeShellExecution",
+    r"C:\Python312\python.exe -I C:\Users\GUARD-~1\.cursor\hooks\HOL-GU~1.PY --cursor-hook-event preToolUse",
+    r"C:\Python312\python.exe -I C:\Users\GUARD-~2\.cursor\hooks\HOL-GU~2.PY",
+    r"C:\Users\GUARD-~1\bin\CURREN~1.EXE __guard-cursor-hook " + WIN_SCRIPT,
+    r"& 'C:\Program Files\HOL Guard\current-hol-guard.exe' __guard-cursor-hook "
+    r"'C:\Users\O''Neil\.cursor\hooks\hol-guard-cursor-hook.py' --cursor-hook-event preToolUse",
+    r"  &'C:\Program Files\guard-native.exe' cursor-hook-bridge 'C:\Python 312\python.exe' -I " + WIN_SCRIPT,
+    r"& 'C:\x.exe' ;rm",
+    r"&'C:\a.exe'x",
+    "&",
+    r"& 'C:\a.exe' bare-token  ",
+    r"'C:\Python 312\python.exe' -I 'C:\Users\guard-user\.cursor\hooks\hol-guard-cursor-hook.py'",
+    r"  'C:\Python 312\python.exe' -I C:\Users\guard-user\managed\cursor\hol-guard-cursor-hook.py",
+    r'"C:\Program Files\Python\python.exe" -I "C:\Users\guard user\managed\cursor\hol-guard-cursor-hook.py"'
+    " --cursor-hook-event afterShellExecution",
+    r"C:/Python312/python.exe -I C:/Users/guard-user/.cursor/hooks/hol-guard-cursor-hook.py",
+    r"\\server\share\Python\python.exe -I \\server\share\guard\.cursor\hooks\hol-guard-cursor-hook.py",
+    r"python.exe -I \\?\UNC\server\share\hol-guard-cursor-hook.py",
+    r"python.exe -I \\?\unc\server\share\x\hol-guard-cursor-hook.py",
+    r"python.exe -I \\.\C:\x\hol-guard-cursor-hook.py",
+    r"python.exe -I \\server",
+    r"python.exe -I \\server\share",
+    r"python.exe -I //server/share/hol-guard-cursor-hook.py",
+    r"C:\Users\guard-user\bin\hol-guard.exe __guard-cursor-hook " + WIN_SCRIPT,
+    r"C:\Users\guard-user\bin\current-hol-guard.cmd __guard-cursor-hook " + WIN_SCRIPT,
+    r"C:\Users\guard-user\bin\HOL-GUARD.EXE __guard-cursor-hook C:\x\HOL-GUARD-CURSOR-HOOK.PY",
+    "python.exe -I C:hol-guard-cursor-hook.py",
+    "python.exe -I C:",
+    r"python.exe -I \hol-guard-cursor-hook.py",
+    r'"C:\Program Files\python.exe -I x',
+    r'"" -I C:\x\hol-guard-cursor-hook.py',
+    r'C:\a\\\"b c "d\\" e\\\\"f g" h\\',
+    r"C:\Python312\python.exe -m codex_plugin_scanner.cli hol-guard-hook-argv --harness cursor",
+    r"C:\Windows\py.exe -3 -I " + WIN_SCRIPT,
+    r"C:\Users\x~y\python.exe -I C:\~1\hol-guard-cursor-hook.py",
+    "pythonw.exe\u3000-I " + WIN_SCRIPT,
+]

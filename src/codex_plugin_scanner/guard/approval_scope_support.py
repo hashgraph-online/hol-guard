@@ -2,75 +2,23 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, cast
 
 from .models import DECISION_SCOPE_VALUES, DecisionScope
-from .package_execution_context import (
-    PACKAGE_EXECUTION_CONTEXT_EVIDENCE_KIND,
-    PACKAGE_EXECUTION_CONTEXT_VERSION,
-    PackageExecutionContext,
-    package_execution_context_from_scanner_evidence,
-)
-from .runtime.approval_context import parse_approval_context_token
-from .runtime.composio_contract import composio_requires_action_review
-from .runtime.github_workflow_runtime import approval_record_from_approval_request
+from .native_package_workspace_scope import native_package_workspace_scopes
+from .package_execution_context import PackageExecutionContext
 from .temporary_mcp_approvals import temporary_mcp_approval_payload
 from .trusted_local_tools import local_tool_approval_payload
 
-_SCOPED_APPROVAL_FAMILIES = frozenset(
-    {
-        "file-read",
-        "mcp",
-        "mcp-tool",
-        "package-request",
-        "prompt",
-        "prompt-env-read",
-        "prompt-file",
-        "tool-action",
-    }
-)
-
 APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX: Final = "guard.approval-scopes.v"
 APPROVAL_SCOPE_CONTRACT_VERSION: Final = f"{APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX}7"
+# Set by the resident (approval_scope_contract.rs) when a native review has no
+# retry binding, so a one-time approval cannot let the agent's retry run.
+RETRY_CANNOT_REUSE_APPROVAL: Final = "retry_cannot_reuse_approval"
 ResolutionAction = Literal["allow", "block"]
-
-_SCOPE_ACTION_ENVELOPE_KEYS: Final = (
-    "schema_version",
-    "harness",
-    "event_name",
-    "action_type",
-    "workspace_hash",
-    "tool_name",
-    "command",
-    "raw_command_text",
-    "command_text",
-    "commandText",
-    "prompt_excerpt",
-    "target_paths",
-    "network_hosts",
-    "mcp_server",
-    "mcp_tool",
-    "package_manager",
-    "package_name",
-    "command_category",
-    "package_intent_kind",
-    "package_targets",
-    "script_name",
-    "wrapper_chain",
-)
-
-_SCOPE_PACKAGE_CONTEXT_KEYS: Final = (
-    "kind",
-    "schema_version",
-    "portable",
-    "context_digest",
-    "components",
-)
 
 
 class StaleApprovalScopeContractError(ValueError):
@@ -105,13 +53,6 @@ class IneligibleApprovalScopeError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
-class ApprovalScopeSelection:
-    requested_scope: DecisionScope
-    applied_scope: DecisionScope
-    warning: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class ApprovalScopeContract:
     allow_scopes: tuple[DecisionScope, ...]
     block_scopes: tuple[DecisionScope, ...]
@@ -122,7 +63,16 @@ class ApprovalScopeContract:
     task_capability_eligible: bool = False
     task_capability_reason_codes: tuple[str, ...] = ("task_capability_not_enabled",)
     exact_action_persistence_eligible: bool = False
+    once_only_reason: str | None = None
     version: str = APPROVAL_SCOPE_CONTRACT_VERSION
+
+    @property
+    def can_run_once(self) -> bool:
+        return bool(self.allow_scopes) and RETRY_CANNOT_REUSE_APPROVAL not in self.restrictions
+
+    @property
+    def can_persist_exact_version(self) -> bool:
+        return bool(self.allow_scopes) and self.exact_action_persistence_eligible
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -142,137 +92,160 @@ class ApprovalScopeContract:
                 "reason_codes": list(self.task_capability_reason_codes),
             },
             "exact_action_persistence_eligible": self.exact_action_persistence_eligible,
+            "once_only_reason": self.once_only_reason,
+            "execution_approval": {
+                "schema": "guard.execution-approval.v1",
+                "can_record_decision": bool(self.block_scopes),
+                "can_run_once": self.can_run_once,
+                "can_persist_exact_version": self.can_persist_exact_version,
+                "delivery_reason": "execution_binding_unavailable"
+                if RETRY_CANNOT_REUSE_APPROVAL in self.restrictions
+                else None,
+            },
         }
 
 
-def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContract:
-    """Derive the current action-aware scope contract from trusted request fields.
+def _scope_item(request: Mapping[str, object]) -> dict[str, object]:
+    """Narrow a request to the fields the native scope contract reads."""
 
-    Reusable allow scopes are exposed only when Guard can persist an action-bound
-    selector. The wider scope changes where that same action may be reused; it
-    never turns into blanket permission for unrelated actions.
+    # Imported here for the same reason as in `_native_scopes`: the transport
+    # pulls in the native runtime, which the package-only hot paths skip.
+    from .native_approval_scope import REQUEST_FIELDS
+
+    item: dict[str, object] = {field: _json_boundary_value(request.get(field)) for field in REQUEST_FIELDS}
+    item["workspace_target"] = _derived_workspace_scope_target(request)
+    if request.get("artifact_type") == "native_bash_request" and request.get("request_id") is not None:
+        item["request_id"] = _json_boundary_value(request["request_id"])
+    return item
+
+
+def _native_scopes(
+    requests: Sequence[Mapping[str, object]],
+    *,
+    guard_home: Path | None = None,
+) -> list[tuple[ApprovalScopeContract, str | None]]:
+    # Imported here: the resident transport pulls in the native runtime, which
+    # hook hot paths that only need the package scope helpers must not load.
+    from .native_approval_scope import ApprovalScopeUnavailableError, native_approval_scopes
+
+    items: list[Mapping[str, object]] = [_scope_item(request) for request in requests]
+    contracts: list[tuple[ApprovalScopeContract, str | None]] = []
+    scopes = (
+        native_approval_scopes(items) if guard_home is None else native_approval_scopes(items, guard_home=guard_home)
+    )
+    for native in scopes:
+        contract = _contract_from_native(native.contract)
+        if contract is None:
+            raise ApprovalScopeUnavailableError
+        contracts.append((contract, native.exact_context_token))
+    return contracts
+
+
+def _scope_tuple(value: object) -> tuple[DecisionScope, ...] | None:
+    if not isinstance(value, list) or not all(
+        isinstance(item, str) and item in DECISION_SCOPE_VALUES for item in value
+    ):
+        return None
+    return tuple(_decision_scope(item) for item in cast(list[str], value))
+
+
+def _string_tuple(value: object) -> tuple[str, ...] | None:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        return None
+    return tuple(cast(list[str], value))
+
+
+def _contract_from_native(payload: Mapping[str, object]) -> ApprovalScopeContract | None:
+    allowed = payload.get("allowed_scopes_by_action")
+    recommended = payload.get("recommended_scope_by_action")
+    task = payload.get("task_capability_eligibility")
+    if not isinstance(allowed, dict) or not isinstance(recommended, dict) or not isinstance(task, dict):
+        return None
+    allow_scopes = _scope_tuple(allowed.get("allow"))
+    block_scopes = _scope_tuple(allowed.get("block"))
+    restrictions = _string_tuple(payload.get("scope_restrictions"))
+    reason_codes = _string_tuple(task.get("reason_codes"))
+    recommended_allow = recommended.get("allow")
+    recommended_block = recommended.get("block")
+    recommended_scopes = (recommended_allow, recommended_block)
+    digest = payload.get("scope_contract_digest")
+    once_only = payload.get("once_only_reason")
+    eligible = task.get("eligible")
+    persistence = payload.get("exact_action_persistence_eligible")
+    if (
+        allow_scopes is None
+        or block_scopes is None
+        or restrictions is None
+        or reason_codes is None
+        or payload.get("scope_contract_version") != APPROVAL_SCOPE_CONTRACT_VERSION
+        or not isinstance(digest, str)
+        or not digest
+        or not isinstance(eligible, bool)
+        or not isinstance(persistence, bool)
+        or (once_only is not None and not isinstance(once_only, str))
+        or any(item is not None and item not in DECISION_SCOPE_VALUES for item in recommended_scopes)
+    ):
+        return None
+    contract = ApprovalScopeContract(
+        allow_scopes=allow_scopes,
+        block_scopes=block_scopes,
+        recommended_allow_scope=_decision_scope(recommended_allow) if isinstance(recommended_allow, str) else None,
+        recommended_block_scope=_decision_scope(recommended_block) if isinstance(recommended_block, str) else None,
+        restrictions=restrictions,
+        digest=digest,
+        task_capability_eligible=eligible,
+        task_capability_reason_codes=reason_codes,
+        exact_action_persistence_eligible=persistence,
+        once_only_reason=once_only,
+    )
+    # Older residents expose the retry restriction without capability fields.
+    # When present, the versioned projection must agree with that authority.
+    if "execution_approval" in payload:
+        execution = payload["execution_approval"]
+        if (
+            not isinstance(execution, dict)
+            or any(
+                not isinstance(execution.get(key), bool)
+                for key in (
+                    "can_record_decision",
+                    "can_run_once",
+                    "can_persist_exact_version",
+                )
+            )
+            or execution != contract.to_dict()["execution_approval"]
+        ):
+            return None
+    return contract
+
+
+def request_scope_contracts(
+    requests: Sequence[Mapping[str, object]],
+    *,
+    guard_home: Path | None = None,
+) -> list[ApprovalScopeContract]:
+    """Derive the current action-aware scope contract of each request in the resident.
+
+    Reusable allow scopes are exposed only when Guard can persist an
+    action-bound selector. The wider scope changes where that same action may
+    be reused; it never turns into blanket permission for unrelated actions.
+    Raises ``ApprovalScopeUnavailableError`` when the resident cannot answer.
     """
 
-    artifact_available = _string_or_none(request.get("artifact_id")) is not None
-    artifact_scopes: tuple[DecisionScope, ...] = ("artifact",) if artifact_available else ()
-    allow_scopes = () if _allow_is_non_overridable(request) else _reusable_allow_scopes(request, artifact_scopes)
-    block_scopes: list[DecisionScope] = list(artifact_scopes)
-    trusted_family = _request_scoped_family_key(request)
-    task_capability_eligible = _github_workflow_task_capability_eligible(request)
-    exact_action_persistence_eligible = exact_action_allow_persistence_eligible(request)
-    task_capability_reason_codes = (
-        ("exact_github_workflow_record",) if task_capability_eligible else ("task_capability_not_enabled",)
-    )
-    if trusted_family is not None:
-        if _derived_workspace_scope_target(request) is not None:
-            block_scopes.append("workspace")
-        if _string_or_none(request.get("publisher")) is not None:
-            block_scopes.append("publisher")
-        block_scopes.extend(("harness", "global"))
-    restrictions = ["reusable_allow_is_action_bound"]
-    if _unverified_provider_execution(request):
-        restrictions.append("provider_account_unverified_once_only")
-    restrictions.append(
-        "task_capability_exact_operation_only" if task_capability_eligible else "task_capability_not_enabled"
-    )
-    if _allow_is_non_overridable(request):
-        restrictions.append("current_action_not_overridable")
-    if "workspace" in allow_scopes:
-        restrictions.append("workspace_allow_bound_to_project_and_action")
-    if "harness" in allow_scopes or "global" in allow_scopes:
-        restrictions.append("broad_allow_bound_to_exact_action")
-    if trusted_family is None:
-        restrictions.append("broad_deny_requires_trusted_selector")
-    block_scope_tuple = tuple(block_scopes)
-    restrictions_tuple = tuple(restrictions)
-    digest = _scope_contract_digest(
-        request,
-        allow_scopes=allow_scopes,
-        block_scopes=block_scope_tuple,
-        restrictions=restrictions_tuple,
-        task_capability_eligible=task_capability_eligible,
-        task_capability_reason_codes=task_capability_reason_codes,
-        exact_action_persistence_eligible=exact_action_persistence_eligible,
-    )
-    return ApprovalScopeContract(
-        allow_scopes=allow_scopes,
-        block_scopes=block_scope_tuple,
-        recommended_allow_scope=_recommended_allow_scope(allow_scopes),
-        recommended_block_scope="artifact" if "artifact" in block_scopes else None,
-        restrictions=restrictions_tuple,
-        digest=digest,
-        task_capability_eligible=task_capability_eligible,
-        task_capability_reason_codes=task_capability_reason_codes,
-        exact_action_persistence_eligible=exact_action_persistence_eligible,
-    )
+    scopes = _native_scopes(requests) if guard_home is None else _native_scopes(requests, guard_home=guard_home)
+    return [contract for contract, _token in scopes]
 
 
-def _recommended_allow_scope(allow_scopes: tuple[DecisionScope, ...]) -> DecisionScope | None:
-    if "workspace" in allow_scopes:
-        return "workspace"
-    if "artifact" in allow_scopes:
-        return "artifact"
-    return None
+def request_scope_contract(request: Mapping[str, object], *, guard_home: Path | None = None) -> ApprovalScopeContract:
+    return request_scope_contracts([request], guard_home=guard_home)[0]
 
 
-def _reusable_allow_scopes(
-    request: Mapping[str, object],
-    artifact_scopes: tuple[DecisionScope, ...],
-) -> tuple[DecisionScope, ...]:
-    if _unverified_provider_execution(request):
-        return artifact_scopes
-    if not artifact_scopes or _request_scoped_family_key(request) is None:
-        return artifact_scopes
-    artifact_hash = _string_or_none(request.get("artifact_hash"))
-    if artifact_hash is None or artifact_hash == "unknown":
-        return artifact_scopes
+def scope_payload_for_request(
+    request: Mapping[str, object], contract: ApprovalScopeContract, *, guard_home: Path | None = None
+) -> dict[str, object]:
+    """Attach non-resident approval hints to a contract already derived."""
 
-    scopes: list[DecisionScope] = list(artifact_scopes)
-    artifact_type = _string_or_none(request.get("artifact_type"))
-    workspace = _derived_workspace_scope_target(request)
-    if workspace is not None and artifact_type in {
-        "file_read_request",
-        "prompt_request",
-        "tool_action_request",
-    }:
-        scopes.append("workspace")
-    elif workspace is not None and artifact_type == "package_request":
-        execution_context = package_execution_context_from_scanner_evidence(request.get("scanner_evidence"))
-        if execution_context is not None and execution_context.portable:
-            scopes.append("workspace")
-
-    if artifact_type == "tool_action_request" and _tool_action_has_exact_context(request):
-        scopes.extend(("harness", "global"))
-    return tuple(scopes)
-
-
-def _unverified_provider_execution(request: Mapping[str, object]) -> bool:
-    if request.get("artifact_type") not in ("tool_call", "tool_action_request"):
-        return False
-    labels: list[object] = [request.get("artifact_name")]
-    envelope = request.get("action_envelope_json")
-    if isinstance(envelope, Mapping):
-        labels.extend(envelope.get(key) for key in ("tool_name", "mcp_tool"))
-    raw = request.get("raw_command_text")
-    if isinstance(raw, str) and raw.startswith("tool:"):
-        labels.append(raw.removeprefix("tool:"))
-    # Names can restrict approval scopes; they can never assert a verified
-    # account or expand authority. This profile has no trusted account resolver.
-    return any(isinstance(label, str) and composio_requires_action_review(label) for label in labels)
-
-
-def _tool_action_has_exact_context(request: Mapping[str, object]) -> bool:
-    raw_command_text = _string_or_none(request.get("raw_command_text"))
-    envelope = request.get("action_envelope_json")
-    if isinstance(envelope, Mapping):
-        raw_command_text = raw_command_text or _string_or_none(envelope.get("raw_command_text"))
-        raw_command_text = raw_command_text or _string_or_none(envelope.get("command"))
-    return raw_command_text is not None
-
-
-def request_scope_contract_payload(request: Mapping[str, object]) -> dict[str, object]:
-    payload = request_scope_contract(request).to_dict()
-    temporary_mcp_approval = temporary_mcp_approval_payload(request)
+    payload = contract.to_dict()
+    temporary_mcp_approval = temporary_mcp_approval_payload(request, guard_home=guard_home)
     if temporary_mcp_approval is not None:
         payload["temporary_mcp_approval"] = temporary_mcp_approval
     local_tool_approval = local_tool_approval_payload(request)
@@ -281,98 +254,44 @@ def request_scope_contract_payload(request: Mapping[str, object]) -> dict[str, o
     return payload
 
 
-def exact_action_allow_persistence_eligible(request: Mapping[str, object]) -> bool:
-    """Return whether an artifact allow can be saved as one exact action."""
+def apply_scope_surfaces(payload: dict[str, object]) -> None:
+    """Project a payload's derived contract onto the legacy UI fields.
 
-    if _allow_is_non_overridable(request) or _unverified_provider_execution(request):
-        return False
-    artifact_type = _string_or_none(request.get("artifact_type"))
-    artifact_id = _string_or_none(request.get("artifact_id"))
-    artifact_hash = _string_or_none(request.get("artifact_hash"))
-    if artifact_type == "package_request":
-        return bool(artifact_id and artifact_hash and artifact_hash != "unknown")
-    if artifact_type == "tool_call":
-        return bool(
-            artifact_id
-            and parse_approval_context_token(artifact_hash) is not None
-            and _string_or_none(request.get("raw_command_text"))
-        )
-    if artifact_type != "tool_action_request":
-        return False
-    action_identity = _string_or_none(request.get("action_identity"))
-    raw_command_text = _string_or_none(request.get("raw_command_text"))
-    envelope = request.get("action_envelope_json")
-    if isinstance(envelope, Mapping):
-        typed_envelope = cast(Mapping[str, object], envelope)
-        raw_command_text = (
-            raw_command_text
-            or _string_or_none(typed_envelope.get("raw_command_text"))
-            or _string_or_none(typed_envelope.get("command"))
-        )
-    context_bound = parse_approval_context_token(artifact_hash) is not None
-    trusted_family = _request_scoped_family_key(request) == "family:tool-action"
-    return bool(
-        artifact_id
-        and artifact_hash
-        and artifact_hash != "unknown"
-        and action_identity
-        and raw_command_text
-        and (context_bound or trusted_family)
-    )
+    The stored advertisement in ``decision_v2_json`` is untrusted, so the
+    contract the resident derived always replaces it.
+    """
+
+    from .native_approval_scope import ApprovalScopeUnavailableError
+
+    allowed = payload["allowed_scopes_by_action"]
+    recommended = payload["recommended_scope_by_action"]
+    if not isinstance(allowed, dict) or not isinstance(recommended, dict):
+        raise ApprovalScopeUnavailableError
+    payload["allowed_scopes"] = list(cast(list[str], allowed["allow"]))
+    payload["recommended_scope"] = recommended.get("allow")
+    decision_v2 = payload.get("decision_v2_json")
+    if isinstance(decision_v2, dict):
+        payload["decision_v2_json"] = {
+            **decision_v2,
+            "approval_scopes": list(cast(list[str], payload["allowed_scopes"])),
+        }
 
 
-def resolve_request_scope_selection(
-    request: Mapping[str, object],
+def request_scope_contract_payloads(
+    requests: Sequence[Mapping[str, object]],
     *,
-    action: str,
-    requested_scope: str,
-    contract_version: str | None,
-    contract_digest: str | None,
-) -> ApprovalScopeSelection:
-    if action == "allow":
-        resolution_action: ResolutionAction = "allow"
-    elif action == "block":
-        resolution_action = "block"
-    else:
-        raise ValueError("unsupported_resolution_action")
-    if requested_scope not in DECISION_SCOPE_VALUES:
-        raise ValueError(f"Unsupported approval scope: {requested_scope}")
-    typed_scope = _decision_scope(requested_scope)
-    contract = request_scope_contract(request)
-    if (contract_version is None) != (contract_digest is None):
-        raise ValueError("incomplete_scope_contract")
-    if contract_version is not None and (
-        contract_version != APPROVAL_SCOPE_CONTRACT_VERSION or contract_digest != contract.digest
-    ):
-        raise StaleApprovalScopeContractError(contract)
-    eligible = contract.allow_scopes if resolution_action == "allow" else contract.block_scopes
-    if typed_scope in eligible:
-        return ApprovalScopeSelection(typed_scope, typed_scope)
-    if contract_version is not None or action == "block":
-        raise IneligibleApprovalScopeError(
-            "ineligible_request_scope",
-            contract,
-            action=resolution_action,
-            requested_scope=requested_scope,
-        )
-    if "artifact" not in eligible:
-        raise IneligibleApprovalScopeError(
-            "request_action_not_overridable",
-            contract,
-            action=resolution_action,
-            requested_scope=requested_scope,
-        )
-    return ApprovalScopeSelection(
-        requested_scope=typed_scope,
-        applied_scope="artifact",
-        warning="legacy_scope_narrowed_to_artifact",
-    )
+    guard_home: Path | None = None,
+) -> list[dict[str, object]]:
+    payloads: list[dict[str, object]] = []
+    for request, contract in zip(requests, request_scope_contracts(requests, guard_home=guard_home), strict=True):
+        payloads.append(scope_payload_for_request(request, contract, guard_home=guard_home))
+    return payloads
 
 
-def supported_request_scopes(request: Mapping[str, object]) -> tuple[DecisionScope, ...]:
-    """Return legacy UI scopes, conservatively projected from V2 allow scopes."""
-
-    return request_scope_contract(request).allow_scopes
+def request_scope_contract_payload(
+    request: Mapping[str, object], *, guard_home: Path | None = None
+) -> dict[str, object]:
+    return request_scope_contract_payloads([request], guard_home=guard_home)[0]
 
 
 def resolve_request_workspace_scope(
@@ -396,24 +315,24 @@ def package_request_portable_workspace_scope(
     artifact_hash: str | None,
     artifact_type: str | None = None,
     execution_context: PackageExecutionContext | None = None,
+    guard_home: Path | None = None,
 ) -> str | None:
-    if not _is_package_request_artifact(artifact_id=artifact_id, artifact_type=artifact_type):
-        return None
-    if artifact_hash is None or not artifact_hash.strip() or artifact_hash == "unknown":
-        return None
-    if execution_context is None or not execution_context.portable:
-        return None
-    if execution_context.version != PACKAGE_EXECUTION_CONTEXT_VERSION:
-        return None
-    material = {
-        "artifact_hash": artifact_hash.strip(),
-        "artifact_id": artifact_id.strip() if artifact_id is not None else None,
-        "execution_context": execution_context.digest,
-        "scope": "package-request-workspace",
-        "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
-    }
-    digest = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-    return f"package-request-workspace:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
+    """Return the resident's portable workspace scope, or ``None``.
+
+    The scope is the key a saved package approval is stored and matched under.
+    The resident owns its derivation; deriving it here as well would let the
+    two drift, and a drifted key silently stops a saved "Always allow" from
+    matching.
+    """
+
+    portable, _ = native_package_workspace_scopes(
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+        artifact_type=artifact_type,
+        execution_context=execution_context,
+        guard_home=guard_home,
+    )
+    return portable
 
 
 def package_request_runtime_workspace_scope(
@@ -422,37 +341,23 @@ def package_request_runtime_workspace_scope(
     artifact_hash: str | None,
     artifact_type: str | None = None,
     execution_context: PackageExecutionContext | None,
+    guard_home: Path | None = None,
 ) -> str | None:
     """Return the only workspace identity valid for a package-policy lookup.
 
     Non-portable contexts receive an exact, context-bound sentinel.  It keeps
     artifact-once decisions functional while ensuring legacy path-only and v1
-    workspace approvals cannot match.
+    workspace approvals cannot match.  The resident derives both.
     """
 
-    if not _is_package_request_artifact(artifact_id=artifact_id, artifact_type=artifact_type):
-        return None
-    if artifact_hash is None or not artifact_hash.strip() or artifact_hash == "unknown":
-        return None
-    portable = package_request_portable_workspace_scope(
+    _, runtime = native_package_workspace_scopes(
         artifact_id=artifact_id,
         artifact_hash=artifact_hash,
         artifact_type=artifact_type,
         execution_context=execution_context,
+        guard_home=guard_home,
     )
-    if portable is not None:
-        return portable
-    if execution_context is None or execution_context.version != PACKAGE_EXECUTION_CONTEXT_VERSION:
-        return None
-    material = {
-        "artifact_hash": artifact_hash.strip(),
-        "artifact_id": artifact_id.strip() if artifact_id is not None else None,
-        "execution_context": execution_context.digest,
-        "scope": "package-request-workspace-exact",
-        "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
-    }
-    digest = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-    return f"package-request-workspace-exact:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
+    return runtime
 
 
 def _derived_workspace_scope_target(request: Mapping[str, object]) -> str | None:
@@ -471,147 +376,6 @@ def _derived_workspace_scope_target(request: Mapping[str, object]) -> str | None
     return str(workspace_root)
 
 
-def _is_package_request_artifact(*, artifact_id: str | None, artifact_type: str | None) -> bool:
-    if artifact_type == "package_request":
-        return True
-    return isinstance(artifact_id, str) and ":package-request:" in artifact_id
-
-
-def _request_scoped_family_key(request: Mapping[str, object]) -> str | None:
-    family_key = _artifact_family_key(_string_or_none(request.get("artifact_id")))
-    artifact_type = _string_or_none(request.get("artifact_type"))
-    if family_key is None or artifact_type is None:
-        return None
-    expected_families = {
-        "file_read_request": frozenset({"file-read"}),
-        "mcp_server": frozenset({"mcp", "mcp-tool"}),
-        "mcp_tool_call": frozenset({"mcp", "mcp-tool"}),
-        "package_request": frozenset({"package-request"}),
-        "prompt_request": frozenset({"prompt", "prompt-env-read", "prompt-file"}),
-        "tool_action_request": frozenset({"tool-action"}),
-    }.get(artifact_type)
-    family = family_key.removeprefix("family:")
-    return family_key if expected_families is not None and family in expected_families else None
-
-
-def _scope_contract_digest(
-    request: Mapping[str, object],
-    *,
-    allow_scopes: tuple[DecisionScope, ...],
-    block_scopes: tuple[DecisionScope, ...],
-    restrictions: tuple[str, ...],
-    task_capability_eligible: bool = False,
-    task_capability_reason_codes: tuple[str, ...] = ("task_capability_not_enabled",),
-    exact_action_persistence_eligible: bool = False,
-) -> str:
-    material = {
-        "version": APPROVAL_SCOPE_CONTRACT_VERSION,
-        "allow_scopes": allow_scopes,
-        "block_scopes": block_scopes,
-        "restrictions": restrictions,
-        "task_capability_eligible": task_capability_eligible,
-        "task_capability_reason_codes": task_capability_reason_codes,
-        "exact_action_persistence_eligible": exact_action_persistence_eligible,
-        "request": _scope_contract_request_material(request),
-    }
-    encoded = json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _scope_contract_request_material(request: Mapping[str, object]) -> dict[str, object]:
-    """Return only values that can change authorization scope or its binding.
-
-    Queue rows are refreshed on every retry. Delivery metadata, risk copy, and
-    scanner explanations can legitimately change while the action remains the
-    same; including them made a browser decision stale before it could resolve.
-    Stable action fields, artifact identity, policy posture, package context,
-    and workflow lineage remain bound so a materially different action still
-    requires a fresh contract.
-    """
-
-    return {
-        "harness": _json_boundary_value(request.get("harness")),
-        "artifact_id": _json_boundary_value(request.get("artifact_id")),
-        "artifact_type": _json_boundary_value(request.get("artifact_type")),
-        "artifact_hash": _json_boundary_value(request.get("artifact_hash")),
-        "policy_action": _json_boundary_value(request.get("policy_action")),
-        "publisher": _json_boundary_value(request.get("publisher")),
-        # These fields feed runtime_tool_action_exact_match_context and must
-        # invalidate a browser contract when the target context changes.
-        "source_scope": _json_boundary_value(request.get("source_scope")),
-        "config_path": _json_boundary_value(request.get("config_path")),
-        "wrapper_chain": _scope_wrapper_chain_material(request),
-        "permission_mode": _scope_permission_mode_material(request),
-        "workspace": _json_boundary_value(_derived_workspace_scope_target(request)),
-        "action_identity": _json_boundary_value(request.get("action_identity")),
-        "action_envelope": _scope_action_envelope_material(request.get("action_envelope_json")),
-        "scanner_evidence": _scope_scanner_evidence_material(request.get("scanner_evidence")),
-        "raw_command_text": _json_boundary_value(request.get("raw_command_text")),
-    }
-
-
-def _scope_action_envelope_material(value: object) -> dict[str, object] | None:
-    if not isinstance(value, Mapping):
-        return None
-    material = {key: _json_boundary_value(value.get(key)) for key in _SCOPE_ACTION_ENVELOPE_KEYS}
-    raw_payload = value.get("raw_payload_redacted")
-    if isinstance(raw_payload, Mapping):
-        permission_mode = raw_payload.get("permission_mode")
-        if permission_mode is None:
-            permission_mode = raw_payload.get("permissionMode")
-        material["permission_mode"] = _json_boundary_value(permission_mode)
-    return material
-
-
-def _scope_wrapper_chain_material(request: Mapping[str, object]) -> list[object]:
-    wrapper_chain = request.get("wrapper_chain")
-    envelope = request.get("action_envelope_json")
-    if (not isinstance(wrapper_chain, Sequence) or isinstance(wrapper_chain, str)) and isinstance(envelope, Mapping):
-        wrapper_chain = envelope.get("wrapper_chain")
-    if not isinstance(wrapper_chain, Sequence) or isinstance(wrapper_chain, str | bytes):
-        return []
-    return [_json_boundary_value(item) for item in wrapper_chain]
-
-
-def _scope_permission_mode_material(request: Mapping[str, object]) -> object:
-    envelope = request.get("action_envelope_json")
-    if not isinstance(envelope, Mapping):
-        return None
-    raw_payload = envelope.get("raw_payload_redacted")
-    if not isinstance(raw_payload, Mapping):
-        return None
-    permission_mode = raw_payload.get("permission_mode")
-    if permission_mode is None:
-        permission_mode = raw_payload.get("permissionMode")
-    return _json_boundary_value(permission_mode)
-
-
-def _scope_scanner_evidence_material(value: object) -> list[dict[str, object]]:
-    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
-        return []
-    material: list[dict[str, object]] = []
-    for item in value:
-        if not isinstance(item, Mapping):
-            continue
-        if item.get("kind") == PACKAGE_EXECUTION_CONTEXT_EVIDENCE_KIND:
-            material.append({key: _json_boundary_value(item.get(key)) for key in _SCOPE_PACKAGE_CONTEXT_KEYS})
-        elif item.get("source") == "github_workflow_approval_record":
-            material.append(
-                {
-                    "source": "github_workflow_approval_record",
-                    "record": _json_boundary_value(item.get("record")),
-                }
-            )
-    return material
-
-
-def _github_workflow_task_capability_eligible(request: Mapping[str, object]) -> bool:
-    try:
-        return approval_record_from_approval_request(request) is not None
-    except (TypeError, ValueError):
-        return False
-
-
 def _json_boundary_value(value: object) -> object:
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
@@ -625,21 +389,6 @@ def _json_boundary_value(value: object) -> object:
     return {"invalid_type": type(value).__name__}
 
 
-def _allow_is_non_overridable(request: Mapping[str, object]) -> bool:
-    if _string_or_none(request.get("policy_action")) not in {"require-reapproval", "review"}:
-        return True
-    envelope = request.get("action_envelope_json")
-    if not isinstance(envelope, Mapping):
-        return False
-    action_type = _string_or_none(cast(Mapping[object, object], envelope).get("action_type"))
-    return action_type in {
-        "guard_control",
-        "guard-control",
-        "guard_control_operation",
-        "guard-control-operation",
-    }
-
-
 def _decision_scope(value: str) -> DecisionScope:
     if value == "global":
         return "global"
@@ -650,21 +399,6 @@ def _decision_scope(value: str) -> DecisionScope:
     if value == "publisher":
         return "publisher"
     return "artifact"
-
-
-def _artifact_family_key(artifact_id: str | None) -> str | None:
-    if artifact_id is None or not artifact_id.strip():
-        return None
-    if artifact_id.startswith("family:"):
-        family = artifact_id.removeprefix("family:").strip().lower()
-        return f"family:{family}" if family in _SCOPED_APPROVAL_FAMILIES else None
-    parts = artifact_id.split(":")
-    if len(parts) < 3:
-        return None
-    family = parts[2].strip().lower()
-    if family not in _SCOPED_APPROVAL_FAMILIES:
-        return None
-    return f"family:{family}"
 
 
 def _string_or_none(value: object) -> str | None:

@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+use crate::hook_decision_containment_route::edge_route;
+use crate::native_hook_receipt::{
+    receipt_from_post_tool, receipt_from_pre_tool, NativeReceiptIdentity,
+};
 use crate::policy_enforcement::AdmittedPolicySnapshot;
 use guard_contracts::{
     GuardHookEdgeResultV2, GuardHookEnvelopeV2, GuardHookPayloadKindV2, HookOutputSummaryV1,
@@ -8,119 +12,64 @@ use guard_contracts::{
 };
 use guard_hook_core::review_post_tool;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use crate::native_hook_receipt::{receipt_from_post_tool, receipt_from_pre_tool};
+#[path = "edge_identity.rs"]
+mod edge_identity;
+use edge_identity::{
+    canonical_identity_digest, request_id_is_safe, request_payload_identity, MAX_EVENT_BYTES,
+    MAX_HARNESS_BYTES, MAX_PATH_BYTES,
+};
+pub(crate) use edge_identity::{
+    policy_generation_matches, review_anchor_digest, stable_policy_identity,
+    REQUEST_BINDING_FEATURE,
+};
+#[path = "edge_containment.rs"]
+mod edge_containment;
+#[path = "edge_local_cli.rs"]
+mod edge_local_cli;
+#[path = "edge_pre_tool_chain.rs"]
+mod pre_tool_chain;
+use pre_tool_chain::evaluate_pre_tool_chain;
+#[path = "edge_result_check.rs"]
+mod edge_result_check;
+pub(crate) use edge_result_check::standalone_receipt;
 
-const MAX_HARNESS_BYTES: usize = 64;
-const MAX_EVENT_BYTES: usize = 64;
-const MAX_PATH_BYTES: usize = 32 * 1024;
-fn request_id_is_safe(value: &str) -> bool {
-    let opaque_token = !value.is_empty()
-        && value.len() <= 256
-        && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b'.')
-        });
-    let compact_uuid = value.len() == 32
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
-    let dashed_uuid = value.len() == 36
-        && value.bytes().enumerate().all(|(index, byte)| {
-            matches!(index, 8 | 13 | 18 | 23)
-                .then_some(byte == b'-')
-                .unwrap_or_else(|| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        });
-    opaque_token || compact_uuid || dashed_uuid
-}
-
-fn request_payload_identity(payload: &Value, harness: &str, event: &str) -> Result<Value, String> {
-    let Some(record) = payload.as_object() else {
-        return Err("native_hook_payload_invalid".to_owned());
-    };
-    // Event aliases and adapter timestamps are transport metadata, not request
-    // semantics. Event aliases are validated for agreement by
-    // `authoritative_event`, then omitted here so a harness spelling change
-    // cannot change an otherwise identical request. Timestamps are removed
-    // only at the envelope root: a nested timestamp may be an actual tool
-    // argument and must remain part of the action commitment.
-    let mut identity = record.clone();
-    for key in [
-        "event",
-        "eventName",
-        "hook_event_name",
-        "hookEventName",
-        "hook_name",
-        "hookName",
-        "timestamp",
-        "timestamp_ms",
-        "timestampMs",
-        "created_at",
-        "createdAt",
-        "received_at",
-        "receivedAt",
-    ] {
-        identity.remove(key);
+/// Bind the exact validated tool intent without policy-generation identity.
+/// Policy evaluation remains bound by `request_identity`; this commitment is
+/// the stable action/source input a native review's retry binding anchors to.
+/// `home_dir` is bound because path resolution (`~`, dotfiles) depends on it.
+pub(crate) fn execution_intent_digest(envelope: &GuardHookEnvelopeV2) -> Result<String, String> {
+    let harness = canonical_harness(&envelope.harness)?;
+    let event = authoritative_event(envelope)?;
+    let payload = request_payload_identity(&envelope.raw_payload, &harness, &event)?;
+    let mut value = serde_json::json!({
+        "schema": "guard-native-execution-intent.v2",
+        "version": 2,
+        "event": event,
+        "harness": harness,
+        "payload": payload,
+        "source": {
+            "cwd": envelope.source.cwd,
+            "home_dir": envelope.source.home_dir,
+        },
+    });
+    if let Some(context) = &envelope.source.execution_environment {
+        value["source"]["execution_environment"] = serde_json::to_value(context)
+            .map_err(|_| "native_hook_execution_intent_digest_failed")?;
     }
-    // Pi retries create a new transport call ID for the unchanged action.
-    // Keep nested tool arguments and session identity in the commitment.
-    if matches!(harness, "pi" | "omp")
-        && event == "PreToolUse"
-        && identity
-            .get("session_id")
-            .and_then(Value::as_str)
-            .is_some_and(|s| !s.is_empty())
-    {
-        identity.remove("tool_call_id");
-    }
-    Ok(Value::Object(identity))
-}
-
-fn stable_policy_identity(snapshot: &Value, generation: u64) -> Value {
-    let object = snapshot.as_object();
-    let runtime_identity = object
-        .and_then(|value| value.get("runtime_identity"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let policy_digest = object
-        .and_then(|value| value.get("policy_digest"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let rule_digest = object
-        .and_then(|value| value.get("rule_digest"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let scope_digest = object
-        .and_then(|value| value.get("scope_contract"))
-        .and_then(Value::as_object)
-        .and_then(|scope| scope.get("scope_digest"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    serde_json::json!({
-        "generation": generation,
-        "policy_digest": policy_digest,
-        "rule_digest": rule_digest,
-        "runtime_identity": runtime_identity,
-        "scope_digest": scope_digest,
-    })
+    canonical_identity_digest(&value, "native_hook_execution_intent_digest_failed")
 }
 
 /// Derive a stable opaque identity when the harness omitted a request ID.
 /// The digest covers semantic request inputs only. Transport deadlines,
 /// object field order, and event-alias spelling are deliberately excluded.
-/// Raw request material remains inside the resident and never appears in an
-/// approval result.
+/// Raw request material stays in the resident, never in an approval result.
 pub(crate) fn request_identity(envelope: &GuardHookEnvelopeV2) -> Result<(String, String), String> {
     let harness = canonical_harness(&envelope.harness)?;
     let event = authoritative_event(envelope)?;
     let payload = request_payload_identity(&envelope.raw_payload, &harness, &event)?;
-    let source = serde_json::json!({
-        "cwd": envelope.source.cwd,
-        "guard_home": envelope.source.guard_home,
-        "home_dir": envelope.source.home_dir,
-        "source_ref_external_allowed": envelope.source.source_ref_external_allowed,
-    });
+    let source = request_source(envelope, "native_hook_request_digest_failed")?;
     let value = serde_json::json!({
         "schema": "guard-native-request-identity.v3",
         "version": 3,
@@ -130,17 +79,29 @@ pub(crate) fn request_identity(envelope: &GuardHookEnvelopeV2) -> Result<(String
         "policy": stable_policy_identity(&envelope.policy_snapshot, envelope.policy_generation),
         "source": source,
     });
-    let value =
-        serde_json::to_value(value).map_err(|_| "native_hook_request_digest_failed".to_owned())?;
-    let canonical = guard_policy_snapshot::canonical_json_bytes(&value)
-        .map_err(|_| "native_hook_request_digest_failed".to_owned())?;
-    let digest = hex::encode(Sha256::digest(&canonical));
+    let digest = canonical_identity_digest(&value, "native_hook_request_digest_failed")?;
     let request_id = match envelope.request_id.as_deref() {
         Some(value) if request_id_is_safe(value) => value.to_owned(),
         Some(_) => return Err("native_hook_request_id_invalid".to_owned()),
         None => format!("sha256:{digest}"),
     };
     Ok((request_id, digest))
+}
+
+/// Full request source. `execution_intent_digest` is narrower, so commitments
+/// to the guard home, home directory, or source-ref flag use this instead.
+fn request_source(envelope: &GuardHookEnvelopeV2, error: &str) -> Result<Value, String> {
+    let mut source = serde_json::json!({
+        "cwd": envelope.source.cwd,
+        "guard_home": envelope.source.guard_home,
+        "home_dir": envelope.source.home_dir,
+        "source_ref_external_allowed": envelope.source.source_ref_external_allowed,
+    });
+    if let Some(context) = &envelope.source.execution_environment {
+        source["execution_environment"] =
+            serde_json::to_value(context).map_err(|_| error.to_owned())?;
+    }
+    Ok(source)
 }
 
 fn bounded_nonempty(value: &str, maximum: usize, code: &str) -> Result<(), String> {
@@ -162,6 +123,7 @@ fn canonical_harness(value: &str) -> Result<String, String> {
         "oh-my-pi" => "omp",
         "zai" | "z-code" | "zai-zcode" => "zcode",
         "devin-cli" | "cognition-devin" => "devin",
+        "muse-code" => "muse",
         _ => normalized.as_str(),
     };
     if !canonical
@@ -183,6 +145,7 @@ fn canonical_harness(value: &str) -> Result<String, String> {
             | "grok"
             | "hermes"
             | "kimi"
+            | "muse"
             | "omp"
             | "openclaw"
             | "opencode"
@@ -194,15 +157,16 @@ fn canonical_harness(value: &str) -> Result<String, String> {
     Ok(canonical.to_owned())
 }
 
-fn canonical_event(value: &str) -> Result<String, String> {
+pub(crate) fn canonical_event(value: &str) -> Result<String, String> {
     bounded_nonempty(value, MAX_EVENT_BYTES, "native_hook_event_invalid")?;
     let compact = value.trim().to_ascii_lowercase().replace(['_', '-'], "");
     match compact.as_str() {
-        "pretool" | "pretooluse" => Ok("PreToolUse".to_owned()),
+        // Hermes names its hooks `pre_tool_call` and `post_tool_call`.
+        "pretool" | "pretooluse" | "pretoolcall" => Ok("PreToolUse".to_owned()),
         "beforeshellexecution" | "beforereadfile" | "beforewritefile" | "beforemcpexecution" => {
             Ok("PreToolUse".to_owned())
         }
-        "posttool" | "posttooluse" => Ok("PostToolUse".to_owned()),
+        "posttool" | "posttooluse" | "posttoolcall" => Ok("PostToolUse".to_owned()),
         "aftershellexecution" | "afterreadfile" | "afterwritefile" | "aftermcpexecution" => {
             Ok("PostToolUse".to_owned())
         }
@@ -250,7 +214,7 @@ fn authoritative_event(envelope: &GuardHookEnvelopeV2) -> Result<String, String>
     Ok(declared)
 }
 
-fn payload_kind(payload: &Value) -> Result<GuardHookPayloadKindV2, String> {
+pub(crate) fn payload_kind(payload: &Value) -> Result<GuardHookPayloadKindV2, String> {
     let Some(record) = payload.as_object() else {
         return Err("native_hook_payload_invalid".to_owned());
     };
@@ -279,12 +243,7 @@ fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String>
     if envelope.policy_generation == 0 {
         return Err("native_hook_policy_generation_invalid".to_owned());
     }
-    if envelope
-        .policy_snapshot
-        .get("generation")
-        .and_then(Value::as_u64)
-        != Some(envelope.policy_generation)
-    {
+    if !policy_generation_matches(&envelope.policy_snapshot, envelope.policy_generation) {
         return Err("native_hook_policy_generation_mismatch".to_owned());
     }
     let encoded = serde_json::to_vec(envelope)
@@ -292,6 +251,9 @@ fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String>
     if encoded.len() > MAX_NATIVE_REQUEST_BYTES {
         return Err("native_hook_request_bounds_exceeded".to_owned());
     }
+    // Optional lookup context is bounded by the whole-envelope transport cap.
+    // Its tighter Git-specific limits are checked by git_config before quiet
+    // admission; oversized environments must not reject unrelated file hooks.
     let _ = request_identity(envelope)?;
     for path in [
         envelope.source.cwd.as_deref(),
@@ -306,61 +268,49 @@ fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String>
     Ok(())
 }
 
-fn validate_pre_tool_result(result: &Value) -> Result<(), String> {
-    let typed: guard_contracts::PreToolResultV1 = serde_json::from_value(result.clone())
-        .map_err(|_| "native_hook_pre_tool_result_invalid".to_owned())?;
-    if typed.schema != "guard-pre-tool-result.v1" || typed.authority != "rust" {
-        return Err("native_hook_pre_tool_result_schema_invalid".to_owned());
-    }
-    Ok(())
-}
-
-fn evaluate_validated_envelope(
+/// `lease` is held until the verdict and its evidence are settled, and
+/// released before any prompt context lookup waits on CIGAR.
+fn evaluate_validated_envelope<Lease>(
     envelope: GuardHookEnvelopeV2,
     policy_snapshot: Option<&AdmittedPolicySnapshot>,
+    origin_store: Option<&crate::policy_store::PolicySnapshotStore>,
+    lease: Lease,
 ) -> Result<Vec<u8>, String> {
+    let started = Instant::now();
     let harness = canonical_harness(&envelope.harness)?;
     let event_name = authoritative_event(&envelope)?;
     let kind = payload_kind(&envelope.raw_payload)?;
     let (request_id, request_digest) = request_identity(&envelope)?;
+    let intent_digest = execution_intent_digest(&envelope)?;
+    let anchor_digest = review_anchor_digest(
+        &envelope,
+        policy_snapshot.map(AdmittedPolicySnapshot::snapshot),
+    )?;
+    let receipt_identity = NativeReceiptIdentity {
+        request_id: &request_id,
+        request_digest: &request_digest,
+        execution_intent_digest: Some(&intent_digest),
+        review_anchor_digest: Some(&anchor_digest),
+    };
     if kind == GuardHookPayloadKindV2::EncryptedPayloadRef {
         return Err("native_hook_encrypted_payload_unsupported".to_owned());
     }
-    let (result, receipt) = match event_name.as_str() {
+    let (mut result, mut receipt) = match event_name.as_str() {
         "PreToolUse" | "UserPromptSubmit" => {
-            let native = guard_command::pretool::evaluate_pre_tool_envelope_with_context(
-                &harness,
-                &event_name,
-                &envelope.raw_payload,
-                policy_snapshot.and_then(|snapshot| snapshot.command_extensions.as_ref()),
-                Some(
-                    Instant::now()
-                        + Duration::from_millis(
-                            envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000),
-                        ),
-                ),
-                Some(envelope.source.home_dir.as_str()),
-                envelope.source.cwd.as_deref(),
-            );
-            let evaluated = if let Some(snapshot) = policy_snapshot {
-                crate::policy_enforcement::apply_pre_tool_policy(
-                    snapshot,
-                    &envelope.raw_payload,
-                    native,
-                )?
-            } else {
-                native
-            };
+            let evaluated =
+                evaluate_pre_tool_chain(&envelope, &harness, &event_name, policy_snapshot)?;
+            let call = (event_name.as_str(), harness.as_str());
+            let evaluated =
+                crate::edge_session_cascade::apply(&envelope, policy_snapshot, call, evaluated);
             let value = serde_json::to_value(evaluated)
                 .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
-            validate_pre_tool_result(&value)?;
+            edge_result_check::validate_pre_tool_result(&value)?;
             let typed = serde_json::from_value::<PreToolResultV1>(value.clone())
                 .map_err(|_| "native_hook_pre_tool_result_invalid".to_owned())?;
             let receipt = receipt_from_pre_tool(
                 &envelope,
                 policy_snapshot.map(AdmittedPolicySnapshot::snapshot),
-                &request_id,
-                &request_digest,
+                &receipt_identity,
                 &harness,
                 &kind,
                 &typed,
@@ -368,7 +318,6 @@ fn evaluate_validated_envelope(
             (value, receipt)
         }
         "PostToolUse" => {
-            let payload_kind = kind.clone();
             let request = NativeHookRequestV1 {
                 protocol_version: NATIVE_PROTOCOL_VERSION,
                 request_id: envelope.request_id.clone(),
@@ -379,29 +328,33 @@ fn evaluate_validated_envelope(
                 home_dir: envelope.source.home_dir.clone(),
                 guard_home: envelope.source.guard_home.clone(),
                 source_ref_external_allowed: envelope.source.source_ref_external_allowed,
-                // Keep the intrinsic result intact. The authenticated policy
-                // join below owns observe-mode semantics and suppresses only
-                // policy-only escalation; passing observe here would erase a
-                // native source/content block before that join runs.
+                // Keep the intrinsic result intact. The authenticated policy join below owns
+                // observe-mode semantics and suppresses only policy-only escalation; passing
+                // observe here would erase a native source/content block before that join runs.
                 observe_mode: false,
                 deadline_budget_ms: envelope.deadline_budget_ms,
             };
             let native = review_post_tool(&request);
-            let evaluated = if let Some(snapshot) = policy_snapshot {
-                crate::policy_enforcement::apply_post_tool_policy(
+            let mut evaluated = if let Some(snapshot) = policy_snapshot {
+                crate::policy_enforcement::apply_post_tool_policy_for_hook(
                     snapshot,
                     &request,
-                    payload_kind,
+                    kind.clone(),
                     native,
+                    origin_store,
+                    envelope.recording_only,
+                    envelope.source.execution_environment.as_ref(),
                 )?
             } else {
                 native
             };
+            // Settle "may the model read this" once, after the policy join ran.
+            evaluated.seal_output_mask();
+            crate::edge_post_tool_delivery::settle(&harness, &mut evaluated);
             let receipt = receipt_from_post_tool(
                 &envelope,
                 policy_snapshot.map(AdmittedPolicySnapshot::snapshot),
-                &request_id,
-                &request_digest,
+                &receipt_identity,
                 &harness,
                 &kind,
                 &evaluated,
@@ -412,7 +365,53 @@ fn evaluate_validated_envelope(
         }
         _ => return Err("native_hook_event_unsupported".to_owned()),
     };
-    crate::encode_response(&GuardHookEdgeResultV2 {
+    if let Some(store) = origin_store {
+        crate::policy_store::native_review_origin::authenticate(store, &mut receipt)?;
+        crate::context_assistance_notifications::notify_hook(&envelope, &receipt, &result);
+    }
+    if event_name == "PreToolUse" {
+        crate::command_policy_repair::apply_at_edge(&mut result, policy_snapshot, &envelope.source);
+    }
+    let guard_home = origin_store.map(crate::policy_store::PolicySnapshotStore::guard_home);
+    let (local_cli_rule, review_evidence) = crate::edge_review_evidence::beside(
+        &envelope,
+        &harness,
+        &event_name,
+        &result,
+        &receipt,
+        guard_home,
+        || {
+            let step = |payload: &Value, budget_ms: u64| {
+                pre_tool_chain::step(
+                    &envelope,
+                    &harness,
+                    &event_name,
+                    policy_snapshot,
+                    payload,
+                    budget_ms,
+                )
+            };
+            edge_local_cli::settle(&envelope, &harness, &event_name, &result, &step)
+        },
+    );
+    drop(lease);
+    let harness_response = crate::context_assistance_prompt::harness_response(
+        &envelope,
+        &harness,
+        &event_name,
+        &result,
+        origin_store,
+        started,
+    );
+    let mut edge = GuardHookEdgeResultV2 {
+        exact_command_block: None,
+        review_evidence,
+        // Every edge carries its route so no hook asks again; only PreToolUse is routed.
+        containment_route: Some(edge_route(&event_name, &result, envelope.recording_only)),
+        containment_rewrite: None,
+        local_cli_rule: local_cli_rule?,
+        receipt_recorded: false,
+        activity_recorded: false,
         schema: GUARD_HOOK_EDGE_RESULT_V2_SCHEMA.to_owned(),
         authority: "rust".to_owned(),
         request_id: Some(request_id),
@@ -420,8 +419,14 @@ fn evaluate_validated_envelope(
         event_name,
         payload_kind: kind,
         result,
+        harness_response,
         receipt,
-    })
+    };
+    edge_local_cli::attach_exact_command_block(&envelope, &mut edge);
+    edge_result_check::check(&edge)?;
+    // After the check, so a refused edge leaves no sink snapshot behind.
+    edge_containment::attach(&envelope, &mut edge);
+    crate::edge_receipt::encode(&envelope, origin_store, edge, started)
 }
 
 /// Evaluate a resident hook envelope against the already-installed in-memory
@@ -436,8 +441,35 @@ pub(crate) fn evaluate_envelope_with_store(
         &envelope.source.guard_home,
         envelope.policy_generation,
     )?;
-    let _command_lease = policy_store.command_authority_lease(snapshot.snapshot())?;
-    evaluate_validated_envelope(envelope, Some(snapshot.as_ref()))
+    let lease = policy_store.command_authority_lease(snapshot.snapshot())?;
+    evaluate_validated_envelope(envelope, Some(snapshot.as_ref()), Some(policy_store), lease)
+}
+
+/// Review a Cursor routing probe on the same authenticated binding as the
+/// edge. Watch gives a plain probe allow and leaves the next hook to review
+/// the call that actually runs.
+pub(crate) fn evaluate_cursor_probe(
+    envelope: GuardHookEnvelopeV2,
+    policy_store: &crate::policy_store::PolicySnapshotStore,
+    harness_postures: Option<&Value>,
+) -> Result<Option<Vec<u8>>, String> {
+    validate_envelope_shape(&envelope)?;
+    let admitted = policy_store.validate_request_snapshot(
+        &envelope.policy_snapshot,
+        &envelope.source.guard_home,
+        envelope.policy_generation,
+    )?;
+    let snapshot = admitted.snapshot();
+    let binding = serde_json::json!({"mode": snapshot.mode, "harness_postures": harness_postures});
+    if crate::hook_render_posture::recording_only_for_binding(
+        Some(&binding),
+        &Value::from("cursor"),
+    ) {
+        return Ok(None);
+    }
+    let lease = policy_store.command_authority_lease(snapshot)?;
+    evaluate_validated_envelope(envelope, Some(admitted.as_ref()), Some(policy_store), lease)
+        .map(Some)
 }
 
 /// Evaluate against a snapshot while the policy store's request fence is
@@ -448,9 +480,13 @@ pub(crate) fn evaluate_envelope_with_snapshot(
     snapshot: &AdmittedPolicySnapshot,
 ) -> Result<Vec<u8>, String> {
     validate_envelope_shape(&envelope)?;
-    evaluate_validated_envelope(envelope, Some(snapshot))
+    evaluate_validated_envelope(envelope, Some(snapshot), None, ())
 }
 
 #[cfg(test)]
 #[path = "edge_tests.rs"]
-mod tests;
+pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "edge_request_binding_tests.rs"]
+mod request_binding_tests;

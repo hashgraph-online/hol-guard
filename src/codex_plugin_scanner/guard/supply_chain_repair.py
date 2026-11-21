@@ -29,6 +29,10 @@ def coordinate_supply_chain_repair(
     try:
         _ = repair_package_shims()
         completed_steps.append("package_shims")
+    except SupplyChainRepairDeferredError as error:
+        remaining_steps.append(
+            {"step": "package_shims", "code": error.code, "message": error.message, "action": error.action}
+        )
     except Exception:
         _LOGGER.exception("Supply-chain repair step failed: package_shims")
         failed_steps.append(
@@ -80,6 +84,8 @@ def coordinate_supply_chain_repair(
     )
     if repaired:
         message = "Supply-chain protection restored and refreshed."
+    elif any(step.get("action") == "check_access" for step in remaining_steps):
+        message = "Existing protection was repaired. Check Cloud access before protecting additional package tools."
     elif connect_only:
         message = "Package protection is on. Connect Guard Cloud to refresh safety intelligence."
     elif completed_steps:

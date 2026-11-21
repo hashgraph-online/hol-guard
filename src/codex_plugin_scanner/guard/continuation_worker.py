@@ -42,6 +42,24 @@ def run_store_continuation_plan(
     )
 
 
+def settle_without_harness(
+    offer: ContinuationOffer,
+    *,
+    cancelled: Callable[[], bool],
+    observed_at: str,
+) -> ContinuationResult | None:
+    """Answer offers whose continuation needs no harness call, or return None."""
+
+    if offer.capability != "suspended-response":
+        return None
+    if cancelled():
+        return _result(offer, "failed", "continuation_cancelled", observed_at)
+    # The parent already proved the live-hook deadline. Only the parent may
+    # mutate the claimed resume row, so terminal hook completion cannot be
+    # overwritten by a late result.
+    return _result(offer, "waiting", "original_hook_waiting", observed_at)
+
+
 class StoreContinuationAdapter:
     def __init__(self, *, store: GuardStore, request_id: str, observed_at: str) -> None:
         self._store: GuardStore = store
@@ -57,13 +75,11 @@ class StoreContinuationAdapter:
         cancelled: Callable[[], bool],
     ) -> ContinuationResult:
         _ = action
+        settled = settle_without_harness(offer, cancelled=cancelled, observed_at=self._observed_at)
+        if settled is not None:
+            return settled
         if cancelled():
             return _result(offer, "failed", "continuation_cancelled", self._observed_at)
-        if offer.capability == "suspended-response":
-            # The parent already proved the live-hook deadline. Only the parent
-            # may mutate the claimed resume row, so terminal hook completion
-            # cannot be overwritten by a late child result.
-            return _result(offer, "waiting", "original_hook_waiting", self._observed_at)
         if offer.capability != "session-resume":
             return _result(offer, "manual_retry_required", "manual_retry_required", self._observed_at)
         try:

@@ -1,0 +1,516 @@
+{
+  "schema": "guard-attestation-envelope-parity.v1",
+  "cases": [
+    {
+      "name": "a complete envelope is accepted",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "accepted": {
+        "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature_algorithm": "rsa-pss-sha256",
+        "key_id": "guard-aibom-trust-key-local",
+        "public_key_pem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprint_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "public_jwk_thumbprint": "thumb",
+        "signature": "c2lnbmF0dXJl",
+        "signed_at": "2026-01-02T03:04:05+00:00"
+      }
+    },
+    {
+      "name": "an ecdsa envelope is accepted",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "ecdsa-p256-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "accepted": {
+        "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature_algorithm": "ecdsa-p256-sha256",
+        "key_id": "guard-aibom-trust-key-local",
+        "public_key_pem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprint_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "public_jwk_thumbprint": "thumb",
+        "signature": "c2lnbmF0dXJl",
+        "signed_at": "2026-01-02T03:04:05+00:00"
+      }
+    },
+    {
+      "name": "a missing signing time is left to the payload check",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "accepted": {
+        "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature_algorithm": "rsa-pss-sha256",
+        "key_id": "guard-aibom-trust-key-local",
+        "public_key_pem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprint_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "public_jwk_thumbprint": "thumb",
+        "signature": "c2lnbmF0dXJl",
+        "signed_at": null
+      }
+    },
+    {
+      "name": "a missing thumbprint is accepted",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "accepted": {
+        "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature_algorithm": "rsa-pss-sha256",
+        "key_id": "guard-aibom-trust-key-local",
+        "public_key_pem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprint_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "public_jwk_thumbprint": null,
+        "signature": "c2lnbmF0dXJl",
+        "signed_at": "2026-01-02T03:04:05+00:00"
+      }
+    },
+    {
+      "name": "a thumbprint that is not a string is read as absent",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": 17
+      },
+      "accepted": {
+        "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature_algorithm": "rsa-pss-sha256",
+        "key_id": "guard-aibom-trust-key-local",
+        "public_key_pem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprint_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "public_jwk_thumbprint": null,
+        "signature": "c2lnbmF0dXJl",
+        "signed_at": "2026-01-02T03:04:05+00:00"
+      }
+    },
+    {
+      "name": "an unknown field is refused",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb",
+        "stowaway": "x"
+      },
+      "error": "Unknown trust attestation envelope fields: stowaway"
+    },
+    {
+      "name": "unknown fields are named in sorted order",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb",
+        "zulu": "x",
+        "alpha": "y"
+      },
+      "error": "Unknown trust attestation envelope fields: alpha, zulu"
+    },
+    {
+      "name": "a missing payloadHash is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a blank payloadHash is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a non-string payloadHash is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": 5,
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a missing signatureAlgorithm is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a blank signatureAlgorithm is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a non-string signatureAlgorithm is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": 5,
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a missing keyId is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a blank keyId is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a non-string keyId is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": 5,
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a missing publicKeyPem is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a blank publicKeyPem is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a non-string publicKeyPem is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": 5,
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a missing fingerprintSha256 is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a blank fingerprintSha256 is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a non-string fingerprintSha256 is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": 5,
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a missing signature is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a blank signature is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a non-string signature is incomplete",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": 5,
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Trust attestation envelope is incomplete"
+    },
+    {
+      "name": "a missing version is unsupported",
+      "envelope": {
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Unsupported trust attestation envelope version"
+    },
+    {
+      "name": "an older version is unsupported",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v2",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Unsupported trust attestation envelope version"
+    },
+    {
+      "name": "a non-string version is unsupported",
+      "envelope": {
+        "payloadVersion": 3,
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Unsupported trust attestation envelope version"
+    },
+    {
+      "name": "an unknown signature algorithm is refused",
+      "envelope": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "ed25519",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Unsupported trust attestation signature algorithm"
+    },
+    {
+      "name": "a signature algorithm is read after the version",
+      "envelope": {
+        "payloadVersion": "v2",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "c2lnbmF0dXJl",
+        "signatureAlgorithm": "ed25519",
+        "signedAt": "2026-01-02T03:04:05+00:00",
+        "keyId": "guard-aibom-trust-key-local",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+        "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicJwkThumbprint": "thumb"
+      },
+      "error": "Unsupported trust attestation envelope version"
+    }
+  ],
+  "fingerprints": [
+    {
+      "pem": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+      "normalized": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+      "fingerprint": "24ae57010cc50faca9c33ce8a97422cc0f897589a30f0b79265e0c759e8ee2fa"
+    },
+    {
+      "pem": "\r\n-----BEGIN PUBLIC KEY-----\r\nAAAA\r\n-----END PUBLIC KEY-----\r\n",
+      "normalized": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+      "fingerprint": "24ae57010cc50faca9c33ce8a97422cc0f897589a30f0b79265e0c759e8ee2fa"
+    },
+    {
+      "pem": "  -----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----  \n\n",
+      "normalized": "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----",
+      "fingerprint": "24ae57010cc50faca9c33ce8a97422cc0f897589a30f0b79265e0c759e8ee2fa"
+    },
+    {
+      "pem": "",
+      "normalized": "",
+      "fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

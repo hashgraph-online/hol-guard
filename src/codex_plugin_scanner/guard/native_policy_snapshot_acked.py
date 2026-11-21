@@ -13,16 +13,13 @@ from .native_policy_snapshot_constants import (
     POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES,
     NativePolicySnapshotError,
 )
+from .native_policy_snapshot_harness_postures import (
+    binding_with_harness_postures,
+    read_harness_postures_sidecar,
+)
 from .native_policy_snapshot_storage import _read_v3_snapshot_file
 
 logger = logging.getLogger(__name__)
-
-
-def recording_only_from_acked_snapshot(store: object) -> bool:
-    """Accept Watch only from an authenticated, unexpired resident binding."""
-
-    binding = acked_snapshot_binding_for_store(store)
-    return binding is not None and binding.get("mode") == "observe"
 
 
 def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
@@ -73,4 +70,6 @@ def acked_snapshot_binding_for_store(store: object) -> dict[str, object] | None:
     }
     if "command_extensions" in snapshot:
         binding["command_extensions_bound"] = True
-    return binding
+    return binding_with_harness_postures(
+        binding, read_harness_postures_sidecar(store, generation=generation, policy_digest=digest)
+    )

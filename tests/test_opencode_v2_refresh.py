@@ -4,13 +4,12 @@ import json
 import os
 import stat
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode_pretool import pretool_plugin_source
+from tests import harness_ops_support as harness_support
+from tests.opencode_test_support import pretool_plugin_source
 from tests.test_opencode_pretool import _bun_executable, _ctx
 
 
@@ -32,7 +31,7 @@ def _stale_companion(tmp_path: Path):
         ),
         encoding="utf-8",
     )
-    OpenCodeHarnessAdapter().install(ctx)
+    harness_support.install("opencode", ctx)
     payload = json.loads(config.read_text(encoding="utf-8"))
     companion = payload["mcp"]["hol-guard::test"]
     argv = companion["command"]
@@ -43,8 +42,8 @@ def _stale_companion(tmp_path: Path):
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file mode contract")
 def test_refresh_preserves_jsonc_comments_and_existing_mode(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.opencode_proxy_refresh import refresh_opencode_proxy_launchers
-    from codex_plugin_scanner.guard.runtime.jsonc import loads_jsonc
+    from codex_plugin_scanner.json_comment_stripping import strip_jsonc_comments
+    from tests.opencode_test_support import refresh_opencode_proxy_launchers
 
     ctx, config, payload = _stale_companion(tmp_path)
     text = config.read_text(encoding="utf-8")
@@ -60,17 +59,16 @@ def test_refresh_preserves_jsonc_comments_and_existing_mode(tmp_path: Path) -> N
     assert "// launcher note" in result
     assert stat.S_IMODE(config.stat().st_mode) == 0o640
     expected = payload["mcp"]["hol-guard::test"]["command"]
-    actual = loads_jsonc(result)
+    actual = json.loads(strip_jsonc_comments(result))
     actual["mcp"]["hol-guard::test"]["command"] = expected
     assert actual == payload
 
 
 def test_invalid_workspace_config_does_not_block_valid_global_refresh(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.opencode_artifacts import config_paths
-    from codex_plugin_scanner.guard.adapters.opencode_proxy_refresh import refresh_opencode_proxy_launchers
+    from tests.opencode_test_support import refresh_opencode_proxy_launchers
 
     ctx, config, _ = _stale_companion(tmp_path)
-    other = next(path for path in config_paths(ctx) if path != config)
+    other = config.with_name("opencode.jsonc")
     other.parent.mkdir(parents=True, exist_ok=True)
     other.write_text("{invalid", encoding="utf-8")
     warnings: list[str] = []
@@ -81,7 +79,7 @@ def test_invalid_workspace_config_does_not_block_valid_global_refresh(tmp_path: 
 
 
 def test_refresh_skips_changed_transport(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.opencode_proxy_refresh import refresh_opencode_proxy_launchers
+    from tests.opencode_test_support import refresh_opencode_proxy_launchers
 
     ctx, config, payload = _stale_companion(tmp_path)
     payload["mcp"]["test"]["type"] = "remote"
@@ -91,27 +89,10 @@ def test_refresh_skips_changed_transport(tmp_path: Path) -> None:
     assert config.read_bytes() == before
 
 
-def test_refresh_does_not_overwrite_concurrent_config_edit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.adapters import opencode_proxy_refresh
-
-    ctx, config, payload = _stale_companion(tmp_path)
-    original = opencode_proxy_refresh.guard_cli_command
-    user_edit = json.dumps({**payload, "user_note": "edited concurrently"}).encode()
-
-    def changed(context, args):
-        config.write_bytes(user_edit)
-        return original(context, args)
-
-    monkeypatch.setattr(opencode_proxy_refresh, "guard_cli_command", changed)
-    with pytest.raises(ValueError, match="changed during launcher refresh"):
-        opencode_proxy_refresh.refresh_opencode_proxy_launchers(ctx)
-    assert config.read_bytes() == user_edit
-
-
 def test_invalid_config_does_not_prevent_independent_plugin_refresh(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.opencode_pretool import global_plugin_path, install_pretool_plugin
     from codex_plugin_scanner.guard.cli.update_opencode import _refresh_opencode_pretool_plugin
     from codex_plugin_scanner.guard.store import GuardStore
+    from tests.opencode_test_support import global_plugin_path, install_pretool_plugin
 
     ctx = _ctx(tmp_path)
     install_pretool_plugin(ctx)
@@ -180,7 +161,7 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
     mismatched_binding: bool,
     frozen_runtime: bool,
 ) -> None:
-    from codex_plugin_scanner.guard.adapters.opencode_proxy_refresh import refresh_opencode_proxy_launchers
+    from tests.opencode_test_support import refresh_opencode_proxy_launchers
 
     ctx = _ctx(tmp_path)
     config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
@@ -199,7 +180,7 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
         ),
         encoding="utf-8",
     )
-    OpenCodeHarnessAdapter().install(ctx)
+    harness_support.install("opencode", ctx)
     payload = json.loads(config.read_text(encoding="utf-8"))
     companion = payload["mcp"]["hol-guard::test"]
     proxy_index = companion["command"].index("opencode-mcp-proxy")
@@ -213,11 +194,13 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
     before = json.loads(config.read_text(encoding="utf-8"))
 
     if frozen_runtime:
-        from codex_plugin_scanner.guard.adapters import hook_python
+        from codex_plugin_scanner.guard import native_harness_client as harness_client
 
-        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        stamp = harness_client.caller_identity()
         monkeypatch.setattr(
-            hook_python, "resolve_guard_hook_python", lambda _context: Path("/durable/current-hol-guard")
+            harness_client,
+            "caller_identity",
+            lambda: {**stamp, "frozen": True, "executable_resolved": "/durable/current-hol-guard"},
         )
 
     assert refresh_opencode_proxy_launchers(ctx) == (0 if mismatched_binding else 1)

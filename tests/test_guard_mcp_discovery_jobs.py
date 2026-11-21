@@ -9,12 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
-from codex_plugin_scanner.guard.daemon.local_cli_http import dispatch_local_cli_post
-from codex_plugin_scanner.guard.daemon.mcp_discovery_jobs import DiscoveryJobError, McpDiscoveryJobs
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.mcp_discovery_jobs import DiscoveryJobError, McpDiscoveryJobs
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import run_mcp_catalog
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
 
 
 def _finished(pool: McpDiscoveryJobs, job_id: str) -> dict[str, object]:
@@ -115,6 +116,7 @@ def test_cancel_before_start_launches_nothing(tmp_path: Path):
         "mcp_launch_failed",
         "mcp_transport_failed",
         "mcp_initialize_failed",
+        "mcp_server_exited",
         "mcp_protocol_unsupported",
         "mcp_capability_rejected",
     ],
@@ -163,9 +165,7 @@ def test_refresh_api_requires_process_consent_and_cancel_does_not_mutate_grants(
         with pytest.raises(LocalCliApiError, match="Confirm starting"):
             service.refresh_job({"cli_id": identity.cli_id})
         assert not entered.is_set()
-        job = dispatch_local_cli_post(
-            service,
-            "/v1/local-clis/refresh-job",
+        job = service.refresh_job(
             {
                 "cli_id": identity.cli_id,
                 "confirm_process_start": True,
@@ -186,14 +186,14 @@ def test_configured_inventory_uses_read_adapters_and_never_launches(tmp_path: Pa
     calls = []
     monkeypatch.setattr(service, "_observe_harness_mcp_servers", lambda **_kwargs: calls.append("configuration"))
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_observed_mcp_tools",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_observed_mcp_tools",
         lambda *_args, **_kwargs: calls.append("observations"),
     )
 
     def forbidden_launch(*_args, **_kwargs):
         pytest.fail("configuration discovery must not launch a server")
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server", forbidden_launch)
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server", forbidden_launch)
     try:
         job = service.refresh_job({"operation": "configured-connections"})
         assert _finished(service._discovery_jobs, str(job["job_id"]))["state"] == "complete"
@@ -224,7 +224,7 @@ def test_configured_inventory_reports_failed_stage_without_private_exception(
     else:
         monkeypatch.setattr(service, "_observe_harness_mcp_servers", lambda **_kwargs: None)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.daemon.local_cli_api.discover_observed_mcp_tools",
+            "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_observed_mcp_tools",
             lambda *_args, **_kwargs: fail(),
         )
     try:
@@ -284,9 +284,7 @@ def test_cancel_stalled_real_probe_leaves_unrelated_process_alive(tmp_path: Path
         for pid in pids:
             deadline = time.monotonic() + 2
             while time.monotonic() < deadline:
-                try:
-                    os.kill(pid, 0)
-                except ProcessLookupError:
+                if not _owned_pid_is_running(pid):
                     break
                 time.sleep(0.01)
             else:
@@ -296,3 +294,38 @@ def test_cancel_stalled_real_probe_leaves_unrelated_process_alive(tmp_path: Path
         thread.join(3)
         unrelated.terminate()
         unrelated.wait(3)
+
+
+def _owned_pid_is_running(pid: int) -> bool:
+    if sys.platform == "linux":
+        try:
+            # kill(pid, 0) also succeeds for terminated zombies awaiting init
+            # reaping. Those cannot execute; an active descendant still fails.
+            state = Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()[0]
+        except FileNotFoundError:
+            return False
+        except (OSError, IndexError):
+            return True  # Missing state evidence cannot prove termination.
+        return state not in {"Z", "X"}
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux procfs distinguishes terminated zombies")
+def test_owned_pid_liveness_rejects_running_child_but_accepts_terminated_zombie():
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert _owned_pid_is_running(child.pid)
+        child.kill()
+        deadline = time.monotonic() + 3
+        while _owned_pid_is_running(child.pid) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        # Deliberately inspect before wait() so the child is not yet reaped.
+        assert Path(f"/proc/{child.pid}/stat").read_text().rsplit(") ", 1)[1].split()[0] == "Z"
+        assert not _owned_pid_is_running(child.pid)
+    finally:
+        child.kill()
+        child.wait(3)

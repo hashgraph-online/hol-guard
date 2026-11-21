@@ -14,6 +14,7 @@ import { useModalDialog } from "./use-modal-dialog";
 import {
   type EffectiveExtensionControls,
   type ExtensionCatalogItem,
+  type ExtensionCatalogSummary,
   type ExtensionMutationPreview,
   type ExtensionPermission,
 } from "./extension-controls-api";
@@ -124,7 +125,7 @@ function DraftControl(props: {
 
 export function PermissionPolicyRow(props: {
   permission: ExtensionPermission;
-  extension: ExtensionCatalogItem;
+  extension: ExtensionCatalogSummary;
   effective: EffectiveExtensionControls;
   draftState: PermissionDraftState;
   disabled: boolean;
@@ -132,12 +133,14 @@ export function PermissionPolicyRow(props: {
 }) {
   const managed = managedPermissionState(props.effective, props.permission.permission_id);
   const provenance = controlProvenance(props.effective, "permission", props.permission.permission_id);
-  const example = props.permission.example_command ?? (props.extension.executables[0]?.trim() || props.permission.label);
+  const example = props.permission.example_command ?? props.extension.executables[0]?.trim();
   return (
     <article id={`pattern-${props.permission.permission_id}`} className="guard-pattern-row" data-permission-id={props.permission.permission_id}>
       <div className="min-w-0">
         <h3 className="text-sm font-semibold text-brand-dark">{props.permission.label}</h3>
-        <p className="guard-pattern-example mt-1">{example}</p>
+        {props.permission.description ? <p className="mt-1 text-xs leading-5 text-brand-dark/80">{props.permission.description}</p> : null}
+        {/* The catalog's sample command, not a package or command this device has allowed. */}
+        {example ? <p className="mt-1 text-xs text-brand-dark/70">Example: <code className="guard-pattern-example">{example}</code></p> : null}
         {!props.permission.configurable ? (
           <p className="mt-2 text-xs leading-5 text-brand-dark">
             Why this cannot be changed: {props.permission.fixed_reason ?? "Guard marks this safety permission as immutable."}
@@ -290,9 +293,9 @@ export function PolicyReviewSheet(props: {
           />
         </div>
         {props.error ? <p role="alert" className="mt-3 text-sm text-red-950">{props.error}</p> : null}
-        <div className="sticky bottom-0 mt-4 flex flex-wrap justify-end gap-2 bg-[var(--surface-1)] pb-1 pt-3">
-          <button type="button" disabled={props.busy} onClick={props.onClose} className="min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark">Continue editing</button>
-          <button type="submit" disabled={submitDisabled} className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">
+        <div className="sticky bottom-0 z-10 -mx-5 mt-4 flex flex-wrap items-center justify-end gap-2 bg-[var(--surface-1)] px-5 pb-1 pt-3 sm:-mx-6 sm:px-6">
+          <button type="button" disabled={props.busy} onClick={props.onClose} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-center text-sm font-semibold text-brand-dark">Continue editing</button>
+          <button type="submit" disabled={submitDisabled} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-blue px-4 text-center text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">
             {props.busy ? "Applying…" : `Apply ${count} reviewed change${count === 1 ? "" : "s"}`}
           </button>
         </div>

@@ -59,6 +59,83 @@ def test_stage_from_wheel_extracts_sealed_runtime(tmp_path: Path) -> None:
     assert oct(runtime_path.stat().st_mode & 0o777) == "0o755"
 
 
+
+def test_stage_from_wheel_applies_the_runtime_bound(tmp_path: Path) -> None:
+    runtime = b"native-runtime-bytes"
+    wheel = tmp_path / "hol_guard-3.0.12-py3-none-macosx_11_0_arm64.whl"
+    _write_wheel(wheel, runtime, _manifest(runtime))
+    stage = {"expected_version": "3.0.12", "expected_target": "aarch64-apple-darwin"}
+
+    with pytest.raises(MODULE.NativeRuntimeStageError, match="invalid size"):
+        MODULE.stage_from_wheel(wheel, tmp_path / "small", max_runtime_bytes=len(runtime) - 1, **stage)
+    with pytest.raises(MODULE.NativeRuntimeStageError, match="runtime bound"):
+        MODULE.stage_from_wheel(
+            wheel, tmp_path / "huge", max_runtime_bytes=MODULE._MAX_UNPUBLISHED_RUNTIME_BYTES + 1, **stage
+        )
+    runtime_path, _ = MODULE.stage_from_wheel(wheel, tmp_path / "exact", max_runtime_bytes=len(runtime), **stage)
+    assert runtime_path.read_bytes() == runtime
+
+    with pytest.raises(MODULE.NativeRuntimeStageError, match="wrong size"):
+        MODULE.refresh_identity(tmp_path / "exact", max_runtime_bytes=len(runtime) - 1)
+    with pytest.raises(MODULE.NativeRuntimeStageError, match="runtime bound"):
+        MODULE.refresh_identity(tmp_path / "exact", max_runtime_bytes=MODULE._MAX_UNPUBLISHED_RUNTIME_BYTES + 1)
+    assert MODULE.refresh_identity(tmp_path / "exact", max_runtime_bytes=len(runtime)).is_file()
+
+def _bundle_binding(source_sha: str = "a" * 40) -> dict[str, object]:
+    return {
+        "schema": "guard.command-pack-bundle.v1",
+        "path": "codex_plugin_scanner/guard/contracts/data/extensions/command-pack-bundle/command-pack-bundle.v1.json",
+        "sha256": "c" * 64,
+        "length": 2168,
+        "source_sha": source_sha,
+        "engine": "d" * 64,
+    }
+
+
+def test_staging_keeps_the_command_pack_bundle_binding(tmp_path: Path) -> None:
+    # Native rejects the installed catalog unless the runtime manifest carries
+    # the same binding as the source compiler manifest (#5419).
+    runtime = b"native-runtime-bytes"
+    wheel = tmp_path / "wheel.whl"
+    _write_wheel(wheel, runtime, {**_manifest(runtime), "command_pack_bundle": _bundle_binding()})
+    destination = tmp_path / "native"
+    runtime_path, manifest_path = MODULE.stage_from_wheel(
+        wheel,
+        destination,
+        expected_version="3.0.12",
+        expected_target="aarch64-apple-darwin",
+    )
+    assert json.loads(manifest_path.read_text(encoding="utf-8"))["command_pack_bundle"] == _bundle_binding()
+
+    runtime_path.write_bytes(runtime + b"-signed")
+    runtime_path.chmod(0o755)
+    MODULE.refresh_identity(destination)
+    assert json.loads(manifest_path.read_text(encoding="utf-8"))["command_pack_bundle"] == _bundle_binding()
+
+
+@pytest.mark.parametrize(
+    "binding",
+    [
+        _bundle_binding(source_sha="e" * 40),
+        {**_bundle_binding(), "path": "elsewhere.json"},
+        {**_bundle_binding(), "extra": True},
+        {**_bundle_binding(), "length": 0},
+        "not-a-binding",
+    ],
+)
+def test_staging_rejects_a_malformed_command_pack_bundle_binding(tmp_path: Path, binding: object) -> None:
+    runtime = b"native-runtime-bytes"
+    wheel = tmp_path / "wheel.whl"
+    _write_wheel(wheel, runtime, {**_manifest(runtime), "command_pack_bundle": binding})
+    with pytest.raises(MODULE.NativeRuntimeStageError, match="command pack bundle"):
+        MODULE.stage_from_wheel(
+            wheel,
+            tmp_path / "native",
+            expected_version="3.0.12",
+            expected_target="aarch64-apple-darwin",
+        )
+
+
 def test_stage_from_wheel_rejects_path_escape(tmp_path: Path) -> None:
     wheel = tmp_path / "evil.whl"
     with zipfile.ZipFile(wheel, "w") as archive:

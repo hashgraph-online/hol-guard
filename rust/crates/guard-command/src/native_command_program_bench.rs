@@ -22,7 +22,7 @@ fn native_command_program_component_diagnostic() {
         let mut observed = Vec::with_capacity(6);
         let admitted = black_box(
             NativeCommandProgram::from_packaged_bytes_observed(
-                black_box(EMBEDDED_PROGRAM),
+                black_box(packaged_command_program_bytes()),
                 |phase| {
                     let now = Instant::now();
                     observed.push((phase, now.duration_since(last).as_secs_f64() * 1_000_000.0));

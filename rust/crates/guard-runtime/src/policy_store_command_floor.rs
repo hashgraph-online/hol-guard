@@ -12,6 +12,8 @@ pub(super) struct CommandControlFloor {
     managed_revision: u64,
     effective_digest: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    control_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     authority: Option<guard_contracts::NativeCommandControlAuthorityV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     previous_floor_digest: Option<String>,
@@ -23,6 +25,11 @@ pub(super) fn snapshot_floor(snapshot: Option<&PolicySnapshotV3>) -> Option<Comm
         revision: binding.revision,
         managed_revision: binding.managed_revision,
         effective_digest: binding.effective_digest.clone(),
+        control_digest: binding.active_security_digest.as_ref().and_then(|_| {
+            let mut controls = binding.clone();
+            controls.active_security_digest = None;
+            controls.compute_effective_digest().ok()
+        }),
         authority: binding.authority.clone(),
         previous_floor_digest: binding
             .authority
@@ -61,7 +68,14 @@ pub(super) fn next_floor(
         }
         if candidate.revision == current.revision
             && candidate.managed_revision == current.managed_revision
-            && candidate.effective_digest != current.effective_digest
+            && candidate
+                .control_digest
+                .as_ref()
+                .unwrap_or(&candidate.effective_digest)
+                != current
+                    .control_digest
+                    .as_ref()
+                    .unwrap_or(&current.effective_digest)
         {
             return Err("native_command_control_revision_reused".to_owned());
         }

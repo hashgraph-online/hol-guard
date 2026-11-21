@@ -10,10 +10,13 @@ from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from codex_plugin_scanner.guard.aibom_content_upload import (
     GuardAibomPrimaryContentSource,
     upload_primary_content_sources,
 )
+from tests.support.cloud_json_request_transport import use_runner_transport
 
 
 def _source(skills_root: Path, index: int) -> GuardAibomPrimaryContentSource:
@@ -36,7 +39,9 @@ def _source(skills_root: Path, index: int) -> GuardAibomPrimaryContentSource:
     )
 
 
-def test_primary_content_upload_batches_exact_bodies_and_item_count(tmp_path: Path) -> None:
+def test_primary_content_upload_batches_exact_bodies_and_item_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     sources = tuple(_source(tmp_path / "skills", index) for index in range(101))
     requests: list[SimpleNamespace] = []
 
@@ -59,6 +64,7 @@ def test_primary_content_upload_batches_exact_bodies_and_item_count(tmp_path: Pa
         _urlopen_json_with_timeout_retry=respond,
     )
 
+    use_runner_transport(monkeypatch, runner)
     summary, _auth_context = upload_primary_content_sources(
         object(),
         runner,
@@ -89,7 +95,7 @@ def test_primary_content_upload_batches_exact_bodies_and_item_count(tmp_path: Pa
     assert first_item["versionId"] == sources[0].version_id
 
 
-def test_primary_content_upload_failure_is_nonfatal(tmp_path: Path) -> None:
+def test_primary_content_upload_failure_is_nonfatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source = _source(tmp_path / "skills", 1)
 
     def fail(*_args, **_kwargs):
@@ -106,6 +112,7 @@ def test_primary_content_upload_failure_is_nonfatal(tmp_path: Path) -> None:
         _urlopen_json_with_timeout_retry=fail,
     )
 
+    use_runner_transport(monkeypatch, runner)
     summary, _auth_context = upload_primary_content_sources(
         object(),
         runner,
@@ -120,7 +127,9 @@ def test_primary_content_upload_failure_is_nonfatal(tmp_path: Path) -> None:
     assert summary["reason"] == "endpoint_unavailable"
 
 
-def test_primary_content_upload_accounts_for_partial_batch_failure(tmp_path: Path) -> None:
+def test_primary_content_upload_accounts_for_partial_batch_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     sources = tuple(_source(tmp_path / "skills", index) for index in range(2))
     runner = SimpleNamespace(
         _guard_sync_request=lambda *_args, **kwargs: SimpleNamespace(data=kwargs["data"]),
@@ -131,6 +140,7 @@ def test_primary_content_upload_accounts_for_partial_batch_failure(tmp_path: Pat
         },
     )
 
+    use_runner_transport(monkeypatch, runner)
     summary, _auth_context = upload_primary_content_sources(
         object(),
         runner,
@@ -146,7 +156,7 @@ def test_primary_content_upload_accounts_for_partial_batch_failure(tmp_path: Pat
     assert summary["failed"] == 1
 
 
-def test_primary_content_upload_skips_changed_body(tmp_path: Path) -> None:
+def test_primary_content_upload_skips_changed_body(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source = _source(tmp_path / "skills", 1)
     source.path.write_text("changed after snapshot\n", encoding="utf-8")
     runner = SimpleNamespace(
@@ -154,6 +164,7 @@ def test_primary_content_upload_skips_changed_body(tmp_path: Path) -> None:
         _urlopen_json_with_timeout_retry=lambda **_kwargs: {},
     )
 
+    use_runner_transport(monkeypatch, runner)
     summary, _auth_context = upload_primary_content_sources(
         object(),
         runner,
@@ -167,7 +178,7 @@ def test_primary_content_upload_skips_changed_body(tmp_path: Path) -> None:
     assert summary["skipped"] == 1
 
 
-def test_primary_content_upload_accepts_an_empty_primary_file(tmp_path: Path) -> None:
+def test_primary_content_upload_accepts_an_empty_primary_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source = _source(tmp_path / "skills", 1)
     source.path.write_bytes(b"")
     source = replace(
@@ -183,6 +194,7 @@ def test_primary_content_upload_accepts_an_empty_primary_file(tmp_path: Path) ->
         },
     )
 
+    use_runner_transport(monkeypatch, runner)
     summary, _auth_context = upload_primary_content_sources(
         object(),
         runner,

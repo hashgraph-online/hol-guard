@@ -2,6 +2,7 @@ import {
   approvalDecisionContractKey,
   approvalDecisionSubjectKey,
   ADVANCED_SCOPE_VALUES,
+  BLOCK_SCOPE_CHOICES,
   DEFAULT_SCOPE_CHOICES,
   advancedScopeChoicesForRequest,
   buildDecisionPayload,
@@ -9,8 +10,10 @@ import {
   normalizeDecisionScope,
   recommendedScopeForAction,
   requestSupportsScope,
+  scopeChoiceWithDuration,
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
+  onceOnlyReasonCopy,
   taskCapabilityExplanation,
   willPersistExactAction,
 } from "./approval-scopes";
@@ -275,8 +278,55 @@ assert(
   "T-AS-14: task access copy explains protected actions",
 );
 assert(
-  taskCapabilityExplanation(BASE_REQUEST)?.includes("not available") === true,
-  "T-AS-15: task access copy truthfully explains disabled eligibility",
+  taskCapabilityExplanation(BASE_REQUEST) === null,
+  "T-AS-15: no task-access note when exact-action Always is available",
+);
+const onceOnlyRequest = (reason: string | null): GuardApprovalRequest => ({
+  ...BASE_REQUEST,
+  exact_action_persistence_eligible: false,
+  once_only_reason: reason,
+});
+for (const [reason, fragment] of [
+  ["no_command_identity", "no stable command or file"],
+  ["mutable_launcher", "run other code or config"],
+  ["node_package_manifest_unproven", "resolution settings"],
+  ["node_package_entrypoint_unproven", "package entry point"],
+  ["node_package_exports_unproven", "export conditions or path patterns"],
+  ["node_package_native_addon_unproven", "compiled dependency"],
+  ["node_runtime_package_mutation_unproven", "later package loads"],
+  ["runner_code_closure_unproven", "package runner and its command"],
+  ["python_runtime_module_unproven", "installed Python implementation"],
+  ["python_runtime_bootstrap_unproven", "startup code and native libraries"],
+  ["script_execution_binding_unavailable", "verified snapshot"],
+  ["compound_command", "chains steps"],
+  ["guard_control", "Changes to Guard itself"],
+  ["package_action", "Package installs and updates"],
+  ["non_overridable", "does not let this action be remembered"],
+  ["unproven_launch", "could not verify exactly what this command launches"],
+  ["sensitive_path", "may hold secrets"],
+  ["broad_scope", "covers too much"],
+  ["git_helper_config", "configures git helpers"],
+  ["destructive_command", "delete, move or send data"],
+  ["provider_unverified", "provider account is verified"],
+] as const) {
+  const copy = taskCapabilityExplanation(onceOnlyRequest(reason));
+  assert(copy?.includes(fragment) === true, `T-AS-15a: once-only copy for ${reason}`);
+  assert(copy?.includes("Task access") === false, `T-AS-15b: ${reason} copy never mentions task access`);
+}
+assert(
+  taskCapabilityExplanation(onceOnlyRequest(null)) === onceOnlyReasonCopy("unknown_future_code"),
+  "T-AS-15c: missing or unknown reasons use the generic once-only copy",
+);
+assert(
+  taskCapabilityExplanation({
+    ...onceOnlyRequest("compound_command"),
+    extension_recommendation: { permissions: [{ permission_id: "p" }] },
+  } as unknown as GuardApprovalRequest) === null,
+  "T-AS-15e: an available extension permission route suppresses the unavailable note",
+);
+assert(
+  taskCapabilityExplanation(onceOnlyRequest(null))?.includes("Task access") === false,
+  "T-AS-15d: the generic copy is not the task-access note",
 );
 
 assert(ADVANCED_SCOPE_VALUES.has("global"), "T-AS-16: global remains the only advanced scope");
@@ -336,4 +386,42 @@ assert(
   DEFAULT_SCOPE_CHOICES.find((choice) => choice.value === "workspace")?.label ===
     "Allow and remember for this project",
   "T-AS-26: workspace choice copy matches the primary allow button",
+);
+
+const exactOnce = DEFAULT_SCOPE_CHOICES.find((item) => item.value === "artifact");
+assert(
+  exactOnce !== undefined && scopeChoiceWithDuration(exactOnce, false) === exactOnce,
+  "T-AS-30: the one-time exact action keeps its one-time copy",
+);
+assert(
+  exactOnce !== undefined &&
+    scopeChoiceWithDuration(exactOnce, true).label === "Always allow this exact action" &&
+    !scopeChoiceWithDuration(exactOnce, true).description.includes("Nothing is saved"),
+  "T-AS-34: Always allow on the exact action relabels the choice and drops the one-time description",
+);
+
+const simpleMarkup = renderToStaticMarkup(
+  createElement(ReviewScopeControls, {
+    commonScopeOptions: DEFAULT_SCOPE_CHOICES.filter((item) => item.value === "artifact"),
+    broaderScopeOptions: DEFAULT_SCOPE_CHOICES.filter((item) => item.value === "harness"),
+    advancedScopeOptions: [],
+    blockScopeOptions: [],
+    hasAllowScope: true,
+    taskCapabilityCopy: null,
+    exactActionPersistenceEligible: false,
+    rememberExactAction: false,
+    allowScope: "artifact",
+    blockScope: "artifact",
+    onAllowScopeChange: ignoreScopeChange,
+    onBlockScopeChange: ignoreScopeChange,
+    onRememberExactActionChange: ignoreScopeChange,
+  }),
+);
+assert(
+  simpleMarkup.includes("Allow just this once") && simpleMarkup.includes("Approval scope"),
+  "T-AS-32: the card shows the one-time choice under its section label",
+);
+assert(
+  !simpleMarkup.includes("Applies to") && !simpleMarkup.includes("Expires") && !simpleMarkup.includes("Policy"),
+  "T-AS-33: a scope choice is a label and one line, with no applies-to, expiry or policy table",
 );

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .local_cli_errors import LocalCliCatalogLimitError
 from .runtime.local_cli_commands import (
@@ -17,26 +17,75 @@ from .runtime.local_cli_commands import (
 )
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .runtime.local_mcp_stdio import McpCatalogResult
-from .runtime.mcp_classification import classify_mcp_action
-from .store_custom_extension_continuity import _write_local_cli_grant
-from .store_local_cli_rows import (
-    _grant_from_row,
-    _merge_item,
-    _observation_from_row,
-    _row_int,
-    _row_text,
-    _row_values,
-    _with_suggestable,
-)
+from .store_custom_extension_continuity import _native_grant_write
+from .store_local_cli_capabilities import LocalCliCapabilityState, capability_map, load_local_cli_capabilities
+from .store_local_cli_context import note_capability_cause
+from .store_local_cli_retention import utc_now_iso
+from .store_local_cli_rows import _row_int, _row_values, local_cli_rules_exist
 from .store_local_cli_schema import ensure_local_cli_schema
-from .store_mcp_catalog import load_mcp_catalogs, review_catalog_changes, write_mcp_catalog
-from .store_mcp_provider_catalog import load_provider_catalog_summaries
+from .store_mcp_catalog import catalog_change_ids
+
+# How many times one listing starts over because the inventory changed between
+# its pages. Each restart means a connector was observed or granted mid-walk;
+# a store still changing after this many is reported rather than read forever.
+_LIST_RESTART_LIMIT = 4
+
+
+def _catalog_args(
+    cli_id: str,
+    commands: Sequence[LocalCliCommand],
+    *,
+    mcp_catalog: McpCatalogResult | None,
+    identity_hash: str | None,
+    seen_at: str | None,
+    expected_catalog_revision: int | None,
+) -> dict[str, object]:
+    """The wire shape both catalog writes share."""
+    return {
+        "cli_id": cli_id,
+        "commands": [
+            {
+                "command_id": command.command_id,
+                "name": command.name,
+                "usage": command.usage,
+                "description": command.description,
+                "parent_id": command.parent_id,
+            }
+            for command in commands
+        ],
+        "identity_hash": identity_hash,
+        "seen_at": seen_at,
+        "expected_catalog_revision": expected_catalog_revision,
+        "mcp_catalog": None if mcp_catalog is None else _catalog_payload(mcp_catalog),
+    }
+
+
+def _catalog_payload(catalog: McpCatalogResult) -> dict[str, object]:
+    return {
+        "tools": list(catalog.tools),
+        "complete": catalog.complete,
+        "reason": catalog.reason,
+        "pages": catalog.pages,
+        "protocol_version": catalog.protocol_version,
+        "server_info": catalog.server_info,
+        "capabilities": catalog.capabilities,
+        "cache_ttl_ms": catalog.cache_ttl_ms,
+        "cache_scope": catalog.cache_scope,
+        "cache_received_at": catalog.cache_received_at,
+        "skills": list(catalog.skills),
+        "skills_complete": catalog.skills_complete,
+        "skills_reason": catalog.skills_reason,
+    }
 
 
 class StoreLocalCliMixin:
     if TYPE_CHECKING:
 
         def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
+
+        def _native_store_call(
+            self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
+        ) -> Any: ...
 
     def record_local_cli_observation(
         self,
@@ -49,164 +98,104 @@ class StoreLocalCliMixin:
         server_identity_hash: str | None = None,
         server_command: str | None = None,
         server_args_hash: str | None = None,
+        only_if_missing: bool = False,
+        replayed_at: str | None = None,
     ) -> None:
-        if not is_local_cli_id(identity.cli_id):
-            raise ValueError("invalid local CLI id")
-        surface_value = surface if surface in {"cli", "mcp", "package-scripts"} else "cli"
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            current = connection.execute(
-                "select observed_count from local_cli_observation where cli_id = ?",
-                (identity.cli_id,),
-            ).fetchone()
-            if current is None:
-                _ = connection.execute(
-                    """
-                    insert into local_cli_observation (
-                        cli_id, identity_hash, kind, name, interpreter_name, example_label,
-                        observed_count, last_seen_at, source_path, help_status, surface,
-                        server_identity_hash, server_command, server_args_hash
-                    ) values (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        identity.cli_id,
-                        identity.identity_hash,
-                        identity.kind,
-                        identity.name,
-                        identity.interpreter_name,
-                        identity.example_label,
-                        seen_at,
-                        source_path,
-                        help_status,
-                        surface_value,
-                        server_identity_hash,
-                        server_command,
-                        server_args_hash,
-                    ),
-                )
-                return
-            _ = connection.execute(
-                """
-                update local_cli_observation
-                set identity_hash = ?, kind = ?, name = ?, interpreter_name = ?,
-                    example_label = ?, observed_count = observed_count + 1, last_seen_at = ?,
-                    source_path = coalesce(?, source_path),
-                    help_status = coalesce(?, help_status),
-                    surface = ?,
-                    server_identity_hash = coalesce(?, server_identity_hash),
-                    server_command = coalesce(?, server_command),
-                    server_args_hash = coalesce(?, server_args_hash)
-                where cli_id = ?
-                """,
-                (
-                    identity.identity_hash,
-                    identity.kind,
-                    identity.name,
-                    identity.interpreter_name,
-                    identity.example_label,
-                    seen_at,
-                    source_path,
-                    help_status,
-                    surface_value,
-                    server_identity_hash,
-                    server_command,
-                    server_args_hash,
-                    identity.cli_id,
-                ),
-            )
+        _ = self._native_store_call(
+            "record_local_cli_observation",
+            {
+                "cli_id": identity.cli_id,
+                "identity_hash": identity.identity_hash,
+                "kind": identity.kind,
+                "name": identity.name,
+                "interpreter_name": identity.interpreter_name,
+                "example_label": identity.example_label,
+                "seen_at": seen_at,
+                "source_path": source_path,
+                "help_status": help_status,
+                "surface": surface,
+                "server_identity_hash": server_identity_hash,
+                "server_command": server_command,
+                "server_args_hash": server_args_hash,
+                "only_if_missing": only_if_missing,
+                "replayed_at": replayed_at,
+                "clock": utc_now_iso(),
+            },
+        )
 
     def list_local_cli_items(self) -> list[dict[str, object]]:
+        """Every observed CLI and this-device grant, as the resident assembles it.
+
+        A connector carries its whole command catalog, so a device with many
+        of them holds more inventory than one reply may frame. The resident
+        answers a page at a time, names the offset the next page starts at and
+        the snapshot of the list those offsets index into. Each later page
+        sends that snapshot back; when the list changed in between, the
+        resident asks for a restart rather than letting the walk skip or
+        repeat an item.
+        """
+
+        items: list[dict[str, object]] = []
+        offset = 0
+        snapshot: str | None = None
+        restarts = 0
+        while True:
+            args: dict[str, object] = {"offset": offset}
+            if snapshot is not None:
+                args["snapshot"] = snapshot
+            page = self._native_store_call("list_local_cli_items", args)
+            if not isinstance(page, dict) or not isinstance(page.get("snapshot"), str):
+                raise sqlite3.DatabaseError("native_local_cli_items_invalid")
+            if page.get("restart") is True:
+                restarts += 1
+                if restarts > _LIST_RESTART_LIMIT:
+                    raise sqlite3.DatabaseError("native_local_cli_items_unsettled")
+                items, offset, snapshot = [], 0, page["snapshot"]
+                continue
+            snapshot = page["snapshot"]
+            listed = page.get("items")
+            if not isinstance(listed, list) or any(not isinstance(item, dict) for item in listed):
+                raise sqlite3.DatabaseError("native_local_cli_items_invalid")
+            items.extend(listed)
+            following = page.get("next_offset")
+            if following is None:
+                return items
+            if type(following) is not int or following <= offset or not listed:
+                raise sqlite3.DatabaseError("native_local_cli_items_invalid")
+            offset = following
+
+    def read_local_cli_surface(self, cli_id: str) -> str | None:
+        """The observed surface of ``cli_id``, or ``None`` when never observed."""
+
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
-            observation_rows = connection.execute(
-                """
-                select cli_id, identity_hash, kind, name, interpreter_name, example_label,
-                       observed_count, last_seen_at, source_path, help_status, surface,
-                       server_identity_hash, source_label, server_command
-                from local_cli_observation
-                order by last_seen_at desc, cli_id asc
-                """
-            ).fetchall()
-            grant_rows = connection.execute(
-                "select cli_id, identity_hash, state, revision, updated_at from local_cli_grant"
-            ).fetchall()
-            revision_row = connection.execute("select revision from local_cli_authority where singleton = 1").fetchone()
-            command_map = _load_commands_by_cli(connection)
-            catalog_map = load_mcp_catalogs(connection)
-            provider_map = load_provider_catalog_summaries(connection)
-        grants = {_row_text(row, 0): _grant_from_row(row) for row in grant_rows}
-        items: list[dict[str, object]] = []
-        seen: set[str] = set()
-        for row in observation_rows:
-            item = _observation_from_row(row)
-            cli_id = str(item["cli_id"])
-            seen.add(cli_id)
-            grant = grants.get(cli_id)
-            items.append(_with_suggestable(_merge_item(item, grant)))
-        for cli_id, grant in sorted(grants.items()):
-            if cli_id in seen:
-                continue
-            items.append(
-                _with_suggestable(
-                    {
-                        "cli_id": cli_id,
-                        "name": cli_id.removeprefix("local-cli."),
-                        "kind": "executable",
-                        "identity_hash": grant["identity_hash"],
-                        "example_label": cli_id.removeprefix("local-cli."),
-                        "interpreter_name": None,
-                        "observed_count": 0,
-                        "last_seen_at": None,
-                        "source_path": None,
-                        "help_status": None,
-                        "surface": "cli",
-                        "server_identity_hash": None,
-                        "source_label": None,
-                        "state": grant["state"],
-                        "stale": False,
-                        "grant_revision": grant["revision"],
-                    }
-                )
-            )
-        authority_revision = 0 if revision_row is None else _row_int(revision_row[0])
-        for item in items:
-            item["authority_revision"] = authority_revision
-            item["commands"] = command_map.get(str(item["cli_id"]), [])
-            catalog = catalog_map.get(str(item["cli_id"]))
-            if catalog is not None and item.get("surface") == "mcp" and catalog[0] == item.get("identity_hash"):
-                item["mcp_catalog"] = catalog[1]
-                definitions = catalog[1].get("tools")
-                by_name = (
-                    {
-                        tool["name"]: tool
-                        for tool in definitions
-                        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
-                    }
-                    if isinstance(definitions, list)
-                    else {}
-                )
-                for command in command_map.get(str(item["cli_id"]), []):
-                    definition = by_name.get(command.get("usage"))
-                    if definition is not None:
-                        command["classification"] = classify_mcp_action(
-                            str(definition["name"]),
-                            definition.get("inputSchema"),
-                            annotations=definition.get("annotations"),
-                        )
-            if str(item["cli_id"]) in provider_map:
-                item["provider_catalog"] = provider_map[str(item["cli_id"])]
-        return items
+            row = connection.execute("select surface from local_cli_observation where cli_id = ?", (cli_id,)).fetchone()
+        return None if row is None or not isinstance(row[0], str) else row[0]
+
+    def note_local_cli_capability_cause(self, *, cli_id: str, identity_hash: str, cause: str) -> int:
+        """Keep the capability cause a contained run of an allowed CLI was denied."""
+
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            return note_capability_cause(connection, cli_id=cli_id, identity_hash=identity_hash, cause=cause)
+
+    def read_local_cli_capabilities(self, cli_id: str) -> dict[str, LocalCliCapabilityState]:
+        """The full ``{name: on|off}`` map stored for ``cli_id``."""
+
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            return capability_map(load_local_cli_capabilities(connection).get(cli_id))
 
     def read_local_cli_grant(self, cli_id: str) -> dict[str, object] | None:
-        if not is_local_cli_id(cli_id):
-            return None
+        grant = self._native_store_call("read_local_cli_grant", {"cli_id": cli_id})
+        if grant is not None and not isinstance(grant, dict):
+            raise sqlite3.DatabaseError("native_local_cli_grant_invalid")
+        return grant
+
+    def has_local_cli_block_rules(self) -> bool:
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
-            row = connection.execute(
-                "select cli_id, identity_hash, state, revision, updated_at from local_cli_grant where cli_id = ?",
-                (cli_id,),
-            ).fetchone()
-        return None if row is None else _grant_from_row(row)
+            return local_cli_rules_exist(connection, blocks_only=True)
 
     def read_local_cli_revision(self) -> int:
         with self._connect() as connection:
@@ -222,6 +211,7 @@ class StoreLocalCliMixin:
         expected_revision: int,
         updated_at: str,
         command_states: Mapping[str, LocalCliCommandState] | None = None,
+        reviewed_catalog_revision: int | None = None,
     ) -> int:
         if state not in {"allowed", "blocked", "unset"}:
             raise ValueError("invalid local CLI grant state")
@@ -229,19 +219,21 @@ class StoreLocalCliMixin:
             raise ValueError("invalid local CLI id")
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
-            current = connection.execute("select revision from local_cli_authority where singleton = 1").fetchone()
-            current_revision = 0 if current is None else _row_int(current[0])
-            if current_revision != expected_revision:
-                raise ValueError("local_cli_revision_conflict")
-            next_revision = _write_local_cli_grant(
-                connection,
-                identity=identity,
-                state=state,
-                current_revision=current_revision,
-                updated_at=updated_at,
-                command_states=command_states,
-            )
-        return next_revision
+            reviewing = (identity.cli_id,) if reviewed_catalog_revision is not None else ()
+            change_ids = catalog_change_ids(connection, reviewing)
+        args: dict[str, object] = {
+            "cli_id": identity.cli_id,
+            "identity_hash": identity.identity_hash,
+            "state": state,
+            "expected_revision": expected_revision,
+            "updated_at": updated_at,
+            "catalog_change_ids": change_ids,
+        }
+        if command_states is not None:
+            args["command_states"] = dict(command_states)
+        if reviewed_catalog_revision is not None:
+            args["reviewed_catalog_revision"] = reviewed_catalog_revision
+        return _native_grant_write(self, "upsert_local_cli_grant", args)
 
     def replace_local_cli_commands(
         self,
@@ -253,60 +245,17 @@ class StoreLocalCliMixin:
         seen_at: str | None = None,
         expected_catalog_revision: int | None = None,
     ) -> None:
-        if not is_local_cli_id(cli_id):
-            raise ValueError("invalid local CLI id")
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            connection.commit()
-            connection.execute("begin immediate")
-            review_ids = (
-                write_mcp_catalog(
-                    connection,
-                    cli_id,
-                    identity_hash=identity_hash,
-                    catalog=mcp_catalog,
-                    seen_at=seen_at,
-                    expected_revision=expected_catalog_revision,
-                )
-                if mcp_catalog is not None
-                else set()
-            )
-            _ = connection.execute("delete from local_cli_command where cli_id = ?", (cli_id,))
-            for index, command in enumerate(commands):
-                if not is_local_cli_command_id(command.command_id):
-                    raise ValueError("invalid local CLI command id")
-                _ = connection.execute(
-                    """
-                    insert into local_cli_command (
-                        cli_id, command_id, name, usage, description, parent_id, sort_index
-                    ) values (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        cli_id,
-                        command.command_id,
-                        command.name[:120],
-                        command.usage[:160],
-                        command.description[:240],
-                        command.parent_id,
-                        index,
-                    ),
-                )
-            known = {command.command_id for command in commands}
-            review_catalog_changes(connection, cli_id, review_ids, known, seen_at)
-            existing = connection.execute(
-                "select command_id, state from local_cli_command_grant where cli_id = ?",
-                (cli_id,),
-            ).fetchall()
-            for row in existing:
-                command_id, state = _row_values(row, 2)
-                command_id = str(command_id)
-                if mcp_catalog is not None and state in {"block", "review"}:
-                    continue
-                if command_id not in known:
-                    _ = connection.execute(
-                        "delete from local_cli_command_grant where cli_id = ? and command_id = ?",
-                        (cli_id, command_id),
-                    )
+        _ = self._native_store_call(
+            "replace_local_cli_commands",
+            _catalog_args(
+                cli_id,
+                commands,
+                mcp_catalog=mcp_catalog,
+                identity_hash=identity_hash,
+                seen_at=seen_at,
+                expected_catalog_revision=expected_catalog_revision,
+            ),
+        )
 
     def merge_local_cli_commands(
         self,
@@ -320,139 +269,39 @@ class StoreLocalCliMixin:
         expected_catalog_revision: int | None = None,
     ) -> None:
         """Append observed tools atomically without deleting existing choices."""
-        if not is_local_cli_id(cli_id) or limit < 1:
-            raise ValueError("invalid local CLI catalog")
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            connection.commit()
-            connection.execute("begin immediate")
-            review_ids = (
-                write_mcp_catalog(
-                    connection,
-                    cli_id,
-                    identity_hash=identity_hash,
-                    catalog=mcp_catalog,
-                    seen_at=seen_at,
-                    expected_revision=expected_catalog_revision,
-                )
-                if mcp_catalog is not None
-                else set()
-            )
-            rows = connection.execute(
-                "select command_id from local_cli_command where cli_id = ?",
-                (cli_id,),
-            ).fetchall()
-            known = {str(row[0]) for row in rows}
-            if any(not is_local_cli_command_id(command.command_id) for command in commands):
-                raise ValueError("invalid local CLI command id")
-            incoming = {command.command_id for command in commands}
-            if len(known | incoming) > limit:
-                raise LocalCliCatalogLimitError("local_cli_catalog_limit")
-            for command in commands:
-                if command.command_id in known:
-                    continue
-                connection.execute(
-                    """insert into local_cli_command
-                    (cli_id, command_id, name, usage, description, parent_id, sort_index)
-                    values (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        cli_id,
-                        command.command_id,
-                        command.name[:120],
-                        command.usage[:160],
-                        command.description[:240],
-                        command.parent_id,
-                        len(known),
-                    ),
-                )
-                known.add(command.command_id)
-            review_catalog_changes(connection, cli_id, review_ids, known, seen_at)
-
-    def upsert_local_cli_command_states(
-        self,
-        cli_id: str,
-        states: Mapping[str, LocalCliCommandState],
-    ) -> None:
-        if not is_local_cli_id(cli_id):
-            raise ValueError("invalid local CLI id")
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            _write_command_states(connection, cli_id, states)
+        args = _catalog_args(
+            cli_id,
+            commands,
+            mcp_catalog=mcp_catalog,
+            identity_hash=identity_hash,
+            seen_at=seen_at,
+            expected_catalog_revision=expected_catalog_revision,
+        )
+        args["limit"] = limit
+        try:
+            _ = self._native_store_call("merge_local_cli_commands", args)
+        except ValueError as error:
+            # The runtime reports the bound as the same message the Python
+            # owner raised; callers select on the type, not the text.
+            if str(error) == "local_cli_catalog_limit":
+                raise LocalCliCatalogLimitError("local_cli_catalog_limit") from error
+            raise
 
     def read_local_cli_command_catalog(self, cli_id: str) -> list[LocalCliCommand]:
-        if not is_local_cli_id(cli_id):
-            return []
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            return _read_command_catalog(connection, cli_id)
+        rows = self._native_store_call("read_local_cli_command_catalog", {"cli_id": cli_id})
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            raise sqlite3.DatabaseError("native_local_cli_command_catalog_invalid")
+        return [LocalCliCommand(**row) for row in rows]
 
     def read_local_cli_command_states(self, cli_id: str) -> dict[str, LocalCliCommandState]:
-        if not is_local_cli_id(cli_id):
-            return {}
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            return _read_command_states(connection, cli_id)
-
-
-def _command_id_filter(command_ids: Sequence[str] | None) -> tuple[str, tuple[str, ...]]:
-    if command_ids is None:
-        return "", ()
-    if not command_ids:
-        # An empty filter must never turn into a full permission read.
-        return " and 0", ()
-    return f" and command_id in ({','.join('?' for _ in command_ids)})", tuple(command_ids)
-
-
-def _read_command_catalog(
-    connection: sqlite3.Connection, cli_id: str, command_ids: Sequence[str] | None = None
-) -> list[LocalCliCommand]:
-    selection, parameters = _command_id_filter(command_ids)
-    rows = connection.execute(
-        f"""
-        select command_id, name, usage, description, parent_id
-        from local_cli_command
-        where cli_id = ?{selection}
-        order by sort_index asc, command_id asc
-        """,
-        (cli_id, *parameters),
-    ).fetchall()
-    catalog: list[LocalCliCommand] = []
-    for row in rows:
-        command_id, name, usage, description, parent_id = _row_values(row, 5)
-        if (
-            isinstance(command_id, str)
-            and isinstance(name, str)
-            and isinstance(usage, str)
-            and isinstance(description, str)
-            and (parent_id is None or isinstance(parent_id, str))
-        ):
-            catalog.append(
-                LocalCliCommand(
-                    command_id=command_id,
-                    name=name,
-                    usage=usage,
-                    description=description,
-                    parent_id=parent_id,
-                )
-            )
-    return catalog
-
-
-def _read_command_states(
-    connection: sqlite3.Connection, cli_id: str, command_ids: Sequence[str] | None = None
-) -> dict[str, LocalCliCommandState]:
-    selection, parameters = _command_id_filter(command_ids)
-    rows = connection.execute(
-        f"select command_id, state from local_cli_command_grant where cli_id = ?{selection}",
-        (cli_id, *parameters),
-    ).fetchall()
-    states: dict[str, LocalCliCommandState] = {}
-    for row in rows:
-        command_id, raw_state = _row_values(row, 2)
-        parsed_state = local_cli_command_state(raw_state)
-        if isinstance(command_id, str) and parsed_state is not None:
-            states[command_id] = parsed_state
-    return states
+        states = self._native_store_call("read_local_cli_command_states", {"cli_id": cli_id})
+        if not isinstance(states, dict):
+            raise sqlite3.DatabaseError("native_local_cli_command_states_invalid")
+        return {
+            command_id: state
+            for command_id, raw_state in states.items()
+            if (state := local_cli_command_state(raw_state)) is not None
+        }
 
 
 def _write_command_states(
@@ -484,35 +333,3 @@ def _write_command_states(
             """,
             (cli_id, command_id, state),
         )
-
-
-def _load_commands_by_cli(connection: sqlite3.Connection) -> dict[str, list[dict[str, object]]]:
-    catalog_rows = connection.execute(
-        """
-        select cli_id, command_id, name, usage, description, parent_id
-        from local_cli_command
-        order by cli_id asc, sort_index asc, command_id asc
-        """
-    ).fetchall()
-    state_rows = connection.execute("select cli_id, command_id, state from local_cli_command_grant").fetchall()
-    states: dict[tuple[str, str], str] = {}
-    for row in state_rows:
-        cli_id, command_id, state = _row_values(row, 3)
-        if isinstance(cli_id, str) and isinstance(command_id, str) and isinstance(state, str):
-            states[(cli_id, command_id)] = state
-    grouped: dict[str, list[dict[str, object]]] = {}
-    for row in catalog_rows:
-        cli_id, command_id, name, usage, description, parent_id = _row_values(row, 6)
-        if not isinstance(cli_id, str) or not isinstance(command_id, str):
-            continue
-        grouped.setdefault(cli_id, []).append(
-            {
-                "command_id": command_id,
-                "name": name,
-                "usage": usage,
-                "description": description,
-                "parent_id": parent_id,
-                "state": states.get((cli_id, command_id), "inherit"),
-            }
-        )
-    return grouped

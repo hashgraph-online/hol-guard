@@ -1,0 +1,3551 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "givi automatic-review configuration",
+            "givi automatic-review execution",
+            "givi finding decision write"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "dependencies": [],
+          "description": "Opt-in review of six direct givi CLI operations affecting automatic review and finding decisions. Does not cover MCP calls, npm/Node wrappers, other submissions or all GiviLoop writes.",
+          "ecosystem_ids": [],
+          "executables": [
+            "givi"
+          ],
+          "extension_id": "command.givi",
+          "homepage": "https://github.com/vgflutter/GiviLoop",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "Apache-2.0",
+          "name": "GiviLoop CLI controls",
+          "permissions": [
+            {
+              "action_classes": [
+                "givi automatic-review configuration"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews changes to automatic-review policy, managed agent instructions/client configuration, or acknowledgement of a previous attempt.",
+              "example_command": "givi auto-review enable",
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Configure GiviLoop automatic review",
+              "permission_id": "command.givi.permission.auto-review-config",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "givi automatic-review execution"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews an automatic-review attempt, which may save a new run and send selected code to the configured web or local reviewer.",
+              "example_command": "givi auto-review run --task-id task-1 --checks passed",
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Run GiviLoop automatic review",
+              "permission_id": "command.givi.permission.auto-review-run",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect the selected changed files and configured reviewer; keep the stable task ID and do not bypass a skipped or suspended attempt."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "givi finding decision write"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews adding or updating recorded assessments in an explicitly selected review run. Does not verify or certify their evidence.",
+              "example_command": "givi findings update --run-id RUN --id F-ID --status unverified",
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Write GiviLoop finding decisions",
+              "permission_id": "command.givi.permission.findings-write",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.givi"
+          },
+          "reference_urls": [
+            "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/cli.ts",
+            "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/workflow-commands.ts",
+            "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/auto-review.ts",
+            "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/review-evidence.ts",
+            "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/review-report.ts",
+            "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/package.json"
+          ],
+          "required": false,
+          "risk_classes": [
+            "execution"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "givi automatic-review configuration"
+              ],
+              "default_mode": "review",
+              "description": "Can write .giviloop/auto-review.json, AGENTS.md and supporting configuration; --client codex also installs managed client settings and tool approvals.",
+              "matcher": {
+                "config": {
+                  "executables": [
+                    "givi"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--version",
+                    "--help",
+                    "-h",
+                    "--json",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "interleaved_options_with_values": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "options_with_values": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "subcommands": [
+                    "auto-review",
+                    "enable"
+                  ]
+                },
+                "op": "leading-subcommand.v1"
+              },
+              "permission_id": "command.givi.permission.auto-review-config",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.givi.auto-review-enable",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--task-id",
+                        "--checks",
+                        "--file",
+                        "--run-id",
+                        "--client",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "auto-review",
+                        "enable"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--task-id",
+                        "--checks",
+                        "--file",
+                        "--run-id",
+                        "--client",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "-h"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "auto-review",
+                        "enable"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "short-help"
+                }
+              ],
+              "safer_alternatives": [
+                "Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."
+              ],
+              "severity": "medium",
+              "title": "Enable automatic review"
+            },
+            {
+              "action_classes": [
+                "givi automatic-review configuration"
+              ],
+              "default_mode": "review",
+              "description": "Revokes automatic-review policy and removes managed instructions/client configuration. An in-flight review is not cancelled.",
+              "matcher": {
+                "config": {
+                  "executables": [
+                    "givi"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--version",
+                    "--help",
+                    "-h",
+                    "--json",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "interleaved_options_with_values": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "options_with_values": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "subcommands": [
+                    "auto-review",
+                    "disable"
+                  ]
+                },
+                "op": "leading-subcommand.v1"
+              },
+              "permission_id": "command.givi.permission.auto-review-config",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.givi.auto-review-disable",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--task-id",
+                        "--checks",
+                        "--file",
+                        "--run-id",
+                        "--client",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "auto-review",
+                        "disable"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--task-id",
+                        "--checks",
+                        "--file",
+                        "--run-id",
+                        "--client",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "-h"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "auto-review",
+                        "disable"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "short-help"
+                }
+              ],
+              "safer_alternatives": [
+                "Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."
+              ],
+              "severity": "medium",
+              "title": "Disable automatic review"
+            },
+            {
+              "action_classes": [
+                "givi automatic-review configuration"
+              ],
+              "default_mode": "review",
+              "description": "Writes acknowledgement to automatic-review history, potentially allowing new tasks after an unresolved attempt. Does not resend or certify the old review.",
+              "matcher": {
+                "config": {
+                  "executables": [
+                    "givi"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--version",
+                    "--help",
+                    "-h",
+                    "--json",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "interleaved_options_with_values": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "options_with_values": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "subcommands": [
+                    "auto-review",
+                    "acknowledge"
+                  ]
+                },
+                "op": "leading-subcommand.v1"
+              },
+              "permission_id": "command.givi.permission.auto-review-config",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.givi.auto-review-acknowledge",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--task-id",
+                        "--checks",
+                        "--file",
+                        "--run-id",
+                        "--client",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "auto-review",
+                        "acknowledge"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--task-id",
+                        "--checks",
+                        "--file",
+                        "--run-id",
+                        "--client",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "-h"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "auto-review",
+                        "acknowledge"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "short-help"
+                }
+              ],
+              "safer_alternatives": [
+                "Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."
+              ],
+              "severity": "medium",
+              "title": "Acknowledge an automatic-review attempt"
+            },
+            {
+              "action_classes": [
+                "givi automatic-review execution"
+              ],
+              "default_mode": "review",
+              "description": "May skip according to application state, or save review artifacts/history and submit selected changed code to the configured reviewer.",
+              "matcher": {
+                "config": {
+                  "executables": [
+                    "givi"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--version",
+                    "--help",
+                    "-h",
+                    "--json",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "interleaved_options_with_values": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "options_with_values": [
+                    "--repo",
+                    "--task-id",
+                    "--checks",
+                    "--file",
+                    "--run-id",
+                    "--client",
+                    "--repositoryPath",
+                    "-f"
+                  ],
+                  "subcommands": [
+                    "auto-review",
+                    "run"
+                  ]
+                },
+                "op": "leading-subcommand.v1"
+              },
+              "permission_id": "command.givi.permission.auto-review-run",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.givi.auto-review-run",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--task-id",
+                        "--checks",
+                        "--file",
+                        "--run-id",
+                        "--client",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "auto-review",
+                        "run"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--task-id",
+                        "--checks",
+                        "--file",
+                        "--run-id",
+                        "--client",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "-h"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "auto-review",
+                        "run"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "short-help"
+                }
+              ],
+              "safer_alternatives": [
+                "Inspect the selected changed files and configured reviewer; keep the stable task ID and do not bypass a skipped or suspended attempt."
+              ],
+              "severity": "medium",
+              "title": "Run automatic review"
+            },
+            {
+              "action_classes": [
+                "givi finding decision write"
+              ],
+              "default_mode": "review",
+              "description": "Creates a finding and its first recorded assessment, including confirmed or dismissed when application evidence requirements are satisfied.",
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--version",
+                        "--help",
+                        "-h",
+                        "--json",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "interleaved_options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "subcommands": [
+                        "findings",
+                        "add"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--version",
+                        "--help",
+                        "-h",
+                        "--json",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "interleaved_options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "subcommands": [
+                        "findings",
+                        "--json",
+                        "add"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "permission_id": "command.givi.permission.findings-write",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.givi.findings-add",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--json"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "findings",
+                        "add"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--json"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "-h"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "findings",
+                        "add"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "short-help"
+                }
+              ],
+              "safer_alternatives": [
+                "Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."
+              ],
+              "severity": "medium",
+              "title": "Add a finding decision"
+            },
+            {
+              "action_classes": [
+                "givi finding decision write"
+              ],
+              "default_mode": "review",
+              "description": "Appends a decision to a finding in the explicitly selected run, preserving its original title and claim. Missing IDs are not supplied by Guard.",
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--version",
+                        "--help",
+                        "-h",
+                        "--json",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "interleaved_options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "subcommands": [
+                        "findings",
+                        "update"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--version",
+                        "--help",
+                        "-h",
+                        "--json",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "interleaved_options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "subcommands": [
+                        "findings",
+                        "--json",
+                        "update"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "permission_id": "command.givi.permission.findings-write",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.givi.findings-update",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--json"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "findings",
+                        "update"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "givi"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--json"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--repo",
+                        "--run-id",
+                        "--id",
+                        "--title",
+                        "--claim",
+                        "--status",
+                        "--reason",
+                        "--evidence",
+                        "--file",
+                        "--repositoryPath",
+                        "-f"
+                      ],
+                      "required_flags": [
+                        "-h"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "findings",
+                        "update"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "GiviLoop command help",
+                  "variant_id": "short-help"
+                }
+              ],
+              "safer_alternatives": [
+                "Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."
+              ],
+              "severity": "medium",
+              "title": "Update a finding decision"
+            }
+          ],
+          "safer_alternatives": [
+            "Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run.",
+            "Inspect the selected changed files and configured reviewer; keep the stable task ID and do not bypass a skipped or suspended attempt.",
+            "Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.aether-vault",
+          "command.agentbridge",
+          "command.agenticjobs",
+          "command.agentsocks",
+          "command.agi-memory",
+          "command.ai-dev",
+          "command.answerloops",
+          "command.apex",
+          "command.appimg",
+          "command.batterycontrol",
+          "command.blitcp",
+          "command.blkcp",
+          "command.claude-tmux",
+          "command.cloudg",
+          "command.codesage",
+          "command.codex-migrate",
+          "command.cogext",
+          "command.crisp-tui",
+          "command.cs",
+          "command.ctty",
+          "command.dataman",
+          "command.dearmour",
+          "command.digline",
+          "command.dispat",
+          "command.drip",
+          "command.envseal",
+          "command.errand",
+          "command.faf-cli",
+          "command.formicx",
+          "command.genclave",
+          "command.gitsync",
+          "command.givi",
+          "command.golive",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.hashdup",
+          "command.iterlay",
+          "command.keibidrop",
+          "command.kelados",
+          "command.kim",
+          "command.kindling",
+          "command.kintsua",
+          "command.kranz",
+          "command.librarybridge",
+          "command.llmrig",
+          "command.macscope",
+          "command.master-of",
+          "command.mcp-agent-wire",
+          "command.mcp-agenthub",
+          "command.mcp-architecture-intelligence-platform",
+          "command.mcp-asdecided",
+          "command.mcp-aseprite",
+          "command.mcp-askjev",
+          "command.mcp-authyouragent",
+          "command.mcp-authzloom",
+          "command.mcp-axpilot",
+          "command.mcp-azure-vm-pricing",
+          "command.mcp-brickproof-adb",
+          "command.mcp-ccm",
+          "command.mcp-cf-mail-mcp",
+          "command.mcp-ci-guard",
+          "command.mcp-clipugc",
+          "command.mcp-codex-claude-bridge",
+          "command.mcp-compose-bridge",
+          "command.mcp-contribos",
+          "command.mcp-dchub",
+          "command.mcp-debuganything",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-fetchsandbox",
+          "command.mcp-figlens",
+          "command.mcp-filesystem",
+          "command.mcp-ftp",
+          "command.mcp-g-krusch",
+          "command.mcp-garmin-coach-mcp",
+          "command.mcp-google-mcp-universal",
+          "command.mcp-google-workspace.gmail",
+          "command.mcp-halflife",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-jd-church-website-audit",
+          "command.mcp-kranz",
+          "command.mcp-krusch",
+          "command.mcp-krusch-agentic-proxy",
+          "command.mcp-krusch-context-mcp",
+          "command.mcp-krusch-git",
+          "command.mcp-kuuhaku",
+          "command.mcp-lattice-talk",
+          "command.mcp-leadline",
+          "command.mcp-loomdesk",
+          "command.mcp-mac-address-lookup",
+          "command.mcp-mail-server",
+          "command.mcp-melra",
+          "command.mcp-musiccontext",
+          "command.mcp-nuvui",
+          "command.mcp-obsidian-kanban",
+          "command.mcp-openscreenshot",
+          "command.mcp-ops-brain",
+          "command.mcp-p6-mcp",
+          "command.mcp-pc-control",
+          "command.mcp-pinpoint",
+          "command.mcp-plim",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-quidli-connect",
+          "command.mcp-raw-browser",
+          "command.mcp-reaper",
+          "command.mcp-remote-pc-mcp",
+          "command.mcp-repo-notebook",
+          "command.mcp-run",
+          "command.mcp-seahorse",
+          "command.mcp-seminara",
+          "command.mcp-seq-mcp",
+          "command.mcp-setup-doctor",
+          "command.mcp-tether",
+          "command.mcp-thingery",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.mcp-xrpl-token-guard",
+          "command.mcp-xrpl-trading-lab",
+          "command.mcpguard",
+          "command.netdoctor",
+          "command.noodle",
+          "command.ollama",
+          "command.omairc",
+          "command.probe",
+          "command.pyrig",
+          "command.redpen",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.repro-surgeon",
+          "command.rls-saboteur",
+          "command.routed",
+          "command.rungs",
+          "command.salesforce.sf",
+          "command.seatbelt-guard",
+          "command.shellroute",
+          "command.showtime",
+          "command.simgit",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.skills-check-updates",
+          "command.snoboard",
+          "command.storage-clearer",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vaultsync",
+          "command.vttforge",
+          "command.where-are-we",
+          "command.x402shield",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.digitalocean",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "givi auto-review enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-enable-active",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-enable-inactive",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review enable",
+      "disabled_permissions": [
+        "command.givi.permission.auto-review-config"
+      ],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-enable-disabled-permission",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review enable --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-enable-help",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review enable -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-enable-short-help",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review --help enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-enable-interleaved-help",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "\"/opt/test tools/givi\" auto-review enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-enable-path",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "\"givi\" \"auto-review\" \"enable\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-enable-quoted",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review --repo \"fixture project\" enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-enable-repo-before-action",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review --repo=fixture-project enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-enable-repo-equals",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review enable --repo \"fixture project\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-enable-repo-after",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review --repo enable status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-enable-value-is-action",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi --repo fixture-project auto-review enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-enable-no-global-repo",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi report auto-review enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-enable-other-command",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review enable --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-enable-trailing-version",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review enable --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-enable-no-dry-run",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review enable --help; givi auto-review enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "auto-review-enable-help-then-command",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review enable; givi auto-review enable --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-enable-command-then-help",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "npm run givi -- auto-review enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-enable-npm",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "node dist/cli.js auto-review enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-enable-node",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review disable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-disable-active",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review disable",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-disable-inactive",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review disable",
+      "disabled_permissions": [
+        "command.givi.permission.auto-review-config"
+      ],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-disable-disabled-permission",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review disable --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-disable-help",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review disable -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-disable-short-help",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review --help disable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-disable-interleaved-help",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "\"/opt/test tools/givi\" auto-review disable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-disable-path",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "\"givi\" \"auto-review\" \"disable\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-disable-quoted",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review --repo \"fixture project\" disable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-disable-repo-before-action",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review --repo=fixture-project disable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-disable-repo-equals",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review disable --repo \"fixture project\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-disable-repo-after",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review --repo disable status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-disable-value-is-action",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi --repo fixture-project auto-review disable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-disable-no-global-repo",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi report auto-review disable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-disable-other-command",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review disable --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-disable-trailing-version",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review disable --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-disable-no-dry-run",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review disable --help; givi auto-review disable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "auto-review-disable-help-then-command",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review disable; givi auto-review disable --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-disable-command-then-help",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "npm run givi -- auto-review disable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-disable-npm",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "node dist/cli.js auto-review disable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-disable-node",
+      "rule_id": "command.givi.auto-review-disable"
+    },
+    {
+      "command": "givi auto-review acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-acknowledge-active",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-acknowledge-inactive",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review acknowledge",
+      "disabled_permissions": [
+        "command.givi.permission.auto-review-config"
+      ],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-acknowledge-disabled-permission",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review acknowledge --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-acknowledge-help",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review acknowledge -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-acknowledge-short-help",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review --help acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-acknowledge-interleaved-help",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "\"/opt/test tools/givi\" auto-review acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-acknowledge-path",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "\"givi\" \"auto-review\" \"acknowledge\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-acknowledge-quoted",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review --repo \"fixture project\" acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-acknowledge-repo-before-action",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review --repo=fixture-project acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-acknowledge-repo-equals",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review acknowledge --repo \"fixture project\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-acknowledge-repo-after",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review --repo acknowledge status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-acknowledge-value-is-action",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi --repo fixture-project auto-review acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-acknowledge-no-global-repo",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi report auto-review acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-acknowledge-other-command",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review acknowledge --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-acknowledge-trailing-version",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review acknowledge --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-acknowledge-no-dry-run",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review acknowledge --help; givi auto-review acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "auto-review-acknowledge-help-then-command",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review acknowledge; givi auto-review acknowledge --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-acknowledge-command-then-help",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "npm run givi -- auto-review acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-acknowledge-npm",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "node dist/cli.js auto-review acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-acknowledge-node",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi auto-review run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-run-active",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review run",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-run-inactive",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review run",
+      "disabled_permissions": [
+        "command.givi.permission.auto-review-run"
+      ],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-run-disabled-permission",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review run --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-run-help",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review run -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-run-short-help",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review --help run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-run-interleaved-help",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "\"/opt/test tools/givi\" auto-review run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-run-path",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "\"givi\" \"auto-review\" \"run\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-run-quoted",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review --repo \"fixture project\" run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-run-repo-before-action",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review --repo=fixture-project run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-run-repo-equals",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review run --repo \"fixture project\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-run-repo-after",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review --repo run status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-run-value-is-action",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi --repo fixture-project auto-review run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-run-no-global-repo",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi report auto-review run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-run-other-command",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review run --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-run-trailing-version",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review run --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-run-no-dry-run",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review run --help; givi auto-review run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "auto-review-run-help-then-command",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review run; givi auto-review run --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "auto-review-run-command-then-help",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "npm run givi -- auto-review run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-run-npm",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "node dist/cli.js auto-review run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "auto-review-run-node",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi findings add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-add-active",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings add",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-add-inactive",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings add",
+      "disabled_permissions": [
+        "command.givi.permission.findings-write"
+      ],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-add-disabled-permission",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings add --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-add-help",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings add -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-add-short-help",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings --help add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-add-interleaved-help",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "\"/opt/test tools/givi\" findings add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-add-path",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "\"givi\" \"findings\" \"add\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-add-quoted",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings --repo \"fixture project\" add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-add-repo-before-action",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings --repo=fixture-project add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-add-repo-equals",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings add --repo \"fixture project\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-add-repo-after",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings --repo add list",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-add-value-is-action",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi --repo fixture-project findings add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-add-no-global-repo",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi report findings add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-add-other-command",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings add --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-add-trailing-version",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings add --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-add-no-dry-run",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings add --help; givi findings add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "findings-add-help-then-command",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings add; givi findings add --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-add-command-then-help",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "npm run givi -- findings add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-add-npm",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "node dist/cli.js findings add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-add-node",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-update-active",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-update-inactive",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update",
+      "disabled_permissions": [
+        "command.givi.permission.findings-write"
+      ],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-update-disabled-permission",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-update-help",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-update-short-help",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings --help update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-update-interleaved-help",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "\"/opt/test tools/givi\" findings update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-update-path",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "\"givi\" \"findings\" \"update\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-update-quoted",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings --repo \"fixture project\" update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-update-repo-before-action",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings --repo=fixture-project update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-update-repo-equals",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update --repo \"fixture project\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-update-repo-after",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings --repo update list",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-update-value-is-action",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi --repo fixture-project findings update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-update-no-global-repo",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi report findings update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-update-other-command",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-update-trailing-version",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-update-no-dry-run",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update --help; givi findings update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "findings-update-help-then-command",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update; givi findings update --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "findings-update-command-then-help",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "npm run givi -- findings update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-update-npm",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "node dist/cli.js findings update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "findings-update-node",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi auto-review run --task-id task-1 --checks passed --file src/a.ts --file=src/b.ts",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-complete",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review run --task-id task-1 --checks failed",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-checks-failed",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review run --checks not-applicable --task-id task-1",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-checks-not-applicable",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi auto-review --client=codex enable --repo .",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "enable-client",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review --run-id=2026-09-24T10-00-00-000Z-1234abcd acknowledge",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "acknowledge-id",
+      "rule_id": "command.givi.auto-review-acknowledge"
+    },
+    {
+      "command": "givi findings --json --run-id=2026-09-24T10-00-00-000Z-1234abcd add --title \"A claim\" --claim \"Verify this\" --file src/a.ts --file src/b.ts",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-complete",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings update --run-id 2026-09-24T10-00-00-000Z-1234abcd --id F-1234abcd --status dismissed --reason \"Inspected contract\" --evidence first --evidence=second --file src/a.ts --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "update-complete",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update --run-id R --id F --status unverified --reason -hello",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "update-dash-prefixed-value",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update --run-id R --id F --status unverified --reason=-h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "update-inline-help-value",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update --run-id R --id F --status unverified --reason=--help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "update-inline-long-help-value",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update --run-id",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "update-missing-value",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update --run-id R --run-id S",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "update-duplicate-option",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings --unknown value update --id F",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "update-unknown-option",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update -- --status unverified",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "update-delimiter-not-preview",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update -- --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "help-after-delimiter-conservative",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings update --reason -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "help-as-value-conservative",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings add --run-id R --title T --claim C | cat",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pipeline",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings add --help; givi findings update --run-id R --id F --status unverified",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "different-rule-help",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings add --help; givi findings update --run-id R --id F --status unverified",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "different-rule-help-cleared",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings add --help; git reset --hard",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "git-floor-kept",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi auto-review status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-00",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi findings list",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-01",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi report",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-02",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi report --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-03",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi report --stdout",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-04",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-05",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi send",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-06",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi resume",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-07",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi ask --send ollama",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-08",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi archive --send chatgpt-web",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-09",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi prepare",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-10",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi recheck",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-11",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi copy --open",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-12",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi ingest",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-13",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi setup",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-14",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi demo",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-15",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi browser login",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-16",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-17",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi open",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-18",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi cancel",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-19",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi-mcp",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-20",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-21",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-22",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-23",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-24",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-25",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi findings",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-26",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "npm --prefix fixture run givi -- findings add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-27",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "node /opt/giviloop/dist/cli.js findings update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-28",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi-other auto-review enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-29",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "echo givi auto-review enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "excluded-30",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi findings list --reason update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "excluded-31",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "unrelated-tool inspect",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "unknown-executable",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "pwd",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "unrelated-safe",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review --repositoryPath \"project space\" enable",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "current-repo-alias",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi auto-review -f src/a.ts run --task-id T --checks passed",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "current-short-file",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi findings -f src/a.ts add --run-id R --title T --claim C",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "current-finding-short-file",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi findings -f update list",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "current-short-file-value",
+      "rule_id": "command.givi.findings-update"
+    },
+    {
+      "command": "givi findings",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "current-default-findings",
+      "rule_id": "command.givi.findings-add"
+    },
+    {
+      "command": "givi auto-review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "current-default-auto-review",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi opinion \"Check this\" -f src/a.ts",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "current-opinion-excluded",
+      "rule_id": "command.givi.auto-review-run"
+    },
+    {
+      "command": "givi login",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "current-login-excluded",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "current-check-excluded",
+      "rule_id": "command.givi.auto-review-enable"
+    },
+    {
+      "command": "givi answer R",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.givi"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "current-answer-excluded",
+      "rule_id": "command.givi.findings-update"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

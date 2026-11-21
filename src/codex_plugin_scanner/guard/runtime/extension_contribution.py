@@ -39,27 +39,6 @@ _ALLOWED_ICON_NAMES: Final = frozenset(
 )
 
 
-def contributions_dir() -> Path:
-    return Path(__file__).resolve().parents[4] / "contributions" / "extensions"
-
-
-def load_contribution_payloads(root: Path | None = None) -> tuple[dict[str, object], ...]:
-    if root is not None:
-        return _load_from_directory(root)
-    packaged = _load_packaged_payloads()
-    if packaged:
-        return packaged
-    return _load_from_directory(contributions_dir())
-
-
-def validate_contribution_file(path: Path) -> dict[str, object]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path.name} must contain an object")
-    validate_contribution(payload, filename=path.name)
-    return payload
-
-
 def validate_contribution(payload: Mapping[str, object], *, filename: str = "contribution") -> None:
     if payload.get("schemaVersion") == "guard.extension-contribution.v1":
         raise ValueError(
@@ -90,75 +69,8 @@ def validate_contribution(payload: Mapping[str, object], *, filename: str = "con
         raise ValueError(f"{filename} trust class disagrees with the reviewed trust map")
 
 
-def contribution_ids(root: Path | None = None) -> frozenset[str]:
-    ids: set[str] = set()
-    for payload in load_contribution_payloads(root):
-        extension_id = payload.get("id")
-        if isinstance(extension_id, str):
-            ids.add(extension_id)
-    return frozenset(ids)
-
-
-def contribution_catalog_overlay(extension_id: str) -> dict[str, object] | None:
-    payload = _contribution_index().get(extension_id)
-    if payload is None:
-        return None
-    publisher = payload.get("publisher")
-    icon = payload.get("icon")
-    if not isinstance(publisher, dict) or not isinstance(icon, dict):
-        return None
-    return {"publisher": dict(publisher), "icon": dict(icon)}
-
-
-def reset_contribution_cache() -> None:
-    _contribution_index.cache_clear()
-    _validator.cache_clear()
-    _trust_classes.cache_clear()
-
-
-def _load_from_directory(directory: Path) -> tuple[dict[str, object], ...]:
-    if not directory.is_dir():
-        return ()
-    return tuple(validate_contribution_file(path) for path in sorted(directory.glob("command.*.json")))
-
-
 def _frozen_runtime() -> bool:
     return bool(getattr(sys, "frozen", False))
-
-
-def _load_packaged_payloads() -> tuple[dict[str, object], ...]:
-    try:
-        root = resources.files("codex_plugin_scanner.guard.contracts.data.extensions") / "contributions"
-        names = [item for item in root.iterdir() if item.name.startswith("command.") and item.name.endswith(".json")]
-    except (FileNotFoundError, ModuleNotFoundError, OSError, AttributeError):
-        frozen = frozen_package_data("extensions", "contributions")
-        if frozen is None or not frozen.is_dir():
-            if _frozen_runtime():
-                raise FileNotFoundError("frozen Guard is missing packaged extension contributions") from None
-            return ()
-        names = [item for item in frozen.iterdir() if item.name.startswith("command.") and item.name.endswith(".json")]
-    if not names:
-        if _frozen_runtime():
-            raise FileNotFoundError("frozen Guard is missing packaged extension contributions")
-        return ()
-    payloads: list[dict[str, object]] = []
-    for item in sorted(names, key=lambda entry: entry.name):
-        payload = json.loads(item.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            raise ValueError(f"{item.name} must contain an object")
-        validate_contribution(payload, filename=item.name)
-        payloads.append(payload)
-    return tuple(payloads)
-
-
-@lru_cache(maxsize=1)
-def _contribution_index() -> dict[str, dict[str, object]]:
-    index: dict[str, dict[str, object]] = {}
-    for payload in load_contribution_payloads():
-        extension_id = payload.get("id")
-        if isinstance(extension_id, str):
-            index[extension_id] = payload
-    return index
 
 
 @lru_cache(maxsize=1)
@@ -186,6 +98,12 @@ def _schema_bytes() -> bytes:
 
 @lru_cache(maxsize=1)
 def _trust_classes() -> dict[str, str]:
+    # Prefer authored per-extension bindings; the packaged aggregate map is a
+    # generated projection kept for frozen/packaged runtimes and release staging.
+    if not _frozen_runtime():
+        bindings = Path(__file__).resolve().parents[4] / "contracts" / "extensions" / "trust"
+        if bindings.is_dir():
+            return _trust_classes_from_bindings(bindings)
     try:
         root = resources.files("codex_plugin_scanner.guard.contracts.data.extensions")
         raw = (root / "trust-class-map.v1.json").read_bytes()
@@ -196,7 +114,9 @@ def _trust_classes() -> dict[str, str]:
         elif _frozen_runtime():
             raise FileNotFoundError("frozen Guard is missing packaged extension trust map") from None
         else:
-            raw = (Path(__file__).resolve().parents[4] / "contracts/extensions/trust-class-map.v1.json").read_bytes()
+            raise FileNotFoundError(
+                "Guard requires authored trust bindings or a packaged extension trust map"
+            ) from None
     payload = json.loads(raw.decode("utf-8"))
     classes = payload.get("classes") if isinstance(payload, dict) else None
     if not isinstance(classes, dict):
@@ -211,6 +131,13 @@ def _trust_classes() -> dict[str, str]:
                 raise ValueError("duplicate extension trust binding")
             result[extension_id] = name
     return result
+
+
+def _trust_classes_from_bindings(bindings: Path) -> dict[str, str]:
+    """Fold authored per-extension trust bindings into an id -> class index."""
+    from .extension_trust import trust_binding_index
+
+    return dict(trust_binding_index(bindings))
 
 
 def _reviewed_trust_class(extension_id: str) -> str:

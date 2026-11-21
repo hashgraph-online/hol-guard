@@ -23,6 +23,7 @@ function testSupportedAppSlugs(): void {
     "kimi",
     "grok",
     "devin",
+    "muse",
   ];
   for (const slug of expected) {
     assert(SUPPORTED_APP_SLUGS.includes(slug as typeof SUPPORTED_APP_SLUGS[number]), `SUPPORTED_APP_SLUGS missing: ${slug}`);

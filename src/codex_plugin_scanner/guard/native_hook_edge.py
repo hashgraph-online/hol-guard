@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 import json
+import re
 import time
-from collections.abc import Mapping
+import uuid
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
 
-from .native_approval_errors import FINITE_FAILURE_CODES
-from .native_decision_receipt import receipt_matches_edge, valid_prompt_risk_classes
+from .native_approval_errors import resident_refusal_code
 from .native_resident_client import (
     native_resident_client_request,
     record_native_resident_client_failure_code,
 )
 from .native_route_receipt import record_native_hook_result
-from .native_runtime import _isolated_environment, native_runtime_status
+from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (
     native_record_resident_failure,
     native_record_resident_success,
@@ -23,82 +24,33 @@ from .native_runtime_resilience import (
 
 _EDGE_FEATURE = "hook-envelope-v2"
 _CLIENT_FEATURE = "native-resident-client-v1"
-_GENERIC_PRE_TOOL_SCHEMA = "guard-pre-tool-result.v1"
-_GENERIC_PRE_TOOL_ACTION_SCHEMA = "guard-pre-tool-action.v1"
+_RESPONSE_FEATURE = "hook-harness-response-v1"
+# Python no longer re-checks the edge result or receipt; only a resident that
+# checks its own answer may be trusted with it.
+_SELF_CHECK_FEATURE = "edge-self-check-v1"
+# The edge answers the Oh My Pi / Pi structured-output mediation itself from
+# the resident-authenticated direct-lane binding.
+STRUCTURED_OUTPUT_FEATURE = "edge-structured-output-v1"
+STRUCTURED_OUTPUT_BINDING_FEATURE = "edge-structured-output-binding-v1"
+_UNSUPPORTED_EVENT_CODE = "native_hook_event_unsupported"
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
-_MAX_RESULT_TEXT = 2_048
-_PRE_TOOL_ACTION_TYPES = {
-    "command",
-    "file_read",
-    "file_write",
-    "package",
-    "mcp_tool",
-    "network",
-    "process_service",
-    "browser",
-    "config",
-    "prompt",
-    "harness",
-    "unknown",
-}
-_PRE_TOOL_OPERATIONS = {
-    "execute",
-    "read",
-    "write",
-    "install",
-    "call",
-    "request",
-    "start",
-    "stop",
-    "navigate",
-    "set",
-    "submit",
-    "unknown",
-}
-_PRE_TOOL_ACTION_OPERATIONS = {
-    "command": {"execute"},
-    "file_read": {"read"},
-    "file_write": {"write"},
-    "package": {"install"},
-    "mcp_tool": {"call"},
-    "network": {"request"},
-    "process_service": {"start", "stop"},
-    "browser": {"navigate"},
-    "config": {"set"},
-    "prompt": {"submit"},
-    "harness": {"start", "stop"},
-    "unknown": {"unknown"},
-}
-_PRE_TOOL_RESULT_KEYS = {
-    "schema",
-    "version",
-    "authority",
-    "action",
-    "decision",
-    "policy_action",
-    "minimum_action",
-    "reason_code",
-    "reason",
-    "explicitly_benign",
-}
-_PRE_TOOL_POLICY_ACTIONS = {
-    "allow",
-    "warn",
-    "review",
-    "require-reapproval",
-    "sandbox-required",
-    "block",
-}
-_PRE_TOOL_ACTION_KEYS = {
-    "schema",
-    "version",
-    "harness",
-    "event",
-    "action_type",
-    "operation",
-    "bounded",
-    "sensitive_target",
-}
+_LOCAL_CLI_RULE_FEATURE = "edge-local-cli-rule-v1"
+# The custom extension rule is read after the review, and identifying a
+# launch can take seconds. It once had its own request with this timeout;
+# the edge keeps that allowance rather than spending the review's budget.
+_LOCAL_CLI_RULE_SECONDS = 5.0
+# The edge proves a review's policy binding, retry binding and exact-action
+# token beside the custom extension rule when the rules carry the daemon's
+# extension-control digest.
+_REVIEW_EVIDENCE_FEATURE = "edge-review-evidence-v1"
+_REVIEW_EVIDENCE_KEYS = frozenset({"policy_binding_valid", "binding", "token", "once_only_reason"})
+# The edge rewrites a call it routes to the contained sink itself when the
+# envelope carries the argv that starts Guard's CLI: `routed` means the
+# response runs the call in the sink, `kept` that the receipt stands.
+_CONTAINMENT_REWRITES = frozenset({"routed", "kept"})
+# The resident echoes the envelope's request id verbatim and stamps the same
+# id on the receipt, so an id minted here names one request and no other.
+_REQUEST_BINDING_FEATURE = "edge-request-binding-v1"
 
 
 def _capture_deadline(deadline: float | None) -> tuple[float, int]:
@@ -108,99 +60,29 @@ def _capture_deadline(deadline: float | None) -> tuple[float, int]:
     return effective_deadline, budget_ms
 
 
-def _valid_pre_tool_result_fields(result: dict[str, Any]) -> bool:
-    decision = result.get("decision")
-    policy_action = result.get("policy_action")
-    reason_code = result.get("reason_code")
-    reason = result.get("reason")
-    minimum_action = result.get("minimum_action")
-    return not (
-        result.get("schema") != _GENERIC_PRE_TOOL_SCHEMA
-        or result.get("version") != 1
-        or result.get("authority") != "rust"
-        or not isinstance(decision, str)
-        or decision not in {"allow", "deny"}
-        or not isinstance(policy_action, str)
-        or policy_action not in _PRE_TOOL_POLICY_ACTIONS
-        or minimum_action != policy_action
-        or not isinstance(reason_code, str)
-        or not reason_code
-        or len(reason_code) > _MAX_RESULT_TEXT
-        or not isinstance(reason, str)
-        or not reason
-        or len(reason) > _MAX_RESULT_TEXT
-        or not isinstance(result.get("explicitly_benign"), bool)
-    )
-
-
-def _valid_pre_tool_action(action: dict[str, Any], *, harness: str, event: str) -> bool:
-    action_type = action.get("action_type")
-    operation = action.get("operation")
-    action_harness = action.get("harness")
-    if (
-        action.get("schema") != _GENERIC_PRE_TOOL_ACTION_SCHEMA
-        or action.get("version") != 1
-        or action_harness != harness
-        or action.get("event") != event
-        or (event == "UserPromptSubmit" and action_type != "prompt")
-        or not isinstance(action_type, str)
-        or action_type not in _PRE_TOOL_ACTION_TYPES
-        or not isinstance(operation, str)
-        or operation not in _PRE_TOOL_OPERATIONS
-        or not isinstance(action_harness, str)
-        or not action_harness
-        or len(action_harness) > 64
-        or not isinstance(action.get("bounded"), bool)
-        or not isinstance(action.get("sensitive_target"), bool)
-    ):
-        return False
-    return operation in _PRE_TOOL_ACTION_OPERATIONS[action_type]
-
-
-def _decode_pre_tool_result(result: object, *, harness: str, event: str = "PreToolUse") -> bool:
-    if (
-        not isinstance(result, dict)
-        or not set(result).issuperset(_PRE_TOOL_RESULT_KEYS)
-        or set(result) - _PRE_TOOL_RESULT_KEYS - {"command_extensions", "prompt_risk_classes"}
-    ):
-        return False
-    if "prompt_risk_classes" in result and (
-        event != "UserPromptSubmit" or not valid_prompt_risk_classes(result["prompt_risk_classes"])
-    ):
-        return False
-    if "command_extensions" in result:
-        from .native_command_observations import validate_native_command_observations
-
-        extensions = validate_native_command_observations(result["command_extensions"])
-        if extensions is None:
-            return False
-        binding = cast(dict[str, object], extensions["binding"])
-        if binding["uncertainty_count"] and result.get("minimum_action") != "block":
-            return False
-    if not _valid_pre_tool_result_fields(result):
-        return False
-    action = result.get("action")
-    if not isinstance(action, dict) or set(action) != _PRE_TOOL_ACTION_KEYS:
-        return False
-    if not _valid_pre_tool_action(action, harness=harness, event=event):
-        return False
-    decision = result["decision"]
-    minimum_action = result["minimum_action"]
-    if result["explicitly_benign"] != (decision == "allow" and minimum_action == "allow"):
-        return False
-    # `warn` is an allow-with-warning floor. All stronger actions remain
-    # denying floors; this keeps the Python edge purely mechanical.
-    return decision == ("allow" if minimum_action in {"allow", "warn"} else "deny")
-
-
 def _native_error_code(payload: object) -> str | None:
     """Accept only the resident's finite error envelope for local diagnostics."""
-    if not isinstance(payload, dict) or set(payload) != {"error", "retryable"}:
+    return resident_refusal_code(payload)
+
+
+def review_evidence_parts(
+    evidence: Mapping[str, object] | None,
+) -> tuple[bool, str | None, str | None, str | None] | None:
+    """Decode the policy binding, retry binding and identity checked by the edge."""
+
+    if evidence is None or set(evidence) != _REVIEW_EVIDENCE_KEYS:
         return None
-    code = payload.get("error")
-    if type(payload.get("retryable")) is not bool or not isinstance(code, str):
+    valid = evidence["policy_binding_valid"]
+    binding, token, reason = evidence["binding"], evidence["token"], evidence["once_only_reason"]
+    if (
+        not isinstance(valid, bool)
+        or not isinstance(binding, str | None)
+        or not isinstance(token, str | None)
+        or not isinstance(reason, str | None)
+        or (token is None) == (reason is None)
+    ):
         return None
-    return code if code in FINITE_FAILURE_CODES else None
+    return valid, binding, token, reason
 
 
 def _decode_edge(payload: object) -> dict[str, Any] | None:
@@ -213,7 +95,17 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         "result",
         "receipt",
     }
-    allowed = required | {"request_id"}
+    allowed = required | {
+        "request_id",
+        "harness_response",
+        "containment_route",
+        "containment_rewrite",
+        "local_cli_rule",
+        "review_evidence",
+        "receipt_recorded",
+        "activity_recorded",
+        "exact_command_block",
+    }
     if not isinstance(payload, dict) or not required <= set(payload) or set(payload) - allowed:
         return None
     event_name = payload.get("event_name")
@@ -229,18 +121,36 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         or not payload["harness"]
         or len(payload["harness"]) > 64
         or not isinstance(payload.get("result"), dict)
+        or not isinstance(payload.get("harness_response"), dict)
+        or not isinstance(payload.get("receipt_recorded", False), bool)
+        or not isinstance(payload.get("activity_recorded", False), bool)
+        or not isinstance(payload.get("exact_command_block", False), bool)
     ):
         return None
-    if event_name in {"PreToolUse", "UserPromptSubmit"} and not _decode_pre_tool_result(
-        payload["result"], harness=payload["harness"], event=event_name
+    # Every resident stamps its containment route; an edge without one would
+    # skip containment, so it is refused rather than read as `none`. An older
+    # resident may still stamp `grant`, which nothing routes on any more.
+    route = payload.get("containment_route")
+    if not isinstance(route, str) or route not in {"none", "sink", "grant"}:
+        return None
+    rewrite = payload.get("containment_rewrite")
+    if rewrite is not None and (
+        route != "sink" or not isinstance(rewrite, str) or rewrite not in _CONTAINMENT_REWRITES
     ):
-        return None
-    if event_name == "UserPromptSubmit" and payload_kind != "inline":
-        return None
-    if event_name == "PreToolUse" and payload_kind == "encrypted_payload_ref":
         return None
     receipt = payload.get("receipt")
-    if not receipt_matches_edge(payload, receipt):
+    if not isinstance(receipt, dict) or not isinstance(receipt.get("request_id"), str):
+        return None
+    rule = payload.get("local_cli_rule")
+    if rule is not None and (
+        not isinstance(rule, dict)
+        or set(rule) != {"blocked", "harness_response"}
+        or not isinstance(rule["blocked"], bool)
+        or not isinstance(rule["harness_response"], dict)
+    ):
+        return None
+    evidence = payload.get("review_evidence")
+    if evidence is not None and (not isinstance(evidence, dict) or review_evidence_parts(evidence) is None):
         return None
     return payload
 
@@ -256,13 +166,26 @@ def _encode_hook_envelope(
     source_ref_external_allowed: bool,
     deadline_budget_ms: int,
     snapshot: Mapping[str, object],
+    execution_context_supported: bool = False,
+    request_id: str | None = None,
+    recording_only: bool = False,
+    local_cli_rules: Mapping[str, object] | None = None,
+    observe_local_cli: bool = False,
+    record_receipt: bool = False,
+    structured_output_config: Mapping[str, object] | None = None,
+    containment_sink: Sequence[str] | None = None,
+    native_sink: bool = False,
 ) -> bytes | None:
+    from .hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
+
+    raw_payload = dict(payload)
+    caller_context = raw_payload.pop(HOOK_EXECUTION_ENVIRONMENT_KEY, ...)
     envelope = {
         "schema": "guard-hook-envelope.v2",
-        "request_id": None,
+        "request_id": request_id,
         "harness": harness,
         "event": event,
-        "raw_payload": payload,
+        "raw_payload": raw_payload,
         "deadline_budget_ms": deadline_budget_ms,
         "policy_generation": snapshot["generation"],
         # The resident already authenticated and cached the full snapshot at
@@ -281,6 +204,33 @@ def _encode_hook_envelope(
             "source_ref_external_allowed": source_ref_external_allowed,
         },
     }
+    if recording_only:
+        envelope["recording_only"] = True
+    if local_cli_rules is not None:
+        envelope["local_cli_rules"] = dict(local_cli_rules)
+    if observe_local_cli:
+        envelope["observe_local_cli"] = True
+    if record_receipt:
+        # The caller that asks for its receipt also skips a tool activity the
+        # edge says it queued.
+        envelope["record_receipt"] = True
+        envelope["record_activity"] = True
+        envelope["record_pre_tool_activity"] = True
+    if structured_output_config is not None:
+        envelope["structured_output_config"] = dict(structured_output_config)
+    if containment_sink is not None:
+        envelope["containment_sink"] = {"sink_command": list(containment_sink)}
+        if native_sink:
+            envelope["containment_sink"]["native_sink"] = True
+    if execution_context_supported:
+        # Direct CLI calls capture locally; daemon workers explicitly pass
+        # None when caller context is unavailable instead of using daemon env.
+        if caller_context is ...:
+            caller_context = collect_hook_execution_environment()
+        if caller_context is not None:
+            if not isinstance(caller_context, Mapping):
+                return None
+            cast(dict[str, Any], envelope["source"])["execution_environment"] = dict(caller_context)
     try:
         encoded = json.dumps(
             envelope,
@@ -305,11 +255,41 @@ def review_raw_hook_native(
     observe_mode: bool,
     deadline: float | None,
     policy_snapshot: Mapping[str, object] | None = None,
+    runtime_status: NativeRuntimeStatus | None = None,
+    request_id: str | None = None,
+    local_cli_rules: Mapping[str, object] | None = None,
+    observe_local_cli: bool = False,
+    record_receipt: bool = False,
+    structured_output_config: Mapping[str, object] | None = None,
+    containment_sink: bool = False,
 ) -> dict[str, Any] | None:
     """Return a typed Rust edge result, or fail closed without reinterpretation."""
-    status = native_runtime_status()
+    record_native_resident_client_failure_code(None)
+    if request_id is not None and (
+        not isinstance(request_id, str) or re.fullmatch(r"[a-z0-9][a-z0-9_.:-]{0,255}", request_id) is None
+    ):
+        return record_native_hook_result("native_fail_safe", None)
+    status = runtime_status if runtime_status is not None else native_runtime_status()
     event_key = event.strip().lower().replace("_", "").replace("-", "")
-    required_features = {_EDGE_FEATURE, _CLIENT_FEATURE}
+    required_features = {_EDGE_FEATURE, _CLIENT_FEATURE, _RESPONSE_FEATURE, _SELF_CHECK_FEATURE}
+    normalized_harness = harness.strip().lower().replace("_", "-")
+    if event_key in {
+        "posttool",
+        "posttooluse",
+        "posttoolcall",
+        "aftershellexecution",
+        "afterreadfile",
+        "afterwritefile",
+        "aftermcpexecution",
+    } and normalized_harness in {"pi", "pi-agent", "pi-coding-agent", "omp", "oh-my-pi"}:
+        # The resident resolves the managed structured-output view from its
+        # authenticated direct-lane binding. Older residents without that
+        # binding capability cannot be trusted with this hook path.
+        required_features.add(STRUCTURED_OUTPUT_BINDING_FEATURE)
+    elif structured_output_config is not None:
+        # Compatibility callers that still carry the view use the original
+        # envelope capability until their caller is migrated.
+        required_features.add(STRUCTURED_OUTPUT_FEATURE)
     if event_key in {
         "pretool",
         "pretooluse",
@@ -322,23 +302,45 @@ def review_raw_hook_native(
         "prompt",
     }:
         required_features.add("pre-tool-generic-authority-v1")
+        if event_key not in {"userpromptsubmit", "userpromptsubmitted", "prompt"}:
+            required_features.add("git-execution-context-v1")
+            if local_cli_rules is not None:
+                required_features.add(_LOCAL_CLI_RULE_FEATURE)
+                if local_cli_rules.get("exact_action_control_digest") is not None:
+                    required_features.add(_REVIEW_EVIDENCE_FEATURE)
+    tool_call = "git-execution-context-v1" in required_features
+    if _LOCAL_CLI_RULE_FEATURE not in required_features:
+        # Only a tool call has a custom extension rule to settle.
+        local_cli_rules = None
     if (
-        status.mode not in {"auto", "force"}
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None
         or not required_features <= set(status.capabilities.features)
     ):
         return record_native_hook_result("native_fail_safe", None)
+    # Bind this call's answer to this call. Without an id of its own a review
+    # can only trust the stream it borrowed to have carried one request at a
+    # time; with one, an answer naming a different request -- or naming none --
+    # is a desynchronised stream rather than this review's verdict. The id is
+    # transport identity: nothing here reads or recomputes the verdict.
+    bound_request_id = request_id
+    if bound_request_id is None and _REQUEST_BINDING_FEATURE in status.capabilities.features:
+        bound_request_id = uuid.uuid4().hex
     deadline_monotonic, deadline_budget_ms = _capture_deadline(deadline)
-    del observe_mode
     if policy_snapshot is None:
         return record_native_hook_result("native_fail_safe", None)
     snapshot = dict(policy_snapshot)
     generation = snapshot.get("generation")
     if isinstance(generation, bool) or not isinstance(generation, int) or generation <= 0:
         return record_native_hook_result("native_fail_safe", None)
+    sink_command: tuple[str, ...] | None = None
+    if containment_sink and tool_call and cwd is not None:
+        # Without a workspace there is no snapshot to write, and the receipt stands.
+        from .contained_sink_command import contained_sink_command_prefix
+
+        sink_command = contained_sink_command_prefix()
     encoded = _encode_hook_envelope(
         payload=payload,
         harness=harness,
@@ -349,6 +351,17 @@ def review_raw_hook_native(
         source_ref_external_allowed=source_ref_external_allowed,
         deadline_budget_ms=deadline_budget_ms,
         snapshot=snapshot,
+        execution_context_supported="git-execution-context-v1" in status.capabilities.features,
+        request_id=bound_request_id,
+        recording_only=observe_mode,
+        local_cli_rules=local_cli_rules,
+        observe_local_cli=observe_local_cli,
+        record_receipt=record_receipt,
+        structured_output_config=structured_output_config,
+        containment_sink=sink_command,
+        # Cursor's route probe may name the runtime's own sink, which this
+        # daemon admits on `beforeShellExecution` (`cursor_shell_route`).
+        native_sink=harness == "cursor",
     )
     if encoded is None:
         return record_native_hook_result("native_fail_safe", None)
@@ -357,7 +370,7 @@ def review_raw_hook_native(
         guard_home=guard_home,
         environment=_isolated_environment(),
         payload=encoded,
-        deadline_monotonic=deadline_monotonic,
+        deadline_monotonic=deadline_monotonic + (_LOCAL_CLI_RULE_SECONDS if local_cli_rules is not None else 0.0),
         raw_hook_envelope=True,
     )
     if output is None:
@@ -367,15 +380,23 @@ def review_raw_hook_native(
             reason="native_hook_edge_unavailable",
         )
         return record_native_hook_result("native_fail_safe", None)
+    error_code: str | None = None
     try:
         response_payload = json.loads(output)
         error_code = _native_error_code(response_payload)
+        if error_code == _UNSUPPORTED_EVENT_CODE:
+            # A lifecycle event the edge does not review. The resident
+            # answered, so this neither counts against its health nor proves it.
+            return record_native_hook_result("native_fail_safe", None)
         if error_code is not None:
             record_native_resident_client_failure_code(error_code)
         decoded = _decode_edge(response_payload)
     except (UnicodeDecodeError, json.JSONDecodeError):
         decoded = None
-    if decoded is None:
+    if decoded is None or (
+        bound_request_id is not None
+        and (decoded.get("request_id") != bound_request_id or decoded["receipt"]["request_id"] != bound_request_id)
+    ):
         native_record_resident_failure(
             status.identity.sha256,
             guard_home,

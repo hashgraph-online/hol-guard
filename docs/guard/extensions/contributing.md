@@ -15,7 +15,7 @@ For a regular declarative command extension, author these inputs:
 
 1. `contributions/command-sources/command.<name>.json`;
 2. `tests/fixtures/command-source-<slug>.v1.json`, bound to that exact source document; and
-3. the external trust-class entry in `contracts/extensions/trust-class-map.v1.json`.
+3. the external trust-class binding `contracts/extensions/trust/command.<name>.v1.json`.
 
 Do not add Python detector modules or hand-edit generated descriptors, native programs, package
 resources, or public catalogs. The Builder writes the deterministic projections from the reviewed
@@ -36,7 +36,10 @@ uv run --no-sync python scripts/prepare_extension_contribution.py \
 ```
 
 The command validates the exact source/fixture binding through native evaluation with zero target
-command execution and synchronizes the checked-in projections. Follow it with the handoff check:
+command execution and generates that extension's public JSON record. Include this record in the
+same contribution PR: it preserves the public metadata, publisher links, and contribution evidence.
+Runtime projections go to ignored build directories; this command does not update the shared
+directory catalogs or unrelated public descriptors. Follow it with the handoff check:
 
 ```sh
 uv run --no-sync hol-guard extensions handoff --repo . \
@@ -48,9 +51,17 @@ Here, `<slug>` is the extension ID without the `command.` prefix. For example,
 `command.cloud.aws` uses `command-source-cloud.aws.v1.json`.
 
 Use `--check` with the preparation command to verify an already prepared change. Optional public
-credit, upstream, and claim-readiness metadata belongs in
+credit, upstream, and explicit authority overrides belong in
 `contributions/extension-listings/command.<name>.json`; it is documented in
-[publisher metadata](publisher-metadata.md). Contributor credit never grants claim authority.
+[publisher metadata](publisher-metadata.md). A credit may also carry a public profile: a short
+description, an organization name, and website, LinkedIn, and X links. Contributor credit and that
+profile never grant claim authority.
+
+Required CI verifies public descriptors against the committed source before generating runtime
+files, so a missing or stale record fails the original contribution PR. After merges, the existing
+publication workflow builds an immutable directory snapshot automatically; no follow-up publication
+PR is needed. `--publish-directory` is reserved for a complete publication preview in CI or a
+maintainer workspace.
 
 When a ready-for-review PR has a mechanical source, fixture, schema, or generated-projection
 problem, Gitar can apply the deterministic repair. It does not choose matcher semantics, trust
@@ -62,6 +73,48 @@ before Gitar can commit a repair. The repository cannot grant that permission fo
 GitHub offers **Allow edits and access to secrets by maintainers**, leave it disabled and apply
 the suggested change manually.
 
+## Test with an installed Guard
+
+The source checkout proves that the matcher and its fixtures agree. An installed HOL Guard shows
+what an end user experiences: which prompt their agent receives, which safe commands pass, and how
+the extension reads in `hol-guard command explain`, the dashboard, and receipts. Use both.
+
+Before authoring, install the released CLI, connect the agent you work with, and record the
+current behavior of a destructive command and its safe counterpart:
+
+```sh
+pipx install hol-guard
+hol-guard install claude-code    # or codex, cursor, copilot, gemini, ...
+hol-guard command explain '<destructive command>'
+hol-guard command explain '<safe counterpart>'
+```
+
+The released CLI includes the Extension Builder, so `hol-guard extensions generate` and
+`hol-guard extensions validate` work without a Rust toolchain. Add the `command explain` results to
+the **Installed Guard check** section of the pull request. They show reviewers what the current
+catalog does and confirm that the extension does not duplicate existing coverage.
+
+Community extensions stay off until a local administrator enables them, and a merged source reaches
+users only through a release. Once a release includes your extension, update, turn it on, and run
+the same cases through your agent:
+
+```sh
+hol-guard update
+hol-guard command controls preview command.<name> --target-kind extension --state enabled
+hol-guard command controls apply command.<name> --target-kind extension --state enabled
+hol-guard command explain '<destructive command>'
+```
+
+Guard asks for local approval before it applies the change; the dashboard's **Protection Center**
+offers the same setting. Point the destructive case at a disposable target, such as a scratch
+directory, a throwaway branch or resource, or a test account, and run it in an environment you can
+discard. The target must be safe to destroy even if Guard does not intercept the command or a saved
+approval allows it; never use real data or shared infrastructure. Then ask your agent to run the
+safe counterpart, which should proceed, and the destructive command, which should get the verdict
+your fixture expects: a review, or a block for rules that use `block`. If Guard presents a review,
+deny it. Confirm the outcome with `hol-guard receipts`. If the agent experience differs from your fixture, open a follow-up pull
+request with the case that exposed it.
+
 ## Choose the contribution type
 
 | Contribution | Use it for | Expected scope |
@@ -71,6 +124,7 @@ the suggested change manually.
 | False-positive fix | A safe variant that incorrectly triggers a rule | A scoped native predicate and regressions for the affected rule and independent protections |
 | New native operation | Semantics the existing matcher graph cannot express | Reviewed Rust contract, validation, lowering, evaluation, identity, and parity tests |
 | MCP server | A package or hosted MCP service with tool defaults | Follow the separate [MCP server guide](../mcp-server-contributions.md) |
+| Cloud action pack | A provider's hosted actions, run by a host from a reviewed pack | Follow the separate [cloud action pack guide](cloud-action-pack-contributing.md) |
 | Documentation or publisher listing | Examples, references, public presentation, or attribution | Docs or an optional listing sidecar, plus public directory checks |
 
 For a new Extension or a material authority change, open a draft pull request with the
@@ -102,7 +156,8 @@ review kit with [Extension Builder](../extension-builder/README.md).
 | --- | --- |
 | `contributions/command-sources/command.<name>.json` | Authoritative metadata, permissions, rules, safe variants, and typed native matcher trees |
 | `tests/fixtures/command-source-<slug>.v1.json` | Portable command cases, synthetic controls, expected actions, and rule/segment observations |
-| `contracts/extensions/trust-class-map.v1.json` | Separately reviewed trust classification; community contributions are external |
+| `contracts/extensions/trust/command.<name>.v1.json` | Separately reviewed per-extension trust binding; community contributions are external |
+| `contracts/extensions/build-trust-class-map.v1.json` | Ignored package projection of `contracts/extensions/trust/`; never committed or edited by hand |
 | `contributions/extensions/command.<name>.json` | Maintainer-generated v2 descriptor, including source identity |
 | `contracts/extensions/native-command-program.v1.json` and `command-catalog.v1.json` | Maintainer-generated native program and catalog; the build also updates package resource copies |
 | `contributions/extension-listings/<contribution-id>.json` | Optional public presentation and reviewed numeric GitHub claimant IDs |
@@ -160,9 +215,9 @@ an addition with `base: "packaged"` cannot overwrite an ID already embedded in t
 Build current binaries and run the native source CLI contract:
 
 ```bash
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command --bin guard-command-source
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p hol-guard-runtime
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
+cargo +1.89.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command --bin guard-command-source
+cargo +1.89.0 build --locked --manifest-path rust/Cargo.toml --release -p hol-guard-runtime
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
 uv run --no-sync python scripts/build_native_command_program.py --check --compiler rust/target/release/guard-command-source
 ```
 
@@ -223,9 +278,13 @@ cannot choose its trust class, activate itself, or replace an installed policy d
 Community command extensions remain **external** and off until a local administrator enables
 them on a device. A source merge is followed by the normal release and installed-platform
 qualification; local compilation or an offline fixture pass does not establish release availability.
+After release, verify the extension in a real agent as described in
+[Test with an installed Guard](#test-with-an-installed-guard).
 
-For a public publisher profile, follow [publisher metadata](publisher-metadata.md). Optional
-listing sidecars carry the separately reviewed `maintainerGithubIds` mapping. The post-merge
-claim notice can direct newly accepted claimants to Extension Studio, but PR authorship and
-opening an onboarding link do not grant a claim. Profile management never promotes runtime
-trust, activates protection, or implies upstream ownership.
+For a public publisher profile, follow [publisher metadata](publisher-metadata.md). The
+verified PR that first introduces an external contribution establishes its initial
+claimant automatically. The post-merge claim notice links that contributor to Extension
+Studio; no separate listing PR is required. Optional listing sidecars carry public
+presentation and reviewed authority overrides. Later fixes and onboarding links cannot
+grant ownership. Profile management never promotes runtime trust, activates protection,
+or implies upstream ownership.

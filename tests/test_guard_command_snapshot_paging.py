@@ -8,8 +8,12 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TypedDict, TypeGuard
 
-from codex_plugin_scanner.guard.runtime import local_request_snapshots
+import pytest
+
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import local_request_snapshots_client as local_request_snapshots
+
+pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
 
 
 class SnapshotPayload(TypedDict):
@@ -143,7 +147,7 @@ def test_local_request_snapshot_payload_stays_under_cloud_byte_budget(tmp_path: 
 def test_local_request_snapshot_pending_is_cursorless(tmp_path: Path) -> None:
     """Pending snapshots must NOT persist cursors so every call sees the newest batch.
 
-    The implementation invariant (local_request_snapshots.py line 175) is
+    The implementation invariant (local_request_snapshots_client.py) is
     ``use_cursor = status != "pending"`` — pending status never reads or
     writes a paging cursor.  Each call therefore returns the same first
     batch (rows 0-124) regardless of prior calls.

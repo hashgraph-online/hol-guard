@@ -67,6 +67,7 @@ def _normalized_harness_selector_v3(value: object) -> str | None:
         "zai-zcode": "zcode",
         "devin-cli": "devin",
         "cognition-devin": "devin",
+        "muse-code": "muse",
     }.get(normalized, normalized)
 
 

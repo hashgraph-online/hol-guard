@@ -1,0 +1,5 @@
+{
+  "extension": "command.feature-flags",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "trusted-library"
+}

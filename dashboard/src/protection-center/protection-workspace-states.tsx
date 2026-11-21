@@ -20,6 +20,7 @@ export function ExtensionsLoadingState(props: { label: string }) {
 export function ExtensionsLoadError(props: {
   title: string;
   detail: string;
+  reference?: string;
   onRetry: () => void;
 }) {
   return (
@@ -28,6 +29,11 @@ export function ExtensionsLoadError(props: {
         <h1 className="text-xl font-semibold text-red-950">{props.title}</h1>
         <p role="alert" className="mt-2 text-sm text-red-800">{props.detail}</p>
         <p className="mt-3 text-xs font-medium text-red-900">Local protection continues on this device.</p>
+        {props.reference ? (
+          <p className="mt-2 text-xs text-red-900">
+            Reference: <span className="font-mono break-all">{props.reference}</span>
+          </p>
+        ) : null}
         <button
           type="button"
           onClick={props.onRetry}

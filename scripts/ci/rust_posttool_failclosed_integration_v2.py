@@ -91,9 +91,7 @@ def _decision(value: dict[str, Any]) -> str:
 def _require_native_error(result: subprocess.CompletedProcess[bytes], reason: str) -> None:
     blob = result.stderr.decode("utf-8", "replace") + result.stdout.decode("utf-8", "replace")
     if result.returncode == 0 or reason not in blob:
-        raise SystemExit(
-            f"expected native error {reason}, got rc={result.returncode} output={blob[:240]!r}"
-        )
+        raise SystemExit(f"expected native error {reason}, got rc={result.returncode} output={blob[:240]!r}")
 
 
 def main() -> int:

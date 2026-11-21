@@ -8,21 +8,31 @@ from unittest.mock import Mock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
-from codex_plugin_scanner.guard.daemon import server as daemon
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot_v3
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .native_exit_code_support import native_exit_code_is
 from .native_policy_snapshot_test_fixtures import _config
 from .test_native_policy_snapshot_cache_binding import _write_resident_authority
 
 
+def test_hermes_pre_tool_worker_failure_never_allows_execution() -> None:
+    response = availability_harness_response(
+        harness="hermes",
+        event_name="pre_tool_call",
+        reason_code="native_hook_worker_exception",
+        reason="Native hook worker failed.",
+    )
+
+    assert response["decision"] == "block"
+    assert response["policy_action"] == "block"
+
+
 @pytest.mark.parametrize("state", ["observe", "enforce", "missing", "expired", "tampered"])
-@pytest.mark.parametrize(
-    "failure", ["worker_exception", "worker_none", "capacity", "disabled_legacy_path", "cli_disabled"]
-)
+@pytest.mark.parametrize("failure", ["worker_exception", "worker_none"])
 def test_outage_mode_requires_authenticated_unexpired_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str, failure: str
 ) -> None:
@@ -50,62 +60,46 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
         if state == "tampered":
             snapshot["mode"] = "observe"
         _write_resident_authority(guard_home, snapshot, master)
-    payload = {"hook_event_name": "PreToolUse", "tool_input": {"command": "printf fixture > output.txt"}}
-    if failure == "disabled_legacy_path":
-        worker = HookWorker(store=store, wait_for_native_policy=False, publish_native_policy=False)
-        monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker_native.native_mode", lambda: "off")
-        try:
-            response = worker._review_pre_tool_http(
-                payload,
-                harness="codex",
-                home_dir=tmp_path / "home",
-                guard_home=guard_home,
-                workspace=None,
-            )
-        finally:
-            worker.close()
-    elif failure == "capacity":
-        handler = object.__new__(daemon._GuardDaemonHandler)
-        handler.server = Mock(store=store)
-        monkeypatch.setattr(handler, "_validated_fail_safe_hook_paths", lambda _params: (None, None))
-        response = handler._runtime_hook_capacity_response(
-            payload, {}, default_harness="codex", native_authoritative=True
-        )
+    payload: dict[str, object] = {
+        "hook_event_name": "PreToolUse",
+        "tool_input": {"command": "printf fixture > output.txt"},
+    }
+    worker = Mock()
+    if failure == "worker_exception":
+        worker.review_http_payload.side_effect = RuntimeError("injected unavailable native worker")
     else:
-        worker = Mock()
-        if failure == "worker_exception":
-            worker.review_http_payload.side_effect = RuntimeError("injected unavailable native worker")
-        else:
-            worker.review_http_payload.return_value = None
-        monkeypatch.setattr(cli, "HookWorker", lambda **_kwargs: worker)
-        monkeypatch.setattr(cli, "_native_mode_requires_rust", lambda: failure != "cli_disabled")
-        responses = []
-        monkeypatch.setattr(cli, "_emit", lambda _name, value, _json: responses.append(value))
-        if failure == "worker_exception":
-            response = cli.try_native_hook_authority(
-                payload=payload,
-                harness="codex",
-                home_dir=tmp_path / "home",
-                guard_home=guard_home,
-                workspace=None,
-                store=store,
-            )
-        monkeypatch.setattr(
-            cli,
-            "try_native_hook_authority",
-            lambda **_kwargs: response if failure == "worker_exception" else None,
-        )
-        status = cli.route_native_hook(
-            Mock(harness="codex", json=True),
-            config=None,
-            context=HarnessContext(home_dir=tmp_path / "home", guard_home=guard_home, workspace_dir=None),
+        worker.review_http_payload.return_value = None
+    monkeypatch.setattr(cli, "HookWorker", lambda **_kwargs: worker)
+    native_exit_code_is(monkeypatch, 0)
+    responses = []
+    monkeypatch.setattr(cli, "native_cli_hook_emit", lambda _harness, value, **_kwargs: responses.append(value))
+    if failure == "worker_exception":
+        response = cli.try_native_hook_authority(
             payload=payload,
-            runtime_workspace=None,
+            harness="codex",
+            home_dir=tmp_path / "home",
+            guard_home=guard_home,
+            workspace=None,
             store=store,
         )
-        assert status == 0
-        assert len(responses) == 1
-        response = responses[0]
-    assert response["hookSpecificOutput"]["permissionDecision"] == (
-        "allow" if state == "observe" and failure not in {"disabled_legacy_path", "cli_disabled"} else "deny"
+    monkeypatch.setattr(
+        cli,
+        "try_native_hook_authority",
+        lambda **_kwargs: response if failure == "worker_exception" else None,
     )
+    status = cli.route_native_hook(
+        Mock(harness="codex", json=True),
+        context=HarnessContext(home_dir=tmp_path / "home", guard_home=guard_home, workspace_dir=None),
+        payload=payload,
+        runtime_workspace=None,
+        store=store,
+    )
+    # codex denies via the hookSpecificOutput.permissionDecision envelope;
+    # rc stays 0 because a nonzero rc would read as a hook error and permit.
+    assert status == 0
+    assert len(responses) == 1
+    response = responses[0]
+    hook_output = response["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    # The resident being unavailable never authorizes, whatever the snapshot says.
+    assert hook_output["permissionDecision"] == "deny"

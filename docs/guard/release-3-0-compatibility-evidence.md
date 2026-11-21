@@ -64,25 +64,25 @@ Evidence:
 
 ## Surface schema ↔ runtime method-list negotiated contract
 
-The prior blocker ("surface schema method list and runtime method list require an explicit negotiated contract") is resolved by the existing handshake. `initialize_client()` in `runtime/surface_server.py:60` returns both lists in one response: `schema.methods` (advertised surface methods) and `server_capabilities.methods` (the implemented runtime methods from `SERVER_METHODS`). Protocol negotiation uses same-major-version matching (`_negotiate_protocol_version`), and the response carries `protocol_version`, `schema_version`, and the negotiated version. A 2.x client calling `initialize` receives the full implemented-method list and the negotiated protocol version; the three schema-advertised but unimplemented methods (`operation/item/add`, `client/attach`, `client/heartbeat`) are absent from `SERVER_METHODS` and therefore are never routed.
+The prior blocker ("surface schema method list and runtime method list require an explicit negotiated contract") is resolved by the existing handshake. `initialize_client()` in `runtime/surface_server.py:55` returns both lists in one response: `schema.methods` (advertised surface methods) and `server_capabilities.methods` (the implemented runtime methods from `SERVER_METHODS`). Protocol negotiation uses same-major-version matching (the native `surface_server_handshake` kind), and the response carries `protocol_version`, `schema_version`, and the negotiated version. A 2.x client calling `initialize` receives the full implemented-method list and the negotiated protocol version; the three schema-advertised but unimplemented methods (`operation/item/add`, `client/attach`, `client/heartbeat`) are absent from `SERVER_METHODS` and therefore are never routed.
 
 Evidence:
 
-- `runtime/surface_server.py:21-38` — `SERVER_METHODS` (16 implemented methods).
-- `runtime/surface_server.py:60-114` — `initialize_client()` returns `schema`, `server_capabilities.methods`, and `negotiated_version`.
-- `schemas/surface_server.py:165-175` — advertised method list.
-- Both files byte-identical to 2.2.
+- `runtime/surface_server.py:16-33` — `SERVER_METHODS` (16 implemented methods).
+- `runtime/surface_server.py:55-93` — `initialize_client()` returns `schema`, `server_capabilities.methods`, and `negotiated_version`.
+- `rust/crates/guard-runtime/src/surface_server_handshake.rs:83-93` — advertised method list, now served by the native `surface_server_handshake` kind.
+- Both method lists match the `v2.2.99` tag entry for entry; the advertised list moved from `schemas/surface_server.py` to the native runtime.
 - Characterization tests `tests/test_guard_release_3_0_compatibility.py::TestSurfaceRuntimeNegotiationContract` pin the handshake contract: both method lists returned together, unimplemented advertised methods never routed, and same-major-version protocol negotiation (accepted and rejected).
 
 ## Archived receipt-rollup reconstruction
 
-The blocker requiring migration evidence for archived receipt-rollup reconstruction is resolved by existing proof. `backfill_receipt_rollups()` in `store_receipt_rollups.py` rebuilds rollup state from the `runtime_receipts` table (whose schema is byte-identical to 2.2), and `test_store_upgrade_rebuilds_historical_warn_rollup_bucket` proves that a store upgrade reconstructs the historical rollup bucket from archived receipts. `test_guard_storage_maintenance.py` proves `receipt_rollups_need_backfill`/`backfill_receipt_rollups` reconcile dirty and deleted rollup rows.
+The blocker requiring migration evidence for archived receipt-rollup reconstruction is resolved by existing proof. The resident rebuild in `guard_store_receipt_rollups.rs` rebuilds rollup state from the `runtime_receipts` table (whose schema is byte-identical to 2.2), and `test_store_upgrade_rebuilds_historical_warn_rollup_bucket` proves that a store upgrade reconstructs the historical rollup bucket from archived receipts. `test_guard_storage_maintenance.py` proves the rebuild reconciles dirty and deleted rollup rows.
 
 Evidence:
 
-- `store_receipt_rollups.py` — `backfill_receipt_rollups()`, byte-identical to 2.2.
+- `guard_store_receipt_rollups.rs` — the rebuild and reconcile paths, replayed against vectors recorded from the original Python implementation (`store_receipt_rollups.py`, byte-identical to 2.2 in behavior) before it was removed. Payloads and table state are compared exactly, and `*_json` columns are compared by decoded value.
 - Tests: `tests/test_guard_receipt_persistence.py::test_store_upgrade_rebuilds_historical_warn_rollup_bucket`, `tests/test_guard_storage_maintenance.py` — passed.
-- Characterization tests `tests/test_guard_release_3_0_compatibility.py::TestLegacyReceiptRollupReconstruction` simulate a 2.x-era store (migrations 10 and 16 applied, stale rollup bucket) and prove `backfill_receipt_rollups` reconstructs archived rollups idempotently.
+- Characterization tests `tests/test_guard_release_3_0_compatibility.py::TestLegacyReceiptRollupReconstruction` simulate a 2.x-era store (migrations 10 and 16 applied, stale rollup bucket) and prove the resident rebuild reconstructs archived rollups idempotently.
 
 ## Harness coverage (degraded/unsupported)
 

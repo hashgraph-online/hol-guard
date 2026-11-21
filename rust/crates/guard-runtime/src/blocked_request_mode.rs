@@ -1,0 +1,367 @@
+//! `safe_alternative_reason` from `blocked_request_mode.py`: the deny text a
+//! safe-alternative blocked request returns to the agent.
+
+use crate::guard_store_json::py_strip;
+
+/// Read-only notification for a queued review whose identical retry is bound.
+pub(crate) fn approval_wait_hint(request_id: &str) -> String {
+    if request_id.is_empty()
+        || request_id.starts_with('-')
+        || request_id.len() > 64
+        || !request_id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_'))
+    {
+        return String::new();
+    }
+    format!(
+        "Wait for the decision with `hol-guard approvals wait {request_id} --json` (bounded to 120 seconds). \
+         Only after an allow decision, retry the identical action through Guard. \
+         A timeout or a block is not approval."
+    )
+}
+
+pub(crate) fn approval_wait_hint_for_home(
+    request_id: &str,
+    guard_home: &str,
+    home_dir: &str,
+) -> String {
+    let hint = approval_wait_hint(request_id);
+    if hint.is_empty()
+        || std::path::Path::new(home_dir).join(".hol-guard") == std::path::Path::new(guard_home)
+    {
+        return hint;
+    }
+    let quoted = crate::mcp_proxy_shlex::quote(guard_home);
+    hint.replace(" --json`", &format!(" --json --home {quoted}`"))
+}
+
+/// The `blocked_request_mode` a silent block is recorded with.
+pub(crate) const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
+/// The silent block's reason when the review gave none.
+pub(crate) const BLOCKED_REASON: &str = "HOL Guard blocked this action.";
+
+/// `str(value or fallback)` for the values the resident reproduces: a string,
+/// or a falsy `None`, `False` or `""`. Anything else is `None`.
+pub(crate) fn falsy_or_text<'a>(
+    value: Option<&'a serde_json::Value>,
+    fallback: &'a str,
+) -> Option<&'a str> {
+    use serde_json::Value;
+    match value {
+        None | Some(Value::Null) | Some(Value::Bool(false)) => Some(fallback),
+        Some(Value::String(text)) if text.is_empty() => Some(fallback),
+        Some(Value::String(text)) => Some(text),
+        Some(_) => None,
+    }
+}
+
+/// The `safe-alternative` PreToolUse response that blocks `result` with
+/// `reason`: rendered for `harness`, never prompted.
+pub(crate) fn safe_alternative_block(
+    harness: &str,
+    result: &guard_command::hook_responses::Object,
+    reason: &str,
+) -> guard_command::hook_responses::Object {
+    use serde_json::json;
+    let mut blocked = result.clone();
+    blocked.insert("decision".to_owned(), json!("deny"));
+    blocked.insert("minimum_action".to_owned(), json!("block"));
+    blocked.insert("policy_action".to_owned(), json!("block"));
+    blocked.insert("reason".to_owned(), json!(reason));
+    let mut response = guard_command::hook_responses::pre_tool(harness, &blocked);
+    response.insert("prompted".to_owned(), json!(false));
+    response.insert(
+        "blocked_request_mode".to_owned(),
+        json!(SAFE_ALTERNATIVE_MODE),
+    );
+    response
+}
+
+pub(crate) fn wait_hint_projection(
+    args: &serde_json::Value,
+) -> crate::runner_authority_op::KindResult {
+    let id = args
+        .get("request_id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(crate::runner_authority_op::ERR_INVALID)?;
+    let guard_home = args
+        .get("guard_home")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(crate::runner_authority_op::ERR_INVALID)?;
+    let home_dir = args
+        .get("home_dir")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(crate::runner_authority_op::ERR_INVALID)?;
+    Ok(serde_json::json!({"hint": approval_wait_hint_for_home(id, guard_home, home_dir)}))
+}
+
+#[cfg(test)]
+mod wait_hint_tests {
+    use super::approval_wait_hint;
+
+    #[test]
+    fn only_a_literal_request_id_is_a_shell_wait_hint() {
+        assert!(approval_wait_hint("req-1").contains("approvals wait req-1 --json"));
+        for id in ["", "-x", "req;id", "$(id)", "req/1", "réq"] {
+            assert!(approval_wait_hint(id).is_empty(), "{id}");
+        }
+    }
+
+    #[test]
+    fn a_custom_home_wait_names_the_store_without_weakening_its_review_gate() {
+        let hint = super::approval_wait_hint_for_home("req-1", "/custom guard", "/user");
+        assert!(hint.contains("--json --home '/custom guard'"));
+        let default = super::approval_wait_hint_for_home("req-1", "/user/.hol-guard", "/user");
+        assert!(!default.contains("--home"));
+        let projected = super::wait_hint_projection(&serde_json::json!({
+            "request_id": "req-1", "guard_home": "/custom guard", "home_dir": "/user"
+        }))
+        .unwrap();
+        assert_eq!(projected["hint"], hint);
+    }
+}
+
+/// `SAFE_ALTERNATIVE_GUIDANCE`.
+const SAFE_ALTERNATIVE_GUIDANCE: &str = "This action remains blocked. Continue with a safe, \
+     permitted alternative that respects the same protection. Do not retry an equivalent \
+     command, bypass Guard, or seek permission to run it. If no safe alternative can complete \
+     the task, explain the limitation.";
+/// `_APPROVAL_WAIT`.
+const APPROVAL_WAIT: &str = "It is waiting for the user to approve it in the HOL Guard inbox \
+     (`hol-guard approvals`). Allow once lets this exact action run one time; Always allow keeps \
+     allowing it until the user removes that choice. Do not retry the same action until it is approved; continue with \
+     other work meanwhile.";
+/// `_NOT_QUEUED`.
+const NOT_QUEUED: &str = "No approval is waiting in HOL Guard for this action. Do not retry the \
+     same action or work around the block; continue with a permitted alternative or tell the user what is \
+     blocked.";
+const APPROVAL_ALWAYS_ONLY: &str = "It is waiting in the HOL Guard inbox (`hol-guard approvals`), but approving it just once will not \
+     let you run it; only \"Always allow exact action\" will. Do not retry it unless the user says they \
+     chose that; continue with other work meanwhile.";
+const APPROVAL_CANNOT_UNBLOCK: &str =
+    "It is recorded in the HOL Guard inbox, but approving it there will not let you run it. \
+     Do not retry this exact command. Tell the user exactly what is blocked so they can run it themselves, \
+     or continue with a permitted alternative.";
+/// `_INBOX_APPROVAL_OFFER`: the native review text's offer of inbox approval,
+/// dropped when no approval can let the action run.
+const INBOX_APPROVAL_OFFER: &str = " Approve it in the HOL Guard inbox (choose Always for a \
+     repeated read-only command), or split it into simpler commands.";
+
+/// `_CONNECTOR_SETUP_WAIT`: an MCP server setup review is one decision for
+/// the server, not an approval of this action.
+const CONNECTOR_SETUP_WAIT: &str = "Setting it up is a one-time decision for the user in the HOL \
+     Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this \
+     or another spelling, until it is set up; continue with other work meanwhile.";
+/// `_CONNECTOR_APPROVAL_WAIT`: a local CLI or script Guard has not been set
+/// up for is an ordinary review, which the user's Allow once or Always allow
+/// releases.
+const CONNECTOR_APPROVAL_WAIT: &str = "It is waiting for the user to approve it in the HOL Guard \
+     inbox (`hol-guard approvals`), where Allow once or Always allow lets it run. Do not retry \
+     the same action until it is approved; continue with other work meanwhile.";
+/// `CONNECTOR_SETUP_REASON_PREFIX`.
+const CONNECTOR_SETUP_REASON_PREFIX: &str = "HOL Guard has not been set up for `";
+/// The start every connector setup reason shares, including the one for a
+/// file that changed after the user allowed it.
+const CONNECTOR_SETUP_REASON_MARKER: &str = "HOL Guard has not been set up for ";
+/// The opening for a local CLI or script the user allowed an earlier version of.
+const CONNECTOR_CHANGED_REASON_PREFIX: &str = "HOL Guard has not been set up for this version of `";
+const CONNECTOR_CHANGED_REASON_SUFFIX: &str =
+    " on this device: the user allowed an earlier version, and the file has changed since.";
+
+/// `connector_setup_reason(name, surface, ask=..., permitted=..., approvable=...)`:
+/// a local CLI or script whose review is `approvable` says it waits for the
+/// user's approval in either mode, and the caller adds the link. Otherwise,
+/// and for an MCP server, the default mode names the computed redirect (if
+/// any) and appends `SAFE_ALTERNATIVE_GUIDANCE`, with no link and no request
+/// to ask the user; `ask` mode says it waits in the inbox, and the caller adds
+/// the link.
+/// The daemon and the resident's review queue both render this text; the
+/// vector test keeps the two byte-identical.
+#[cfg(test)]
+pub(crate) fn connector_setup_reason(
+    name: &str,
+    surface: &str,
+    ask: bool,
+    permitted: &[&str],
+    approvable: bool,
+) -> String {
+    connector_setup_reason_for(name, surface, ask, permitted, approvable, false)
+}
+
+/// `connector_setup_reason(...)`, opening with the earlier allow when the user
+/// allowed an earlier version of the file. An allow is bound to the file's
+/// content, so it does not carry over; saying "not set up" alone reads as if
+/// the user's allow had been lost.
+pub(crate) fn connector_setup_reason_for(
+    name: &str,
+    surface: &str,
+    ask: bool,
+    permitted: &[&str],
+    approvable: bool,
+    allowed_earlier_version: bool,
+) -> String {
+    let label = match surface {
+        "cli" => "local CLI",
+        "package-scripts" => "package script",
+        "mcp" => "MCP server",
+        other => other,
+    };
+    let reason = if allowed_earlier_version {
+        format!(
+            "{CONNECTOR_CHANGED_REASON_PREFIX}{name}` ({label}){CONNECTOR_CHANGED_REASON_SUFFIX}"
+        )
+    } else {
+        format!("{CONNECTOR_SETUP_REASON_PREFIX}{name}` ({label}) on this device.")
+    };
+    if approvable && matches!(surface, "cli" | "package-scripts") {
+        return format!("{reason} {CONNECTOR_APPROVAL_WAIT}");
+    }
+    if ask {
+        return format!("{reason} {CONNECTOR_SETUP_WAIT}");
+    }
+    let names = permitted
+        .iter()
+        .filter(|item| !item.is_empty())
+        .map(|item| format!("`{item}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let redirect = if names.is_empty() {
+        String::new()
+    } else {
+        format!("Permitted on this device: {names}.")
+    };
+    [
+        reason.as_str(),
+        redirect.as_str(),
+        SAFE_ALTERNATIVE_GUIDANCE,
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+/// `is_unlinked_connector_setup_reason`: a default-mode connector setup
+/// reason, to which a harness renderer adds no approval link or step.
+pub(crate) fn is_unlinked_connector_setup_reason(text: &str) -> bool {
+    text.contains(CONNECTOR_SETUP_REASON_MARKER) && text.contains(SAFE_ALTERNATIVE_GUIDANCE)
+}
+
+/// `_BUILD_REVIEW_PREFIX`: a package review of a build or test says why in
+/// its own text, and the install hint does not apply to it.
+const BUILD_REVIEW_PREFIX: &str = "HOL Guard requires review before this build or test command";
+
+/// `_READ_REVIEW_PREFIX`: a review of a direct read of one path says why in
+/// its own text, and the advice for narrowing a search does not apply to it.
+const READ_REVIEW_PREFIX: &str = "HOL Guard requires review before this file read";
+
+/// `_REASON_CODE_HINTS`: plain-language next steps keyed by the native
+/// decision's reason code; unknown codes have none.
+fn reason_code_hint(reason_code: &str) -> &'static str {
+    match reason_code {
+        "native_destructive_command" => {
+            "This command deletes or overwrites data. Use `git worktree remove` for a worktree, \
+             or target one specific path."
+        }
+        "native_package_review" => {
+            "Package installs download code from a registry, so Guard reviews them. For npm, pnpm \
+             and bun, an install that only restores the committed lockfile and runs no scripts \
+             (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile \
+             --ignore-scripts --ignore-pnpmfile` or `npm ci --ignore-scripts`) can proceed once \
+             Guard has checked the lockfile and settings; if this was already that form, reuse \
+             dependencies that are already installed where you can. Other package managers, such \
+             as pip, uv or cargo, have no form Guard passes without review."
+        }
+        // Cloud gave no verdict, so the lockfile-only advice above would be paused the same way.
+        "native_package_cloud_unavailable" => {
+            "Guard Cloud could not check this package, so Guard paused the install instead of \
+             treating it as safe. This is not a finding about the package, and another form of \
+             the same install is paused the same way until Guard Cloud can check it."
+        }
+        "native_network_review" => "This makes a network request that Guard has not seen before.",
+        "native_file_read_review" => {
+            "This reads a file outside what Guard treats as safe to read. A search is checked \
+             against every file it can reach, so search a narrower folder or one file, use `rg` \
+             with a `-g` file filter, or find files by name with `find` or `glob`."
+        }
+        "native_pre_tool_unknown_review" => {
+            "Guard cannot check what this tool call will do before it runs."
+        }
+        "native_command_review_required" => {
+            "Guard could not prove this exact command is read-only. Use a simpler built-in tool \
+             where one fits. If it chains several steps, run each step as its own command; Guard \
+             checks each one on its own."
+        }
+        _ => "",
+    }
+}
+
+/// `matched_rule(reason_code)`: names the native rule that held the action,
+/// so the agent can tell holds apart. Only a plain rule identifier is named;
+/// `unknown` and anything else say nothing.
+fn matched_rule(reason_code: Option<&str>) -> String {
+    let code = reason_code.unwrap_or_default();
+    if code == "unknown"
+        || code.is_empty()
+        || code.len() > 64
+        || !code
+            .bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
+    {
+        return String::new();
+    }
+    format!("Guard rule: `{code}`.")
+}
+
+/// `safe_alternative_reason(reason, reason_code=..., approval_queued=...)`.
+pub(crate) fn safe_alternative_reason(
+    reason: &str,
+    reason_code: Option<&str>,
+    approval_queued: Option<bool>,
+) -> String {
+    safe_alternative_reason_with_retry(reason, reason_code, approval_queued, true, false)
+}
+
+pub(crate) fn safe_alternative_reason_with_retry(
+    reason: &str,
+    reason_code: Option<&str>,
+    approval_queued: Option<bool>,
+    retry_reuses_approval: bool,
+    exact_action_allowable: bool,
+) -> String {
+    let reason = py_strip(reason);
+    if reason_code.is_none() && approval_queued.is_none() {
+        return py_strip(&format!("{reason} {SAFE_ALTERNATIVE_GUIDANCE}")).to_owned();
+    }
+    let hint = if reason.starts_with(BUILD_REVIEW_PREFIX) || reason.starts_with(READ_REVIEW_PREFIX)
+    {
+        ""
+    } else {
+        reason_code_hint(reason_code.unwrap_or_default())
+    };
+    let wait = if approval_queued != Some(true) {
+        NOT_QUEUED
+    } else if retry_reuses_approval {
+        APPROVAL_WAIT
+    } else if exact_action_allowable {
+        APPROVAL_ALWAYS_ONLY
+    } else {
+        APPROVAL_CANNOT_UNBLOCK
+    };
+    let reason = if wait == NOT_QUEUED || wait == APPROVAL_CANNOT_UNBLOCK {
+        reason.replace(INBOX_APPROVAL_OFFER, "")
+    } else {
+        reason.to_owned()
+    };
+    let rule = matched_rule(reason_code);
+    [reason.as_str(), hint, rule.as_str(), wait]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg(test)]
+#[path = "blocked_request_mode_tests.rs"]
+mod tests;

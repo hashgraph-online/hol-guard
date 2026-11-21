@@ -1,16 +1,13 @@
-"""Dormant signed workflow-capability contracts.
+"""Workflow-capability contract shapes.
 
-This module deliberately has no dependency on Guard policy evaluation or command
-execution. Callers must inject key material and an exact expected binding.
+Transport and presentation only: the resident holds the capability key, signs
+every claim and verifies every envelope, so nothing here touches key material.
 """
 
 # pyright: reportAny=false, reportUnnecessaryIsInstance=false, reportUnusedCallResult=false
 
 from __future__ import annotations
 
-import hashlib
-import hmac
-import json
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -21,7 +18,6 @@ WORKFLOW_CAPABILITY_ENVELOPE_SCHEMA: Final = "hol-guard.workflow-capability-enve
 WORKFLOW_CAPABILITY_RECEIPT_SCHEMA: Final = "hol-guard.workflow-capability-receipt.v1"
 WORKFLOW_CAPABILITY_RECEIPT_ENVELOPE_SCHEMA: Final = "hol-guard.workflow-capability-receipt-envelope.v1"
 WORKFLOW_CAPABILITY_ALGORITHM: Final = "hmac-sha256"
-_FRAME_MAGIC: Final = b"hol-guard.workflow-capability\x00"
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$")
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$")
@@ -286,157 +282,6 @@ class SignedWorkflowCapabilityReceipt:
         )
 
 
-def canonical_framed_payload(purpose: str, payload: object) -> bytes:
-    """Serialize a typed payload with unambiguous length-delimited framing."""
-    purpose_bytes = purpose.encode("ascii", errors="strict")
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-    return (
-        _FRAME_MAGIC
-        + len(purpose_bytes).to_bytes(4, "big")
-        + purpose_bytes
-        + len(canonical).to_bytes(8, "big")
-        + canonical
-    )
-
-
-def sign_workflow_capability(claim: WorkflowCapabilityClaim, *, key: bytes, key_id: str) -> SignedWorkflowCapability:
-    _validate_key(key)
-    validate_workflow_capability_identifier("key_id", key_id)
-    claim = _validated_claim(claim)
-    authenticated = {
-        "algorithm": WORKFLOW_CAPABILITY_ALGORITHM,
-        "claim": asdict(claim),
-        "envelope_schema": WORKFLOW_CAPABILITY_ENVELOPE_SCHEMA,
-        "key_id": key_id,
-    }
-    signature = hmac.new(key, canonical_framed_payload("claim-envelope", authenticated), hashlib.sha256).hexdigest()
-    return SignedWorkflowCapability(
-        envelope_schema=WORKFLOW_CAPABILITY_ENVELOPE_SCHEMA,
-        algorithm=WORKFLOW_CAPABILITY_ALGORITHM,
-        claim=claim,
-        key_id=key_id,
-        signature=signature,
-    )
-
-
-def verify_workflow_capability(
-    signed: SignedWorkflowCapability,
-    *,
-    key: bytes,
-    key_id: str,
-    now: str,
-    expected_binding: WorkflowCapabilityBinding,
-) -> None:
-    if type(expected_binding) is not WorkflowCapabilityBinding:
-        raise WorkflowCapabilityError("invalid_expected_capability_binding")
-    verify_workflow_capability_signature(signed, key=key, key_id=key_id)
-    current = parse_utc_timestamp(now)
-    if current < parse_utc_timestamp(signed.claim.not_before):
-        raise WorkflowCapabilityError("capability_not_yet_valid")
-    if current >= parse_utc_timestamp(signed.claim.expires_at):
-        raise WorkflowCapabilityError("capability_expired")
-    if signed.claim.binding != expected_binding:
-        raise WorkflowCapabilityError("capability_context_mismatch")
-
-
-def verify_workflow_capability_signature(signed: SignedWorkflowCapability, *, key: bytes, key_id: str) -> None:
-    try:
-        _verify_workflow_capability_signature_fields(signed, key=key, key_id=key_id)
-    except WorkflowCapabilityError:
-        raise
-    except Exception as error:
-        raise WorkflowCapabilityError("invalid_signed_capability") from error
-
-
-def _verify_workflow_capability_signature_fields(signed: SignedWorkflowCapability, *, key: bytes, key_id: str) -> None:
-    _validate_key(key)
-    if type(signed) is not SignedWorkflowCapability or type(signed.claim) is not WorkflowCapabilityClaim:
-        raise WorkflowCapabilityError("invalid_signed_capability")
-    if signed.envelope_schema != WORKFLOW_CAPABILITY_ENVELOPE_SCHEMA:
-        raise WorkflowCapabilityError("unsupported_capability_envelope")
-    if signed.claim.schema_version != WORKFLOW_CAPABILITY_SCHEMA:
-        raise WorkflowCapabilityError("unsupported_capability_schema")
-    if signed.algorithm != WORKFLOW_CAPABILITY_ALGORITHM or signed.claim.algorithm != signed.algorithm:
-        raise WorkflowCapabilityError("unsupported_capability_algorithm")
-    validate_workflow_capability_identifier("key_id", signed.key_id)
-    _validate_sha256("signature", signed.signature)
-    if signed.key_id != key_id:
-        raise WorkflowCapabilityError("capability_key_mismatch")
-    expected = sign_workflow_capability(signed.claim, key=key, key_id=key_id).signature
-    if not hmac.compare_digest(expected, signed.signature):
-        raise WorkflowCapabilityError("capability_signature_invalid")
-
-
-def sign_workflow_capability_receipt(
-    receipt: WorkflowCapabilityReceipt, *, key: bytes, key_id: str
-) -> SignedWorkflowCapabilityReceipt:
-    _validate_key(key)
-    validate_workflow_capability_identifier("key_id", key_id)
-    receipt = _validated_receipt(receipt)
-    authenticated = {
-        "algorithm": WORKFLOW_CAPABILITY_ALGORITHM,
-        "envelope_schema": WORKFLOW_CAPABILITY_RECEIPT_ENVELOPE_SCHEMA,
-        "key_id": key_id,
-        "receipt": asdict(receipt),
-    }
-    signature = hmac.new(key, canonical_framed_payload("receipt-envelope", authenticated), hashlib.sha256).hexdigest()
-    return SignedWorkflowCapabilityReceipt(
-        envelope_schema=WORKFLOW_CAPABILITY_RECEIPT_ENVELOPE_SCHEMA,
-        algorithm=WORKFLOW_CAPABILITY_ALGORITHM,
-        receipt=receipt,
-        key_id=key_id,
-        signature=signature,
-    )
-
-
-def verify_workflow_capability_receipt(signed: SignedWorkflowCapabilityReceipt, *, key: bytes, key_id: str) -> None:
-    try:
-        _verify_workflow_capability_receipt_fields(signed, key=key, key_id=key_id)
-    except WorkflowCapabilityError:
-        raise
-    except Exception as error:
-        raise WorkflowCapabilityError("invalid_signed_receipt") from error
-
-
-def _verify_workflow_capability_receipt_fields(
-    signed: SignedWorkflowCapabilityReceipt, *, key: bytes, key_id: str
-) -> None:
-    _validate_key(key)
-    if type(signed) is not SignedWorkflowCapabilityReceipt or type(signed.receipt) is not WorkflowCapabilityReceipt:
-        raise WorkflowCapabilityError("invalid_signed_receipt")
-    if signed.envelope_schema != WORKFLOW_CAPABILITY_RECEIPT_ENVELOPE_SCHEMA:
-        raise WorkflowCapabilityError("unsupported_receipt_envelope")
-    if signed.receipt.schema_version != WORKFLOW_CAPABILITY_RECEIPT_SCHEMA:
-        raise WorkflowCapabilityError("unsupported_receipt_schema")
-    if signed.algorithm != WORKFLOW_CAPABILITY_ALGORITHM:
-        raise WorkflowCapabilityError("unsupported_receipt_algorithm")
-    validate_workflow_capability_identifier("key_id", signed.key_id)
-    _validate_sha256("signature", signed.signature)
-    if signed.key_id != key_id:
-        raise WorkflowCapabilityError("receipt_key_mismatch")
-    expected = sign_workflow_capability_receipt(signed.receipt, key=key, key_id=key_id).signature
-    if not hmac.compare_digest(expected, signed.signature):
-        raise WorkflowCapabilityError("receipt_signature_invalid")
-
-
-def workflow_capability_claim_sha256(signed: SignedWorkflowCapability) -> str:
-    return hashlib.sha256(canonical_framed_payload("signed-claim", signed.to_dict())).hexdigest()
-
-
-def _validated_claim(claim: WorkflowCapabilityClaim) -> WorkflowCapabilityClaim:
-    if type(claim) is not WorkflowCapabilityClaim:
-        raise WorkflowCapabilityError("invalid_capability_claim")
-    payload = json.loads(json.dumps(asdict(claim), sort_keys=True, separators=(",", ":")))
-    return WorkflowCapabilityClaim.from_dict(payload)
-
-
-def _validated_receipt(receipt: WorkflowCapabilityReceipt) -> WorkflowCapabilityReceipt:
-    if type(receipt) is not WorkflowCapabilityReceipt:
-        raise WorkflowCapabilityError("invalid_capability_receipt")
-    payload = json.loads(json.dumps(asdict(receipt), sort_keys=True, separators=(",", ":")))
-    return WorkflowCapabilityReceipt.from_dict(payload)
-
-
 def format_utc_timestamp(value: datetime) -> str:
     if value.tzinfo is None:
         raise WorkflowCapabilityError("timestamp_timezone_required")
@@ -481,8 +326,3 @@ def validate_workflow_capability_identifier(name: str, value: str) -> None:
 def _validate_sha256(name: str, value: str) -> None:
     if type(value) is not str or not _SHA256_PATTERN.fullmatch(value):
         raise WorkflowCapabilityError(f"invalid_{name}")
-
-
-def _validate_key(key: bytes) -> None:
-    if type(key) is not bytes or len(key) < 32:
-        raise WorkflowCapabilityError("invalid_capability_key")

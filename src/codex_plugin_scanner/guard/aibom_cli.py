@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from ..version import __version__ as __version__
-from .adapters.base import HarnessContext as HarnessContext
 from .aibom_cloud_contract import cloud_syncable_snapshots as cloud_syncable_snapshots
 from .aibom_cloud_contract import inventory_snapshot_event as _inventory_snapshot_event
 from .aibom_collection import _resolve_trust_attestation_context as _resolve_trust_attestation_context
@@ -19,6 +18,7 @@ from .aibom_collection import collect_aibom_snapshots as collect_aibom_snapshots
 from .aibom_commands import build_aibom_export_payload as build_aibom_export_payload
 from .aibom_commands import build_aibom_status_payload as build_aibom_status_payload
 from .aibom_commands import build_inventory_json_payload as build_inventory_json_payload
+from .aibom_commands import remember_user_inventory_if_due as remember_user_inventory_if_due
 from .aibom_commands import sync_aibom_snapshots_if_due as sync_aibom_snapshots_if_due
 from .aibom_content_upload import GuardAibomPrimaryContentSource as GuardAibomPrimaryContentSource
 from .aibom_content_upload import empty_content_upload_summary as empty_content_upload_summary
@@ -42,15 +42,14 @@ from .aibom_reporting import _redact_inventory_store_item as _redact_inventory_s
 from .aibom_reporting import _render_aibom_markdown as _render_aibom_markdown
 from .aibom_reporting import _store_only_artifact_metadata_extensions as _store_only_artifact_metadata_extensions
 from .aibom_reporting import _store_row_config_path as _store_row_config_path
-from .aibom_reporting import summarize_aibom_drift as summarize_aibom_drift
 from .aibom_reporting import summarize_aibom_layers as summarize_aibom_layers
-from .aibom_reporting import summarize_aibom_trust as summarize_aibom_trust
 from .aibom_sync import _accepted_snapshot_ids as _accepted_snapshot_ids
 from .aibom_sync import _batch_inventory_events as _batch_inventory_events
 from .aibom_sync import _inventory_events_request_body as _inventory_events_request_body
 from .aibom_sync import _sync_summary as _sync_summary
 from .aibom_sync import _sync_timestamp_from_payload as _sync_timestamp_from_payload
 from .aibom_trust_metadata import apply_local_trust_metadata as apply_local_trust_metadata
+from .harness_context import HarnessContext as HarnessContext
 from .inventory_cisco import run_cisco_inventory_scans as run_cisco_inventory_scans
 from .inventory_contract import GuardAgentInventorySnapshot as GuardAgentInventorySnapshot
 from .inventory_contract import cloud_inventory_artifacts_from_detection as cloud_inventory_artifacts_from_detection
@@ -147,6 +146,9 @@ def sync_aibom_snapshots(
 ) -> dict[str, object]:
     """Sync compatible snapshots and upload content only after cloud acknowledgment."""
     runner = _runner_module()
+    from .runtime import cloud_bundle_sync
+
+    runner_native_sync = importlib.import_module(".runtime.runner_native_sync", __package__)
     guard_sync_not_configured_error = runner.GuardSyncNotConfiguredError
 
     with store.hold_oauth_credential_lock():
@@ -174,6 +176,16 @@ def sync_aibom_snapshots(
         trust_attestation_context=trust_attestation_context,
         primary_content_sources=primary_content_sources,
     )
+    # Fleet posture reports what this collection found; see runtime/fleet_posture_aibom.py.
+    from .runtime.fleet_posture_aibom import remember_aibom_items
+
+    remember_aibom_items(
+        store,
+        snapshots,
+        now=generated_at,
+        home_dir=context.home_dir,
+        workspace_dir=context.workspace_dir,
+    )
     snapshots = cloud_syncable_snapshots(snapshots)
     cloud_snapshot_ids = {snapshot.snapshot_id for snapshot in snapshots}
     primary_content_sources = [source for source in primary_content_sources if source.snapshot_id in cloud_snapshot_ids]
@@ -190,7 +202,7 @@ def sync_aibom_snapshots(
         return summary
 
     resolved_auth_context = auth_context if auth_context is not None else runner._resolve_guard_sync_auth_context(store)
-    sync_url = runner._guard_events_sync_url(str(resolved_auth_context["sync_url"]))
+    sync_url = runner_native_sync.guard_events_sync_url(str(resolved_auth_context["sync_url"]))
     events = [
         _inventory_snapshot_event(
             snapshot=snapshot,
@@ -241,17 +253,12 @@ def sync_aibom_snapshots(
 
     for batch in event_batches:
         body = _inventory_events_request_body(batch)
-        request = runner._guard_sync_request(
-            resolved_auth_context,
-            request_url=sync_url,
-            method="POST",
-            data=body,
-            extra_headers=None,
-        )
         auth_refresh_retried = False
         try:
-            payload = runner._urlopen_json_with_timeout_retry(
-                request=request,
+            payload = cloud_bundle_sync.cloud_json_request(
+                resolved_auth_context,
+                url=sync_url,
+                body=body,
                 timeout_seconds=90,
                 retry_timeout_seconds=120,
             )
@@ -259,15 +266,10 @@ def sync_aibom_snapshots(
             if error.code == 401 and not auth_refresh_retried:
                 auth_refresh_retried = True
                 resolved_auth_context = runner._resolve_guard_sync_auth_context(store, force_refresh=True)
-                request = runner._guard_sync_request(
+                payload = cloud_bundle_sync.cloud_json_request(
                     resolved_auth_context,
-                    request_url=sync_url,
-                    method="POST",
-                    data=body,
-                    extra_headers=None,
-                )
-                payload = runner._urlopen_json_with_timeout_retry(
-                    request=request,
+                    url=sync_url,
+                    body=body,
                     timeout_seconds=90,
                     retry_timeout_seconds=120,
                 )
@@ -314,7 +316,12 @@ def sync_aibom_snapshots(
             }
             store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
             raise RuntimeError("Guard Cloud AIBOM sync failed due to an HTTP error.") from error
-        except OSError as error:
+        except (OSError, RuntimeError) as error:
+            failure_message = (
+                str(error) or "Guard Cloud AIBOM sync failed."
+                if isinstance(error, RuntimeError)
+                else "Guard Cloud AIBOM sync failed due to a network error."
+            )
             failure_summary = {
                 "synced": False,
                 "synced_at": synced_at,
@@ -323,10 +330,12 @@ def sync_aibom_snapshots(
                 "rejected": total_rejected,
                 "statuses": all_statuses,
                 "partial": batches_sent > 0 or bool(oversized_events),
-                "error": "Guard Cloud AIBOM sync failed due to a network error.",
+                "error": failure_message,
                 "content_upload": content_upload_summary,
             }
             store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
+            if isinstance(error, RuntimeError):
+                raise
             raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
         batches_sent += 1
         events_sent += len(batch)
@@ -360,8 +369,12 @@ def sync_aibom_snapshots(
     content_eligible = content_eligible_value if isinstance(content_eligible_value, int) else 0
     content_stored = content_stored_value if isinstance(content_stored_value, int) else 0
     content_upload_complete = content_stored == content_eligible
+    # A snapshot Cloud rejects never has its skill content uploaded, so the sync
+    # is not complete even when every accepted snapshot's content was stored.
+    # Oversized snapshots are skipped locally and reported as partial instead.
+    cloud_rejected = total_rejected - len(oversized_events)
     summary: dict[str, object] = {
-        "synced": content_upload_complete,
+        "synced": content_upload_complete and cloud_rejected == 0,
         "synced_at": synced_at,
         "snapshots": len(snapshots),
         "accepted": total_accepted,
@@ -376,5 +389,9 @@ def sync_aibom_snapshots(
     if not content_upload_complete:
         summary["partial"] = True
         summary["reason"] = "content_upload_incomplete"
+    if cloud_rejected > 0:
+        summary["partial"] = bool(summary.get("partial")) or total_accepted > 0
+        summary["reason"] = "snapshots_rejected"
+        summary["message"] = f"Guard Cloud rejected {cloud_rejected} of {len(snapshots)} inventory snapshots."
     store.set_sync_payload("aibom_sync_summary", summary, synced_at)
     return summary

@@ -8,8 +8,16 @@ import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..approval_gate import ApprovalGateError, require_high_risk, revoke_cooldown, unlock_cooldown
+from ..approval_gate import (
+    ApprovalGateError,
+    require_high_risk,
+    revoke_cooldown,
+    unlock_cooldown,
+)
 from ..approval_gate import public_config as approval_gate_public_config
+from ..approval_gate_fresh import require_fresh_approval_decision
+from ..approval_handoff_link import HANDOFF_LINK_PATTERN
+from ..approval_hook_copy import authenticated_approval_review_url
 from ..approval_resolution import TERMINAL_POLICY_ACTION_NOT_RESOLVABLE
 from ..approval_scope_support import IneligibleApprovalScopeError, StaleApprovalScopeContractError
 from ..approvals import (
@@ -18,15 +26,18 @@ from ..approvals import (
     apply_approval_resolution,
     build_runtime_snapshot,
 )
-from ..browser_opener import open_browser_url
+from ..browser_opener import open_app_url, open_browser_url
 from ..codex_resume import retry_request_resume
 from ..config import load_guard_config
-from ..daemon import load_guard_daemon_url
+from ..desktop_review_link import desktop_review_url
+from ..native_daemon_manage import load_guard_daemon_url
 from ..runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from ..runtime.self_approval import SELF_APPROVAL_REASON, approval_resolution_invoked_from_agent
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from ..trusted_local_tools import LocalToolGrantUnavailableError
 from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
+from .commands_parser_approvals import add_approval_parser as add_approval_parser
 
 _HARNESS_RETRY_COPY: dict[str, str] = {
     "codex": "Return to Codex and retry",
@@ -45,116 +56,6 @@ def _build_retry_hint(action: str, harness: str) -> dict[str, str]:
     return {"title": title, "body": _HARNESS_RETRY_COPY.get(harness, _DEFAULT_RETRY_COPY)}
 
 
-def add_approval_parser(
-    guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
-    add_common_args,
-) -> None:
-    approvals_parser = guard_subparsers.add_parser(
-        "approvals",
-        help="List, resolve, or clear Guard approval history",
-    )
-    approvals_subparsers = approvals_parser.add_subparsers(dest="approvals_command")
-
-    add_common_args(approvals_parser)
-    approvals_parser.add_argument("--json", action="store_true")
-
-    for name, action in (("approve", "allow"), ("deny", "block")):
-        decision_parser = approvals_subparsers.add_parser(name, help=f"{name.title()} a pending approval request")
-        decision_parser.add_argument("request_id")
-        decision_parser.add_argument(
-            "--scope",
-            choices=("artifact", "publisher", "workspace", "harness", "global"),
-            default="artifact",
-        )
-        decision_parser.add_argument("--reason")
-        decision_parser.add_argument(
-            "--remember",
-            action="store_true",
-            help="Save an exact-action remembered rule for artifact scope instead of resolving only this request.",
-        )
-        if action == "allow":
-            decision_parser.add_argument(
-                "--trust-local-tool",
-                action="store_true",
-                help="Trust the verified read-only local tool capability after authenticated approval.",
-            )
-            decision_parser.add_argument(
-                "--trust-target",
-                choices=("capability", "version"),
-                default="capability",
-                help="Trust only this capability or every verified read-only capability from this tool version.",
-            )
-            decision_parser.add_argument(
-                "--trust-duration",
-                choices=("15m", "1h", "5h", "version", "always"),
-                default="1h",
-                help="How long the local tool grant remains active.",
-            )
-        add_common_args(decision_parser)
-        decision_parser.add_argument("--json", action="store_true")
-        decision_parser.set_defaults(approval_action=action)
-
-    clear_history_parser = approvals_subparsers.add_parser(
-        "clear-history",
-        help="Clear remembered rules and resolved approval history so flows can be re-tested",
-    )
-    clear_history_parser.add_argument(
-        "--harness",
-        help="The harness to clear history for (for example: codex, claude-code, opencode, copilot)",
-    )
-    clear_history_parser.add_argument(
-        "--all",
-        action="store_true",
-        help="Clear approval history across every harness; cannot be combined with --harness",
-    )
-    clear_history_parser.add_argument(
-        "--source",
-        help="Optional source filter for remembered rules (for example: manual, claude-ask-user-question)",
-    )
-    add_common_args(clear_history_parser)
-    clear_history_parser.add_argument("--json", action="store_true")
-
-    open_parser = approvals_subparsers.add_parser(
-        "open",
-        help="Show the approval URL for a pending request",
-    )
-    open_parser.add_argument("request_id", help="The approval request ID to open")
-    add_common_args(open_parser)
-    open_parser.add_argument("--json", action="store_true")
-
-    retry_hint_parser = approvals_subparsers.add_parser(
-        "retry-hint",
-        help="Print the retry hint for a resolved approval request",
-    )
-    retry_hint_parser.add_argument("request_id", help="The approval request ID to get the retry hint for")
-    add_common_args(retry_hint_parser)
-    retry_hint_parser.add_argument("--json", action="store_true")
-
-    resume_parser = approvals_subparsers.add_parser(
-        "resume",
-        help="Retry Codex auto-resume for a resolved approval request",
-    )
-    resume_parser.add_argument("request_id", help="The approval request ID to resume")
-    resume_parser.add_argument("--force", action="store_true", help="Retry even if Codex was already resumed")
-    add_common_args(resume_parser)
-    resume_parser.add_argument("--json", action="store_true")
-
-    unlock_parser = approvals_subparsers.add_parser(
-        "unlock",
-        help="Unlock approval gate cooldown for 15m or 1h",
-    )
-    unlock_parser.add_argument("--duration", choices=("15m", "1h"), default="15m")
-    add_common_args(unlock_parser)
-    unlock_parser.add_argument("--json", action="store_true")
-
-    lock_parser = approvals_subparsers.add_parser(
-        "lock",
-        help="End the active approval gate cooldown immediately",
-    )
-    add_common_args(lock_parser)
-    lock_parser.add_argument("--json", action="store_true")
-
-
 def run_approval_command(
     args: argparse.Namespace,
     *,
@@ -170,6 +71,13 @@ def run_approval_command(
         )
         payload["auto_open"] = _auto_open_first_pending_request(store=store, workspace=workspace)
         return payload
+    if command == "list":
+        # The same queue snapshot as the bare command, read-only: it never opens the approval center.
+        return build_runtime_snapshot(
+            store=store,
+            approval_center_url=load_guard_daemon_url(store.guard_home),
+            now=_now(),
+        )
     if command == "clear-history":
         harness = getattr(args, "harness", None)
         clear_all = bool(getattr(args, "all", False))
@@ -260,24 +168,46 @@ def run_approval_command(
             "next_action": "Open the original Guard request in the local approval center or native harness prompt.",
             "exit_code": 4,
         }
+    requested_scope = str(getattr(args, "scope", None) or "artifact")
     try:
         trust_local_tool = bool(getattr(args, "trust_local_tool", False))
-        if trust_local_tool and (args.scope != "artifact" or bool(getattr(args, "remember", False))):
+        if trust_local_tool and (requested_scope != "artifact" or bool(getattr(args, "remember", False))):
             return {
                 "resolved": False,
                 "error": "invalid_local_tool_trust_scope",
                 "message": "Local tool trust requires artifact scope and cannot be combined with --remember.",
                 "exit_code": 2,
             }
-        gate_input = (
-            prompt_for_approval_gate(store.guard_home)
-            if _approval_resolution_needs_gate(
-                store,
-                action=str(args.approval_action),
-                scope=str(args.scope),
+        approval_gate_grant = None
+        if bool(getattr(args, "fresh_approval_gate", False)) and approval_gate_public_config(store.guard_home).enabled:
+            # A "y" typed at an install prompt proves only that something could type
+            # into that terminal. Ask for the gate's own factor every time: an open
+            # password cooldown or a recent authenticator code does not count here.
+            fresh_input = prompt_for_approval_gate(
+                store.guard_home,
+                use_cooldown=False,
+                require_fresh_totp=True,
+                strict=True,
             )
-            else None
-        )
+            approval_gate_grant = require_fresh_approval_decision(
+                store.guard_home,
+                action=str(args.approval_action),
+                scope=requested_scope,
+                approval_gate_input=fresh_input,
+                subject=f"approval-request:{args.request_id}",
+                now=_now(),
+            )
+            gate_input = None
+        else:
+            gate_input = (
+                prompt_for_approval_gate(store.guard_home, strict=requested_scope == "global")
+                if _approval_resolution_needs_gate(
+                    store,
+                    action=str(args.approval_action),
+                    scope=requested_scope,
+                )
+                else None
+            )
         remember = bool(getattr(args, "remember", False))
         request = store.get_approval_request(args.request_id) if remember else None
         exact_action_remember = request is not None and request.get("exact_action_persistence_eligible") is True
@@ -298,11 +228,12 @@ def run_approval_command(
             store=store,
             request_id=args.request_id,
             action=args.approval_action,
-            scope=args.scope,
+            scope=requested_scope,
             workspace=str(workspace) if workspace is not None else None,
             reason=args.reason,
             now=_now(),
             approval_gate_input=gate_input,
+            approval_gate_grant=approval_gate_grant,
             persist_policy=True if remember else None,
             scope_contract_version=scope_contract_version,
             scope_contract_digest=scope_contract_digest,
@@ -337,6 +268,12 @@ def run_approval_command(
         return {
             "resolved": False,
             "error": "already_resolved",
+            "exit_code": 4,
+        }
+    except LocalToolGrantUnavailableError as error:
+        return {
+            "resolved": False,
+            "error": str(error),
             "exit_code": 4,
         }
     except ValueError as error:
@@ -409,11 +346,40 @@ def run_approval_open_command(
         return {"error": "not_found", "request_id": request_id}, 1
     approval_url = str(item.get("approval_url", ""))
     repaired_url = _repaired_approval_url(approval_url, store.guard_home)
-    return {
+    payload: dict[str, object] = {
         "request_id": request_id,
         "approval_url": repaired_url,
         "repaired": repaired_url != approval_url,
-    }, 0
+        "opened": False,
+        "opened_in": None,
+    }
+    if getattr(args, "no_open", False):
+        # An agent asked for the link to hand the user. The bare link opens a
+        # tab that cannot decide anything, so give the short signed one the
+        # paused tool shows: it opens only this request, signed in, and expires.
+        signed_link = _shareable_signed_link(repaired_url, store.guard_home)
+        if signed_link is not None:
+            payload["signed_approval_url"] = signed_link
+        return payload, 0
+    # The launch carries a session, in Desktop's own window or as a signed
+    # browser link, so the request opens signed in on this machine.
+    desktop_url = desktop_review_url(store.guard_home, request_id)
+    if desktop_url is not None and open_app_url(desktop_url):
+        payload.update(opened=True, opened_in="desktop")
+        return payload, 0
+    signed_url = authenticated_approval_review_url(repaired_url, guard_home=store.guard_home)
+    if signed_url and open_browser_url(signed_url):
+        payload.update(opened=True, opened_in="browser")
+    return payload, 0
+
+
+def _shareable_signed_link(approval_url: str, guard_home: Path) -> str | None:
+    """The short link bound to this one request, never a full dashboard session."""
+
+    signed = authenticated_approval_review_url(approval_url, guard_home=guard_home)
+    if not signed or signed == approval_url or HANDOFF_LINK_PATTERN.search(signed) is None:
+        return None
+    return signed
 
 
 def run_approval_retry_hint_command(
@@ -455,6 +421,8 @@ def run_approval_resume_command(
             item = store.get_approval_request(request_id)
             status = str(item.get("status", "")) if item is not None else ""
             return {"error": "not_resolved", "status": status, "request_id": request_id}, 1
+        if error_code == "resume_unavailable":
+            return {"error": "resume_unavailable", "request_id": request_id}, 1
         return {"error": "resume_not_supported", "request_id": request_id}, 1
     return payload, 0
 

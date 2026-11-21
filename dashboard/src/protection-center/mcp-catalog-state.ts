@@ -10,6 +10,11 @@ export function mcpToolCanReceiveDirectAllow(command: LocalCliCommand): boolean 
 export function mcpCatalogCopy(item: LocalCliItem): { title: string; description: string } | null {
   if (item.surface !== "mcp") return null;
   const catalog = item.mcp_catalog;
+  if (!catalog && item.remote_origin) return {
+    title: "Remote connector",
+    description: "Guard does not connect to remote servers, so it cannot list this connector's tools. "
+      + "Tools appear here after your host app calls them.",
+  };
   if (!catalog) return {
     title: "Inventory not checked",
     description: "Guard knows observed tools from this connector. Its full inventory has not been verified.",
@@ -37,6 +42,14 @@ export function mcpCatalogCopy(item: LocalCliItem): { title: string; description
     title: `${count} known · Inventory incomplete`,
     description: "Discovery reached a limit or returned an incomplete inventory. Unknown tools still need review.",
   };
+}
+
+/**
+ * A later listing of the same connector moved its catalog on. Choices made
+ * against the earlier catalog were not made against the tools it now lists.
+ */
+export function catalogRevisionChanged(previous: LocalCliItem, next: LocalCliItem): boolean {
+  return previous.cli_id === next.cli_id && previous.mcp_catalog?.revision !== next.mcp_catalog?.revision;
 }
 
 export function rebaseCommandDraft(

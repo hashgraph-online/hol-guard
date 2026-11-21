@@ -3,125 +3,45 @@
 Onefile launches extract to ``<tempdir>/_MEIxxxxxx``; the bootloader parent
 removes that directory on normal exit, but a hard-killed launch leaks it. Each
 launch stamps an owner marker recording its pid and bootloader parent pid so the
-resident daemon can prove a leaked directory is dead before reclaiming it.
-Unmarked directories are never deleted — they are only counted so operators can
-see the legacy leak volume.
-
-This module is imported on the frozen CLI fast path before heavy Guard imports,
-so it must stay stdlib-only.
+resident daemon can prove a leaked directory is dead before reclaiming it. The
+native runtime's ``onefile-extraction-reclaim`` command runs the sweep: it
+deletes marked dirs whose recorded pids are both dead and, when asked to scan
+open files, unmarked dirs that are provably Guard extractions no live process
+uses. Every other unmarked dir is only counted so operators can see the legacy
+leak volume.
 """
 
 from __future__ import annotations
 
-import json
-import os
-import re
-import shutil
-import stat
-import sys
-import tempfile
-from collections.abc import Callable
-from contextlib import suppress
+import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
-
-_EXTRACTION_DIR_NAME = re.compile(r"^_MEI[0-9A-Za-z]{4,}$")
+from typing import cast
 
 OWNER_MARKER_NAME = ".hol-guard-extraction-owner.json"
 _OWNER_MARKER_SCHEMA = "guard.onefile-extraction-owner.v1"
-_OWNER_MARKER_MAX_BYTES = 4096
 
-# A data file shipped only by the hol-guard PyInstaller bundle; its presence in
-# an unmarked extraction dir identifies the dir as a legacy Guard leak that this
-# version refuses to delete because ownership cannot be proven.
-_LEGACY_BUNDLE_SENTINEL = ("codex_plugin_scanner", "guard", "daemon", "static", "index.html")
+_FEATURE = "native-onefile-extraction-reclaim-v1"
+_COMMAND = "onefile-extraction-reclaim"
+_SCHEMA = "onefile-extraction-reclaim.v1"
+_OUTPUT_LIMIT = 64 * 1024
+# The open-files scan waits up to 90 seconds for lsof; marked deletes and the
+# bytes walk get the rest.
+_SCAN_SECONDS = 90.0
+_SLACK_SECONDS = 120.0
+_UNBOUNDED_SWEEP_SECONDS = 300.0
 
-_MAX_RECORDED_ERRORS = 8
-_UNMARKED_BYTES_SAMPLE_LIMIT = 10
-
-
-def is_onefile_extraction_dir(path: Path, temp_root: Path) -> bool:
-    """Return True only for a real ``_MEI*`` directory directly under temp_root."""
-
-    if not _EXTRACTION_DIR_NAME.fullmatch(path.name):
-        return False
-    try:
-        if path.is_symlink() or not path.is_dir():
-            return False
-        return path.resolve(strict=True).parent == temp_root.resolve(strict=True)
-    except OSError:
-        return False
+# Unmarked dirs have no pid to check, so keep a conservative floor well above a
+# slow cold-start extraction.
+UNMARKED_MIN_AGE = timedelta(hours=2)
+DEFAULT_MIN_AGE = timedelta(minutes=10)
+DEFAULT_MAX_UNMARKED_RECLAIMS = 250
+DEFAULT_UNMARKED_TIME_BUDGET = timedelta(minutes=2)
 
 
-def _guard_version() -> str:
-    try:
-        from ..version import __version__
-
-        return __version__
-    except Exception:
-        return "unknown"
-
-
-def record_extraction_owner(*, meipass: str | None, temp_root: Path | None = None) -> bool:
-    """Stamp the current onefile extraction dir with its owning launch's pids.
-
-    Only acts when running frozen and ``meipass`` is an actual onefile
-    extraction dir under ``temp_root`` — in onedir mode ``sys._MEIPASS`` is the
-    bundle's own directory and is never marked. Never raises.
-    """
-
-    try:
-        if not getattr(sys, "frozen", False):
-            return False
-        if not isinstance(meipass, str) or not meipass:
-            return False
-        root = temp_root if temp_root is not None else Path(tempfile.gettempdir())
-        extraction_dir = Path(meipass)
-        if not is_onefile_extraction_dir(extraction_dir, root):
-            return False
-        payload = {
-            "schema": _OWNER_MARKER_SCHEMA,
-            "pid": os.getpid(),
-            "parent_pid": os.getppid(),
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "guard_version": _guard_version(),
-        }
-        encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-        marker = extraction_dir / OWNER_MARKER_NAME
-        descriptor, temp_name = tempfile.mkstemp(dir=extraction_dir, prefix=".owner-", suffix=".tmp")
-        try:
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(encoded)
-            os.chmod(temp_name, 0o600)
-            os.replace(temp_name, marker)
-        finally:
-            with suppress(OSError):
-                os.unlink(temp_name)
-        return True
-    except Exception:
-        return False
-
-
-def _pid_alive(pid: int) -> bool:
-    """Fail closed: a pid that cannot be proven dead counts as alive."""
-
-    if pid <= 0:
-        return True
-    if os.name == "nt":
-        try:
-            from .windows_paths import windows_process_is_running
-
-            return windows_process_is_running(pid)
-        except Exception:
-            return True
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except Exception:
-        return True
-    return True
+class ExtractionReclaimUnavailableError(RuntimeError):
+    """The native runtime could not run the sweep."""
 
 
 @dataclass
@@ -131,46 +51,27 @@ class ExtractionReclaimResult:
     killed_launches: int = 0
     unmarked_count: int = 0
     unmarked_bytes_estimate: int = 0
+    unmarked_reclaimed_count: int = 0
+    unmarked_reclaimed_bytes: int = 0
+    partial_reclaimed_count: int = 0
+    # "disabled" (no open-files scan asked for), "not_needed", "ok", or
+    # "unavailable" (scan failed, so every unmarked dir was skipped).
+    unmarked_scan: str = "disabled"
+    unmarked_budget_exhausted: bool = False
     errors: list[str] = field(default_factory=list)
 
 
-def _read_owner_marker(marker_path: Path) -> dict[str, int] | None:
-    """Return the marker's ``pid``/``parent_pid`` only when the record is valid."""
-
-    try:
-        metadata = marker_path.lstat()
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > _OWNER_MARKER_MAX_BYTES:
-            return None
-        payload = json.loads(marker_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(payload, dict) or payload.get("schema") != _OWNER_MARKER_SCHEMA:
-        return None
-    pid = payload.get("pid")
-    parent_pid = payload.get("parent_pid")
-    if type(pid) is not int or type(parent_pid) is not int:
-        return None
-    return {"pid": pid, "parent_pid": parent_pid}
-
-
-def _dir_bytes(root: Path) -> int:
-    total = 0
-    for dirpath, _dirnames, filenames in os.walk(root, followlinks=False):
-        for name in filenames:
-            try:
-                total += os.lstat(os.path.join(dirpath, name)).st_size
-            except OSError:
-                continue
-    return total
-
-
-def _remember_error(result: ExtractionReclaimResult, detail: str) -> None:
-    if len(result.errors) < _MAX_RECORDED_ERRORS:
-        result.errors.append(detail)
-
-
-def _is_guard_bundle(extraction_dir: Path) -> bool:
-    return extraction_dir.joinpath(*_LEGACY_BUNDLE_SENTINEL).is_file()
+_COUNTERS = (
+    "reclaimed_count",
+    "reclaimed_bytes",
+    "killed_launches",
+    "unmarked_count",
+    "unmarked_bytes_estimate",
+    "unmarked_reclaimed_count",
+    "unmarked_reclaimed_bytes",
+    "partial_reclaimed_count",
+)
+_SCAN_STATES = frozenset({"disabled", "not_needed", "ok", "unavailable"})
 
 
 def reclaim_orphaned_extraction_dirs(
@@ -178,84 +79,74 @@ def reclaim_orphaned_extraction_dirs(
     temp_root: Path,
     current_meipass: str | None,
     now: datetime,
-    min_age: timedelta = timedelta(minutes=10),
-    pid_alive: Callable[[int], bool] = _pid_alive,
-    should_stop: Callable[[], bool] = lambda: False,
+    min_age: timedelta = DEFAULT_MIN_AGE,
+    scan_open_paths: bool = False,
+    unmarked_min_age: timedelta = UNMARKED_MIN_AGE,
+    max_unmarked_reclaims: int = DEFAULT_MAX_UNMARKED_RECLAIMS,
+    unmarked_time_budget: timedelta | None = DEFAULT_UNMARKED_TIME_BUDGET,
+    dry_run: bool = False,
+    stop_event: threading.Event | None = None,
 ) -> ExtractionReclaimResult:
-    """Reclaim ``_MEI*`` dirs whose marked owner launch is provably dead.
+    """Reclaim ``_MEI*`` dirs under ``temp_root`` that are provably dead.
 
-    A directory is deleted only when it carries a valid owner marker and both
-    the recorded pid and bootloader parent pid are dead. Unmarked directories
-    that contain the Guard bundle sentinel are counted as legacy leaks and left
-    in place.
+    Setting ``stop_event`` kills the sweep. A directory it was deleting
+    keeps its owner marker and package directory until last, so the next
+    sweep still recognises and reclaims it. Raises
+    ``ExtractionReclaimUnavailableError`` when the runtime gives no answer.
     """
 
-    result = ExtractionReclaimResult()
-    try:
-        resolved_root = temp_root.resolve(strict=True)
-    except OSError:
-        _remember_error(result, "temp_root_unavailable")
-        return result
-    current: Path | None = None
-    if isinstance(current_meipass, str) and current_meipass:
-        try:
-            current = Path(current_meipass).resolve(strict=True)
-        except OSError:
-            current = None
-    try:
-        children = sorted(temp_root.iterdir())
-    except OSError:
-        _remember_error(result, "temp_root_listing_failed")
-        return result
-    now_seconds = now.timestamp()
-    unmarked_sampled_count = 0
-    unmarked_sampled_bytes = 0
-    for child in children:
-        if should_stop():
-            return result
-        if not _EXTRACTION_DIR_NAME.fullmatch(child.name):
-            continue
-        try:
-            child_stat = child.lstat()
-        except OSError:
-            continue
-        if not stat.S_ISDIR(child_stat.st_mode) or stat.S_ISLNK(child_stat.st_mode):
-            continue
-        try:
-            resolved_child = child.resolve(strict=True)
-        except OSError:
-            continue
-        if resolved_child.parent != resolved_root:
-            continue
-        if current is not None and resolved_child == current:
-            continue
-        if now_seconds - child_stat.st_mtime < min_age.total_seconds():
-            continue
-        owner = _read_owner_marker(child / OWNER_MARKER_NAME)
-        if owner is not None:
-            if pid_alive(owner["pid"]) or pid_alive(owner["parent_pid"]):
-                continue
-            # Re-verify the marker right before deleting so a concurrent live
-            # launch that rewrote it cannot be swept out from under itself.
-            if _read_owner_marker(child / OWNER_MARKER_NAME) != owner:
-                continue
-            size = _dir_bytes(child)
-            try:
-                shutil.rmtree(child)
-            except OSError as error:
-                _remember_error(result, f"rmtree:{type(error).__name__}")
-                continue
-            result.reclaimed_count += 1
-            result.reclaimed_bytes += size
-            result.killed_launches += 1
-            continue
-        if _is_guard_bundle(child):
-            result.unmarked_count += 1
-            # Walking every legacy dir on the hourly sweep is too expensive on
-            # hosts with hundreds of leaks; sample a bounded set and estimate.
-            if unmarked_sampled_count < _UNMARKED_BYTES_SAMPLE_LIMIT:
-                unmarked_sampled_count += 1
-                unmarked_sampled_bytes += _dir_bytes(child)
-    if unmarked_sampled_count:
-        result.unmarked_bytes_estimate = round(unmarked_sampled_bytes / unmarked_sampled_count * result.unmarked_count)
+    from .mdm.runtime_request import runtime_answer
+
+    budget = unmarked_time_budget.total_seconds() if unmarked_time_budget is not None else None
+    sweep_seconds = budget if budget is not None else _UNBOUNDED_SWEEP_SECONDS
+    answer = runtime_answer(
+        _FEATURE,
+        _COMMAND,
+        {
+            "schema": _SCHEMA,
+            "temp_root": str(temp_root),
+            "current_meipass": current_meipass if isinstance(current_meipass, str) else None,
+            "now": now.timestamp(),
+            "min_age_seconds": min_age.total_seconds(),
+            "unmarked_min_age_seconds": unmarked_min_age.total_seconds(),
+            "max_unmarked_reclaims": max(0, max_unmarked_reclaims),
+            "unmarked_time_budget_seconds": budget,
+            "scan_open_paths": scan_open_paths,
+            "dry_run": dry_run,
+        },
+        output_limit=_OUTPUT_LIMIT,
+        timeout_seconds=_SCAN_SECONDS + sweep_seconds + _SLACK_SECONDS,
+        stop_event=stop_event,
+    )
+    result = _result(answer)
+    if result is None:
+        raise ExtractionReclaimUnavailableError("onefile_extraction_reclaim_unavailable")
+    return result
+
+
+def _result(answer: dict[str, object] | None) -> ExtractionReclaimResult | None:
+    if answer is None:
+        return None
+    counters = {name: answer.get(name) for name in _COUNTERS}
+    scan = answer.get("unmarked_scan")
+    exhausted = answer.get("unmarked_budget_exhausted")
+    errors = answer.get("errors")
+    entries = cast("list[object]", errors) if isinstance(errors, list) else None
+    texts = [entry for entry in entries if isinstance(entry, str)] if entries is not None else None
+    if (
+        not all(type(value) is int and value >= 0 for value in counters.values())
+        or scan not in _SCAN_STATES
+        or type(exhausted) is not bool
+        or entries is None
+        or texts is None
+        or len(texts) != len(entries)
+    ):
+        return None
+    result = ExtractionReclaimResult(
+        unmarked_scan=str(scan),
+        unmarked_budget_exhausted=exhausted,
+        errors=texts,
+    )
+    for name, value in counters.items():
+        setattr(result, name, value)
     return result

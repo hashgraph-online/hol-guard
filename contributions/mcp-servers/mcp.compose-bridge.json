@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.compose-bridge",
+  "version": "1.0.0",
+  "name": "compose-bridge",
+  "description": "Deterministic AST-guided mutations for Jetpack Compose. Allows AI agents to safely inspect and edit UI tokens (colors, dimensions) with dry-run and git-style diffs.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.jalal591",
+    "displayName": "JALAL591",
+    "url": "https://github.com/JALAL591"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://github.com/JALAL591/compose-bridge",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "compose-bridge"
+  },
+  "riskClasses": [
+    "source-code-write",
+    "ast-mutation"
+  ],
+  "tools": [
+    {
+      "name": "list_tokens",
+      "state": "inherit"
+    },
+    {
+      "name": "get_token_impact",
+      "state": "inherit"
+    },
+    {
+      "name": "suggest_token_split",
+      "state": "inherit"
+    },
+    {
+      "name": "set_token",
+      "state": "review"
+    },
+    {
+      "name": "add_token",
+      "state": "review"
+    },
+    {
+      "name": "rollback_last",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/JALAL591/compose-bridge",
+    "https://github.com/JALAL591/compose-bridge#mcp-tools"
+  ],
+  "saferAlternatives": [
+    "Use list_tokens to inspect available tokens without modifying source code.",
+    "Ensure set_token and add_token are set to review to prevent unintended AST mutations."
+  ]
+}

@@ -2,28 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from hashlib import sha256
-from typing import Final
+from typing import Final, NamedTuple, cast
 
-from .adapters.contracts import contract_for
 from .codex_app_server_target import codex_app_server_target_reachable
 from .codex_live_hook_target import codex_live_hook_process_is_unavailable, codex_live_hook_wait_deadline
 from .continuation_contract import (
-    CAPABILITY_CONTRACT_VERSION,
     ContinuationAction,
     ContinuationCoordinator,
     ContinuationOffer,
     ContinuationResult,
     capability_offer,
-)
-from .continuation_payload import (
-    attempt_count as _attempt_count,
-)
-from .continuation_payload import (
-    continuation_events as _continuation_events,
 )
 from .continuation_payload import (
     continuation_payload as _payload,
@@ -32,22 +25,13 @@ from .continuation_payload import (
     continuation_result as _result,
 )
 from .continuation_payload import (
-    continuation_strategy as _strategy,
-)
-from .continuation_payload import (
     mapping_value as _mapping,
 )
 from .continuation_payload import (
     offer_hash as _offer_hash,
 )
 from .continuation_payload import (
-    operation_update_payload as _operation_update_payload,
-)
-from .continuation_payload import (
     parse_aware_timestamp as _parse_aware_timestamp,
-)
-from .continuation_payload import (
-    persisted_resume_status as _persisted_resume_status,
 )
 from .continuation_payload import (
     previous_result as _previous_result,
@@ -55,13 +39,17 @@ from .continuation_payload import (
 from .continuation_payload import (
     text_value as _text,
 )
-from .continuation_snapshot import canonical_continuation_correlation_id
+from .continuation_snapshot import canonical_continuation_correlation_id, validated_continuation_snapshot
 from .continuation_worker import (
     StoreContinuationPlan,
     run_store_continuation_plan,
+    settle_without_harness,
 )
 from .desktop_notifications import DesktopApprovalNotification, notify_pending_approval_once
+from .native_continuation_authority import offer_wire, result_wire
+from .setup_contracts import contract_for
 from .store import GuardStore
+from .store_continuation import continuation_store_call
 
 _SESSION_KEYS = (
     "codex_thread_id",
@@ -74,6 +62,7 @@ _SESSION_KEYS = (
 )
 _CLAIM_LEASE_SECONDS: Final = 30.0
 _run_store_continuation_plan = run_store_continuation_plan
+_settle_without_harness = settle_without_harness
 
 
 def continue_request_after_application(
@@ -98,8 +87,12 @@ def continue_request_after_application(
         observed_at=observed_at,
         headless=headless,
     )
+    offer_hash = _offer_hash(offer)
     existing = store.get_request_resume(request_id)
-    previous = _previous_result(existing, offer=offer, action=normalized_action)
+    recorded = _live_hook_recorded_offer(request_row, existing, offer=offer, action=normalized_action)
+    if recorded is not None:
+        offer, offer_hash = recorded
+    previous = _replayable_result(existing, offer=offer, offer_hash=offer_hash, action=normalized_action)
     if previous is not None:
         _persist_attempt(
             store,
@@ -110,7 +103,6 @@ def continue_request_after_application(
             now=now,
         )
         return _payload(offer, previous, replayed=True)
-    offer_hash = _offer_hash(offer)
     claim_id = store.claim_continuation_attempt(
         request_id=request_id,
         offer_hash=offer_hash,
@@ -122,7 +114,7 @@ def continue_request_after_application(
         wait_deadline = time.monotonic() + min(timeout_seconds, 0.5)
         while True:
             existing = store.get_request_resume(request_id)
-            previous = _previous_result(existing, offer=offer, action=normalized_action)
+            previous = _replayable_result(existing, offer=offer, offer_hash=offer_hash, action=normalized_action)
             if previous is not None:
                 _persist_attempt(
                     store,
@@ -161,6 +153,9 @@ def continue_request_after_application(
             observed_at=now,
         ),
         isolated_runner=_run_store_continuation_plan,
+        settle_inline=lambda offer, _action, offer_cancelled: _settle_without_harness(
+            offer, cancelled=offer_cancelled, observed_at=now
+        ),
     )
     result = coordinator.continue_after_application(
         offer,
@@ -183,33 +178,63 @@ def _offer_from_request(
     headless: bool,
     operation_override: Mapping[str, object] | None = None,
 ) -> ContinuationOffer:
-    harness = _canonical_harness(request_row.get("harness"))
     operation = operation_override or store.get_guard_operation_for_approval_request(request_id)
+    facts = continuation_offer_facts(
+        store, harness=request_row.get("harness"), operation=operation, observed_at=observed_at
+    )
+    return capability_offer(
+        correlation_id=canonical_continuation_correlation_id(
+            request_id=request_id,
+            request_row=request_row,
+            operation_metadata=facts.metadata,
+        ),
+        harness=facts.harness,
+        original_hook_attached=facts.original_hook_attached,
+        wait_deadline=facts.wait_deadline,
+        opaque_target_id=facts.opaque_target_id,
+        session_target_verified=facts.session_target_verified,
+        headless=headless,
+        now=lambda: observed_at,
+    )
+
+
+class ContinuationOfferFacts(NamedTuple):
+    """What an offer reads from the harness and the operation that queued it."""
+
+    harness: str
+    metadata: Mapping[str, object]
+    original_hook_attached: bool
+    wait_deadline: datetime | None
+    opaque_target_id: str | None
+    session_target_verified: bool
+
+
+def continuation_offer_facts(
+    store: GuardStore,
+    *,
+    harness: object,
+    operation: Mapping[str, object] | None,
+    observed_at: datetime,
+) -> ContinuationOfferFacts:
+    canonical = _canonical_harness(harness)
     metadata: Mapping[str, object] = _mapping(operation.get("metadata")) if isinstance(operation, Mapping) else {}
     deadline = codex_live_hook_wait_deadline(store, operation=operation, metadata=metadata) if operation else None
-    original_hook_attached = harness == "codex" and deadline is not None and deadline > observed_at
+    original_hook_attached = canonical == "codex" and deadline is not None and deadline > observed_at
     raw_target = _first_text(metadata, _SESSION_KEYS)
     session_target_verified = (
-        harness == "codex"
+        canonical == "codex"
         and not original_hook_attached
         and not codex_live_hook_process_is_unavailable(metadata)
         and raw_target is not None
         and codex_app_server_target_reachable(metadata)
     )
-    opaque_target_id = _opaque_target_id(harness, raw_target)
-    return capability_offer(
-        correlation_id=canonical_continuation_correlation_id(
-            request_id=request_id,
-            request_row=request_row,
-            operation_metadata=metadata,
-        ),
-        harness=harness,
-        original_hook_attached=original_hook_attached,
-        wait_deadline=deadline,
-        opaque_target_id=opaque_target_id,
-        session_target_verified=session_target_verified,
-        headless=headless,
-        now=lambda: observed_at,
+    return ContinuationOfferFacts(
+        canonical,
+        metadata,
+        original_hook_attached,
+        deadline,
+        _opaque_target_id(canonical, raw_target),
+        session_target_verified,
     )
 
 
@@ -241,51 +266,6 @@ def continuation_offer_payload(
     }
 
 
-def record_live_hook_completion(
-    store: GuardStore,
-    *,
-    request_id: str,
-    action: str,
-    now: str,
-    approval_decision: Mapping[str, object] | None = None,
-) -> dict[str, object] | None:
-    """Record proof that the original browser-waiting Codex hook consumed a decision."""
-
-    request = store.get_approval_request(request_id)
-    if not isinstance(request, Mapping):
-        return None
-    normalized_action = _continuation_action(action)
-    offer = _offer_from_request(
-        store,
-        request_row=request,
-        request_id=request_id,
-        observed_at=_parse_aware_timestamp(now),
-        headless=False,
-    )
-    if offer.capability != "suspended-response":
-        return None
-    previous = _previous_result(store.get_request_resume(request_id), offer=offer, action=normalized_action)
-    if previous is not None and previous.status != "waiting":
-        return _payload(offer, previous, replayed=True)
-    if normalized_action == "allow_once":
-        result = _result(offer, "resumed", "live_hook_completed", now)
-    else:
-        result = _result(offer, "blocked_not_resumed", "blocked_not_resumed", now)
-    persisted = _finalize_persist_attempt(
-        store,
-        request_id=request_id,
-        action=normalized_action,
-        offer=offer,
-        result=result,
-        now=now,
-        approval_decision=approval_decision,
-    )
-    if not persisted:
-        return None
-    authoritative = _previous_result(store.get_request_resume(request_id), offer=offer, action=normalized_action)
-    return _payload(offer, authoritative or result, replayed=authoritative is not None)
-
-
 def _finalize_persist_attempt(
     store: GuardStore,
     *,
@@ -297,71 +277,103 @@ def _finalize_persist_attempt(
     claim_id: str | None = None,
     approval_decision: Mapping[str, object] | None = None,
 ) -> bool:
-    operation = store.get_guard_operation_for_approval_request(request_id)
-    operation_id = _text(operation.get("operation_id")) if isinstance(operation, Mapping) else None
-    raw_session_id = _operation_session_id(operation)
-    prior = store.get_request_resume(request_id)
-    attempt_count = _attempt_count(prior)
-    # `retry_request_resume` already records the actual Codex app-server send.
-    # The contract evidence enriches that same attempt instead of double-counting it.
-    if offer.harness == "codex" and offer.capability == "session-resume" and isinstance(prior, Mapping):
-        existing_attempt_count = prior.get("attempt_count")
-        if isinstance(existing_attempt_count, int) and not isinstance(existing_attempt_count, bool):
-            attempt_count = existing_attempt_count
-    events = _continuation_events(
+    finalized = continuation_store_call(
+        store,
+        "store_finalize_projected",
         request_id=request_id,
-        operation_id=operation_id,
         action=action,
-        offer=offer,
-        result=result,
-    )
-    operation_update = _operation_update_payload(operation, result=result, action=action, now=now)
-    return store.finalize_continuation_attempt(
-        request_id=request_id,
-        offer_hash=_offer_hash(offer),
-        action=action,
-        claim_id=claim_id,
-        evidence_id=result.evidence_id,
-        terminal=result.status != "waiting",
-        resume_seed={
-            "operation_id": operation_id,
-            "harness": offer.harness,
-            "strategy": _strategy(offer, result),
-            "supported": offer.capability in {"suspended-response", "session-resume"},
-            "thread_id": raw_session_id,
-        },
-        resume_update={
-            "resolution_action": "allow" if action == "allow_once" else "block",
-            "strategy": _strategy(offer, result),
-            "supported": offer.capability in {"suspended-response", "session-resume"},
-            "status": _persisted_resume_status(offer, result),
-            "reason": result.reason,
-            "message": None,
-            "last_error": result.reason if result.status == "failed" else None,
-            "attempt_count": attempt_count,
-            "last_attempt_at": now,
-            "sent_at": now if result.status in {"resumed", "already_resumed"} else None,
-            "continuation_contract_version": CAPABILITY_CONTRACT_VERSION,
-            "continuation_capability": offer.capability,
-            "continuation_status": result.status,
-            "continuation_reason": result.reason,
-            "continuation_evidence": [
-                {
-                    "correlationId": offer.correlation_id,
-                    "evidenceId": result.evidence_id,
-                    "status": result.status,
-                }
-            ],
-            "continuation_offer_hash": _offer_hash(offer),
-            "continuation_action": action,
-            "continuation_completed_at": result.completed_at.isoformat(),
-            "continuation_cancelled_at": now if result.reason == "continuation_cancelled" else None,
-        },
-        operation_update=operation_update,
-        events=events,
+        offer=offer_wire(offer),
+        result=result_wire(result),
+        operation=store.get_guard_operation_for_approval_request(request_id),
+        prior=store.get_request_resume(request_id),
         now=now,
+        claim_id=claim_id,
         approval_decision=approval_decision,
     )
+    return cast(bool, finalized["finalized"])
+
+
+def _live_hook_recorded_offer(
+    request_row: Mapping[str, object],
+    existing: Mapping[str, object] | None,
+    *,
+    offer: ContinuationOffer,
+    action: ContinuationAction,
+) -> tuple[ContinuationOffer, str] | None:
+    """The frozen offer a waiting Codex hook already completed this decision under.
+
+    The bridge completes its own decision as soon as it sees the resolution and
+    then exits. A caller that continues the request afterwards observes no live
+    hook and derives a retry-only offer, so without this it would record a second
+    terminal result for the same request under a different capability, which
+    Cloud rejects as a binding change. Returning the snapshot offer lets that
+    caller replay the hook's result instead. It applies only when the snapshot
+    reproduces the recorded offer hash exactly.
+    """
+    if (
+        offer.capability == "suspended-response"
+        or not isinstance(existing, Mapping)
+        or existing.get("continuation_capability") != "suspended-response"
+        or existing.get("continuation_action") != action
+        or existing.get("continuation_status") in {None, "waiting"}
+    ):
+        return None
+    raw_snapshot = request_row.get("continuation_snapshot")
+    if raw_snapshot is None:
+        raw_snapshot = request_row.get("continuation_snapshot_json")
+    if isinstance(raw_snapshot, str):
+        try:
+            raw_snapshot = json.loads(raw_snapshot)
+        except ValueError:
+            return None
+    snapshot = validated_continuation_snapshot(raw_snapshot)
+    if (
+        snapshot is None
+        or snapshot["capability"] != "suspended-response"
+        or snapshot["correlationId"] != offer.correlation_id
+    ):
+        return None
+    # Rebuild the deadline exactly as frozen, offset included, so the hash can match.
+    try:
+        wait_deadline = datetime.fromisoformat(cast(str, snapshot["waitDeadline"]))
+    except ValueError:
+        return None
+    if wait_deadline.utcoffset() is None:
+        return None
+    frozen = ContinuationOffer(
+        correlation_id=offer.correlation_id,
+        harness=offer.harness,
+        capability="suspended-response",
+        original_hook_attached=True,
+        wait_deadline=wait_deadline,
+    )
+    frozen_hash = _offer_hash(frozen)
+    if existing.get("continuation_offer_hash") != frozen_hash:
+        return None
+    return frozen, frozen_hash
+
+
+def _replayable_result(
+    existing: Mapping[str, object] | None,
+    *,
+    offer: ContinuationOffer,
+    offer_hash: str,
+    action: ContinuationAction,
+) -> ContinuationResult | None:
+    """Ask the native replay only for a row bound to this offer and action.
+
+    Replay can only succeed for a row carrying this offer hash, this action and
+    a persisted status, so the claim-wait loop skips the native round trip for
+    every other row.
+    """
+    if (
+        not isinstance(existing, Mapping)
+        or existing.get("continuation_offer_hash") != offer_hash
+        or existing.get("continuation_action") != action
+        or not isinstance(existing.get("continuation_status"), str)
+    ):
+        return None
+    return _previous_result(existing, offer=offer, action=action)
 
 
 def _persist_attempt(
@@ -422,12 +434,6 @@ def _canonical_harness(value: object) -> str:
         return "unknown"
     contract = contract_for(text)
     return contract.harness if contract is not None else text.lower()
-
-
-def _operation_session_id(operation: Mapping[str, object] | None) -> str | None:
-    if not isinstance(operation, Mapping):
-        return None
-    return _first_text(_mapping(operation.get("metadata")), _SESSION_KEYS) or _text(operation.get("session_id"))
 
 
 def _opaque_target_id(harness: str, raw_target: str | None) -> str | None:

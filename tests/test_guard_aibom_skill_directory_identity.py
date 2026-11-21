@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -9,7 +10,6 @@ import pytest
 
 from codex_plugin_scanner.guard.aibom_detection import (
     discover_codex_skill_artifacts,
-    file_content_hash,
 )
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
 from codex_plugin_scanner.guard.models import GuardArtifact
@@ -42,7 +42,7 @@ def test_codex_skill_uses_complete_directory_identity_and_detects_secondary_tail
 
     assert artifact_hash(first) == artifact_hash(stable)
     assert first.metadata == stable.metadata
-    assert first.metadata.get("content_hash") == f"sha256:{file_content_hash(skill_path)}"
+    assert first.metadata.get("content_hash") == f"sha256:{hashlib.sha256(skill_path.read_bytes()).hexdigest()}"
     assert isinstance(first.metadata.get("directory_hash"), str)
     identity_metadata = first.metadata.get("skillDirectoryIdentity")
     assert isinstance(identity_metadata, dict)

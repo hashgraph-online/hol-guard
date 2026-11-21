@@ -2,12 +2,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
 
-def test_ci_runs_trusted_updater_regressions_on_native_windows() -> None:
-    workflow = (Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+from tests.support.ci_workflow import expand_ci_job_actions
 
-    assert "pull_request:\n    branches: [main, release/3.0, release/3.2]" in workflow
+
+def test_nightly_runs_trusted_updater_regressions_on_native_windows() -> None:
+    """Verify the nightly workflow runs trusted updater regressions on native windows."""
+    workflow = (Path(__file__).resolve().parents[1] / ".github" / "workflows" / "nightly-native.yml").read_text(
+        encoding="utf-8"
+    )
+
     assert "windows-updater:" in workflow
     assert 'python-version: ["3.10", "3.12"]' in workflow
-    assert "tests/test_guard_update_isolation.py" in workflow
-    assert "tests/test_guard_update_subprocess.py" in workflow
+    expanded = expand_ci_job_actions(yaml.safe_load(workflow))
+    commands = "\n".join(step.get("run", "") for step in expanded["jobs"]["windows-updater"]["steps"])
+    assert "tests/test_guard_update_isolation.py" in commands
+    assert "tests/test_guard_update_subprocess.py" in commands
+    regression = next(
+        step
+        for step in expanded["jobs"]["windows-updater"]["steps"]
+        if step.get("name") == "Run trusted updater and daemon regressions"
+    )
+    assert regression["env"]["HOL_GUARD_NATIVE_REGRESSION"] == "1"

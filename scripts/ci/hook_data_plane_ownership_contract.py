@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import json
 import re
 from pathlib import Path
@@ -149,23 +148,18 @@ def validate_installed_proof_environment(source: str) -> None:
             )
             first_proof = min(proof_indices)
             if first_proof == 0 or lines[first_proof - 1] != f"source {helper}":
-                raise RuntimeError(
-                    f"installed proof environment helper must be sourced before each proof: {platform}"
-                )
+                raise RuntimeError(f"installed proof environment helper must be sourced before each proof: {platform}")
 
 
 def registered_harnesses() -> frozenset[str]:
-    path = Path("src/codex_plugin_scanner/guard/adapters/contracts.py")
-    tree = ast.parse(_read(path), filename=str(path))
-    harnesses: set[str] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
-            continue
-        if node.func.id != "HarnessProtectionContract":
-            continue
-        value = next((keyword.value for keyword in node.keywords if keyword.arg == "harness"), None)
-        if isinstance(value, ast.Constant) and isinstance(value.value, str):
-            harnesses.add(value.value)
+    path = Path("src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json")
+    document = json.loads(_read(path))
+    contracts = document.get("contracts") if isinstance(document, dict) else None
+    harnesses = {
+        contract["harness"]
+        for contract in contracts or []
+        if isinstance(contract, dict) and isinstance(contract.get("harness"), str)
+    }
     if not harnesses:
         raise RuntimeError("registered harness inventory is empty")
     return frozenset(harnesses)

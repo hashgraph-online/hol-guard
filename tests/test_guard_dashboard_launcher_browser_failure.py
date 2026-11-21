@@ -45,6 +45,12 @@ def test_browser_opener_failure_is_reported_with_public_url(tmp_path: Path) -> N
         result = open_dashboard(guard_home=tmp_path, store=mock_store, config=mock_config)
 
     assert result.opened is False
-    assert result.reason == "open-failed"
+    assert result.reason == "browser_unavailable"
     assert result.browser_url == "http://127.0.0.1:4781/approvals"
+    payload = result.to_payload()
+    assert payload["port"] == 4781
+    assert payload["browser"] == "unavailable"
+    assert payload["signed_url"] == "withheld"
+    assert "hol-guard dashboard" in str(payload["fallback"])
+    assert "session-token-xyz" not in str(payload)
     mock_opener.assert_called_once()

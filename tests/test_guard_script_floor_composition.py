@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifact_policy import _runtime_artifact_policy_action
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact
+from tests.runtime_artifact_policy_support import _runtime_artifact_policy_action
 
 
 def _artifact(*risks: str) -> GuardArtifact:
@@ -29,16 +29,27 @@ def _artifact(*risks: str) -> GuardArtifact:
 
 
 @pytest.mark.parametrize("risk", ("destructive_shell", "guard_bypass", "credential_exfiltration"))
-def test_script_floor_keeps_independent_paranoid_block(tmp_path: Path, risk: str) -> None:
+def test_script_floor_keeps_independent_paranoid_block(
+    tmp_path: Path, risk: str, native_approval_reuse_runtime
+) -> None:
     config = GuardConfig(guard_home=tmp_path, workspace=None, security_level="paranoid")
-    assert _runtime_artifact_policy_action(config, _artifact(risk), "codex") == "block"
+    assert (
+        _runtime_artifact_policy_action(config, _artifact(risk), "codex", guard_home=native_approval_reuse_runtime)
+        == "block"
+    )
 
 
-def test_script_floor_alone_remains_a_review_contract(tmp_path: Path) -> None:
+def test_script_floor_alone_remains_a_review_contract(tmp_path: Path, native_approval_reuse_runtime) -> None:
     config = GuardConfig(guard_home=tmp_path, workspace=None, security_level="paranoid")
-    assert _runtime_artifact_policy_action(config, _artifact(), "codex") == "require-reapproval"
+    assert (
+        _runtime_artifact_policy_action(config, _artifact(), "codex", guard_home=native_approval_reuse_runtime)
+        == "require-reapproval"
+    )
 
 
-def test_script_floor_keeps_explicit_execution_block(tmp_path: Path) -> None:
+def test_script_floor_keeps_explicit_execution_block(tmp_path: Path, native_approval_reuse_runtime) -> None:
     config = GuardConfig(guard_home=tmp_path, workspace=None, risk_actions={"execution": "block"})
-    assert _runtime_artifact_policy_action(config, _artifact(), "codex") == "block"
+    assert (
+        _runtime_artifact_policy_action(config, _artifact(), "codex", guard_home=native_approval_reuse_runtime)
+        == "block"
+    )

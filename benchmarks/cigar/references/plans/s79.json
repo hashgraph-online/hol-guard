@@ -1,0 +1,130 @@
+{
+ "repo": "click",
+ "seed": 79,
+ "steps": [
+  {
+   "kind": "stub",
+   "prompt": "Tests fail because HelpFormatter.write_text is not implemented (src/click/formatting.py). Write the implementation; the docstring and tests describe the expected behavior.",
+   "stub": {
+    "body": "        indent = \" \" * self.current_indent\n        self.write(\n            wrap_text(\n                text,\n                self.width,\n                initial_indent=indent,\n                subsequent_indent=indent,\n                preserve_paragraphs=True,\n            )\n        )\n        self.write(\"\\n\")\n",
+    "body_start": 198,
+    "end": 208,
+    "failing": [
+     "tests/test_basic.py::test_basic_functionality",
+     "tests/test_basic.py::test_basic_group",
+     "tests/test_chain.py::test_chaining_help[args0-COMMAND1",
+     "tests/test_chain.py::test_chaining_help[args1-ROOT",
+     "tests/test_chain.py::test_chaining_help[args2-SDIST",
+     "tests/test_chain.py::test_chaining_help[args3-BDIST",
+     "tests/test_chain.py::test_chaining_help[args4-SDIST",
+     "tests/test_commands.py::test_deprecated_in_help_messages[CLI",
+     "tests/test_commands.py::test_deprecated_in_help_messages[None]",
+     "tests/test_formatting.py::test_basic_functionality",
+     "tests/test_formatting.py::test_formatting_empty_help_lines",
+     "tests/test_formatting.py::test_help_formatter_write_text",
+     "tests/test_formatting.py::test_truncating_docstring",
+     "tests/test_formatting.py::test_wrapping_long_command_name",
+     "tests/test_formatting.py::test_wrapping_long_options_strings"
+    ],
+    "indent": 8,
+    "path": "src/click/formatting.py",
+    "qual": "HelpFormatter.write_text"
+   }
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_basic.py::test_group_from_list",
+      "tests/test_info_dict.py::test_command[Group]",
+      "tests/test_info_dict.py::test_command[Nested",
+      "tests/test_shell_completion.py::test_chained",
+      "tests/test_shell_completion.py::test_full_complete[bash-env0-plain,a\\nplain,b\\n]",
+      "tests/test_shell_completion.py::test_full_complete[bash-env1-plain,b\\n]",
+      "tests/test_shell_completion.py::test_full_complete[fish-env4-plain,a\\nplain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[fish-env5-plain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env2-plain\\na\\n_\\nplain\\nb\\nbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env3-plain\\nb\\nbee\\n]",
+      "tests/test_shell_completion.py::test_group",
+      "tests/test_shell_completion.py::test_group_command_same_option",
+      "tests/test_shell_completion.py::test_help_option",
+      "tests/test_shell_completion.py::test_hidden"
+     ],
+     "line": 1839,
+     "new": "            commands = {c.name: c for c in commands if c.name is None}\n",
+     "orig": "            commands = {c.name: c for c in commands if c.name is not None}\n",
+     "path": "src/click/core.py",
+     "qual": "Group.__init__"
+    },
+    {
+     "failing": [
+      "tests/test_arguments.py::test_nargs_envvar[-1-a",
+      "tests/test_arguments.py::test_nargs_envvar[2-a",
+      "tests/test_arguments.py::test_nargs_envvar[2-a-Takes",
+      "tests/test_arguments.py::test_nargs_envvar_only_if_values_empty",
+      "tests/test_options.py::test_multiple_envvar",
+      "tests/test_options.py::test_nargs_envvar"
+     ],
+     "line": 128,
+     "new": "        return (rv and \"\").split(self.envvar_list_splitter)\n",
+     "orig": "        return (rv or \"\").split(self.envvar_list_splitter)\n",
+     "path": "src/click/types.py",
+     "qual": "ParamType.split_envvar_value"
+    }
+   ]
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_detect_program_name` to `_detect_program_name_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 4,
+    "files": [
+     "tests/test_utils.py",
+     "src/click/core.py",
+     "src/click/utils.py"
+    ],
+    "new": "_detect_program_name_impl",
+    "old": "_detect_program_name",
+    "path": "src/click/utils.py"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_utils.py::test_confirm_repeat"
+     ],
+     "line": 240,
+     "new": "        elif default is not None or value == \"\":\n",
+     "orig": "        elif default is not None and value == \"\":\n",
+     "path": "src/click/termui.py",
+     "qual": "confirm"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `ProgressBar.eta` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_termui.py::test_progressbar_eta[True-0]"
+     ],
+     "line": 156,
+     "new": "        if self.length is not None or not self.finished:\n",
+     "orig": "        if self.length is not None and not self.finished:\n",
+     "path": "src/click/_termui_impl.py",
+     "qual": "ProgressBar.eta"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

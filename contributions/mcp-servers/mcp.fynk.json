@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.fynk",
+  "version": "1.0.0",
+  "name": "fynk MCP Server",
+  "description": "Reviews fynk contract tools that invite outside signatories, cancel or skip signing, change who signs, delete account data, or change templates and team access on the official hosted server. Reads, searches, drafting and ordinary document edits keep Guard's usual handling.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "fynk.com",
+    "displayName": "fynk",
+    "url": "https://fynk.com"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCloud", "background": "#121719" },
+  "homepage": "https://fynk.com/en/integrations/mcp-server/",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://app.fynk.com/mcp",
+    "serverNames": ["fynk", "fynk-mcp", "fynk-mcp-server"]
+  },
+  "riskClasses": [
+    "external-signature-request",
+    "external-signing-cancellation",
+    "external-signatory-change",
+    "external-data-deletion",
+    "external-template-change",
+    "external-access-change"
+  ],
+  "tools": [
+    { "name": "move-document-to-signing-stage", "state": "review" },
+    { "name": "create-document-from-template", "state": "review" },
+    { "name": "move-document-to-review-stage", "state": "review" },
+    { "name": "move-document-to-done-stage", "state": "review" },
+    { "name": "create-document-signatory", "state": "review" },
+    { "name": "update-document-signatory", "state": "review" },
+    { "name": "delete-document-signatory", "state": "review" },
+    { "name": "delete-account-document-type", "state": "review" },
+    { "name": "delete-account-metadata", "state": "review" },
+    { "name": "delete-account-tag", "state": "review" },
+    { "name": "delete-account-team", "state": "review" },
+    { "name": "delete-template-dynamic-field", "state": "review" },
+    { "name": "delete-template-party", "state": "review" },
+    { "name": "delete-template-signature-block", "state": "review" },
+    { "name": "replace-template-content", "state": "review" },
+    { "name": "set-template-published-state", "state": "review" },
+    { "name": "attach-account-users-to-team", "state": "review" },
+    { "name": "detach-account-users-from-team", "state": "review" },
+    { "name": "archive-document", "state": "inherit" },
+    { "name": "restore-document", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://fynk.com/en/integrations/mcp-server/",
+    "https://github.com/fynk-com/fynk-mcp-server",
+    "https://app.fynk.com/mcp"
+  ],
+  "saferAlternatives": [
+    "Use get-document-info, list-documents and get-template-info to inspect contracts without changing them.",
+    "Create the document as a draft and start signing from the fynk app after checking parties, signatories and content.",
+    "Archive a document instead of deleting account data when it only needs to be out of the way; restore-document brings it back."
+  ]
+}

@@ -2,31 +2,29 @@
 
 from __future__ import annotations
 
-import io
 import json
 import os
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.adapters.devin import DevinHarnessAdapter
-from codex_plugin_scanner.guard.adapters.devin_config import (
-    DEVIN_GUARD_TOOL_MATCHER,
-    GUARD_MANAGED_MARKER,
-    is_guard_managed_hook_command,
-    load_devin_jsonc,
-)
-from codex_plugin_scanner.guard.adapters.devin_hooks import (
-    devin_hook_response_from_guard,
-    devin_hook_should_block,
-    emit_devin_hook_response,
-    prepare_devin_hook_payload,
-)
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
+from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
+from tests import harness_ops_support as harness_support
 
 FIXTURES = Path(__file__).parent / "fixtures" / "devin"
+GUARD_MANAGED_MARKER = "HOL_GUARD_MANAGED_DEVIN"
+DEVIN_GUARD_TOOL_MATCHER = (
+    "^(exec|read|write|edit|apply_patch|notebook_read|notebook_edit|grep|glob|webfetch|mcp_call_tool|mcp__.*)$"
+)
+
+
+def is_guard_managed_hook_command(command: object) -> bool:
+    request = {"op": "managed", "harness": "devin", "commands": [command]}
+    return native_runner_authority("harness_hook_settings", request) == {"managed": [True]}
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
@@ -73,20 +71,20 @@ def _managed_commands(payload: dict[str, object]) -> list[str]:
 
 class TestDevinAdapterIdentity:
     def test_harness_identifier_is_devin(self) -> None:
-        assert DevinHarnessAdapter.harness == "devin"
+        assert harness_ops.canonical_harness("devin") == "devin"
 
     def test_aliases_resolve(self) -> None:
         for alias in ("devin", "devin-cli", "cognition-devin"):
-            assert get_adapter(alias).harness == "devin"
+            assert harness_ops.canonical_harness(alias) == "devin"
 
     def test_get_adapter_returns_devin_instance(self) -> None:
-        assert isinstance(get_adapter("devin"), DevinHarnessAdapter)
+        assert harness_ops.canonical_harness("devin") == "devin"
 
     def test_devin_is_registered_in_adapter_list(self) -> None:
-        assert "devin" in {item.harness for item in list_adapters()}
+        assert "devin" in set(harness_ops.list_harnesses())
 
     def test_contract_resolve(self) -> None:
-        from codex_plugin_scanner.guard.adapters.contracts import contract_for, setup_contract_for
+        from codex_plugin_scanner.guard.setup_contracts import contract_for, setup_contract_for
 
         contract = contract_for("devin")
         assert contract is not None
@@ -103,7 +101,7 @@ class TestDevinDetect:
     def test_detects_user_config_hooks_and_legacy_mcp(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write(_user_config_path(ctx), _fixture_payload("user_config.json"))
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         assert result.installed is True
         assert any(".config/devin/config.json" in path for path in result.config_paths)
         hooks = [a for a in result.artifacts if a.artifact_type == "hook"]
@@ -115,7 +113,7 @@ class TestDevinDetect:
     def test_detects_user_mcp_config_stdio_and_http(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write(ctx.home_dir / ".config" / "devin" / "mcp_config.json", _fixture_payload("mcp_config.json"))
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         mcp = {a.name: a for a in result.artifacts if a.artifact_type == "mcp_server"}
         assert mcp["local-stdio"].command == "uvx"
         assert mcp["local-stdio"].transport == "stdio"
@@ -126,7 +124,7 @@ class TestDevinDetect:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
         _write(ctx.workspace_dir / ".devin" / "hooks.v1.json", _fixture_payload("hooks_v1.json"))
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         hooks = [a for a in result.artifacts if a.artifact_type == "hook" and a.source_scope == "project"]
         assert any(a.command == "echo post-edit" and a.metadata.get("event") == "PostToolUse" for a in hooks)
         assert any(a.command == "echo stop" and a.metadata.get("event") == "Stop" for a in hooks)
@@ -138,7 +136,7 @@ class TestDevinDetect:
             ctx.workspace_dir / ".devin" / "mcp_config.local.json",
             _fixture_payload("mcp_config.local.json"),
         )
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         mcp = [a for a in result.artifacts if a.artifact_type == "mcp_server" and a.source_scope == "project"]
         assert any(a.name == "project-local" for a in mcp)
 
@@ -153,7 +151,7 @@ class TestDevinDetect:
             ctx.workspace_dir / ".devin" / "config.local.json",
             {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo project-local"}]}]}},
         )
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         hooks = [a for a in result.artifacts if a.artifact_type == "hook" and a.source_scope == "project"]
         assert any(a.command == "echo project-config" for a in hooks)
         assert any(a.command == "echo project-local" for a in hooks)
@@ -171,7 +169,7 @@ class TestDevinDetect:
         for root in roots:
             (root).mkdir(parents=True, exist_ok=True)
             (root / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         skills = {(a.name, a.source_scope) for a in result.artifacts if a.artifact_type == "skill"}
         assert ("global-devin", "global") in skills
         assert ("global-agents", "global") in skills
@@ -201,7 +199,7 @@ class TestDevinDetect:
                 }
             },
         )
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         commands = [a.command for a in result.artifacts if a.artifact_type == "hook"]
         assert commands == ["echo user-hook"]
 
@@ -210,24 +208,16 @@ class TestDevinDetect:
         config_path = _user_config_path(ctx)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text((FIXTURES / "config_with_comments.jsonc").read_text(encoding="utf-8"), encoding="utf-8")
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         hooks = [a for a in result.artifacts if a.artifact_type == "hook"]
         assert any(a.command == "echo jsonc-hook" for a in hooks)
-
-    def test_load_devin_jsonc_flags_commented_payload(self, tmp_path: Path) -> None:
-        path = tmp_path / "config.json"
-        path.write_text((FIXTURES / "config_with_comments.jsonc").read_text(encoding="utf-8"), encoding="utf-8")
-        document = load_devin_jsonc(path)
-        assert document.had_comments is True
-        assert document.parse_failed is False
-        assert document.payload["permissions"]["allow"] == ["exec(ls*)"]
 
     def test_unparseable_config_warns_and_is_still_found(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         config_path = _user_config_path(ctx)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text('{"permissions": ', encoding="utf-8")
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         assert str(config_path) in result.config_paths
         assert any("could not be parsed" in warning for warning in result.warnings)
 
@@ -255,7 +245,7 @@ class TestDevinDetect:
                 }
             },
         )
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         assert any("Claude Code hooks" in warning for warning in result.warnings)
 
     def _ctx_with_managed_claude_hook(self, tmp_path: Path) -> HarnessContext:
@@ -286,61 +276,46 @@ class TestDevinDetect:
     def test_read_config_from_claude_false_suppresses_overlap_warning(self, tmp_path: Path) -> None:
         ctx = self._ctx_with_managed_claude_hook(tmp_path)
         _write(_user_config_path(ctx), {"read_config_from": {"claude": False}})
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         assert not any("Claude Code hooks" in warning for warning in result.warnings)
 
     def test_read_config_from_claude_true_keeps_overlap_warning(self, tmp_path: Path) -> None:
         ctx = self._ctx_with_managed_claude_hook(tmp_path)
         _write(_user_config_path(ctx), {"read_config_from": {"claude": True}})
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         assert any("Claude Code hooks" in warning for warning in result.warnings)
 
     def test_no_overlap_no_warning(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write(_user_config_path(ctx), {})
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         assert not any("Claude Code hooks" in warning for warning in result.warnings)
 
 
 class TestDevinWindowsPaths:
-    def test_appdata_config_dir_on_windows(self, tmp_path: Path, monkeypatch) -> None:
-        from pathlib import PureWindowsPath
-
-        ctx = _ctx(tmp_path)
-        appdata = tmp_path / "AppData" / "Roaming"
-        monkeypatch.setattr(os, "name", "nt")
-        monkeypatch.setenv("APPDATA", str(appdata))
-        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.devin.Path", PureWindowsPath)
-        adapter = DevinHarnessAdapter()
-        expected = PureWindowsPath(str(appdata)) / "devin" / "config.json"
-        assert adapter._user_config_path(ctx) == expected
-
     def test_unix_config_dir_ignores_appdata(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(os, "name", "posix")
-        monkeypatch.setenv("APPDATA", str(tmp_path / "unused"))
-        adapter = DevinHarnessAdapter()
-        assert adapter._user_config_path(ctx) == ctx.home_dir / ".config" / "devin" / "config.json"
+        with monkeypatch.context() as platform_patch:
+            platform_patch.setattr(os, "name", "posix")
+            platform_patch.setenv("APPDATA", str(tmp_path / "unused"))
+            actual = harness_ops.policy_path("devin", ctx)
+        assert actual == ctx.home_dir / ".config" / "devin" / "config.json"
 
     def test_utf16_config_warns_and_install_refuses(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         config_path = _user_config_path(ctx)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_bytes('{"permissions": {}}'.encode("utf-16"))
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         assert str(config_path) in result.config_paths
         assert any("could not be parsed" in warning for warning in result.warnings)
         self._shim_safe(monkeypatch, ctx)
         with pytest.raises(ValueError, match="could not be parsed"):
-            DevinHarnessAdapter().install(ctx)
+            harness_support.install("devin", ctx)
 
     def _shim_safe(self, monkeypatch, ctx: HarnessContext) -> None:
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.devin.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
-        )
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.devin.remove_guard_shim",
+            "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
         )
 
@@ -350,14 +325,14 @@ class TestDevinWindowsPaths:
         mcp_path = ctx.workspace_dir / ".devin" / "mcp_config.json"
         mcp_path.parent.mkdir(parents=True, exist_ok=True)
         mcp_path.write_text("{not json", encoding="utf-8")
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         assert str(mcp_path) in result.config_paths
         assert any("could not be parsed" in warning for warning in result.warnings)
 
     def test_artifact_ids_include_config_file_name(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write(_user_config_path(ctx), _fixture_payload("user_config.json"))
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         assert result.artifacts
         for artifact in result.artifacts:
             assert "config.json" in artifact.artifact_id, artifact.artifact_id
@@ -384,7 +359,7 @@ class TestDevinWindowsPaths:
                 }
             },
         )
-        result = DevinHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("devin", ctx)
         assert any("Claude Code hooks" in warning for warning in result.warnings)
 
     def test_frozen_and_script_forms_detected_as_managed(self) -> None:
@@ -400,38 +375,30 @@ class TestDevinWindowsPaths:
         config_path = _user_config_path(ctx)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text("{}", encoding="utf-8")
-        original_bytes = config_path.read_bytes()
-
-        def _deny(*_args: object, **_kwargs: object) -> str:
-            raise PermissionError("denied")
-
-        monkeypatch.setattr(Path, "read_text", _deny)
-        result = DevinHarnessAdapter().detect(ctx)
+        # The resident reads the file, so it must be unreadable on disk.
+        config_path.chmod(0)
+        try:
+            if os.access(config_path, os.R_OK):
+                pytest.skip("file permissions are not enforced for this user")
+            result = harness_ops.detect("devin", ctx)
+            with pytest.raises(ValueError, match="could not be parsed"):
+                harness_support.install("devin", ctx)
+        finally:
+            config_path.chmod(0o600)
+        assert config_path.read_text(encoding="utf-8") == "{}"
         assert str(config_path) in result.config_paths
         assert any("could not be parsed" in warning for warning in result.warnings)
-        with pytest.raises(ValueError, match="could not be parsed"):
-            DevinHarnessAdapter().install(ctx)
-        monkeypatch.undo()
-        assert config_path.read_bytes() == original_bytes
 
     def test_missing_config_still_counts_as_absent(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         missing = _user_config_path(ctx)
         assert not missing.exists()
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.devin.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
-        )
-        DevinHarnessAdapter().install(ctx)
+        harness_support.install("devin", ctx)
         assert json.loads(missing.read_text(encoding="utf-8"))["hooks"]
 
     def test_install_writes_config_atomically_without_leftover_temps(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.devin.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
-        )
-        DevinHarnessAdapter().install(ctx)
+        harness_support.install("devin", ctx)
         config_path = _user_config_path(ctx)
         assert json.loads(config_path.read_text(encoding="utf-8"))["hooks"]
         assert not list(config_path.parent.glob("*.tmp"))
@@ -442,18 +409,14 @@ class TestDevinWindowsPaths:
 class TestDevinInstallUninstall:
     def _patch_shims(self, monkeypatch, ctx: HarnessContext) -> None:
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.devin.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
-        )
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.devin.remove_guard_shim",
+            "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
         )
 
     def test_install_writes_four_managed_event_groups(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         self._patch_shims(monkeypatch, ctx)
-        manifest = DevinHarnessAdapter().install(ctx)
+        manifest = harness_support.install("devin", ctx)
         assert manifest["active"] is True
         config_path = _user_config_path(ctx)
         payload = json.loads(config_path.read_text(encoding="utf-8"))
@@ -484,7 +447,7 @@ class TestDevinInstallUninstall:
         ctx = _ctx(tmp_path)
         _write(_user_config_path(ctx), _fixture_payload("user_config.json"))
         self._patch_shims(monkeypatch, ctx)
-        DevinHarnessAdapter().install(ctx)
+        harness_support.install("devin", ctx)
         payload = json.loads(_user_config_path(ctx).read_text(encoding="utf-8"))
         assert payload["permissions"]["allow"] == ["exec(ls*)"]
         assert payload["read_config_from"]["claude"] is True
@@ -507,9 +470,8 @@ class TestDevinInstallUninstall:
         ctx = _ctx(tmp_path)
         _write(_user_config_path(ctx), _fixture_payload("user_config.json"))
         self._patch_shims(monkeypatch, ctx)
-        adapter = DevinHarnessAdapter()
-        adapter.install(ctx)
-        adapter.install(ctx)
+        harness_support.install("devin", ctx)
+        harness_support.install("devin", ctx)
         payload = json.loads(_user_config_path(ctx).read_text(encoding="utf-8"))
         managed = _managed_commands(payload)
         assert len(managed) == 4, f"expected one managed handler per event, got {managed}"
@@ -519,14 +481,13 @@ class TestDevinInstallUninstall:
         config_path = _write(_user_config_path(ctx), _fixture_payload("user_config.json"))
         original = config_path.read_text(encoding="utf-8")
         self._patch_shims(monkeypatch, ctx)
-        adapter = DevinHarnessAdapter()
-        adapter.install(ctx)
+        harness_support.install("devin", ctx)
         backup = ctx.guard_home / "managed" / "devin" / "config.json.backup"
         state = ctx.guard_home / "managed" / "devin" / "install.state.json"
         assert backup.read_text(encoding="utf-8") == original
         assert json.loads(state.read_text(encoding="utf-8"))["managed_config_path"] == str(config_path)
         # Second install must not overwrite the pristine backup.
-        adapter.install(ctx)
+        harness_support.install("devin", ctx)
         assert backup.read_text(encoding="utf-8") == original
 
     def test_install_refuses_jsonc_config(self, tmp_path: Path, monkeypatch) -> None:
@@ -537,7 +498,7 @@ class TestDevinInstallUninstall:
         config_path.write_text(original, encoding="utf-8")
         self._patch_shims(monkeypatch, ctx)
         with pytest.raises(ValueError, match="comments or trailing commas"):
-            DevinHarnessAdapter().install(ctx)
+            harness_support.install("devin", ctx)
         assert config_path.read_text(encoding="utf-8") == original
 
     def test_install_refuses_unparseable_config(self, tmp_path: Path, monkeypatch) -> None:
@@ -548,7 +509,7 @@ class TestDevinInstallUninstall:
         config_path.write_text(original, encoding="utf-8")
         self._patch_shims(monkeypatch, ctx)
         with pytest.raises(ValueError, match="could not be parsed"):
-            DevinHarnessAdapter().install(ctx)
+            harness_support.install("devin", ctx)
         assert config_path.read_text(encoding="utf-8") == original
         assert not (ctx.guard_home / "managed" / "devin" / "install.state.json").exists()
 
@@ -559,7 +520,7 @@ class TestDevinInstallUninstall:
         config_path.write_text("[]", encoding="utf-8")
         self._patch_shims(monkeypatch, ctx)
         with pytest.raises(ValueError, match="could not be parsed"):
-            DevinHarnessAdapter().install(ctx)
+            harness_support.install("devin", ctx)
         assert config_path.read_text(encoding="utf-8") == "[]"
 
     def test_install_handles_empty_config_file(self, tmp_path: Path, monkeypatch) -> None:
@@ -568,7 +529,7 @@ class TestDevinInstallUninstall:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text("", encoding="utf-8")
         self._patch_shims(monkeypatch, ctx)
-        manifest = DevinHarnessAdapter().install(ctx)
+        manifest = harness_support.install("devin", ctx)
         assert manifest["active"] is True
         payload = json.loads(config_path.read_text(encoding="utf-8"))
         assert set(payload["hooks"].keys()) == {"PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse"}
@@ -580,7 +541,7 @@ class TestDevinInstallUninstall:
         original = '{"permissions": '
         config_path.write_text(original, encoding="utf-8")
         self._patch_shims(monkeypatch, ctx)
-        manifest = DevinHarnessAdapter().uninstall(ctx)
+        manifest = harness_support.uninstall("devin", ctx)
         assert config_path.read_text(encoding="utf-8") == original
         assert any("could not be parsed" in note for note in manifest["notes"])
         assert not any("entries removed" in note for note in manifest["notes"])
@@ -588,12 +549,11 @@ class TestDevinInstallUninstall:
     def test_uninstall_leaves_managed_handlers_in_jsonc_config(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         self._patch_shims(monkeypatch, ctx)
-        adapter = DevinHarnessAdapter()
-        adapter.install(ctx)
+        harness_support.install("devin", ctx)
         config_path = _user_config_path(ctx)
         commented = config_path.read_text(encoding="utf-8").replace('"hooks"', '// user comment\n  "hooks"', 1)
         config_path.write_text(commented, encoding="utf-8")
-        manifest = adapter.uninstall(ctx)
+        manifest = harness_support.uninstall("devin", ctx)
         assert config_path.read_text(encoding="utf-8") == commented
         assert any("left its managed hook entries in place" in note for note in manifest["notes"])
         assert not any("entries removed" in note for note in manifest["notes"])
@@ -602,9 +562,8 @@ class TestDevinInstallUninstall:
         ctx = _ctx(tmp_path)
         _write(_user_config_path(ctx), _fixture_payload("user_config.json"))
         self._patch_shims(monkeypatch, ctx)
-        adapter = DevinHarnessAdapter()
-        adapter.install(ctx)
-        manifest = adapter.uninstall(ctx)
+        harness_support.install("devin", ctx)
+        manifest = harness_support.uninstall("devin", ctx)
         assert manifest["active"] is False
         payload = json.loads(_user_config_path(ctx).read_text(encoding="utf-8"))
         assert _managed_commands(payload) == []
@@ -618,15 +577,14 @@ class TestDevinInstallUninstall:
     def test_uninstall_drops_empty_hooks_object(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         self._patch_shims(monkeypatch, ctx)
-        adapter = DevinHarnessAdapter()
-        adapter.install(ctx)
-        adapter.uninstall(ctx)
+        harness_support.install("devin", ctx)
+        harness_support.uninstall("devin", ctx)
         payload = json.loads(_user_config_path(ctx).read_text(encoding="utf-8"))
         assert "hooks" not in payload
 
     def test_rendered_command_detected_managed_without_marker(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        parts = DevinHarnessAdapter._hook_command_parts(ctx)
+        parts = tuple(harness_ops.hook_argv("devin", ctx))  # pyright: ignore[reportAttributeAccessIssue]
         for windows in (False, True):
             rendered = _shell_command(parts, windows=windows)
             assert GUARD_MANAGED_MARKER not in rendered
@@ -659,8 +617,7 @@ class TestDevinInstallUninstall:
             encoding="utf-8",
         )
         self._patch_shims(monkeypatch, ctx)
-        adapter = DevinHarnessAdapter()
-        adapter.install(ctx)
+        harness_support.install("devin", ctx)
         payload = json.loads(config_path.read_text(encoding="utf-8"))
         commands = [
             handler["command"] for group in payload["hooks"]["PreToolUse"] for handler in group.get("hooks", [])
@@ -669,7 +626,7 @@ class TestDevinInstallUninstall:
         assert not any(GUARD_MANAGED_MARKER in command for command in commands)
         managed = _managed_commands(payload)
         assert len(managed) == 4
-        adapter.uninstall(ctx)
+        harness_support.uninstall("devin", ctx)
         payload = json.loads(config_path.read_text(encoding="utf-8"))
         assert _managed_commands(payload) == []
         remaining = [
@@ -685,107 +642,8 @@ class TestDevinInstallUninstall:
         config_path.write_text(original, encoding="utf-8")
         self._patch_shims(monkeypatch, ctx)
         with pytest.raises(ValueError, match="non-object hooks"):
-            DevinHarnessAdapter().install(ctx)
+            harness_support.install("devin", ctx)
         assert config_path.read_text(encoding="utf-8") == original
-
-
-class TestDevinHookPayload:
-    def test_exec_maps_to_bash(self, monkeypatch) -> None:
-        monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
-        normalized = prepare_devin_hook_payload(
-            {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "exec",
-                "tool_input": {"command": "ls"},
-                "session_id": "s",
-                "prompt_id": "p",
-            }
-        )
-        assert normalized["hook_event_name"] == "PreToolUse"
-        assert normalized["tool_name"] == "Bash"
-        assert normalized["tool_input"] == {"command": "ls"}
-        assert normalized["session_id"] == "s"
-        assert normalized["prompt_id"] == "p"
-
-    def test_mcp_call_tool_synthesizes_canonical_name(self, monkeypatch) -> None:
-        monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
-        normalized = prepare_devin_hook_payload(
-            {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "mcp_call_tool",
-                "tool_input": {
-                    "server_name": "github",
-                    "tool_name": "create_issue",
-                    "arguments": {"title": "hi"},
-                },
-            }
-        )
-        assert normalized["tool_name"] == "mcp__github__create_issue"
-        assert normalized["tool_input"] == {"title": "hi"}
-        assert normalized["devin_mcp_call"] == {"server_name": "github", "tool_name": "create_issue"}
-
-    def test_direct_mcp_tool_name_preserved(self, monkeypatch) -> None:
-        monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
-        normalized = prepare_devin_hook_payload(
-            {"hook_event_name": "PreToolUse", "tool_name": "mcp__github__create_issue", "tool_input": {"x": 1}}
-        )
-        assert normalized["tool_name"] == "mcp__github__create_issue"
-
-    def test_devin_project_dir_supplies_cwd(self, monkeypatch) -> None:
-        monkeypatch.setenv("DEVIN_PROJECT_DIR", "/workspace/project-root")
-        normalized = prepare_devin_hook_payload({"hook_event_name": "PreToolUse", "tool_name": "exec"})
-        assert normalized["cwd"] == "/workspace/project-root"
-
-    def test_explicit_cwd_wins_over_env(self, monkeypatch) -> None:
-        monkeypatch.setenv("DEVIN_PROJECT_DIR", "/workspace/project-root")
-        normalized = prepare_devin_hook_payload(
-            {"hook_event_name": "PreToolUse", "tool_name": "exec", "cwd": "/elsewhere"}
-        )
-        assert normalized["cwd"] == "/elsewhere"
-
-    def test_user_prompt_submit_event(self, monkeypatch) -> None:
-        monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
-        normalized = prepare_devin_hook_payload(
-            {"hook_event_name": "UserPromptSubmit", "prompt": "hello", "session_id": "s"}
-        )
-        assert normalized["hook_event_name"] == "UserPromptSubmit"
-        assert normalized["prompt"] == "hello"
-
-
-class TestDevinHookResponses:
-    def test_block_response_has_decision_and_deny(self) -> None:
-        response = devin_hook_response_from_guard(policy_action="block", reason="no", event_name="PreToolUse")
-        assert response["decision"] == "block"
-        assert response["reason"] == "no"
-        specific = response["hookSpecificOutput"]
-        assert specific["permissionDecision"] == "deny"
-        assert specific["permissionDecisionReason"] == "no"
-
-    def test_allow_response_has_no_decision(self) -> None:
-        response = devin_hook_response_from_guard(policy_action="allow", reason="", event_name="PreToolUse")
-        assert "decision" not in response
-        assert "permissionDecision" not in response["hookSpecificOutput"]
-
-    def test_no_approve_decision_is_ever_emitted(self) -> None:
-        for action in ("allow", "review", "require-reapproval", "sandbox-required", "block"):
-            response = devin_hook_response_from_guard(policy_action=action, reason="r", event_name="PreToolUse")
-            assert response.get("decision") != "approve"
-
-    def test_prompt_block_uses_additional_context(self) -> None:
-        response = devin_hook_response_from_guard(policy_action="review", reason="check", event_name="UserPromptSubmit")
-        assert response["decision"] == "block"
-        assert response["hookSpecificOutput"]["additionalContext"] == "check"
-
-    def test_emit_writes_response_to_stream(self) -> None:
-        stream = io.StringIO()
-        emit_devin_hook_response(policy_action="block", reason="no", event_name="PreToolUse", output_stream=stream)
-        response = json.loads(stream.getvalue())
-        assert response["decision"] == "block"
-
-    def test_should_block_classification(self) -> None:
-        for action in ("review", "require-reapproval", "sandbox-required", "block"):
-            assert devin_hook_should_block(policy_action=action) is True
-        assert devin_hook_should_block(policy_action="allow") is False
 
 
 class TestDevinManagedMarker:

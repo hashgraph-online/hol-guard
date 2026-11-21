@@ -81,7 +81,9 @@ def test_resident_stop_always_verifies_containment_before_optional_client_teardo
 
     monkeypatch.setattr(session_module, "_resident_state_may_exist", lambda _path: True)
     monkeypatch.setattr(session_module.subprocess, "run", stop)
-    monkeypatch.setattr(session_module, "close_native_resident_clients", lambda _home: calls.append("close-clients"))
+    monkeypatch.setattr(
+        session_module, "close_native_resident_clients", lambda _home: calls.append("close-clients") or True
+    )
 
     result = session_module.stop_native_resident(
         tmp_path / "runtime", tmp_path / "guard-home", preserve_clients=preserve_clients, write_diagnostic=False
@@ -102,10 +104,6 @@ def test_session_retains_serving_worker_clients_only_when_recovery_requested(
         calls.append("contained")
         return NativeStopResult(True, {"status": "contained"})
 
-    def close_clients() -> bool:
-        calls.append("close-worker-clients")
-        return True
-
     session = cast(
         AdapterSession,
         cast(
@@ -113,18 +111,13 @@ def test_session_retains_serving_worker_clients_only_when_recovery_requested(
             SimpleNamespace(
                 runtime=tmp_path / "runtime",
                 guard_home=tmp_path,
-                daemon=SimpleNamespace(
-                    _server=SimpleNamespace(
-                        hook_process_runner=SimpleNamespace(close_native_resident_clients=close_clients)
-                    )
-                ),
             ),
         ),
     )
     monkeypatch.setattr(session_module, "stop_native_resident", stop)
 
     assert AdapterSession.stop_resident(session, preserve_clients=preserve_clients)
-    assert calls == ["contained"] + ([] if preserve_clients else ["close-worker-clients"])
+    assert calls == ["contained"]
 
 
 def test_both_recovery_samples_keep_complete_request_timing_and_original_deadline(

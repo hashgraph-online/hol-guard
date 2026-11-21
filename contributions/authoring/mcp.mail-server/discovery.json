@@ -1,0 +1,195 @@
+{
+  "adapter": "mcp",
+  "digest": "9d45c23fb67c15f7a6c1d3568246e6b5a22350b36fe9ebd885310b0dd415a353",
+  "limitations": [
+    "mcp-inventory-is-snapshot",
+    "mcp-schemas-fingerprinted-not-executed",
+    "mcp-tool-annotations-untrusted",
+    "metadata-is-not-semantics"
+  ],
+  "metadata": {
+    "executable": "",
+    "homepage": "https://github.com/yunfeizhu/mcp-mail-server",
+    "kind": "mcp",
+    "launcher": "npx",
+    "name": "mcp-mail-server",
+    "package": "mcp-mail-server",
+    "publisher": {
+      "displayName": "zhuyunfei",
+      "id": "community.yunfeizhu"
+    },
+    "slug": "mail-server",
+    "upstreamVersion": "2.1.0"
+  },
+  "operations": [
+    {
+      "evidenceSha256": "cdb2b046a0f530638ee31bd7eedea31e85e0eef48e7823155a962208d4533558",
+      "flags": [],
+      "hints": [
+        "network-hint",
+        "read-only-hint"
+      ],
+      "id": "tool-8e8b572b7a914ce1",
+      "name": "check_connection",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "9a3f7fcd24818541f0f11d67975f6b17dce9ad6f9a3b2fcf02dcb140a3a1e644",
+      "flags": [],
+      "hints": [
+        "network-hint"
+      ],
+      "id": "tool-5f6fe9f8dd346786",
+      "name": "continue_email_thread",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "16c1e6adf7695e2fe35e66820265905ddaee3899cfecb78ef4f068cdd7bfed56",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "destructive-name",
+        "network-hint"
+      ],
+      "id": "tool-5e656fb2455234f9",
+      "name": "delete_message",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "7ba3410c7ffd626ae24eeee2daab83d9b8bec3ad5867507b425229fdf7b9236f",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "destructive-name",
+        "network-hint"
+      ],
+      "id": "tool-a8529ad07b15b766",
+      "name": "delete_messages",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "d4c23203719c8c65411ff44552037bb601b0dbff5c889465d92f089ac5650973",
+      "flags": [],
+      "hints": [
+        "network-hint",
+        "read-only-hint"
+      ],
+      "id": "tool-2895a1ad3cd9458e",
+      "name": "find_unreplied_messages",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "c8c693fa47b268163647a332f328c6599f2d32fc0e9f599f2a716f1345bd8683",
+      "flags": [],
+      "hints": [
+        "network-hint",
+        "read-name"
+      ],
+      "id": "tool-9e5026b7679eff23",
+      "name": "get_message",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "ca708c0ed757bfa42baf9197f788c60d9cf52dcaf8a80decdc9760be9b97dd9c",
+      "flags": [],
+      "hints": [
+        "network-hint",
+        "read-name"
+      ],
+      "id": "tool-4da5ab6b72564e5b",
+      "name": "get_messages",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "a844c80bc27420500bfb63481a533c9b38f32054eed77c4eb80df98b3a7234ff",
+      "flags": [],
+      "hints": [
+        "network-hint",
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-c74f93899985530e",
+      "name": "list_mailboxes",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "de3eafc4c4d1175841d7800faa7c31790703f67089e960edf9de1d39d40b4262",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "network-hint"
+      ],
+      "id": "tool-2bf45e47cbc3de63",
+      "name": "move_message",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "54d095f8ad1918cda81b779dc75a9c0a202dbf100548f68b21d80832941f9b85",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "network-hint"
+      ],
+      "id": "tool-5ea65a010d5012d5",
+      "name": "move_messages",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "b822d59c399ddf15a46da3b327a5047f0d264f6dda320c2d56353cc35a3a7fc3",
+      "flags": [],
+      "hints": [
+        "network-hint"
+      ],
+      "id": "tool-733bdd3564088076",
+      "name": "reply_to_email",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "9572ba647e6517b3bf786ea930d0e412c1bd2ef8834fe43fe9e092f35c6ba8b3",
+      "flags": [],
+      "hints": [
+        "network-hint"
+      ],
+      "id": "tool-5936686265c85ef4",
+      "name": "save_attachment",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "a4cf49d4d8ff60d6f8a3fff2319ec92bd956edcf22d0668fdb84436101ecd789",
+      "flags": [],
+      "hints": [
+        "network-hint",
+        "read-only-hint"
+      ],
+      "id": "tool-331c6012c4333529",
+      "name": "search_messages",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "7deb190dcb29b633974f467346fd5af2166d2fe914fb3390a83cf2d9d1c649b8",
+      "flags": [],
+      "hints": [
+        "network-hint"
+      ],
+      "id": "tool-a1ceb71dd9160bb9",
+      "name": "send_email",
+      "optionsWithValues": [],
+      "path": []
+    }
+  ],
+  "schemaVersion": "guard.extension-discovery.v1",
+  "sourceSha256": "b76703f5374e698edb5f44424516ab5a5a75c5ca0356a2291f60ff2b15d4a583"
+}

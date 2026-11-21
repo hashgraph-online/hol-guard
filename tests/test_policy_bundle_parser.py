@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import os
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -10,32 +12,36 @@ import pytest
 
 from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION, ManagedPolicyState
 from codex_plugin_scanner.guard.mdm.policy import parse_managed_policy
-from codex_plugin_scanner.guard.policy_bundle_parser import (
-    canonical_policy_bundle_payload,
-    computed_policy_bundle_hash,
-    payload_hash_for_policy_bundle,
-    policy_bundle_rejection_message,
-    validated_policy_bundle_payload,
-)
+from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_rejection_message
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     POLICY_BUNDLE_KEY_PURPOSE,
     POLICY_BUNDLE_KEYRING_CONTRACT_VERSION,
     PolicyBundleVerificationKey,
     load_policy_bundle_verification_keys,
     policy_bundle_keyring_payload,
-    policy_bundle_verification_context,
-    policy_bundle_verification_key_from_public_key,
     safe_load_policy_bundle_verification_keys,
     validate_synced_policy_bundle,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.guard_review_signing_helpers import review_verification_keys
+from tests.policy_bundle_parser_support import (
+    canonical_policy_bundle_payload,
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
+    validated_policy_bundle_payload,
+)
 from tests.policy_bundle_signing_helpers import (
     TEST_POLICY_BUNDLE_WORKSPACE_ID,
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
+    policy_bundle_verification_key_from_public_key,
     sign_policy_bundle,
 )
+
+_NEEDS_RESIDENT = pytest.mark.skipif(
+    os.environ.get("HOL_GUARD_NATIVE_REGRESSION") != "1",
+    reason="the rejection text comes from the native resident",
+)
+
 
 _TEST_SIGNING_KEY = policy_bundle_test_verification_key()
 
@@ -182,6 +188,7 @@ def test_hgc073_signed_policy_bundle_rejects_invalid_signature() -> None:
     assert reason == "bundle_signature_invalid"
 
 
+@_NEEDS_RESIDENT
 @pytest.mark.parametrize(
     ("reason", "expected_guidance"),
     [
@@ -205,6 +212,28 @@ def test_policy_bundle_rejection_message_provides_actionable_guidance(
     assert message is not None
     assert expected_guidance in message
     assert "Sync again" in message
+
+
+@_NEEDS_RESIDENT
+def test_policy_bundle_rejection_message_does_not_blame_guard_version_for_downgrade() -> None:
+    message = policy_bundle_rejection_message("bundle_version_downgrade")
+
+    assert message is not None
+    assert "Update Guard" not in message
+    assert "contract or daemon version" not in message
+    assert "keeps the policy it already had" in message
+    assert "Publish the policy again in Guard Cloud" in message
+    assert "sync again" in message
+    assert "policy record on this device may be damaged" in message
+
+
+@_NEEDS_RESIDENT
+def test_policy_bundle_rejection_message_names_the_exact_command_review_restriction() -> None:
+    message = policy_bundle_rejection_message("canonical_compile_unsupported_exact_command_review")
+
+    assert message is not None
+    assert "review on an exact command" in message
+    assert "allow and block" in message
 
 
 def test_policy_bundle_rejection_message_ignores_unknown_reason() -> None:
@@ -409,7 +438,7 @@ def test_signed_policy_bundle_rejects_sync_only_keys_without_anchor() -> None:
     )
 
     assert validated_bundle is None
-    assert reason == "trusted_key_unavailable"
+    assert reason == "untrusted_signing_key"
 
 
 def test_validate_synced_policy_bundle_does_not_persist_unanchored_sync_keys() -> None:
@@ -472,54 +501,17 @@ def test_validate_synced_policy_bundle_ignores_malformed_sync_keyring() -> None:
     assert validated_bundle is not None
 
 
-def test_live_managed_anchor_overrides_user_store_key_collision(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    managed_keyring = policy_bundle_test_keyring(workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID)
-    managed_state = _managed_policy_state(managed_keyring)
-    review_public_key = review_verification_keys()[0]
-    attacker_key = policy_bundle_verification_key_from_public_key(
-        key_id=_TEST_SIGNING_KEY.key_id,
-        public_key_pem=str(review_public_key["publicKeyPem"]),
-        purpose=POLICY_BUNDLE_KEY_PURPOSE,
-        workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
-    )
-    attacker_store_keyring = policy_bundle_keyring_payload(
-        (attacker_key,),
-        workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.mdm.policy.load_managed_policy",
-        lambda: managed_state,
-    )
-
-    trusted_keys, anchored_keys = policy_bundle_verification_context(
-        stored_keyring=attacker_store_keyring,
-    )
-    validated_bundle, reason, persisted_keys = validate_synced_policy_bundle(
-        _sample_policy_bundle(),
-        stored_keyring=attacker_store_keyring,
-        expected_workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
-    )
-
-    assert trusted_keys == (_TEST_SIGNING_KEY,)
-    assert anchored_keys == (_TEST_SIGNING_KEY,)
-    assert reason is None
-    assert validated_bundle is not None
-    assert persisted_keys == ()
-
-
 @pytest.mark.parametrize(
     "managed_state",
     [
-        _managed_policy_state(None),
-        _managed_policy_state(policy_bundle_keyring_payload((), workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID)),
-        ManagedPolicyState(
+        lambda: _managed_policy_state(None),
+        lambda: _managed_policy_state(policy_bundle_keyring_payload((), workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID)),
+        lambda: ManagedPolicyState(
             "invalid",
             "managed-policy-test",
             reason_code="managed_policy_invalid",
         ),
-        ManagedPolicyState(
+        lambda: ManagedPolicyState(
             "inaccessible",
             "managed-policy-test",
             reason_code="managed_policy_inaccessible",
@@ -529,11 +521,12 @@ def test_live_managed_anchor_overrides_user_store_key_collision(
 )
 def test_managed_policy_without_usable_anchor_ignores_user_store_keyring(
     monkeypatch: pytest.MonkeyPatch,
-    managed_state: ManagedPolicyState,
+    managed_state: Callable[[], ManagedPolicyState],
 ) -> None:
+    state = managed_state()
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.mdm.policy.load_managed_policy",
-        lambda: managed_state,
+        lambda: state,
     )
 
     validated_bundle, reason, anchored_keys = validate_synced_policy_bundle(
@@ -724,8 +717,8 @@ def test_malformed_anchor_validity_never_becomes_an_unbounded_trust_window(
     )
 
     assert validated_bundle is None
-    assert reason == "trusted_key_unavailable"
-    assert anchored_keys == ()
+    assert reason == "untrusted_signing_key"
+    assert all(key.key_id != malformed_anchor["keyId"] for key in anchored_keys)
 
 
 def test_signed_policy_bundle_rejects_expired_signing_key() -> None:

@@ -1,16 +1,28 @@
-"""Version-bound MCP setup and rollback using the supported Codex config API."""
+"""Version-bound MCP setup and rollback using the supported Codex config API.
+
+Guard's native runtime does the work (`codex-mcp-setup`): it starts the Codex
+app-server, reads and checks the config layers, writes or removes the one
+`mcp_servers.<name>` entry bound to the user layer's version, and reads it
+back. This module sends it the request, runs the caller's bookkeeping between
+the write and the end of setup, and turns the answer into a receipt or a
+reason code.
+"""
 
 from __future__ import annotations
 
 import json
 import os
-import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from .codex_config_rpc import CodexConfigRpc
-
-_NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
+_FEATURE = "native-codex-mcp-setup-v1"
+_COMMAND = "codex-mcp-setup"
+_OUTPUT_LIMIT = 64 * 1024
+# The native session ends itself, and its Codex host, within 60 seconds in all
+# (`SESSION_LIMIT`). This deadline only backstops it: it kills the native process,
+# which cannot clean up after itself, so it must stay above that limit.
+_TIMEOUT_SECONDS = 75.0
+_NATIVE_UNAVAILABLE = "codex_setup_native_unavailable"
 
 
 @dataclass(frozen=True)
@@ -22,101 +34,85 @@ class CodexMcpSetupReceipt:
     previous_version: str | None = None
 
 
-def _layers(payload: dict[str, object]) -> tuple[dict[str, object], list[dict[str, object]]]:
-    layers = payload.get("layers")
-    if isinstance(layers, list) and not layers:
-        raise ValueError("codex_config_no_layers")
-    if not isinstance(layers, list) or len(layers) > 32:
-        raise ValueError("codex_config_layers_unavailable")
-    checked: list[dict[str, object]] = []
-    users: list[dict[str, object]] = []
-    for layer in layers:
-        if not isinstance(layer, dict) or not isinstance(layer.get("config"), dict):
-            raise ValueError("codex_config_invalid_layer")
-        config = layer["config"]
-        servers = config.get("mcp_servers", {})
-        if not isinstance(servers, dict):
-            raise ValueError("codex_config_invalid_servers")
-        checked.append(layer)
-        source = layer.get("name")
-        if isinstance(source, dict) and source.get("type") == "user" and source.get("profile") is None:
-            users.append(layer)
-    if not users:
-        raise ValueError("codex_config_no_user_layer")
-    if len(users) != 1:
-        raise ValueError("codex_config_multiple_user_layers")
-    user = users[0]
-    source = user["name"]
-    assert isinstance(source, dict)
-    version, path = user.get("version"), source.get("file")
-    if not isinstance(version, str) or not 1 <= len(version) <= 256:
-        raise ValueError("codex_config_invalid_user_version")
-    if not isinstance(path, str) or not os.path.isabs(path):
-        raise ValueError("codex_config_invalid_user_path")
-    if user.get("disabledReason") is not None:
-        raise ValueError("codex_config_user_layer_disabled")
-    return user, checked
+def _ask(request: dict[str, object]) -> dict[str, object]:
+    from ..mdm.runtime_request import runtime_answer
+
+    answer = runtime_answer(
+        _FEATURE,
+        _COMMAND,
+        json.dumps(request, sort_keys=True),
+        output_limit=_OUTPUT_LIMIT,
+        timeout_seconds=_TIMEOUT_SECONDS,
+    )
+    if answer is None:
+        raise ValueError(_NATIVE_UNAVAILABLE)
+    return answer
 
 
-def _entry(layer: Mapping[str, object], name: str) -> object:
-    config = layer["config"]
-    assert isinstance(config, dict)
-    servers = config.get("mcp_servers", {})
-    assert isinstance(servers, dict)
-    return servers.get(name)
+def _host(executable: str) -> dict[str, object]:
+    # The native runtime starts with a minimal environment of its own: the host
+    # gets the one this process has, from the folder this process is in.
+    return {"executable": executable, "cwd": os.getcwd(), "environment": dict(os.environ)}
 
 
-def _contains(layer: Mapping[str, object], name: str) -> bool:
-    config = layer["config"]
-    assert isinstance(config, dict)
-    servers = config.get("mcp_servers", {})
-    assert isinstance(servers, dict)
-    return name in servers
+def _reason(answer: dict[str, object]) -> str | None:
+    error = answer.get("error")
+    if error is None:
+        return None
+    if not isinstance(error, str):
+        raise ValueError(_NATIVE_UNAVAILABLE)
+    return error
 
 
-def _write(rpc: CodexConfigRpc, receipt: CodexMcpSetupReceipt, value: Mapping[str, object] | None) -> str:
-    try:
-        response = rpc.request(
-            "config/batchWrite",
-            {
-                "filePath": receipt.file_path,
-                "expectedVersion": receipt.version,
-                "reloadUserConfig": False,
-                "edits": [{"keyPath": f"mcp_servers.{receipt.name}", "value": value, "mergeStrategy": "replace"}],
-            },
-        )
-    except (ValueError, OSError) as error:
-        if str(error) in {"codex_config_changed", "codex_config_readonly"}:
-            raise
-        raise ValueError("codex_setup_outcome_uncertain") from error
-    version = response.get("version")
+def _receipt(value: object) -> CodexMcpSetupReceipt:
+    if not isinstance(value, dict):
+        raise ValueError(_NATIVE_UNAVAILABLE)
+    name, file_path, version, entry_json = (value.get(key) for key in ("name", "file_path", "version", "entry_json"))
+    previous = value.get("previous_version")
     if (
-        response.get("status") != "ok"
-        or response.get("filePath") != receipt.file_path
+        not isinstance(name, str)
+        or not isinstance(file_path, str)
         or not isinstance(version, str)
-        or not 1 <= len(version) <= 256
-        or response.get("overriddenMetadata") is not None
+        or not isinstance(entry_json, str)
+        or not (previous is None or isinstance(previous, str))
     ):
-        raise ValueError("codex_setup_outcome_uncertain")
+        raise ValueError(_NATIVE_UNAVAILABLE)
+    return CodexMcpSetupReceipt(name, file_path, version, entry_json, previous)
+
+
+def _version_pairs(value: object) -> tuple[str, list[tuple[str, str]]] | None:
+    if not isinstance(value, dict):
+        return None
+    file_path, pairs = value.get("file_path"), value.get("pairs")
+    if not isinstance(file_path, str) or not isinstance(pairs, list):
+        return None
+    chain: list[tuple[str, str]] = []
+    for pair in pairs:
+        if not isinstance(pair, list) or len(pair) != 2 or not all(isinstance(item, str) for item in pair):
+            return None
+        chain.append((pair[0], pair[1]))
+    return file_path, chain
+
+
+def _rollback(executable: str, receipt: CodexMcpSetupReceipt) -> str:
+    answer = _ask({"op": "rollback", **_host(executable), "receipt": _receipt_fields(receipt)})
+    reason = _reason(answer)
+    if reason is not None:
+        raise ValueError(reason)
+    version = answer.get("version")
+    if not isinstance(version, str):
+        raise ValueError(_NATIVE_UNAVAILABLE)
     return version
 
 
-def _rollback(rpc: CodexConfigRpc, receipt: CodexMcpSetupReceipt) -> str:
-    user, layers = _layers(rpc.request("config/read", {"includeLayers": True}))
-    source = user["name"]
-    assert isinstance(source, dict)
-    if (
-        source["file"] != receipt.file_path
-        or user["version"] != receipt.version
-        or _entry(user, receipt.name) != json.loads(receipt.entry_json)
-        or any(_contains(layer, receipt.name) for layer in layers if layer is not user)
-    ):
-        raise ValueError("codex_config_changed")
-    version = _write(rpc, receipt, None)
-    after, layers = _layers(rpc.request("config/read", {"includeLayers": True}))
-    if after["version"] != version or any(_contains(layer, receipt.name) for layer in layers):
-        raise ValueError("codex_setup_outcome_uncertain")
-    return version
+def _receipt_fields(receipt: CodexMcpSetupReceipt) -> dict[str, object]:
+    return {
+        "name": receipt.name,
+        "file_path": receipt.file_path,
+        "version": receipt.version,
+        "entry_json": receipt.entry_json,
+        "previous_version": receipt.previous_version,
+    }
 
 
 def install_reviewed_codex_mcp(
@@ -127,44 +123,34 @@ def install_reviewed_codex_mcp(
     on_installed: Callable[[CodexMcpSetupReceipt], None] | None = None,
     on_version_chain: Callable[[str, list[tuple[str, str]]], None] | None = None,
 ) -> str:
-    if not _NAME.fullmatch(name):
-        raise ValueError("invalid_codex_setup_selection")
     encoded_entry = json.dumps(entry, sort_keys=True, separators=(",", ":"), allow_nan=False)
-    with CodexConfigRpc(executable) as rpc:
-        user, layers = _layers(rpc.request("config/read", {"includeLayers": True}))
-        if any(_contains(layer, name) for layer in layers):
-            raise ValueError("codex_connection_already_exists")
-        source = user["name"]
-        assert isinstance(source, dict)
-        before = CodexMcpSetupReceipt(name, str(source["file"]), str(user["version"]), encoded_entry)
-        version = _write(rpc, before, entry)
-        installed = CodexMcpSetupReceipt(name, before.file_path, version, encoded_entry, before.version)
-        try:
-            verified, layers = _layers(rpc.request("config/read", {"includeLayers": True}))
-            if (
-                verified["version"] != version
-                or verified["name"] != user["name"]
-                or _entry(verified, name) != entry
-                or any(_contains(layer, name) for layer in layers if layer is not verified)
-            ):
-                raise ValueError("codex_setup_outcome_uncertain")
-            if on_installed is not None:
-                on_installed(installed)
-        except (ValueError, OSError) as error:
+    answer = _ask({"op": "install", **_host(executable), "name": name, "entry_json": encoded_entry})
+    reason = _reason(answer)
+    if reason is not None:
+        chain = _version_pairs(answer.get("version_chain"))
+        if chain is not None and on_version_chain is not None:
             try:
-                removed_version = _rollback(rpc, installed)
-                if on_version_chain is not None:
-                    on_version_chain(
-                        before.file_path, [(before.version, installed.version), (installed.version, removed_version)]
-                    )
-            except (ValueError, OSError):
+                on_version_chain(*chain)
+            except (ValueError, OSError) as error:
                 raise ValueError("codex_setup_outcome_uncertain") from error
-            raise ValueError("codex_setup_rolled_back") from error
+        raise ValueError(reason)
+    installed = _receipt(answer.get("receipt"))
+    try:
+        if on_installed is not None:
+            on_installed(installed)
+    except (ValueError, OSError) as error:
+        try:
+            removed_version = _rollback(executable, installed)
+            if on_version_chain is not None and installed.previous_version is not None:
+                on_version_chain(
+                    installed.file_path,
+                    [(installed.previous_version, installed.version), (installed.version, removed_version)],
+                )
+        except (ValueError, OSError):
+            raise ValueError("codex_setup_outcome_uncertain") from error
+        raise ValueError("codex_setup_rolled_back") from error
     return name
 
 
 def rollback_reviewed_codex_mcp(executable: str, receipt: CodexMcpSetupReceipt) -> str:
-    if not _NAME.fullmatch(receipt.name):
-        raise ValueError("invalid_codex_setup_selection")
-    with CodexConfigRpc(executable) as rpc:
-        return _rollback(rpc, receipt)
+    return _rollback(executable, receipt)

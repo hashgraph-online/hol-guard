@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timezone
+from typing import cast
 
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
-from codex_plugin_scanner.guard.runtime.runner import (
-    _cloud_sync_receipt_payload,
-    _receipt_sync_rows_with_command_detail_backfill,
-    sync_receipts,
-)
+from codex_plugin_scanner.guard.runtime.runner import sync_receipts
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cloud_receipt_payload_client import cloud_sync_receipt_payload
+from tests.support import cloud_sync_transport
+from tests.support import receipt_upload_transport as upload
 
 
 def _decode_transport_command(envelope: dict[str, object]) -> str | None:
@@ -82,7 +82,7 @@ def test_command_detail_backfill_ignores_legacy_v1_completion_marker(tmp_path) -
         "2026-04-15T00:01:00Z",
     )
 
-    rows, marker = _receipt_sync_rows_with_command_detail_backfill(
+    rows, marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="none",
@@ -91,7 +91,20 @@ def test_command_detail_backfill_ignores_legacy_v1_completion_marker(tmp_path) -
 
     assert [row["receipt_id"] for row in rows] == ["guard-receipt-backfill-v2"]
     assert marker is not None
-    assert marker["complete"] is True
+    # The walk is finished by the page that comes back empty, not by a short
+    # one, so this first page is still open.
+    assert marker["complete"] is False
+    store.set_sync_payload("cloud_receipt_command_detail_backfill_v2", marker, "2026-04-15T00:02:00Z")
+
+    _, final_marker = upload.receipt_sync_rows_with_command_detail_backfill(
+        store,
+        receipts=[],
+        redaction_level="none",
+        synced_at="2026-04-15T00:03:00Z",
+    )
+
+    assert final_marker is not None
+    assert final_marker["complete"] is True
 
 
 def test_command_detail_backfill_replays_sandbox_required_receipts(tmp_path) -> None:
@@ -102,7 +115,7 @@ def test_command_detail_backfill_replays_sandbox_required_receipts(tmp_path) -> 
         policy_decision="sandbox-required",
     )
 
-    rows, marker = _receipt_sync_rows_with_command_detail_backfill(
+    rows, marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="none",
@@ -119,7 +132,7 @@ def test_redaction_disabled_backfill_payload_keeps_review_command_detail(tmp_pat
     receipt = store.get_receipt("guard-receipt-command-payload")
     assert receipt is not None
 
-    payload = _cloud_sync_receipt_payload(
+    payload = cloud_sync_receipt_payload(
         receipt,
         device_id="device",
         device_name="Developer Mac",
@@ -140,9 +153,9 @@ def test_command_detail_backfill_pages_historical_receipts(monkeypatch, tmp_path
             receipt_id=f"guard-receipt-page-{index}",
         )
 
-    monkeypatch.setattr(guard_runner, "_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 2)
+    monkeypatch.setattr(upload, "RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 2)
 
-    first_rows, first_marker = _receipt_sync_rows_with_command_detail_backfill(
+    first_rows, first_marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="none",
@@ -156,7 +169,7 @@ def test_command_detail_backfill_pages_historical_receipts(monkeypatch, tmp_path
     assert first_marker["complete"] is False
     store.set_sync_payload("cloud_receipt_command_detail_backfill_v2", first_marker, "2026-07-02T00:00:00+00:00")
 
-    second_rows, second_marker = _receipt_sync_rows_with_command_detail_backfill(
+    second_rows, second_marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="none",
@@ -167,7 +180,22 @@ def test_command_detail_backfill_pages_historical_receipts(monkeypatch, tmp_path
     assert second_marker is not None
     assert second_marker["queried"] == 1
     assert second_marker["receipts"] == 1
-    assert second_marker["complete"] is True
+    # A short page can be one the store shortened to a size the runtime can
+    # reply with, so the walk keeps going until a page comes back empty.
+    assert second_marker["complete"] is False
+    store.set_sync_payload("cloud_receipt_command_detail_backfill_v2", second_marker, "2026-07-02T00:01:00+00:00")
+
+    third_rows, third_marker = upload.receipt_sync_rows_with_command_detail_backfill(
+        store,
+        receipts=[],
+        redaction_level="none",
+        synced_at="2026-07-02T00:02:00+00:00",
+    )
+
+    assert third_rows == []
+    assert third_marker is not None
+    assert third_marker["queried"] == 0
+    assert third_marker["complete"] is True
 
 
 def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_success(
@@ -181,11 +209,11 @@ def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_s
             receipt_id=f"guard-receipt-progress-{index}",
         )
 
-    monkeypatch.setattr(guard_runner, "_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 6)
-    monkeypatch.setattr(guard_runner, "_RECEIPT_SYNC_BATCH_SIZE", 2)
+    monkeypatch.setattr(upload, "RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 6)
+    monkeypatch.setattr(upload, "RECEIPT_SYNC_BATCH_SIZE", 2)
     monkeypatch.setattr(guard_runner, "_resolve_cloud_receipt_redaction_level", lambda _store: "none")
-    monkeypatch.setattr(guard_runner, "_guard_sync_request", lambda *args, **kwargs: object())
-    monkeypatch.setattr(guard_runner, "_receipt_sync_rows_for_upload", lambda _store, cursor_rowid: [])
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", lambda *args, **kwargs: object())
+    monkeypatch.setattr(upload, "receipt_sync_rows_for_upload", lambda _store, cursor_rowid: [])
 
     attempted_batches = {"count": 0}
 
@@ -195,9 +223,9 @@ def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_s
             return {"syncedAt": "2026-07-04T00:00:00+00:00", "receiptsStored": 2}
         raise OSError("network down")
 
-    monkeypatch.setattr(guard_runner, "_urlopen_json_with_timeout_retry", _fake_sync)
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", _fake_sync)
 
-    preview_rows, preview_marker = _receipt_sync_rows_with_command_detail_backfill(
+    preview_rows, preview_marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="none",
@@ -223,7 +251,7 @@ def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_s
     assert isinstance(marker, dict)
     assert marker["before_rowid"] == min(first_batch_rowids)
 
-    remaining_rows, _ = _receipt_sync_rows_with_command_detail_backfill(
+    remaining_rows, _ = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="none",
@@ -232,3 +260,61 @@ def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_s
     remaining_rowids = [row["receipt_rowid"] for row in remaining_rows if isinstance(row.get("receipt_rowid"), int)]
     assert remaining_rowids
     assert all(rowid < min(first_batch_rowids) for rowid in remaining_rowids)
+
+
+def test_first_sync_page_reads_its_window_in_rowid_order(tmp_path) -> None:
+    # The cursor saved after a page is the highest rowid it uploaded, so the
+    # page has to end at its newest row. A page the store shortens then loses
+    # rows above the cursor, which the next page reads, rather than rows below
+    # it, which nothing would read again.
+    store = GuardStore(tmp_path)
+    for index in range(5):
+        _store_command_receipt(store, receipt_id=f"guard-receipt-order-{index}")
+
+    rows = upload.receipt_sync_rows_for_upload(store, cursor_rowid=None)
+
+    rowids = [row["receipt_rowid"] for row in rows]
+    assert rowids == sorted(rowids)
+    assert [row["receipt_id"] for row in rows] == [f"guard-receipt-order-{index}" for index in range(5)]
+
+
+class _SparseRowidStore:
+    """A store whose receipt rowids carry the gaps cleanup leaves behind."""
+
+    def __init__(self, rowids: list[int]) -> None:
+        self._rows: list[dict[str, object]] = [
+            {"receipt_id": f"guard-receipt-{rowid}", "receipt_rowid": rowid} for rowid in rowids
+        ]
+
+    def latest_receipt_rowid(self, *, harness: str | None = None) -> int | None:
+        return int(self._rows[-1]["receipt_rowid"]) if self._rows else None
+
+    def list_receipts(self, limit: int = 50, harness: str | None = None) -> list[dict[str, object]]:
+        return list(reversed(self._rows))[:limit]
+
+    def list_receipts_since_rowid(
+        self,
+        *,
+        after_rowid: int | None,
+        limit: int = 200,
+        harness: str | None = None,
+    ) -> list[dict[str, object]]:
+        floor = after_rowid or 0
+        return [row for row in self._rows if int(row["receipt_rowid"]) > floor][:limit]
+
+
+def test_first_sync_page_fills_from_receipts_that_exist_not_a_rowid_interval(monkeypatch) -> None:
+    # Cleanup leaves gaps in the rowids. A window measured as a fixed distance
+    # below the latest rowid can hold a couple of receipts where a page holds
+    # many, and the cursor saved after it still moves past every older receipt
+    # the window skipped, which no later page reads again.
+    monkeypatch.setattr(upload, "RECEIPT_SYNC_CURSOR_PAGE_SIZE", 5)
+    store = _SparseRowidStore([1, 2, 3, 4, 5, 6, 40, 80, 120, 160])
+
+    rows = upload.receipt_sync_rows_for_upload(cast("GuardStore", store), cursor_rowid=None)
+
+    assert [row["receipt_rowid"] for row in rows] == [6, 40, 80, 120, 160]
+
+
+def test_first_sync_page_is_empty_without_any_receipt(tmp_path) -> None:
+    assert upload.receipt_sync_rows_for_upload(GuardStore(tmp_path), cursor_rowid=None) == []

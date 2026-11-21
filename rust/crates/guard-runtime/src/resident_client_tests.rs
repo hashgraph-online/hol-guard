@@ -92,6 +92,19 @@ impl crate::ResidentStream for TestStream {
 }
 
 #[test]
+fn auth_window_keeps_hook_budgets_and_scales_long_budgets() {
+    assert_eq!(
+        auth_window(Duration::from_millis(100)),
+        Duration::from_millis(100)
+    );
+    assert_eq!(auth_window(Duration::from_millis(750)), AUTH_TIMEOUT);
+    assert_eq!(auth_window(Duration::from_secs(1)), AUTH_TIMEOUT);
+    assert_eq!(auth_window(Duration::from_secs(4)), Duration::from_secs(1));
+    assert_eq!(auth_window(Duration::from_secs(9)), Duration::from_secs(2));
+    assert_eq!(auth_window(Duration::from_secs(60)), Duration::from_secs(2));
+}
+
+#[test]
 fn rejects_non_loopback_tcp_endpoint() {
     let error = match connect_loopback_with_digest(
         "192.0.2.1:80",
@@ -99,7 +112,7 @@ fn rejects_non_loopback_tcp_endpoint() {
         &ExpectedProcessIdentity {
             process_id: 1,
             start_marker: "",
-            digest: None,
+            runtime: ExpectedRuntime::Package,
         },
     ) {
         Ok(_) => panic!("non-loopback endpoint was accepted"),
@@ -398,4 +411,180 @@ fn resident_proofs_are_role_bound_and_match_fixed_hmac_vectors() {
         hex::encode(client),
         "7eee66422a1717a1650543cdd98cf98847fe78bb45611c4f4fd1b4086aa7742d"
     );
+}
+
+struct DripStream {
+    delay: Duration,
+}
+
+impl Read for DripStream {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        std::thread::sleep(self.delay);
+        buffer[0] = 0;
+        Ok(1)
+    }
+}
+
+impl Write for DripStream {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl crate::ResidentStream for DripStream {
+    fn set_resident_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn set_resident_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn set_resident_nonblocking(&self, _nonblocking: bool) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn try_read_available(&mut self, _output: &mut [u8]) -> io::Result<usize> {
+        Ok(0)
+    }
+}
+
+#[test]
+fn dripped_server_proof_cannot_outlast_the_handshake_window() {
+    let mut stream = DripStream {
+        delay: Duration::from_millis(30),
+    };
+    let started = std::time::Instant::now();
+    let error = authenticate(&mut stream, b"token", Duration::from_millis(400))
+        .expect_err("a proof dripped past the window must fail closed");
+    assert_eq!(error.code, "native_client_frame_read_failed");
+    assert!(!error.retryable_teardown);
+    assert!(started.elapsed() < Duration::from_millis(600));
+}
+
+/// An owner-only directory for one endpoint case.
+///
+/// The name stays short: a unix socket path has to fit `sun_path`, and the
+/// per-user temporary directory already spends most of that budget on macOS.
+#[cfg(unix)]
+fn endpoint_fixture() -> std::path::PathBuf {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    // `sun_path` holds 104 bytes on macOS, and the endpoints built on top of
+    // this directory add a separator and a name. `temp_dir` reads `TMPDIR`,
+    // which a caller may have pointed somewhere long; a directory no socket
+    // can be bound inside would fail these cases at `bind` rather than on what
+    // they are about, so fall back to a short base when it does not fit.
+    const BUDGET: usize = 90;
+
+    let mut nonce = [0u8; 8];
+    getrandom::fill(&mut nonce).unwrap();
+    let name = format!("cl-{}", hex::encode(nonce));
+    let mut base = std::env::temp_dir();
+    if base.as_os_str().len() + 1 + name.len() > BUDGET {
+        base = std::path::PathBuf::from("/tmp");
+    }
+    let path = base.join(name);
+    fs::create_dir(&path).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+    path
+}
+
+/// An identity naming this process, which is running the expected runtime.
+#[cfg(unix)]
+fn own_identity(start_marker: &str) -> ExpectedProcessIdentity<'_> {
+    ExpectedProcessIdentity {
+        process_id: std::process::id(),
+        start_marker,
+        runtime: ExpectedRuntime::Package,
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn an_absent_unix_socket_is_a_connect_failure() {
+    let marker = crate::resident_state::process_start_marker(std::process::id()).unwrap();
+    let directory = endpoint_fixture();
+    let endpoint = directory.join("s");
+    let error = connect_unix_with_digest(
+        endpoint.to_str().unwrap(),
+        Duration::from_millis(250),
+        &own_identity(&marker),
+    )
+    .err();
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert_eq!(error.as_deref(), Some("native_client_connect_failed"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_unix_endpoint_replaced_by_a_regular_file_is_a_connect_failure() {
+    let marker = crate::resident_state::process_start_marker(std::process::id()).unwrap();
+    let directory = endpoint_fixture();
+    let endpoint = directory.join("s");
+    // What a resident leaves behind when its socket is swapped for a file: the
+    // path exists, so only the connect itself can refuse it.
+    std::fs::write(&endpoint, b"not a socket").unwrap();
+    let error = connect_unix_with_digest(
+        endpoint.to_str().unwrap(),
+        Duration::from_millis(250),
+        &own_identity(&marker),
+    )
+    .err();
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert_eq!(error.as_deref(), Some("native_client_connect_failed"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_unix_endpoint_longer_than_the_address_is_invalid() {
+    let marker = crate::resident_state::process_start_marker(std::process::id()).unwrap();
+    let directory = endpoint_fixture();
+    // `sun_path` holds 104 bytes on macOS and 108 on Linux; no state can name
+    // a socket this long, and the address must be refused before any syscall.
+    let endpoint = directory.join("s".repeat(256));
+    let error = connect_unix_with_digest(
+        endpoint.to_str().unwrap(),
+        Duration::from_millis(250),
+        &own_identity(&marker),
+    )
+    .err();
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert_eq!(error.as_deref(), Some("native_client_endpoint_invalid"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_resident_whose_start_marker_moved_is_refused_before_the_socket_is_touched() {
+    use std::os::unix::net::UnixListener;
+
+    let directory = endpoint_fixture();
+    let endpoint = directory.join("s");
+    let listener = UnixListener::bind(&endpoint).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let error = connect_unix_with_digest(
+        endpoint.to_str().unwrap(),
+        Duration::from_millis(250),
+        &ExpectedProcessIdentity {
+            process_id: std::process::id(),
+            start_marker: "stale-process-marker",
+            runtime: ExpectedRuntime::Package,
+        },
+    )
+    .err();
+    // A pid that was reused points at a live socket, so the refusal has to
+    // come before the connect, not from a failure to reach the peer.
+    let accepted = listener.accept().is_ok();
+    drop(listener);
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert_eq!(
+        error.as_deref(),
+        Some("native_resident_process_identity_mismatch")
+    );
+    assert!(!accepted, "the client connected before owner validation");
 }

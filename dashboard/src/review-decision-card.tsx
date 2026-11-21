@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HiMiniArrowPath,
   HiMiniCheckCircle,
@@ -10,13 +10,16 @@ import {
 } from "react-icons/hi2";
 import { ActionButton, Badge, EmptyState, SectionLabel } from "./approval-center-primitives";
 import {
-  buildRetryAfterApprovalCopy,
-  formatRelativeTime,
   harnessDisplayName,
   isWatchOnlyObservation,
   requestResolutionBlockReason,
 } from "./approval-center-utils";
-import { GuardRequestResolutionError } from "./guard-api";
+import {
+  oneTimeRetryWindowMinutes,
+  retryCannotReuseApproval,
+  retryCannotReuseApprovalHint,
+} from "./approval-retry-guidance";
+import { GuardRequestResolutionError, guardAwareHref } from "./guard-api";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import {
   approvalDecisionContractKey,
@@ -28,48 +31,34 @@ import {
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
   taskCapabilityExplanation,
-  willPersistExactAction,
 } from "./approval-scopes";
-import { approvalProofRecentlySatisfied, buildApprovalProofCredentials } from "./approval-proof-inline";
-import { fetchResolvedApprovalGate } from "./use-resolved-approval-gate";
-import { guardAwareHref } from "./guard-api";
+import { ApprovalGateRecommendationNotice, approvalGateNeedsSetup } from "./approval-proof-inline";
 import { ConsolidatedEvidenceAlert } from "./consolidated-evidence-alert";
 import { plainEnglishRequestTitle } from "./evidence/plain-english";
 import type { DecisionScope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import { guardActionPresentation } from "./guard-action";
-import {
-  approvalGateIsLocked,
-  approvalGateLockRemainingSeconds,
-  approvalGateRequiredForResolution,
-  requiresApprovalPasswordPrompt,
-} from "./approval-gate-utils";
 import { buildEvidenceItems, buildTopAlertItems } from "./review-evidence";
-import {
-  allowButtonLabel,
-  blockButtonLabel,
-  ReviewScopeControls,
-} from "./review-scope-controls";
-import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
+import { explainMcpCall } from "./mcp-call/explain-mcp-call";
+import { simpleMcpChoiceApplies } from "./mcp-call/mcp-decision-choice";
+import { ReviewDecisionControls } from "./review-decision-controls";
+import { decisionButtonLabels, resolvedActionCopy } from "./review-decision-labels";
+import { buildWhatWouldHappen, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
+import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
+import { ApprovalExtensionCoverageCard } from "./approval-extension-coverage-card";
+import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
+import { useReviewDecisionResolve } from "./use-review-decision-resolve";
+import { ReviewDecisionSignIn } from "./review-decision-sign-in";
+import { ContextReviewPanel } from "./context-assistance/review-panel";
+import { ReviewLastTimeCard } from "./review-last-time-card";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
-function resolvedActionCopy(
-  item: GuardApprovalRequest | null,
-  action: "allow" | "block",
-  persistedExactAction: boolean,
-): string {
-  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
-  if (action === "allow") return "Approved: action can proceed";
-  return "Blocked: action stopped";
-}
-
-export function approvalGateRefreshFailureMessage(message: string): string {
-  return `${message} Unable to refresh approval settings. Retry to refresh.`;
-}
-
 export function ReviewDecisionCard(props: {
   detail: ReviewViewModel | null;
+  detailError?: string | null;
+  detailLoading?: boolean;
+  onRetryDetail?: () => void;
   onResolve: ReviewWorkspaceProps["onResolve"];
   onGoHome: () => void;
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -79,21 +68,11 @@ export function ReviewDecisionCard(props: {
   const resolutionBlockReason = item ? requestResolutionBlockReason(item) : null;
   const [allowScope, setAllowScope] = useState<DecisionScope>("artifact");
   const [blockScope, setBlockScope] = useState<DecisionScope>("artifact");
-  const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
-  const [resolved, setResolved] = useState<{ action: "allow" | "block"; persistedExactAction: boolean } | null>(null);
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
-  const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [approvalPassword, setApprovalPassword] = useState("");
-  const [approvalTotpCode, setApprovalTotpCode] = useState("");
-  const [useCooldown, setUseCooldown] = useState(false);
-  const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
-  const [pendingContractKey, setPendingContractKey] = useState<string | null>(null);
+  const [extensionDialogActive, setExtensionDialogActive] = useState(false);
   const [rememberExactAction, setRememberExactAction] = useState(false);
-  const [effectiveApprovalGate, setEffectiveApprovalGate] = useState(props.approvalGate);
   const allowButtonRef = useRef<HTMLButtonElement>(null);
-  const approvalGate = effectiveApprovalGate;
   const availableScopeChoices = useMemo(
     () => (item ? standardScopeChoicesForRequest(item, "allow") : []),
     [item]
@@ -117,26 +96,17 @@ export function ReviewDecisionCard(props: {
   const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
   const watchOnlyObservation = item !== null && isWatchOnlyObservation(item);
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
+  const canSubmitAllow = hasAllowScope && (item === null || !retryCannotReuseApproval(item) ||
+    (allowScope === "artifact" && rememberExactAction && item.exact_action_persistence_eligible === true));
   const decisionContractKey = item ? approvalDecisionContractKey(item) : null;
   const decisionSubjectKey = item ? approvalDecisionSubjectKey(item) : null;
 
   useEffect(() => {
-    setEffectiveApprovalGate(props.approvalGate);
-  }, [props.approvalGate]);
-
-  useEffect(() => {
     if (item) {
-      setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
+      // The two plain choices are "just this once" and "always allow this call", both on the exact call.
+      // A broader recommended scope would leave neither card selected, so it never starts selected here.
+      setAllowScope(simpleMcpChoiceApplies(item) ? "artifact" : (recommendedScopeForAction(item, "allow") ?? "artifact"));
       setBlockScope(recommendedScopeForAction(item, "block") ?? "artifact");
-      setResolved(null);
-      setSubmitting(null);
-      setLastAction(null);
-      setErrorMessage(null);
-      setApprovalPassword("");
-      setApprovalTotpCode("");
-      setUseCooldown(false);
-      setPendingAction(null);
-      setPendingContractKey(null);
       setRememberExactAction(false);
     }
   }, [decisionSubjectKey]);
@@ -154,202 +124,45 @@ export function ReviewDecisionCard(props: {
     }
   }, [decisionContractKey]);
 
-  const handleResolve = useCallback(
-    async (action: "allow" | "block") => {
-      if (!item || resolutionBlockReason !== null) return;
-      const requestedScope = action === "allow" ? allowScope : blockScope;
-      const gate = approvalGate;
-      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
-      if (gateRequired && approvalGateIsLocked(gate)) {
-        setErrorMessage(
-          `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`,
-        );
-        return;
-      }
-      setSubmitting(action);
-      setErrorMessage(null);
-      try {
-        const persistExactAction = willPersistExactAction(
-          item,
-          action,
-          requestedScope,
-          action === "allow" ? rememberExactAction : watchOnlyObservation,
-        );
-        const includeGateFields =
-          gateRequired &&
-          gate?.configured === true &&
-          requiresApprovalPasswordPrompt(
-            gate.cooldown_active,
-            gate.strict_all_decisions,
-            requestedScope,
-          );
-        const proof = includeGateFields
-          ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode })
-          : {};
-        await props.onResolve({
-          ...buildDecisionPayload({
-            item,
-            action,
-            scope: requestedScope,
-            reason: action === "allow" ? "approved in review" : "blocked in review",
-            persistExactAction,
-          }),
-          ...proof,
-          ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
-        });
-        setResolved({ action, persistedExactAction: persistExactAction });
-        setApprovalPassword("");
-        setApprovalTotpCode("");
-        setUseCooldown(false);
-        setPendingAction(null);
-        setPendingContractKey(null);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
-        setErrorMessage(message);
-        if (
-          err instanceof GuardRequestResolutionError &&
-          err.status === 423 &&
-          err.payload?.["error"] === "approval_gate_locked"
-        ) {
-          setSubmitting(null);
-          try {
-            const refreshedGate = await fetchResolvedApprovalGate();
-            setEffectiveApprovalGate(refreshedGate);
-          } catch {
-            setErrorMessage(approvalGateRefreshFailureMessage(message));
-          }
-        }
-      } finally {
-        setSubmitting(null);
-      }
-    },
-    [
-      item,
-      allowScope,
-      blockScope,
-      watchOnlyObservation,
-      rememberExactAction,
-      props.onResolve,
-      approvalGate,
-      approvalPassword,
-      approvalTotpCode,
-      useCooldown,
-      resolutionBlockReason,
-    ]
-  );
-
-  const handleRequestResolve = useCallback(
-    (action: "allow" | "block") => {
-      if (resolutionBlockReason !== null) return;
-      if (action === "allow" && !hasAllowScope) {
-        setErrorMessage("This action has no eligible approval scope.");
-        return;
-      }
-      if (action === "block" && blockScopeOptions.length === 0) {
-        setErrorMessage("This action has no eligible block scope.");
-        return;
-      }
-      setLastAction(action);
-      const requestedScope = action === "allow" ? allowScope : blockScope;
-      const gate = approvalGate;
-      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
-      if (gateRequired && approvalGateIsLocked(gate)) {
-        setErrorMessage(
-          `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`,
-        );
-        return;
-      }
-      const gateEnabled =
-        gateRequired &&
-        gate?.configured === true &&
-        requiresApprovalPasswordPrompt(
-          gate.cooldown_active,
-          gate.strict_all_decisions,
-          requestedScope,
-        );
-      if (!gateEnabled) {
-        void handleResolve(action);
-        return;
-      }
-      setErrorMessage(null);
-      if (!approvalProofRecentlySatisfied(gate)) {
-        setPendingAction(action);
-        setPendingContractKey(decisionContractKey);
-        return;
-      }
-      void (async () => {
-        const fresh = await fetchResolvedApprovalGate().catch(() => gate);
-        if (approvalProofRecentlySatisfied(fresh ?? gate)) {
-          void handleResolve(action);
-          return;
-        }
-        setPendingAction(action);
-        setPendingContractKey(decisionContractKey);
-      })();
-    },
-    [
-      allowScope,
-      blockScope,
-      blockScopeOptions.length,
-      decisionContractKey,
-      handleResolve,
-      hasAllowScope,
-      approvalGate,
-      resolutionBlockReason,
-    ]
-  );
-
-  const handleAllow = useCallback(() => {
-    handleRequestResolve("allow");
-  }, [handleRequestResolve]);
-  const handleBlock = useCallback(() => {
-    handleRequestResolve("block");
-  }, [handleRequestResolve]);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (submitting !== null || pendingAction !== null || resolved !== null || resolutionBlockReason !== null) return;
-      const target = event.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
-
-      if (event.key === "a" || event.key === "A") {
-        event.preventDefault();
-        handleRequestResolve("allow");
-      }
-      if (event.key === "b" || event.key === "B") {
-        event.preventDefault();
-        handleRequestResolve("block");
-      }
-      const scopeIndex = parseInt(event.key, 10);
-      if (scopeIndex >= 1 && scopeIndex <= availableScopeChoices.length) {
-        event.preventDefault();
-        setAllowScope(availableScopeChoices[scopeIndex - 1].value);
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [availableScopeChoices, handleRequestResolve, pendingAction, resolutionBlockReason, resolved, submitting]);
-
-  const handleModalSubmit = useCallback(() => {
-    if (pendingAction === null) {
-      return;
-    }
-    if (pendingContractKey !== decisionContractKey) {
-      setPendingAction(null);
-      setPendingContractKey(null);
-      setErrorMessage("This request changed while you were reviewing it. Review the current scopes and try again.");
-      return;
-    }
-    void handleResolve(pendingAction);
-  }, [decisionContractKey, handleResolve, pendingAction, pendingContractKey]);
-
-  const handleModalCancel = useCallback(() => {
-    setPendingAction(null);
-    setPendingContractKey(null);
-    setApprovalPassword("");
-    setApprovalTotpCode("");
-    setUseCooldown(false);
-  }, []);
+  const {
+    approvalGate,
+    approvalPassword,
+    approvalTotpCode,
+    errorMessage,
+    freshCodeRequired,
+    handleAllow,
+    handleApprovalPasswordChange,
+    handleApprovalTotpCodeChange,
+    handleBlock,
+    handleModalCancel,
+    handleModalSubmit,
+    handleRetryLastAction,
+    handleSignInRecheck,
+    handleUseCooldownChange,
+    pendingAction,
+    resolved,
+    setResolved,
+    signInReason,
+    submitting,
+    useCooldown,
+  } = useReviewDecisionResolve({
+    item,
+    approvalGate: props.approvalGate,
+    onResolve: props.onResolve,
+    resolutionBlockReason,
+    allowScope,
+    blockScope,
+    setAllowScope,
+    availableScopeChoices,
+    blockScopeOptions,
+    hasAllowScope,
+    canSubmitAllow,
+    watchOnlyObservation,
+    rememberExactAction,
+    extensionDialogActive,
+    decisionContractKey,
+    decisionSubjectKey,
+  });
 
   const handleToggleConsequences = useCallback(() => {
     setShowConsequences((visible) => !visible);
@@ -357,25 +170,30 @@ export function ReviewDecisionCard(props: {
   const handleToggleEvidence = useCallback(() => {
     setShowEvidence((visible) => !visible);
   }, []);
-  const handleRetryLastAction = useCallback(() => {
-    setErrorMessage(null);
-    if (lastAction !== null) {
-      handleRequestResolve(lastAction);
-    }
-  }, [handleRequestResolve, lastAction]);
-
-  const handleApprovalPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setApprovalPassword(event.target.value);
-  }, []);
-  const handleApprovalTotpCodeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setApprovalTotpCode(event.target.value);
-  }, []);
-
-  const handleUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setUseCooldown(event.target.checked);
-  }, []);
+  const reviewedRequestId = item?.request_id ?? null;
+  const handleExtensionApproved = useCallback(
+    (message: string) => {
+      if (reviewedRequestId === null) return;
+      setResolved({ requestId: reviewedRequestId, action: "allow", persistedExactAction: false, message });
+    },
+    [reviewedRequestId],
+  );
 
   if (!detail || !item) {
+    if (props.detailError) {
+      return <section role="alert" className="rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-5">
+        <h3 className="text-lg font-semibold text-brand-dark">Request details are unavailable</h3>
+        <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{props.detailError}</p>
+        {props.onRetryDetail && <ActionButton className="mt-4" variant="outline" onClick={props.onRetryDetail}>
+          Refresh request
+        </ActionButton>}
+      </section>;
+    }
+    if (props.detailLoading) {
+      return <div aria-busy="true" aria-live="polite" className="p-5 text-sm text-brand-dark/80">
+        Loading request details…
+      </div>;
+    }
     return (
       <EmptyState
         title="Select an action"
@@ -385,26 +203,32 @@ export function ReviewDecisionCard(props: {
     );
   }
 
-  const plainTitle = plainEnglishRequestTitle(item);
-  const harnessName = harnessDisplayName(item.harness);
-  const whatWouldHappen = buildWhatWouldHappen(item);
-  const topAlertItems = buildTopAlertItems(item);
-  const evidenceItems = buildEvidenceItems(item);
+  const nativeDisplayOnly = item.native_business_review_display_only === true;
+  const versionBoundScript = item.artifact_type === "native_bash_request";
+  const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
+  const mcpCall = nativeDisplayOnly ? null : explainMcpCall(item);
+  const harnessName = mcpCall?.requester ?? harnessDisplayName(item.harness);
+  const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
+  const topAlertItems = nativeDisplayOnly ? [] : buildTopAlertItems(item);
+  const evidenceItems = nativeDisplayOnly ? [] : buildEvidenceItems(item);
   const actionPresentation = guardActionPresentation(item.policy_action);
-  const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
-  const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
-  let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
-  if (watchOnlyObservation) {
-    resolvedAllowButtonLabel = "Keep allowing";
-  } else if (persistExactAllow) {
-    resolvedAllowButtonLabel = "Approve and remember";
+  let sectionLabel = "Paused action";
+  let badgeLabel = actionPresentation.label;
+  if (nativeDisplayOnly) {
+    sectionLabel = "Saved request";
+    badgeLabel = "Read-only";
+  } else if (watchOnlyObservation) {
+    sectionLabel = "Watch-only finding";
+    badgeLabel = "Would have stopped";
   }
-  let resolvedBlockButtonLabel = blockButtonLabel(blockScope);
-  if (watchOnlyObservation || persistExactBlock) {
-    resolvedBlockButtonLabel = "Stop this next time";
-  }
+  const simpleMcp = simpleMcpChoiceApplies(item);
+  const {
+    persistExactAllow,
+    allowLabel: resolvedAllowButtonLabel,
+    blockLabel: resolvedBlockButtonLabel,
+  } = decisionButtonLabels({ item, allowScope, blockScope, rememberExactAction, watchOnlyObservation, simpleMcp });
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       {resolved && (
         <div
           className={`guard-fade-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
@@ -420,7 +244,7 @@ export function ReviewDecisionCard(props: {
             aria-hidden="true"
           />
           <p className={`text-sm font-medium ${resolved.action === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
-            {resolvedActionCopy(item, resolved.action, resolved.persistedExactAction)}
+            {resolved.message ?? resolvedActionCopy(item, resolved.action, resolved.persistedExactAction)}
           </p>
         </div>
       )}
@@ -428,19 +252,29 @@ export function ReviewDecisionCard(props: {
       <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <SectionLabel>{watchOnlyObservation ? "Watch-only finding" : "Paused action"}</SectionLabel>
-            <h2 className="mt-2 text-lg font-semibold text-brand-dark">{plainTitle}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              From {harnessName}
-            </p>
+            {!nativeDisplayOnly && <SectionLabel>{sectionLabel}</SectionLabel>}
+            <h2 className={`${nativeDisplayOnly ? "" : "mt-2 "}text-lg font-semibold text-brand-dark`}>{plainTitle}</h2>
+            {/* An MCP headline already names the app that asked. */}
+            {mcpCall === null && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                From {harnessName}
+              </p>
+            )}
           </div>
-          <Badge tone={watchOnlyObservation ? "info" : actionPresentation.tone}>
-            {watchOnlyObservation ? "Would have stopped" : actionPresentation.label}
+          <Badge tone={item.native_business_review_display_only || watchOnlyObservation ? "info" : actionPresentation.tone}>
+            {badgeLabel}
           </Badge>
         </div>
 
-        <PrimaryActionCard item={item} />
-        {item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
+        {!nativeDisplayOnly && <PrimaryActionCard item={item} />}
+        {nativeDisplayOnly && <BusinessReviewSummaryPanel key={item.request_id} requestId={item.request_id} />}
+        {resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? (
+          <p className="mt-4 text-sm leading-6 text-brand-dark">
+            {retryCannotReuseApprovalHint(item, harnessName)}
+          </p>
+        ) : null}
+        {/* An MCP card says this itself, next to what the approval covers. */}
+        {mcpCall === null && item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
             Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable.
           </p>
@@ -454,7 +288,9 @@ export function ReviewDecisionCard(props: {
                 aria-hidden="true"
               />
               <div>
-                <p className="text-sm font-semibold text-brand-attention">This decision cannot be overridden</p>
+                <p className="text-sm font-semibold text-brand-attention">
+                  {item.native_business_review_display_only ? "Review is not connected yet" : "This decision cannot be overridden"}
+                </p>
                 <p className="mt-1 text-sm text-brand-dark">{resolutionBlockReason}</p>
                 {item.superseded_by_request_id ? (
                   <a className="mt-3 inline-flex min-h-11 items-center font-semibold text-brand-blue underline"
@@ -497,8 +333,35 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
+        {resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && (
+          <ApprovalExtensionRecommendationCard
+            key={item.request_id}
+            item={item}
+            approvalGate={approvalGate}
+            allowScope={allowScope}
+            persistExactAction={persistExactAllow}
+            disabled={!canSubmitAllow || submitting !== null || pendingAction !== null}
+            onResolve={props.onResolve}
+            onApproved={handleExtensionApproved}
+            onDialogActiveChange={setExtensionDialogActive}
+          />
+        )}
+
+        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+          <ApprovalExtensionCoverageCard
+            coverage={item.extension_coverage}
+            linkedPatterns={
+              item.extension_recommendation?.permissions.map((permission) => ({
+                extension_id: permission.extension_id,
+                rule_id: permission.rule_id,
+              })) ?? []
+            }
+          />
+        )}
+
         {resolutionBlockReason === null && resolved === null && (
-          <ReviewScopeControls
+          <ReviewDecisionControls
+            simpleMcp={simpleMcp}
             commonScopeOptions={commonScopeOptions}
             broaderScopeOptions={broaderScopeOptions}
             advancedScopeOptions={advancedScopeOptions}
@@ -506,7 +369,10 @@ export function ReviewDecisionCard(props: {
             hasAllowScope={hasAllowScope}
             taskCapabilityCopy={taskCapabilityCopy}
             exactActionPersistenceEligible={item.exact_action_persistence_eligible === true}
+            versionBoundScript={versionBoundScript}
             rememberExactAction={rememberExactAction}
+            oneTimeRetryBlocked={retryCannotReuseApproval(item)}
+            retryWindowMinutes={oneTimeRetryWindowMinutes(item)}
             allowScope={allowScope}
             blockScope={blockScope}
             onAllowScopeChange={setAllowScope}
@@ -532,12 +398,13 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {resolutionBlockReason === null && resolved === null && <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <ActionButton
+        {resolutionBlockReason === null && resolved === null && signInReason !== null && <ReviewDecisionSignIn requestId={item.request_id} reason={signInReason} onRecheck={handleSignInRecheck} />}
+        {resolutionBlockReason === null && resolved === null && signInReason === null && <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {hasAllowScope && <ActionButton
             ref={allowButtonRef}
             variant="success"
             onClick={handleAllow}
-            disabled={!hasAllowScope || submitting !== null || pendingAction !== null}
+            disabled={!canSubmitAllow || submitting !== null || pendingAction !== null}
           >
             {submitting === "allow" ? (
               <span className="flex items-center gap-2">
@@ -550,7 +417,7 @@ export function ReviewDecisionCard(props: {
                 {resolvedAllowButtonLabel}
               </span>
             )}
-          </ActionButton>
+          </ActionButton>}
           <ActionButton
             variant="outline"
             onClick={handleBlock}
@@ -569,7 +436,9 @@ export function ReviewDecisionCard(props: {
             )}
           </ActionButton>
         </div>}
-
+        {resolutionBlockReason === null && resolved === null && approvalGateNeedsSetup(approvalGate) && (
+          <ApprovalGateRecommendationNotice />
+        )}
       </div>
 
       {evidenceItems.length > 0 && (
@@ -595,28 +464,20 @@ export function ReviewDecisionCard(props: {
         </div>
       )}
 
-      {detail.receipt && (
-        <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
-          <SectionLabel>Last time</SectionLabel>
-          <p className="mt-2 text-sm text-muted-foreground">
-            You previously {pastDecisionVerb(detail.receipt.policy_decision)} a similar action{" "}
-            {formatRelativeTime(detail.receipt.timestamp)}.
-          </p>
-          {detail.diff && detail.diff.changed_fields.length > 0 && (
-            <div className="mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4">
-              <p className="text-sm font-medium text-brand-dark">What changed since then:</p>
-              <ul className="mt-2 space-y-1">
-                {detail.diff.changed_fields.map((field) => (
-                  <li key={field} className="flex items-center gap-2 text-sm text-brand-dark">
-                    <HiMiniCheckCircle className="h-3.5 w-3.5 shrink-0 text-brand-blue" aria-hidden="true" />
-                    {field}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+      {mcpCall === null ? (
+        <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+      ) : (
+        // The MCP card answers the question on its own; extra context is there for anyone who wants it.
+        <details className="rounded-xl border border-slate-100 px-4 py-3 sm:px-5">
+          <summary className="cursor-pointer select-none text-sm font-medium text-brand-dark/80">
+            Prepare more context for this decision
+          </summary>
+          <div className="mt-3">
+            <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+          </div>
+        </details>
       )}
+      <ReviewLastTimeCard detail={detail} />
 
       {pendingAction !== null && approvalGate !== null && (
         <ApprovalPasswordModal
@@ -628,6 +489,8 @@ export function ReviewDecisionCard(props: {
           onApprovalTotpCodeChange={handleApprovalTotpCodeChange}
           onUseCooldownChange={handleUseCooldownChange}
           onSubmit={handleModalSubmit}
+          busy={submitting !== null}
+          requireFreshTotp={freshCodeRequired}
           onCancel={handleModalCancel}
           submitLabel={pendingAction === "allow" ? resolvedAllowButtonLabel : resolvedBlockButtonLabel}
         />

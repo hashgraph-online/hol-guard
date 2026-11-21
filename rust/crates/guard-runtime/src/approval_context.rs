@@ -105,7 +105,7 @@ fn canonical_digest<T: Serialize>(value: &T, maximum: usize, code: &str) -> Resu
     Ok(digest_bytes(&bytes))
 }
 
-fn binding_digest(label: &str, values: &[&str]) -> Result<String, String> {
+pub(super) fn binding_digest(label: &str, values: &[&str]) -> Result<String, String> {
     let mut normalized = values
         .iter()
         .map(|value| value.trim())
@@ -258,15 +258,45 @@ pub(super) fn derive_context_with_snapshot(
         .map_err(|_| "native_approval_result_invalid".to_owned())?;
     crate::policy_enforcement::validate_pre_tool_result_matrix(&result)
         .map_err(|_| "native_approval_action_reconstruction_failed".to_owned())?;
-    let intrinsic = guard_command::pretool::evaluate_pre_tool_envelope_with_context(
+    let unavailable_environment = guard_contracts::GuardExecutionEnvironmentV1::unavailable();
+    let intrinsic = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         &edge_result.harness,
         &edge_result.event_name,
         &envelope.raw_payload,
         None,
         None,
-        Some(envelope.source.home_dir.as_str()),
-        envelope.source.cwd.as_deref(),
+        guard_command::pretool::PathContext {
+            literal_words: &[],
+            guard_home: None,
+            home_dir: Some(envelope.source.home_dir.as_str()),
+            cwd: envelope.source.cwd.as_deref(),
+            cdpath_unset: false,
+            rustup_override_absent: false,
+            cargo_config_inert: false,
+            npm_config_inert: false,
+            pip_config_inert: false,
+            python_environment_inert: false,
+            shell_home_matches: false,
+            ripgrep_config_absent: false,
+            gem_config_absent: false,
+            http_config_absent: false,
+            openssl_config_absent: false,
+            psql_environment: Default::default(),
+            creates_nothing: false,
+        },
+        Some(
+            envelope
+                .source
+                .execution_environment
+                .as_ref()
+                .unwrap_or(&unavailable_environment),
+        ),
     );
+    let intrinsic = crate::omp_yield_input_scan::scan(
+        &envelope.raw_payload,
+        envelope.deadline_budget_ms,
+        intrinsic,
+    )?;
     if result.action != intrinsic.action
         || action_rank(&intrinsic.minimum_action).is_none()
         || action_rank(&result.minimum_action).is_none()

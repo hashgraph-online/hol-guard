@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
-
 from .edge_events import build_access_graph_snapshot_event
 from .models import HarnessDetection
 from .redaction import redact_sensitive_text
-from .stable_digest import stable_digest_hex
 from .store import GuardStore
+
+# Artifact fields the resident reads; only string values travel.
+_ARTIFACT_TEXT_FIELDS = ("artifact_id", "artifact_type", "artifact_name", "source_scope", "policy_action")
 
 
 def queue_access_graph_snapshot(
@@ -18,61 +18,29 @@ def queue_access_graph_snapshot(
     artifacts: list[dict[str, object]],
     now: str,
 ) -> None:
+    """Queue the detection's access graph; the resident builds its entities and edges."""
+
     workspace_id = store.get_cloud_workspace_id()
     device_id = store.get_or_create_installation_id()
-    device_fingerprint = f"device:{device_id}"
-    harness_fingerprint = f"harness:{detection.harness}"
-    agent_id = f"{detection.harness}:local-agent"
-    agent_fingerprint = f"agent:{agent_id}"
-    entities: list[dict[str, object]] = []
-    edges: list[dict[str, object]] = []
-    seen_fingerprints: set[str] = set()
-
-    def add_entity(entity: dict[str, object]) -> None:
-        fingerprint = entity.get("fingerprint")
-        if not isinstance(fingerprint, str) or fingerprint in seen_fingerprints:
-            return
-        seen_fingerprints.add(fingerprint)
-        entities.append(entity)
-
-    _add_device_harness_and_agent(
-        add_entity=add_entity,
-        edges=edges,
-        device_id=device_id,
-        device_fingerprint=device_fingerprint,
-        detection=detection,
-        harness_fingerprint=harness_fingerprint,
-        agent_id=agent_id,
-        agent_fingerprint=agent_fingerprint,
-        now=now,
-    )
-    _add_artifact_entities(
-        add_entity=add_entity,
-        edges=edges,
-        artifacts=artifacts,
-        agent_fingerprint=agent_fingerprint,
-        harness=detection.harness,
-        agent_id=agent_id,
-        now=now,
-    )
-    snapshot_seed = {
-        "workspace": workspace_id,
-        "device": device_id,
-        "harness": detection.harness,
-        "generatedAt": now,
-    }
-    snapshot_hash = stable_digest_hex(
-        json.dumps(snapshot_seed, sort_keys=True).encode("utf-8"),
-        length=24,
-    )
-    snapshot_id = f"access-graph-{snapshot_hash}"
-    payload: dict[str, object] = {
-        "snapshotId": snapshot_id,
-        "generatedAt": now,
-        "entities": entities,
-        "edges": edges,
-    }
     try:
+        from .native_runner_authority import native_runner_authority
+
+        answer = native_runner_authority(
+            "access_graph_snapshot",
+            {
+                "harness": detection.harness,
+                "installed": bool(detection.installed),
+                "command_available": bool(detection.command_available),
+                "workspace_id": workspace_id,
+                "device_id": device_id,
+                "now": now,
+                "artifacts": [_artifact_fields(artifact) for artifact in artifacts],
+            },
+        )
+        snapshot_id = answer["snapshot_id"]
+        payload = answer["payload"]
+        if not isinstance(snapshot_id, str) or not isinstance(payload, dict):
+            raise ValueError("access_graph_snapshot answer is malformed")
         store.add_guard_event_v1(
             build_access_graph_snapshot_event(
                 snapshot_id=snapshot_id,
@@ -93,153 +61,10 @@ def queue_access_graph_snapshot(
         )
 
 
-def _add_device_harness_and_agent(
-    *,
-    add_entity,
-    edges: list[dict[str, object]],
-    device_id: str,
-    device_fingerprint: str,
-    detection: HarnessDetection,
-    harness_fingerprint: str,
-    agent_id: str,
-    agent_fingerprint: str,
-    now: str,
-) -> None:
-    add_entity(
-        {
-            "entityType": "device",
-            "entityId": device_id,
-            "displayName": "Local machine",
-            "fingerprint": device_fingerprint,
-            "metadata": {},
-            "firstSeenAt": now,
-            "lastSeenAt": now,
-        }
-    )
-    add_entity(
-        {
-            "entityType": "harness",
-            "entityId": detection.harness,
-            "displayName": detection.harness,
-            "fingerprint": harness_fingerprint,
-            "metadata": {"installed": detection.installed, "commandAvailable": detection.command_available},
-            "firstSeenAt": now,
-            "lastSeenAt": now,
-        }
-    )
-    edges.append(
-        {
-            "sourceFingerprint": device_fingerprint,
-            "targetFingerprint": harness_fingerprint,
-            "edgeType": "device_runs_harness",
-            "confidence": 100,
-            "metadata": {},
-            "firstSeenAt": now,
-            "lastSeenAt": now,
-        }
-    )
-    add_entity(
-        {
-            "entityType": "agent",
-            "entityId": agent_id,
-            "displayName": f"{detection.harness} local agent",
-            "fingerprint": agent_fingerprint,
-            "metadata": {"harness": detection.harness},
-            "firstSeenAt": now,
-            "lastSeenAt": now,
-        }
-    )
-    edges.append(
-        {
-            "sourceFingerprint": harness_fingerprint,
-            "targetFingerprint": agent_fingerprint,
-            "edgeType": "harness_runs_agent",
-            "confidence": 90,
-            "metadata": {},
-            "firstSeenAt": now,
-            "lastSeenAt": now,
-        }
-    )
-
-
-def _add_artifact_entities(
-    *,
-    add_entity,
-    edges: list[dict[str, object]],
-    artifacts: list[dict[str, object]],
-    agent_fingerprint: str,
-    harness: str,
-    agent_id: str,
-    now: str,
-) -> None:
-    for artifact in artifacts:
-        artifact_id = _non_empty_string(artifact.get("artifact_id"))
-        if artifact_id is None:
-            continue
-        artifact_type = _non_empty_string(artifact.get("artifact_type")) or "tool"
-        entity_type = _access_graph_entity_type(artifact_type)
-        fingerprint = f"{entity_type}:{artifact_id}"
-        add_entity(
-            {
-                "entityType": entity_type,
-                "entityId": artifact_id,
-                "displayName": _non_empty_string(artifact.get("artifact_name")) or artifact_id,
-                "fingerprint": fingerprint,
-                "metadata": {
-                    "agentId": agent_id,
-                    # agentType and harness both carry the harness slug for portal topology resolution.
-                    "agentType": harness,
-                    "artifactType": artifact_type,
-                    "harness": harness,
-                    "sourceScope": _non_empty_string(artifact.get("source_scope")),
-                    "policyAction": _non_empty_string(artifact.get("policy_action")),
-                    "present": artifact.get("removed") is not True,
-                },
-                "firstSeenAt": now,
-                "lastSeenAt": now,
-            }
-        )
-        edge_type = _access_graph_artifact_edge_type(entity_type)
-        if edge_type is not None:
-            edges.append(
-                {
-                    "sourceFingerprint": agent_fingerprint,
-                    "targetFingerprint": fingerprint,
-                    "edgeType": edge_type,
-                    "confidence": 80,
-                    "metadata": {},
-                    "firstSeenAt": now,
-                    "lastSeenAt": now,
-                }
-            )
-
-
-def _access_graph_entity_type(artifact_type: str) -> str:
-    if artifact_type in {
-        "skill",
-        "mcp_server",
-        "tool",
-        "repository",
-        "agent",
-        "policy",
-        "integration",
-        "instruction",
-    }:
-        return artifact_type
-    return "tool"
-
-
-def _access_graph_artifact_edge_type(entity_type: str) -> str | None:
-    if entity_type == "skill":
-        return "agent_uses_skill"
-    if entity_type == "mcp_server":
-        return "agent_uses_mcp_server"
-    if entity_type == "instruction":
-        return "agent_uses_instruction"
-    return None
-
-
-def _non_empty_string(value: object) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value
-    return None
+def _artifact_fields(artifact: dict[str, object]) -> dict[str, object]:
+    fields: dict[str, object] = {
+        key: value for key in _ARTIFACT_TEXT_FIELDS if isinstance(value := artifact.get(key), str)
+    }
+    if artifact.get("removed") is True:
+        fields["removed"] = True
+    return fields

@@ -1,0 +1,228 @@
+{
+  "agent-plugins/mcp.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+    "mcpServers": {
+      "notes": {
+        "args": [
+          "-y",
+          "@acme/notes-mcp@2.0.1"
+        ],
+        "command": "npx",
+        "type": "stdio"
+      }
+    }
+  },
+  "agent-plugins/plugin.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+    "description": "Search and edit notes.",
+    "name": "notes",
+    "repository": "https://github.com/acme/notes",
+    "version": "2.0.1"
+  },
+  "claude-code/.claude-plugin/plugin.json": {
+    "description": "Search and edit notes.",
+    "name": "notes",
+    "repository": "https://github.com/acme/notes",
+    "version": "2.0.1"
+  },
+  "claude-code/.mcp.json": {
+    "mcpServers": {
+      "notes": {
+        "args": [
+          "-y",
+          "@acme/notes-mcp@2.0.1"
+        ],
+        "command": "npx",
+        "env": {
+          "NOTES_TOKEN": "${NOTES_TOKEN}"
+        }
+      }
+    }
+  },
+  "codex/.codex-plugin/plugin.json": {
+    "description": "Search and edit notes.",
+    "mcpServers": "./.mcp.json",
+    "name": "notes",
+    "repository": "https://github.com/acme/notes",
+    "version": "2.0.1"
+  },
+  "codex/.mcp.json": {
+    "mcpServers": {
+      "notes": {
+        "args": [
+          "-y",
+          "@acme/notes-mcp@2.0.1"
+        ],
+        "command": "npx",
+        "env": {
+          "NOTES_TOKEN": "${NOTES_TOKEN}"
+        }
+      }
+    }
+  },
+  "cursor/.cursor/mcp.json": {
+    "mcpServers": {
+      "notes": {
+        "args": [
+          "-y",
+          "@acme/notes-mcp@2.0.1"
+        ],
+        "command": "npx",
+        "env": {
+          "NOTES_TOKEN": "${env:NOTES_TOKEN}"
+        }
+      }
+    }
+  },
+  "gemini-cli/gemini-extension.json": {
+    "description": "Search and edit notes.",
+    "mcpServers": {
+      "notes": {
+        "args": [
+          "-y",
+          "@acme/notes-mcp@2.0.1"
+        ],
+        "command": "npx",
+        "env": {
+          "NOTES_TOKEN": "$NOTES_TOKEN"
+        }
+      }
+    },
+    "name": "notes",
+    "settings": [
+      {
+        "description": "NOTES_TOKEN for the notes MCP server.",
+        "envVar": "NOTES_TOKEN",
+        "name": "NOTES_TOKEN",
+        "sensitive": true
+      }
+    ],
+    "version": "2.0.1"
+  },
+  "hol.provenance.json": {
+    "files": [
+      {
+        "path": "agent-plugins/mcp.json",
+        "sha256": "cd0e94433a3b4349ae2801c374857ff459660a7122d717a55664ccf916077d6f"
+      },
+      {
+        "path": "agent-plugins/plugin.json",
+        "sha256": "15b7279733cddc151fc930154f126269306a6b0a447b97d2f005e5e0f73c8813"
+      },
+      {
+        "path": "claude-code/.claude-plugin/plugin.json",
+        "sha256": "77e8f88d48bed0de00e6400324cefd74c8403ab3c8758dbf3d53f481e515e649"
+      },
+      {
+        "path": "claude-code/.mcp.json",
+        "sha256": "dc3c6ce2601e98abd143c2fcfa5e55da59ab532cedf45ce1731c4ad83a717c8e"
+      },
+      {
+        "path": "codex/.codex-plugin/plugin.json",
+        "sha256": "cdbe996ed7dacd9266e265f07cfb7df1e7337d36d54f1efc4b93309e005e7cf0"
+      },
+      {
+        "path": "codex/.mcp.json",
+        "sha256": "dc3c6ce2601e98abd143c2fcfa5e55da59ab532cedf45ce1731c4ad83a717c8e"
+      },
+      {
+        "path": "cursor/.cursor/mcp.json",
+        "sha256": "20e1f9c184637e8219342ac73a56b32a6782767383883e1463d65a17163f0d85"
+      },
+      {
+        "path": "gemini-cli/gemini-extension.json",
+        "sha256": "9b0a8b346a436ee9bcbf0516e14f10d77e12655c969a03b37aab9e3d9f3b4a4c"
+      },
+      {
+        "path": "mcp-registry/server.json",
+        "sha256": "83c2e7b62a8b2a5f04c82ff3a217e05d7794f1173a8f501ae052d6bc1ab744f2"
+      },
+      {
+        "path": "opencode/opencode.json",
+        "sha256": "c9b269f92a578a25d8f4afab9cc325837009ead1de93cef76ecf61289fa4c481"
+      },
+      {
+        "path": "vscode/.vscode/mcp.json",
+        "sha256": "3768545ef9bc66a94a77af0028727f5a614340dc72d7e04d960b6c4d3da40a49"
+      }
+    ],
+    "generator": {
+      "name": "hol-guard plugin-kit",
+      "version": "<version>"
+    },
+    "plugin": {
+      "name": "notes",
+      "version": "2.0.1"
+    },
+    "repository": "https://github.com/acme/notes",
+    "runtimes": [
+      "claude-code",
+      "codex",
+      "gemini-cli",
+      "cursor",
+      "vscode",
+      "opencode",
+      "mcp-registry",
+      "agent-plugins"
+    ],
+    "schema": "hol.plugin-kit.provenance.v1",
+    "source_digest": "sha256:3f231441e8fafcd609225f85ff2d1b54af3547eff2ae5794c48bca74aa330d97"
+  },
+  "mcp-registry/server.json": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+    "description": "Search and edit notes.",
+    "name": "io.github.acme/notes",
+    "packages": [
+      {
+        "environmentVariables": [
+          {
+            "isSecret": true,
+            "name": "NOTES_TOKEN"
+          }
+        ],
+        "identifier": "@acme/notes-mcp",
+        "registryType": "npm",
+        "transport": {
+          "type": "stdio"
+        },
+        "version": "2.0.1"
+      }
+    ],
+    "repository": {
+      "source": "github",
+      "url": "https://github.com/acme/notes"
+    },
+    "version": "2.0.1"
+  },
+  "opencode/opencode.json": {
+    "$schema": "https://opencode.ai/config.json",
+    "mcp": {
+      "notes": {
+        "command": [
+          "npx",
+          "-y",
+          "@acme/notes-mcp@2.0.1"
+        ],
+        "environment": {
+          "NOTES_TOKEN": "{env:NOTES_TOKEN}"
+        },
+        "type": "local"
+      }
+    }
+  },
+  "vscode/.vscode/mcp.json": {
+    "servers": {
+      "notes": {
+        "args": [
+          "-y",
+          "@acme/notes-mcp@2.0.1"
+        ],
+        "command": "npx",
+        "env": {
+          "NOTES_TOKEN": "${env:NOTES_TOKEN}"
+        },
+        "type": "stdio"
+      }
+    }
+  }
+}

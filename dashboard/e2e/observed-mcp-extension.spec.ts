@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { initialize, mount } from "./extension-control-fixtures";
+import { initialize, mount, showCustomExtensions } from "./extension-control-fixtures";
 import { defaultSettingsPayload } from "./fixture-states";
 
 for (const width of [1280, 390]) {
@@ -63,6 +63,7 @@ for (const width of [1280, 390]) {
       } },
     } }));
     await initialize(page);
+    await showCustomExtensions(page);
     await page.getByTestId("custom-extensions-empty").getByRole("button", { name: "Add custom extension", exact: true }).click();
     await page.getByText("Find an MCP server in the public registry", { exact: true }).click();
     const registry = page.getByRole("region", { name: "Public MCP registry search", exact: true });
@@ -145,6 +146,7 @@ for (const width of [1280, 390]) {
       } },
     } }));
     await initialize(page);
+    await showCustomExtensions(page);
     await page.getByTestId("custom-extensions-empty").getByRole("button", { name: "Add custom extension", exact: true }).click();
     await page.getByText("Find an MCP server in the public registry", { exact: true }).click();
     const registry = page.getByRole("region", { name: "Public MCP registry search", exact: true });
@@ -214,6 +216,7 @@ for (const width of [1280, 390]) {
       } },
     } }));
     await initialize(page);
+    await showCustomExtensions(page);
     await page.getByTestId("custom-extensions-empty").getByRole("button", { name: "Add custom extension", exact: true }).click();
     await page.getByText("Find an MCP server in the public registry", { exact: true }).click();
     const registry = page.getByRole("region", { name: "Public MCP registry search", exact: true });
@@ -295,6 +298,7 @@ for (const width of [1280, 390]) {
       } },
     } }));
     await initialize(page);
+    await showCustomExtensions(page);
     await page.getByTestId("custom-extensions-empty").getByRole("button", { name: "Add custom extension", exact: true }).click();
     await page.getByText("Find an MCP server in the public registry", { exact: true }).click();
     const registry = page.getByRole("region", { name: "Public MCP registry search", exact: true });
@@ -341,6 +345,7 @@ for (const width of [1280, 390]) {
         cloud: { sync_local_only: true, summary: "Synthetic fixture." } } });
     });
     await initialize(page);
+    await showCustomExtensions(page);
     await page.getByTestId("custom-extensions-empty").getByRole("button", { name: "Add custom extension", exact: true }).click();
     const toggle = page.getByText("Find an MCP server in the public registry", { exact: true });
     await toggle.click();
@@ -418,6 +423,7 @@ for (const width of [1280, 390]) {
       } },
     } }));
     await initialize(page);
+    await showCustomExtensions(page);
     await expect(page.getByRole("button", { name: /composio.*Detected/i })).toBeVisible();
     expect(discovered).toBe(true);
     await page.getByRole("button", { name: "Add custom extension", exact: true }).click();

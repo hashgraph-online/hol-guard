@@ -11,6 +11,7 @@ import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils
 import { isConnectableAppHarness } from "../apps/harness-setup-target";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { guardAwareHref } from "../guard-api";
+import { StyledSelect } from "../styled-select";
 import { Sparkline } from "./sparkline";
 import { ScopedEvidenceTable } from "./scoped-evidence-table";
 import type { EvidenceDecision } from "./evidence-types";
@@ -216,20 +217,20 @@ function AppTabRaw({ receipts }: AppTabProps) {
             <HiMiniFunnel className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Filter:</span>
           </div>
-          <select
+          <StyledSelect
             value={decisionFilter}
             onChange={handleDecisionFilterChange}
-            className="min-h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+            className="min-h-8 rounded-lg py-1 text-xs font-medium"
           >
             <option value="all">All decisions</option>
             <option value="allow">Allowed</option>
             <option value="ask">Review</option>
             <option value="block">Stopped</option>
-          </select>
-          <select
+          </StyledSelect>
+          <StyledSelect
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="min-h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+            className="min-h-8 rounded-lg py-1 text-xs font-medium"
           >
             <option value="">All categories</option>
             {categories.map((cat) => {
@@ -238,7 +239,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
                 <option key={cat} value={cat}>{info.label}</option>
               );
             })}
-          </select>
+          </StyledSelect>
           {(decisionFilter !== "all" || categoryFilter) && (
             <button
               type="button"

@@ -15,6 +15,7 @@ use crate::resident_state::publish_state;
 use crate::resident_state::socket_directory;
 
 #[cfg(unix)]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn serve_unix_managed(
     owner: (&Path, &super::ManagedOwnerLock),
     policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
@@ -23,6 +24,7 @@ pub(super) fn serve_unix_managed(
     digest: &str,
     token: [u8; crate::AUTH_TOKEN_BYTES],
     owner_alive: Arc<AtomicBool>,
+    on_ready: impl FnOnce(),
 ) -> Result<(), String> {
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
     use std::os::unix::net::UnixListener;
@@ -69,6 +71,7 @@ pub(super) fn serve_unix_managed(
         );
         return Err("native_socket_identity_changed".to_owned());
     }
+    on_ready();
     let result = managed_accept_loop(listener, Arc::new(token), owner_alive, policy_store);
     drop(ownership);
     resident_state_retirement::retire_state(
@@ -83,6 +86,7 @@ pub(super) fn serve_unix_managed(
 }
 
 #[cfg(not(unix))]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn serve_unix_managed(
     _owner: (&Path, &super::ManagedOwnerLock),
     _policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
@@ -91,6 +95,7 @@ pub(super) fn serve_unix_managed(
     _digest: &str,
     _token: [u8; crate::AUTH_TOKEN_BYTES],
     _owner_alive: Arc<AtomicBool>,
+    _on_ready: impl FnOnce(),
 ) -> Result<(), String> {
     Err("native_unix_socket_not_available".to_owned())
 }
@@ -102,35 +107,49 @@ fn managed_accept_loop(
     owner_alive: Arc<AtomicBool>,
     policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
 ) -> Result<(), String> {
-    let admission = crate::resident_transport::start_resident_workers(token, Some(policy_store));
+    let admission =
+        crate::resident_transport::start_resident_workers(token, Some(Arc::clone(&policy_store)));
     let mut last_activity = Instant::now();
     let mut failures = 0;
-    while owner_alive.load(Ordering::Acquire)
-        && last_activity.elapsed() < super::MANAGED_IDLE_TIMEOUT
-        && !super::shutdown_requested()
-    {
-        match listener.accept() {
-            Ok((stream, _)) => {
-                failures = 0;
-                last_activity = Instant::now();
-                if stream.set_nonblocking(false).is_err() {
-                    continue;
+    let result = (|| {
+        while owner_alive.load(Ordering::Acquire)
+            && (last_activity.elapsed() < super::MANAGED_IDLE_TIMEOUT
+                || policy_store.swarm().has_active_runs())
+            && !super::shutdown_requested()
+        {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    failures = 0;
+                    last_activity = Instant::now();
+                    if stream.set_nonblocking(false).is_err() {
+                        continue;
+                    }
+                    crate::resident_transport::admit_connection(&admission, Box::new(stream))?;
                 }
-                crate::resident_transport::admit_connection(&admission, Box::new(stream))?;
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    failures = 0;
+                    crate::hardening::wait_for_accept_ready(&listener)
+                        .map_err(|_| "native_socket_accept_failed".to_owned())?;
+                }
+                Err(error)
+                    if crate::hardening::classify_io_error(&error)
+                        != crate::hardening::IoFailureClass::Other =>
+                {
+                    failures += 1;
+                    thread::sleep(crate::hardening::accept_retry_delay(failures, &error));
+                }
+                Err(_) => return Err("native_socket_accept_failed".to_owned()),
             }
-            Err(error)
-                if crate::hardening::classify_io_error(&error)
-                    != crate::hardening::IoFailureClass::Other =>
-            {
-                failures += 1;
-                thread::sleep(crate::hardening::accept_retry_delay(failures, &error));
-            }
-            Err(_) => return Err("native_socket_accept_failed".to_owned()),
         }
-    }
-    Ok(())
+        Ok(())
+    })();
+    #[cfg(target_os = "macos")]
+    policy_store.bash_launches().shutdown();
+    crate::resident_transport::drain_resident_workers(admission);
+    result
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn serve_loopback_managed(
     scope: &Path,
     policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
@@ -139,6 +158,7 @@ pub(super) fn serve_loopback_managed(
     digest: &str,
     token: [u8; crate::AUTH_TOKEN_BYTES],
     owner_alive: Arc<AtomicBool>,
+    on_ready: impl FnOnce(),
 ) -> Result<(), String> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .map_err(|_| "native_resident_loopback_bind_failed".to_owned())?;
@@ -160,13 +180,17 @@ pub(super) fn serve_loopback_managed(
         address.to_string(),
         &token,
     )?;
-    let admission =
-        crate::resident_transport::start_resident_workers(Arc::new(token), Some(policy_store));
+    on_ready();
+    let admission = crate::resident_transport::start_resident_workers(
+        Arc::new(token),
+        Some(Arc::clone(&policy_store)),
+    );
     let mut last_activity = Instant::now();
     let mut failures = 0;
     let result = loop {
         if !(owner_alive.load(Ordering::Acquire)
-            && last_activity.elapsed() < super::MANAGED_IDLE_TIMEOUT
+            && (last_activity.elapsed() < super::MANAGED_IDLE_TIMEOUT
+                || policy_store.swarm().has_active_runs())
             && !super::shutdown_requested())
         {
             break Ok(());
@@ -181,7 +205,18 @@ pub(super) fn serve_loopback_managed(
                 if stream.set_nonblocking(false).is_err() {
                     continue;
                 }
-                crate::resident_transport::admit_connection(&admission, Box::new(stream))?;
+                if let Err(error) =
+                    crate::resident_transport::admit_connection(&admission, Box::new(stream))
+                {
+                    break Err(error);
+                }
+            }
+            #[cfg(unix)]
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                failures = 0;
+                if crate::hardening::wait_for_accept_ready(&listener).is_err() {
+                    break Err("native_resident_loopback_accept_failed".to_owned());
+                }
             }
             Err(error)
                 if crate::hardening::classify_io_error(&error)
@@ -193,6 +228,9 @@ pub(super) fn serve_loopback_managed(
             Err(_) => break Err("native_resident_loopback_accept_failed".to_owned()),
         }
     };
+    #[cfg(target_os = "macos")]
+    policy_store.bash_launches().shutdown();
+    crate::resident_transport::drain_resident_workers(admission);
     resident_state_retirement::retire_state(
         scope,
         generation,
@@ -203,3 +241,7 @@ pub(super) fn serve_loopback_managed(
     );
     result
 }
+
+#[cfg(all(test, unix))]
+#[path = "managed_resident_transport_ready_tests.rs"]
+mod ready_tests;

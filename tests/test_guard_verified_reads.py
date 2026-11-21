@@ -6,22 +6,17 @@ import argparse
 import inspect
 import io
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import BinaryIO
+from typing import cast
 
 import pytest
 
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
-from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.runtime import verified_github_reads as github_reads
 from codex_plugin_scanner.guard.runtime import verified_read_execution as local_reads
-from codex_plugin_scanner.guard.runtime.command_verified_read_candidates import verified_read_candidate_operation
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
-from codex_plugin_scanner.guard.runtime.launch_identity_binding import (
-    RuleVersionBinding,
-    observe_launch_identity_binding,
-)
 from codex_plugin_scanner.guard.runtime.verified_github_reads import try_read_verified_public_github_pull_request
 from codex_plugin_scanner.guard.runtime.verified_read_execution import try_execute_verified_local_read
 from tests.guard_command_corpus import iter_benign_corpus
@@ -39,6 +34,11 @@ def _workspace(tmp_path: Path) -> tuple[Path, Path, Path]:
     return workspace, repository, cwd
 
 
+def _requires_read_proof(evaluation: object) -> bool:
+    reasons = evaluation.decision_plane.reasons
+    return any(reason.reason_code == "verified-read-proof-required" for reason in reasons)
+
+
 def test_every_cdx_060_corpus_case_requires_proof_instead_of_inheriting_allow() -> None:
     records = (
         (case, oracle)
@@ -53,7 +53,7 @@ def test_every_cdx_060_corpus_case_requires_proof_instead_of_inheriting_allow() 
     )
     assert len(evaluations) == 350
     assert {item.minimum_action for item in evaluations} == {"review"}
-    assert {item.decision_plane.action for item in evaluations} == {"review"}
+    assert {item.decision_plane.action for item in evaluations} == {"review", "require-reapproval"}
     assert all(
         any(reason.reason_code == "verified-read-proof-required" for reason in item.decision_plane.reasons)
         for item in evaluations
@@ -73,7 +73,7 @@ def test_raw_shell_candidates_never_mint_positive_proof(tmp_path: Path) -> None:
     )
     for command in commands:
         evaluation = real_native_command_evaluation(command, cwd=cwd, home_dir=home).evaluation
-        assert verified_read_candidate_operation(evaluation.command) is not None
+        assert _requires_read_proof(evaluation)
         assert evaluation.decision_plane.action == "review"
         assert evaluation.decision_plane.proof_routes == frozenset()
 
@@ -86,7 +86,7 @@ def test_raw_search_without_cwd_evidence_retains_approval_floor(tmp_path: Path) 
 
     evaluation = real_native_command_evaluation("rg -n GuardAction src", cwd=missing, home_dir=home).evaluation
 
-    assert verified_read_candidate_operation(evaluation.command) == "workspace-read"
+    assert _requires_read_proof(evaluation)
     assert evaluation.decision_plane.action == "require-reapproval"
     assert evaluation.decision_plane.proof_routes == frozenset()
     assert any(reason.reason_code == "critical.local-script-execution" for reason in evaluation.decision_plane.reasons)
@@ -97,7 +97,7 @@ def test_git_read_overlap_reaches_the_frozen_cdx_064_pair_baseline() -> None:
         "git diff --check", cwd=Path("workspace"), home_dir=Path("home")
     ).evaluation
 
-    assert verified_read_candidate_operation(evaluation.command) == "workspace-read"
+    assert _requires_read_proof(evaluation)
     assert evaluation.minimum_action == "review"
     assert evaluation.decision_plane.action == "review"
     assert evaluation.decision_plane.proof_routes == frozenset()
@@ -140,95 +140,47 @@ def test_local_executor_rejects_shell_composition_and_boundary_drift(tmp_path: P
         os.chdir(previous)
 
 
-def test_local_executor_rejects_untrusted_workspace_and_context_drift(
+def test_local_executor_shows_the_slice_the_resident_planned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _workspace_path, _repository, cwd = _workspace(tmp_path)
+    source = cwd / "main.py"
+    _ = source.write_text("".join(f"line{number}\n" for number in range(1, 11)), encoding="utf-8")
+    monkeypatch.chdir(cwd)
+
+    view = try_execute_verified_local_read(("sed", "-n", "3,5p", "main.py"))
+    leading = try_execute_verified_local_read(("head", "--lines=2", "main.py"))
+    trailing = try_execute_verified_local_read(("tail", "-2", "main.py"))
+
+    assert view is not None and view.operation_id == "bounded-source-view"
+    assert view.stdout == "line3\nline4\nline5\n"
+    assert leading is not None and leading.operation_id == "bounded-head"
+    assert leading.stdout == "line1\nline2\n"
+    assert trailing is not None and trailing.operation_id == "bounded-tail"
+    assert trailing.stdout == "line9\nline10\n"
+
+
+def test_local_executor_has_no_grammar_of_its_own(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without the resident's read there is no read, and no Python fallback."""
+
+    _workspace_path, _repository, cwd = _workspace(tmp_path)
+    _ = (cwd / "main.py").write_text("print('ok')\n", encoding="utf-8")
+    monkeypatch.chdir(cwd)
+
+    def unavailable(*_args: object) -> object:
+        raise local_reads.NativeVerifiedReadExecuteError("native_verified_read_execute_unavailable")
+
+    monkeypatch.setattr(local_reads, "resident_decide", unavailable)
+
+    assert try_execute_verified_local_read(("head", "-40", "main.py")) is None
+    assert try_execute_verified_local_read(("pwd",)) is None
+
+
+def test_local_executor_rejects_a_directory_outside_any_checkout(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    workspace, _repository, cwd = _workspace(tmp_path)
+    _ = _workspace(tmp_path)
     monkeypatch.chdir(tmp_path)
     assert try_execute_verified_local_read(("pwd",)) is None
-    monkeypatch.chdir(cwd)
-    initial = local_reads._current_workspace_context()  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(local_reads, "_current_workspace_context", lambda: initial)
-    assert try_execute_verified_local_read(("missing-read-tool",)) is None
-    changed = local_reads._WorkspaceContext(  # pyright: ignore[reportPrivateUsage]
-        initial.repository,
-        workspace,
-        "0" * 64,
-        initial.repository_file_identity,
-    )
-    contexts = iter((initial, changed))
-    monkeypatch.setattr(local_reads, "_current_workspace_context", lambda: next(contexts))
-    assert try_execute_verified_local_read(("pwd",)) is None
-
-
-def test_local_executor_fails_closed_on_output_and_time_bounds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _workspace_path, _repository, cwd = _workspace(tmp_path)
-    monkeypatch.chdir(cwd)
-    monkeypatch.setattr(local_reads, "_MAX_OUTPUT_BYTES", 1)
-    assert try_execute_verified_local_read(("pwd",)) is None
-    assert "timeout_seconds" not in inspect.signature(try_execute_verified_local_read).parameters
-
-
-def test_local_executor_rejects_target_identity_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _workspace_path, _repository, cwd = _workspace(tmp_path)
-    _ = (cwd / "main.py").write_text("line one\nline two\n", encoding="utf-8")
-    monkeypatch.chdir(cwd)
-    actual = local_reads._stable_file_identity  # pyright: ignore[reportPrivateUsage]
-    calls = 0
-
-    def changed(metadata: os.stat_result) -> tuple[int, int, int, int]:
-        nonlocal calls
-        calls += 1
-        identity = actual(metadata)
-        if calls == 2:
-            return identity[0], identity[1], identity[2] + 1, identity[3]
-        return identity
-
-    monkeypatch.setattr(local_reads, "_stable_file_identity", changed)
-    assert try_execute_verified_local_read(("head", "-1", "main.py")) is None
-
-
-def test_local_executor_rejects_parent_directory_swap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _workspace_path, _repository, cwd = _workspace(tmp_path)
-    safe = cwd / "safe"
-    safe.mkdir()
-    _ = (safe / "main.py").write_text("safe\n", encoding="utf-8")
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    _ = (outside / "main.py").write_text("private\n", encoding="utf-8")
-    monkeypatch.chdir(cwd)
-    resolve_target = local_reads._resolve_target  # pyright: ignore[reportPrivateUsage]
-
-    def swap_parent(
-        value: str,
-        *,
-        context: local_reads._WorkspaceContext,  # pyright: ignore[reportPrivateUsage]
-    ) -> Path:
-        target = resolve_target(value, context=context)
-        _ = safe.rename(cwd / "safe-original")
-        _ = safe.symlink_to(outside, target_is_directory=True)
-        return target
-
-    monkeypatch.setattr(local_reads, "_resolve_target", swap_parent)
-    assert try_execute_verified_local_read(("head", "-1", "safe/main.py")) is None
-
-
-def test_local_executor_rejects_file_growth_after_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _workspace_path, _repository, cwd = _workspace(tmp_path)
-    source = cwd / "main.py"
-    _ = source.write_text("safe\n", encoding="utf-8")
-    monkeypatch.chdir(cwd)
-    monkeypatch.setattr(local_reads, "_MAX_FILE_BYTES", 8)
-    bounded_read = local_reads._read_bounded_text  # pyright: ignore[reportPrivateUsage]
-
-    def grow_then_read(stream: BinaryIO) -> str:
-        with source.open("a", encoding="utf-8") as output:
-            _ = output.write("private-data\n")
-        return bounded_read(stream)
-
-    monkeypatch.setattr(local_reads, "_read_bounded_text", grow_then_read)
-    assert try_execute_verified_local_read(("head", "-1", "main.py")) is None
 
 
 def test_verified_read_cli_owns_local_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -262,114 +214,74 @@ def test_local_executor_accepts_a_bound_git_worktree_identity(tmp_path: Path, mo
     assert result.stdout == f"{cwd}\n"
 
 
-def _github_payloads(owner: str = "public-owner", repository: str = "public-repo") -> tuple[dict[str, object], ...]:
-    full_name = f"{owner}/{repository}"
-    return (
-        {"private": False, "full_name": full_name},
-        {
-            "number": 17,
-            "state": "open",
-            "mergeable": True,
-            "base": {"repo": {"full_name": full_name}},
-        },
-    )
+_BINDING = "ab" * 32
 
 
-def test_owned_public_github_get_returns_silent_verified(monkeypatch: pytest.MonkeyPatch) -> None:
-    responses = iter(_github_payloads())
-    urls: list[str] = []
+def _native(answer: object, requests: list[tuple[dict[str, object], float]] | None = None) -> Callable[..., object]:
+    def runtime_answer(feature: str, command: str, request: dict[str, object], **kwargs: object) -> object:
+        assert (feature, command) == ("native-verified-github-read-v2", "verified-github-read")
+        if requests is not None:
+            requests.append((request, cast(float, kwargs["timeout_seconds"])))
+        if isinstance(answer, BaseException):
+            raise answer
+        return answer
 
-    def public_get(url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
-        assert timeout_seconds == 15.0
-        assert opener is not None
-        urls.append(url)
-        return next(responses)
+    return runtime_answer
 
-    monkeypatch.setattr(github_reads, "_public_get_json", public_get)
+
+def test_owned_public_github_read_returns_silent_verified(monkeypatch: pytest.MonkeyPatch) -> None:
+    requests: list[tuple[dict[str, object], float]] = []
+    stdout = '{"mergeable":true,"number":17,"state":"open"}\n'
+    answer = {"stdout": stdout, "binding_digest": _BINDING}
+    monkeypatch.setattr(github_reads, "runtime_answer", _native(answer, requests))
     result = try_read_verified_public_github_pull_request("public-owner", "public-repo", 17)
 
     assert result is not None
-    assert result.stdout == '{"mergeable":true,"number":17,"state":"open"}\n'
-    assert urls == [
-        "https://api.github.com/repos/public-owner/public-repo",
-        "https://api.github.com/repos/public-owner/public-repo/pulls/17",
+    assert result.stdout == stdout
+    assert requests == [
+        (
+            {
+                "op": "read",
+                "owner": "public-owner",
+                "repository": "public-repo",
+                "pull_number": 17,
+                "fields": ["number", "state", "mergeable"],
+                "timeout_seconds": 15.0,
+            },
+            40.0,
+        )
     ]
     assert result.proof.route is ProofRoute.VERIFIED
+    assert result.proof.binding_digest == _BINDING
     assert result.decision.action == "allow"
     assert result.decision.disposition is FinalDisposition.SILENT_VERIFIED
 
 
-def test_github_executor_rejects_private_dynamic_and_drifted_reads(monkeypatch: pytest.MonkeyPatch) -> None:
-    private, pull = _github_payloads()
-    private["private"] = True
-    responses = iter((private, pull))
-
-    def private_get(_url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
-        del timeout_seconds, opener
-        return next(responses)
-
-    monkeypatch.setattr(github_reads, "_public_get_json", private_get)
-    assert try_read_verified_public_github_pull_request("public-owner", "public-repo", 17) is None
-    assert try_read_verified_public_github_pull_request("owner/value", "repo", 17) is None
-    assert try_read_verified_public_github_pull_request("owner", "repo", 0) is None
-    assert try_read_verified_public_github_pull_request("owner", "repo", 17, fields=("body",)) is None
-
-    responses = iter(_github_payloads())
-
-    def drift_get(_url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
-        del timeout_seconds, opener
-        return next(responses)
-
-    monkeypatch.setattr(github_reads, "_public_get_json", drift_get)
-    digests = iter(("0" * 64, "1" * 64))
-    monkeypatch.setattr(github_reads, "_source_digest", lambda: next(digests))
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        {"verified": False},
+        {"stdout": "x\n"},
+        {"stdout": 1, "binding_digest": _BINDING},
+        OSError("runtime unavailable"),
+    ],
+)
+def test_github_read_without_a_native_proof_is_unverified(answer: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(github_reads, "runtime_answer", _native(answer))
     assert try_read_verified_public_github_pull_request("public-owner", "public-repo", 17) is None
 
 
-def test_github_verified_read_proof_binds_managed_ca_contents(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    ca_bundle = tmp_path / "managed-ca.pem"
-    ca_bundle.write_bytes(b"first-managed-ca")
-    ca_bundle.chmod(0o600)
-    policy = ManagedNetworkPolicy(proxy_mode="none", ca_bundle_path=str(ca_bundle))
-    monkeypatch.setattr(github_reads, "active_network_policy", lambda: policy)
-    monkeypatch.setattr(github_reads, "managed_opener", lambda *_args, **_kwargs: object())
-
-    def read_once() -> github_reads.VerifiedGitHubReadResult:
-        responses = iter(_github_payloads())
-
-        def public_get(_url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
-            del timeout_seconds, opener
-            return next(responses)
-
-        monkeypatch.setattr(github_reads, "_public_get_json", public_get)
-        result = try_read_verified_public_github_pull_request("public-owner", "public-repo", 17)
-        assert result is not None
-        return result
-
-    first = read_once()
-    ca_bundle.write_bytes(b"second-managed-ca")
-    second = read_once()
-
-    assert first.proof.binding_digest != second.proof.binding_digest
-
-
-def test_proof_apis_do_not_accept_syntax_proof_or_transport_injection(tmp_path: Path) -> None:
-    local_parameters = inspect.signature(try_execute_verified_local_read).parameters
-    github_parameters = inspect.signature(try_read_verified_public_github_pull_request).parameters
-    assert "proof" not in local_parameters and "receipt" not in local_parameters
-    assert "proof" not in github_parameters and "transport" not in github_parameters
-
-    workspace, repository, cwd = _workspace(tmp_path)
-    command = real_native_command_evaluation("pwd", cwd=cwd).evaluation.command
-    observation = observe_launch_identity_binding(
-        command=command,
-        workspace=workspace,
-        repository=repository,
-        working_directory=cwd,
-        policy_version="verified-read-test.v1",
-        rules=(RuleVersionBinding("command.verified-read.test", "1.0.0"),),
-        launch_env={"PATH": os.environ.get("PATH", "")},
-    )
-    assert observation.can_issue_positive_proof is False
-    assert observation.unresolved_requirements == observation.required_requirements
-    assert real_native_command_evaluation("pwd").evaluation.decision_plane.proof_routes == frozenset()
+def test_github_read_refuses_an_unbounded_timeout_or_untyped_request_before_the_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[tuple[dict[str, object], float]] = []
+    monkeypatch.setattr(github_reads, "runtime_answer", _native(None, requests))
+    read = try_read_verified_public_github_pull_request
+    assert read("owner", "repo", 17, timeout_seconds=0) is None
+    assert read("owner", "repo", 17, timeout_seconds=31) is None
+    assert read("owner", "repo", 17, timeout_seconds=float("nan")) is None
+    assert read("owner", "repo", 17, timeout_seconds=cast(float, "15")) is None
+    assert read("owner", "repo", cast(int, True)) is None
+    assert read("owner", "repo", 17, fields=cast(tuple[str, ...], ["state"])) is None
+    assert requests == []

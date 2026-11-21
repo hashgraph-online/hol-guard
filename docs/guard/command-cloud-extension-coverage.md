@@ -9,6 +9,7 @@ Guard evaluates cloud CLI operations from the canonical parsed command model. Ru
 | `command.cloud.aws` | 300 | EC2 instance termination, RDS instance or cluster deletion, and EKS cluster deletion | Help, request skeleton generation, EC2 permission-only dry run, and describe operations |
 | `command.cloud.gcp` | 100 | Compute Engine instance deletion and Cloud SQL instance deletion | Help and describe operations |
 | `command.cloud.azure` | 100 | Resource management, identity, network, compute, application, data, messaging, observability, AI, and virtual machine deletion | Long and short help forms plus show operations |
+| `command.cloud.digitalocean` | 147 | Resource deletion, disruptive operations, access changes, credential exposure, remote execution, and inline access tokens | Long and short help forms; `list` and `get` reads are allowed silently by Guard's read proof |
 
 The AWS matrix is delivered as three non-overlapping 100-operation batches. Google Cloud and Azure each contribute one 100-operation batch.
 
@@ -28,8 +29,13 @@ Global account, project, subscription, profile, region, output, query, configura
 - Every matrix entry is exercised through command inspection and runtime tool-action extraction.
 - Read-only neighboring AWS operations remain unclassified by the destructive matrix.
 
+## DigitalOcean read proof
+
+Guard allows `doctl version`, help, and the `list` and `get` style reads of account, apps, billing, compute, Kubernetes, registry, project, VPC, network, monitoring, and NFS resources without a prompt. Some reads stay on review even though they change nothing, because they print or store credentials: `auth token`, `registry login`, `registry docker-config`, `kubernetes cluster kubeconfig`, and every `databases` read, since connection details include passwords. A read also stays on review when it passes `--access-token` or `-t`, which puts a token on the command line, `--api-url` or `-u`, which sends the stored token to another endpoint, or `--trace`, which prints each API request with its authorization header. Reads with `--config` or `--show` skip the quiet read path and fall back to the extension's ordinary rules.
+
 ## Primary references
 
 - [AWS CLI command reference](https://docs.aws.amazon.com/cli/latest/reference/)
 - [Google Cloud CLI reference](https://cloud.google.com/sdk/gcloud/reference)
 - [Azure CLI reference](https://learn.microsoft.com/cli/azure/reference-index)
+- [doctl command reference](https://docs.digitalocean.com/reference/doctl/)

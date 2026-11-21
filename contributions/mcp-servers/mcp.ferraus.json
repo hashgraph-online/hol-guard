@@ -1,0 +1,197 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.ferraus",
+  "version": "1.0.0",
+  "name": "ferraus",
+  "description": "Reviews the ferraus audio workstation's MCP tools that reach beyond the --allow music folders: downloads (including tools that fetch an ML model on first use), cache deletion, config changes, CLAP/VST3 plugin code, raw FFmpeg arguments, and tools that run other tools. Other editing, mixing and mastering tools only touch paths inside --allow and keep inherited policy. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.djynnius",
+    "displayName": "Sunday Ikpe",
+    "url": "https://github.com/djynnius/ferraus"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0F172A"
+  },
+  "homepage": "https://djynnius.github.io/ferraus",
+  "license": "Apache-2.0 OR MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "ferraus"
+  },
+  "riskClasses": [
+    "local-media-read",
+    "local-file-write",
+    "package-or-source-installation",
+    "local-data-deletion",
+    "external-command-execution"
+  ],
+  "tools": [
+    {
+      "name": "ferraus_models_pull",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_models_registry_update",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_sounds_install",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_sounds_update",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_accelerate_install",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_doctor",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_models_rm",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_models_prune",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_sounds_remove",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_pipeline_prune",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_presets_save",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_sounds_alias",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_plugin_run",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_plugin_scan",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_plugin_info",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_plugin_presets_list",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_plugin_state_save",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_plugin_state_load",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_sounds_scan",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_render",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_score_perform",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_hum",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_vocoder",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_ffmpeg",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_ffprobe",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_job_start",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_pipeline_run",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_replay",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_separate",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_denoise",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_tune",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_analyze_pitch",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_transcribe",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_score_read",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_fx",
+      "state": "review"
+    },
+    {
+      "name": "ferraus_score",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/djynnius/ferraus",
+    "https://github.com/djynnius/ferraus/blob/main/docs/guides/concepts/mcp.md",
+    "https://github.com/djynnius/ferraus/blob/main/crates/ferraus-mcp/src/server.rs",
+    "https://github.com/djynnius/ferraus/blob/main/docs/decisions",
+    "https://djynnius.github.io/ferraus"
+  ],
+  "saferAlternatives": [
+    "Start the server with --allow set to one music folder: path arguments outside it fail with path_not_allowed, and outputs default to ferraus-out/ inside it.",
+    "Keep ferraus_job_start, ferraus_pipeline_run and ferraus_replay on Review: each runs other ferraus tools, so an inherited call could reach a reviewed one.",
+    "Leave models.auto_download off (the default). FERRAUS_AUTO_DOWNLOAD=1 or -y can enable model downloads even when the default is off; separate, denoise, tune, analyze_pitch, transcribe, score_read, score and fx stay on Review either way.",
+    "Prefer ferraus_convert and the ferraus_media_* tools, whose paths are checked, to ferraus_ffmpeg and ferraus_ffprobe, which pass their arguments straight to FFmpeg.",
+    "Plugin tools and plugin:<name> instruments (render, score_perform, hum, vocoder carriers) run installed CLAP/VST3 code in a separate host process with a watchdog.",
+    "Models and sounds are SHA-256 checked against Ed25519-signed registries; sounds without a pinned hash are refused unless FERRAUS_ALLOW_UNVERIFIED=1 is set."
+  ]
+}

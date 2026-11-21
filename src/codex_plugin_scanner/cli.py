@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import importlib
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 from .argparse_utils import FriendlyArgumentParser, should_default_to_scan_target
+from .cli_native_errors import guard_value_error_exit
 from .cli_ui import build_cli_epilog, build_plain_text, build_scan_help_epilog
 from .reporting import format_json as format_json
 from .version import __version__
@@ -23,12 +26,25 @@ def _guard_cli(name: str):
     return getattr(guard_cli_module, name)
 
 
-def _supported_harness_values() -> tuple[str, ...]:
-    # Deferred: product_model transitively imports the whole Guard command
-    # surface, which short-lived invocations must not pay for.
-    from .guard.product_model import SUPPORTED_HARNESS_VALUES
+def _load_guard_command_hub() -> None:
+    # Parser construction no longer imports the Guard command hub. Load it
+    # before the dispatch handlers so an import failure keeps its traceback
+    # diagnostics instead of collapsing into a one-line error.
+    importlib.import_module(".guard.cli.commands", __package__)
 
-    return SUPPORTED_HARNESS_VALUES
+
+def _supported_harness_values() -> tuple[str, ...]:
+    # Deferred: the harness registry transitively imports the whole Guard command
+    # surface, which short-lived invocations must not pay for.
+    from .guard.native_runner_authority import NativeRunnerAuthorityError
+    from .guard.setup_contract_registry import harness_names
+
+    try:
+        return harness_names()
+    except NativeRunnerAuthorityError:
+        # Without a runtime no argument names a harness; the scanner's
+        # doctor still runs.
+        return ()
 
 
 def _run_scan(args: argparse.Namespace) -> int:
@@ -243,11 +259,12 @@ def _resolve_legacy_args(
         if program_mode == "hol-guard":
             return ["--help"]
         return argv
-    if program_mode == "guard":
+    if program_mode in {"guard", "hol-guard"}:
+        # Guard-generated commands spell the combined form `<cli> guard ...`.
+        # Neither standalone launcher has a `guard` subcommand, so the prefix
+        # is dropped instead of failing the whole command.
         if argv[0] == "guard":
             return argv[1:]
-        return _resolve_hermes_args(argv)
-    if program_mode == "hol-guard":
         return _resolve_hermes_args(argv)
     if program_mode == "combined" and argv[0] == "hook":
         return ["guard", *argv]
@@ -273,7 +290,12 @@ def _resolve_legacy_args(
         is_hol_guard_default_doctor = _is_hol_guard_program(program_name) and (
             len(argv) == 1 or "-h" in argv[1:] or "--help" in argv[1:]
         )
-        has_harness_arg = len(argv) >= 2 and not argv[1].startswith("-") and argv[1] in _supported_harness_values()
+        # Only a bare name can be a harness; a path never asks the runtime.
+        has_harness_arg = (
+            len(argv) >= 2
+            and re.fullmatch(r"[a-z][a-z0-9-]*", argv[1]) is not None
+            and argv[1] in _supported_harness_values()
+        )
         if has_guard_doctor_flag or is_hol_guard_default_doctor or has_harness_arg:
             return ["guard", *argv]
     known_commands = {
@@ -308,6 +330,9 @@ def _resolve_legacy_args(
         "protect",
         "preflight",
         "pytest-contained",
+        "execute-contained-test",
+        "execute-bound-bash",
+        "ack-bound-bash",
         "diff",
         "test-eval",
         "command",
@@ -332,7 +357,7 @@ def _resolve_legacy_args(
         "disconnect",
         "login",
         "sync",
-        *("device", "cloud-review"),
+        *("device", "cloud-review", "cloud-actions"),
         "bridge",
         "daemon",
         "hook",
@@ -344,6 +369,7 @@ def _resolve_legacy_args(
         "opencode-mcp-proxy",
         "copilot-mcp-proxy",
         "cursor-mcp-proxy",
+        "cline-mcp-proxy",
         "hermes-mcp-proxy",
     }
     if program_mode == "combined" and argv[0] in _guard_subcommands and ("--format" not in argv or argv[0] == "policy"):
@@ -357,13 +383,17 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
     if not bool(getattr(sys, "frozen", False)):
         return None
     if requested_argv[:1] == ["__guard-bounded-hook"]:
-        from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
+        from .guard.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(requested_argv[1:])
     if requested_argv[:1] == ["__guard-cursor-hook"]:
-        from .guard.adapters.cursor_hook_config import run_frozen_cursor_hook
+        from .guard.cursor_hook_ops import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(requested_argv[1:])
+    if requested_argv[:1] == ["__guard-claude-hook"]:
+        from .guard.claude_hook_entry import run_frozen_claude_hook
+
+        return run_frozen_claude_hook(requested_argv[1:])
     from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim
 
     frozen_shim_path = resolve_frozen_package_shim_path(requested_argv)
@@ -372,18 +402,40 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
     return run_frozen_package_shim(frozen_shim_path, requested_argv[1:])
 
 
+def _frozen_module_argv(argv: list[str]) -> list[str]:
+    """Drop the ``-m codex_plugin_scanner.cli`` prefix a frozen build cannot run.
+
+    MCP proxy entries keep the Python module argv so the native relay can parse
+    them, and the relay runs that argv unchanged when it hands a session back
+    to the proxy or restarts the daemon. A frozen launcher reads it as the CLI.
+    """
+
+    if bool(getattr(sys, "frozen", False)) and argv[:2] == ["-m", "codex_plugin_scanner.cli"]:
+        return argv[2:]
+    return argv
+
+
+def _program_name(argv0: str) -> str:
+    """The name users type: Windows launches console scripts as ``hol-guard.EXE``."""
+    name = Path(argv0).name
+    if name.lower().endswith(".exe"):
+        name = name[: -len(".exe")]
+    return name or "plugin-scanner"
+
+
 def main(argv: list[str] | None = None) -> int:
-    effective_argv = sys.argv[1:] if argv is None else argv
+    argv = _frozen_module_argv(sys.argv[1:] if argv is None else argv)
+    effective_argv = argv
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-bounded-hook"]:
-        from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
+        from .guard.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(effective_argv[1:])
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-cursor-hook"]:
-        from .guard.adapters.cursor_hook_config import run_frozen_cursor_hook
+        from .guard.cursor_hook_ops import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(effective_argv[1:])
-    program_name = Path(sys.argv[0]).name or "plugin-scanner"
-    requested_argv = sys.argv[1:] if argv is None else argv
+    program_name = _program_name(sys.argv[0])
+    requested_argv = argv
     frozen_exit = _run_frozen_early_dispatch(requested_argv)
     if frozen_exit is not None:
         return frozen_exit
@@ -392,6 +444,19 @@ def main(argv: list[str] | None = None) -> int:
         from .guard.secrets.cli import main as secrets_main
 
         return secrets_main(requested_argv[1:], program_name=f"{program_name} secrets")
+    if _is_hol_guard_program(program_name) and list(requested_argv[:2]) == ["plugin", "updates"]:
+        from .guard.plugin_telemetry.updates import main as plugin_updates_main
+
+        return plugin_updates_main(requested_argv[2:], program_name=f"{program_name} plugin updates")
+    if _is_hol_guard_program(program_name) and requested_argv and requested_argv[0] == "plugin":
+        from .guard.plugin_kit.cli import main as plugin_kit_main
+
+        return plugin_kit_main(requested_argv[1:], program_name=f"{program_name} plugin")
+
+    if _is_hol_guard_program(program_name) and requested_argv and requested_argv[0] == "telemetry":
+        from .guard.plugin_telemetry.cli import main as plugin_telemetry_main
+
+        return plugin_telemetry_main(requested_argv[1:], program_name=f"{program_name} telemetry")
     if _is_guard_program(program_name):
         program_mode = "guard"
     elif _is_hol_guard_program(program_name):
@@ -429,6 +494,16 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:
                 print(str(exc), file=sys.stderr)
                 return 1
+        from .guard.cli.desktop_daemon_workers import is_daemon_workers_fast_path_argv, run_daemon_workers_cli
+
+        if is_daemon_workers_fast_path_argv(requested_argv):
+            # Fast path: the native daemon starts its worker host on every cold
+            # start and is not ready until the host publishes policy.
+            try:
+                return run_daemon_workers_cli(requested_argv)
+            except Exception as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
         if is_daemon_serve_fast_path_argv(requested_argv):
             # Fast path: Desktop and the isolated launcher start the
             # approval-center with `daemon --serve`. The command hub must not
@@ -453,13 +528,14 @@ def main(argv: list[str] | None = None) -> int:
 
     warn_if_shadowed()
     if program_mode in {"guard", "hol-guard"}:
+        _load_guard_command_hub()
         try:
             import codex_plugin_scanner.cli as cli_module
 
             run_guard = getattr(cli_module, "run_guard_command", None) or _guard_cli("run_guard_command")
             return run_guard(args)
         except ValueError as exc:
-            parser.error(str(exc))
+            return guard_value_error_exit(parser, exc)
         except Exception as exc:
             print(str(exc), file=sys.stderr)
             return 1
@@ -487,10 +563,11 @@ def _dispatch_scanner_command(
     if args.command == "doctor":
         return _run_doctor(args)
     if args.command == "guard":
+        _load_guard_command_hub()
         try:
             return _guard_cli("run_guard_command")(args)
         except ValueError as exc:
-            parser.error(str(exc))
+            return guard_value_error_exit(parser, exc)
         except Exception as exc:
             print(str(exc), file=sys.stderr)
             return 1

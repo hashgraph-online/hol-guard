@@ -11,11 +11,11 @@ import pytest
 
 from codex_plugin_scanner.guard import evaluation_cli_run as cli_run
 from codex_plugin_scanner.guard import evaluation_runner as runner
-from codex_plugin_scanner.guard.adapters.hook_python_subprocess import ProbeResult
 from codex_plugin_scanner.guard.evaluation_cli import main
 from codex_plugin_scanner.guard.evaluation_contracts import EvaluationContractError, EvaluationProfile
 from codex_plugin_scanner.guard.evaluation_preflight import EvaluationSetup, setup_evaluation
 from codex_plugin_scanner.guard.evaluation_witness import FileWitnessPair
+from codex_plugin_scanner.guard.probe_subprocess import ProbeResult
 
 from .evaluation_cli_fixtures import _profile
 
@@ -25,9 +25,7 @@ def _write_runner_profile(tmp_path: Path, case_ids: tuple[str, ...]) -> tuple[Pa
     executable.write_text("#!/bin/sh\nexit 64\n", encoding="utf-8")
     executable.chmod(0o755)
     profile = _profile(tmp_path, executable)
-    profile["expectedCapabilities"] = [
-        {"capabilityId": case_id, "expectedAction": "block"} for case_id in case_ids
-    ]
+    profile["expectedCapabilities"] = [{"capabilityId": case_id, "expectedAction": "block"} for case_id in case_ids]
     profile_path = tmp_path / "runner-profile.json"
     profile_path.write_text(json.dumps(profile), encoding="utf-8")
     return profile_path, profile
@@ -170,9 +168,7 @@ def test_run_preserves_unrelated_bytes_and_never_invokes_host(tmp_path: Path, ca
     host_path = Path(str(profile["hostIdentity"]["executable"]))  # type: ignore[index]
     marker = tmp_path / "host-ran"
     host_path.write_text(
-        "#!/bin/sh\n"
-        f"touch '{marker}'\n"
-        "exit 0\n",
+        f"#!/bin/sh\ntouch '{marker}'\nexit 0\n",
         encoding="utf-8",
     )
     host_path.chmod(0o755)

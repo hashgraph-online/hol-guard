@@ -3,7 +3,7 @@ import { HiMiniArrowTopRightOnSquare, HiMiniCloud, HiMiniExclamationTriangle } f
 
 import { startGuardCloudConnect } from "../guard-api";
 import { extensionEffectiveState, permissionEffectiveState } from "../extension-control-center-model";
-import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
+import type { EffectiveExtensionControls, ExtensionCatalogItem, ExtensionCatalogSummary } from "../extension-controls-api";
 import type { GuardRuntimeSnapshot } from "../guard-types";
 import { effectiveStatusKey } from "../protection-center/effective-status-key";
 import {
@@ -72,12 +72,30 @@ function ManagedControlsPrimaryAction(props: {
   return null;
 }
 
+/**
+ * Permission IDs that belong to an extension. An index summary has no
+ * permission list, so the effective projection (which covers every catalog
+ * permission) supplies them; a full item adds its own.
+ */
+function extensionPermissionIds(
+  effective: EffectiveExtensionControls,
+  extension: ExtensionCatalogSummary | ExtensionCatalogItem,
+): Set<string> {
+  const ids = new Set(
+    (effective.projection?.permissions ?? [])
+      .filter((item) => item.extension_id === extension.extension_id)
+      .map((item) => item.permission_id),
+  );
+  if ("permissions" in extension) for (const permission of extension.permissions) ids.add(permission.permission_id);
+  return ids;
+}
+
 function layerTargetsExtension(
   effective: EffectiveExtensionControls,
-  extension: ExtensionCatalogItem,
+  extension: ExtensionCatalogSummary,
+  permissionIds: ReadonlySet<string>,
   kind: "local-admin" | "signed-cloud",
 ): boolean {
-  const permissionIds = new Set(extension.permissions.map((permission) => permission.permission_id));
   return effective.layers.some((layer) =>
     layer.kind === kind
     && layer.controls.some((control) =>
@@ -102,12 +120,12 @@ function managedSource(effective: EffectiveExtensionControls): ProtectionSource 
 
 export function extensionProtectionAuthority(
   effective: EffectiveExtensionControls,
-  extension: ExtensionCatalogItem,
+  extension: ExtensionCatalogSummary | ExtensionCatalogItem,
 ): ExtensionProtectionAuthority {
   if (effective.global_lockdown) {
     return { effectiveState: "lockdown", source: "Emergency Lockdown", sources: ["Emergency Lockdown"] };
   }
-  const permissionIds = new Set(extension.permissions.map((permission) => permission.permission_id));
+  const permissionIds = extensionPermissionIds(effective, extension);
   const extensionProjection = effective.projection?.extensions.find(
     (item) => item.extension_id === extension.extension_id,
   );
@@ -117,9 +135,9 @@ export function extensionProtectionAuthority(
   const projections = extensionProjection ? [extensionProjection, ...permissionProjections] : permissionProjections;
   const managed = managedSource(effective);
   const hasManaged = projections.some((item) => item.managed_state !== "inherited")
-    || layerTargetsExtension(effective, extension, "signed-cloud");
+    || layerTargetsExtension(effective, extension, permissionIds, "signed-cloud");
   const hasLocal = projections.some((item) => item.local_state !== "inherited")
-    || layerTargetsExtension(effective, extension, "local-admin");
+    || layerTargetsExtension(effective, extension, permissionIds, "local-admin");
   const sources: ProtectionSource[] = [];
   if (hasManaged) sources.push(managed);
   if (hasLocal) sources.push("Set on this device");
@@ -141,9 +159,9 @@ export function extensionProtectionAuthority(
   ));
   const extensionBlocked = extensionProjection?.effective_state === "blocked"
     || extensionEffectiveState(effective, extension) === "disabled";
-  const permissionStates = extension.permissions.map(
-    (permission) => permissionEffectiveState(effective, extension, permission),
-  );
+  const permissionStates = "permissions" in extension
+    ? extension.permissions.map((permission) => permissionEffectiveState(effective, extension, permission))
+    : permissionProjections.map((item) => (item.effective_state === "allowed" ? "enabled" : "disabled"));
   const blockedPermissionCount = permissionStates.filter((state) => state === "disabled").length;
   let effectiveState: LocalProtectionInput["effectiveState"];
   if (extensionBlocked) effectiveState = "blocked";
@@ -159,7 +177,7 @@ export function extensionProtectionAuthority(
 
 export function extensionProtectionSource(
   effective: EffectiveExtensionControls,
-  extension: ExtensionCatalogItem,
+  extension: ExtensionCatalogSummary | ExtensionCatalogItem,
 ): ProtectionSource {
   return extensionProtectionAuthority(effective, extension).source;
 }
@@ -232,7 +250,7 @@ export function ExtensionManagedControlsPanel(props: {
   const input = extensionLocalProtectionInput(props.extension, props.effective, props.runtime);
   const view = buildLocalProtectionView(input);
   const connected = props.runtime?.cloud_state === "paired_active" || props.runtime?.cloud_state === "paired_waiting";
-  const hasManagedControl = layerTargetsExtension(props.effective, props.extension, "signed-cloud");
+  const hasManagedControl = layerTargetsExtension(props.effective, props.extension, extensionPermissionIds(props.effective, props.extension), "signed-cloud");
   const refresh = useCallback(async () => {
     if (refreshState === "checking") return;
     refreshBaselineRef.current = effectiveStatusKey(props.effective, { runtime: props.runtime });

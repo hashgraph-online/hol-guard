@@ -1,0 +1,31 @@
+{
+  "capabilities": {
+    "agents": 0,
+    "commands": 0,
+    "hooks": false,
+    "mcpServers": [],
+    "skills": []
+  },
+  "description": null,
+  "homepage": null,
+  "identity": {
+    "repository": null,
+    "verified": false
+  },
+  "license": null,
+  "links": {
+    "holCard": null,
+    "listing": null,
+    "repository": null
+  },
+  "name": null,
+  "permissions": {
+    "environment": [],
+    "networkHosts": [],
+    "runsHooks": false,
+    "startsPrograms": []
+  },
+  "runtimes": [],
+  "schema": "hol.plugin-card.v0-draft",
+  "version": null
+}

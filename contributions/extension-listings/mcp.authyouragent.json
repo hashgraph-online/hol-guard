@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "mcp.authyouragent",
+  "tagline": "Review for an agent driving a signed-in browser vault: page actions, saved-credential fill and screenshots.",
+  "summary": "Auth Your Agent gives an AI agent a signed-in browser whose passwords and authenticator codes stay in the owner's vault. This opt-in coverage reviews the tools that act on the page (navigate, click, type_text, press_key, select_option, go_back), fill_secret, request_approval and screenshot. Reads, status checks, take over and sign-out follow normal Guard policy. Separately, the server can ask the owner on their phone before committing clicks, depending on the approval mode and trusted sites the owner has set.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed Auth Your Agent MCP tools and the surrounding Guard policy.",
+    "Matching applies to the authyouragent-mcp package launched through npx; other launchers or registries fall back to normal Guard policy.",
+    "Phone approval is enforced by the Auth Your Agent server, not by Guard, and depends on the owner's approval mode: some modes and trusted sites let clicks through without asking.",
+    "A publisher profile or badge is not a security certification or an endorsement by HOL."
+  ],
+  "documentationUrl": "https://authyouragent.com/docs/developers/takeover",
+  "tags": ["mcp", "browser", "credentials", "approval"],
+  "contributors": [
+    {"githubId": "62420081", "githubLogin": "kjames2001", "roles": ["author"]}
+  ],
+  "originalContributions": [
+    {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3345"}
+  ],
+  "upstream": {"name": "Auth Your Agent", "url": "https://github.com/kjames2001/authyouragent"}
+}

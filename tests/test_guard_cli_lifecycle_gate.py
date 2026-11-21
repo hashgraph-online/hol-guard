@@ -15,8 +15,9 @@ from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateInput,
     update_settings,
 )
-from codex_plugin_scanner.guard.cli import commands_lifecycle_gate
+from codex_plugin_scanner.guard.cli import commands_daemon_recovery, commands_lifecycle_gate
 from codex_plugin_scanner.guard.cli.commands_lifecycle_gate import (
+    LifecycleGateContext,
     enforce_lifecycle_gate,
     lifecycle_gate_requirement,
 )
@@ -99,6 +100,112 @@ def test_lifecycle_gate_warns_and_allows_when_protection_is_disabled(
     assert "This notice is advisory and does not block the current command." in warning
 
 
+def test_disabled_lifecycle_gate_does_not_consume_proof_input(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error_stream = io.StringIO()
+    monkeypatch.setattr(commands_lifecycle_gate, "canonical_lifecycle_home", lambda: tmp_path)
+
+    def proof_must_not_be_read(**_kwargs: object) -> None:
+        raise AssertionError("disabled approval gate consumed proof input")
+
+    monkeypatch.setattr(commands_lifecycle_gate, "consume_desktop_lifecycle_stdin", proof_must_not_be_read)
+
+    context = enforce_lifecycle_gate(
+        argparse.Namespace(
+            guard_command="daemon",
+            daemon_command="recovery",
+            daemon_recovery_command="restart",
+            approval_proof_stdin=True,
+        ),
+        guard_home=tmp_path,
+        error_stream=error_stream,
+    )
+
+    assert context is not None
+    assert context.was_enabled is False
+    assert "This notice is advisory and does not block the current command." in error_stream.getvalue()
+
+
+def test_disabled_lifecycle_gate_does_not_validate_desktop_environment_proof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error_stream = io.StringIO()
+    monkeypatch.setattr(commands_lifecycle_gate, "canonical_lifecycle_home", lambda: tmp_path)
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    monkeypatch.setenv("HOL_GUARD_APPROVAL_PASSWORD", "stale-unused-proof")
+
+    def proof_must_not_be_validated(**_kwargs: object) -> None:
+        raise AssertionError("disabled approval gate validated Desktop environment proof")
+
+    monkeypatch.setattr(commands_lifecycle_gate, "consume_desktop_lifecycle_env", proof_must_not_be_validated)
+
+    context = enforce_lifecycle_gate(
+        argparse.Namespace(guard_command="update"),
+        guard_home=tmp_path,
+        error_stream=error_stream,
+    )
+
+    assert context is not None
+    assert context.was_enabled is False
+    assert "This notice is advisory and does not block the current command." in error_stream.getvalue()
+    assert "HOL_GUARD_APPROVAL_PASSWORD" not in os.environ
+
+
+def test_cli_stdin_proof_clears_desktop_factors_before_handler_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    password = "correct horse battery staple"
+    monkeypatch.setattr(commands_lifecycle_gate, "canonical_lifecycle_home", lambda: tmp_path)
+    _ = update_settings(
+        tmp_path,
+        {"enabled": True, "new_password": password, "confirm_password": password},
+    )
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    monkeypatch.setenv("HOL_GUARD_APPROVAL_PASSWORD", "stale desktop password")
+    monkeypatch.setenv("HOL_GUARD_APPROVAL_TOTP_CODE", "654321")
+    proof_stream = io.TextIOWrapper(
+        io.BytesIO(json.dumps({"password": password, "totpCode": None}).encode("utf-8")),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sys.stdin", proof_stream)
+
+    from codex_plugin_scanner.guard.cli import commands_router
+
+    inherited: dict[str, str | None] = {}
+
+    def downstream_handler(*_args: object, **_kwargs: object) -> int:
+        inherited.update(
+            {
+                "password": os.environ.get("HOL_GUARD_APPROVAL_PASSWORD"),
+                "totp": os.environ.get("HOL_GUARD_APPROVAL_TOTP_CODE"),
+            }
+        )
+        return 0
+
+    monkeypatch.setattr(commands_router, "_run_guard_daemon_command", downstream_handler, raising=False)
+    parser = argparse.ArgumentParser()
+    add_guard_root_parser(parser)
+    args = parser.parse_args(
+        [
+            "daemon",
+            "recovery",
+            "restart",
+            "--guard-home",
+            str(tmp_path),
+            "--approval-proof-stdin",
+        ]
+    )
+
+    exit_code = run_guard_command(args, output_stream=io.StringIO())
+
+    assert exit_code == 0
+    assert inherited == {"password": None, "totp": None}
+
+
 def test_lifecycle_gate_does_not_warn_when_totp_gate_is_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -178,6 +285,110 @@ def test_lifecycle_gate_accepts_valid_password_and_binds_grant(
         argparse.Namespace(guard_command="install", harness="codex"),
         guard_home=tmp_path,
     )
+
+
+def test_daemon_recovery_revalidates_action_grant_without_reprompting(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    password = "correct horse battery staple"
+    _ = update_settings(
+        tmp_path,
+        {"enabled": True, "new_password": password, "confirm_password": password},
+    )
+    prompt_calls: list[str] = []
+
+    def prompt(_guard_home: Path, **_kwargs: object) -> ApprovalGateInput:
+        prompt_calls.append("prompt")
+        return ApprovalGateInput(password=password)
+
+    monkeypatch.setattr(commands_lifecycle_gate, "prompt_for_approval_gate", prompt)
+    observations: dict[str, dict[str, object]] = {}
+    original_validate = commands_daemon_recovery.validate_lifecycle_gate_context
+    validations: list[LifecycleGateContext] = []
+
+    def validate_context(context: LifecycleGateContext) -> bool:
+        validations.append(context)
+        return len(validations) == 1 and original_validate(context)
+
+    monkeypatch.setattr(commands_daemon_recovery, "validate_lifecycle_gate_context", validate_context)
+
+    def fake_recovery(
+        _home: Path, _home_dir: object, mode: str, *, request_id: object = None, authorize=None, emit=None
+    ) -> dict[str, object]:
+        del emit
+        assert mode == "run" and authorize is not None
+        observations["first"] = authorize()
+        second = observations["second"] = authorize()
+        allowed = second["allowed"] is True
+        return {
+            "operationId": str(request_id),
+            "phase": "complete" if allowed else "awaiting_approval",
+            "service": "ready",
+            "protection": "verified",
+            "outcome": "reconnected" if allowed else "not_recovered",
+            "reasonCode": "healthy" if allowed else "approval_required",
+            "workerActive": False,
+            "retryAllowed": False,
+            "requiresHumanAction": not allowed,
+        }
+
+    monkeypatch.setattr(commands_daemon_recovery, "_native_recovery", fake_recovery)
+    parser = argparse.ArgumentParser()
+    add_guard_root_parser(parser)
+    args = parser.parse_args(
+        [
+            "daemon",
+            "recovery",
+            "restart",
+            "--guard-home",
+            str(tmp_path),
+            "--json",
+        ]
+    )
+    output = io.StringIO()
+
+    exit_code = run_guard_command(args, output_stream=output)
+
+    assert exit_code == 2
+    assert observations["first"]["allowed"] is True
+    assert observations["second"]["allowed"] is False
+    assert prompt_calls == ["prompt"]
+    assert len(validations) == 2
+    context = validations[0]
+    assert context.authority_home == tmp_path.resolve()
+    assert context.action == "daemon.restart"
+    assert context.scope == "local-protection"
+    assert context.subject == "local-daemon"
+    assert context.grant is not None
+    assert context.grant.action == "daemon.restart"
+
+
+def test_router_preserves_recovery_error_stream_on_error_path(
+    tmp_path: Path,
+) -> None:
+    parser = argparse.ArgumentParser()
+    add_guard_root_parser(parser)
+    args = parser.parse_args(
+        [
+            "daemon",
+            "recovery",
+            "status",
+            "--guard-home",
+            str(tmp_path),
+            "--operation-id",
+            "11111111-1111-4111-8111-111111111111",
+            "--json",
+        ]
+    )
+    output = io.StringIO()
+    error = io.StringIO()
+
+    exit_code = run_guard_command(args, output_stream=output, error_stream=error)
+
+    assert exit_code == 2
+    assert output.getvalue() == ""
+    assert error.getvalue().startswith("HOL Guard recovery failed:")
 
 
 @pytest.mark.parametrize("override_flag", ["--home", "--guard-home"])
@@ -465,3 +676,119 @@ def test_approval_prompt_tells_the_user_it_is_waiting(
     assert result is not None
     assert result.password == password
     assert "waiting for your approval password" in capsys.readouterr().err
+
+
+def test_silent_authority_names_the_runtime_install_when_the_runtime_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli import update_commands
+
+    manual = 'python -m pip install --force-reinstall --no-deps "https://example.test/hol_guard.whl"'
+    monkeypatch.setattr(
+        update_commands,
+        "bundled_native_runtime_report",
+        lambda: {"status": "missing", "bundled": False, "manual_install": manual},
+    )
+    error = ApprovalGateError("native_approval_gate_unavailable", "The native approval authority did not answer.")
+
+    explained = commands_lifecycle_gate.explain_missing_native_runtime(error)
+
+    assert explained.code == "native_approval_gate_unavailable"
+    assert manual in str(explained)
+    assert "Retry" not in str(explained)
+
+
+@pytest.mark.parametrize(
+    ("code", "report"),
+    [
+        ("native_approval_gate_unavailable", {"status": "present", "bundled": True}),
+        ("native_approval_gate_unavailable", None),
+        ("approval_gate_password_required", {"status": "missing", "manual_install": "python -m pip install x"}),
+    ],
+)
+def test_silent_authority_keeps_its_error_unless_the_runtime_is_missing(
+    monkeypatch: pytest.MonkeyPatch, code: str, report: dict[str, object] | None
+) -> None:
+    from codex_plugin_scanner.guard.cli import update_commands
+
+    monkeypatch.setattr(update_commands, "bundled_native_runtime_report", lambda: report)
+    error = ApprovalGateError(code, "original")
+
+    assert commands_lifecycle_gate.explain_missing_native_runtime(error) is error
+
+
+def _missing_runtime(monkeypatch: pytest.MonkeyPatch, repair: tuple[dict[str, object], int] | None) -> list[Path]:
+    from codex_plugin_scanner.guard.cli import update_commands
+
+    runtime = {"missing": True}
+    calls: list[Path] = []
+
+    def fake_repair(**kwargs: object) -> tuple[dict[str, object], int] | None:
+        calls.append(cast(Path, kwargs["guard_home"]))
+        if repair is not None and repair[1] == 0:
+            runtime["missing"] = False
+        return repair
+
+    monkeypatch.setattr(update_commands, "bundled_native_runtime_missing", lambda: runtime["missing"])
+    monkeypatch.setattr(update_commands, "repair_native_runtime_if_missing", fake_repair)
+    return calls
+
+
+def test_silent_authority_installs_the_missing_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls = _missing_runtime(monkeypatch, ({"status": "updated"}, 0))
+    error = ApprovalGateError("native_approval_gate_unavailable", "silent")
+    stream = io.StringIO()
+
+    restored = commands_lifecycle_gate.restore_missing_native_runtime(
+        error, context=None, guard_home=tmp_path, error_stream=stream
+    )
+
+    assert restored is True
+    assert calls == [tmp_path]
+    assert "Installing the missing native runtime" in stream.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("code", "repair"),
+    [
+        ("approval_gate_password_required", ({"status": "updated"}, 0)),
+        ("native_approval_gate_unavailable", ({"status": "failed"}, 1)),
+        ("native_approval_gate_unavailable", None),
+    ],
+)
+def test_silent_authority_restore_leaves_other_failures_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, code: str, repair: tuple[dict[str, object], int] | None
+) -> None:
+    calls = _missing_runtime(monkeypatch, repair)
+
+    restored = commands_lifecycle_gate.restore_missing_native_runtime(
+        ApprovalGateError(code, "original"), context=None, guard_home=tmp_path, error_stream=io.StringIO()
+    )
+
+    assert restored is False
+    assert calls == ([] if code != "native_approval_gate_unavailable" else [tmp_path])
+
+
+def test_router_reruns_the_gate_after_restoring_the_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.cli import commands_router
+
+    gate_calls: list[str] = []
+
+    def gate(_args: object, **_kwargs: object) -> None:
+        gate_calls.append("gate")
+        if len(gate_calls) == 1:
+            raise ApprovalGateError("native_approval_gate_unavailable", "silent")
+        raise ApprovalGateError("approval_gate_interactive_required", "approve first")
+
+    monkeypatch.setattr(commands_router, "enforce_lifecycle_gate", gate)
+    monkeypatch.setattr(commands_router, "restore_missing_native_runtime", lambda *_a, **_k: True)
+    parser = argparse.ArgumentParser()
+    add_guard_root_parser(parser)
+    args = parser.parse_args(["update", "--guard-home", str(tmp_path), "--json"])
+    output = io.StringIO()
+
+    exit_code = run_guard_command(args, output_stream=output)
+
+    assert exit_code == 4
+    assert gate_calls == ["gate", "gate"]
+    assert cast(dict[str, object], json.loads(output.getvalue()))["error"] == "approval_gate_interactive_required"

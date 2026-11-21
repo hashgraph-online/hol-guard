@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 from urllib.parse import urlparse
 
 _LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -40,14 +40,6 @@ def parse_loopback_origin(approval_url_base: object) -> str | None:
     if not netloc:
         return None
     return f"{parsed.scheme}://{netloc}"
-
-
-AnnotationHint = Literal[
-    "readOnlyHint",
-    "destructiveHint",
-    "idempotentHint",
-    "openWorldHint",
-]
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,7 +175,7 @@ _GET_POLICY_CREATION_SCHEMA: dict[str, object] = {
 }
 
 
-def build_tool_registry() -> list[ToolDefinition]:
+def build_tool_registry(*, context_tools: tuple[str, ...] = ()) -> list[ToolDefinition]:
     """Build the complete typed tool registry.
 
     Returns all six tools with their schemas, annotations, and handlers.
@@ -196,7 +188,7 @@ def build_tool_registry() -> list[ToolDefinition]:
     )
     from .tools import execute_fetch, execute_get_guard_status, execute_search
 
-    return [
+    tools = [
         ToolDefinition(
             name="search",
             description="Search the Guard knowledge base for relevant documentation and guidance.",
@@ -253,14 +245,15 @@ def build_tool_registry() -> list[ToolDefinition]:
             handler=execute_get_policy_creation,
         ),
     ]
+    if context_tools:
+        from .context_tools import definitions
+
+        tools.extend(tool for tool in definitions() if tool.name in context_tools)
+    return tools
 
 
-def list_tool_names() -> list[str]:
-    return [tool.name for tool in build_tool_registry()]
-
-
-def get_tool_definition(name: str) -> ToolDefinition | None:
-    for tool in build_tool_registry():
+def get_tool_definition(name: str, *, context_tools: tuple[str, ...] = ()) -> ToolDefinition | None:
+    for tool in build_tool_registry(context_tools=context_tools):
         if tool.name == name:
             return tool
     return None
@@ -271,6 +264,5 @@ __all__ = [
     "ToolDefinition",
     "build_tool_registry",
     "get_tool_definition",
-    "list_tool_names",
     "parse_loopback_origin",
 ]

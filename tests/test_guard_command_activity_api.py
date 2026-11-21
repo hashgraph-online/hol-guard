@@ -22,9 +22,9 @@ from codex_plugin_scanner.guard.runtime.command_activity_api_contract import (
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_command_activity_api import (
     CommandActivityNotFoundError,
-    _activity_page_query,
 )
 from tests.guard_command_activity_api_support import evidence, seed
+from tests.native_store_shims import record_command_activity
 
 
 def test_api_schema_is_atomic_strict_and_reopens(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -139,7 +139,7 @@ def test_analytics_reconciles_rollups_and_exposes_bounded_health(tmp_path: Path)
 def test_filtered_analytics_excludes_out_of_scope_feedback(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     seed(store)
-    store.record_command_activity(evidence("activity:claude", minute=4, harness="claude-code"))
+    record_command_activity(store, evidence("activity:claude", minute=4, harness="claude-code"))
     store.record_command_activity_feedback(
         activity_id="activity:claude",
         label=CommandActivityFeedbackLabel.EXPECTED_GUARD_TO_STOP_THIS,
@@ -223,26 +223,3 @@ def test_empty_invalidation_log_resets_an_ahead_cursor(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     page = store.list_command_activity_invalidations(42)
     assert page == {"reset_required": True, "reset_cursor": 0, "items": []}
-
-
-def test_filtered_query_plans_are_index_driven(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    with sqlite3.connect(store.path) as connection:
-        status_sql, status_params = _activity_page_query(
-            CommandActivityListQuery(execution_status="confirmed_failure"),
-            cursor=None,
-        )
-        status_plan = " ".join(
-            str(row[3]) for row in connection.execute(f"explain query plan {status_sql}", status_params).fetchall()
-        )
-        rule_sql, rule_params = _activity_page_query(
-            CommandActivityListQuery(rule_id="command.git.missing"),
-            cursor=None,
-        )
-        rule_plan = " ".join(
-            str(row[3]) for row in connection.execute(f"explain query plan {rule_sql}", rule_params).fetchall()
-        )
-    assert "idx_command_activity_execution_status_occurred_at" in status_plan
-    assert "idx_command_activity_match_rule" in rule_plan
-    assert "SCAN activity USING INDEX idx_command_activity_occurred_at" not in status_plan
-    assert "SCAN activity USING INDEX idx_command_activity_occurred_at" not in rule_plan

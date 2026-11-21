@@ -29,11 +29,55 @@ EXACT_FIXTURES = (
     r"printf escaped\ space",
     r"printf \#not-a-comment",
     "./tool --flag=value",
+    # A shell run on a script file is exact in both models; the script contents
+    # are governed by the file-shell read authority, not by command-model uncertainty.
+    "bash ./script.sh",
     # Bounded sudo wrappers preserve the same source tokens, spans, and
     # wrapper provenance as Python; exact parsing does not authorize execution.
     "sudo rm -rf /tmp/example",
     "sudo -n rm -rf /tmp/example",
     "sudo --non-interactive -- rm -rf /tmp/example",
+    # A literal shell-script invocation is an exact single command in both
+    # models (bounded script execution review is owned by the pre-tool
+    # authority, not by the structural parser), so parity must hold.
+    "bash ./script.sh",
+    "sh script.sh",
+)
+# Transparent prefixes that the Python model's wrapper normalization rewrites
+# away (`time tool` becomes `tool` with a `time` wrapper), while the native
+# shadow keeps the source text and spans and models the prefix as a keyword.
+# Both must be exact and must run the same program with the same arguments.
+NORMALIZED_WRAPPER_FIXTURES = (("time tool", "time"),)
+# A plain inline script is modeled as the words it runs, so the native shadow
+# reads `sh -c '<script>'` as the program inside it, with the same arguments
+# it reads for the script on its own.
+INLINE_SCRIPT_FIXTURES = (("sh -c 'rm -rf /tmp/example'", "rm -rf /tmp/example"),)
+# A scheduling or buffering prefix read through its documented options leaves
+# the program behind it as the command, so the native shadow models it exactly
+# as it models that program run on its own, with no wrapper left in the chain.
+# The Python model normalizes the prefix into its wrapper chain, as it does for
+# `time`, so the two are compared by the program they run.
+# The spellings the launcher grammars do not read stay uncertain below.
+LAUNCHER_FIXTURES = (
+    ("stdbuf -o0 tool", "tool"),
+    ("stdbuf -oL -e0 tool --flag", "tool --flag"),
+    ("nice -n 10 tool", "tool"),
+)
+# The parser reads `exec` as a launcher, but wrapper normalization does not
+# strip it, so only the native model is compared with the bare command.
+EXEC_LAUNCHER_FIXTURES = (("exec rm -rf /tmp/example", "rm -rf /tmp/example"),)
+# Spellings the native model reads as the plain command they run. Wrapper
+# normalization does not rewrite any of them, so only the native model is
+# compared with the plain spelling.
+# - `env NAME=value tool` sets the same environment as a bare
+#   `NAME=value tool`, so both model the same program and environment names.
+# - A closed `[[ ... ]]` test is read as the `[ ... ]` test it asks.
+# - A subshell or brace group is read as the command list inside it.
+NATIVE_EQUIVALENT_FIXTURES = (
+    ("env FOO=bar tool", "FOO=bar tool"),
+    ("[[ -f Cargo.toml ]]", "[ -f Cargo.toml ]"),
+    ("(echo nested)", "echo nested"),
+    ("{ echo nested; }", "echo nested"),
 )
 UNCERTAIN_FIXTURES = (
     "echo $(uname)",
@@ -44,27 +88,23 @@ UNCERTAIN_FIXTURES = (
     "sudo -u root rm -rf /tmp/example",
     "sudo -i rm -rf /tmp/example",
     "sudo -s rm -rf /tmp/example",
-    "env FOO=bar tool",
-    "time tool",
-    "stdbuf -o0 tool",
-    "sh -c 'rm -rf /tmp/example'",
-    "bash ./script.sh",
+    "stdbuf tool",
+    "./stdbuf -o0 tool",
+    "nohup tool",
+    "setsid tool",
     "eval 'rm -rf /tmp/example'",
-    "exec rm -rf /tmp/example",
+    "exec -a worker rm -rf /tmp/example",
+    "exec bash -lc 'rm -rf /tmp/example'",
     "source ./script.sh",
     ". ./script.sh",
     "if true; then echo yes; fi",
     'for item in one two; do echo "$item"; done',
     "while true; do break; done",
     'case "$value" in one) echo one;; esac',
-    "[[ -f Cargo.toml ]]",
-    "echo $'non-posix quote'",
     'echo $"localized quote"',
     "xargs rm -rf",
     "parallel rm ::: one",
     "find . -exec rm {} ;",
-    "(echo nested)",
-    "{ echo nested; }",
     "echo 'unterminated",
     "echo trailing\\",
 )
@@ -104,6 +144,20 @@ def _comparable(command: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _programs(command: dict[str, object]) -> list[tuple[object, ...]]:
+    return [
+        (
+            segment["executable"],
+            segment["arguments"],
+            segment["environment_names"],
+            segment["path_overridden"],
+            segment["execution_context"],
+            segment["pipeline_index"],
+        )
+        for segment in command["segments"]
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", type=Path, required=True)
@@ -126,6 +180,51 @@ def main() -> int:
         assert native_model["confidence"] == "exact", fixture
         assert _comparable(native_model) == _comparable(python_model), fixture
 
+    for fixture, wrapper in NORMALIZED_WRAPPER_FIXTURES:
+        python_model = parse_shell_command(fixture).to_dict()
+        native_model = _native(args.binary, fixture)
+        assert python_model["confidence"] == "exact", fixture
+        assert native_model["confidence"] == "exact", fixture
+        assert wrapper in python_model["wrapper_chain"], fixture
+        assert _programs(native_model) == _programs(python_model), fixture
+
+    for fixture, script in INLINE_SCRIPT_FIXTURES:
+        native_model = _native(args.binary, fixture)
+        direct_model = _native(args.binary, script)
+        assert native_model["confidence"] == "exact", fixture
+        assert direct_model["confidence"] == "exact", script
+        launched = [(segment["executable"], segment["arguments"]) for segment in native_model["segments"]]
+        for segment in direct_model["segments"]:
+            assert (segment["executable"], segment["arguments"]) in launched, fixture
+
+    for fixture, program in LAUNCHER_FIXTURES:
+        python_model = parse_shell_command(fixture).to_dict()
+        native_model = _native(args.binary, fixture)
+        direct_model = _native(args.binary, program)
+        assert python_model["confidence"] == "exact", fixture
+        assert native_model["confidence"] == "exact", fixture
+        assert direct_model["confidence"] == "exact", program
+        assert fixture.split()[0] in python_model["wrapper_chain"], fixture
+        assert native_model["wrapper_chain"] == [], fixture
+        assert _programs(native_model) == _programs(python_model), fixture
+        assert _programs(native_model) == _programs(direct_model), fixture
+
+    for fixture, program in EXEC_LAUNCHER_FIXTURES:
+        native_model = _native(args.binary, fixture)
+        direct_model = _native(args.binary, program)
+        assert native_model["confidence"] == "exact", fixture
+        assert direct_model["confidence"] == "exact", program
+        assert native_model["wrapper_chain"] == [], fixture
+        assert _programs(native_model) == _programs(direct_model), fixture
+
+    for fixture, program in NATIVE_EQUIVALENT_FIXTURES:
+        native_model = _native(args.binary, fixture)
+        direct_model = _native(args.binary, program)
+        assert native_model["confidence"] == "exact", fixture
+        assert direct_model["confidence"] == "exact", program
+        assert native_model["wrapper_chain"] == [], fixture
+        assert _programs(native_model) == _programs(direct_model), fixture
+
     for fixture in UNCERTAIN_FIXTURES:
         native_model = _native(args.binary, fixture)
         assert native_model["confidence"] == "uncertain", fixture
@@ -136,6 +235,11 @@ def main() -> int:
         json.dumps(
             {
                 "exact_fixture_count": len(EXACT_FIXTURES),
+                "normalized_wrapper_fixture_count": len(NORMALIZED_WRAPPER_FIXTURES),
+                "inline_script_fixture_count": len(INLINE_SCRIPT_FIXTURES),
+                "launcher_fixture_count": len(LAUNCHER_FIXTURES),
+                "exec_launcher_fixture_count": len(EXEC_LAUNCHER_FIXTURES),
+                "native_equivalent_fixture_count": len(NATIVE_EQUIVALENT_FIXTURES),
                 "uncertain_fixture_count": len(UNCERTAIN_FIXTURES),
                 "status": "ok",
             },

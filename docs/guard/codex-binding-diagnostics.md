@@ -7,10 +7,12 @@ private v2 marker. Capture cannot supply native authority or an approval.
 ## Start a local capture
 
 Use `initialize_capture_marker(guard_home, run_id=..., expires_at=...)` from
-`codex_plugin_scanner.guard.codex_binding_capture`. Supply an existing absolute
-Guard home with private ownership and permissions, a unique run ID and an
-expiry within one hour. The initializer returns a `CaptureSession` on success
-and `None` on refusal. It must not replace an existing marker. Interrupted
+`codex_plugin_scanner.guard.native_codex_binding_capture`. The native runtime
+owns the marker, key, fingerprints, sealing and output file; Python forwards
+JSON text only. Supply an existing absolute Guard home with private ownership
+and permissions, a unique run ID and an expiry within one hour. The initializer
+returns the session metadata (run ID, key ID, expiry and limits, never the key)
+on success and `None` on refusal or when the runtime is unavailable. It must not replace an existing marker. Interrupted
 creation can leave a private partial marker; inspect the owned artifact before
 explicit cleanup or starting another run.
 
@@ -35,6 +37,8 @@ contention, a full queue, startup failure or shutdown drops the diagnostic;
 review never waits for capture file I/O or for the queue to drain. Marker
 validation, sealing and file writes run in that writer and remain default off.
 
+Each capture call first checks that the marker file exists and returns without
+runtime traffic when it does not, so the default-off path costs one `lstat`.
 Bridge capture is synchronous and consumes the existing hook budget. The lock
 retry bound does not bound filesystem calls or total hook delivery time.
 Neither capture route proves that every hook was recorded or meets a host
@@ -42,9 +46,9 @@ latency target. A missing row remains ambiguous.
 
 ## Verify locally
 
-Read the private session with `read_capture_session(guard_home)`, then pass it
-to `join_binding_records(records, capture_session=session)`. Keep JSONL input
-within the capture limits.
+Call `join_binding_records(guard_home, records)`. The runtime reads the private
+marker itself, so the key never reaches Python. Keep JSONL input within the
+capture limits.
 
 V2 rows contain domain-separated HMAC fingerprints and a row MAC. Native
 receipt fields are sealed with AES-GCM; the local join authenticates and opens

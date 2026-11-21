@@ -25,11 +25,9 @@ import pytest
 from codex_plugin_scanner.cli import _resolve_legacy_args, main
 from codex_plugin_scanner.guard import local_trust_contract as local_trust_contract_module
 from codex_plugin_scanner.guard import local_trust_controller as local_trust_controller_module
-from codex_plugin_scanner.guard import policy_integrity as policy_integrity_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard import store_policy_integrity_runtime as policy_integrity_runtime_module
 from codex_plugin_scanner.guard.cli import commands_dispatch_trust as trust_dispatch_module
-from codex_plugin_scanner.guard.daemon.manager import ApprovalCenterLocator, write_guard_daemon_state
 from codex_plugin_scanner.guard.local_trust_contract import (
     LOCAL_TRUST_DEGRADED_REASON_LABELS,
     LOCAL_TRUST_MODES,
@@ -53,6 +51,12 @@ from codex_plugin_scanner.guard.local_trust_contract import (
     select_trust_backend,
 )
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
+from codex_plugin_scanner.guard.native_daemon_manage import ApprovalCenterLocator, write_guard_daemon_state
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
+    NATIVE_POLICY_VERIFIER_KEY_NAME,
+    NATIVE_RUNTIME_STATE_DIRECTORY,
+)
 from codex_plugin_scanner.guard.policy_authority import PolicyAuthorityError
 from codex_plugin_scanner.guard.policy_bundle_decisions import build_policy_bundle_decisions
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
@@ -63,6 +67,8 @@ from codex_plugin_scanner.guard.store import (
 )
 from codex_plugin_scanner.guard.store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.policy_integrity_fixture import canonical_policy_payload
+from tests.policy_store_support import replace_remote_policies, resolve_policy
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
 _TRUST_BACKEND_CORRUPT_RESULT_RUNTIME_TIMEOUT_SECONDS = 1.0
@@ -991,6 +997,10 @@ def _rotate_policy_integrity_key(store: GuardStore, *, raw_key: bytes) -> None:
         store._policy_integrity_key_ref,
         base64.urlsafe_b64encode(raw_key).decode("ascii"),
     )
+    # The resident verifier key is derived from the master key and is never
+    # replaced in place, so a rotation is an explicit repair that retires it
+    # with the old master.
+    (store.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_VERIFIER_KEY_NAME).unlink(missing_ok=True)
     store._clear_policy_integrity_cache()
 
 
@@ -1052,7 +1062,8 @@ def test_direct_sqlite_insert_is_ignored_when_integrity_is_degraded(tmp_path: Pa
             ),
         )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:forged",
         "hash-forged",
@@ -1106,7 +1117,8 @@ def test_sync_state_tamper_cannot_downgrade_enforcement(tmp_path: Path) -> None:
             ),
         )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:forged-sync-state",
         "hash-forged-sync-state",
@@ -1124,6 +1136,10 @@ def test_upsert_policy_uses_single_integrity_key_lookup_per_write(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = _store(tmp_path)
+    # The resident's one-time verifier-key provisioning also reads the master.
+    # It happens once per guard home, not once per write, so settle it before
+    # counting the lookups the write itself makes.
+    assert ensure_resident_prerequisite(store.guard_home, store=store)
     original_lookup = store._policy_integrity_secret_material
     lookup_calls = 0
 
@@ -1298,7 +1314,8 @@ def test_ensure_policy_integrity_ready_for_write_skips_item_context_expansion(
     assert payload["autorepair"]["attempted"] is True
     assert payload["autorepair"]["steps"][0]["step"] == "setup"
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:approval-memory",
             "hash-approval-memory",
@@ -1328,8 +1345,10 @@ def test_setup_policy_integrity_repairs_all_harnesses_when_called_with_scope(tmp
 
     assert payload["counts"]["valid"] == 1
     assert global_status["counts"]["valid"] == 2
-    assert store.resolve_policy("codex", "codex:project:codex", "hash-codex", now="2026-06-14T00:06:00Z") == "allow"
-    assert store.resolve_policy("cursor", "cursor:project:cursor", "hash-cursor", now="2026-06-14T00:06:00Z") == "allow"
+    assert resolve_policy(store, "codex", "codex:project:codex", "hash-codex", now="2026-06-14T00:06:00Z") == "allow"
+    assert (
+        resolve_policy(store, "cursor", "cursor:project:cursor", "hash-cursor", now="2026-06-14T00:06:00Z") == "allow"
+    )
 
 
 def test_ensure_policy_integrity_ready_for_write_clears_tampered_rows_without_item_expansion(
@@ -1362,7 +1381,8 @@ def test_ensure_policy_integrity_ready_for_write_clears_tampered_rows_without_it
     assert payload["cleared"] == 1
     assert payload["autorepair"]["steps"][0]["step"] == "clear_invalid"
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:tampered-repair",
             "hash-tampered-repair",
@@ -1398,7 +1418,8 @@ def test_ensure_policy_integrity_ready_for_write_preserves_unknown_key_rows_whil
     assert payload["counts"]["valid"] == 1
     assert payload["cleared"] == 1
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:unknown-key",
             "hash-unknown-key",
@@ -1407,7 +1428,8 @@ def test_ensure_policy_integrity_ready_for_write_preserves_unknown_key_rows_whil
         == "allow"
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:tampered-mixed",
             "hash-tampered-mixed",
@@ -1444,7 +1466,8 @@ def test_ensure_policy_integrity_ready_for_write_repairs_only_requested_harness(
 
     assert payload["cleared"] == 1
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:tampered-local",
             "hash-tampered-local",
@@ -1482,9 +1505,93 @@ def test_repair_policy_integrity_uses_reconciled_generation_before_fast_scan(
     assert payload["counts"]["valid"] == 2
     assert payload["cleared"] == 0
     assert (
-        store.resolve_policy("codex", "codex:project:baseline", "hash-baseline", now="2026-06-14T00:03:00Z") == "allow"
+        resolve_policy(store, "codex", "codex:project:baseline", "hash-baseline", now="2026-06-14T00:03:00Z") == "allow"
     )
-    assert store.resolve_policy("codex", "codex:project:pending", "hash-pending", now="2026-06-14T00:03:00Z") == "allow"
+    assert (
+        resolve_policy(store, "codex", "codex:project:pending", "hash-pending", now="2026-06-14T00:03:00Z") == "allow"
+    )
+
+
+def test_repair_policy_integrity_attaches_source_context_to_invalid_items(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:repair-context", artifact_hash="hash-repair-context"),
+        "2026-06-14T00:00:00Z",
+    )
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            "update policy_decisions set payload_mac = ? where artifact_id = ?",
+            ("deadbeef", "codex:project:repair-context"),
+        )
+    attached: list[list[dict[str, object]]] = []
+
+    def _attach(items: list[dict[str, object]]) -> None:
+        attached.append(items)
+        for item in items:
+            item["remembered_command"] = "attached"
+
+    monkeypatch.setattr(store, "_attach_policy_source_contexts", _attach)
+
+    payload = store.repair_policy_integrity(clear_invalid=False, now="2026-06-14T00:02:00Z")
+    without_items = store.repair_policy_integrity(
+        clear_invalid=False,
+        now="2026-06-14T00:03:00Z",
+        include_items=False,
+    )
+
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert [item["artifact_id"] for item in items] == ["codex:project:repair-context"]
+    assert items[0]["remembered_command"] == "attached"
+    assert len(attached) == 1
+    assert "items" not in without_items
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        TimeoutError("native store timed out"),
+        sqlite3.OperationalError("database is locked"),
+        ValueError("native reply undecodable"),
+        "malformed",
+    ],
+)
+def test_repair_policy_integrity_survives_a_failed_source_context_lookup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failure: object,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:repair-lookup", artifact_hash="hash-repair-lookup"),
+        "2026-06-14T00:00:00Z",
+    )
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            "update policy_decisions set payload_mac = ? where artifact_id = ?",
+            ("deadbeef", "codex:project:repair-lookup"),
+        )
+
+    def _native_store_call(method: str, args: dict[str, object]) -> object:
+        assert method == "policy_source_contexts"
+        if isinstance(failure, BaseException):
+            raise failure
+        return [{"unexpected_key": "value"} for _ in args["items"]]
+
+    monkeypatch.setattr(store, "_native_store_call", _native_store_call)
+
+    with caplog.at_level("WARNING"):
+        payload = store.repair_policy_integrity(clear_invalid=False, now="2026-06-14T00:02:00Z")
+
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert [item["artifact_id"] for item in items] == ["codex:project:repair-lookup"]
+    assert "remembered_command" not in items[0]
+    assert "policy source context lookup failed" in caplog.text
 
 
 def test_tampered_signed_row_is_ignored_and_event_emitted(tmp_path: Path) -> None:
@@ -1499,7 +1606,8 @@ def test_tampered_signed_row_is_ignored_and_event_emitted(tmp_path: Path) -> Non
             ("deadbeef", "codex:project:tampered"),
         )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:tampered",
         "hash-tampered",
@@ -1520,7 +1628,8 @@ def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
         artifact_id="codex:project:remote",
     )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:remote",
         "hash-remote",
@@ -1536,38 +1645,26 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
-
     store = _store(tmp_path)
     _install_signed_exact_policy(
         store,
         artifact_id="codex:project:remote-tampered",
     )
-    original_result = GuardStore._policy_integrity_result_for_row
-
-    def _forced_invalid(
-        self: GuardStore,
-        row: sqlite3.Row,
-        *,
-        mode: str,
-        key: bytes | None,
-        key_id: str | None,
-        trusted_generation: int | None = None,
-    ) -> PolicyIntegrityVerificationResult:
-        if row["artifact_id"] == "codex:project:remote-tampered":
-            return PolicyIntegrityVerificationResult(status="invalid_mac", message="remote bundle row was tampered")
-        return original_result(
-            self,
-            row,
-            mode=mode,
-            key=key,
-            key_id=key_id,
-            trusted_generation=trusted_generation,
+    # Row verification now runs in the native resident. Remote-source rows
+    # (policy-bundle) bypass local HMAC — they are trusted via the materialized
+    # bundle-decision identity probe instead. Tamper with a field that is part
+    # of the materialized identity so the persisted row no longer matches the
+    # authorized bundle decision and is silently filtered: resolved=None and,
+    # critically, no `rule.ignored.local_integrity` evidence (which is reserved
+    # for local rules).
+    with store._connect() as connection:
+        connection.execute(
+            "update policy_decisions set reason = ? where artifact_id = ?",
+            ("tampered-reason", "codex:project:remote-tampered"),
         )
 
-    monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _forced_invalid)
-
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:remote-tampered",
         "hash-remote",
@@ -1577,7 +1674,10 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
     ignored_events = store.list_events(limit=100, event_name="rule.ignored.local_integrity")
 
     assert resolved is None
-    assert any(
+    # Remote rows bypass local HMAC; the tamper is detected by identity mismatch
+    # which is a silent filter (no policy_integrity_violation), and no
+    # rule.ignored.local_integrity (reserved for local rules).
+    assert not any(
         event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered" for event in integrity_events
     )
     assert not any(
@@ -1595,19 +1695,22 @@ def test_local_policy_write_cannot_impersonate_remote_policy_source(tmp_path: Pa
         )
 
     with pytest.raises(PolicyAuthorityError, match="remote_policy_source_requires_validated_sync_path"):
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [_decision(artifact_id="codex:project:forged-replace", artifact_hash="hash-forged", source="team-policy")],
             "2026-06-14T00:01:00Z",
         )
 
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [_decision(artifact_id="codex:project:valid-remote", artifact_hash="hash-valid", source="team-policy")],
         "2026-06-14T00:01:00Z",
         remote_write_authorized=True,
     )
 
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:valid-remote",
             "hash-valid",
@@ -1622,7 +1725,8 @@ def test_local_policy_write_cannot_impersonate_remote_policy_source(tmp_path: Pa
         now="2026-06-14T00:01:45Z",
     )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:valid-remote",
         "hash-valid",
@@ -1653,7 +1757,8 @@ def test_legacy_unsigned_row_stays_ignored_before_and_after_trusted_write(tmp_pa
         "2026-06-14T00:02:00Z",
     )
     enforced_status = store.get_policy_integrity_status()
-    enforced = store.resolve_policy(
+    enforced = resolve_policy(
+        store,
         "codex",
         "codex:project:legacy",
         "hash-legacy",
@@ -1690,8 +1795,8 @@ def test_migrate_local_policy_integrity_preserves_selected_rows_only(tmp_path: P
         now="2026-06-14T00:05:00Z",
     )
 
-    first = store.resolve_policy("codex", "codex:project:legacy-one", "hash-one", now="2026-06-14T00:06:00Z")
-    second = store.resolve_policy("codex", "codex:project:legacy-two", "hash-two", now="2026-06-14T00:06:00Z")
+    first = resolve_policy(store, "codex", "codex:project:legacy-one", "hash-one", now="2026-06-14T00:06:00Z")
+    second = resolve_policy(store, "codex", "codex:project:legacy-two", "hash-two", now="2026-06-14T00:06:00Z")
 
     assert Path(str(payload["backup_path"])).exists()
     assert payload["enforcement"] == "enforce"
@@ -1721,7 +1826,7 @@ def test_migrate_local_policy_integrity_re_signs_unknown_key_rows(tmp_path: Path
         now="2026-06-14T00:05:00Z",
     )
 
-    resolved = store.resolve_policy("codex", "codex:project:rotated", "hash-rotated", now="2026-06-14T00:06:00Z")
+    resolved = resolve_policy(store, "codex", "codex:project:rotated", "hash-rotated", now="2026-06-14T00:06:00Z")
 
     assert verify_payload["counts"]["unknown_key"] == 1
     assert payload["unknown_key_row_ids"] == [preserve_id]
@@ -1855,7 +1960,7 @@ def test_startup_refresh_does_not_promote_legacy_row_generation(tmp_path: Path) 
     legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:baseline"))
     legacy_row["integrity_version"] = 1
     legacy_row["integrity_generation"] = 999
-    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    legacy_payload = canonical_policy_payload(legacy_row, integrity_version=1)
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """
@@ -1976,7 +2081,7 @@ def test_startup_refresh_keeps_pending_generation_when_legacy_rows_remain(
     assert key_id is not None
     legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:legacy"))
     legacy_row["integrity_version"] = 1
-    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    legacy_payload = canonical_policy_payload(legacy_row, integrity_version=1)
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """
@@ -2044,10 +2149,10 @@ def test_startup_refresh_clears_stale_pending_generation_when_legacy_rows_remain
 
     legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:legacy"))
     legacy_row["integrity_version"] = 1
-    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    legacy_payload = canonical_policy_payload(legacy_row, integrity_version=1)
     pending_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:pending"))
     pending_row["integrity_generation"] = 1
-    pending_payload = policy_integrity_module.canonical_policy_payload(
+    pending_payload = canonical_policy_payload(
         pending_row,
         integrity_version=pending_row["integrity_version"],
     )
@@ -2133,10 +2238,10 @@ def test_refresh_clears_stale_pending_generation_when_legacy_rows_remain(
 
     legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:legacy"))
     legacy_row["integrity_version"] = 1
-    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    legacy_payload = canonical_policy_payload(legacy_row, integrity_version=1)
     pending_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:pending"))
     pending_row["integrity_generation"] = 1
-    pending_payload = policy_integrity_module.canonical_policy_payload(
+    pending_payload = canonical_policy_payload(
         pending_row,
         integrity_version=pending_row["integrity_version"],
     )
@@ -2206,7 +2311,7 @@ def test_refresh_keeps_pending_generation_when_only_signed_v1_rows_remain(tmp_pa
 
     legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:legacy"))
     legacy_row["integrity_version"] = 1
-    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    legacy_payload = canonical_policy_payload(legacy_row, integrity_version=1)
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """
@@ -2601,9 +2706,7 @@ def test_startup_refresh_leaves_mixed_newer_generations_unresolved(tmp_path: Pat
 
     newer_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:current"))
     newer_row["integrity_generation"] = 3
-    newer_payload = policy_integrity_module.canonical_policy_payload(
-        newer_row, integrity_version=newer_row["integrity_version"]
-    )
+    newer_payload = canonical_policy_payload(newer_row, integrity_version=newer_row["integrity_version"])
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """
@@ -2684,9 +2787,7 @@ def test_startup_refresh_leaves_invalid_newer_generations_unresolved(tmp_path: P
 
     valid_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:baseline"))
     valid_row["integrity_generation"] = 3
-    valid_payload = policy_integrity_module.canonical_policy_payload(
-        valid_row, integrity_version=valid_row["integrity_version"]
-    )
+    valid_payload = canonical_policy_payload(valid_row, integrity_version=valid_row["integrity_version"])
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """
@@ -2802,7 +2903,7 @@ def test_signed_rollback_snapshot_is_detected_and_repair_advances_generation(tmp
     rollback_item = next(item for item in verify["items"] if item.get("artifact_id") == "codex:project:rollback")
     repair = store.repair_policy_integrity(clear_invalid=True, now="2026-06-14T00:02:00Z")
     control = _policy_integrity_control_payload(store)
-    resolved = store.resolve_policy("codex", "codex:project:current", "hash-current", now="2026-06-14T00:03:00Z")
+    resolved = resolve_policy(store, "codex", "codex:project:current", "hash-current", now="2026-06-14T00:03:00Z")
 
     assert verify["counts"]["rollback_detected"] == 1
     assert rollback_item["integrity_status"] == "rollback_detected"
@@ -3670,7 +3771,8 @@ def test_trust_cli_explain_human_output_uses_trust_renderer(
 def test_trust_cli_explain_reports_guard_cloud_rule(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",
@@ -3906,7 +4008,8 @@ def test_no_keyring_local_vault_keeps_persistent_local_allow_authoritative(
         "2026-06-14T00:00:00Z",
     )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:local-vault",
         "hash-local-vault",
@@ -3931,7 +4034,8 @@ def test_symlinked_guard_home_forces_degraded_local_policy_authority(tmp_path: P
         "2026-06-14T00:00:00Z",
     )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:symlinked",
         "hash-symlinked",
@@ -3943,3 +4047,98 @@ def test_symlinked_guard_home_forces_degraded_local_policy_authority(tmp_path: P
     assert verify["mode"] == "degraded"
     assert "guard_home_symlink" in verify["degraded_reasons"]
     assert verify["counts"]["degraded_mode"] == 1
+
+
+def _generation_lock_is_held(guard_home: Path) -> bool:
+    """Probe the generation lock from a second open file description."""
+
+    import fcntl
+
+    with (guard_home / "policy-integrity-generation.lock").open("a+b") as handle:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return True
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        return False
+
+
+@pytest.mark.skipif(os.name == "nt", reason="flock probes the POSIX advisory lock.")
+def test_upsert_policy_holds_the_policy_integrity_generation_lock(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    observed: list[bool] = []
+    original = store._native_store_call
+
+    def record(operation: str, args: dict[str, object]) -> object:
+        if operation == "upsert_policy":
+            observed.append(_generation_lock_is_held(store.guard_home))
+        return original(operation, args)
+
+    store._native_store_call = record  # type: ignore[method-assign]
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:locked", artifact_hash="hash-locked"),
+        "2026-06-14T00:00:00Z",
+    )
+
+    # The resident's write and the control state around it share one holder, so
+    # a second save cannot read the generation this one is about to advance.
+    assert observed == [True]
+    assert not _generation_lock_is_held(store.guard_home)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="flock probes the POSIX advisory lock.")
+def test_policy_integrity_generation_lock_excludes_a_second_holder(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    store.guard_home.mkdir(parents=True, exist_ok=True)
+
+    with store.hold_policy_integrity_generation_lock():
+        assert _generation_lock_is_held(store.guard_home)
+        # Re-entry must not deadlock: one thread advancing a generation calls
+        # through several routes that each take the lock.
+        with store.hold_policy_integrity_generation_lock():
+            assert _generation_lock_is_held(store.guard_home)
+        assert _generation_lock_is_held(store.guard_home)
+
+    assert not _generation_lock_is_held(store.guard_home)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="flock probes the POSIX advisory lock.")
+def test_policy_integrity_generation_lock_serializes_two_threads(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    store.guard_home.mkdir(parents=True, exist_ok=True)
+    inside = 0
+    overlapped = False
+
+    def hold() -> None:
+        nonlocal inside, overlapped
+        with store.hold_policy_integrity_generation_lock():
+            inside += 1
+            if inside > 1:
+                overlapped = True
+            time.sleep(0.05)
+            inside -= 1
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        for future in [pool.submit(hold), pool.submit(hold)]:
+            future.result(timeout=30)
+
+    assert not overlapped
+
+
+def test_policy_integrity_generation_cannot_advance_inside_a_connection_scope(tmp_path: Path) -> None:
+    """A connection scope shares a connection, not a transaction.
+
+    Nothing serializes an advance taken under one, and taking the file lock
+    there would invert the order every other holder uses, so the route refuses
+    instead of racing.
+    """
+
+    store = GuardStore(tmp_path / "home")
+    store.guard_home.mkdir(parents=True, exist_ok=True)
+
+    with (
+        store.connection_scope(),
+        pytest.raises(RuntimeError, match="connection scope"),
+        store.hold_policy_integrity_generation_lock(),
+    ):
+        pass

@@ -11,16 +11,12 @@ import urllib.parse
 from dataclasses import dataclass
 from functools import lru_cache
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-
 PRODUCTION_GUARD_OAUTH_CLIENT_ID = "guard-local-daemon"
 STAGING_GUARD_OAUTH_CLIENT_ID = "guard-local-daemon-staging"
 LOCAL_GUARD_OAUTH_CLIENT_ID = "guard-local-daemon-local"
 
 PRODUCTION_GUARD_ISSUER = "https://hol.org"
 STAGING_GUARD_ISSUER = "https://staging.hol.org"
-LOCAL_GUARD_ISSUER = "http://127.0.0.1:3000"
 
 _ALLOWED_PRODUCTION_GUARD_ORIGINS = frozenset({PRODUCTION_GUARD_ISSUER})
 _ALLOWED_STAGING_GUARD_ORIGINS = frozenset({STAGING_GUARD_ISSUER})
@@ -212,6 +208,11 @@ def build_pkce_s256_challenge(verifier: str) -> str:
 
 
 def generate_dpop_key_pair() -> GuardDpopKeyMaterial:
+    # Loaded here, not at module import: every store imports this module for its issuer
+    # allowlist, and only key generation needs the cryptography backend.
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
     private_key = ec.generate_private_key(ec.SECP256R1())
     private_numbers = private_key.private_numbers()
     public_numbers = private_numbers.public_numbers

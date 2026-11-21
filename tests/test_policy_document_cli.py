@@ -44,7 +44,7 @@ def test_policy_capabilities_advertise_command_expression_runtime(
         "glob",
         "regex",
     ]
-    assert payload["command_pattern_expressions"]["regex_timeout_ms"] == 50
+    assert payload["command_pattern_expressions"]["regex_backtrack_limit"] == 100000
 
 
 def test_policy_evaluate_command_returns_highest_matching_action(
@@ -189,7 +189,7 @@ def test_policy_show_and_explain_active_document(
     assert explanation["scopes"] == {}
 
 
-def test_policy_import_is_feature_gated_and_dry_run_by_default(
+def test_policy_import_is_dry_run_by_default_without_any_environment_gate(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -212,21 +212,6 @@ def test_policy_import_is_feature_gated_and_dry_run_by_default(
     )
     capsys.readouterr()
 
-    disabled_rc = main(
-        [
-            "guard",
-            "policy",
-            "import",
-            str(policy_file),
-            "--home",
-            str(home),
-            "--replace",
-            "--json",
-        ]
-    )
-    disabled_payload = json.loads(capsys.readouterr().out)
-
-    monkeypatch.setenv("HOL_GUARD_POLICY_YAML_IMPORT", "1")
     dry_run_rc = main(
         [
             "guard",
@@ -241,8 +226,6 @@ def test_policy_import_is_feature_gated_and_dry_run_by_default(
     )
     dry_run_payload = json.loads(capsys.readouterr().out)
 
-    assert disabled_rc == 4
-    assert disabled_payload["error"] == "policy_import_disabled"
     assert dry_run_rc == 0
     assert dry_run_payload["dry_run"] is True
     assert dry_run_payload["changed"] is False
@@ -290,7 +273,6 @@ def test_policy_import_reports_authority_errors(
         == 0
     )
     capsys.readouterr()
-    monkeypatch.setenv("HOL_GUARD_POLICY_YAML_IMPORT", "1")
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.commands_dispatch_policy_document.prompt_for_approval_gate",
         lambda *_args, **_kwargs: object(),
@@ -313,6 +295,7 @@ def test_policy_import_reports_authority_errors(
             str(policy_file),
             "--replace",
             "--apply",
+            "--yes",
             "--home",
             str(home),
             "--json",
@@ -323,3 +306,56 @@ def test_policy_import_reports_authority_errors(
     assert result == 4
     assert payload["error"] == "PolicyAuthorityError"
     assert payload["message"] == "remote_policy_source_requires_validated_sync_path"
+
+
+@pytest.mark.parametrize("subcommand", ["show", "export"])
+def test_policy_show_explains_how_to_include_workspace_rules(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    subcommand: str,
+) -> None:
+    workspace_row = {
+        "decision_id": 63,
+        "harness": "codex",
+        "scope": "workspace",
+        "workspace": "/workspace/repository",
+        "action": "allow",
+    }
+    monkeypatch.setattr(GuardStore, "list_policy_decisions", lambda self: [workspace_row])
+
+    text_rc = main(["guard", "policy", subcommand, "--home", str(tmp_path / "home")])
+    text = capsys.readouterr().out
+    json_rc = main(["guard", "policy", subcommand, "--home", str(tmp_path / "home"), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert text_rc == json_rc == 4
+    assert f"hol-guard policy {subcommand} --include-provenance" in text
+    assert "local-63" in text
+    assert "/workspace/repository" not in text
+    assert payload["error"] == "sensitive_local_policy_requires_provenance"
+    assert "--include-provenance" in payload["message"]
+
+
+def test_policy_commands_provision_the_resident_prerequisite_from_their_own_store(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli import commands_dispatch_policy_document as dispatch
+
+    stores: list[object] = []
+    monkeypatch.setattr(
+        dispatch,
+        "ensure_resident_prerequisite",
+        lambda home, *, store: stores.append((home, store)) or True,
+    )
+    monkeypatch.setattr(GuardStore, "list_policy_decisions", lambda self: [])
+
+    main(["guard", "policy", "show", "--home", str(tmp_path / "home"), "--json"])
+    capsys.readouterr()
+
+    assert len(stores) == 1
+    home, store = stores[0]
+    assert isinstance(store, GuardStore)
+    assert home == store.guard_home

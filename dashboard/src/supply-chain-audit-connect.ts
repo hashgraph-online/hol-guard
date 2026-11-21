@@ -126,7 +126,7 @@ export function supplyChainAuditUserMessage(error: unknown): string | null {
       return "Folder selection is unavailable right now. Paste the project folder path instead.";
     }
     if (isSupplyChainAuditWorkspaceInvalidError(error)) {
-      return "Guard could not use that project folder. Choose an existing local folder and run the audit again.";
+      return "Guard could not use that project folder. Choose an existing folder inside your home folder and run the audit again.";
     }
     return supplyChainAuditConnectUserMessage(error);
   }

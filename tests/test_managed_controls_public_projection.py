@@ -4,10 +4,10 @@ import json
 import urllib.request
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import MANAGED_CONTROLS_ACTIVE_STATE_KEY
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.managed_controls_activation_support import activate_managed_bundle, managed_bundle
@@ -40,9 +40,7 @@ def test_policy_api_serializes_authenticated_managed_authority_label(tmp_path: P
         source="policy-bundle",
     )
     assert activate_managed_bundle(store, managed_bundle(), decisions=(decision,)) is True
-    status = store.managed_controls_public_status(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    )
+    status = store.managed_controls_public_status(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     assert status is not None
     assert status["control_set_id"] == "managed-git-safety"
     assert status["control_set_name"] == "Managed Git safety"

@@ -16,14 +16,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import dashboard_update as dashboard_update_module
-from codex_plugin_scanner.guard.daemon.dashboard_update import (
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.updates import dashboard_update as dashboard_update_module
+from codex_plugin_scanner.guard.updates.dashboard_update import (
     build_dashboard_update_runner_command,
     build_dashboard_update_runner_popen_kwargs,
     dashboard_update_runner_script,
@@ -32,7 +33,7 @@ from codex_plugin_scanner.guard.daemon.dashboard_update import (
     schedule_guard_dashboard_update,
     write_dashboard_update_outcome,
 )
-from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 from tests.update_context_test_support import build_legacy_status_distribution
 
 
@@ -41,10 +42,6 @@ def _use_legacy_status_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_commands._status_installed_distribution",
         build_legacy_status_distribution,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.manager._guard_daemon_process_inventory_for_guard_home",
-        lambda _guard_home: [],
     )
 
 
@@ -265,8 +262,9 @@ def test_update_status_uses_persisted_alpha_channel(tmp_path: Path, monkeypatch:
 
 def test_daemon_update_status_route(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "9.9.9",
             "latest_version": "9.9.9",
@@ -309,8 +307,9 @@ def test_daemon_update_schedule_route(tmp_path: Path, monkeypatch: pytest.Monkey
         scheduled["daemon_port"] = daemon_port
         return {"scheduled": True, "message": "scheduled"}
 
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.1",
@@ -327,8 +326,9 @@ def test_daemon_update_schedule_route(tmp_path: Path, monkeypatch: pytest.Monkey
             "blocked_reason": None,
         },
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+    patch_daemon_global(
+        monkeypatch,
+        "schedule_guard_dashboard_update",
         fake_schedule,
     )
 
@@ -344,6 +344,156 @@ def test_daemon_update_schedule_route(tmp_path: Path, monkeypatch: pytest.Monkey
     assert scheduled["guard_home"] == store.guard_home
     assert isinstance(scheduled["daemon_pid"], int)
     assert isinstance(scheduled["daemon_port"], int)
+
+
+def _desktop_status_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "current_version": "3.53.0a4",
+        "latest_version": "3.53.0a5",
+        "installer": "desktop",
+        "version_check": {
+            "source": "desktop_core",
+            "status": "stale",
+            "current_version": "3.53.0a4",
+            "latest_version": "3.53.0a5",
+            "update_available": True,
+        },
+        "auto_updatable": True,
+        "update_available": True,
+        "blocked_reason": None,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_desktop_update_request_file_is_atomic_and_private(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    request_path = dashboard_update_module.write_desktop_update_request(guard_home, latest_version="3.53.0a5")
+
+    assert request_path == dashboard_update_module.desktop_update_request_path(guard_home)
+    payload = json.loads(request_path.read_text(encoding="utf-8"))
+    assert payload["schema"] == dashboard_update_module.DESKTOP_UPDATE_REQUEST_SCHEMA
+    assert payload["latestVersion"] == "3.53.0a5"
+    requested_at = datetime.fromisoformat(str(payload["requestedAt"]))
+    assert datetime.now(timezone.utc) - requested_at < timedelta(minutes=1)
+    if os.name != "nt":
+        assert stat.S_IMODE(request_path.stat().st_mode) == 0o600
+    assert list(guard_home.glob("*.tmp-*")) == []
+
+
+def test_daemon_desktop_handoff_writes_update_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _store(tmp_path)
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
+        lambda **_kwargs: _desktop_status_payload(),
+    )
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update", {"handoff_to_desktop": True})
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["handoff_requested"] is True
+    assert payload["latest_version"] == "3.53.0a5"
+    request_path = dashboard_update_module.desktop_update_request_path(store.guard_home)
+    written = json.loads(request_path.read_text(encoding="utf-8"))
+    assert written["latestVersion"] == "3.53.0a5"
+
+
+def test_desktop_update_request_concurrent_writes_stay_valid(tmp_path: Path) -> None:
+    import threading
+
+    guard_home = tmp_path / "guard-home"
+    errors: list[BaseException] = []
+
+    def write(version: str) -> None:
+        try:
+            dashboard_update_module.write_desktop_update_request(guard_home, latest_version=version)
+        except BaseException as error:
+            errors.append(error)
+
+    threads = [threading.Thread(target=write, args=(f"3.53.0a{index}",)) for index in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    request_path = dashboard_update_module.desktop_update_request_path(guard_home)
+    payload = json.loads(request_path.read_text(encoding="utf-8"))
+    assert payload["schema"] == dashboard_update_module.DESKTOP_UPDATE_REQUEST_SCHEMA
+    assert list(guard_home.glob("*.tmp-*")) == []
+
+
+def test_daemon_desktop_handoff_reports_disk_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _store(tmp_path)
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
+        lambda **_kwargs: _desktop_status_payload(),
+    )
+
+    def failing_write(_guard_home: Path, *, latest_version: str) -> Path:
+        raise OSError("disk full")
+
+    patch_daemon_global(monkeypatch, "write_desktop_update_request", failing_write)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update", {"handoff_to_desktop": True})
+    finally:
+        daemon.stop()
+
+    assert status == 500
+    assert payload["error"] == "desktop_handoff_failed"
+    assert not dashboard_update_module.desktop_update_request_path(store.guard_home).exists()
+
+
+def test_daemon_desktop_handoff_rejects_non_desktop_installs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _store(tmp_path)
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
+        lambda **_kwargs: _desktop_status_payload(installer="pip"),
+    )
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update", {"handoff_to_desktop": True})
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "desktop_handoff_unavailable"
+    assert not dashboard_update_module.desktop_update_request_path(store.guard_home).exists()
+
+
+def test_daemon_desktop_handoff_rejects_when_no_update_is_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
+        lambda **_kwargs: _desktop_status_payload(update_available=False),
+    )
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update", {"handoff_to_desktop": True})
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "update_not_available"
+    assert not dashboard_update_module.desktop_update_request_path(store.guard_home).exists()
 
 
 def test_alpha_update_channel_persists_and_schedules_alpha(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -367,8 +517,8 @@ def test_alpha_update_channel_persists_and_schedules_alpha(tmp_path: Path, monke
         scheduled.update(kwargs)
         return {"scheduled": True, "message": "scheduled"}
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload", fake_status)
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update", fake_schedule)
+    patch_daemon_global(monkeypatch, "build_guard_update_status_payload", fake_status)
+    patch_daemon_global(monkeypatch, "schedule_guard_dashboard_update", fake_schedule)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -388,7 +538,13 @@ def test_alpha_update_channel_persists_and_schedules_alpha(tmp_path: Path, monke
     assert scheduled["include_alpha"] is True
 
 
-def test_alpha_update_channel_requires_and_accepts_approval_proof(tmp_path: Path) -> None:
+def test_alpha_update_channel_requires_and_accepts_approval_proof(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The accepted change answers with the live update status, which would
+    # ask PyPI for the newest alpha inside the 5-second request budget.
+    monkeypatch.setattr(update_commands, "_latest_alpha_version_from_pypi", lambda _current: None)
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: None)
     store = _store(tmp_path)
     update_approval_gate_settings(
         store.guard_home,
@@ -427,8 +583,9 @@ def test_alpha_update_channel_requires_and_accepts_approval_proof(tmp_path: Path
 
 def test_daemon_update_schedule_rejects_non_updatable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.0",
@@ -446,8 +603,9 @@ def test_daemon_update_schedule_rejects_non_updatable(tmp_path: Path, monkeypatc
         },
     )
     schedule_mock = MagicMock()
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+    patch_daemon_global(
+        monkeypatch,
+        "schedule_guard_dashboard_update",
         schedule_mock,
     )
 
@@ -478,7 +636,7 @@ def test_schedule_guard_dashboard_update_spawns_runner(
             self.pid = 4243
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.dashboard_update.subprocess.Popen",
+        "codex_plugin_scanner.guard.updates.dashboard_update.subprocess.Popen",
         FakeProcess,
     )
     monkeypatch.setattr(
@@ -728,7 +886,7 @@ def test_runner_command_avoids_module_shadowing_from_cwd(tmp_path: Path) -> None
         update_token="a" * 64,
     )
     assert "-m" not in command
-    assert "codex_plugin_scanner.guard.daemon.dashboard_update_runner" not in command
+    assert "codex_plugin_scanner.guard.updates.dashboard_update_runner" not in command
     runner_script = dashboard_update_runner_script()
     assert str(runner_script) in command
     assert runner_script.is_file()
@@ -814,7 +972,7 @@ def test_runner_bootstrap_ignores_project_import_hooks_and_uses_guard_owned_cwd(
 ) -> None:
     trusted_root = tmp_path / "trusted-root"
     trusted_package = trusted_root / "codex_plugin_scanner"
-    runner_script = trusted_package / "guard" / "daemon" / "dashboard_update_runner.py"
+    runner_script = trusted_package / "guard" / "updates" / "dashboard_update_runner.py"
     runner_script.parent.mkdir(parents=True)
     (trusted_package / "__init__.py").write_text("SOURCE = 'trusted'\n", encoding="utf-8")
     observed_path = tmp_path / "runner-observed.json"
@@ -939,15 +1097,15 @@ def test_merge_dashboard_update_progress_includes_lock_metadata(
             self.pid = 5151
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.dashboard_update.subprocess.Popen",
+        "codex_plugin_scanner.guard.updates.dashboard_update.subprocess.Popen",
         FakeProcess,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.dashboard_update._pid_is_running",
+        "codex_plugin_scanner.guard.updates.dashboard_update._pid_is_running",
         lambda pid: pid == 5151,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.dashboard_update.build_guard_update_status_payload",
+        "codex_plugin_scanner.guard.updates.dashboard_update.build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "2.0.508",
             "latest_version": "2.0.509",
@@ -998,7 +1156,7 @@ def test_dashboard_update_runner_preserves_state_for_trusted_successful_restart(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1084,7 +1242,7 @@ def test_dashboard_update_runner_accepts_verified_retained_newer_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1137,7 +1295,7 @@ def test_dashboard_update_runner_blocks_install_when_daemon_retirement_is_unprov
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1184,7 +1342,7 @@ def test_dashboard_update_runner_exit_zero_requires_embedded_daemon_restart(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1235,7 +1393,7 @@ def test_dashboard_update_runner_missing_embedded_restart_uses_legacy_only_after
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1299,7 +1457,7 @@ def test_dashboard_update_runner_failure_stderr_never_renders_payload_details(
     capsys: pytest.CaptureFixture[str],
     failure_detail: dict[str, object],
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1350,7 +1508,7 @@ def test_dashboard_update_runner_failure_uses_availability_fallback_only_after_i
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1626,8 +1784,9 @@ def test_daemon_update_schedules_recovery_reinstall_for_local_folder(
         scheduled["force_pypi_reinstall"] = kwargs.get("force_pypi_reinstall")
         return {"scheduled": True, "message": "reinstall scheduled"}
 
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.0",
@@ -1646,8 +1805,9 @@ def test_daemon_update_schedules_recovery_reinstall_for_local_folder(
             "recovery_reinstall_command": "pipx install --force hol-guard",
         },
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+    patch_daemon_global(
+        monkeypatch,
+        "schedule_guard_dashboard_update",
         fake_schedule,
     )
 
@@ -1668,8 +1828,9 @@ def test_daemon_update_recovery_reinstall_rejected_for_editable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = _store(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.0",
@@ -1689,8 +1850,9 @@ def test_daemon_update_recovery_reinstall_rejected_for_editable(
         },
     )
     schedule_mock = MagicMock()
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+    patch_daemon_global(
+        monkeypatch,
+        "schedule_guard_dashboard_update",
         schedule_mock,
     )
 
@@ -1711,8 +1873,9 @@ def test_daemon_update_recovery_reinstall_rejected_when_python_incompatible(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = _store(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "2.0.789",
             "latest_version": "2.0.807",
@@ -1735,8 +1898,9 @@ def test_daemon_update_recovery_reinstall_rejected_when_python_incompatible(
         },
     )
     schedule_mock = MagicMock()
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+    patch_daemon_global(
+        monkeypatch,
+        "schedule_guard_dashboard_update",
         schedule_mock,
     )
 

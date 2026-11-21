@@ -1,6 +1,17 @@
 use super::*;
 use std::sync::atomic::Ordering;
 
+#[path = "policy_store_launch_fence.rs"]
+pub(crate) mod launch_fence;
+
+#[cfg(target_os = "macos")]
+#[path = "policy_store_bash_journal.rs"]
+pub(crate) mod bash_journal;
+
+#[cfg(target_os = "macos")]
+#[path = "policy_store_bash_cancellation.rs"]
+pub(crate) mod bash_cancellation;
+
 pub(crate) struct ApprovalPolicyFence<'a> {
     pub(crate) generation: u64,
     pub(crate) policy_digest: &'a str,
@@ -9,6 +20,10 @@ pub(crate) struct ApprovalPolicyFence<'a> {
 }
 
 impl PolicySnapshotStore {
+    #[cfg(target_os = "macos")]
+    pub(crate) fn approval_database_path(&self) -> std::path::PathBuf {
+        std::path::Path::new(&self.expected_guard_home).join("guard.db")
+    }
     /// Fence an approval challenge to the resident's current authenticated
     /// snapshot. The callback runs while the state mutex is held, so action
     /// reconstruction and binding derivation cannot observe a policy push in
@@ -21,20 +36,8 @@ impl PolicySnapshotStore {
     where
         F: FnOnce(&AdmittedPolicySnapshot) -> Result<T, String>,
     {
-        let now = now_ms()?;
-        let state = self
-            .state
-            .lock()
-            .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
-        let snapshot = self.validate_request_snapshot_locked(
-            &state,
-            &envelope.policy_snapshot,
-            &envelope.source.guard_home,
-            envelope.policy_generation,
-            now,
-        )?;
-        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
-        callback(snapshot.as_ref())
+        let fence = self.fence_for_launch(envelope)?;
+        callback(fence.snapshot())
     }
 
     pub(crate) fn approval_v4_authority(

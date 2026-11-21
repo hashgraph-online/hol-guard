@@ -1,0 +1,232 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.localsites",
+  "version": "1.0.0",
+  "name": "LocalSites",
+  "description": "Local web development for macOS and Linux: every project folder gets https://name.test with its own PHP and database. Agents can read projects, logs and health checks, and change projects, databases and shares. LocalSites already makes risky calls wait for Approve in its app; this entry adds Guard review on top. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "github.itismowgli",
+    "displayName": "Parth Shah",
+    "url": "https://github.com/itismowgli/localsites"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#111113"
+  },
+  "homepage": "https://itismowgli.github.io/localsites/",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "localsites"
+  },
+  "riskClasses": [
+    "local-file-write",
+    "local-data-access",
+    "local-data-deletion",
+    "local-content-overwrite",
+    "package-or-source-installation",
+    "external-command-execution",
+    "localhost-listener",
+    "external-configuration-change"
+  ],
+  "tools": [
+    {
+      "name": "activity",
+      "state": "inherit"
+    },
+    {
+      "name": "addons_list",
+      "state": "inherit"
+    },
+    {
+      "name": "agents_list",
+      "state": "inherit"
+    },
+    {
+      "name": "approvals_list",
+      "state": "inherit"
+    },
+    {
+      "name": "apps_list",
+      "state": "inherit"
+    },
+    {
+      "name": "attention",
+      "state": "inherit"
+    },
+    {
+      "name": "data_connections",
+      "state": "inherit"
+    },
+    {
+      "name": "data_schemas",
+      "state": "inherit"
+    },
+    {
+      "name": "data_structure",
+      "state": "inherit"
+    },
+    {
+      "name": "data_tables",
+      "state": "inherit"
+    },
+    {
+      "name": "data_test",
+      "state": "inherit"
+    },
+    {
+      "name": "db_backups",
+      "state": "inherit"
+    },
+    {
+      "name": "db_list",
+      "state": "inherit"
+    },
+    {
+      "name": "doctor",
+      "state": "inherit"
+    },
+    {
+      "name": "events_wait",
+      "state": "inherit"
+    },
+    {
+      "name": "git_branches",
+      "state": "inherit"
+    },
+    {
+      "name": "git_hosting",
+      "state": "inherit"
+    },
+    {
+      "name": "git_log",
+      "state": "inherit"
+    },
+    {
+      "name": "git_status",
+      "state": "inherit"
+    },
+    {
+      "name": "import_sources",
+      "state": "inherit"
+    },
+    {
+      "name": "logs",
+      "state": "inherit"
+    },
+    {
+      "name": "notices_list",
+      "state": "inherit"
+    },
+    {
+      "name": "pg_list",
+      "state": "inherit"
+    },
+    {
+      "name": "php_info",
+      "state": "inherit"
+    },
+    {
+      "name": "problems_list",
+      "state": "inherit"
+    },
+    {
+      "name": "problems_preview",
+      "state": "inherit"
+    },
+    {
+      "name": "settings_get",
+      "state": "inherit"
+    },
+    {
+      "name": "setup_status",
+      "state": "inherit"
+    },
+    {
+      "name": "share_list",
+      "state": "inherit"
+    },
+    {
+      "name": "sites_context",
+      "state": "inherit"
+    },
+    {
+      "name": "sites_hidden",
+      "state": "inherit"
+    },
+    {
+      "name": "sites_list",
+      "state": "inherit"
+    },
+    {
+      "name": "status",
+      "state": "inherit"
+    },
+    {
+      "name": "storage_list",
+      "state": "inherit"
+    },
+    {
+      "name": "update_check",
+      "state": "inherit"
+    },
+    {
+      "name": "update_status",
+      "state": "inherit"
+    },
+    {
+      "name": "version",
+      "state": "inherit"
+    },
+    {
+      "name": "version_check",
+      "state": "inherit"
+    },
+    {
+      "name": "problems_send",
+      "state": "block"
+    },
+    {
+      "name": "problems_ui",
+      "state": "block"
+    },
+    {
+      "name": "setup_homebrew",
+      "state": "block"
+    },
+    {
+      "name": "sites_trash",
+      "state": "block"
+    },
+    {
+      "name": "update_install",
+      "state": "block"
+    },
+    {
+      "name": "update_rollback",
+      "state": "block"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/itismowgli/localsites",
+    "https://github.com/itismowgli/localsites/blob/master/internal/api/api.go",
+    "https://github.com/itismowgli/localsites/blob/master/internal/api/approvals.go",
+    "https://github.com/itismowgli/localsites/blob/master/internal/mcp/mcp.go",
+    "https://github.com/itismowgli/localsites/blob/master/SECURITY.md"
+  ],
+  "saferAlternatives": [
+    "Start with the read tools: sites_list, status, doctor and logs show what is running and what is broken without changing anything.",
+    "LocalSites enforces its own approvals in its background service, not in the app UI: risky calls wait for the person to click Approve, and agents can't approve their own requests.",
+    "Every tool not listed here gets Guard review, including open and db_open_in (they launch apps), sites_check (loading a page runs project code) and tools added in later versions.",
+    "Installing updates, moving projects to the Trash, installing Homebrew and sending problem reports are blocked here, as LocalSites already refuses them to agents.",
+    "Tools that reveal passwords exist only when the server is started with --allow-secrets; leave that flag off.",
+    "This entry matches the localsites executable and the LocalSites app binary. Launched through a shell or another wrapper, Guard keeps its normal handling."
+  ]
+}

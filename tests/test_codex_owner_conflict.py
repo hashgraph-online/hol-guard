@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
 from codex_plugin_scanner.guard.codex_hook_registration import require_codex_hook_owner
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
+from tests.codex_hook_paths_support import hook_manifest_path
+from tests.codex_toml_support import dump_toml, read_toml_payload
 
 
 @pytest.mark.parametrize("scope", ("group", "handler"))
@@ -27,7 +27,7 @@ def test_install_preserves_inactive_unowned_handlers(tmp_path, scope, activation
     (group if scope == "group" else handler).update(activation)
     config.write_text(dump_toml({"hooks": {"PreToolUse": [group]}}), encoding="utf-8")
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard-home")
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     groups = read_toml_payload(config)["hooks"]["PreToolUse"]
     assert group in groups
     assert len(groups) == 2
@@ -260,8 +260,9 @@ def test_deep_python_structure_preserves_the_owner_conflict_error():
 @pytest.mark.parametrize("binding_kind", ("same_home_bridge", "foreign_home_guard_cli"))
 @pytest.mark.parametrize("source_format", ("toml", "json"))
 @pytest.mark.parametrize("feature_enabled", (True, False))
+@pytest.mark.parametrize("operation", ("install", "prepare_install"))
 def test_install_rejects_unowned_guard_bridge_without_committing(
-    tmp_path: Path, binding_kind: str, source_format: str, feature_enabled: bool
+    tmp_path: Path, binding_kind: str, source_format: str, feature_enabled: bool, operation: str
 ) -> None:
     guard_home = tmp_path / "guard-home"
     home_dir = tmp_path / "home"
@@ -289,10 +290,10 @@ def test_install_rejects_unowned_guard_bridge_without_committing(
     before_json = hooks_path.read_bytes() if hooks_path.exists() else None
     before = config_path.read_bytes()
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
-    result: dict[str, object] | None = None
+    result: object = None
     failure: Exception | None = None
     try:
-        result = CodexHarnessAdapter().install(context)
+        result = getattr(harness_support, operation)("codex", context)
     except Exception as error:
         failure = error
 
@@ -313,10 +314,10 @@ def test_install_rejects_unowned_guard_bridge_without_committing(
         for handler in group.get("hooks", [])
         if isinstance(handler, dict) and isinstance(handler.get("command"), str)
     ]
-    manifest_path = codex_adapter.hook_manifest_path(guard_home, config_path)
+    manifest_path = hook_manifest_path(guard_home, config_path)
     assert failure is not None, (
         "Install accepted an unowned Guard bridge; "
-        f"event group counts are {group_counts}, active={result.get('active') if result else None}, "
+        f"event group counts are {group_counts}, active={result.get('active') if isinstance(result, dict) else None}, "
         f"integrity={result.get('managed_hook_integrity') if result else None}, manifest={manifest_path.exists()}, "
         f"old_present={old_command in commands}, third_party_present={'lean-ctx hook observe' in commands}"
     )

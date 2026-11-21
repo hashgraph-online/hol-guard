@@ -11,10 +11,10 @@ from enum import Enum
 from typing import Final, cast
 
 from .command_activity_contract import (
-    COMMAND_ACTIVITY_HARNESSES,
     ActivityApprovalReuseStatus,
     CommandExecutionStatus,
     CommandProofLevel,
+    command_activity_harnesses,
 )
 
 COMMAND_ACTIVITY_API_SCHEMA_VERSION: Final = "guard.command-activity-api.v1"
@@ -46,7 +46,7 @@ class CommandActivityListQuery:
     def __post_init__(self) -> None:
         if type(self.limit) is not int or not 1 <= self.limit <= COMMAND_ACTIVITY_PAGE_MAX:
             raise ValueError("limit_out_of_range")
-        if self.harness is not None and self.harness not in COMMAND_ACTIVITY_HARNESSES:
+        if self.harness is not None and self.harness not in command_activity_harnesses():
             raise ValueError("invalid_harness")
         _require_optional_enum(self.execution_status, CommandExecutionStatus, "invalid_execution_status")
         _require_optional_enum(self.proof_level, CommandProofLevel, "invalid_proof_level")
@@ -107,7 +107,7 @@ class CommandActivityAnalyticsQuery:
         if self.dimension is not None and self.dimension not in {"harness", "extension", "rule"}:
             raise ValueError("invalid_dimension")
         _require_optional_stable_id(self.dimension_value, "invalid_dimension_value")
-        if self.dimension == "harness" and self.dimension_value not in COMMAND_ACTIVITY_HARNESSES:
+        if self.dimension == "harness" and self.dimension_value not in command_activity_harnesses():
             raise ValueError("invalid_harness")
 
 

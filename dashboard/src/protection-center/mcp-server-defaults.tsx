@@ -13,13 +13,23 @@ export function McpServerDefaults({ extension }: { extension: ExtensionCatalogIt
   const tools = extension.mcp_tools ?? [];
   const remoteLaunch = launch?.kind === "remote-http" ? launch : null;
   const packageLaunch = launch?.kind === "package-launcher" ? launch : null;
+  const directLaunch = launch?.kind === "direct-command" ? launch : null;
+  const unsupportedLaunch = launch?.kind === "unsupported";
   return (
     <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2" data-testid="mcp-server-defaults">
       <h2 className="text-lg font-semibold text-brand-dark">MCP server defaults</h2>
+      {unsupportedLaunch ? (
+        <p className="mt-2 text-sm leading-6 text-brand-dark/75" data-testid="mcp-launch-unsupported">
+          This server uses a launch type this version of Guard does not recognize, so its launch details are unavailable. Update Guard to see them.
+        </p>
+      ) : (
+      <>
       <p className="mt-2 text-sm leading-6 text-brand-dark/75">
         {remoteLaunch
           ? "Matching hosted endpoints use these defaults after you turn the server on. A custom extension on this device still wins."
-          : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins."}
+          : directLaunch
+            ? "Matching launches use this command. Defaults apply only after you turn the server on. A custom extension on this device still wins."
+            : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins."}
       </p>
       <dl className="mt-5 grid gap-4 sm:grid-cols-2">
         {remoteLaunch ? (
@@ -33,6 +43,11 @@ export function McpServerDefaults({ extension }: { extension: ExtensionCatalogIt
               <dd className="mt-1 text-sm text-brand-dark">{remoteLaunch.serverNames.join(", ")}</dd>
             </div>
           </>
+        ) : directLaunch ? (
+          <div>
+            <dt className="text-xs font-semibold uppercase text-brand-dark/55">Launcher</dt>
+            <dd className="mt-1 break-all font-mono text-sm text-brand-dark">{directLaunch.command}</dd>
+          </div>
         ) : (
           <>
             <div>
@@ -46,6 +61,8 @@ export function McpServerDefaults({ extension }: { extension: ExtensionCatalogIt
           </>
         )}
       </dl>
+      </>
+      )}
       {tools.length ? (
         <div className="mt-5 overflow-x-auto">
           <table className="min-w-full text-left text-sm">

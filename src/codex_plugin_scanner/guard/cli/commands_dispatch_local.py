@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
+import sqlite3
 import sys
 from typing import TYPE_CHECKING
 
@@ -19,6 +21,7 @@ if TYPE_CHECKING:
     from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 
 
+from ..approval_gate_nudge import approval_gate_posture
 from ..package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from . import protect_output as _protect_output
 from ._commands_shared import *
@@ -98,13 +101,153 @@ def _run_guard_pytest_contained_command(
     try:
         return run_restricted_pytest(
             command,
-            workspace=Path(str(args.workspace)),
+            workspace=Path(str(args.workspace)) if getattr(args, "workspace", None) else Path.cwd(),
             cwd=Path(str(args.cwd)) if getattr(args, "cwd", None) else Path.cwd(),
             timeout_seconds=int(args.timeout_seconds),
+            read_only_workspace=bool(getattr(args, "read_only_workspace", False)),
         )
     except RestrictedPytestError as error:
         print(f"{error.reason_code}: {error}", file=sys.stderr)
         return error.exit_code
+
+def _run_guard_execute_contained_test_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    **_kwargs: object,
+) -> int:
+    from ..desktop_core_currency import OUT_OF_SYNC_REASON, superseded_desktop_core
+    from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
+    from ..runtime.contained_test_hook import read_contained_test_request, run_authorized_contained_test
+    from ..runtime.restricted_pytest import RestrictedPytestError
+    from ..runtime.restricted_workspace_grant_lookup import grant_store
+    from .commands_hook_native_authority import try_native_hook_authority
+
+    if guard_home is None or workspace is None or context is None or store is None:
+        return 126
+
+    def execution_workspace(original: dict[str, object]) -> Path:
+        if "cwd" not in original:
+            return workspace
+        try:
+            return Path(str(original["cwd"])).resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            raise RestrictedPytestError(
+                "guard_contained_test_rejected", f"Execution directory is unavailable: {error}",
+            ) from error
+
+    request_validated = False
+    try:
+        payload = read_contained_test_request(
+            Path(args.request_file), str(args.request_sha256), workspace=workspace,
+        )
+        request_validated = True
+        # A CLI that Desktop has replaced cannot reach the resident that
+        # follows the new Core. Say so now instead of after every
+        # acknowledgement window has run out.
+        superseded = superseded_desktop_core()
+        if superseded is not None:
+            raise RestrictedPytestError(OUT_OF_SYNC_REASON, superseded.message())
+        # The workspace sandbox asks this store for the grant it is widened by.
+        with grant_store(store):
+            return run_authorized_contained_test(
+                payload, workspace=workspace, timeout_seconds=int(args.timeout_seconds),
+                home_dir=context.home_dir,
+                authorize=lambda original: try_native_hook_authority(
+                    # The adapter snapshots the hook payload before stamping it, so
+                    # declare the environment this process will launch the command
+                    # from rather than letting Rust fall back to the resident's.
+                    payload={
+                        **original,
+                        "guard_containment_receipt_only": True,
+                        HOOK_EXECUTION_ENVIRONMENT_KEY: collect_hook_execution_environment(),
+                    },
+                    harness=str(getattr(args, "harness", "omp")), home_dir=context.home_dir,
+                    guard_home=guard_home,
+                    workspace=execution_workspace(original),
+                    store=store,
+                ),
+            )
+    except RestrictedPytestError as error:
+        print(f"{error.reason_code}: {error}", file=sys.stderr)
+        return error.exit_code
+    finally:
+        # A validated request is single-use. The sink removes it for every
+        # harness because an OMP or Pi call that moves to the background settles
+        # before its job reads the request, so the extension cannot.
+        if request_validated:
+            with suppress(OSError):
+                request_file = Path(args.request_file)
+                request_file.unlink(missing_ok=True)
+                request_file.parent.rmdir()
+
+def _run_guard_ack_bound_bash_command(
+    args: argparse.Namespace, *, guard_home: Path | None = None,
+    workspace: Path | None = None, store: GuardStore | None = None, **_kwargs: object,
+) -> int:
+    from ..native_bash_ack import acknowledge
+    from ..native_bash_protocol import NativeBashError
+
+    if guard_home is None or workspace is None or store is None:
+        return 126
+    try:
+        recorded = acknowledge(
+            guard_home=guard_home, store_path=store.path, project=workspace,
+            base_id=str(args.operation_id), harness=str(args.harness),
+            tool_call_id=str(args.tool_call_id), exit_code=args.exit_code,
+        )
+        if recorded:
+            return 0
+        print("native_bash_ack_not_recorded", file=sys.stderr)
+        return 125
+    except (NativeBashError, OSError, RuntimeError, ValueError, sqlite3.Error):
+        print("native_bash_ack_unavailable", file=sys.stderr)
+        return 125
+
+
+def _run_guard_execute_bound_bash_command(
+    args: argparse.Namespace, *, guard_home: Path | None = None,
+    workspace: Path | None = None, context: HarnessContext | None = None,
+    store: GuardStore | None = None, **_kwargs: object,
+) -> int:
+    from ..native_bash_protocol import NativeBashError
+    from ..runtime.bound_bash_sink import run_bound_bash
+    from ..runtime.contained_test_hook import read_contained_test_request
+    from ..runtime.restricted_pytest import RestrictedPytestError
+
+    if guard_home is None or workspace is None or context is None or store is None:
+        return 126
+    validated = False
+    try:
+        payload = read_contained_test_request(Path(args.request_file), str(args.request_sha256), workspace=workspace)
+        validated = True
+        return run_bound_bash(
+            payload, store=store, workspace=workspace, harness=str(args.harness),
+            operation_id=str(args.operation_id), timeout_seconds=args.timeout_seconds,
+            host_owner_pid=getattr(args, "host_owner_pid", None),
+            tool_call_id=getattr(args, "tool_call_id", None),
+        )
+    except NativeBashError as error:
+        print(error.code, file=sys.stderr)
+        return 125
+    except RestrictedPytestError as error:
+        print(error.reason_code, file=sys.stderr)
+        return error.exit_code
+    except (OSError, RuntimeError, ValueError, sqlite3.Error):
+        # A missing policy/store answer cannot select an alternate executor.
+        # Do not expose request contents or integrity-provider diagnostics.
+        print("native_bash_sink_unavailable", file=sys.stderr)
+        return 125
+    finally:
+        if validated:
+            with suppress(OSError):
+                request_file = Path(args.request_file)
+                request_file.unlink(missing_ok=True)
+                request_file.parent.rmdir()
+
 
 def _run_guard_command_inspection_command(
     args: argparse.Namespace,
@@ -117,8 +260,6 @@ def _run_guard_command_inspection_command(
 
         guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
         return run_extension_controls_command(args, guard_home=guard_home, output_stream=output_stream)
-    from ..daemon.client import GuardDaemonRequestError
-    from ..runtime.command_inspection import command_extensions_payload, unavailable_command_inspection
     from .extension_controls_commands import _client
 
     command_command = str(getattr(args, "command_command", ""))
@@ -134,34 +275,31 @@ def _run_guard_command_inspection_command(
             _emit("command-setup", payload, bool(getattr(args, "json", False)))
             return 0
         if command_command == "extensions":
-            payload = command_extensions_payload(getattr(args, "extension_id", None))
+            from .command_extension_listing import command_extensions_listing
+
+            guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
+            payload = command_extensions_listing(guard_home, getattr(args, "extension_id", None))
             _emit("command-extensions", payload, bool(getattr(args, "json", False)))
             return 0
         if command_command not in {"test", "explain"}:
             print("Choose command test, command explain, command extensions, or command setup.", file=sys.stderr)
             return 2
+        if command_command == "explain" and getattr(args, "cloud", False):
+            from .cloud_pack_explain_command import run_cloud_explain
+
+            return run_cloud_explain(args, output=output_stream)
         command_text = str(getattr(args, "command_text", "")).strip()
         if not command_text:
             raise ValueError("Command text cannot be empty")
         guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
         workspace, home = Path.cwd(), Path.home()
-        try:
-            from ..daemon.manager import ensure_guard_daemon
+        from ..native_daemon_manage import ensure_guard_daemon
+        from .command_inspection_client import inspect_through_daemon
 
-            try:
-                payload = _client(guard_home).inspect_command({
-                    "command": command_text, "cwd": str(workspace), "home_dir": str(home),
-                })
-            except GuardDaemonRequestError:
-                try:
-                    ensure_guard_daemon(guard_home, home_dir=home)
-                except RuntimeError as error:
-                    raise GuardDaemonRequestError(str(error)) from error
-                payload = _client(guard_home).inspect_command({
-                    "command": command_text, "cwd": str(workspace), "home_dir": str(home),
-                })
-        except GuardDaemonRequestError:
-            payload = unavailable_command_inspection(command_text, cwd=workspace, home_dir=home)
+        payload = inspect_through_daemon(
+            command_text, guard_home=guard_home, workspace=workspace, home=home,
+            client_for=_client, ensure_daemon=ensure_guard_daemon,
+        )
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
@@ -202,28 +340,6 @@ def _run_guard_scan_command(
     _emit("scan", payload, args.json or args.consumer_mode)
     return 0
 
-def _run_guard_preflight_command(
-    args: argparse.Namespace,
-    *,
-    guard_home: Path | None = None,
-    workspace: Path | None = None,
-    context: HarnessContext | None = None,
-    store: GuardStore | None = None,
-    config: GuardConfig | None = None,
-    input_text: str | None = None,
-    output_stream: TextIO | None = None,
-) -> int:
-    payload = _run_consumer_scan_with_mode(
-        Path(args.target).resolve(),
-        intended_harness=getattr(args, "harness", None),
-        cisco_mode=args.cisco_mode,
-    )
-    _emit("preflight", payload, getattr(args, "json", False))
-    if getattr(args, "enforce", False):
-        install_verdict = payload.get("install_verdict")
-        if isinstance(install_verdict, dict) and str(install_verdict.get("action")) != "allow":
-            return 2
-    return 0
 
 def _run_guard_update_command(
     args: argparse.Namespace,
@@ -317,21 +433,39 @@ def _run_guard_protect_command(
         _emit("protect", payload, getattr(args, "json", False))
         return 0
     protect_workspace = workspace or Path.cwd()
+    from ..native_protect_request import NativeProtectRequestError
+
+    def _emit_protect_resident_failure(error: NativeProtectRequestError) -> int:
+        code = str(error).strip() or "native_protect_request_unavailable"
+        _emit(
+            "protect",
+            {
+                "policy_action": "block",
+                "exit_code": 1,
+                "error": {"code": code, "status": "native_protect_request_failed"},
+                "verdict": {"action": "block", "blocking": True, "reason": code},
+            },
+            bool(getattr(args, "json", False)),
+        )
+        return 1
 
     def current_protect_config() -> GuardConfig:
         local_config = load_guard_config(guard_home, workspace=protect_workspace)
         return overlay_synced_guard_policy(local_config, _synced_policy_payload(store))
 
-    payload, exit_code = build_protect_payload(
-        command=protect_command,
-        store=store,
-        workspace_dir=protect_workspace,
-        dry_run=bool(getattr(args, "dry_run", False)),
-        now=_now(),
-        config=config,
-        current_config_provider=current_protect_config,
-        unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
-    )
+    try:
+        payload, exit_code = build_protect_payload(
+            command=protect_command,
+            store=store,
+            workspace_dir=protect_workspace,
+            dry_run=bool(getattr(args, "dry_run", False)),
+            now=_now(),
+            config=config,
+            current_config_provider=current_protect_config,
+            unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
+        )
+    except NativeProtectRequestError as error:
+        return _emit_protect_resident_failure(error)
     _queue_local_protect_approvals(
         payload,
         store=store,
@@ -344,24 +478,34 @@ def _run_guard_protect_command(
             harness=harness,
         ),
     )
+    wait_result: dict[str, object] | None = None
     if (
         bool(getattr(args, "package_shim_ui", False))
         and not bool(getattr(args, "json", False))
         and config.approval_wait_timeout_seconds > 0
     ):
+        from .protect_inline_approval import inline_package_approval
+
+        wait_result = inline_package_approval(
+            payload,
+            store=store,
+            workspace=protect_workspace,
+            timeout_seconds=config.approval_wait_timeout_seconds,
+        )
         approval_request_ids = payload.get("approval_request_ids")
         request_ids = [
             str(item)
             for item in (approval_request_ids if isinstance(approval_request_ids, list) else [])
             if isinstance(item, str) and item
         ]
-        if request_ids:
+        if wait_result is None and request_ids:
             _emit_package_shim_pending_approval_status()
             wait_result = wait_for_approval_requests(
                 store=store,
                 request_ids=request_ids,
                 timeout_seconds=config.approval_wait_timeout_seconds,
             )
+        if wait_result is not None:
             payload["approval_wait"] = wait_result
             wait_items = wait_result.get("items")
             resolved_items = [
@@ -372,50 +516,32 @@ def _run_guard_protect_command(
             if bool(wait_result.get("resolved")) and not any(
                 str(item.get("resolution_action")) == "block" for item in resolved_items
             ):
-                initial_payload = payload
-                fresh_payload, fresh_exit_code = build_protect_payload(
-                    command=protect_command,
-                    store=store,
-                    workspace_dir=protect_workspace,
-                    dry_run=bool(getattr(args, "dry_run", False)),
-                    now=_now(),
-                    config=current_protect_config(),
-                    current_config_provider=current_protect_config,
-                    unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
-                )
+                try:
+                    fresh_payload, fresh_exit_code = build_protect_payload(
+                        command=protect_command,
+                        store=store,
+                        workspace_dir=protect_workspace,
+                        dry_run=bool(getattr(args, "dry_run", False)),
+                        now=_now(),
+                        config=current_protect_config(),
+                        current_config_provider=current_protect_config,
+                        unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
+                        # A Cloud resolution of these requests is honored
+                        # here, by the install that waited on them, and only
+                        # here.
+                        waited_request_ids=tuple(request_ids),
+                    )
+                except NativeProtectRequestError as error:
+                    return _emit_protect_resident_failure(error)
                 if fresh_exit_code == 0:
-                    payload, exit_code = fresh_payload, fresh_exit_code
-                elif _package_shim_approval_matches_fresh_request(initial_payload, fresh_payload):
-                    fresh_verdict = fresh_payload.get("verdict")
-                    if isinstance(fresh_verdict, dict):
-                        fresh_verdict["action"] = "allow"
-                        fresh_verdict["blocking"] = False
-                    fresh_payload["policy_action"] = "allow"
                     fresh_payload["approval_wait"] = wait_result
-                    payload, exit_code = fresh_payload, 0
+                    payload, exit_code = fresh_payload, fresh_exit_code
     if not _suppress_package_shim_allow_output(args, payload):
         as_json = bool(getattr(args, "json", False))
         output_payload = payload if as_json else _protect_payload_for_human_output(payload, guard_home=guard_home)
         _emit("protect", output_payload, as_json)
     return exit_code
 
-
-def _package_shim_approval_matches_fresh_request(
-    initial_payload: dict[str, object],
-    fresh_payload: dict[str, object],
-) -> bool:
-    """Resume only when the full package request and execution context are unchanged."""
-    initial_request = initial_payload.get("request")
-    fresh_request = fresh_payload.get("request")
-    fresh_verdict = fresh_payload.get("verdict")
-    if not isinstance(initial_request, dict) or not isinstance(fresh_request, dict):
-        return False
-    if not isinstance(fresh_verdict, dict):
-        return False
-    fresh_action = str(fresh_verdict.get("action") or "")
-    if fresh_action not in {"review", "require-reapproval"}:
-        return False
-    return initial_request == fresh_request
 
 def _run_guard_start_command(
     args: argparse.Namespace,
@@ -450,6 +576,7 @@ def _run_guard_status_command(
     store = _require_guard_store(store)
     config = _require_guard_config(config)
     payload = importlib.import_module(".product", __package__).build_guard_status_payload(context, store, config)
+    payload["approval_gate"] = approval_gate_posture(context.guard_home)
     _emit("status", payload, getattr(args, "json", False))
     return 0
 
@@ -465,12 +592,51 @@ def _run_guard_network_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    from ..runtime.network_protection_bundle import NETWORK_PROTECTION_SYNC_STATE_KEY, network_protection_status
+
     command = getattr(args, "network_command", None) or "status"
+    if command == "sync":
+        store = _require_guard_store(store)
+        try:
+            summary = sync_network_protection_bundle(store)
+        except (RuntimeError, ValueError) as error:
+            from .commands_support_service import _guard_sync_failure_message
+
+            message = str(error)
+            if isinstance(error, GuardSyncNotConfiguredError):
+                message = _guard_sync_failure_message(error)
+            _emit("network-sync", {"synced": False, "error": message}, getattr(args, "json", False))
+            return 1
+        _emit("network-sync", {"synced": True, **summary}, getattr(args, "json", False))
+        return 0
+    if command == "check":
+        return _run_guard_network_check(args, guard_home=guard_home)
     if command != "status":
         raise ValueError(f"unsupported network command: {command}")
-    payload = load_network_status_payload(guard_home=guard_home, config=config)
+    payload = dict(load_network_status_payload(guard_home=guard_home, config=config))
+    if store is not None:
+        payload["protection_bundle"] = network_protection_status(
+            store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
+        )
     _emit("network", payload, getattr(args, "json", False))
     return 0
+
+def _run_guard_network_check(args: argparse.Namespace, *, guard_home: Path | None) -> int:
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    url = str(getattr(args, "url", "") or "").strip()
+    home = guard_home if guard_home is not None else resolve_guard_home(None)
+    try:
+        verdict = native_runner_authority("network_check", {"guard_home": str(home), "url": url})
+    except NativeRunnerAuthorityError as error:
+        _emit("network-check", {"url": url, "error": str(error)}, getattr(args, "json", False))
+        return 1
+    payload: dict[str, object] = {"url": url, **verdict}
+    _emit("network-check", payload, getattr(args, "json", False))
+    if not verdict.get("valid_url", False):
+        return 2
+    return 0
+
 
 def _run_guard_init_command(
     args: argparse.Namespace,
@@ -516,10 +682,7 @@ def _run_guard_dashboard_command(
         "dashboard",
         {
             "generated_at": _now(),
-            "approval_center_url": result.approval_center_url,
-            "browser_url": result.browser_url,
-            "opened": result.opened,
-            "reason": result.reason,
+            **{key: value for key, value in result.to_payload().items() if key != "error"},
             **({"error": result.error} if result.error else {}),
         },
         getattr(args, "json", False),
@@ -606,6 +769,24 @@ def _run_guard_install_command(
     store = _require_guard_store(store)
     if not bool(getattr(args, "dry_run", False)):
         _migrate_legacy_macos_secrets(store)
+    native_repair: dict[str, object] | None = None
+    if not bool(getattr(args, "dry_run", False)):
+        # Hooks fail closed without the native runtime, so fetch it before wiring any harness.
+        repair = repair_native_runtime_if_missing(
+            context=context,
+            store=store,
+            workspace=str(workspace) if workspace else None,
+            now=_now(),
+            guard_home=guard_home,
+        )
+        if repair is not None:
+            native_repair, repair_exit = repair
+            if repair_exit != 0 or native_repair.get("status") in {"failed", "blocked"}:
+                if getattr(args, "json", False):
+                    print(json.dumps({"status": "failed", "native_runtime_repair": native_repair}, indent=2))
+                else:
+                    print(str(native_repair.get("message") or ""), file=sys.stderr)
+                return 1
     try:
         if bool(getattr(args, "dry_run", False)):
             payload = build_managed_install_plan(args.harness, bool(getattr(args, "all", False)), context, store)
@@ -622,6 +803,15 @@ def _run_guard_install_command(
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
+    if native_repair is not None:
+        payload["native_runtime_repair"] = native_repair
+    if not bool(getattr(args, "dry_run", False)):
+        from ..mcp_discovery_client import observe_configured_mcp_servers
+
+        observe_configured_mcp_servers(store, context=context, seen_at=_now())
+        from .install_daemon_prewarm import prewarm_after_install
+
+        prewarm_after_install(context.guard_home, home_dir=context.home_dir)
     _emit("install", payload, getattr(args, "json", False))
     return 0
 
@@ -652,26 +842,20 @@ def _run_guard_mcp_command(
     return server.run_stdio()
 
 
-def _guard_package_version() -> str:
-    """Return the installed guard package version, or empty string."""
-    try:
-        from importlib.metadata import version
-
-        return version("codex-plugin-scanner")
-    except Exception:
-        return ""
 
 __all__ = [
+    "_run_guard_ack_bound_bash_command",
     "_run_guard_apps_command",
     "_run_guard_bootstrap_command",
     "_run_guard_command_inspection_command",
     "_run_guard_dashboard_command",
     "_run_guard_detect_command",
+    "_run_guard_execute_bound_bash_command",
+    "_run_guard_execute_contained_test_command",
     "_run_guard_init_command",
     "_run_guard_install_command",
     "_run_guard_mcp_command",
     "_run_guard_network_command",
-    "_run_guard_preflight_command",
     "_run_guard_protect_command",
     "_run_guard_pytest_contained_command",
     "_run_guard_scan_command",

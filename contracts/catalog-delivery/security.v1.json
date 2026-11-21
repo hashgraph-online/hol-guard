@@ -1,0 +1,5 @@
+{
+  "schema": "guard.extension-delivery-security.v1",
+  "authority_epoch": 1,
+  "revocation_epoch": 0
+}

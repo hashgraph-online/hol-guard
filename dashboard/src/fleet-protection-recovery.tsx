@@ -11,6 +11,7 @@ import {
   waitForAuthorizeUrl,
   waitForCloudConnection,
 } from "./guard-cloud-connect-flow";
+import { GuardRepairControl } from "./guard-repair-control";
 import { openPackageFirewallAuthorizeFallback } from "./package-firewall-connect-browser";
 import type {
   GuardProtectionHealth,
@@ -414,6 +415,11 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
               onRepair={onRepairHarness}
             />
           ))}
+        </div>
+      ) : null}
+      {hasRepairableGaps && repairableGaps.some((check) => check.check_id === "harness_hooks") ? (
+        <div className="mt-3 border-t border-slate-200 pt-3" id="guard-repair-banner">
+          <GuardRepairControl description="Hooks timing out or an app stuck blocked? Repair Guard restarts what is stuck, clears stale state, and reinstalls broken hooks." />
         </div>
       ) : null}
       <button

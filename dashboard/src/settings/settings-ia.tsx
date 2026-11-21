@@ -3,18 +3,22 @@ import {
   HiMiniAdjustmentsHorizontal,
   HiMiniBellAlert,
   HiMiniCircleStack,
+  HiMiniCloud,
   HiMiniLockClosed,
   HiMiniShieldCheck,
+  HiMiniSquares2X2,
 } from "react-icons/hi2";
 
 export type LocalSettingsTabKey =
   | "protection"
+  | "apps"
   | "approval"
   | "notifications"
   | "rules"
-  | "maintenance";
+  | "maintenance"
+  | "cloud-actions";
 
-export type LocalSettingsNavGroupKey = "local";
+export type LocalSettingsNavGroupKey = "local" | "cloud";
 
 export interface LocalSettingsNavGroup {
   key: LocalSettingsNavGroupKey;
@@ -37,13 +41,20 @@ export const localSettingsNavGroups: readonly LocalSettingsNavGroup[] = [
     label: "This machine",
     summary: "Protection, approval checks, alerts, tuning, and local upkeep.",
   },
+  {
+    key: "cloud",
+    label: "Guard Cloud",
+    summary: "Guard Cloud features for this machine. Protection on this machine does not depend on them.",
+  },
 ] as const;
 
 const ICON_PROTECTION = <HiMiniShieldCheck className="h-4 w-4" aria-hidden="true" />;
+const ICON_APPS = <HiMiniSquares2X2 className="h-4 w-4" aria-hidden="true" />;
 const ICON_APPROVAL = <HiMiniLockClosed className="h-4 w-4" aria-hidden="true" />;
 const ICON_NOTIFICATIONS = <HiMiniBellAlert className="h-4 w-4" aria-hidden="true" />;
 const ICON_RISK = <HiMiniAdjustmentsHorizontal className="h-4 w-4" aria-hidden="true" />;
 const ICON_MAINTENANCE = <HiMiniCircleStack className="h-4 w-4" aria-hidden="true" />;
+const ICON_CLOUD_ACTIONS = <HiMiniCloud className="h-4 w-4" aria-hidden="true" />;
 
 export const localSettingsNavItems: readonly LocalSettingsNavItem[] = [
   {
@@ -53,6 +64,14 @@ export const localSettingsNavItems: readonly LocalSettingsNavItem[] = [
     summary: "Security level, mode, sync, and what Guard pauses.",
     group: "local",
     icon: ICON_PROTECTION,
+  },
+  {
+    key: "apps",
+    label: "Apps",
+    mobileLabel: "Apps",
+    summary: "Choose protection or Watch for each app on this machine.",
+    group: "local",
+    icon: ICON_APPS,
   },
   {
     key: "approval",
@@ -86,6 +105,14 @@ export const localSettingsNavItems: readonly LocalSettingsNavItem[] = [
     group: "local",
     icon: ICON_MAINTENANCE,
   },
+  {
+    key: "cloud-actions",
+    label: "Cloud actions",
+    mobileLabel: "Cloud",
+    summary: "Which workspaces AI tools here are signed in to, and whether Guard Cloud still accepts them.",
+    group: "cloud",
+    icon: ICON_CLOUD_ACTIONS,
+  },
 ] as const;
 
 
@@ -95,18 +122,22 @@ export const localSettingsMobileTabLabels: Record<LocalSettingsTabKey, string> =
 
 export const localSettingsTabLabels: Record<LocalSettingsTabKey, string> = {
   protection: "Protection",
+  apps: "Apps",
   approval: "Approval gate",
   notifications: "Notifications",
   rules: "Protection rules",
   maintenance: "Data & repair",
+  "cloud-actions": "Cloud actions",
 };
 
 export function isLocalSettingsTabKey(value: string): value is LocalSettingsTabKey {
   return (
     value === "protection"
+    || value === "apps"
     || value === "approval"
     || value === "notifications"
     || value === "rules"
     || value === "maintenance"
+    || value === "cloud-actions"
   );
 }

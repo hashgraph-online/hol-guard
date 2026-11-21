@@ -2,24 +2,9 @@
 
 from __future__ import annotations
 
-import json
-import shlex
-import sqlite3
-import sys
-from collections.abc import Sequence
-from pathlib import Path
-
-from ..adapters.base import HarnessContext
-from ..adapters.grok import GrokHarnessAdapter
-from ..adapters.grok_config import (
-    GROK_HOOK_INTERNAL_TIMEOUT_SECONDS,
-    GROK_PRETOOL_HOOK_TIMEOUT_SECONDS,
-    GUARD_HOOK_PRETOOL_FILE,
-)
-from ..stable_guard_cli import prune_safe_cli_executable
+from ..harness_context import HarnessContext
 from ..store import GuardStore
-from .install_commands import apply_managed_install
-from .managed_install_context import managed_install_context as repair_context_from_managed_install
+from .native_managed_update import native_update_repair
 
 
 def repair_grok_install(
@@ -29,174 +14,14 @@ def repair_grok_install(
     workspace: str | None,
     now: str,
 ) -> tuple[dict[str, object] | None, str | None]:
-    """Rewrite Grok PreToolUse hooks when the baked launcher is stale."""
+    """Rewrite Grok PreToolUse hooks when the baked launcher is stale.
 
-    try:
-        managed_install = store.get_managed_install("grok")
-    except (json.JSONDecodeError, sqlite3.Error):
-        return None, None
-    if managed_install is None or not bool(managed_install.get("active")):
-        return None, None
-    try:
-        repair_context, repair_workspace = repair_context_from_managed_install(context, managed_install)
-        if _grok_hooks_are_current(repair_context):
-            return None, None
-        payload = apply_managed_install(
-            "install",
-            "grok",
-            False,
-            repair_context,
-            store,
-            repair_workspace or workspace,
-            now,
-        )
-    except (OSError, RuntimeError, ValueError, json.JSONDecodeError, sqlite3.Error) as error:
-        return None, f"Could not refresh Grok protection during update: {error}"
-    repaired = payload.get("managed_install")
-    if not isinstance(repaired, dict):
-        return None, "Could not refresh Grok protection during update: managed install was not recorded"
-    return repaired, None
+    The native runtime reads the install record, checks whether both hook files already hold what an install
+    would write now, and reinstalls under its own installation transaction when they do not.
+    """
 
-
-def _grok_hooks_are_current(context: HarnessContext) -> bool:
-    hook_path = GrokHarnessAdapter._hooks_dir(context) / GUARD_HOOK_PRETOOL_FILE
-    if not hook_path.is_file():
-        return False
-    try:
-        payload = json.loads(hook_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    timeout = _pretool_timeout(payload)
-    command = _pretool_command(payload)
-    if timeout != GROK_PRETOOL_HOOK_TIMEOUT_SECONDS:
-        return False
-    if _isolated_bounded_hook_is_current(command, context=context):
-        return True
-    marker = f'"timeout_seconds":{GROK_HOOK_INTERNAL_TIMEOUT_SECONDS}'
-    if marker not in command.replace(" ", ""):
-        return False
-    hook_config = _hook_config_from_command(command)
-    if hook_config is None:
-        return False
-    executable = hook_config.get("python_executable")
-    cli_args = hook_config.get("cli_args")
-    if not isinstance(executable, str) or not executable.strip():
-        return False
-    executable_path = Path(executable)
-    if not executable_path.exists():
-        return False
-    try:
-        expected = Path(prune_safe_cli_executable(sys.executable)).resolve()
-        if executable_path.resolve() != expected:
-            return False
-    except OSError:
-        return False
-    return isinstance(cli_args, list) and "--json" in cli_args
-
-
-def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext) -> bool:
-    from ..adapters.bounded_cli_hook_bridge import bounded_hook_script_path
-    from ..adapters.cursor_hook_config import isolated_cursor_hook_python
-
-    interpreter = isolated_cursor_hook_python()
-    expected_script = bounded_hook_script_path(context.guard_home, "grok")
-    if interpreter is None or expected_script is None:
-        return False
-    argv = _split_hook_command(command, posix=True)
-    if len(argv) != 3 or argv[1] != "-I":
-        argv = _split_hook_command(command, posix=False)
-    if len(argv) != 3 or argv[1] != "-I":
-        return False
-    try:
-        if Path(argv[0]).resolve() != Path(interpreter).resolve():
-            return False
-        if Path(argv[2]).resolve() != expected_script.resolve():
-            return False
-        source = expected_script.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    return 'HARNESS = "grok"' in source and f"TIMEOUT_SECONDS = {GROK_HOOK_INTERNAL_TIMEOUT_SECONDS}" in source
-
-
-def _hook_config_from_command(command: str) -> dict[str, object] | None:
-    for posix in (True, False):
-        parsed = _hook_config_from_argv(_split_hook_command(command, posix=posix))
-        if parsed is not None:
-            return parsed
-    return None
-
-
-def _split_hook_command(command: str, *, posix: bool) -> list[str]:
-    try:
-        return shlex.split(command, posix=posix)
-    except ValueError:
-        return []
-
-
-def _hook_config_from_argv(argv: Sequence[str]) -> dict[str, object] | None:
-    for index, argument in enumerate(argv):
-        if argument == "__guard-bounded-hook" and index + 1 < len(argv):
-            parsed = _hook_config_payload(argv[index + 1])
-            if parsed is not None:
-                return parsed
-        parsed = _hook_config_payload(argument)
-        if parsed is not None:
-            return parsed
-    return None
-
-
-def _hook_config_payload(raw: str) -> dict[str, object] | None:
-    for candidate in (raw, raw.replace('\\"', '"')):
-        parsed = _parse_grok_hook_config(candidate)
-        if parsed is not None:
-            return parsed
-    return None
-
-
-def _parse_grok_hook_config(raw: str) -> dict[str, object] | None:
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    if parsed.get("harness") != "grok":
-        return None
-    if not isinstance(parsed.get("python_executable"), str):
-        return None
-    if not isinstance(parsed.get("cli_args"), list):
-        return None
-    return parsed
-
-
-def _pretool_timeout(payload: object) -> int | None:
-    command = _pretool_entry(payload)
-    timeout = command.get("timeout") if command is not None else None
-    return timeout if isinstance(timeout, int) else None
-
-
-def _pretool_command(payload: object) -> str:
-    command = _pretool_entry(payload)
-    value = command.get("command") if command is not None else None
-    return value if isinstance(value, str) else ""
-
-
-def _pretool_entry(payload: object) -> dict[str, object] | None:
-    if not isinstance(payload, dict):
-        return None
-    hooks = payload.get("hooks")
-    if not isinstance(hooks, dict):
-        return None
-    pretool = hooks.get("PreToolUse")
-    if not isinstance(pretool, list) or not pretool:
-        return None
-    first = pretool[0]
-    if not isinstance(first, dict):
-        return None
-    inner = first.get("hooks")
-    if isinstance(inner, list) and inner and isinstance(inner[0], dict):
-        return inner[0]
-    return first
+    installs, notes = native_update_repair("grok", context=context, store=store, workspace=workspace, now=now)
+    return (installs[0] if installs else None), (notes[0] if notes else None)
 
 
 def append_grok_repair(

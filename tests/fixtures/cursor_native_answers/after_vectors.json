@@ -1,0 +1,209 @@
+{
+  "schema": "hol-guard-cursor-native-after-answers.v1",
+  "vectors": [
+    {
+      "input": "{\"hook_event_name\": \"afterShellExecution\", \"command\": \" ls -la \", \"cwd\": \"/nonexistent-cursor-cwd\", \"conversation_id\": \"c-1\", \"generation_id\": \"g-1\", \"output\": \"a\\nb\", \"duration\": 12}",
+      "observer": true,
+      "sent": {
+        "hook_event_name": "afterShellExecution",
+        "command": " ls -la ",
+        "cwd": "/nonexistent-cursor-cwd",
+        "conversation_id": "c-1",
+        "generation_id": "g-1",
+        "output": "a\nb",
+        "duration": 12,
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "ls -la",
+          "working_directory": "/nonexistent-cursor-cwd"
+        }
+      },
+      "answers": [
+        {
+          "daemon_body": "{}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": "{\"policy_action\": \"block\", \"reason_code\": \"native_policy_block\"}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": " {\"x\": [1]} ",
+          "stdout": "{}\n",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "input": "{\"hook_event_name\": \" AfterShellExecution \", \"command\": \"pwd\", \"tool_input\": {\"command\": \"echo hi\"}}",
+      "observer": true,
+      "sent": {
+        "hook_event_name": "afterShellExecution",
+        "command": "pwd",
+        "tool_input": {
+          "command": "echo hi"
+        },
+        "tool_name": "Shell"
+      },
+      "answers": [
+        {
+          "daemon_body": "{}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": "{\"policy_action\": \"block\", \"reason_code\": \"native_policy_block\"}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": " {\"x\": [1]} ",
+          "stdout": "{}\n",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "input": "{\"hook_event_name\": \"afterMCPExecution\", \"tool_name\": \" lookup \", \"tool_input\": \"{\\\"q\\\": 1}\", \"result_json\": \"{}\", \"url\": \"https://example.invalid/mcp\"}",
+      "observer": true,
+      "sent": {
+        "hook_event_name": "afterMCPExecution",
+        "tool_name": "lookup",
+        "tool_input": {
+          "q": 1
+        },
+        "result_json": "{}",
+        "url": "https://example.invalid/mcp"
+      },
+      "answers": [
+        {
+          "daemon_body": "{}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": "{\"policy_action\": \"block\", \"reason_code\": \"native_policy_block\"}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": " {\"x\": [1]} ",
+          "stdout": "{}\n",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "input": "{\"hook_event_name\": \"afterMCPExecution\", \"tool_input\": [\"a\", 1]}",
+      "observer": true,
+      "sent": {
+        "hook_event_name": "afterMCPExecution",
+        "tool_input": {
+          "arguments": [
+            "a",
+            1
+          ]
+        },
+        "tool_name": "MCP"
+      },
+      "answers": [
+        {
+          "daemon_body": "{}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": "{\"policy_action\": \"block\", \"reason_code\": \"native_policy_block\"}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": " {\"x\": [1]} ",
+          "stdout": "{}\n",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "input": "{\"hook_event_name\": \"AFTERMCPEXECUTION\", \"tool_name\": \"\", \"tool_input\": \"not json\"}",
+      "observer": true,
+      "sent": {
+        "hook_event_name": "afterMCPExecution",
+        "tool_name": "",
+        "tool_input": {
+          "raw": "not json"
+        }
+      },
+      "answers": [
+        {
+          "daemon_body": "{}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": "{\"policy_action\": \"block\", \"reason_code\": \"native_policy_block\"}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": " {\"x\": [1]} ",
+          "stdout": "{}\n",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "input": "{\"hookEventName\": \"afterShellExecution\", \"command\": \"ls\", \"workspace_roots\": [\"/nonexistent-root\"]}",
+      "observer": true,
+      "sent": {
+        "hookEventName": "afterShellExecution",
+        "command": "ls",
+        "workspace_roots": [
+          "/nonexistent-root"
+        ],
+        "hook_event_name": "afterShellExecution",
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "ls"
+        }
+      },
+      "answers": [
+        {
+          "daemon_body": "{}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": "{\"policy_action\": \"block\", \"reason_code\": \"native_policy_block\"}",
+          "stdout": "{}\n",
+          "exit_code": 0
+        },
+        {
+          "daemon_body": " {\"x\": [1]} ",
+          "stdout": "{}\n",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "input": "{\"hook_event_name\": \"after_shell_execution\", \"command\": \"ls\"}",
+      "observer": false,
+      "sent": {
+        "hook_event_name": "after_shell_execution",
+        "command": "ls"
+      },
+      "answers": []
+    },
+    {
+      "input": "{\"hook_event_name\": \"after-mcp-execution\", \"tool_name\": \"x\"}",
+      "observer": false,
+      "sent": {
+        "hook_event_name": "after-mcp-execution",
+        "tool_name": "x"
+      },
+      "answers": []
+    }
+  ]
+}

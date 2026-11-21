@@ -18,14 +18,16 @@ with a merge commit marks the original PRs merged. With squash merge, close the
 original PRs manually with a reference comment.
 
 The refresh step executes code from the merged tree (``src/`` imports, test
-helpers, build tooling), so the contribution diff is gated: paths inside
+build tooling), so the contribution diff is gated: paths inside
 ``contributions/`` and ``tests/fixtures/`` pass as contributor-owned, and
 machine-managed paths (generated projections, rendered docs, and refresh
-inputs such as the trust-class map, managed-controls vectors,
-``extension_builder`` modules, and the anchored test files) pass because the
+inputs such as the trust-class map and ``extension_builder`` modules) pass because the
 script resets them to ``origin/main`` — restoring trusted content and
 deleting planted files — before refresh runs. Anything else is refused
-unless ``--trust-tooling-changes`` is passed after manual review.
+unless ``--trust-tooling-changes`` is passed after manual review. Reviewed test
+code and managed-controls vectors are not machine-owned; they require that
+explicit tooling review or ``--skip-regen`` and are preserved rather than reset.
+Portable fixtures remain contributor-owned and are never rewritten by refresh.
 
 Requires ``gh`` authenticated as a maintainer and push access to origin.
 """
@@ -55,7 +57,21 @@ def _gh(*args: str) -> str:
     return _run(["gh", *args])
 
 
+MACHINE_DIRS = (
+    "contracts/extensions/",
+    "docs/guard/extensions/",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions/",
+    "src/codex_plugin_scanner/guard/extension_builder/",
+)
+
+
+def is_machine_managed(path: str) -> bool:
+    """Separate generated product paths from independently reviewed expectations."""
+    return path.startswith(MACHINE_DIRS)
+
+
 def main() -> int:
+    """Prepare a contributor intake branch while preserving reviewed expectations and ancestry."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr", type=int, nargs="+", required=True)
     parser.add_argument("--repo", default="hashgraph-online/hol-guard")
@@ -111,37 +127,10 @@ def main() -> int:
     _run(["git", "fetch", "origin", "main"])
 
     contributor_owned = ("contributions/", "tests/fixtures/")
-    # Machine-managed paths are reset to origin/main before the refresh runs,
-    # so contributor edits to them never reach the maintainer credential
-    # context: generated projections get rebuilt, refresh inputs (the
-    # append-only trust map, the signature vector, extension_builder modules,
-    # the anchored test files) revert to main's trusted content, and files
-    # planted under these directories are deleted rather than carried.
-    machine_dirs = (
-        "contracts/extensions/",
-        "contracts/managed-controls/",
-        "docs/guard/extensions/",
-        "src/codex_plugin_scanner/guard/contracts/data/extensions/",
-        "src/codex_plugin_scanner/guard/extension_builder/",
-    )
-    machine_files = (
-        "tests/test_guard_extension_trust.py",
-        "tests/test_policy_bundle_delivery_runtime.py",
-        # Fully rewritten refresh outputs that live under the contributor-owned
-        # tests/fixtures/ prefix: refresh_baseline rebuilds the baseline from
-        # the registry and the decision-diff report is a regenerated corpus
-        # artifact, and the framed-sha256 file is that report's digest
-        # sidecar. Contributor-owned command-source-*.v1.json fixtures are
-        # deliberately excluded — their trust field is rebound in place.
-        "tests/fixtures/extension-controls/catalog-baseline.v1.json",
-        "tests/fixtures/guard-command-corpus/decision-diff-report.json",
-        "tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256",
-    )
+    # Only generated product data and existing credential-sensitive tooling
+    # are reset. Reviewed fixture/vector/test edits are no longer regenerated.
     machine_touched: set[str] = set()
     salvaged: set[str] = set()
-
-    def managed(path: str) -> bool:
-        return path.startswith(machine_dirs) or path in machine_files
 
     for (pr_number, _, _), contributor_head in zip(contributions, contributor_heads, strict=True):
         merge_base = _run(["git", "merge-base", contributor_head, "origin/main"])
@@ -155,8 +144,8 @@ def main() -> int:
             )
             if p
         ]
-        machine_touched.update(p for p in changed if managed(p))
-        outside = [p for p in changed if not p.startswith(contributor_owned) and not managed(p)]
+        machine_touched.update(p for p in changed if is_machine_managed(p))
+        outside = [p for p in changed if not p.startswith(contributor_owned) and not is_machine_managed(p)]
         if outside:
             if args.salvage:
                 # Non-contributor edits are reverted after the merge, before
@@ -206,10 +195,10 @@ def main() -> int:
     def salvage_conflicts() -> bool:
         """Under --salvage, resolve conflicts on non-contributor paths to the
         incoming side — the reset below normalizes them to origin/main anyway.
-        Conflicts inside contributor-owned paths stay manual, except managed
-        refresh outputs under tests/fixtures/ which the reset also rebuilds."""
+        Conflicts inside contributor-owned fixtures stay manual: refresh does
+        not generate their independently reviewed expectations."""
         unmerged = [p for p in _run(["git", "diff", "--name-only", "--diff-filter=U", "-z"]).split("\0") if p]
-        resolvable = [p for p in unmerged if not p.startswith(contributor_owned) or managed(p)]
+        resolvable = [p for p in unmerged if not p.startswith(contributor_owned) or is_machine_managed(p)]
         if len(resolvable) != len(unmerged):
             return False
         checked_out = []
@@ -303,14 +292,10 @@ def main() -> int:
                 "add",
                 "-A",
                 "contracts/extensions",
-                "contracts/managed-controls",
                 "docs/guard/extensions",
                 "contributions/extensions",
                 "src/codex_plugin_scanner/guard/contracts/data/extensions",
                 "src/codex_plugin_scanner/guard/extension_builder",
-                "tests/fixtures",
-                "tests/test_guard_extension_trust.py",
-                "tests/test_policy_bundle_delivery_runtime.py",
             ]
         )
         if _run(["git", "status", "--porcelain"]):

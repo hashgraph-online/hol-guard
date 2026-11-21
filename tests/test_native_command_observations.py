@@ -1,4 +1,8 @@
-"""Independent malformed-wire, redaction, and receipt replay vectors."""
+"""Receipt replay vectors binding native command observations to a decision.
+
+The wire validator itself lives in the resident; its malformed-wire and
+redaction vectors are in `native_command_extension_evidence_tests.rs`.
+"""
 
 from __future__ import annotations
 
@@ -7,15 +11,11 @@ import hashlib
 import json
 from typing import Any
 
-import pytest
-
-from codex_plugin_scanner.guard.native_command_observations import validate_native_command_observations
 from codex_plugin_scanner.guard.native_decision_receipt import (
-    canonical_receipt_bytes,
     receipt_matches_edge,
     validate_native_decision_receipt,
 )
-from codex_plugin_scanner.guard.native_hook_edge import _decode_pre_tool_result
+from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
 
 
 def _evidence() -> dict[str, object]:
@@ -66,7 +66,7 @@ def _rehash(value: dict[str, Any]) -> None:
     ).hexdigest()
 
 
-def _receipt(extensions: dict[str, Any] | None) -> dict[str, Any]:
+def _receipt(extensions: dict[str, Any] | None, *, review_anchor: bool = False) -> dict[str, Any]:
     value: dict[str, Any] = {
         "schema": "guard-native-hook-decision-receipt.v1",
         "version": 1,
@@ -92,10 +92,14 @@ def _receipt(extensions: dict[str, Any] | None) -> dict[str, Any]:
         "observe_mode": False,
         "deadline_budget_ms": 750,
     }
+    if review_anchor:
+        # Evidence only; the store never persists it and it stays out of the
+        # decision identity.
+        value["review_anchor_digest"] = "9" * 64
     if extensions is not None:
         value["command_extensions"] = copy.deepcopy(extensions["binding"])
     identity = {
-        **{key: item for key, item in value.items() if key not in {"authority", "decision_id"}},
+        **{key: item for key, item in value.items() if key not in {"authority", "decision_id", "review_anchor_digest"}},
         "schema": "guard-native-hook-decision-identity.v1",
     }
     value["decision_id"] = hashlib.sha256(
@@ -125,7 +129,6 @@ def _edge(extensions: dict[str, Any]) -> dict[str, Any]:
 
 def test_observations_bind_exact_redacted_evidence_to_receipt() -> None:
     observations = _observations()
-    assert validate_native_command_observations(observations) == observations
     receipt = _receipt(observations)
     assert validate_native_decision_receipt(receipt) == receipt
     assert receipt_matches_edge(_edge(observations), receipt)
@@ -162,99 +165,3 @@ def test_prompt_extension_binding_cannot_be_detached_from_its_native_receipt() -
     changed = copy.deepcopy(edge)
     changed["result"]["command_extensions"]["binding"]["program_digest"] = "e" * 64
     assert not receipt_matches_edge(changed, receipt)
-
-
-@pytest.mark.parametrize(
-    "field,value",
-    [
-        ("segment_index", True),
-        ("segment_index", 128),
-        ("segment_index", -1),
-        ("executable", "/private/ollama"),
-        ("executable", "secret token"),
-        ("detail", "raw secret command"),
-    ],
-)
-def test_untrusted_evidence_is_rejected_even_with_recomputed_digest(field: str, value: object) -> None:
-    observations = _observations()
-    observations["observations"][0]["matcher_evidence"][0][field] = value
-    _rehash(observations)
-    assert validate_native_command_observations(observations) is None
-
-
-def test_safe_variant_suppression_is_exact_and_cannot_hide_other_segments() -> None:
-    observations = _observations()
-    item = observations["observations"][0]
-    item["matcher_evidence"].append({**_evidence(), "segment_index": 1})
-    item["safe_variants"] = [{"match_class": "safe-variant", "variant_id": "help", "matcher_evidence": [_evidence()]}]
-    item["effective_segment_indexes"] = [1]
-    _rehash(observations)
-    assert validate_native_command_observations(observations) == observations
-    item["effective_segment_indexes"] = []
-    _rehash(observations)
-    assert validate_native_command_observations(observations) is None
-
-
-def test_permission_only_evidence_and_uncertainty_cannot_disappear() -> None:
-    observations = _observations()
-    observations["permission_observations"] = [
-        {
-            "extension_id": "command.github",
-            "permission_id": "command.github.permission.read-remote",
-            "matcher_evidence": [{**_evidence(), "executable": "gh"}],
-            "uncertainty_reasons": ["matcher-failure"],
-        }
-    ]
-    observations["binding"]["observation_count"] = 2
-    observations["binding"]["uncertainty_count"] = 1
-    _rehash(observations)
-    assert validate_native_command_observations(observations) == observations
-    observations["binding"]["uncertainty_count"] = 0
-    assert validate_native_command_observations(observations) is None
-    observations["binding"]["uncertainty_count"] = 1
-    observations["permission_observations"][0]["permission_id"] = "command.ollama.permission.push"
-    _rehash(observations)
-    assert validate_native_command_observations(observations) is None
-
-
-def test_unknown_fields_duplicates_limits_and_unbound_error_reject() -> None:
-    original = _observations()
-    bad = copy.deepcopy(original)
-    bad["raw_command"] = "secret"
-    assert validate_native_command_observations(bad) is None
-    bad = copy.deepcopy(original)
-    bad["observations"] *= 2
-    bad["binding"]["observation_count"] = 2
-    _rehash(bad)
-    assert validate_native_command_observations(bad) is None
-    bad = copy.deepcopy(original)
-    bad["observations"][0]["matcher_evidence"] *= 8_193
-    _rehash(bad)
-    assert validate_native_command_observations(bad) is None
-    bad = copy.deepcopy(original)
-    bad["evaluation_error"] = "native_command_evaluation_failed"
-    _rehash(bad)
-    assert validate_native_command_observations(bad) is None
-    valid_result = {
-        "schema": "guard-pre-tool-result.v1",
-        "version": 1,
-        "authority": "rust",
-        "action": {
-            "schema": "guard-pre-tool-action.v1",
-            "version": 1,
-            "harness": "claude-code",
-            "event": "PreToolUse",
-            "action_type": "command",
-            "operation": "execute",
-            "bounded": True,
-            "sensitive_target": False,
-        },
-        "decision": "deny",
-        "policy_action": "block",
-        "minimum_action": "block",
-        "reason_code": "native_command_extension_evaluation_failed",
-        "reason": "HOL Guard rejected malformed native extension evidence.",
-        "explicitly_benign": False,
-        "command_extensions": bad,
-    }
-    assert not _decode_pre_tool_result(valid_result, harness="claude-code")

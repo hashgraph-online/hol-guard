@@ -1,0 +1,280 @@
+{
+  "description": "Each case changes cloud-binding-build.json and must fail validation with this code and pointer. Diagnostics never repeat the rejected values.",
+  "cases": [
+    {
+      "name": "default-decision",
+      "why": "A binding carries no default decision; policy decides.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            0,
+            "bindings",
+            0,
+            "default"
+          ],
+          "value": "allow"
+        }
+      ],
+      "code": "cloud_binding_contract_invalid",
+      "pointer": "/cloud_bindings/0/bindings/0"
+    },
+    {
+      "name": "contribution-decision",
+      "why": "A contribution cannot pre-approve its actions.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            0,
+            "decision"
+          ],
+          "value": "allow"
+        }
+      ],
+      "code": "cloud_binding_contract_invalid",
+      "pointer": "/cloud_bindings/0"
+    },
+    {
+      "name": "foreign-permission",
+      "why": "A binding may only name a permission its own extension declares.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            0,
+            "bindings",
+            0,
+            "permissionId"
+          ],
+          "value": "command.other-cli.permission.destroy"
+        }
+      ],
+      "code": "cloud_binding_permission_unknown",
+      "pointer": "/cloud_bindings/0/bindings/0"
+    },
+    {
+      "name": "unknown-effect",
+      "why": "Effects are read, write, destructive or admin.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            0,
+            "bindings",
+            0,
+            "effect"
+          ],
+          "value": "harmless"
+        }
+      ],
+      "code": "cloud_binding_contract_invalid",
+      "pointer": "/cloud_bindings/0/bindings/0"
+    },
+    {
+      "name": "command-run-in-cloud",
+      "why": "A command line never runs as a hosted action, even with every restriction.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            0,
+            "bindings",
+            0,
+            "cloudSupport"
+          ],
+          "value": "cloud-executable"
+        },
+        {
+          "path": [
+            "cloud_bindings",
+            0,
+            "bindings",
+            0,
+            "requiredCapabilities"
+          ],
+          "value": [
+            "egress-pinned",
+            "bounded-output"
+          ]
+        }
+      ],
+      "code": "cloud_binding_local_only_target",
+      "pointer": "/cloud_bindings/0/bindings/0"
+    },
+    {
+      "name": "unknown-portability-label",
+      "why": "Portability is portable-policy or cloud-executable.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            0,
+            "bindings",
+            0,
+            "cloudSupport"
+          ],
+          "value": "local-only"
+        }
+      ],
+      "code": "cloud_binding_contract_invalid",
+      "pointer": "/cloud_bindings/0/bindings/0"
+    },
+    {
+      "name": "include",
+      "why": "Bindings cannot pull in other files.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            1,
+            "bindings",
+            0,
+            "include"
+          ],
+          "value": "https://example.com/more-bindings.json"
+        }
+      ],
+      "code": "cloud_binding_contract_invalid",
+      "pointer": "/cloud_bindings/1/bindings/0"
+    },
+    {
+      "name": "callback",
+      "why": "Contributions carry no callbacks or code.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            1,
+            "callback"
+          ],
+          "value": "https://hooks.example.com/notify"
+        }
+      ],
+      "code": "cloud_binding_contract_invalid",
+      "pointer": "/cloud_bindings/1"
+    },
+    {
+      "name": "endpoint-override",
+      "why": "A binding uses the endpoint of the server it extends; it cannot name its own.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            1,
+            "bindings",
+            0,
+            "endpoint"
+          ],
+          "value": "https://elsewhere.example.com/mcp"
+        }
+      ],
+      "code": "cloud_binding_contract_invalid",
+      "pointer": "/cloud_bindings/1/bindings/0"
+    },
+    {
+      "name": "egress-not-pinned",
+      "why": "A hosted action must pin egress and bound its output.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            1,
+            "bindings",
+            0,
+            "requiredCapabilities"
+          ],
+          "value": [
+            "bounded-output"
+          ]
+        }
+      ],
+      "code": "cloud_binding_missing_required_capability",
+      "pointer": "/cloud_bindings/1/bindings/0"
+    },
+    {
+      "name": "resource-argument",
+      "why": "A resource names one argument; spaces and quotes are rejected.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            1,
+            "bindings",
+            0,
+            "resource",
+            "argument"
+          ],
+          "value": "task id"
+        }
+      ],
+      "code": "cloud_binding_resource_invalid",
+      "pointer": "/cloud_bindings/1/bindings/0"
+    },
+    {
+      "name": "catch-all-tool",
+      "why": "The catch-all entry for undeclared tools is not a reviewed action.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            1,
+            "bindings",
+            0,
+            "tool"
+          ],
+          "value": "other"
+        }
+      ],
+      "code": "cloud_binding_tool_unknown",
+      "pointer": "/cloud_bindings/1/bindings/0"
+    },
+    {
+      "name": "duplicate-action",
+      "why": "An action ID names one hosted action.",
+      "set": [
+        {
+          "path": [
+            "cloud_bindings",
+            1,
+            "bindings"
+          ],
+          "value": [
+            {
+              "actionId": "example-tasks.task.delete",
+              "tool": "delete_task",
+              "effect": "destructive",
+              "resource": {
+                "kind": "task",
+                "argument": "task_id"
+              },
+              "requiredCapabilities": [
+                "egress-pinned",
+                "bounded-output",
+                "resource-allowlist"
+              ],
+              "cloudSupport": "cloud-executable"
+            },
+            {
+              "actionId": "example-tasks.task.delete",
+              "tool": "delete_task",
+              "effect": "write",
+              "resource": {
+                "kind": "task",
+                "argument": "task_id"
+              },
+              "requiredCapabilities": [
+                "egress-pinned",
+                "bounded-output",
+                "resource-allowlist"
+              ],
+              "cloudSupport": "cloud-executable"
+            }
+          ]
+        }
+      ],
+      "code": "cloud_binding_duplicate_action",
+      "pointer": "/cloud_bindings/1/bindings/1"
+    }
+  ]
+}

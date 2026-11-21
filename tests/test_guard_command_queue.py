@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import itertools
 import json
 import urllib.error
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,30 +11,32 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import native_daemon_client as daemon_client_module
 from codex_plugin_scanner.guard import store as guard_store_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-from codex_plugin_scanner.guard.daemon import client as daemon_client_module
-from codex_plugin_scanner.guard.daemon.command_queue_worker import (
+from codex_plugin_scanner.guard.cloud_control.command_queue_worker import (
     CommandQueueWorker,
     start_command_queue_worker,
 )
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.review_contracts import (
     GuardReviewContractError,
     build_local_review_request_claim,
     guard_review_oauth_metadata,
-    payload_hash_for_decision_memory_bundle,
     payload_hash_for_remote_approval_envelope,
     validate_remote_approval_request_binding,
-    validated_decision_memory_bundle,
     validated_remote_approval_envelope,
+)
+from codex_plugin_scanner.guard.review_decision_memory import (
+    payload_hash_for_decision_memory_bundle,
+    validated_decision_memory_bundle,
 )
 from codex_plugin_scanner.guard.runtime import (
     command_executors,
     command_queue,
     command_queue_authority,
-    local_request_snapshots,
 )
+from codex_plugin_scanner.guard.runtime import command_queue_loop as command_queue_loop_module
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_oauth_token_support import oauth_binding_access_token
@@ -42,6 +46,11 @@ from tests.guard_review_signing_helpers import (
     review_verification_keys,
     sign_review_payload,
 )
+from tests.local_request_snapshots_client import cloud_safe_local_request_payload
+from tests.support.command_queue_store import FakeStore
+
+# Every job is planned by the native runtime before it runs.
+pytestmark = pytest.mark.usefixtures("native_command_capability_runtime")
 
 
 @pytest.fixture(autouse=True)
@@ -74,8 +83,8 @@ def _isolate_legacy_queue_mechanics(monkeypatch: pytest.MonkeyPatch) -> None:
             requires_local_approval=False,
         ),
     )
+    monkeypatch.setattr(command_queue, "command_identity_digest", lambda *_args, **_kwargs: "identity-digest-1")
     monkeypatch.setattr(command_queue, "consume_local_command_approval", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(command_queue, "mark_command_job_consumed", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(command_queue, "audit_command_decision", lambda *_args, **_kwargs: None)
 
 
@@ -85,74 +94,6 @@ def _block_local_daemon_client(monkeypatch: pytest.MonkeyPatch) -> None:
         raise AssertionError("Guard Cloud command execution must not use the local daemon client.")
 
     monkeypatch.setattr(daemon_client_module, "load_guard_surface_daemon_client", fail)
-
-
-class FakeStore:
-    def __init__(self, guard_home: Path) -> None:
-        self.guard_home = guard_home
-        self.payloads: dict[str, dict[str, object] | list[object]] = {
-            "policy_bundle_keyring": review_trusted_keyring_payload(),
-        }
-
-    def get_sync_payload(self, key: str) -> dict[str, object] | list[object] | None:
-        return self.payloads.get(key)
-
-    def set_sync_payload(self, key: str, payload: dict[str, object] | list[object], now: str) -> None:
-        self.payloads[key] = payload
-
-    def get_cloud_sync_profile(self) -> dict[str, str]:
-        return {
-            "auth_mode": "oauth",
-            "sync_url": "https://hol.test/api/guard/receipts/sync",
-            "workspace_id": "workspace-1",
-        }
-
-    def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object]:
-        return {
-            "device_id": "machine-1",
-            "grant_id": "grant-1",
-            "machine_id": "machine-1",
-            "runtime_id": "runtime-1",
-            "workspace_id": "workspace-1",
-        }
-
-    def get_or_create_installation_id(self) -> str:
-        return "22222222-2222-4222-8222-222222222222"
-
-    def get_guard_operation_for_approval_request(self, request_id: str) -> dict[str, object]:
-        return {
-            "operation_id": request_id,
-            "metadata": {"workspace_path": "/workspace/repo"},
-        }
-
-    def get_approval_request(self, request_id: str) -> dict[str, object] | None:
-        del request_id
-        return None
-
-    def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
-        del harness
-        return []
-
-    def replace_remote_policies(
-        self,
-        decisions,
-        generated_at: str,
-        *,
-        remote_write_authorized: bool = False,
-    ) -> None:
-        del decisions, generated_at, remote_write_authorized
-
-    def list_approval_requests(
-        self,
-        *,
-        status: str | None = "pending",
-        harness: str | None = None,
-        limit: int | None = 50,
-        cursor: str | None = None,
-        search: str | None = None,
-    ) -> list[dict[str, object]]:
-        del status, harness, limit, cursor, search
-        return []
 
 
 def _approval_request_row(
@@ -233,6 +174,10 @@ def _signed_remote_approval(
     }
     if include_key_id:
         envelope["keyId"] = REVIEW_SIGNING_KEY_ID
+    if isinstance(claim.get("nativeBindingVersion"), str):
+        envelope["nativeBindingVersion"] = claim["nativeBindingVersion"]
+        if isinstance(claim.get("nativeBindingDigest"), str):
+            envelope["nativeBindingDigest"] = claim["nativeBindingDigest"]
     envelope["payloadHash"] = payload_hash_for_remote_approval_envelope(envelope)
     envelope["signature"] = sign_review_payload(envelope)
     return envelope
@@ -402,6 +347,7 @@ def test_remote_approval_rejects_signing_key_outside_its_authority(
         validated_remote_approval_envelope(envelope, store=store)
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 @pytest.mark.parametrize(
     ("name", "envelope", "expected"),
     [
@@ -470,7 +416,7 @@ def test_cloud_review_payload_action_envelope_aliases(
         "action_envelope_json": envelope,
     }
 
-    payload = local_request_snapshots._cloud_safe_local_request_payload(row, redaction_level="none")
+    payload = cloud_safe_local_request_payload(row, redaction_level="none")
 
     action_envelope = payload["action_envelope_json"]
     assert isinstance(action_envelope, dict)
@@ -483,13 +429,14 @@ def test_cloud_review_payload_action_envelope_aliases(
         assert action_envelope[key] == value
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_cloud_review_payload_malformed_envelope_gets_safe_display_contract() -> None:
     row = {
         **_approval_request_row("req-malformed-envelope"),
         "action_envelope_json": "{not json",
     }
 
-    payload = local_request_snapshots._cloud_safe_local_request_payload(row, redaction_level="full")
+    payload = cloud_safe_local_request_payload(row, redaction_level="full")
 
     envelope = payload["action_envelope_json"]
     assert isinstance(envelope, dict)
@@ -502,6 +449,7 @@ def test_cloud_review_payload_malformed_envelope_gets_safe_display_contract() ->
     assert envelope["operation"] == "parse_action_envelope"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 @pytest.mark.parametrize("redaction_level", ["full", "none"])
 def test_cloud_review_payload_preserves_exact_action_across_redaction_levels(
     redaction_level: str,
@@ -516,7 +464,7 @@ def test_cloud_review_payload_preserves_exact_action_across_redaction_levels(
         },
     }
 
-    payload = local_request_snapshots._cloud_safe_local_request_payload(
+    payload = cloud_safe_local_request_payload(
         row,
         redaction_level=redaction_level,
     )
@@ -531,11 +479,12 @@ def test_cloud_review_payload_preserves_exact_action_across_redaction_levels(
     assert envelope["preExecutionResult"] == "sandbox-required"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_cloud_review_payload_projects_missing_legacy_action_fail_closed() -> None:
     row = _approval_request_row("req-legacy-missing-action")
     row.pop("policy_action")
 
-    payload = local_request_snapshots._cloud_safe_local_request_payload(
+    payload = cloud_safe_local_request_payload(
         row,
         redaction_level="full",
     )
@@ -544,6 +493,7 @@ def test_cloud_review_payload_projects_missing_legacy_action_fail_closed() -> No
     assert payload["policyAction"] == "require-reapproval"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_cloud_review_payload_rejects_explicit_unknown_action() -> None:
     row = {
         **_approval_request_row("req-explicit-unknown-action"),
@@ -551,34 +501,38 @@ def test_cloud_review_payload_rejects_explicit_unknown_action() -> None:
     }
 
     with pytest.raises(ValueError, match="authoritative_decision_inconsistent"):
-        local_request_snapshots._cloud_safe_local_request_payload(
+        cloud_safe_local_request_payload(
             row,
             redaction_level="full",
         )
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_cloud_action_envelope_matches_the_dashboard_round_trip_fixture() -> None:
     fixture_path = (
         Path(__file__).resolve().parents[1] / "dashboard" / "src" / "test-fixtures" / "cloud-action-envelope.json"
     )
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
 
-    actual = local_request_snapshots._cloud_safe_action_envelope(
+    payload = cloud_safe_local_request_payload(
         {
-            "action_type": "shell_command",
-            "command": "python build.py",
-            "pre_execution_result": "sandbox-required",
+            "request_id": "req-cloud-round-trip",
+            "harness": "codex",
+            "risk_summary": "Sandbox execution is required.",
+            "policy_action": "sandbox-required",
+            "action_envelope_json": {
+                "action_type": "shell_command",
+                "command": "python build.py",
+                "pre_execution_result": "sandbox-required",
+            },
         },
         redaction_level="full",
-        reason="Sandbox execution is required.",
-        policy_action="sandbox-required",
-        fallback_action_id="req-cloud-round-trip",
-        fallback_harness="codex",
     )
 
-    assert actual == fixture
+    assert payload["action_envelope_json"] == fixture
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 @pytest.mark.parametrize(
     ("snake_key", "camel_key"),
     [
@@ -605,13 +559,17 @@ def test_cloud_action_envelope_rejects_conflicting_documented_aliases(
     envelope[camel_key] = "block" if "policy" in snake_key or "execution" in snake_key else "different"
 
     with pytest.raises(ValueError, match="authoritative_decision_inconsistent"):
-        local_request_snapshots._cloud_safe_action_envelope(
-            envelope,
+        cloud_safe_local_request_payload(
+            {
+                **_approval_request_row("req-conflicting-alias"),
+                "policy_action": "allow",
+                "action_envelope_json": envelope,
+            },
             redaction_level="full",
-            policy_action="allow",
         )
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_cloud_review_payload_rejects_an_envelope_action_that_differs_from_outer_authority() -> None:
     row = {
         **_approval_request_row("req-contradictory-cloud-action"),
@@ -623,7 +581,7 @@ def test_cloud_review_payload_rejects_an_envelope_action_that_differs_from_outer
     }
 
     with pytest.raises(ValueError, match="authoritative_decision_inconsistent"):
-        local_request_snapshots._cloud_safe_local_request_payload(row, redaction_level="full")
+        cloud_safe_local_request_payload(row, redaction_level="full")
 
 
 def test_command_queue_enabled_defaults_off_without_local_capability(monkeypatch) -> None:
@@ -723,14 +681,13 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
         },
     )
     assert calls[1] == ("POST", "/job-1/heartbeat", {"leaseId": "lease-1"})
-    assert calls[2] == ("POST", "/job-1/heartbeat", {"leaseId": "lease-1"})
-    assert calls[3][0:2] == ("POST", "/job-1/result")
-    assert calls[3][2]["status"] == "succeeded"
-    assert calls[3][2]["leaseId"] == "lease-1"
+    assert calls[2][0:2] == ("POST", "/job-1/result")
+    assert calls[2][2]["status"] == "succeeded"
+    assert calls[2][2]["leaseId"] == "lease-1"
+    assert len(calls) == 3
     assert "machineInstallationId" not in calls[0][2]
     assert "machineInstallationId" not in calls[1][2]
     assert "machineInstallationId" not in calls[2][2]
-    assert "machineInstallationId" not in calls[3][2]
 
 
 def test_executor_app_remove_never_uses_local_daemon_client(
@@ -967,18 +924,17 @@ def test_poll_once_clears_active_job_when_heartbeat_fails(tmp_path: Path, monkey
     assert "active_job" not in state
 
 
-def test_poll_once_posts_failed_result_when_execution_raises(tmp_path: Path, monkeypatch) -> None:
+def test_poll_once_posts_rejection_when_capability_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.native_command_capability import CommandCapabilityUnavailableError
+
     store = FakeStore(tmp_path / "guard-home")
     result_payloads: list[dict[str, object]] = []
     monkeypatch.setattr(
         command_queue,
         "_resolve_guard_sync_auth_context",
         lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
-    )
-    monkeypatch.setattr(
-        command_executors,
-        "package_shim_status",
-        lambda context: (_ for _ in ()).throw(RuntimeError("shim status failed")),
     )
 
     def fake_json_request(
@@ -991,8 +947,8 @@ def test_poll_once_posts_failed_result_when_execution_raises(tmp_path: Path, mon
         if path == "/lease":
             return {
                 "item": {
-                    "id": "job-5",
-                    "leaseId": "lease-5",
+                    "id": "job-unavailable",
+                    "leaseId": "lease-unavailable",
                     "operation": "guard.packageShims.status",
                 }
             }
@@ -1000,20 +956,26 @@ def test_poll_once_posts_failed_result_when_execution_raises(tmp_path: Path, mon
             result_payloads.append(payload)
         return {"ok": True}
 
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        raise CommandCapabilityUnavailableError
+
     monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+    monkeypatch.setattr(command_queue, "authorize_command_queue_job", unavailable)
 
     status = command_queue.poll_command_queue_once(store, _context(tmp_path))
 
     assert status["state"] == "idle"
+    assert status["active_job"] is None
     assert result_payloads[0]["status"] == "failed"
-    assert result_payloads[0]["failureCode"] == "execution_error"
-    assert "shim status failed" in str(result_payloads[0]["failureMessage"])
+    assert result_payloads[0]["failureCode"] == "native_command_capability_unavailable"
 
 
-def test_poll_once_posts_waiting_local_confirm_result_for_destructive_job(
-    tmp_path: Path,
-    monkeypatch,
+def test_poll_once_posts_rejection_when_the_approval_grant_cannot_be_settled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from codex_plugin_scanner.guard.native_command_envelope import CommandEnvelopeUnavailableError
+    from codex_plugin_scanner.guard.runtime.command_capability import CommandCapabilityError
+
     store = FakeStore(tmp_path / "guard-home")
     result_payloads: list[dict[str, object]] = []
     monkeypatch.setattr(
@@ -1032,44 +994,85 @@ def test_poll_once_posts_waiting_local_confirm_result_for_destructive_job(
         if path == "/lease":
             return {
                 "item": {
-                    "id": "job-6",
-                    "leaseId": "lease-6",
-                    "operation": "guard.packageShims.remove",
-                    "payload": {"managers": ["npm"]},
+                    "id": "job-unsettled",
+                    "leaseId": "lease-unsettled",
+                    "operation": "guard.packageShims.status",
                 }
             }
         if path.endswith("/result"):
             result_payloads.append(payload)
         return {"ok": True}
 
-    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+    def unsettled(*_args: object, **_kwargs: object) -> bool:
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
 
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+    monkeypatch.setattr(command_queue, "consume_local_command_approval", unsettled)
+
+    # The job is already leased here, so a runtime that cannot match the grant
+    # has to be posted as this job's failure; escaping the poll would leave the
+    # lease open with no result.
     status = command_queue.poll_command_queue_once(store, _context(tmp_path))
 
     assert status["state"] == "idle"
-    assert result_payloads[0]["status"] == "waiting_local_confirm"
-    assert result_payloads[0]["idempotencyKey"] == "job-6:lease-6:waiting_local_confirm"
-    result = result_payloads[0]["result"]
-    assert isinstance(result, dict)
-    assert "waitingLocalConfirm" not in result
-    data = result["data"]
-    assert isinstance(data, dict)
-    assert data["confirm_command"] == "hol-guard package-shims uninstall --manager npm"
-    assert data["summary"] == (
-        "Run the local package-shim uninstall command on this machine to confirm removal for npm."
+    assert status["active_job"] is None
+    assert result_payloads[0]["status"] == "failed"
+    assert result_payloads[0]["failureCode"] == "native_command_envelope_unavailable"
+
+
+def test_poll_once_posts_a_failure_when_the_shared_scope_raises_after_the_job_ran(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sqlite3
+
+    store = FakeStore(tmp_path / "guard-home")
+    result_payloads: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
     )
 
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        if path == "/lease":
+            return {
+                "item": {"id": "job-poisoned", "leaseId": "lease-poisoned", "operation": "guard.packageShims.status"}
+            }
+        if path.endswith("/result"):
+            result_payloads.append(payload)
+        return {"ok": True}
 
-def test_result_payload_reuses_stable_success_idempotency_key() -> None:
-    job = {"id": "job-duplicate-result", "leaseId": "lease-duplicate-result"}
-    execution = {"data": {"ok": True}}
+    depth = [0]
+    job_ran = [False]
 
-    first = command_queue._result_payload(job, execution)
-    second = command_queue._result_payload(job, execution)
+    # The real scope re-raises a storage failure recorded while the job ran
+    # once the outermost scope closes, after the job and its grant are spent.
+    @contextmanager
+    def poisoned_scope(_store: object, _job: dict[str, object]):
+        depth[0] += 1
+        job_ran[0] = job_ran[0] or depth[0] > 1
+        try:
+            yield
+        finally:
+            depth[0] -= 1
+        if depth[0] == 0 and job_ran[0]:
+            raise sqlite3.DatabaseError("disk I/O error")
 
-    assert first["status"] == "succeeded"
-    assert first["idempotencyKey"] == "job-duplicate-result:lease-duplicate-result:succeeded"
-    assert second["idempotencyKey"] == first["idempotencyKey"]
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+    monkeypatch.setattr(command_queue, "_review_connection_scope", poisoned_scope)
+
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert status["active_job"] is None
+    assert len(result_payloads) == 1
+    assert result_payloads[0]["status"] == "failed"
+    assert result_payloads[0]["failureCode"] == "execution_error"
 
 
 def test_poll_once_retries_pending_result_before_leasing(tmp_path: Path, monkeypatch) -> None:
@@ -1239,7 +1242,7 @@ def test_command_queue_loop_empty_long_poll_returns_positive_bounded_backoff(
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "1")
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_ERROR_BACKOFF_ENV, "8")
 
-    def fake_poll_once(current_store: object, context: HarnessContext) -> dict[str, object]:
+    def fake_poll_once(current_store: object, context: HarnessContext, **_options: object) -> dict[str, object]:
         return {"last_poll_was_empty": True}
 
     monkeypatch.setattr(command_queue, "poll_command_queue_once", fake_poll_once)
@@ -1254,6 +1257,85 @@ def test_command_queue_loop_empty_long_poll_returns_positive_bounded_backoff(
     assert all(w > 0 for w in waits), f"Long-poll empty responses caused zero-delay spin: {waits}"
     # Backoff must be non-decreasing (bounded exponential growth).
     assert waits == sorted(waits), f"Backoff must not decrease: {waits}"
+
+
+def test_command_queue_loop_leases_again_at_once_after_a_job_with_long_poll(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A finished job is followed by the next lease, not a full poll interval.
+
+    A remote decision made while the device slept would otherwise wait out the
+    interval before this device leased it.
+    """
+    store = FakeStore(tmp_path / "guard-home")
+    waits: list[float] = []
+
+    class StopAfterThreeWaits:
+        def is_set(self) -> bool:
+            return False
+
+        def wait(self, seconds: float) -> bool:
+            waits.append(seconds)
+            return len(waits) >= 3
+
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_LEASE_WAIT_MS_ENV, "25000")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "2")
+    statuses = iter(
+        [
+            {"state": "idle", "last_poll_was_empty": False},
+            {"state": "disabled", "last_poll_was_empty": False},
+            {"state": "idle", "last_poll_was_empty": False},
+        ]
+    )
+
+    def fake_poll_once(current_store: object, context: HarnessContext, **_options: object) -> dict[str, object]:
+        return next(statuses)
+
+    monkeypatch.setattr(command_queue, "poll_command_queue_once", fake_poll_once)
+
+    command_queue.command_queue_loop(
+        store,
+        _context(tmp_path),
+        stop_event=StopAfterThreeWaits(),
+    )
+
+    # A disabled queue still waits the full interval rather than spinning.
+    assert waits == [0.05, 2, 0.05]
+
+
+def test_command_queue_loop_waits_the_interval_after_a_job_without_long_poll(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    waits: list[float] = []
+
+    class StopAfterOneWait:
+        def is_set(self) -> bool:
+            return False
+
+        def wait(self, seconds: float) -> bool:
+            waits.append(seconds)
+            return True
+
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_LEASE_WAIT_MS_ENV, "0")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "2")
+
+    def fake_poll_once(current_store: object, context: HarnessContext, **_options: object) -> dict[str, object]:
+        return {"state": "idle", "last_poll_was_empty": False}
+
+    monkeypatch.setattr(command_queue, "poll_command_queue_once", fake_poll_once)
+
+    command_queue.command_queue_loop(
+        store,
+        _context(tmp_path),
+        stop_event=StopAfterOneWait(),
+    )
+
+    assert waits == [2]
 
 
 def test_command_queue_loop_backs_off_after_empty_short_poll_when_wait_disabled(
@@ -1276,7 +1358,7 @@ def test_command_queue_loop_backs_off_after_empty_short_poll_when_wait_disabled(
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "1")
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_ERROR_BACKOFF_ENV, "8")
 
-    def fake_poll_once(current_store: object, context: HarnessContext) -> dict[str, object]:
+    def fake_poll_once(current_store: object, context: HarnessContext, **_options: object) -> dict[str, object]:
         return {"last_poll_was_empty": True}
 
     monkeypatch.setattr(command_queue, "poll_command_queue_once", fake_poll_once)
@@ -1326,9 +1408,9 @@ def test_start_worker_replaces_stopped_alive_worker(tmp_path: Path, monkeypatch)
         return thread
 
     monkeypatch.delenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, raising=False)
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.command_queue_worker.threading.Thread", fake_thread)
+    monkeypatch.setattr("codex_plugin_scanner.guard.cloud_control.command_queue_worker.threading.Thread", fake_thread)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.command_queue_worker.threading.Event",
+        "codex_plugin_scanner.guard.cloud_control.command_queue_worker.threading.Event",
         lambda: FakeEvent(False),
     )
     existing = CommandQueueWorker(thread=FakeThread(), stop_event=FakeEvent(True))  # type: ignore[arg-type]
@@ -1348,32 +1430,35 @@ def test_start_worker_respects_command_queue_opt_out(tmp_path: Path, monkeypatch
 
 def test_command_queue_loop_backs_off_after_errors(tmp_path: Path, monkeypatch) -> None:
     store = FakeStore(tmp_path / "guard-home")
-    waits: list[float] = []
+    clock = [0.0]
+    polls: list[float] = []
 
-    class StopAfterThreeWaits:
+    class StopAfterFourPolls:
         def is_set(self) -> bool:
-            return False
+            return len(polls) >= 4
 
         def wait(self, seconds: float) -> bool:
-            waits.append(seconds)
-            return len(waits) >= 3
+            clock[0] += seconds
+            return False
+
+    def failing_poll(current_store, context, **_options):
+        polls.append(clock[0])
+        raise OSError("network down")
 
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "1")
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_ERROR_BACKOFF_ENV, "8")
-    monkeypatch.setattr(
-        command_queue,
-        "poll_command_queue_once",
-        lambda current_store, context: (_ for _ in ()).throw(OSError("network down")),
-    )
+    monkeypatch.setattr(command_queue, "poll_command_queue_once", failing_poll)
+    monkeypatch.setattr(command_queue_loop_module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(command_queue_loop_module, "review_wait_recent", lambda: False)
 
     command_queue.command_queue_loop(
         store,
         _context(tmp_path),
-        stop_event=StopAfterThreeWaits(),
+        stop_event=StopAfterFourPolls(),
     )
 
-    assert waits == [1, 2, 4]
+    assert [later - earlier for earlier, later in itertools.pairwise(polls)] == [1, 2, 4]
 
 
 def test_command_queue_loop_retries_revoked_oauth_auth_and_records_reconnect_state(
@@ -1506,29 +1591,6 @@ def test_commands_status_outputs_command_queue_state(tmp_path: Path, capsys, mon
     assert payload["state"] == "idle"
     assert payload["enabled"] is True
     assert payload["supported_operations"] == list(command_executors.SUPPORTED_COMMAND_OPERATIONS)
-
-
-def test_doctor_repair_clears_malformed_command_queue_state(tmp_path: Path, capsys) -> None:
-    guard_home = tmp_path / "guard-home"
-    store = GuardStore(guard_home)
-    store.set_sync_payload(
-        command_queue.COMMAND_QUEUE_STATE_KEY,
-        {"state": "result_pending", "active_job": "bad", "pending_result": {"job": "bad"}},
-        "2026-06-13T00:00:00+00:00",
-    )
-
-    rc = main(["guard", "doctor", "--guard-home", str(guard_home), "--repair", "--json"])
-
-    assert rc == 0
-    payload = json.loads(capsys.readouterr().out)
-    repair = payload["command_queue"]["repair"]
-    assert repair["repaired_count"] == 2
-    assert sorted(repair["repaired"]) == ["active_job", "pending_result"]
-    state = store.get_sync_payload(command_queue.COMMAND_QUEUE_STATE_KEY)
-    assert isinstance(state, dict)
-    assert state["state"] == "idle"
-    assert "active_job" not in state
-    assert "pending_result" not in state
 
 
 def test_executor_rejects_duplicate_package_managers(tmp_path: Path) -> None:

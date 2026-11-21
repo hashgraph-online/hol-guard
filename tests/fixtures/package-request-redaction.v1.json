@@ -1,0 +1,75 @@
+{
+  "schema": "package-request-redaction-parity.v1",
+  "cases": [
+    {
+      "name": "plain package name",
+      "token": "left-pad",
+      "redacted": "left-pad"
+    },
+    {
+      "name": "bare host without a scheme",
+      "token": "registry.example.com/pkg.tgz",
+      "redacted": "registry.example.com/pkg.tgz"
+    },
+    {
+      "name": "https source with userinfo, query and fragment",
+      "token": "https://user:pass@registry.example.com/pkg.tgz?token=abc#frag",
+      "redacted": "https://registry.example.com/pkg.tgz"
+    },
+    {
+      "name": "https source without userinfo keeps its path",
+      "token": "https://registry.example.com/pkg.tgz",
+      "redacted": "https://registry.example.com/pkg.tgz"
+    },
+    {
+      "name": "git+ssh source whose git@ prefix is userinfo",
+      "token": "git+ssh://git@github.com/owner/repo.git#semver:^1",
+      "redacted": "git+ssh://github.com/owner/repo.git"
+    },
+    {
+      "name": "git+https source with a token in the authority",
+      "token": "git+https://token@github.com/owner/repo.git",
+      "redacted": "git+https://github.com/owner/repo.git"
+    },
+    {
+      "name": "slashless http specifier",
+      "token": "http:registry.example.com/pkg",
+      "redacted": "http:<redacted-source>"
+    },
+    {
+      "name": "single-slash https specifier",
+      "token": "https:/user:pass@registry.example.com/pkg",
+      "redacted": "https:<redacted-source>"
+    },
+    {
+      "name": "backslash https specifier",
+      "token": "https:\\\\user:pass@registry.example.com\\pkg",
+      "redacted": "https:<redacted-source>"
+    },
+    {
+      "name": "uppercase scheme keeps its spelling",
+      "token": "HTTPS://user@registry.example.com/pkg?x=1",
+      "redacted": "HTTPS://registry.example.com/pkg"
+    },
+    {
+      "name": "registry assignment carrying userinfo",
+      "token": "NPM_CONFIG_REGISTRY=https://user:pass@registry.example.com/",
+      "redacted": "NPM_CONFIG_REGISTRY=https://registry.example.com/"
+    },
+    {
+      "name": "fragment placed before the query",
+      "token": "https://registry.example.com/pkg#frag?keep",
+      "redacted": "https://registry.example.com/pkg"
+    },
+    {
+      "name": "token mentioning http without a scheme",
+      "token": "not-a-url-http",
+      "redacted": "not-a-url-http"
+    },
+    {
+      "name": "file url is left alone",
+      "token": "file:///tmp/pkg.tgz",
+      "redacted": "file:///tmp/pkg.tgz"
+    }
+  ]
+}

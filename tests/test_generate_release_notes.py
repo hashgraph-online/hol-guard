@@ -5,6 +5,9 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
+from scripts.ci import generate_release_notes
 from scripts.ci.generate_release_notes import (
     Change,
     PreviousRelease,
@@ -76,6 +79,8 @@ def test_select_previous_tag_picks_closest_same_channel_tag() -> None:
     assert select_previous_tag(["alpha/v3.0.0a289", "alpha/v3.0.0a290"], "3.0.0a290", "alpha") == "alpha/v3.0.0a289"
     assert select_previous_tag(["v2.2.128"], "3.0.0", "stable") == "v2.2.128"
     assert select_previous_tag(["v3.0.1"], "3.0.1", "stable") is None
+    assert select_previous_tag(["alpha/v3.1.0a13", "v3.42.0"], "3.43.0a1", "alpha") == "v3.42.0"
+    assert select_previous_tag(["v3.42.0", "alpha/v3.43.0a1"], "3.43.0a2", "alpha") == "alpha/v3.43.0a1"
 
 
 def test_extract_summary_bullets_reads_summary_section_with_limits() -> None:
@@ -169,7 +174,8 @@ def test_render_notes_groups_sections_and_links_everything() -> None:
     assert "@Michael Kantor" not in notes
 
 
-def test_render_notes_condenses_histories_too_large_to_list() -> None:
+def test_render_notes_condenses_histories_too_large_to_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(generate_release_notes, "MAX_CHANGE_LIST_CHARS", 1_000)
     changes = [
         _change(
             sha=f"{i:040x}",
@@ -209,6 +215,10 @@ def test_render_notes_alpha_channel_and_empty_history() -> None:
         source_sha="a" * 40,
     )
     assert "opt-in prerelease" in alpha
+    assert "`hol-guard update --alpha`" in alpha
+    assert "platform wheel attached to [this prerelease]" in alpha
+    assert "pure wheel only" in alpha
+    assert 'uv tool install "hol-guard[cisco]==3.0.0a290"' not in alpha
     assert "since [Guard 3.0.0a289]" in alpha
 
     empty = render_notes(
@@ -401,8 +411,7 @@ def test_render_notes_alpha_channel_links_published_predecessor() -> None:
     )
     assert "opt-in prerelease" in notes
     assert (
-        "since [Guard 3.0.0a289]"
-        "(https://github.com/hashgraph-online/hol-guard/releases/tag/alpha/v3.0.0a289)" in notes
+        "since [Guard 3.0.0a289](https://github.com/hashgraph-online/hol-guard/releases/tag/alpha/v3.0.0a289)" in notes
     )
     assert "**Full changelog**: [alpha/v3.0.0a289...alpha/v3.0.0a290]" in notes
 
@@ -455,9 +464,7 @@ def test_resolve_previous_release_published_unpublished_unavailable(monkeypatch)
         stdout = json.dumps({"tag_name": "v3.0.191", "draft": False})
         stderr = ""
 
-    monkeypatch.setattr(
-        "scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: Ok()
-    )
+    monkeypatch.setattr("scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: Ok())
     resolved = resolve_previous_release(REPO, "v3.0.191")
     assert resolved.status == "published"
     assert resolved.url == "https://github.com/hashgraph-online/hol-guard/releases/tag/v3.0.191"
@@ -467,9 +474,7 @@ def test_resolve_previous_release_published_unpublished_unavailable(monkeypatch)
         stdout = ""
         stderr = "gh: Not Found (HTTP 404)"
 
-    monkeypatch.setattr(
-        "scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: NotFound()
-    )
+    monkeypatch.setattr("scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: NotFound())
     assert resolve_previous_release(REPO, "v3.0.191").status == "unpublished"
 
     class ServerError:
@@ -477,9 +482,7 @@ def test_resolve_previous_release_published_unpublished_unavailable(monkeypatch)
         stdout = ""
         stderr = "gh: Server Error (HTTP 500)"
 
-    monkeypatch.setattr(
-        "scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: ServerError()
-    )
+    monkeypatch.setattr("scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: ServerError())
     assert resolve_previous_release(REPO, "v3.0.191").status == "unavailable"
 
     class Draft:
@@ -487,9 +490,7 @@ def test_resolve_previous_release_published_unpublished_unavailable(monkeypatch)
         stdout = json.dumps({"tag_name": "v3.0.191", "draft": True})
         stderr = ""
 
-    monkeypatch.setattr(
-        "scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: Draft()
-    )
+    monkeypatch.setattr("scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: Draft())
     assert resolve_previous_release(REPO, "v3.0.191").status == "unpublished"
 
     def explode(*a, **k):
@@ -499,9 +500,7 @@ def test_resolve_previous_release_published_unpublished_unavailable(monkeypatch)
     assert resolve_previous_release(REPO, "v3.0.191").status == "unavailable"
 
 
-def test_main_degrades_to_labelled_comparison_when_release_lookup_fails(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_main_degrades_to_labelled_comparison_when_release_lookup_fails(tmp_path: Path, monkeypatch, capsys) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init", "--initial-branch=main")
@@ -540,12 +539,10 @@ def test_main_degrades_to_labelled_comparison_when_release_lookup_fails(
     assert release_url not in notes
     assert "since tag `v3.0.191` (published release lookup unavailable)." in notes
     assert "**Source comparison**: [v3.0.191...v3.0.192]" in notes
-    assert "uv tool install \"hol-guard[cisco]==3.0.192\"" in notes
+    assert 'uv tool install "hol-guard[cisco]==3.0.192"' in notes
 
 
-def test_main_links_no_release_when_tag_exists_without_release_object(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_main_links_no_release_when_tag_exists_without_release_object(tmp_path: Path, monkeypatch, capsys) -> None:
     """v3.0.191 case: the tag exists but has no public release object.
 
     The releases API succeeds and only v3.0.190 (older, published) comes back,
@@ -598,3 +595,105 @@ def test_main_links_no_release_when_tag_exists_without_release_object(
     assert "**Source comparison**: [v3.0.191...v3.0.192]" in notes
     assert "**Full changelog**" not in notes
 
+
+def _many_changes(count: int) -> list[Change]:
+    return [
+        _change(
+            sha=f"{index:040x}",
+            subject=f"fix(native): repair case {index} (#{1000 + index})",
+            type="fix",
+            scope="native",
+            description=f"repair case {index}",
+            pr_number=1000 + index,
+            pr_title=f"fix(native): repair case {index}",
+            summary_bullets=[f"Explains case {index} in one sentence"],
+        )
+        for index in range(count)
+    ]
+
+
+def _render_stable(changes: list[Change]) -> str:
+    return render_notes(
+        changes,
+        version="3.56.0",
+        channel="stable",
+        repo=REPO,
+        tag="v3.56.0",
+        previous_tag="v3.55.1",
+        source_sha="d" * 40,
+    )
+
+
+def test_render_notes_lists_every_change_of_a_large_release() -> None:
+    notes = _render_stable(_many_changes(214))
+
+    assert "too many changes to list" not in notes
+    assert "## Changes by category" not in notes
+    for index in range(214):
+        assert f"[#{1000 + index}](https://github.com/{REPO}/pull/{1000 + index})" in notes
+    assert "  - Explains case 213 in one sentence" in notes
+
+
+def test_render_notes_drops_summary_bullets_before_dropping_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    changes = _many_changes(30)
+    bare = generate_release_notes.render_sections(changes, REPO, with_bullets=False)
+    monkeypatch.setattr(generate_release_notes, "MAX_CHANGE_LIST_CHARS", len(bare))
+
+    notes = _render_stable(changes)
+
+    assert "Explains case" not in notes
+    assert "too many changes to list" not in notes
+    assert f"[#1029](https://github.com/{REPO}/pull/1029)" in notes
+
+
+def test_render_notes_condenses_only_when_bare_entries_exceed_the_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    changes = _many_changes(30)
+    bare = generate_release_notes.render_sections(changes, REPO, with_bullets=False)
+    monkeypatch.setattr(generate_release_notes, "MAX_CHANGE_LIST_CHARS", len(bare) - 1)
+
+    notes = _render_stable(changes)
+
+    assert "## Changes by category" in notes
+    assert "- **Fixes**: 30" in notes
+    assert "too many changes to list" in notes
+
+
+def _crowded_changes(count: int) -> list[Change]:
+    changes = _many_changes(count)
+    for index, change in enumerate(changes):
+        change.author = f"Contributor Number {index}"
+    return changes
+
+
+def test_render_notes_keeps_the_whole_body_within_the_github_limit() -> None:
+    notes = _render_stable(_crowded_changes(4_000))
+
+    assert len(notes) <= generate_release_notes.MAX_BODY_CHARS - generate_release_notes.RESERVED_BODY_CHARS
+    assert "Thanks Contributor Number 0," in notes
+
+
+def test_render_notes_shrinks_the_change_list_when_the_credits_are_wide(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    changes = _many_changes(30)
+    for index, change in enumerate(changes):
+        change.author = f"Contributor Number {index}"
+    full = generate_release_notes.render_sections(changes, REPO)
+    bare = generate_release_notes.render_sections(changes, REPO, with_bullets=False)
+    without_list = len(_render_stable(changes)) - len(full)
+    monkeypatch.setattr(generate_release_notes, "MAX_BODY_CHARS", without_list + len(bare))
+    monkeypatch.setattr(generate_release_notes, "RESERVED_BODY_CHARS", 0)
+
+    notes = _render_stable(changes)
+
+    assert "Explains case" not in notes
+    assert f"[#1029](https://github.com/{REPO}/pull/1029)" in notes
+    assert len(notes) <= generate_release_notes.MAX_BODY_CHARS
+
+
+def test_render_notes_credits_a_wide_contributor_list_by_count() -> None:
+    notes = _render_stable(_crowded_changes(generate_release_notes.MAX_CREDITED_CONTRIBUTORS + 7))
+
+    assert "Contributor Number 0," in notes
+    assert f"Contributor Number {generate_release_notes.MAX_CREDITED_CONTRIBUTORS}" not in notes
+    assert "and 7 more!" in notes

@@ -1,240 +1,207 @@
+"""The Python side of Codex MCP setup: the request it sends, and what it does with the answer.
+
+The checks that decide what is safe to write (layer validation, version binding,
+read-back, rollback) are the native runtime's and are tested in
+`rust/crates/guard-runtime/src/codex_mcp_setup_tests.rs`.
+"""
+
 from __future__ import annotations
 
-import copy
 import json
+import os
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.mcp_registry_undo import RegistrySetupUndo
+from codex_plugin_scanner.guard.local_clis.mcp_registry_undo import RegistrySetupUndo
 from codex_plugin_scanner.guard.runtime import codex_mcp_setup
 from codex_plugin_scanner.guard.store import GuardStore
 
-
-class ConfigHost:
-    def __init__(self, path):
-        self.path = str(path)
-        self.config = {"model": "untouched", "mcp_servers": {"existing": {"url": "https://example.test/existing"}}}
-        self.version = 1
-        self.reads = 0
-        self.writes = []
-        self.corrupt_verification = False
-        self.change_before_write = False
-        self.drop_write_reply = False
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_):
-        pass
-
-    def request(self, method, params):
-        if method == "config/read":
-            self.reads += 1
-            if self.corrupt_verification and self.reads == 2:
-                return {"layers": []}
-            return {
-                "layers": [
-                    {
-                        "name": {"type": "user", "file": self.path, "profile": None},
-                        "version": str(self.version),
-                        "config": copy.deepcopy(self.config),
-                    }
-                ]
-            }
-        assert method == "config/batchWrite"
-        assert params["filePath"] == self.path and params["reloadUserConfig"] is False
-        if self.change_before_write:
-            self.version += 1
-            self.config["user_edit"] = "preserved"
-            self.change_before_write = False
-        if params["expectedVersion"] != str(self.version):
-            raise ValueError("codex_config_changed")
-        [edit] = params["edits"]
-        assert edit["keyPath"].startswith("mcp_servers.") and edit["mergeStrategy"] == "replace"
-        name = edit["keyPath"].removeprefix("mcp_servers.")
-        self.writes.append(copy.deepcopy(params))
-        if edit["value"] is None:
-            self.config["mcp_servers"].pop(name)
-        else:
-            self.config["mcp_servers"][name] = copy.deepcopy(edit["value"])
-        self.version += 1
-        if self.drop_write_reply:
-            raise ValueError("codex_config_rpc_timeout")
-        return {"status": "ok", "filePath": self.path, "version": str(self.version)}
+ENTRY: dict[str, object] = {"url": "https://example.test/reviewed"}
 
 
-@pytest.fixture
-def host(tmp_path, monkeypatch):
-    fixture = ConfigHost(tmp_path / "config.toml")
-    monkeypatch.setattr(codex_mcp_setup, "CodexConfigRpc", lambda _executable: fixture)
-    return fixture
+class NativeStub:
+    """Stands in for the native runtime: records each request and answers from a queue."""
+
+    def __init__(self, monkeypatch, *answers):
+        self.answers = list(answers)
+        self.calls = []
+        monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", self)
+
+    def __call__(self, feature, command, request, *, output_limit, timeout_seconds=None, **_):
+        assert feature == "native-codex-mcp-setup-v1" and command == "codex-mcp-setup"
+        assert isinstance(request, str) and output_limit > 0 and timeout_seconds and timeout_seconds > 0
+        self.calls.append(json.loads(request))
+        return self.answers.pop(0) if self.answers else None
 
 
-def test_setup_and_rollback_only_edit_the_reviewed_connection(host):
-    before = copy.deepcopy(host.config)
+def _receipt(version="2", previous="1", name="reviewed"):
+    return {
+        "name": name,
+        "file_path": "/synthetic/config.toml",
+        "version": version,
+        "entry_json": json.dumps(ENTRY, sort_keys=True, separators=(",", ":")),
+        "previous_version": previous,
+    }
+
+
+def test_install_sends_the_reviewed_entry_with_this_process_environment(monkeypatch):
+    stub = NativeStub(monkeypatch, {"receipt": _receipt()})
     receipts = []
-    entry = {"url": "https://example.test/reviewed"}
+    monkeypatch.setenv("HOL_SETUP_PROBE", "1")
+
     assert (
-        codex_mcp_setup.install_reviewed_codex_mcp("fixture", "reviewed", entry, on_installed=receipts.append)
+        codex_mcp_setup.install_reviewed_codex_mcp("/bin/codex", "reviewed", ENTRY, on_installed=receipts.append)
         == "reviewed"
     )
-    assert len(receipts) == 1 and receipts[0].version == "2"
-    assert host.config["model"] == before["model"]
-    assert host.config["mcp_servers"]["existing"] == before["mcp_servers"]["existing"]
-    codex_mcp_setup.rollback_reviewed_codex_mcp("fixture", receipts[0])
-    assert host.config == before
-    assert [write["expectedVersion"] for write in host.writes] == ["1", "2"]
+
+    [request] = stub.calls
+    assert request["op"] == "install" and request["name"] == "reviewed" and request["executable"] == "/bin/codex"
+    assert request["cwd"] == os.getcwd() and request["environment"]["HOL_SETUP_PROBE"] == "1"
+    assert json.loads(request["entry_json"]) == ENTRY
+    assert receipts == [
+        codex_mcp_setup.CodexMcpSetupReceipt("reviewed", "/synthetic/config.toml", "2", request["entry_json"], "1")
+    ]
 
 
-def test_existing_connection_including_null_metadata_is_never_replaced(host):
-    host.config["mcp_servers"]["reviewed"] = None
-    with pytest.raises(ValueError, match="codex_connection_already_exists"):
-        codex_mcp_setup.install_reviewed_codex_mcp("fixture", "reviewed", {"url": "https://example.test"})
-    assert host.writes == []
+def test_rollback_sends_the_receipt_and_returns_the_new_version(monkeypatch):
+    stub = NativeStub(monkeypatch, {"version": "3"})
+    receipt = codex_mcp_setup.CodexMcpSetupReceipt(**_receipt())
+
+    assert codex_mcp_setup.rollback_reviewed_codex_mcp("/bin/codex", receipt) == "3"
+
+    [request] = stub.calls
+    assert request["op"] == "rollback" and request["receipt"] == _receipt()
 
 
 @pytest.mark.parametrize(
-    "case,reason",
+    "reason",
     [
-        ("malformed_layers", "codex_config_layers_unavailable"),
-        ("no_layers", "codex_config_no_layers"),
-        ("malformed_layer", "codex_config_invalid_layer"),
-        ("invalid_servers", "codex_config_invalid_servers"),
-        ("no_user", "codex_config_no_user_layer"),
-        ("multiple_users", "codex_config_multiple_user_layers"),
-        ("invalid_version", "codex_config_invalid_user_version"),
-        ("invalid_path", "codex_config_invalid_user_path"),
-        ("disabled", "codex_config_user_layer_disabled"),
+        "codex_connection_already_exists",
+        "codex_config_changed",
+        "codex_config_readonly",
+        "codex_setup_outcome_uncertain",
+        "codex_config_no_user_layer",
+        "invalid_codex_setup_selection",
     ],
 )
-def test_invalid_host_layers_have_safe_distinct_reasons_before_any_write(host, monkeypatch, case, reason):
-    before = copy.deepcopy(host.config)
-    payload = host.request("config/read", {})
-    layer = payload["layers"][0]
-    if case == "malformed_layers":
-        payload["layers"] = "private configuration"
-    elif case == "no_layers":
-        payload["layers"] = []
-    elif case == "malformed_layer":
-        layer["config"] = "private configuration"
-    elif case == "invalid_servers":
-        layer["config"]["mcp_servers"] = "private configuration"
-    elif case == "no_user":
-        layer["name"]["type"] = "project"
-    elif case == "multiple_users":
-        payload["layers"].append(copy.deepcopy(layer))
-    elif case == "invalid_version":
-        layer["version"] = {"private": "configuration"}
-    elif case == "invalid_path":
-        layer["name"]["file"] = "private/config.toml"
-    elif case == "disabled":
-        layer["disabledReason"] = "private configuration"
-    original_request = host.request
+def test_a_native_refusal_is_raised_as_its_reason_without_recording_anything(monkeypatch, reason):
+    NativeStub(monkeypatch, {"error": reason})
+    receipts = []
 
-    def read_layers(method, params):
-        if method == "config/read":
-            return payload
-        return original_request(method, params)
-
-    monkeypatch.setattr(host, "request", read_layers)
     with pytest.raises(ValueError) as caught:
-        codex_mcp_setup.install_reviewed_codex_mcp("fixture", "reviewed", {"url": "https://example.test"})
-    assert str(caught.value) == reason
-    assert host.writes == [] and host.config == before
+        codex_mcp_setup.install_reviewed_codex_mcp("/bin/codex", "reviewed", ENTRY, on_installed=receipts.append)
+
+    assert str(caught.value) == reason and receipts == []
 
 
-def test_setup_version_conflict_preserves_concurrent_user_edits(host):
-    host.change_before_write = True
-    with pytest.raises(ValueError, match="codex_config_changed"):
-        codex_mcp_setup.install_reviewed_codex_mcp("fixture", "reviewed", {"url": "https://example.test"})
-    assert host.writes == [] and host.config["user_edit"] == "preserved"
-    assert "reviewed" not in host.config["mcp_servers"]
+def test_an_unavailable_native_runtime_changes_nothing_and_says_so(monkeypatch):
+    stub = NativeStub(monkeypatch)
+    receipt = codex_mcp_setup.CodexMcpSetupReceipt(**_receipt())
+
+    with pytest.raises(ValueError, match="codex_setup_native_unavailable"):
+        codex_mcp_setup.install_reviewed_codex_mcp("/bin/codex", "reviewed", ENTRY)
+    with pytest.raises(ValueError, match="codex_setup_native_unavailable"):
+        codex_mcp_setup.rollback_reviewed_codex_mcp("/bin/codex", receipt)
+
+    assert [call["op"] for call in stub.calls] == ["install", "rollback"]
 
 
-def test_uncertain_write_is_not_replayed_or_removed_without_a_version_receipt(host):
-    host.drop_write_reply = True
-    receipts = []
-    with pytest.raises(ValueError, match="codex_setup_outcome_uncertain"):
-        codex_mcp_setup.install_reviewed_codex_mcp(
-            "fixture", "reviewed", {"url": "https://example.test"}, on_installed=receipts.append
-        )
-    assert len(host.writes) == 1 and receipts == []
-    assert "reviewed" in host.config["mcp_servers"]
+@pytest.mark.parametrize(
+    "answer",
+    [{"receipt": "text"}, {"receipt": {"name": "reviewed"}}, {"receipt": {**_receipt(), "version": 2}}, {"error": 7}],
+)
+def test_a_malformed_native_answer_is_treated_as_unavailable(monkeypatch, answer):
+    NativeStub(monkeypatch, answer)
+
+    with pytest.raises(ValueError, match="codex_setup_native_unavailable"):
+        codex_mcp_setup.install_reviewed_codex_mcp("/bin/codex", "reviewed", ENTRY)
 
 
-def test_failed_verification_rolls_back_only_the_acknowledged_setup(host):
-    before = copy.deepcopy(host.config)
-    host.corrupt_verification = True
-    with pytest.raises(ValueError, match="codex_setup_rolled_back"):
-        codex_mcp_setup.install_reviewed_codex_mcp("fixture", "reviewed", {"url": "https://example.test"})
-    assert host.config == before
-    assert host.writes[-1]["edits"][0]["value"] is None
+def test_a_non_finite_entry_is_refused_before_the_native_runtime_is_asked(monkeypatch):
+    stub = NativeStub(monkeypatch)
+
+    with pytest.raises(ValueError):
+        codex_mcp_setup.install_reviewed_codex_mcp("/bin/codex", "reviewed", {"timeout": float("nan")})
+
+    assert stub.calls == []
 
 
-def test_rollback_refuses_changed_host_configuration(host):
-    receipts = []
-    codex_mcp_setup.install_reviewed_codex_mcp(
-        "fixture", "reviewed", {"url": "https://example.test"}, on_installed=receipts.append
-    )
-    host.version += 1
-    host.config["user_edit"] = "preserved"
-    with pytest.raises(ValueError, match="codex_config_changed"):
-        codex_mcp_setup.rollback_reviewed_codex_mcp("fixture", receipts[0])
-    assert len(host.writes) == 1 and host.config["user_edit"] == "preserved"
-    assert "reviewed" in host.config["mcp_servers"]
-
-
-def test_failed_receipt_retention_rolls_back_before_reporting_success(host):
-    before = copy.deepcopy(host.config)
+def test_failed_receipt_retention_rolls_back_before_reporting_success(monkeypatch):
+    stub = NativeStub(monkeypatch, {"receipt": _receipt()}, {"version": "3"})
 
     def fail(_receipt):
         raise ValueError("receipt_retention_failed")
 
     with pytest.raises(ValueError, match="codex_setup_rolled_back"):
-        codex_mcp_setup.install_reviewed_codex_mcp(
-            "fixture", "reviewed", {"url": "https://example.test"}, on_installed=fail
-        )
-    assert host.config == before
+        codex_mcp_setup.install_reviewed_codex_mcp("/bin/codex", "reviewed", ENTRY, on_installed=fail)
+
+    assert [call["op"] for call in stub.calls] == ["install", "rollback"]
+    assert stub.calls[1]["receipt"] == _receipt()
+
+
+def test_a_rollback_that_cannot_complete_after_a_failed_receipt_is_uncertain(monkeypatch):
+    NativeStub(monkeypatch, {"receipt": _receipt()}, {"error": "codex_config_changed"})
+
+    def fail(_receipt):
+        raise ValueError("receipt_retention_failed")
+
+    with pytest.raises(ValueError, match="codex_setup_outcome_uncertain"):
+        codex_mcp_setup.install_reviewed_codex_mcp("/bin/codex", "reviewed", ENTRY, on_installed=fail)
 
 
 @pytest.mark.parametrize("failure", ["verification", "receipt"])
 @pytest.mark.parametrize("outside_edit", [False, True])
-def test_failed_setup_reports_both_owned_writes_without_reviving_external_edits(host, tmp_path, failure, outside_edit):
+def test_failed_setup_reports_both_owned_writes_without_reviving_external_edits(
+    monkeypatch, tmp_path, failure, outside_edit
+):
     undo = RegistrySetupUndo(GuardStore(tmp_path / "guard"))
-    entry = host.config["mcp_servers"]["existing"]
-    receipt = codex_mcp_setup.CodexMcpSetupReceipt("existing", host.path, "1", json.dumps(entry))
+    entry = {"url": "https://example.test/existing"}
+    receipt = codex_mcp_setup.CodexMcpSetupReceipt("existing", "/synthetic/config.toml", "1", json.dumps(entry))
     handle = undo.remember(receipt, {"setup_name": "existing", "kind": "remote", "endpoint": entry["url"]})
-    if outside_edit:
-        host.version += 1
-        host.config["user_edit"] = "preserved"
+    # An edit made outside Guard first moves the file's version from 1 to 2.
+    start = "2" if outside_edit else "1"
+    installed = str(int(start) + 1)
+    removed = str(int(installed) + 1)
     if failure == "verification":
-        host.corrupt_verification = True
+        pairs = [[start, installed], [installed, removed]]
+        NativeStub(
+            monkeypatch,
+            {"error": "codex_setup_rolled_back", "version_chain": {"file_path": receipt.file_path, "pairs": pairs}},
+        )
+    else:
+        NativeStub(monkeypatch, {"receipt": _receipt(installed, start)}, {"version": removed})
 
     def fail(_receipt):
         raise ValueError("receipt_retention_failed")
 
     with pytest.raises(ValueError, match="codex_setup_rolled_back"):
         codex_mcp_setup.install_reviewed_codex_mcp(
-            "fixture",
+            "/bin/codex",
             "reviewed",
-            {"url": "https://example.test/reviewed"},
+            ENTRY,
             on_installed=fail if failure == "receipt" else None,
             on_version_chain=undo.advance_version_chain,
         )
+
     record = undo._receipts[handle]
-    assert "reviewed" not in host.config["mcp_servers"]
     if outside_edit:
         assert record.available is False
-        assert host.config["user_edit"] == "preserved"
         assert record.receipt.version == "1"
     else:
         assert record.available is True and record.receipt.version == "3"
-        assert codex_mcp_setup.rollback_reviewed_codex_mcp("fixture", record.receipt) == "4"
-        assert host.config == {"model": "untouched", "mcp_servers": {}}
 
 
-@pytest.mark.parametrize("name", ["other.config", "../../config", "", "a" * 65])
-def test_setup_rejects_configuration_key_injection(host, name):
-    with pytest.raises(ValueError, match="invalid_codex_setup_selection"):
-        codex_mcp_setup.install_reviewed_codex_mcp("fixture", name, {"url": "https://example.test"})
-    assert host.reads == 0 and host.writes == []
+def test_a_failing_version_chain_callback_is_reported_as_uncertain(monkeypatch):
+    NativeStub(
+        monkeypatch,
+        {
+            "error": "codex_setup_rolled_back",
+            "version_chain": {"file_path": "/synthetic/config.toml", "pairs": [["1", "2"], ["2", "3"]]},
+        },
+    )
+
+    def fail(_file_path, _pairs):
+        raise ValueError("chain_failed")
+
+    with pytest.raises(ValueError, match="codex_setup_outcome_uncertain"):
+        codex_mcp_setup.install_reviewed_codex_mcp("/bin/codex", "reviewed", ENTRY, on_version_chain=fail)

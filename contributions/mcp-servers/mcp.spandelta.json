@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.spandelta",
+  "version": "1.0.0",
+  "name": "SpanDelta",
+  "description": "Read-only local MCP server for comparing OpenTelemetry trace cohorts across releases and inspecting bounded trace evidence. Queries a user-selected SQLite database; no model execution, outbound requests, or trace ingestion through MCP. External and off until enabled.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.almeida96",
+    "displayName": "Igor Almeida",
+    "url": "https://github.com/Almeida96"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://github.com/Almeida96/spandelta",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "spandelta"
+  },
+  "riskClasses": [
+    "external-filesystem-read",
+    "external-telemetry-data-read"
+  ],
+  "tools": [
+    {
+      "name": "list_datasets",
+      "state": "inherit"
+    },
+    {
+      "name": "compare_releases",
+      "state": "inherit"
+    },
+    {
+      "name": "inspect_trace",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/Almeida96/spandelta",
+    "https://github.com/Almeida96/spandelta/blob/main/docs/mcp.md",
+    "https://github.com/Almeida96/spandelta/blob/main/docs/collector.md",
+    "https://github.com/Almeida96/spandelta/releases/tag/v0.1.0"
+  ],
+  "saferAlternatives": [
+    "Use a dedicated local SQLite database with appropriate filesystem permissions. Service and operation names may contain sensitive information.",
+    "Prefer list_datasets and compare_releases for aggregate results. Use inspect_trace only when detailed span timelines are needed.",
+    "The reviewed direct-command identity requires an MCP client command whose executable basename is spandelta. A client configured to launch java directly will not match it.",
+    "Review unrecognized future tools; do not assume MCP readOnlyHint annotations establish security or grant permission."
+  ]
+}

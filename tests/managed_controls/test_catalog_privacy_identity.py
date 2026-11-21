@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.managed_controls.identity import (
+from tests.managed_controls.identity import (
     CatalogIdentityState,
     ExtensionIdentity,
     compare_extension_identity,
 )
-from codex_plugin_scanner.guard.managed_controls.privacy import (
+from tests.managed_controls.privacy import (
     CatalogPrivacyError,
     privacy_safe_catalog_payload,
 )

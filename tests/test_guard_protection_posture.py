@@ -10,11 +10,6 @@ from codex_plugin_scanner.guard.config import (
     resolve_risk_action,
     update_guard_settings,
 )
-from codex_plugin_scanner.guard.protection_posture import (
-    apply_posture_confidence,
-    derive_protection_posture,
-    dual_write_from_posture,
-)
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -213,52 +208,6 @@ def test_relaxed_implicit_maps_stay_warn(tmp_path: Path) -> None:
     assert resolve_risk_action(config, "credential_exfiltration", harness="codex") == "warn"
 
 
-def test_derive_and_dual_write_tables() -> None:
-    assert derive_protection_posture("observe", "balanced") == "watch"
-    assert derive_protection_posture("prompt", "balanced") == "protected"
-    assert derive_protection_posture("enforce", "strict") == "extra_careful"
-    assert derive_protection_posture("enforce", "paranoid") == "extra_careful"
-    assert derive_protection_posture("prompt", "gentle") == "protected"
-    assert dual_write_from_posture("protected") == ("enforce", "balanced")
-    assert dual_write_from_posture("extra_careful") == ("enforce", "strict")
-    assert dual_write_from_posture("watch", current_security_level="balanced") == ("observe", "balanced")
-
-
-def test_confidence_stop_blocks_strong_exfiltration_even_when_implicit() -> None:
-    asked = apply_posture_confidence(
-        posture="protected",
-        explicit=True,
-        risk_class="credential_exfiltration",
-        action="require-reapproval",
-        confidence=None,
-    )
-    stopped = apply_posture_confidence(
-        posture="protected",
-        explicit=True,
-        risk_class="credential_exfiltration",
-        action="require-reapproval",
-        confidence="strong",
-    )
-    implicit = apply_posture_confidence(
-        posture="protected",
-        explicit=False,
-        risk_class="credential_exfiltration",
-        action="require-reapproval",
-        confidence="strong",
-    )
-    always = apply_posture_confidence(
-        posture="protected",
-        explicit=True,
-        risk_class="guard_bypass",
-        action="require-reapproval",
-        confidence=None,
-    )
-    assert asked == "require-reapproval"
-    assert stopped == "block"
-    assert implicit == "block"
-    assert always == "block"
-
-
 def test_managed_security_level_lock_keeps_level_maps(tmp_path: Path) -> None:
     guard_home = tmp_path / ".hol-guard"
     loaded = update_guard_settings(guard_home, {"protection_posture": "protected"})
@@ -298,14 +247,16 @@ def test_watch_auto_reverts_after_entered_timestamp(tmp_path: Path) -> None:
 def test_watch_auto_revert_accepts_naive_entered_at(tmp_path: Path) -> None:
     from datetime import datetime, timedelta, timezone
 
-    from codex_plugin_scanner.guard.config import maybe_auto_revert_watch, watch_should_auto_revert
+    from codex_plugin_scanner.guard.config import maybe_auto_revert_watch
+    from codex_plugin_scanner.guard.harness_posture import watch_auto_revert_due
 
     guard_home = tmp_path / ".hol-guard"
     loaded = update_guard_settings(guard_home, {"protection_posture": "watch", "watch_auto_revert_hours": 24})
     naive = loaded.watch_entered_at.replace("+00:00", "") if loaded.watch_entered_at else "2020-01-01T00:00:00"
     naive_config = replace(loaded, watch_entered_at=naive)
     later = datetime.now(timezone.utc) + timedelta(hours=25)
-    assert watch_should_auto_revert(naive_config, now=later) is True
+    assert watch_auto_revert_due(naive_config, now=later) == (True, ())
+    assert watch_auto_revert_due(naive_config, now=later.replace(tzinfo=None)) == (True, ())
     reverted = maybe_auto_revert_watch(guard_home, now=later)
     assert reverted.protection_posture == "protected"
 
@@ -313,7 +264,7 @@ def test_watch_auto_revert_accepts_naive_entered_at(tmp_path: Path) -> None:
 def test_explicit_protected_survives_mode_lock_overlay(tmp_path: Path) -> None:
     from types import SimpleNamespace
 
-    from codex_plugin_scanner.guard.config import _reapply_managed_config
+    from codex_plugin_scanner.guard.config import _overlay
 
     guard_home = tmp_path / ".hol-guard"
     loaded = update_guard_settings(guard_home, {"protection_posture": "protected"})
@@ -322,7 +273,7 @@ def test_explicit_protected_survives_mode_lock_overlay(tmp_path: Path) -> None:
         managed_policy=SimpleNamespace(settings={"mode": "enforce"}, locked_settings=frozenset({"mode"})),
         managed_locked_settings=("mode",),
     )
-    overlaid = _reapply_managed_config(locked)
+    overlaid = _overlay(locked, None)
     assert overlaid.protection_posture_explicit is True
     assert resolve_risk_action(overlaid, "package_script", harness="codex") == "require-reapproval"
 
@@ -360,11 +311,13 @@ def test_watch_forces_observe_even_when_mode_is_in_payload(tmp_path: Path) -> No
     assert loaded.protection_posture == "watch"
 
 
-def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
-        _apply_explicit_posture_action,
-    )
+def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(
+    tmp_path: Path, native_approval_reuse_runtime: Path
+) -> None:
     from codex_plugin_scanner.guard.models import GuardArtifact
+    from tests.runtime_artifact_policy_support import (
+        _runtime_artifact_policy_action,
+    )
 
     guard_home = tmp_path / ".hol-guard"
     config = update_guard_settings(guard_home, {"protection_posture": "protected"})
@@ -376,32 +329,15 @@ def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(tmp_path:
         source_scope="project",
         config_path="/workspace/repo/.guard/config.toml",
         metadata={
+            "risk_classes": ["credential_exfiltration"],
             "risk_signals": [{"confidence": "strong", "category": "secret"}],
         },
     )
-    action = _apply_explicit_posture_action(config, artifact, "credential_exfiltration", "require-reapproval")
+    action = _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
     assert action == "block"
 
 
-def test_managed_mode_lock_overrides_watch_payload() -> None:
-    from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION, ManagedPolicy
-    from codex_plugin_scanner.guard.mdm.policy import apply_managed_policy
-
-    policy = ManagedPolicy(
-        schema_version=MDM_POLICY_SCHEMA_VERSION,
-        settings={"mode": "enforce"},
-        locked_settings=frozenset({"mode"}),
-    )
-    composed = apply_managed_policy(
-        {"mode": "observe", "protection_posture": "watch", "security_level": "balanced"},
-        policy,
-    )
-    assert composed["mode"] == "enforce"
-
-
-def test_status_marks_legacy_observe_as_protection_off(
-    tmp_path: Path, capsys: object
-) -> None:
+def test_status_marks_legacy_observe_as_protection_off(tmp_path: Path, capsys: object) -> None:
     import json
 
     from codex_plugin_scanner.cli import main
@@ -484,16 +420,5 @@ def test_guard_doctor_includes_protection_posture(tmp_path: Path, capsys: object
     assert payload["protection"] == "extra_careful"
     assert payload["protection_off"] is False
     assert payload["protection_label"] == "Extra careful"
-
-
-def test_managed_watch_auto_revert_lock_keeps_hours() -> None:
-    from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION, ManagedPolicy
-    from codex_plugin_scanner.guard.mdm.policy import apply_managed_policy
-
-    policy = ManagedPolicy(
-        schema_version=MDM_POLICY_SCHEMA_VERSION,
-        settings={"watch_auto_revert_hours": 24},
-        locked_settings=frozenset({"watch_auto_revert_hours"}),
-    )
-    composed = apply_managed_policy({"watch_auto_revert_hours": 0}, policy)
-    assert composed["watch_auto_revert_hours"] == 24
+    assert payload["protection_basis"] == "configured_posture_and_hook_registration"
+    assert "separate runtime check" in payload["protection_health_note"]

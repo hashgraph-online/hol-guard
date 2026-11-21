@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.xrpl-token-guard",
+  "version": "1.0.0",
+  "name": "xrpl-token-guard",
+  "description": "Read-only XRPL token and wallet checks with issuer-aware explanations",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.riehnbean",
+    "displayName": "Zach Riehn (@WtheWendigo)",
+    "url": "https://github.com/Riehnbean"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://github.com/Riehnbean/xrpl-token-guard",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://cocoeatsai.com/area4/guard/mcp",
+    "serverNames": [
+      "xrpl-token-guard"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "financial-data-read"
+  ],
+  "tools": [
+    {
+      "name": "check_token_safety",
+      "state": "inherit"
+    },
+    {
+      "name": "is_it_the_real_token",
+      "state": "inherit"
+    },
+    {
+      "name": "check_wallet_security",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/Riehnbean/xrpl-token-guard",
+    "https://cocoeatsai.com/area4/guard/"
+  ],
+  "saferAlternatives": [
+    "Provide only public issuer and wallet addresses; never provide a seed, private key or signing permission.",
+    "Verify the exact issuer and dated ledger evidence independently; automated findings are not financial advice or a guarantee of safety."
+  ]
+}

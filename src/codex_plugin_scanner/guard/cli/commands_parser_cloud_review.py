@@ -47,3 +47,11 @@ def configure_guard_cloud_review_parser(
         help="Confirm exact Cloud Review consent revocation",
     )
     disable.add_argument("--json", action="store_true")
+
+    native_apply = subparsers.add_parser(
+        "native-apply",
+        help="Verify and apply one locally persisted native workspace-review decision",
+    )
+    _add_guard_common_args(native_apply)
+    native_apply.add_argument("--request-id", required=True)
+    native_apply.add_argument("--json", action="store_true")

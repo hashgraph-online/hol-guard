@@ -1,0 +1,2 @@
+password = <redacted>
+api_key: see the password manager

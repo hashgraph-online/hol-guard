@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+from base64 import urlsafe_b64encode
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -16,6 +17,11 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.support.network import stub_authenticated_urlopen
+
+
+def _encode_jwt_segment(payload: dict[str, object]) -> str:
+    encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return urlsafe_b64encode(encoded).decode("ascii").rstrip("=")
 
 
 def _store_with_oauth_credentials(
@@ -280,13 +286,30 @@ def test_credential_clear_serializes_with_runtime_refresh(tmp_path, monkeypatch)
     assert refresh_lock_held is False
 
 
+def test_storage_repair_on_an_unconfigured_home_does_not_take_the_credential_lock(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    @contextmanager
+    def _forbidden_credential_lock():
+        raise AssertionError("an unconfigured home must not queue on the credential lock")
+        yield
+
+    monkeypatch.setattr(store, "hold_oauth_credential_lock", _forbidden_credential_lock)
+
+    assert store.repair_oauth_local_credential_storage_from_primary() is False
+    assert store.get_oauth_local_credential_health()["state"] == "not_configured"
+    assert store.get_cloud_sync_profile() is None
+
+
 def test_storage_repair_recovers_missing_oauth_binding_and_claims_unowned_requests(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment(
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment(
                 {
                     "iss": PRODUCTION_GUARD_ISSUER,
                     "grant": {"grantId": "grant-1"},
@@ -342,29 +365,6 @@ def test_storage_repair_recovers_missing_oauth_binding_and_claims_unowned_reques
     delivery = {key: value for key, value in binding.items() if key != "oauth_source"}
     rows = store.list_ready_review_events(now=late, limit=10, **delivery)
     assert rows[0]["oauth_subject_hash"] == binding["oauth_subject_hash"]
-
-
-def test_storage_repair_rejects_conflicting_cached_token_identity(tmp_path) -> None:
-    store = _store_with_oauth_credentials(tmp_path)
-    credentials = store.get_oauth_local_credentials(allow_primary=True)
-    assert credentials is not None
-    conflicting_token = ".".join(
-        (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment(
-                {
-                    "iss": PRODUCTION_GUARD_ISSUER,
-                    "grant": {"grantId": "grant-other"},
-                    "machine": {"machineId": "machine-1"},
-                    "workspace": {"workspaceId": "workspace-1"},
-                }
-            ),
-            "signature",
-        )
-    )
-    credentials["access_token"] = conflicting_token
-
-    assert guard_runner_module._oauth_binding_metadata_from_access_token(credentials) == {}
 
 
 def test_upgraded_running_process_does_not_refresh_shared_oauth_grant(monkeypatch) -> None:
@@ -501,8 +501,8 @@ def test_refresh_guard_oauth_access_token_prefers_jwt_expiry_claim(monkeypatch) 
     expiry = datetime(2099, 1, 1, tzinfo=timezone.utc)
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment({"exp": int(expiry.timestamp())}),
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment({"exp": int(expiry.timestamp())}),
             "signature",
         )
     )
@@ -598,8 +598,8 @@ def test_refresh_guard_oauth_access_token_extracts_cloud_user_profile(monkeypatc
     """Token refresh should extract cloud_user_profile from guard_local_entitlement in the response."""
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment({"exp": 9999999999}),
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment({"exp": 9999999999}),
             "signature",
         )
     )
@@ -649,8 +649,8 @@ def test_refresh_guard_oauth_access_token_returns_none_cloud_user_profile_when_a
     """Token refresh should return None for cloud_user_profile when entitlement lacks user_profile."""
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment({"exp": 9999999999}),
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment({"exp": 9999999999}),
             "signature",
         )
     )
@@ -689,8 +689,8 @@ def test_prepare_guard_cloud_connect_authorization_persists_refreshed_cloud_user
 
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment({"exp": 9999999999}),
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment({"exp": 9999999999}),
             "signature",
         )
     )
@@ -756,8 +756,8 @@ def test_prepare_guard_cloud_connect_authorization_clears_stale_cloud_user_profi
 
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment({"exp": 9999999999}),
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment({"exp": 9999999999}),
             "signature",
         )
     )

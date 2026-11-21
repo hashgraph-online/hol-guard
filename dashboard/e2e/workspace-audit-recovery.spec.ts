@@ -48,7 +48,7 @@ async function mountWorkspaceAuditFixture(page: Page, auditRequests: unknown[]):
           body: JSON.stringify({
             error: invalidWorkspace ? "workspace_dir_invalid" : "workspace_dir_required",
             message: invalidWorkspace
-              ? "Guard could not use the selected project folder. Choose an existing local folder and try again."
+              ? "Guard could not use the selected project folder. Choose an existing folder inside your home folder and try again."
               : "Guard needs a project folder with package manifests before it can run the workspace audit.",
             operation: "audit",
           }),

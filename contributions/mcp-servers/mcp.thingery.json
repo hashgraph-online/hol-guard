@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.thingery",
+  "version": "1.0.0",
+  "name": "Thingery MCP",
+  "description": "Reviews Thingery's write tools. Thingery is the open item database and MCP server for AI agents to list, find, and trade second-hand goods. Read tools keep Guard's usual handling; listings, images and the order path (ordering, payment, tracking, receipts, disputes, payout release) are gated on review because they publish public content or move money. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.thingery",
+    "displayName": "Thingery",
+    "url": "https://github.com/thingery"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCube", "background": "#0F172A" },
+  "homepage": "https://thingery.dev",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://thingery.dev/mcp",
+    "serverNames": ["thingery", "thingery-mcp"]
+  },
+  "riskClasses": ["external-public-listing", "external-credit-spend", "external-escrow-release"],
+  "tools": [
+    { "name": "describe_category", "state": "inherit" },
+    { "name": "search_items", "state": "inherit" },
+    { "name": "get_item", "state": "inherit" },
+    { "name": "my_listings", "state": "inherit" },
+    { "name": "get_payout_setup", "state": "inherit" },
+    { "name": "get_order", "state": "inherit" },
+    { "name": "create_listing", "state": "review" },
+    { "name": "update_listing", "state": "review" },
+    { "name": "add_item_image", "state": "review" },
+    { "name": "create_order", "state": "review" },
+    { "name": "cancel_order", "state": "review" },
+    { "name": "record_tracking", "state": "review" },
+    { "name": "confirm_payment", "state": "review" },
+    { "name": "confirm_receipt", "state": "review" },
+    { "name": "open_dispute", "state": "review" },
+    { "name": "release_funds", "state": "review" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://thingery.dev",
+    "https://thingery.dev/llms.txt",
+    "https://github.com/thingery/thingery",
+    "https://www.npmjs.com/package/thingery"
+  ],
+  "saferAlternatives": [
+    "Start with the read tools search_items, get_item and describe_category; describe_category self-serves the category schema agents need before listing.",
+    "Keep create_listing, update_listing and add_item_image on Review: they publish or change public content under your account.",
+    "create_order charges the buyer and release_funds waives the dispute window to release the seller payout; confirm item, price and counterparty during review.",
+    "cancel_order on a paid order refunds the buyer through Stripe; treat every order mutation as a money action."
+  ]
+}

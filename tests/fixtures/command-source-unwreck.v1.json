@@ -1,0 +1,1884 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "schema": "guard.command-extension-source.v1",
+        "extension": {
+          "action_classes": [
+            "Unwreck state and snapshot mutation command",
+            "Unwreck agent hook configuration command",
+            "Unwreck child process execution command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews Unwreck CLI 0.1.0 invocations that restore or delete project and snapshot state, persist snapshots, change agent hook configuration, or launch child processes. Read-only inspection commands and the installed hook callback are outside this extension's matchers.",
+          "ecosystem_ids": [
+            "unwreck"
+          ],
+          "executables": [
+            "unwreck",
+            "unwreck.exe"
+          ],
+          "extension_id": "command.unwreck",
+          "homepage": "https://github.com/ayushdoesdev/unwreck",
+          "icon": {
+            "background": "#0F172A",
+            "kind": "react-icon",
+            "name": "HiMiniCommandLine"
+          },
+          "license": "MIT OR Apache-2.0",
+          "name": "Unwreck command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "Unwreck state and snapshot mutation command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews Unwreck restore, undo, redo, garbage collection, snapshot, watch, and interactive TUI commands because they can rewrite project files or persist and remove local snapshot history. Restore and undo dry-runs and help requests are safe variants.",
+              "example_command": "unwreck restore 42",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Unwreck state and snapshot changes",
+              "permission_id": "command.unwreck.permission.state-change",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Use `restore --dry-run` or `undo --dry-run` to inspect the proposed changes before applying them.",
+                "Review the target snapshot and retained history before running `gc`, `restore`, `undo`, or `redo`.",
+                "Remember that snapshots can include selected ignored files such as `.env`; keep the local snapshot store protected."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Unwreck agent hook configuration command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews installation or removal of Unwreck hooks in Claude Code, Codex, and Gemini CLI configuration. The --dry-run form only previews the configuration diff.",
+              "example_command": "unwreck hooks --write --agent claude --scope project",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Unwreck agent hook configuration",
+              "permission_id": "command.unwreck.permission.hook-config",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Preview hook installation or removal with `--dry-run` first.",
+                "Inspect the agent configuration diff and preserve existing user-defined hooks."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Unwreck child process execution command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews `unwreck run`, which starts the supplied child process while Unwreck monitors the working tree and snapshots changes.",
+              "example_command": "unwreck run --quiet-ms 1500 -- pytest -q",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Unwreck child process execution",
+              "permission_id": "command.unwreck.permission.run",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Inspect the exact child command and its arguments before running it through Unwreck.",
+                "Use the agent's normal command review for the underlying process as well; this rule does not replace protections for the child command."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Ayush Anand Srivastava",
+            "id": "community.unwreck",
+            "url": "https://github.com/ayushdoesdev/unwreck"
+          },
+          "reference_urls": [
+            "https://github.com/ayushdoesdev/unwreck/tree/20a1910c33208ecfe8723e0e78ad96f734dcf219",
+            "https://github.com/ayushdoesdev/unwreck/blob/20a1910c33208ecfe8723e0e78ad96f734dcf219/code/crates/unwreck/src/main.rs",
+            "https://github.com/ayushdoesdev/unwreck/blob/20a1910c33208ecfe8723e0e78ad96f734dcf219/README.md"
+          ],
+          "required": false,
+          "risk_classes": [
+            "destructive_shell",
+            "execution"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "Unwreck state and snapshot mutation command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies Unwreck 0.1.0 operations that restore or modify project files, persist or delete local snapshots, or open the interactive restore interface. Help and explicit dry-run commands narrow this rule.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--force",
+                        "--dry-run"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--root"
+                      ],
+                      "options_with_values": [
+                        "--root",
+                        "--only"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "restore"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--force",
+                        "--dry-run"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--root"
+                      ],
+                      "options_with_values": [
+                        "--root"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "undo"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--force"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--root"
+                      ],
+                      "options_with_values": [
+                        "--root"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "redo"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--root"
+                      ],
+                      "options_with_values": [
+                        "--root",
+                        "--keep"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "gc"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--root"
+                      ],
+                      "options_with_values": [
+                        "--root",
+                        "--message",
+                        "-m"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "snap"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--root"
+                      ],
+                      "options_with_values": [
+                        "--root",
+                        "--quiet-ms"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "watch"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--root"
+                      ],
+                      "options_with_values": [
+                        "--root"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "tui"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.unwreck.permission.state-change",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.unwreck.state-change",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "variant_id": "restore-undo-dry-run",
+                  "title": "Restore or undo dry-run",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--force",
+                            "--dry-run"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--only"
+                          ],
+                          "required_flags": [
+                            "--dry-run"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "restore"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--force",
+                            "--dry-run"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root"
+                          ],
+                          "required_flags": [
+                            "--dry-run"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "undo"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "variant_id": "state-long-help",
+                  "title": "state help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--force",
+                            "--dry-run"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--only"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "restore"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--force",
+                            "--dry-run"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "undo"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--force"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "redo"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--keep"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "gc"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--message",
+                            "-m"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "snap"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--quiet-ms"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "watch"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "tui"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "variant_id": "state-short-help",
+                  "title": "state short help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--force",
+                            "--dry-run"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--only"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "restore"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--force",
+                            "--dry-run"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "undo"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--force"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "redo"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--keep"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "gc"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--message",
+                            "-m"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "snap"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--quiet-ms"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "watch"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "tui"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "safer_alternatives": [
+                "Use `restore --dry-run` or `undo --dry-run` to inspect changes without writing to the project.",
+                "Inspect `log` and `diff` output before choosing a snapshot to restore.",
+                "Review the snapshot retention policy before deleting stored history with `gc`."
+              ],
+              "severity": "high",
+              "title": "Unwreck state and snapshot mutation"
+            },
+            {
+              "action_classes": [
+                "Unwreck agent hook configuration command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `unwreck hooks --write` and `unwreck hooks --remove`, which modify Claude Code, Codex, or Gemini CLI configuration. The dry-run option only previews the diff.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--root"
+                      ],
+                      "options_with_values": [
+                        "--root",
+                        "--agent",
+                        "--scope"
+                      ],
+                      "required_flags": [
+                        "--write"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "hooks"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--root"
+                      ],
+                      "options_with_values": [
+                        "--root",
+                        "--agent",
+                        "--scope"
+                      ],
+                      "required_flags": [
+                        "--remove"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "hooks"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.unwreck.permission.hook-config",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.unwreck.hook-config",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "variant_id": "hooks-write-dry-run",
+                  "title": "Hook installation dry-run",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--agent",
+                            "--scope"
+                          ],
+                          "required_flags": [
+                            "--write",
+                            "--dry-run"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "hooks"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "variant_id": "hooks-remove-dry-run",
+                  "title": "Hook removal dry-run",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--agent",
+                            "--scope"
+                          ],
+                          "required_flags": [
+                            "--remove",
+                            "--dry-run"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "hooks"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "variant_id": "hooks-long-help",
+                  "title": "hooks help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--write",
+                            "--remove",
+                            "--dry-run"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--agent",
+                            "--scope"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "hooks"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "variant_id": "hooks-short-help",
+                  "title": "hooks short help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "unwreck",
+                            "unwreck.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--write",
+                            "--remove",
+                            "--dry-run"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--root"
+                          ],
+                          "options_with_values": [
+                            "--root",
+                            "--agent",
+                            "--scope"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "hooks"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "safer_alternatives": [
+                "Run `unwreck hooks --write --dry-run` or `unwreck hooks --remove --dry-run` to inspect the configuration diff.",
+                "Use the narrowest intended agent and scope instead of changing every agent configuration."
+              ],
+              "severity": "high",
+              "title": "Unwreck agent hook configuration change"
+            },
+            {
+              "action_classes": [
+                "Unwreck child process execution command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `unwreck run`, which launches a caller-supplied child process while monitoring and snapshotting the working tree.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--root"
+                      ],
+                      "options_with_values": [
+                        "--quiet-ms"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.unwreck.permission.run",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.unwreck.run",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Review the exact child executable and arguments before launching the process.",
+                "Keep the underlying command subject to its own command and policy checks."
+              ],
+              "severity": "high",
+              "title": "Unwreck child process execution"
+            }
+          ],
+          "safer_alternatives": [
+            "Preview restore, undo, and hook configuration changes with their dry-run options.",
+            "Inspect the exact command before using `unwreck run` to launch a child process.",
+            "Review snapshot retention and protect the local snapshot store."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        }
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.agentbridge",
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.keibidrop",
+          "command.kim",
+          "command.kranz",
+          "command.mcp-agenthub",
+          "command.mcp-asdecided",
+          "command.mcp-authyouragent",
+          "command.mcp-clipugc",
+          "command.mcp-contribos",
+          "command.mcp-evernode-mcp",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-lattice-talk",
+          "command.mcp-loomdesk",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.routed",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.unwreck",
+          "command.vttforge",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "HOL",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "id": "restore",
+      "command": "unwreck restore 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "restore-only-paths",
+      "command": "unwreck restore --only src/main.rs 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "restore-force",
+      "command": "unwreck restore --force 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "restore-dry-run-before-id",
+      "command": "unwreck restore --dry-run 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "restore-dry-run-after-id",
+      "command": "unwreck restore 42 --dry-run",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "undo",
+      "command": "unwreck undo",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "undo-force",
+      "command": "unwreck undo --force",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "undo-dry-run",
+      "command": "unwreck undo --dry-run",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "redo",
+      "command": "unwreck redo",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "gc",
+      "command": "unwreck gc --keep 100",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "snap",
+      "command": "unwreck snap --message before-agent-run",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "watch",
+      "command": "unwreck watch --quiet-ms 1500",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "tui",
+      "command": "unwreck tui",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "hooks-write",
+      "command": "unwreck hooks --write --agent claude --scope project",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "hooks-remove",
+      "command": "unwreck hooks --remove --agent codex --scope user",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "hooks-write-dry-run",
+      "command": "unwreck hooks --write --agent claude --dry-run",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hooks-write-dry-run-root-after-subcommand",
+      "command": "unwreck hooks --write --dry-run --root .",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hooks-remove-dry-run",
+      "command": "unwreck hooks --remove --agent gemini --dry-run",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hooks-remove-dry-run-root-after-subcommand",
+      "command": "unwreck hooks --remove --dry-run --root .",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hooks-dry-run-before-action",
+      "command": "unwreck hooks --dry-run --write --agent codex",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "run-shell-command",
+      "command": "unwreck run --quiet-ms 1500 -- rm -rf build/",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.run",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "run-test-command",
+      "command": "unwreck run -- cargo test --workspace",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.run",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "state-help",
+      "command": "unwreck restore --help",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hooks-help",
+      "command": "unwreck hooks --help",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hooks-write-help",
+      "command": "unwreck hooks --write --help",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "run-help",
+      "command": "unwreck run --help",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.run",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "read-only-hooks-snippet",
+      "command": "unwreck hooks",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "read-only-log",
+      "command": "unwreck log -n 10",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "read-only-diff",
+      "command": "unwreck diff --patch",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "read-only-doctor",
+      "command": "unwreck doctor --json",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "automatic-hook-callback",
+      "command": "unwreck hook claude",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unknown-subcommand",
+      "command": "unwreck status",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "inactive-extension",
+      "command": "unwreck gc --keep 5",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "disabled-state-permission",
+      "command": "unwreck restore 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [
+        "command.unwreck.permission.state-change"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "compound-state-command",
+      "command": "unwreck restore 42 && echo done",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "compound-second-segment",
+      "command": "echo before && unwreck gc --keep 5",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "exec-wrapper",
+      "command": "exec unwreck restore 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "xargs-wrapper",
+      "command": "xargs -n 1 unwreck gc --keep 10",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unrelated-echo",
+      "command": "echo unwreck gc --keep 5",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "global-project-root",
+      "command": "unwreck --root /tmp/project restore 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "compound-dry-run-then-gc",
+      "command": "unwreck restore --dry-run 42; unwreck gc --keep 5",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "run-child-help-long",
+      "command": "unwreck run sh -c 'echo x' --help",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.run",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "run-child-help-short",
+      "command": "unwreck run rm -rf build -h",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.run",
+      "expected_effective_segments": [
+        0
+      ]
+    }
+  ]
+}

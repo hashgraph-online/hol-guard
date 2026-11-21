@@ -27,11 +27,6 @@ TARGETS: Final[dict[str, MutationTarget]] = {
             "tests/test_guard_command_corpus.py",
         ),
     ),
-    "secret-flow": MutationTarget(
-        "secret-flow",
-        "src/codex_plugin_scanner/guard/runtime/data_flow.py",
-        ("tests/test_guard_data_flow.py",),
-    ),
     "approval-reuse": MutationTarget(
         "approval-reuse",
         "src/codex_plugin_scanner/guard/runtime/approval_reuse.py",
@@ -40,7 +35,13 @@ TARGETS: Final[dict[str, MutationTarget]] = {
     "package-intent": MutationTarget(
         "package-intent",
         "src/codex_plugin_scanner/guard/runtime/package_intent_parser.py",
-        ("tests/test_guard_package_intent.py", "tests/test_guard_tier2_package_intent_phase13.py"),
+        (
+            "tests/test_guard_package_intent.py",
+            "tests/test_guard_package_intent_local_execution.py",
+            "tests/test_guard_package_intent_typescript.py",
+            "tests/test_guard_package_intent_ecosystems.py",
+            "tests/test_guard_tier2_package_intent_phase13.py",
+        ),
     ),
     "package-policy": MutationTarget(
         "package-policy",

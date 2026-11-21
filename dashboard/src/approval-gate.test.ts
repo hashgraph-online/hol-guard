@@ -6,7 +6,8 @@ import {
 } from "./approval-gate-utils";
 import { approvalGateProofReady, buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import { applyApprovalGateDraft, effectiveApprovalGateCooldownSeconds, hasUnsavedChanges } from "./settings-workspace";
-import { cloudReviewConfirmationError, cloudReviewProofIncomplete } from "./settings/cloud-review-settings";
+import { cloudReviewConfirmationError, cloudReviewProofIncomplete, cloudReviewRecoveryAction, cloudReviewStatusCopy } from "./settings/cloud-review-settings";
+import type { CloudReviewSettingsStatus } from "./guard-api";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -364,8 +365,24 @@ function testCloudReviewKeepsAuthenticatorFieldAfterRecentProof(): void {
   );
 }
 
+function testCloudReviewRecoveryDistinguishesSignInFromConsentAndDelivery(): void {
+  const status = {
+    connected: true, enabled: true, reconnect_required: true, activation_error: null,
+    held_events: 0, delivery_state: "error",
+  } as CloudReviewSettingsStatus;
+  assert(cloudReviewRecoveryAction(status) === "connect", "expired Cloud sign-in needs reconnect, not another MFA consent");
+  assert(cloudReviewStatusCopy(status).includes("Reconnect"), "recovery copy names Cloud sign-in");
+  assert(cloudReviewRecoveryAction({ ...status, reconnect_required: false }) === "none",
+    "upload retries must not request another MFA consent when review is already enabled");
+  assert(cloudReviewRecoveryAction({ ...status, reconnect_required: false, held_events: 2 }) === "restore",
+    "held requests still require explicit local confirmation");
+  assert(cloudReviewRecoveryAction({ ...status, reconnect_required: false, enabled: false }) === "authorize",
+    "missing local consent requires authorization");
+}
+
 function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
   const harnessSetupPanel = readFileSync(new URL("./apps/harness-setup-panel.tsx", import.meta.url), "utf8");
+  const leftoverCleanup = readFileSync(new URL("./apps/leftover-guard-cleanup.tsx", import.meta.url), "utf8");
   assert(
     harnessSetupPanel.includes("Checking approval requirements before disconnect"),
     "disconnect must wait for approval settings before showing confirm",
@@ -381,6 +398,34 @@ function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
   assert(
     harnessSetupPanel.includes('if (!(action === "uninstall" && options.dryRun === true))'),
     "disconnect dry-run must keep the confirm step armed",
+  );
+  assert(
+    harnessSetupPanel.includes("Remove leftover Guard files"),
+    "unmanaged leftover configuration must have a cleanup action",
+  );
+  assert(
+    leftoverCleanup.includes("Leftover Guard files detected"),
+    "unmanaged leftover configuration must explain why cleanup is offered",
+  );
+  assert(
+    harnessSetupPanel.includes('if (hasLeftover) return "Needs repair";'),
+    "the app detail must match the app list repair status",
+  );
+  assert(
+    harnessSetupPanel.includes("cleanupIncomplete = result.managed_install?.manifest?.cleanup_incomplete === true"),
+    "incomplete cleanup must keep the leftover warning visible",
+  );
+  assert(
+    harnessSetupPanel.includes('props.onLeftoverRemoved?.("removed");')
+      && harnessSetupPanel.includes('props.onLeftoverRemoved?.("installed");')
+      && harnessSetupPanel.includes("!cleanupIncomplete"),
+    "every completed disconnect must refresh workspace detection unless config cleanup is incomplete",
+  );
+  const harnessDetection = readFileSync(new URL("./harness-detection.ts", import.meta.url), "utf8");
+  assert(harnessDetection.includes("refresh: () => Promise<boolean>"), "harness detection exposes an explicit refresh result");
+  assert(
+    harnessSetupPanel.includes("if (active) {\n      setLeftoverRemoved(false);"),
+    "install cleanup suppression remains until the active install state is reconciled",
   );
 }
 
@@ -470,6 +515,7 @@ const tests: Array<[string, () => void]> = [
   ["testApprovalProofFreshTotpRequiredForDisconnect", testApprovalProofFreshTotpRequiredForDisconnect],
   ["testApprovalProofBlocksUnreadyGate", testApprovalProofBlocksUnreadyGate],
   ["testCloudReviewKeepsAuthenticatorFieldAfterRecentProof", testCloudReviewKeepsAuthenticatorFieldAfterRecentProof],
+  ["testCloudReviewRecoveryDistinguishesSignInFromConsentAndDelivery", testCloudReviewRecoveryDistinguishesSignInFromConsentAndDelivery],
   ["testDisconnectWaitsForApprovalSettingsBeforeConfirm", testDisconnectWaitsForApprovalSettingsBeforeConfirm],
 ];
 

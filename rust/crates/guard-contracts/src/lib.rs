@@ -3,8 +3,70 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod adapter_state_integrity;
+pub use adapter_state_integrity::*;
+mod aibom_report_summaries;
+pub use aibom_report_summaries::*;
 mod approval_contracts;
 pub use approval_contracts::*;
+mod approval_extension_recommendation;
+pub use approval_extension_recommendation::*;
+mod approval_gate;
+pub use approval_gate::*;
+mod approval_reuse;
+pub use approval_reuse::*;
+mod composio_role;
+pub use composio_role::*;
+mod extension_allow_hint;
+pub use extension_allow_hint::*;
+mod extension_control;
+pub use extension_control::*;
+mod extension_control_mutation;
+pub use extension_control_mutation::*;
+mod extension_control_prepared;
+pub use extension_control_prepared::*;
+mod extension_control_preview;
+pub use extension_control_preview::*;
+mod extension_control_terminal;
+pub use extension_control_terminal::*;
+mod github_cli_classify;
+pub use github_cli_classify::*;
+mod command_job_plan;
+pub use command_job_plan::*;
+mod github_workflow_prepare;
+pub use github_workflow_prepare::*;
+mod protect_advisory_merge;
+pub use protect_advisory_merge::*;
+mod protect_request;
+pub use protect_request::*;
+mod portable_project_identity;
+pub use portable_project_identity::*;
+mod git_execution_safety;
+pub use git_execution_safety::*;
+mod compound_git_inspection;
+pub use compound_git_inspection::*;
+mod approval_bulk_eligibility;
+pub use approval_bulk_eligibility::*;
+mod codex_request_resume;
+pub use codex_request_resume::*;
+mod approval_queue_identity;
+pub use approval_queue_identity::*;
+mod approval_resolution_plan;
+pub use approval_resolution_plan::*;
+mod approval_reuse_diagnostic;
+pub use approval_reuse_diagnostic::*;
+mod codex_tool_output;
+pub use codex_tool_output::*;
+mod policy_bundle_authority;
+pub use policy_bundle_authority::*;
+mod claim_approval_reuse;
+pub use claim_approval_reuse::*;
+mod guard_store;
+pub use guard_store::*;
+mod policy_decision_lookup;
+pub use policy_decision_lookup::*;
+mod policy_document_decision;
+pub use policy_document_decision::*;
 mod native_hook_receipt;
 pub use native_hook_receipt::*;
 mod native_command_observations;
@@ -13,8 +75,262 @@ mod native_command_controls;
 pub use native_command_controls::*;
 mod approval_v4_contracts;
 pub use approval_v4_contracts::*;
+mod workspace_review_contracts;
+pub use workspace_review_contracts::*;
 mod archive_inspection;
 pub use archive_inspection::*;
+mod content_decode;
+pub use content_decode::*;
+
+mod archive_acquisition;
+pub use archive_acquisition::*;
+mod execution_environment;
+pub use execution_environment::*;
+mod context_digest;
+pub use context_digest::*;
+mod python_text;
+pub use python_text::{is_python_space, python_strip};
+mod local_cli_identity;
+pub use local_cli_identity::*;
+mod approval_scope;
+pub use approval_scope::*;
+mod approval_resolution_eligibility;
+pub use approval_resolution_eligibility::*;
+mod command_capability;
+pub use command_capability::*;
+mod command_envelope;
+pub use command_envelope::*;
+mod approval_persist_select;
+pub use approval_persist_select::*;
+mod approval_scope_select;
+pub use approval_scope_select::*;
+mod contained_wrapper_plan;
+pub use contained_wrapper_plan::*;
+mod artifact_content_hash;
+pub use artifact_content_hash::*;
+mod codex_hook_file_identity;
+pub use codex_hook_file_identity::*;
+mod codex_hook_manifest_verify;
+pub use codex_hook_manifest_verify::*;
+mod hook_artifact_facts;
+pub use hook_artifact_facts::*;
+mod hook_render;
+pub use hook_render::*;
+mod approval_proof;
+mod cursor_observer_proof;
+mod extension_control_authority;
+mod hook_authority_state;
+mod local_cli_help_parse;
+mod policy_integrity_rows;
+pub use approval_proof::*;
+pub use cursor_observer_proof::*;
+pub use extension_control_authority::*;
+pub use hook_authority_state::*;
+pub use local_cli_help_parse::*;
+pub use policy_integrity_rows::*;
+mod hook_adapter;
+pub use hook_adapter::*;
+mod hook_artifact_compose;
+pub use hook_artifact_compose::*;
+mod hook_artifact_compose_policy_tail;
+pub use hook_artifact_compose_policy_tail::*;
+mod consumer_artifact_compose;
+pub use consumer_artifact_compose::*;
+mod consumer_artifact_project;
+pub use consumer_artifact_project::*;
+mod connector_setup;
+pub use connector_setup::*;
+mod local_cli_grant;
+pub use local_cli_grant::*;
+mod artifact_risk;
+pub use artifact_risk::*;
+mod local_tool_eligibility;
+pub use local_tool_eligibility::*;
+mod local_tool_grant;
+pub use local_tool_grant::*;
+mod contributed_mcp_decision;
+pub use contributed_mcp_decision::*;
+mod local_mcp_grant;
+pub use local_mcp_grant::*;
+mod cisco_preflight;
+pub use cisco_preflight::*;
+mod mcp_proxy_decision;
+pub use mcp_proxy_decision::*;
+mod daemon_lifecycle_decision;
+pub use daemon_lifecycle_decision::*;
+mod mcp_sensitive_read;
+pub use mcp_sensitive_read::*;
+mod request_context;
+pub use request_context::*;
+mod skill_directory_identity;
+pub use skill_directory_identity::*;
+mod browser_mcp_intent;
+pub use browser_mcp_intent::*;
+mod risk_action_config;
+pub use risk_action_config::*;
+mod harness_posture_config;
+pub use harness_posture_config::*;
+mod runtime_detector_run;
+pub use runtime_detector_run::*;
+mod runner_authority;
+pub use runner_authority::*;
+mod retry_lineage_capture;
+pub use retry_lineage_capture::*;
+mod mcp_runtime_evidence;
+pub use mcp_runtime_evidence::*;
+mod mcp_tool_evidence;
+pub use mcp_tool_evidence::*;
+mod mcp_tool_policy;
+pub use mcp_tool_policy::*;
+mod mcp_tool_policy_decide;
+pub use mcp_tool_policy_decide::*;
+mod mcp_tool_call_identity;
+pub use mcp_tool_call_identity::*;
+mod mcp_classification;
+pub use mcp_classification::*;
+mod mcp_stdio_session;
+pub use mcp_stdio_session::*;
+mod command_effect;
+pub use command_effect::*;
+mod command_policy_decision;
+pub use command_policy_decision::*;
+mod reviewed_invocation_bindings;
+pub use reviewed_invocation_bindings::*;
+mod canonical_json;
+pub use canonical_json::*;
+
+mod utc_timestamp;
+pub use utc_timestamp::*;
+
+mod native_runtime_values;
+pub use native_runtime_values::*;
+mod install_checks;
+pub use install_checks::*;
+mod generic_hook_payload;
+pub use generic_hook_payload::*;
+mod hook_decision;
+pub use hook_decision::*;
+mod hook_decision_artifact_finalize;
+pub use hook_decision_artifact_finalize::*;
+mod hook_decision_artifact_reuse_step;
+pub use hook_decision_artifact_reuse_step::*;
+mod hook_route;
+pub use hook_route::*;
+mod hook_pretool_floor;
+pub use hook_pretool_floor::*;
+mod hook_containment_route;
+pub use hook_containment_route::*;
+mod hook_review_response;
+pub use hook_review_response::*;
+mod claude_permission_verdict;
+pub use claude_permission_verdict::*;
+mod hook_decision_permission_persist;
+pub use hook_decision_permission_persist::*;
+mod daemon_handler;
+pub use daemon_handler::*;
+mod daemon_route;
+pub use daemon_route::*;
+mod native_exact_action;
+pub use native_exact_action::*;
+mod native_bash_subject;
+pub use native_bash_subject::*;
+mod native_script_dependencies;
+pub use native_script_dependencies::*;
+mod native_bash_launch;
+pub use native_bash_launch::*;
+mod native_bash_review;
+pub use native_bash_review::*;
+mod native_bash_activity;
+pub use native_bash_activity::*;
+mod native_bash_ack;
+pub use native_bash_ack::*;
+
+mod workflow_capability;
+pub use workflow_capability::*;
+mod workflow_capability_transitions;
+pub use workflow_capability_transitions::*;
+mod workflow_capability_authority_state;
+pub use workflow_capability_authority_state::*;
+
+mod signal_contract;
+pub use signal_contract::*;
+
+mod decision_lattice;
+pub use decision_lattice::*;
+
+mod authoritative_decision;
+pub use authoritative_decision::*;
+
+mod package_authority;
+pub use package_authority::*;
+mod package_audit_projection;
+pub use package_audit_projection::*;
+mod package_protect_finalize;
+pub use package_protect_finalize::*;
+mod package_evaluation_view;
+pub use package_evaluation_view::*;
+mod package_workspace_scope;
+pub use package_workspace_scope::*;
+mod supply_chain_egress;
+pub use supply_chain_egress::*;
+
+mod contained_execution;
+pub use contained_execution::*;
+mod shim_admin;
+pub use shim_admin::*;
+mod package_context_build;
+pub use package_context_build::*;
+mod data_flow_analyze;
+pub use data_flow_analyze::*;
+mod prompt_requests;
+pub use prompt_requests::*;
+mod business_action;
+pub use business_action::*;
+mod action_fact;
+mod action_facts;
+pub use action_facts::*;
+mod action_fact_selector;
+pub use action_fact_selector::*;
+mod business_dispatch_receipt;
+pub use business_dispatch_receipt::*;
+mod skill_workflow_preflight;
+pub use skill_workflow_preflight::*;
+mod runtime_artifact_identity;
+pub use runtime_artifact_identity::*;
+mod tool_action_identity;
+pub use tool_action_identity::*;
+mod verified_read_decision;
+pub use verified_read_decision::*;
+mod verified_read_execute;
+pub use verified_read_execute::*;
+mod verified_read_plan;
+pub use verified_read_plan::*;
+mod inventory_item_classification;
+pub use inventory_item_classification::*;
+mod inventory_source_evidence;
+pub use inventory_source_evidence::*;
+mod codex_hook_identity;
+pub use codex_hook_identity::*;
+mod inventory_scan_targets;
+pub use inventory_scan_targets::*;
+mod inventory_snapshot_digest;
+pub use inventory_snapshot_digest::*;
+mod command_pack_record;
+pub use command_pack_record::*;
+mod inventory_url_redaction;
+pub use inventory_url_redaction::*;
+mod inventory_scan_findings;
+pub use inventory_scan_findings::*;
+mod network_protection_verify;
+pub use network_protection_verify::*;
+mod supply_chain_bundle_verify;
+pub use supply_chain_bundle_verify::*;
+mod trust_attestation_verify;
+pub use trust_attestation_verify::*;
+mod protection_health_report;
+pub use protection_health_report::*;
+mod resident_health;
+pub use resident_health::*;
 
 pub const NATIVE_PROTOCOL_VERSION: u16 = 1;
 pub const GUARD_HOOK_ENVELOPE_V2_SCHEMA: &str = "guard-hook-envelope.v2";
@@ -38,6 +354,8 @@ pub struct GuardHookSourceMetadataV2 {
     pub guard_home: String,
     #[serde(default)]
     pub source_ref_external_allowed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_environment: Option<GuardExecutionEnvironmentV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -54,6 +372,95 @@ pub struct GuardHookEnvelopeV2 {
     pub policy_generation: u64,
     pub policy_snapshot: Value,
     pub source: GuardHookSourceMetadataV2,
+    /// Acknowledged Watch posture. It only selects a continuing response
+    /// envelope; it never changes the verdict, receipt, or request identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub recording_only: bool,
+    /// The daemon's custom extension rules, which settle a `PreToolUse` with
+    /// the answer they change. Only the daemon sends them; without them the
+    /// edge reads no rule. They never change the request identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_cli_rules: Option<GuardHookLocalCliRulesV1>,
+    /// The daemon asks the resident to record the CLI an answered
+    /// `PreToolUse` launches, off the answer path. It never changes the
+    /// verdict, receipt, or request identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub observe_local_cli: bool,
+    /// The daemon asks the edge to queue the answer's receipt with the hook
+    /// evidence writer already running for this Guard home, so it need not
+    /// submit the receipt in a second request. It never changes the verdict,
+    /// receipt, or request identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub record_receipt: bool,
+    /// With `record_receipt`, the daemon asks the edge to queue a
+    /// `PostToolUse` answer's command activity behind its receipt, after the
+    /// Composio discovery of a call that succeeded, so it need not submit
+    /// them in more requests. It never changes the verdict, receipt, or
+    /// request identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub record_activity: bool,
+    /// With `record_receipt`, the daemon asks the edge to queue a
+    /// `PreToolUse` answer's command activity behind its receipt when the
+    /// daemon returns that answer as the edge rendered it. It never changes
+    /// the verdict, receipt, or request identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub record_pre_tool_activity: bool,
+    /// The managed-policy view the daemon holds for a Pi or Oh My Pi
+    /// `PostToolUse`: `managed_policy_status`, `managed_policy_hash`,
+    /// `managed_locked_settings` and `managed_policy`, the shape the
+    /// structured-output resolution reads. The edge answers the structured
+    /// content mediation from it. It never changes the verdict, receipt, or
+    /// request identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured_output_config: Option<Value>,
+    /// The argv that starts Guard's CLI, so a `PreToolUse` the edge routes
+    /// into the contained sink comes back already rewritten
+    /// (`GuardHookEdgeResultV2::containment_rewrite`). Only the daemon sends
+    /// it; without it the edge rewrites nothing. It never changes the
+    /// verdict, receipt, or request identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub containment_sink: Option<GuardHookContainmentSinkV1>,
+}
+
+/// What the edge's containment rewrite needs beyond the envelope: the
+/// workspace, home and Guard home are the envelope's `source`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookContainmentSinkV1 {
+    /// The argv prefix that starts Guard's CLI; the sink command follows it.
+    pub sink_command: Vec<String>,
+    /// The daemon admits the runtime's own sink command on Cursor's
+    /// `beforeShellExecution`, so the probe answer may route there.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub native_sink: bool,
+}
+
+/// Where the daemon's custom extension rules live and what a command's
+/// launch resolves against: the daemon's own home and environment.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookLocalCliRulesV1 {
+    /// Absolute path of `guard.db`; must sit directly under the guard home.
+    pub store_path: String,
+    /// The daemon's home, which the launch resolves `~` against.
+    pub user_home: String,
+    /// The daemon's environment, which the launch resolves `PATH` against.
+    pub env: std::collections::BTreeMap<String, String>,
+    /// The daemon's extension-control binding digest. When present, a
+    /// reviewed `PreToolUse` answer carries its review evidence
+    /// (`GuardHookEdgeResultV2::review_evidence`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_action_control_digest: Option<String>,
+}
+
+/// The custom extension rule for a reviewed `PreToolUse`: a block the
+/// daemon returns before any saved decision, or an allow it returns once no
+/// saved decision blocks the action. `harness_response` answers either.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookLocalCliRuleV1 {
+    pub blocked: bool,
+    pub harness_response: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -75,6 +482,49 @@ pub struct GuardHookEdgeResultV2 {
     pub event_name: String,
     pub payload_kind: GuardHookPayloadKindV2,
     pub result: Value,
+    /// The harness-specific JSON a hook must print for `result`, rendered by
+    /// the resident so no other layer interprets the verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harness_response: Option<Value>,
+    /// Which containment step `result` takes (`none`, `sink` or `grant`; only
+    /// a PreToolUse answer is ever routed), the same answer the
+    /// `containment_route` decision gives, so a hook routes the call without a
+    /// second round trip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub containment_route: Option<String>,
+    /// The edge's rewrite of a `sink` route, when the envelope carried
+    /// `containment_sink`: `routed` when `harness_response` is the allow that
+    /// runs the call in the sink, `kept` when the receipt stands. Absent when
+    /// the edge did not rewrite; a hook then asks `containment_rewrite`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub containment_rewrite: Option<String>,
+    /// The daemon's custom extension rule for a reviewed `PreToolUse`, when
+    /// one applies. An allowed `PreToolUse` a rule blocks carries the block as
+    /// its `harness_response` instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_cli_rule: Option<GuardHookLocalCliRuleV1>,
+    /// Whether a saved artifact-scoped block may name the exact command of a
+    /// `PreToolUse` the daemon sent its rules for, outside Watch. `false` lets
+    /// the daemon skip its saved exact-command block lookup; `true`, or an
+    /// absent answer, leaves the lookup to decide.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_command_block: Option<bool>,
+    /// The edge queued `receipt` with the running hook evidence writer for
+    /// the request's Guard home, as the envelope's `record_receipt` asked, so
+    /// the daemon does not submit it again.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub receipt_recorded: bool,
+    /// The edge also queued the answer's command activity behind `receipt`,
+    /// as the envelope's `record_activity` (`PostToolUse`) or
+    /// `record_pre_tool_activity` (`PreToolUse`) asked, so the daemon does
+    /// not record it again.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub activity_recorded: bool,
+    /// The retry binding and exact-action token of a reviewed `PreToolUse`,
+    /// answered as a `HookReview` query would, when the daemon sent its
+    /// extension-control digest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_evidence: Option<GuardHookReviewEvidenceV1>,
     /// Rust-owned decision evidence.  The Python edge may only transport it
     /// to a non-authoritative asynchronous consumer.
     pub receipt: NativeHookDecisionReceiptV1,
@@ -211,6 +661,22 @@ pub struct HookReviewResponseV1 {
     pub observed_policy_action: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub observe_mode: bool,
+    /// Whether the harness must keep this output away from the model. It is
+    /// the edge's own answer rather than something a receiver infers from
+    /// `decision` and `model_output_action`, so a later verdict or output
+    /// action cannot change what masking means without changing it here.
+    ///
+    /// It is always serialized, including when false: a receiver that cannot
+    /// find the answer withholds the output rather than guessing one.
+    #[serde(default)]
+    pub output_masked: bool,
+}
+
+/// Masking follows the verdict and the output action together: a denial masks,
+/// and so does an output action that withholds the original text. An excerpt
+/// replacement is not masking -- the model still reads what the review passed.
+fn masks_output(decision: &str, model_output_action: &str) -> bool {
+    decision == "deny" || model_output_action == "block"
 }
 
 impl HookReviewResponseV1 {
@@ -226,6 +692,7 @@ impl HookReviewResponseV1 {
             policy_action: Some("allow".into()),
             observed_policy_action: None,
             observe_mode: false,
+            output_masked: masks_output("allow", "allow_original"),
         }
     }
 
@@ -241,6 +708,7 @@ impl HookReviewResponseV1 {
             policy_action: None,
             observed_policy_action: None,
             observe_mode: false,
+            output_masked: masks_output("deny", "block"),
         }
     }
 
@@ -260,6 +728,7 @@ impl HookReviewResponseV1 {
             policy_action: None,
             observed_policy_action: None,
             observe_mode: false,
+            output_masked: masks_output("allow", "replace_with_reviewed_excerpt"),
         }
     }
 
@@ -277,7 +746,17 @@ impl HookReviewResponseV1 {
         self.policy_action = Some("allow".into());
         self.observed_policy_action = Some("block".into());
         self.observe_mode = true;
+        self.seal_output_mask();
         self
+    }
+
+    /// Re-derive the masking answer from the current verdict and output action.
+    ///
+    /// Policy may rewrite either one after the review built this response, so
+    /// the resident seals the answer on the way out instead of trusting every
+    /// writer to keep a derived field in step.
+    pub fn seal_output_mask(&mut self) {
+        self.output_masked = masks_output(&self.decision, &self.model_output_action);
     }
 }
 
@@ -289,6 +768,15 @@ pub struct RuntimeCapabilitiesV1 {
     pub build_sha: String,
     pub target: String,
     pub features: Vec<String>,
+    /// Packaged command identity of this binary. Empty when the program
+    /// cannot be loaded. The publisher uses these to bind a snapshot to the
+    /// runtime that will enforce it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub program_digest: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub catalog_digest: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub trust_digest: String,
 }
 
 #[cfg(test)]
@@ -302,6 +790,49 @@ mod tests {
         assert!(encoded.get("reason").is_none());
         assert_eq!(encoded["decision"], "allow");
         assert_eq!(encoded["reason_code"], "output_scan_allow");
+    }
+
+    #[test]
+    fn every_edge_response_carries_its_own_masking_answer() {
+        // Masking is the edge's answer, so it must hold for every response the
+        // edge can build, including one an observe-mode downgrade rewrote.
+        let excerpt = HookReviewResponseV1::reviewed_excerpt("excerpt", "why", "text".into());
+        let responses = [
+            HookReviewResponseV1::allow("output_scan_allow"),
+            HookReviewResponseV1::deny("source_secret_match", "blocked"),
+            excerpt,
+            HookReviewResponseV1::deny("source_secret_match", "blocked").observed(None),
+        ];
+        for response in responses {
+            assert_eq!(
+                response.output_masked,
+                masks_output(&response.decision, &response.model_output_action),
+                "{} / {}",
+                response.decision,
+                response.model_output_action
+            );
+        }
+    }
+
+    #[test]
+    fn sealing_follows_a_verdict_a_later_writer_rewrote() {
+        // Observe mode rewrites a denial into an allow after the review built
+        // the response. The seal is what keeps the masking answer honest.
+        let mut response = HookReviewResponseV1::deny("source_secret_match", "blocked");
+        assert!(response.output_masked);
+        response.decision = "allow".into();
+        response.model_output_action = "allow_original".into();
+        response.seal_output_mask();
+        assert!(!response.output_masked);
+    }
+
+    #[test]
+    fn only_a_denial_or_a_withheld_output_masks() {
+        assert!(masks_output("deny", "block"));
+        assert!(masks_output("allow", "block"));
+        assert!(!masks_output("allow", "allow_original"));
+        // An excerpt is what the review passed, so the model may read it.
+        assert!(!masks_output("allow", "replace_with_reviewed_excerpt"));
     }
 
     #[test]

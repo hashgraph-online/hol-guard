@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -33,9 +34,13 @@ from codex_plugin_scanner.guard.native_policy_snapshot_codec import (
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
+from codex_plugin_scanner.guard.sqlite_connection_cache import close_idle_store_connections
 
 from .test_guard_extension_control_authority import MemorySecretStore, _commit, _store
 from .test_native_command_control_binding import _snapshot
+from .test_native_command_control_binding_publisher import (
+    _pinned_integrity_material_and_resident_key as _pinned_integrity_material_and_resident_key,
+)
 from .test_native_command_control_binding_publisher import _publish_ready, _publisher
 
 KEY = derive_native_policy_verifier_key(b"k" * 32)
@@ -76,7 +81,7 @@ def test_marker_hint_verifies_content_without_republishing_own_ack(
 def _allow_terminal_proof(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
-        lambda _enrollment: None,
+        lambda _guard_home, _enrollment: None,
     )
 
 
@@ -119,9 +124,7 @@ def test_marker_sync_failure_prevents_control_mutation(tmp_path: Path, monkeypat
         def fail_write(*args, **kwargs):
             raise NativePolicySnapshotError("injected_fence_sync_failure")
 
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.native_command_control_authority_store.write_private_state", fail_write
-        )
+        monkeypatch.setattr("codex_plugin_scanner.guard.native_command_control_authority_store._write", fail_write)
         with pytest.raises(NativePolicySnapshotError, match="injected_fence_sync_failure"):
             _commit(store)
         after = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
@@ -330,9 +333,7 @@ with hold_command_control_authority_lock(pathlib.Path(sys.argv[1]), shared=True)
         def forbid_write(*args, **kwargs):
             pytest.fail("unchanged verified controls attempted an authority write")
 
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.native_command_control_authority_store.write_private_state", forbid_write
-        )
+        monkeypatch.setattr("codex_plugin_scanner.guard.native_command_control_authority_store._write", forbid_write)
         assert publisher._compiled_command_extensions() == first["command_extensions"]
         process.communicate("release\n", timeout=5)
         assert process.returncode == 0
@@ -340,4 +341,43 @@ with hold_command_control_authority_lock(pathlib.Path(sys.argv[1]), shared=True)
         if process is not None and process.poll() is None:
             process.kill()
             process.wait(timeout=5)
+        publisher.close()
+
+
+def test_projection_reuses_connection_without_caching_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path, MemorySecretStore())
+    publisher = _publisher(store, monkeypatch)
+    try:
+        first = _publish_ready(publisher)
+        opened = []
+        original_connect = sqlite3.connect
+
+        def connect(database, *args, **kwargs):
+            connection = original_connect(database, *args, **kwargs)
+            if database in (store.path, str(store.path)):
+                opened.append(connection)
+            return connection
+
+        close_idle_store_connections()
+        monkeypatch.setattr(sqlite3, "connect", connect)
+        assert publisher._compiled_command_extensions() == first["command_extensions"]
+        assert len(opened) == 1
+        # The connection is kept between projections, outside any transaction,
+        # so the next projection reuses it and still reads committed contents.
+        assert not opened[0].in_transaction
+
+        assert publisher._compiled_command_extensions() == first["command_extensions"]
+        assert len(opened) == 1
+
+        # A later read must authenticate fresh database contents, even if
+        # the previous projection was protected and unchanged.
+        with original_connect(store.path) as writer:
+            writer.execute("update extension_control_authority_snapshot set snapshot_mac = ?", ("0" * 64,))
+        writer.close()
+        changed = publisher._compiled_command_extensions()
+        assert changed["health"] != "protected"
+        assert changed != first["command_extensions"]
+    finally:
         publisher.close()

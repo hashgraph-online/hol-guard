@@ -3,19 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.grok_config import append_mcp_artifacts as append_grok_mcp_artifacts
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
-from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
-from codex_plugin_scanner.guard.adapters.zcode_config import append_cli_config_artifacts
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.consumer import artifact_hash
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -49,7 +46,7 @@ def _detect_server(
             ),
             encoding="utf-8",
         )
-        detection = ClaudeCodeHarnessAdapter().detect(context)
+        detection = harness_ops.detect("claude-code", context)
     elif adapter_name == "codex":
         config_path = context.home_dir / ".codex" / "config.toml"
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,7 +62,7 @@ def _detect_server(
             ),
             encoding="utf-8",
         )
-        detection = CodexHarnessAdapter().detect(context)
+        detection = harness_ops.detect("codex", context)
     else:
         config_path = context.home_dir / ".cursor" / "mcp.json"
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -83,7 +80,7 @@ def _detect_server(
             ),
             encoding="utf-8",
         )
-        detection = CursorHarnessAdapter().detect(context)
+        detection = harness_ops.detect("cursor", context)
     artifact = next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
     return detection, artifact
 
@@ -129,6 +126,7 @@ def test_mcp_adapter_binds_configured_env_values_without_serializing_them(
 def _secondary_mcp_artifact(
     adapter_name: str,
     *,
+    root: Path,
     field: str,
     configured_items: tuple[tuple[str, str], ...],
 ):
@@ -142,31 +140,46 @@ def _secondary_mcp_artifact(
         server["command"] = "node"
 
     if adapter_name == "grok":
-        artifacts = []
-        append_grok_mcp_artifacts(
-            harness="grok",
-            artifacts=artifacts,
-            payload={"mcp_servers": {"value-proof": server}},
-            config_path=Path("/virtual/grok-config.toml"),
-            scope="global",
+        grok_config = root / "home" / ".grok" / "config.toml"
+        grok_config.parent.mkdir(parents=True, exist_ok=True)
+        grok_config.write_text(
+            "\n".join(
+                (
+                    '[mcp_servers."value-proof"]',
+                    *(f"{key} = {json.dumps(value)}" for key, value in server.items() if key != field),
+                    f"{field} = {{ "
+                    + ", ".join(f"{json.dumps(key)} = {json.dumps(value)}" for key, value in configured_items)
+                    + " }",
+                    "",
+                )
+            ),
+            encoding="utf-8",
         )
-        return artifacts[0]
+        with mock.patch.dict(os.environ):
+            os.environ.pop("GROK_HOME", None)
+            detection = harness_ops.detect(
+                "grok", HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "guard-home")
+            )
+        return next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
     if adapter_name == "hermes":
-        return HermesHarnessAdapter()._mcp_artifacts(
-            {"value-proof": server},
-            "/virtual/hermes-config.yaml",
-            source="yaml",
-        )[0]
+        hermes_config = root / "home" / ".hermes" / "mcp_servers.json"
+        hermes_config.parent.mkdir(parents=True, exist_ok=True)
+        hermes_config.write_text(json.dumps({"value-proof": server}), encoding="utf-8")
+        with mock.patch.dict(os.environ):
+            os.environ.pop("HERMES_HOME", None)
+            os.environ.pop("HERMES_HOST_HOME", None)
+            detection = harness_ops.detect(
+                "hermes", HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "guard-home")
+            )
+        return next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
 
-    artifacts = []
-    append_cli_config_artifacts(
-        harness="zcode",
-        artifacts=artifacts,
-        payload={"mcp": {"servers": {"value-proof": server}}},
-        config_path=Path("/virtual/zcode-config.json"),
-        scope="global",
+    config_path = root / "home" / ".zcode" / "cli" / "config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps({"mcp": {"servers": {"value-proof": server}}}), encoding="utf-8")
+    detection = harness_ops.detect(
+        "zcode", HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "guard-home")
     )
-    return artifacts[0]
+    return next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
 
 
 def _claude_header_artifact(
@@ -189,7 +202,7 @@ def _claude_header_artifact(
         ),
         encoding="utf-8",
     )
-    detection = ClaudeCodeHarnessAdapter().detect(context)
+    detection = harness_ops.detect("claude-code", context)
     return next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
 
 
@@ -212,6 +225,7 @@ def _claude_header_artifact(
     ),
 )
 def test_secondary_mcp_adapters_bind_secret_values_without_exposing_them(
+    tmp_path: Path,
     adapter_name: str,
     field: str,
     digest_key: str,
@@ -220,16 +234,19 @@ def test_secondary_mcp_adapters_bind_secret_values_without_exposing_them(
 ) -> None:
     first = _secondary_mcp_artifact(
         adapter_name,
+        root=tmp_path.resolve(),
         field=field,
         configured_items=configured_items,
     )
     reordered = _secondary_mcp_artifact(
         adapter_name,
+        root=tmp_path.resolve(),
         field=field,
         configured_items=tuple(reversed(configured_items)),
     )
     changed = _secondary_mcp_artifact(
         adapter_name,
+        root=tmp_path.resolve(),
         field=field,
         configured_items=changed_items,
     )
@@ -290,6 +307,7 @@ def test_mcp_adapters_canonicalize_padded_duplicate_configured_keys(
             return _claude_header_artifact(context=context, configured_items=configured_items)
         return _secondary_mcp_artifact(
             adapter_name,
+            root=tmp_path.resolve(),
             field=field,
             configured_items=configured_items,
         )

@@ -1,0 +1,254 @@
+{
+  "activeProtectionChanged": false,
+  "binaryIdentityVerified": false,
+  "coverageMeaning": "Enumerated metadata only; not a security certification or proof of runtime completeness.",
+  "discoveredOperations": 16,
+  "discoveryDigest": "1002802e89336475ad89354954f08367e591d51fe6716226b6acda87c71584e2",
+  "limitations": [
+    "metadata-is-not-semantics",
+    "unknown-cli-operations-review"
+  ],
+  "operations": [
+    {
+      "exactSafeInvocations": [
+        [
+          "--help"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "-V"
+        ],
+        [
+          "-h"
+        ]
+      ],
+      "id": "op-75eb278d6a9fb4cf",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [
+        [
+          "adopt",
+          "--scan"
+        ]
+      ],
+      "id": "op-1a83df11ee5b78cd",
+      "path": [
+        "adopt"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [
+        [
+          "completions",
+          "bash"
+        ],
+        [
+          "completions",
+          "elvish"
+        ],
+        [
+          "completions",
+          "fish"
+        ],
+        [
+          "completions",
+          "zsh"
+        ]
+      ],
+      "id": "op-1d8f2e3384b44038",
+      "path": [
+        "completions"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-2e390f4b1131c34a",
+      "path": [
+        "doctor"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-66ac10fbbea895e4",
+      "path": [
+        "edit"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-d76e96e3251de015",
+      "path": [
+        "export"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-bb0b400368c64a1a",
+      "path": [
+        "import"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-6c69101a5444aed0",
+      "path": [
+        "install"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [
+        [
+          "list",
+          "--json"
+        ]
+      ],
+      "id": "op-28e623ce1c945c32",
+      "path": [
+        "list"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": [
+        "read-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-6df54ad180aab1a8",
+      "path": [
+        "notify",
+        "disable"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-c1ecd601718bd5de",
+      "path": [
+        "notify",
+        "enable"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-b4d1dad95db6f6d7",
+      "path": [
+        "notify",
+        "status"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": [
+        "read-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-3c5f7f4c2183d9b4",
+      "path": [
+        "notify",
+        "test"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-98ae7de9f4921295",
+      "path": [
+        "remove"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": [
+        "destructive-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [
+        [
+          "update",
+          "--all",
+          "--check"
+        ],
+        [
+          "update",
+          "--all",
+          "--check",
+          "--json"
+        ]
+      ],
+      "id": "op-227d251131facfdb",
+      "path": [
+        "update"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-08443d1c3be6e196",
+      "path": [
+        "update-source"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    }
+  ],
+  "reviewedOperations": 16,
+  "revisionDigest": "158ebd042c173ed94619f2d93692ca6b24c3ac3c236e9870e2b7a0bc435adf97",
+  "schemaVersion": "guard.extension-coverage-report.v1",
+  "unknownOperationBehavior": "review",
+  "upstreamVersion": "0.4.1"
+}

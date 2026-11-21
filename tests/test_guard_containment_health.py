@@ -1,43 +1,25 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+import codex_plugin_scanner.guard.native_execution as native_execution
+import codex_plugin_scanner.guard.native_protection_health as native_protection_health
 import codex_plugin_scanner.guard.runtime.containment_health as containment_health_module
-from codex_plugin_scanner.guard.runtime.containment_contract import (
-    ContainmentBackend,
-    ContainmentPolicy,
-    ContainmentRequest,
-)
-from codex_plugin_scanner.guard.runtime.containment_executor import file_sha256
+from codex_plugin_scanner.guard.runtime.containment_contract import ContainmentBackend
 from codex_plugin_scanner.guard.runtime.containment_health import (
     CONTAINMENT_POLICY_CONTRACT_DIGEST,
     ContainmentHealthEvidence,
     containment_health_signals,
-    containment_health_uncertainties,
     probe_containment_health,
 )
-from codex_plugin_scanner.guard.runtime.effect_contract import UncertaintyKind
-from codex_plugin_scanner.guard.runtime.protection_health_runtime import build_runtime_protection_health
+from codex_plugin_scanner.guard.runtime.protection_health import ProtectionCheckStatus, ProtectionSignal
 
 _NOW = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)
-
-
-class _Health:
-    dropped_event_count: int = 0
-    persistence_error_count: int = 0
-
-
-class _Store:
-    def count_command_activities(self) -> int:
-        return 1
-
-    def get_command_activity_persistence_health(self) -> _Health:
-        return _Health()
 
 
 def _evidence(**overrides: object) -> ContainmentHealthEvidence:
@@ -63,126 +45,98 @@ def _evidence(**overrides: object) -> ContainmentHealthEvidence:
     )
 
 
-def _runtime_payload(evidence: object) -> dict[str, object]:
-    return build_runtime_protection_health(
-        store=_Store(),
-        runtime_state={"last_heartbeat_at": _NOW.isoformat(), "containment_health": evidence},
-        managed_installs=[{"harness": "codex", "active": True}],
-        trust_status={},
-        now=_NOW,
-    )
-
-
-def test_compatible_health_proves_only_the_containment_owned_checks() -> None:
-    evidence = _evidence()
-    signals = containment_health_signals(evidence.to_dict(), now=_NOW)
-
-    assert set(signals) == {
-        "policy_engine",
-        "decision_plane_compatibility",
-        "containment_compatibility",
-        "sandbox",
-    }
-    assert all(signal.status.value == "pass" for signal in signals.values())
-    assert containment_health_uncertainties(evidence.to_dict(), now=_NOW) == ()
-
-    payload = _runtime_payload(evidence.to_dict())
-    checks = cast(list[dict[str, str]], payload["checks"])
-    by_id = {item["check_id"]: item for item in checks}
-    assert by_id["daemon"]["status"] == "pass"
-    assert by_id["containment_compatibility"]["status"] == "pass"
-    assert by_id["sandbox"]["reason_code"] == "containment_backend_enforced"
-    assert payload["state"] == "degraded"
-
-
 def test_unsupported_platform_probe_returns_explicit_fail_closed_health(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     daemon_fingerprint = hashlib.sha256(b"windows-daemon").hexdigest()
     monkeypatch.setattr(containment_health_module.sys, "platform", "win32")
 
-    evidence = probe_containment_health(daemon_fingerprint=daemon_fingerprint)
-    signals = containment_health_signals(evidence.to_dict(), now=datetime.now(timezone.utc))
+    evidence = probe_containment_health(
+        daemon_fingerprint=daemon_fingerprint,
+        guard_home=tmp_path / "guard-home",
+    )
 
     assert evidence.backend is ContainmentBackend.UNSUPPORTED
     assert evidence.backend_digest == hashlib.sha256(b"unavailable:unsupported").hexdigest()
     assert evidence.probe_enforced is False
-    assert {signal.reason_code for signal in signals.values()} == {"unsupported_platform"}
+    # What unsupported evidence proves is the resident's, pinned in
+    # `guard_command::protection_health_facts`.
 
 
-def test_unsupported_reason_takes_precedence_over_probe_failure() -> None:
-    evidence = _evidence(backend=ContainmentBackend.UNSUPPORTED, probe_enforced=False)
-
-    signals = containment_health_signals(evidence.to_dict(), now=_NOW)
-
-    assert {signal.reason_code for signal in signals.values()} == {"unsupported_platform"}
-
-
-@pytest.mark.parametrize(
-    ("overrides", "reason", "uncertainty"),
-    (
-        ({"backend": ContainmentBackend.UNSUPPORTED}, "unsupported_platform", UncertaintyKind.DEGRADED_CONTAINMENT),
-        ({"probe_enforced": False}, "containment_probe_failed", UncertaintyKind.DEGRADED_CONTAINMENT),
-        (
-            {"probe_at": (_NOW - timedelta(minutes=6)).isoformat()},
-            "containment_probe_stale",
-            UncertaintyKind.DEGRADED_CONTAINMENT,
-        ),
-        (
-            {"probe_at": (_NOW + timedelta(seconds=6)).isoformat()},
-            "containment_probe_future",
-            UncertaintyKind.DEGRADED_CONTAINMENT,
-        ),
-        (
-            {"policy_contract_digest": hashlib.sha256(b"other").hexdigest()},
-            "policy_version_mismatch",
-            UncertaintyKind.POLICY_VERSION_MISMATCH,
-        ),
-        (
-            {"runtime_fingerprint": hashlib.sha256(b"drift").hexdigest()},
-            "daemon_runtime_drift",
-            UncertaintyKind.PROTECTION_HEALTH_DEGRADED,
-        ),
-    ),
-)
-def test_faults_fail_closed_and_surface_degraded(
-    overrides: dict[str, object],
-    reason: str,
-    uncertainty: UncertaintyKind,
+def test_containment_signals_are_the_resident_report_rows(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    evidence = _evidence(**overrides)
-    signals = containment_health_signals(evidence.to_dict(), now=_NOW)
-    uncertainties = containment_health_uncertainties(evidence.to_dict(), now=_NOW)
-    payload = _runtime_payload(evidence.to_dict())
+    sent: list[dict[str, object]] = []
 
-    assert all(signal.status.value == "fail" for signal in signals.values())
-    assert {signal.reason_code for signal in signals.values()} == {reason}
-    assert uncertainty in uncertainties
-    assert payload["state"] == "degraded"
-    assert payload["label"] == "Degraded"
+    def report(facts: dict[str, object], *, guard_home: Path) -> dict[str, object]:
+        sent.append({**facts, "guard_home": guard_home})
+        return {
+            "checks": [
+                {"check_id": "harness_hooks", "status": "fail", "reason_code": "no_managed_harness"},
+                {"check_id": "daemon", "status": "unknown", "reason_code": "daemon_heartbeat_unavailable"},
+                {"check_id": "policy_engine", "status": "pass", "reason_code": "policy_engine_compatible"},
+                {"check_id": "sandbox", "status": "fail", "reason_code": "containment_probe_failed"},
+            ]
+        }
 
+    monkeypatch.setattr(native_protection_health, "protection_health_report", report)
+    evidence = _evidence().to_dict()
 
-def test_daemon_drift_has_an_explicit_daemon_failure() -> None:
-    evidence = _evidence(runtime_fingerprint=hashlib.sha256(b"drift").hexdigest())
-    payload = _runtime_payload(evidence.to_dict())
-    checks = cast(list[dict[str, str]], payload["checks"])
-    daemon = next(item for item in checks if item["check_id"] == "daemon")
+    signals = containment_health_signals(evidence, now=_NOW, guard_home=tmp_path)
 
-    assert daemon == {
-        "check_id": "daemon",
-        "status": "fail",
-        "reason_code": "daemon_runtime_drift",
+    assert signals == {
+        "policy_engine": ProtectionSignal(ProtectionCheckStatus.PASS, "policy_engine_compatible"),
+        "sandbox": ProtectionSignal(ProtectionCheckStatus.FAIL, "containment_probe_failed"),
     }
+    assert sent == [
+        {
+            "now": _NOW.isoformat(),
+            "managed_installs": [],
+            "hook_verification": None,
+            "daemon": {"registration_status": None, "last_heartbeat_at": None, "containment_health": evidence},
+            "remembered_rules": None,
+            "runtime_protection": None,
+            "decision_stream": None,
+            "guard_home": tmp_path,
+        }
+    ]
 
 
-def test_missing_or_malformed_health_is_blocking_not_unknown() -> None:
-    for value in (None, {}, {"schema_version": "future"}, ["not", "a", "mapping"]):
-        signals = containment_health_signals(value, now=_NOW)
-        assert all(signal.status.value == "fail" for signal in signals.values())
-        assert containment_health_uncertainties(value, now=_NOW) == (
-            UncertaintyKind.DEGRADED_CONTAINMENT,
-            UncertaintyKind.PROTECTION_HEALTH_DEGRADED,
-        )
+def test_unsupported_platform_survives_an_unreachable_resident_but_never_overrides_it(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def unreachable(facts: dict[str, object], *, guard_home: Path) -> dict[str, object]:
+        raise native_protection_health.NativeProtectionHealthError("native_protection_health_unavailable")
+
+    monkeypatch.setattr(native_protection_health, "protection_health_report", unreachable)
+    evidence = _evidence(
+        backend=ContainmentBackend.UNSUPPORTED,
+        backend_digest=hashlib.sha256(b"unavailable:unsupported").hexdigest(),
+        probe_enforced=False,
+    ).to_dict()
+
+    signals = containment_health_signals(evidence, now=_NOW, guard_home=tmp_path)
+
+    unsupported = ProtectionSignal(ProtectionCheckStatus.FAIL, "unsupported_platform")
+    assert signals == dict.fromkeys(
+        ("containment_compatibility", "decision_plane_compatibility", "policy_engine", "sandbox"), unsupported
+    )
+    with pytest.raises(native_protection_health.NativeProtectionHealthError):
+        _ = containment_health_signals({**evidence, "backend": "macos-sandbox"}, now=_NOW, guard_home=tmp_path)
+
+    def answered(facts: dict[str, object], *, guard_home: Path) -> dict[str, object]:
+        rows = [
+            {"check_id": check_id, "status": "fail", "reason_code": "containment_health_invalid"} for check_id in ids
+        ]
+        return {"checks": rows}
+
+    ids = ("containment_compatibility", "decision_plane_compatibility", "policy_engine", "sandbox")
+    monkeypatch.setattr(native_protection_health, "protection_health_report", answered)
+    invalid = ProtectionSignal(ProtectionCheckStatus.FAIL, "containment_health_invalid")
+    assert containment_health_signals(evidence, now=_NOW, guard_home=tmp_path) == dict.fromkeys(ids, invalid)
 
 
 def test_health_mapping_is_strict_and_privacy_safe(tmp_path: Path) -> None:
@@ -193,17 +147,50 @@ def test_health_mapping_is_strict_and_privacy_safe(tmp_path: Path) -> None:
         _ = ContainmentHealthEvidence.from_mapping({**evidence.to_dict(), "raw_command": "secret"})
 
 
-def test_request_fixture_remains_path_pinned(tmp_path: Path) -> None:
-    output = tmp_path / "output"
-    output.mkdir()
-    request = ContainmentRequest(
-        argv=("/usr/bin/true",),
-        cwd=str(tmp_path.resolve()),
-        environment=(),
-        policy=ContainmentPolicy(str(tmp_path.resolve()), (str(output.resolve()),)),
-        inputs=(),
-        launch_digest=hashlib.sha256(b"launch").hexdigest(),
-        executable_digest=file_sha256("/usr/bin/true"),
-        operation_id="test",
+def test_probe_consumes_resident_evidence_without_recomputing_it(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    daemon_fingerprint = hashlib.sha256(b"resident-daemon").hexdigest()
+    payload = _evidence(
+        backend=ContainmentBackend.LINUX_BWRAP,
+        probe_enforced=True,
+        daemon_fingerprint=daemon_fingerprint,
+        runtime_fingerprint=daemon_fingerprint,
+    ).to_dict()
+    seen: dict[str, object] = {}
+
+    def fake_probe(*, daemon_fingerprint: str, guard_home: Path) -> dict[str, object]:
+        seen["daemon_fingerprint"] = daemon_fingerprint
+        seen["guard_home"] = guard_home
+        return payload
+
+    monkeypatch.setattr(native_execution, "containment_health_probe_native", fake_probe)
+
+    evidence = probe_containment_health(
+        daemon_fingerprint=daemon_fingerprint,
+        guard_home=tmp_path / "guard-home",
     )
-    assert request.argv == ("/usr/bin/true",)
+
+    assert seen == {
+        "daemon_fingerprint": daemon_fingerprint,
+        "guard_home": tmp_path / "guard-home",
+    }
+    assert evidence.to_dict() == payload
+
+
+def test_probe_fails_closed_when_the_resident_cannot_answer(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        native_execution,
+        "containment_health_probe_native",
+        lambda **_kwargs: None,
+    )
+
+    with pytest.raises(RuntimeError, match="native_containment_health_probe_unavailable"):
+        _ = probe_containment_health(
+            daemon_fingerprint=hashlib.sha256(b"no-resident").hexdigest(),
+            guard_home=tmp_path / "guard-home",
+        )

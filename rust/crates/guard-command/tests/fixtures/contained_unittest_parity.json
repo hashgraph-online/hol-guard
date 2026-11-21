@@ -1,0 +1,198 @@
+{
+  "revision": "68558a59d9e8b6d4a8a86ef9de9263de41248068",
+  "source_sha256": "8c3bae7938e624ce0a9752d9afc538ccdfd346074ae81058e1d0e4e6d85f831b",
+  "cases": [
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-m",
+          "unittest"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-m",
+          "unittest",
+          "-q"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "-I",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests",
+          "-p",
+          "test_*.py"
+        ]
+      },
+      "expected": {
+        "value": [
+          "-I"
+        ]
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-IS",
+          "-m",
+          "unittest",
+          "test_calc.CalcTest.test_add",
+          "-v"
+        ]
+      },
+      "expected": {
+        "value": [
+          "-IS"
+        ]
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-I",
+          "-I",
+          "-m",
+          "unittest"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-m",
+          "arbitrary"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-m",
+          "unittest",
+          "prefix<suffix"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-m",
+          "unittest",
+          "prefix>suffix"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-m",
+          "unittest",
+          "prefix|suffix"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-m",
+          "unittest",
+          "prefix&suffix"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-m",
+          "unittest",
+          "prefix;suffix"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-m",
+          "unittest",
+          "prefix`suffix"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-m",
+          "unittest",
+          "prefix$suffix"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    }
+  ]
+}

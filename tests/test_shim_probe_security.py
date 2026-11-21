@@ -8,12 +8,23 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.protect import parse_protect_command
-from codex_plugin_scanner.guard.runtime.package_intent import parse_package_intent
-from codex_plugin_scanner.guard.shim_probe import parse_protect_json_stdout
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
-from tests.shim_execution_helpers import write_fake_manager_script
+from tests.shim_execution_helpers import parse_protect_json_stdout, write_fake_manager_script
+
+
+@pytest.fixture(autouse=True)
+def _native_shim_intents(package_intent_native, native_mcp_probe, monkeypatch) -> None:
+    original = _harness_context
+
+    def enrolled_context(tmp_path: Path, *, workspace_dir: Path | None = None) -> HarnessContext:
+        context = original(tmp_path, workspace_dir=workspace_dir)
+        native_mcp_probe(context.guard_home)
+        return context
+
+    monkeypatch.setitem(globals(), "_harness_context", enrolled_context)
 
 
 def _harness_context(tmp_path: Path, *, workspace_dir: Path | None = None) -> HarnessContext:
@@ -81,8 +92,8 @@ def test_parse_package_intent_treats_pip3_as_pip_install(tmp_path: Path) -> None
 
 
 def test_package_shim_test_requires_approval_gate_when_enabled(tmp_path: Path) -> None:
+    from ci.guard_daemon_harness import GuardDaemonServer
     from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
     from codex_plugin_scanner.guard.store import GuardStore
     from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_json_response, _request
 

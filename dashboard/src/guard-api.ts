@@ -1,3 +1,5 @@
+import { recordBusinessQueueReadResult } from "./business-review-queue-status";
+import { parseNativeDecisionSelector } from "./context-assistance/native-decision-selector";
 import {
   GUARD_ACTION_TYPES,
   GUARD_DECISION_V2_ACTIONS,
@@ -72,6 +74,7 @@ import type {
   SupplyChainSnapshot,
   GuardSettingsPayload,
   GuardSettingsExport,
+  GuardHarnessPosturePatch,
   GuardSettings,
   GuardUpdateScheduleResult,
   GuardDaemonReconnectAuthorization,
@@ -94,6 +97,28 @@ import {
   demoPresentationSettings,
   isGuardDemoMode
 } from "./guard-demo";
+import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
+import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
+import { observeDashboardBuild } from "./dashboard-build";
+import {
+  decisionRefusedSession,
+  decisionSessionCandidates,
+  decisionSessionVerdict,
+  GuardDecisionSignInRequiredError,
+  markAnonymousDecisionRefused,
+  markSessionRefused,
+  rememberLinkedGuardSession,
+  type GuardDecisionSessionVerdict,
+} from "./dashboard-decision-session";
+import { applyHarnessCigarPatch } from "./fleet-app-modes";
+import {
+  pulseEnrollmentBody,
+  pulseSetupRefusalMessage,
+  pulseShowCommandBody,
+  sendWithPulseApproval,
+  type PulseMinTier,
+  type PulseWaitTiming,
+} from "./pulse-approval";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -104,6 +129,8 @@ const GUARD_DAEMON_PORT_RANGE = 1000;
 const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
 const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
 const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
+// A known daemon gets time for its busy retries; only the port scan stays short.
+const GUARD_DAEMON_CANDIDATE_TIMEOUT_MS = 10_000;
 const GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION = 1;
 const GUARD_DAEMON_RECONNECT_NONCE_BYTES = 32;
 const RUNTIME_HEARTBEAT_MAX_AGE_MS = 30_000;
@@ -126,7 +153,11 @@ type RawGuardApprovalRequest = Omit<
   | "recommended_scope_by_action"
   | "scope_restrictions"
   | "task_capability_eligibility"
+  | "extension_recommendation"
+  | "extension_coverage"
 > & {
+  extension_recommendation?: unknown;
+  extension_coverage?: unknown;
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
   policy_action?: unknown;
@@ -151,6 +182,8 @@ type RawGuardInventoryItem = Omit<GuardInventoryItem, "last_policy_action"> & {
 };
 
 type ApprovalRequestListPayload = {
+  native_business_queue_error?: unknown;
+  native_business_queue_checked?: unknown;
   items?: RawGuardApprovalRequest[] | null;
   next_cursor?: unknown;
   total_pending_count?: unknown;
@@ -217,22 +250,47 @@ export class GuardOperationTimeoutError extends Error {
   }
 }
 
-function withLocalProtectionDeadline<T>(
-  operation: (signal: AbortSignal) => Promise<T>,
+/** Pause and restart a local-protection deadline around a wait on the user. */
+export type LocalProtectionDeadline = {
+  /** Stop counting: the operation is waiting on the user, not on Guard. */
+  pause: () => void;
+  /** Count a fresh `timeoutMs` from now: the operation is waiting on Guard again. */
+  restart: () => void;
+};
+
+/**
+ * Run `operation` under a deadline. While a Pulse approval waits on the YID
+ * app the operation pauses the deadline (that wait has its own 16-minute
+ * window and fails closed), and restarts it for the resubmission, so every
+ * call to Guard stays bounded.
+ */
+export function withLocalProtectionDeadline<T>(
+  operation: (signal: AbortSignal, deadline: LocalProtectionDeadline) => Promise<T>,
   timeoutMs: number,
   message: string,
 ): Promise<T> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let expire: () => void = () => undefined;
+  const pause = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
+  const restart = () => {
+    pause();
+    timer = setTimeout(expire, timeoutMs);
+  };
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
+    expire = () => {
       reject(new GuardOperationTimeoutError(message));
       controller.abort();
-    }, timeoutMs);
+    };
   });
-  return Promise.race([Promise.resolve().then(() => operation(controller.signal)), deadline]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer);
-  });
+  restart();
+  return Promise.race([
+    Promise.resolve().then(() => operation(controller.signal, { pause, restart })),
+    deadline,
+  ]).finally(pause);
 }
 
 function fetchLocalProtectionJson(
@@ -241,8 +299,12 @@ function fetchLocalProtectionJson(
   timeoutMs: number,
   message: string,
 ): Promise<{ response: Response; payload: unknown }> {
-  return withLocalProtectionDeadline(async (signal) => {
-    const response = await fetchGuardApi(input, { ...init, signal });
+  return withLocalProtectionDeadline(async (signal, deadline) => {
+    const response = await fetchWithGuardAuth(
+      input,
+      { ...init, signal },
+      { onPending: deadline.pause, onApproved: deadline.restart },
+    );
     const payload = (await response.json().catch(() => null)) as unknown;
     return { response, payload };
   }, timeoutMs, message);
@@ -361,10 +423,57 @@ export function readGuardToken(): string | null {
   }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
-    return guardToken;
+    return rememberLinkedGuardSession(guardToken);
   }
   return readGuardStorage(GUARD_TOKEN_PARAM);
+}
+
+export { GuardDecisionSignInRequiredError, type GuardDecisionSessionVerdict } from "./dashboard-decision-session";
+
+/** The session this tab should decide `requestId` with, or why it cannot. */
+export function guardDecisionSession(requestId: string): GuardDecisionSessionVerdict {
+  if (isGuardDemoMode()) {
+    return { kind: "ready", token: null };
+  }
+  return decisionSessionVerdict(requestId, readGuardToken());
+}
+
+/**
+ * A decision call sent with each session that may decide its request in
+ * turn. A session the daemon refuses is remembered and the next one is
+ * tried; when none is left the card asks the user to sign in. A 401 that
+ * carries an approval-gate code is the gate's answer and is returned as is.
+ */
+async function fetchDecisionWithSession(
+  requestId: string,
+  input: string,
+  init: (guardToken: string | null) => RequestInit,
+): Promise<Response> {
+  const verdict = guardDecisionSession(requestId);
+  if (verdict.kind === "sign_in") {
+    throw new GuardDecisionSignInRequiredError(requestId, verdict.reason);
+  }
+  const candidates = isGuardDemoMode() ? [] : decisionSessionCandidates(requestId, readGuardToken());
+  const tokens: Array<string | null> = candidates.length > 0 ? candidates : [null];
+  for (const token of tokens) {
+    // The tab's own session may be renewed by the first call; every Pulse
+    // continuation then sends the renewed one, not the session it replaced.
+    const tabSession = token !== null && token === readGuardToken();
+    const send = (sendInput: RequestInfo, sendInit?: RequestInit): Promise<Response> =>
+      tabSession
+        ? fetchWithGuardAuthOnce(sendInput, sendInit)
+        : daemonFetch(guardApiInput(sendInput), withGuardAuthForToken(sendInit, token));
+    const response = await sendWithPulseApproval(send, input, init(token));
+    if (!(await decisionRefusedSession(response))) {
+      return response;
+    }
+    if (token === null) {
+      markAnonymousDecisionRefused();
+      throw new GuardDecisionSignInRequiredError(requestId, "no_session");
+    }
+    markSessionRefused(token);
+  }
+  throw new GuardDecisionSignInRequiredError(requestId, "expired");
 }
 
 function saveGuardToken(guardToken: string): void {
@@ -429,9 +538,11 @@ async function probeGuardDaemonHealth(origin: string): Promise<boolean> {
     return false;
   }
   try {
-    const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/healthz`, {
-      redirect: "error",
-    });
+    const { response, payload } = await fetchGuardDaemonCandidateJson(
+      `${candidateOrigin}/healthz`,
+      { redirect: "error" },
+      GUARD_DAEMON_PROBE_TIMEOUT_MS,
+    );
     if (!response.ok) {
       return false;
     }
@@ -447,11 +558,12 @@ async function probeGuardDaemonHealth(origin: string): Promise<boolean> {
 async function fetchGuardDaemonCandidateJson(
   input: RequestInfo,
   init: RequestInit,
+  timeoutMs = GUARD_DAEMON_CANDIDATE_TIMEOUT_MS,
 ): Promise<{ response: Response; payload: unknown }> {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(input, { ...init, signal: controller.signal });
+    const response = await daemonFetch(input, { ...init, signal: controller.signal });
     const payload: unknown = await response.json();
     return { response, payload };
   } finally {
@@ -671,7 +783,7 @@ export async function prepareGuardDaemonReconnect(): Promise<GuardDaemonReconnec
     guardDaemonReconnectDiagnostic = "dashboard_reconnect_prepare_origin_unavailable";
     throw new Error("Guard could not identify the authenticated daemon for a secure reconnect.");
   }
-  let response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+  let response = await daemonFetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: "{}",
@@ -681,7 +793,7 @@ export async function prepareGuardDaemonReconnect(): Promise<GuardDaemonReconnec
     const refreshedToken = await initializeGuardDashboardSessionAtOrigin(daemonOrigin, guardToken);
     if (refreshedToken && refreshedToken !== guardToken) {
       saveGuardToken(refreshedToken);
-      response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+      response = await daemonFetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{}",
@@ -991,6 +1103,64 @@ function withGuardAuth(init?: RequestInit): RequestInit | undefined {
   return withGuardAuthForToken(init, readGuardToken());
 }
 
+// A busy computer can keep Guard's policy check from answering in time. The
+// daemon then refuses the request before acting on it, so sending it again
+// is safe. A refused restart is not busy and is not retried.
+const BUSY_RETRY_DELAYS_MS = [300, 900, 2_000];
+
+async function isBusyRefusal(response: Response): Promise<boolean> {
+  if (response.status !== 503) {
+    return false;
+  }
+  try {
+    const payload: unknown = await response.clone().json();
+    return (
+      isRecord(payload) &&
+      payload["error"] === "native_route_policy_unavailable" &&
+      payload["reason_code"] === undefined
+    );
+  } catch {
+    return false;
+  }
+}
+
+// An abort during the wait rejects the way fetch does, so callers that
+// recover from a timed-out request still see the AbortError.
+function waitForRetry(delayMs: number, signal: AbortSignal | null | undefined): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    function onAbort(): void {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+// Every daemon response names the dashboard bundle it serves; note it so a tab
+// left running an older bundle after a Guard update can load the current one.
+async function daemonFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  let response = await fetch(input, init);
+  observeDashboardBuild(response);
+  const resendable = !(input instanceof Request) && (init?.body == null || typeof init.body === "string");
+  for (const delayMs of resendable ? BUSY_RETRY_DELAYS_MS : []) {
+    if (!(await isBusyRefusal(response))) {
+      break;
+    }
+    await waitForRetry(delayMs, init?.signal);
+    response = await fetch(input, init);
+    observeDashboardBuild(response);
+  }
+  return response;
+}
+
 function withGuardAuthForToken(
   init: RequestInit | undefined,
   guardToken: string | null,
@@ -1006,10 +1176,19 @@ function withGuardAuthForToken(
   };
 }
 
-async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
+export async function fetchWithGuardAuth(
+  input: RequestInfo,
+  init?: RequestInit,
+  pulse?: PulseWaitTiming,
+): Promise<Response> {
+  // Every gated request goes through the Pulse flow when the gate asks for it.
+  return sendWithPulseApproval(fetchWithGuardAuthOnce, input, init, pulse);
+}
+
+async function fetchWithGuardAuthOnce(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
-  const response = await fetch(requestInput, withGuardAuthForToken(init, guardToken));
+  const response = await daemonFetch(requestInput, withGuardAuthForToken(init, guardToken));
   if (response.status !== 401 || !guardToken || input instanceof Request) {
     return response;
   }
@@ -1018,7 +1197,7 @@ async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promi
     return response;
   }
   saveGuardToken(refreshedGuardToken);
-  return fetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
+  return daemonFetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
 }
 
 export async function fetchCommandActivityApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
@@ -1043,12 +1222,65 @@ export async function fetchExtensionControlApi(input: RequestInfo, init?: Reques
   return fetchWithGuardAuth(input, init);
 }
 
+export async function fetchExtensionCatalogV2Api(input: string, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    /^\/v2\/extension-controls\/catalog\/(?:index|permissions|extensions\/command\.[a-z0-9.-]+(?:\/(?:permissions|rules|mcp-tools))?)(?:\?[^#]*)?$/.test(
+      input,
+    );
+  if (!approvedPath) {
+    throw new Error("Invalid extension catalog API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
+/** Partition key for in-memory read caches: one daemon origin and session. */
+export function guardApiCacheScope(): string {
+  return `${readGuardDaemonOrigin() ?? ""}|${readGuardToken() ?? ""}`;
+}
+
 export async function fetchLocalCliApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const approvedPath =
     typeof input === "string" &&
-    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover|provider-actions|provider-workflows|registry-search|registry-setup|refresh-job|skills|mcp-skills))?$/.test(input);
+    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover|forget|provider-actions|provider-workflows|registry-search|registry-setup|refresh-job|skills|mcp-skills))?$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid local CLI API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
+/**
+ * Sponsored extension discovery: authenticated daemon routes only. The
+ * browser never calls Guard Cloud directly (connect-src stays 'self'), and
+ * these fixed paths are the whole allowlist.
+ */
+export async function fetchExtensionDiscoveryApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/discovery\/extensions\/(?:placements|renders|events|settings)$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid extension discovery API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
+/**
+ * Release archive: the daemon projects hol.org's published feed through the
+ * native runtime and serves it locally. The browser never reaches hol.org
+ * (connect-src stays 'self'), and these two paths are the whole allowlist.
+ */
+export async function fetchReleaseFeedApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/releases\/(?:index|release)(?:\?[A-Za-z0-9=&_.-]*)?$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid release feed API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
+export async function fetchPluginUpdatesApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  if (input !== "/v1/plugins/updates" && input !== "/v1/plugins/updates/dismiss") {
+    throw new Error("Invalid plugin updates API path");
   }
   return fetchWithGuardAuth(input, init);
 }
@@ -1072,7 +1304,7 @@ function parseDashboardSessionToken(payload: unknown): string | null {
 
 async function refreshGuardDashboardSession(guardToken: string, signal?: AbortSignal | null): Promise<string | null> {
   try {
-    const response = await fetch(guardApiInput("/v1/initialize"), {
+    const response = await daemonFetch(guardApiInput("/v1/initialize"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1096,6 +1328,10 @@ async function refreshGuardDashboardSession(guardToken: string, signal?: AbortSi
 }
 
 export function guardAwareHref(href: string): string {
+  // An app link such as hol-guard-desktop:// opens outside this browser and never carries the session token.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href) && !/^https?:/i.test(href)) {
+    return href;
+  }
   const guardToken = readGuardToken();
   if (!guardToken) {
     return href;
@@ -1266,6 +1502,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   if (!isRecord(rawPayloadRedacted)) {
     return null;
   }
+  const nativeOrigin = parseNativeDecisionSelector(raw["native_origin_receipt"], harness, eventName);
   return {
     schema_version: schemaVersion,
     action_id: actionId,
@@ -1292,7 +1529,8 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
       ? {}
       : { policy_action: isGuardAction(policyAction) ? policyAction : null }),
     script_name: scriptName,
-    raw_payload_redacted: rawPayloadRedacted
+    raw_payload_redacted: rawPayloadRedacted,
+    ...(nativeOrigin ? { native_origin_receipt: nativeOrigin } : {}),
   };
 }
 
@@ -1446,7 +1684,14 @@ function parseOptionalString(value: unknown): string | null {
 }
 
 export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardApprovalRequest {
-  const { decision_contract_error: rawContractError, ...baseItem } = item;
+  const {
+    decision_contract_error: rawContractError,
+    extension_recommendation: rawExtensionRecommendation,
+    extension_coverage: rawExtensionCoverage,
+    ...baseItem
+  } = item;
+  const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
+  const extensionCoverage = normalizeApprovalExtensionCoverage(rawExtensionCoverage);
   const policyAction = normalizeGuardAction(item.policy_action);
   const decisionV2 = parseDecisionV2(item.decision_v2_json);
   const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
@@ -1544,6 +1789,10 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
     task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : undefined,
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
+    ...(extensionRecommendation !== null && !hasDecisionContractError
+      ? { extension_recommendation: extensionRecommendation }
+      : {}),
+    ...(extensionCoverage !== null && !hasDecisionContractError ? { extension_coverage: extensionCoverage } : {}),
     ...(hasDecisionContractError
       ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
       : {}),
@@ -1565,6 +1814,7 @@ function normalizeApprovalPage(
   payload: ApprovalRequestListPayload,
   statusFallback: GuardApprovalPageStatus = "pending"
 ): GuardApprovalPage {
+  recordBusinessQueueReadResult(payload);
   return {
     items: normalizeApprovalRequests(payload.items),
     next_cursor: isStringOrNull(payload.next_cursor) ? payload.next_cursor : null,
@@ -2225,6 +2475,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
         },
         approval_wait_timeout_seconds: 120,
         approval_surface_policy: "attention-aware",
+        blocked_request_mode: "safe-alternative",
         approval_browser_delay_seconds: 20,
         approval_browser_immediate_severity: "critical",
         telemetry: false,
@@ -2239,6 +2490,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
 export type CloudReviewSettingsStatus = {
   enabled: boolean;
   connected: boolean;
+  reconnect_required: boolean;
   reason: string | null;
   expires_at: string | null;
   workspace_id: string | null;
@@ -2269,10 +2521,43 @@ export async function changeCloudReviewSettings(input: {
   });
 }
 
-export async function updateSettings(settings: Partial<GuardSettings>): Promise<GuardSettingsPayload> {
+function applyHarnessPosturePatch(
+  current: GuardSettings["harness_postures"],
+  patch: GuardHarnessPosturePatch,
+): NonNullable<GuardSettings["harness_postures"]> {
+  const next = { ...(current ?? {}) };
+  for (const [harness, posture] of Object.entries(patch)) {
+    if (posture === null) delete next[harness];
+    else next[harness] = posture;
+  }
+  return next;
+}
+
+export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures" | "harness_cigar" | "context_assistance_diagnostic" | "context_assistance_requested" | "context_assistance_effective_ready" | "cigar_apps"> & {
+  harness_postures?: GuardHarnessPosturePatch;
+  /** Per-app CIGAR patch: `"off"` stops CIGAR for the app, `null` lets it follow CIGAR again. */
+  harness_cigar?: Record<string, "off" | null>;
+  /** The Watch entries in this update get no auto-revert window (an app keeping only CIGAR). */
+  harness_watch_untimed?: boolean;
+};
+
+export async function updateSettings(settings: GuardSettingsUpdate): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
-    return { ...current, settings: { ...current.settings, ...settings } };
+    const { harness_postures: posturePatch, harness_cigar: cigarPatch, harness_watch_untimed: _untimed, ...rest } = settings;
+    return {
+      ...current,
+      settings: {
+        ...current.settings,
+        ...rest,
+        ...(posturePatch === undefined
+          ? {}
+          : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) }),
+        ...(cigarPatch === undefined
+          ? {}
+          : { harness_cigar: applyHarnessCigarPatch(current.settings.harness_cigar, cigarPatch) }),
+      },
+    };
   }
   return readJson<GuardSettingsPayload>("/v1/settings", {
     method: "POST",
@@ -2338,6 +2623,24 @@ export async function resetSettings(proof?: ApprovalGateWriteProof): Promise<Gua
       ...(proof?.approval_totp_code ? { approval_totp_code: proof.approval_totp_code } : {}),
     })
   });
+}
+
+export async function fetchBusinessReviewSummary(
+  requestId: string, signal?: AbortSignal,
+): Promise<import("./business-review-summary").BusinessReviewSummary | null> {
+  if (isGuardDemoMode()) return null;
+  const response = await fetchWithGuardAuth(
+    `/v1/requests/${encodeURIComponent(requestId)}/business-summary`,
+    { signal, cache: "no-store" },
+  );
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) throw new Error("Saved business details are unavailable.");
+  const { parseBusinessReviewSummary } = await import("./business-review-summary");
+  const summary = parseBusinessReviewSummary(await response.json(), requestId);
+  if (!summary) throw new Error("Saved business details are unavailable.");
+  return summary;
 }
 
 export async function fetchRequest(requestId: string): Promise<GuardApprovalRequest> {
@@ -3000,7 +3303,7 @@ export async function revokeApprovalGateCooldown(password: string, totpCode?: st
   if (isGuardDemoMode()) {
     return fetchSettings();
   }
-  const response = await fetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
+  const response = await daemonFetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -3113,7 +3416,7 @@ export async function resolveRequestWithQueueResult(
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
   const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
-  const init = (guardToken: string | null = readGuardToken()): RequestInit => ({
+  const init = (guardToken: string | null): RequestInit => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -3144,7 +3447,7 @@ export async function resolveRequestWithQueueResult(
       ...(input.approval_gate_use_cooldown !== undefined ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {})
     })
   });
-  const response = await fetchGuardApi(path, init());
+  const response = await fetchDecisionWithSession(input.requestId, path, init);
   if (!response.ok) {
     let payload: Record<string, unknown> | null = null;
     try {
@@ -3174,6 +3477,7 @@ export async function bulkAllowReadOnce(input: {
   approval_password?: string;
   approval_totp_code?: string;
   approval_gate_use_cooldown?: boolean;
+  approval_gate_pulse?: boolean;
 }): Promise<BulkAllowReadOnceResult> {
   if (isGuardDemoMode()) {
     return {
@@ -3193,6 +3497,7 @@ export async function bulkAllowReadOnce(input: {
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
       ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
       approval_gate_use_cooldown: input.approval_gate_use_cooldown ?? false,
+      ...(input.approval_gate_pulse === true ? { approval_gate_pulse: true } : {}),
     }),
   });
   return {
@@ -3346,6 +3651,7 @@ export function normalizeGuardUpdateStatus(
     release_channel: isGuardUpdateChannel(value.release_channel)
       ? value.release_channel
       : (fallbackReleaseChannel ?? "stable"),
+    update_mode: value.update_mode === "ask" || value.update_mode === "off" ? value.update_mode : "automatic",
   };
 }
 
@@ -3413,10 +3719,102 @@ export async function scheduleGuardUpdate(
   };
 }
 
+export type GuardDesktopHandoffResult = {
+  handoff_requested: boolean;
+  latest_version: string | null;
+};
+
+/**
+ * Asks the daemon to record an update request for the HOL Guard app. The
+ * dashboard inside the Desktop window cannot call the app updater itself;
+ * Desktop watches for the request and opens its own visible update flow,
+ * which re-verifies the release before installing anything.
+ */
+/** A refusal or failure answered by the daemon: the request reached Guard. */
+export class GuardDesktopHandoffError extends Error {
+  readonly code: string | null;
+  readonly status: number;
+
+  constructor(message: string, code: string | null, status: number) {
+    super(message);
+    this.name = "GuardDesktopHandoffError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export async function requestGuardDesktopHandoff(
+  offeredVersion: string | null = null,
+): Promise<GuardDesktopHandoffResult> {
+  if (isGuardDemoMode()) {
+    return { handoff_requested: false, latest_version: null };
+  }
+  // Bounded: an unanswered request must release the banner into its
+  // failure state instead of disabling its actions forever.
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 10_000);
+  let response: Response;
+  try {
+    response = await fetchWithGuardAuth("/v1/update", {
+      method: "POST",
+      redirect: "error",
+      headers: { "Content-Type": "application/json" },
+      // The version the banner offered: when Guard's own re-check briefly
+      // cannot confirm it, the daemon still hands it to the app, which
+      // re-verifies the release before installing anything.
+      body: JSON.stringify(
+        offeredVersion
+          ? { handoff_to_desktop: true, latest_version: offeredVersion }
+          : { handoff_to_desktop: true },
+      ),
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    const message =
+      stringValue(payload.message) ??
+      stringValue(payload.error) ??
+      `Guard update failed with ${response.status}`;
+    throw new GuardDesktopHandoffError(message, stringValue(payload.error), response.status);
+  }
+  return {
+    handoff_requested: payload.handoff_requested === true,
+    latest_version: stringValue(payload.latest_version),
+  };
+}
+
 export type GuardUpdateChannelProof = {
   approval_password?: string;
   approval_totp_code?: string;
 };
+
+export type GuardUpdateMode = "automatic" | "ask" | "off";
+
+export async function setGuardUpdateMode(
+  mode: GuardUpdateMode,
+  proof?: GuardUpdateChannelProof,
+): Promise<GuardUpdateStatus> {
+  if (isGuardDemoMode()) {
+    return normalizeGuardUpdateStatus({
+      ...(await fetchGuardUpdateStatus()),
+      update_mode: mode,
+    });
+  }
+  const response = await fetchWithGuardAuth("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings: { update_mode: mode }, ...proof }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const value = isRecord(payload) ? payload : {};
+    throw new Error(stringValue(value.message) ?? `Update preference failed with ${response.status}`);
+  }
+  return fetchGuardUpdateStatus();
+}
 
 export async function setGuardUpdateChannel(
   channel: "stable" | "alpha",
@@ -3488,15 +3886,22 @@ export async function retryResume(requestId: string): Promise<GuardCodexResumeRe
     return null;
   }
   const path = `/v1/requests/${encodeURIComponent(requestId)}/resume`;
-  const init = (guardToken: string | null = readGuardToken()): RequestInit => ({
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeadersForToken(guardToken)
-    },
-    body: JSON.stringify({})
-  });
-  const response = await fetchGuardApi(path, init());
+  let response: Response;
+  try {
+    response = await fetchDecisionWithSession(requestId, path, (guardToken) => ({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeadersForToken(guardToken)
+      },
+      body: JSON.stringify({})
+    }));
+  } catch (error) {
+    if (error instanceof GuardDecisionSignInRequiredError) {
+      throw new Error("Sign in to retry resuming: open this request from Guard on this device.");
+    }
+    throw error;
+  }
   if (!response.ok) {
     throw new Error(`Resume retry failed with ${response.status}`);
   }
@@ -4095,26 +4500,33 @@ export async function runPackageAudit(input?: {
   return normalizePackageFirewallAction(payloadBody);
 }
 
+/** How long the dashboard waits for a supply-chain sync before it stops waiting and rechecks status. */
+export const SUPPLY_CHAIN_SYNC_TIMEOUT_MS = 45_000;
+
 export async function runPackageSync(credentials?: {
   approval_password?: string;
   approval_totp_code?: string;
 }): Promise<PackageFirewallActionResponse> {
-  const response = await fetchGuardApi("/v1/supply-chain/sync", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeaders(),
+  const { response, payload: payloadBody } = await fetchLocalProtectionJson(
+    "/v1/supply-chain/sync",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeaders(),
+      },
+      body: JSON.stringify({
+        ...(credentials?.approval_password !== undefined
+          ? { approval_password: credentials.approval_password }
+          : {}),
+        ...(credentials?.approval_totp_code !== undefined
+          ? { approval_totp_code: credentials.approval_totp_code }
+          : {}),
+      }),
     },
-    body: JSON.stringify({
-      ...(credentials?.approval_password !== undefined
-        ? { approval_password: credentials.approval_password }
-        : {}),
-      ...(credentials?.approval_totp_code !== undefined
-        ? { approval_totp_code: credentials.approval_totp_code }
-        : {}),
-    }),
-  });
-  const payloadBody = (await response.json().catch(() => null)) as unknown;
+    SUPPLY_CHAIN_SYNC_TIMEOUT_MS,
+    "Guard Cloud did not answer the intel sync in time. Guard rechecked the feed status; try syncing again if it is still out of date.",
+  );
   if (!response.ok) {
     throw new GuardHarnessActionError(
       response.status,
@@ -4387,9 +4799,10 @@ export async function resolveMcpPolicyRequest(input: {
   approval_password?: string;
   approval_totp_code?: string;
 }): Promise<McpPolicyDecisionResult> {
-  const response = await fetchGuardApi(
+  const response = await fetchDecisionWithSession(
+    input.requestId,
     `/v1/mcp-policy/requests/${encodeURIComponent(input.requestId)}/decision`,
-    {
+    () => ({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -4397,7 +4810,7 @@ export async function resolveMcpPolicyRequest(input: {
         ...(input.approval_password ? { approval_password: input.approval_password } : {}),
         ...(input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}),
       }),
-    },
+    }),
   );
   const payloadBody = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {
@@ -4424,3 +4837,115 @@ export {
   packageWorkbenchEcosystems,
   sortPackageWorkbenchFindings,
 } from "./supply-chain-audit-normalize";
+
+export type GuardPulseEnrollment = {
+  status: "pending";
+  request_id: string;
+  match_code: string;
+  yid_hint: string;
+  decide_by: string;
+};
+
+/** Step 1 of Pulse setup: check the approval password (and authenticator code) only. */
+export async function authorizeApprovalGatePulseSetup(payload: {
+  approval_password: string;
+  approval_totp_code?: string;
+}): Promise<{ status: "authorized"; expires_at: string }> {
+  return readJson("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, step: "authorize" }),
+  });
+}
+
+/**
+ * Send the enrollment request to the YID app. After step 1, the same session
+ * needs only the agent key for 15 minutes.
+ */
+export async function beginApprovalGatePulseEnrollment(payload: {
+  pulse_agent_key: string;
+  min_tier: PulseMinTier;
+}): Promise<GuardSettingsPayload & { pulse_enrollment: GuardPulseEnrollment }> {
+  const response = await fetchWithGuardAuth("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pulseEnrollmentBody(payload.pulse_agent_key, payload.min_tier)),
+  });
+  if (!response.ok) {
+    let code: unknown = null;
+    try {
+      const refused: unknown = await response.clone().json();
+      code = isRecord(refused) ? refused["error"] : null;
+    } catch {
+      code = null;
+    }
+    throw new Error(
+      pulseSetupRefusalMessage(code, payload.min_tier)
+        ?? (await requestErrorMessage(response, `Request failed with ${response.status}`)),
+    );
+  }
+  return (await response.json()) as GuardSettingsPayload & { pulse_enrollment: GuardPulseEnrollment };
+}
+
+/** One bounded poll of a Pulse request. */
+export async function pollApprovalGatePulse(requestId: string): Promise<{ status: "pending" | "approved" | "rejected" | "expired" }> {
+  return readJson("/v1/approval-gate/pulse/poll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ request_id: requestId }),
+  });
+}
+
+/** Finish Pulse setup. The response carries the one-time recovery code. */
+export async function confirmApprovalGatePulseEnrollment(payload: {
+  request_id: string;
+  cooldown_seconds: 0 | 900 | 3600;
+}): Promise<GuardSettingsPayload & { pulse_recovery_code: string }> {
+  return readJson("/v1/approval-gate/pulse/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Return to the approval password. The Pulse layer asks the YID app first;
+ * aborting `signal` stops waiting for it.
+ */
+export async function disableApprovalGatePulse(signal?: AbortSignal): Promise<GuardSettingsPayload> {
+  return readJson("/v1/approval-gate/pulse/disable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+    signal,
+  });
+}
+
+/**
+ * Show or hide the agent's command in the YID app. It is a settings save, so
+ * the Pulse layer asks the YID app first and the approval covers exactly this
+ * change; aborting `signal` stops waiting for it.
+ */
+export async function setApprovalGatePulseShowCommand(
+  show: boolean,
+  signal?: AbortSignal,
+): Promise<GuardSettingsPayload> {
+  return readJson("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify(pulseShowCommandBody(show)),
+    signal,
+  });
+}
+
+/** Lost the YID app: the approval password and the one-time recovery code turn Pulse off. */
+export async function recoverApprovalGatePulse(payload: {
+  approval_password: string;
+  pulse_recovery_code: string;
+}): Promise<GuardSettingsPayload> {
+  return readJson("/v1/approval-gate/pulse/recover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}

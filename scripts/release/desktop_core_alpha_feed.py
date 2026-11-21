@@ -21,6 +21,10 @@ ONEDIR_TREE_ROOT = "hol-guard"
 ONEDIR_LAUNCHER = f"{ONEDIR_TREE_ROOT}/hol-guard"
 MARKER_SCHEMA = "hol-guard-core-attestation.v3"
 _STABLE_TAG = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+_ALPHA_TAG = re.compile(r"^alpha/v(3\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)a[1-9][0-9]*)$")
+ALPHA_VERSION = re.compile(r"^3\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)a[1-9][0-9]*$")
+STABLE_VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+CHANNELS = ("stable", "alpha")
 
 
 def _sha256(path: Path) -> str:
@@ -45,8 +49,55 @@ def _emit(key: str, value: str | bool) -> None:
     print(f"{key}={value}")
 
 
-def discover_release(tags_file: Path, requested_version: str = "") -> None:
-    """Select a Release Please stable tag. The version is not pinned."""
+def _require_channel(channel: str) -> str:
+    if channel not in CHANNELS:
+        raise SystemExit(f"Unsupported Desktop Core release channel: {channel!r}")
+    return channel
+
+
+def validate_request(
+    channel: str, event_name: str, version: str, publication_run_id: str, publication_source_sha: str
+) -> None:
+    """Gate who may ask for a channel. Alpha is explicit dispatch only, never scheduled or backfilled."""
+    if _require_channel(channel) == "stable":
+        return
+    if event_name != "workflow_dispatch":
+        raise SystemExit("Alpha Desktop Core sidecars are published only by explicit dispatch")
+    if ALPHA_VERSION.fullmatch(version) is None:
+        raise SystemExit(f"Alpha Desktop Core requires an exact alpha version, got {version!r}")
+    if re.fullmatch(r"[1-9][0-9]*", publication_run_id) is None:
+        raise SystemExit("Alpha Desktop Core requires the publication run id")
+    if re.fullmatch(r"[0-9a-f]{40}", publication_source_sha) is None:
+        raise SystemExit("Alpha Desktop Core requires the full alpha source commit")
+
+
+def require_prerelease(release_json: Path, tag: str) -> None:
+    """Fail without side effects when the alpha prerelease was retracted or converted."""
+    try:
+        release = json.loads(release_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"Alpha prerelease {tag} is unavailable; it may have been retracted") from error
+    if not isinstance(release, dict) or release.get("tagName") != tag:
+        raise SystemExit(f"Alpha prerelease {tag} is unavailable; it may have been retracted")
+    if release.get("isDraft") is not False or release.get("isPrerelease") is not True:
+        raise SystemExit(f"{tag} is not a published prerelease")
+
+
+def discover_release(tags_file: Path, requested_version: str = "", channel: str = "stable") -> None:
+    """Select a Release Please stable tag, or the one exact requested alpha tag."""
+    if _require_channel(channel) == "alpha":
+        if ALPHA_VERSION.fullmatch(requested_version) is None:
+            raise SystemExit("Alpha Desktop Core discovery requires an exact alpha version")
+        tags = [raw.strip() for raw in tags_file.read_text(encoding="utf-8").splitlines()]
+        if f"alpha/v{requested_version}" not in tags:
+            raise SystemExit(f"Requested alpha Core {requested_version} is not an eligible published prerelease")
+        major, minor = requested_version.split(".")[:2]
+        _emit("available", True)
+        _emit("version", requested_version)
+        _emit("tag", f"alpha/v{requested_version}")
+        _emit("train", f"{major}.{minor}")
+        _emit("branch", "main")
+        return
     candidates: list[tuple[tuple[int, int, int], str, str, str]] = []
     for raw in tags_file.read_text(encoding="utf-8").splitlines():
         tag = raw.strip()
@@ -105,11 +156,18 @@ def verify_bootstrap(payload_file: Path, version: str, subject: str) -> None:
 
 
 def _manifest_expected(
-    binary: Path, *, version: str, source_commit: str, source_tag: str, target: str, minimum_desktop_version: str
+    binary: Path,
+    *,
+    version: str,
+    source_commit: str,
+    source_tag: str,
+    target: str,
+    minimum_desktop_version: str,
+    channel: str = "stable",
 ) -> dict[str, object]:
     return {
         "schema": MANIFEST_SCHEMA,
-        "channel": "stable",
+        "channel": _require_channel(channel),
         "version": version,
         "sourceCommit": source_commit,
         "sourceTag": source_tag,
@@ -235,10 +293,11 @@ def _onedir_manifest_expected(
     source_tag: str,
     target: str,
     minimum_desktop_version: str,
+    channel: str = "stable",
 ) -> dict[str, object]:
     return {
         "schema": ONEDIR_MANIFEST_SCHEMA,
-        "channel": "stable",
+        "channel": _require_channel(channel),
         "version": version,
         "sourceCommit": source_commit,
         "sourceTag": source_tag,
@@ -361,6 +420,16 @@ def main() -> int:
     discover = subparsers.add_parser("discover-release")
     discover.add_argument("--tags", type=Path, required=True)
     discover.add_argument("--version", default="")
+    discover.add_argument("--channel", choices=CHANNELS, default="stable")
+    request = subparsers.add_parser("validate-request")
+    request.add_argument("--channel", required=True)
+    request.add_argument("--event-name", required=True)
+    request.add_argument("--version", default="")
+    request.add_argument("--publication-run-id", default="")
+    request.add_argument("--publication-source-sha", default="")
+    prerelease = subparsers.add_parser("require-prerelease")
+    prerelease.add_argument("--release-json", type=Path, required=True)
+    prerelease.add_argument("--tag", required=True)
     inspect = subparsers.add_parser("inspect-assets")
     inspect.add_argument("--assets", type=Path, required=True)
     inspect.add_argument("--base", required=True)
@@ -373,6 +442,7 @@ def main() -> int:
         _asset_arguments(command)
         command.add_argument("--manifest", type=Path, required=True)
         command.add_argument("--minimum-desktop-version", required=True)
+        command.add_argument("--channel", choices=CHANNELS, default="stable")
     for name in ("create-onedir-manifest", "validate-onedir-manifest"):
         command = subparsers.add_parser(name)
         command.add_argument("--archive", type=Path, required=True)
@@ -380,6 +450,7 @@ def main() -> int:
         _release_identity_arguments(command)
         command.add_argument("--manifest", type=Path, required=True)
         command.add_argument("--minimum-desktop-version", required=True)
+        command.add_argument("--channel", choices=CHANNELS, default="stable")
     create_marker_parser = subparsers.add_parser("create-marker")
     _marker_arguments(create_marker_parser)
     create_marker_parser.add_argument("--workflow-run", required=True)
@@ -387,7 +458,13 @@ def main() -> int:
     _marker_arguments(validate_marker_parser)
     args = parser.parse_args()
     if args.command == "discover-release":
-        discover_release(args.tags, args.version)
+        discover_release(args.tags, args.version, args.channel)
+    elif args.command == "validate-request":
+        validate_request(
+            args.channel, args.event_name, args.version, args.publication_run_id, args.publication_source_sha
+        )
+    elif args.command == "require-prerelease":
+        require_prerelease(args.release_json, args.tag)
     elif args.command == "inspect-assets":
         inspect_assets(args.assets, args.base)
     elif args.command == "verify-bootstrap":
@@ -399,6 +476,7 @@ def main() -> int:
             "source_tag": args.source_tag,
             "target": args.target,
             "minimum_desktop_version": args.minimum_desktop_version,
+            "channel": args.channel,
         }
         (create_manifest if args.command == "create-manifest" else validate_manifest)(
             args.base, args.manifest, **kwargs
@@ -410,6 +488,7 @@ def main() -> int:
             "source_tag": args.source_tag,
             "target": args.target,
             "minimum_desktop_version": args.minimum_desktop_version,
+            "channel": args.channel,
         }
         (create_onedir_manifest if args.command == "create-onedir-manifest" else validate_onedir_manifest)(
             args.archive, args.tree, args.manifest, **kwargs

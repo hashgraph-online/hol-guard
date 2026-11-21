@@ -36,7 +36,7 @@ fn apply_post_tool_policy(
     )
 }
 
-fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
+pub(crate) fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
     EffectiveNativePolicyV3 {
         protection_posture: "protected".into(),
         security_level: "balanced".into(),
@@ -58,7 +58,7 @@ fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
     }
 }
 
-fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
+pub(crate) fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
     PolicySnapshotV3 {
         schema: POLICY_SNAPSHOT_SCHEMA.into(),
         version: 3,
@@ -77,6 +77,7 @@ fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
         },
         effective_policy: policy,
         command_extensions: None,
+        business_policy: None,
         issued_at_ms: 1,
         expires_at_ms: 2,
         integrity: SnapshotIntegrityV3 {
@@ -106,10 +107,16 @@ fn post_request(payload: Value) -> NativeHookRequestV1 {
 #[path = "policy_enforcement_observed_mcp_tests.rs"]
 mod observed_mcp;
 
+#[path = "policy_enforcement_containment_floor_tests.rs"]
+mod containment_floor;
+
 #[path = "policy_enforcement_codex_budget_tests.rs"]
 mod codex_budget;
 
-fn generic_result(minimum_action: &str) -> PreToolResultV1 {
+#[path = "policy_enforcement_omp_goal_tests.rs"]
+mod omp_goal;
+
+pub(super) fn generic_result(minimum_action: &str) -> PreToolResultV1 {
     PreToolResultV1 {
         schema: "guard-pre-tool-result.v1".into(),
         version: 1,
@@ -196,14 +203,54 @@ fn prompt_risk_floor_remains_for_unproven_prompt_intent() {
     configured
         .risk_actions
         .insert("prompt_injection".into(), "require-reapproval".into());
-    let result = apply_pre_tool_policy(
-        &snapshot(configured),
-        &json!({"hook_event_name": "UserPromptSubmit", "prompt": "Run an unknown action."}),
-        unknown,
-    )
-    .unwrap();
+    let mut detected = unknown.clone();
+    detected.prompt_risk_classes =
+        vec![guard_contracts::NativePromptRiskClassV1::PromptInjectionIntent];
+    let payload =
+        json!({"hook_event_name": "UserPromptSubmit", "prompt": "Run an unknown action."});
+    let injection =
+        apply_pre_tool_policy(&snapshot(configured.clone()), &payload, detected).unwrap();
+    assert!(
+        injection
+            .reason
+            .contains("asks to override or reveal trusted instructions"),
+        "{}",
+        injection.reason
+    );
+    let result = apply_pre_tool_policy(&snapshot(configured), &payload, unknown).unwrap();
     assert_eq!(result.minimum_action, "require-reapproval");
     assert_eq!(result.decision, "deny");
+    assert!(
+        result.reason.contains("did not send this prompt"),
+        "{}",
+        result.reason
+    );
+    assert!(
+        !result
+            .reason
+            .contains("asks to override or reveal trusted instructions"),
+        "{}",
+        result.reason
+    );
+    assert!(
+        result
+            .reason
+            .contains("uses wording Guard holds for review"),
+        "{}",
+        result.reason
+    );
+    assert!(
+        result.reason.contains("Nothing is waiting for approval"),
+        "{}",
+        result.reason
+    );
+    assert!(
+        result
+            .reason
+            .contains("hol-guard settings set risk prompt_injection"),
+        "{}",
+        result.reason
+    );
 }
 
 #[test]
@@ -286,6 +333,7 @@ fn observe_pre_policy_floor_is_non_blocking_but_intrinsic_block_is_hard() {
     .unwrap();
     assert_eq!(policy_only.minimum_action, "warn");
     assert_eq!(policy_only.decision, "allow");
+    assert_eq!(policy_only.reason_code, "native_policy_observed_floor");
 
     let intrinsic = apply_pre_tool_policy(
         &observed_snapshot,
@@ -399,6 +447,21 @@ fn prompt_risk_classes_reject_non_prompt_duplicate_and_unordered_evidence() {
         "native_prompt_risk_classes_invalid"
     );
 }
-
+#[path = "policy_enforcement_floor_cause_tests.rs"]
+mod floor_cause;
+#[path = "policy_enforcement_github_tests.rs"]
+mod github_tests;
+#[path = "policy_enforcement_observe_tests.rs"]
+mod observe_tests;
+#[path = "policy_enforcement_omp_eval_commit_output_tests.rs"]
+mod omp_eval_commit_output_tests;
+#[path = "policy_enforcement_omp_eval_output_tests.rs"]
+mod omp_eval_output_tests;
+#[path = "policy_enforcement_omp_github_output_tests.rs"]
+mod omp_github_output_tests;
 #[path = "policy_enforcement_post_tool_tests.rs"]
 mod post_tool_tests;
+#[path = "policy_enforcement_task_schema_tests.rs"]
+mod task_schema_tests;
+#[path = "policy_enforcement_yield_result_tests.rs"]
+mod yield_result_tests;

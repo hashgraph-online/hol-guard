@@ -1,0 +1,93 @@
+{
+  "activation": "opt-in",
+  "description": "Conservative operation knowledge compiled from a contributor inventory.",
+  "homepage": "https://github.com/yunfeizhu/mcp-mail-server",
+  "icon": {
+    "kind": "none"
+  },
+  "id": "mcp.mail-server",
+  "launch": {
+    "command": "npx",
+    "kind": "package-launcher",
+    "package": "mcp-mail-server"
+  },
+  "name": "mcp-mail-server",
+  "publisher": {
+    "displayName": "zhuyunfei",
+    "id": "community.yunfeizhu"
+  },
+  "referenceUrls": [
+    "https://github.com/yunfeizhu/mcp-mail-server"
+  ],
+  "riskClasses": [
+    "execution"
+  ],
+  "saferAlternatives": [
+    "Inspect the exact target and required permissions before running this operation."
+  ],
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "tools": [
+    {
+      "name": "check_connection",
+      "state": "inherit"
+    },
+    {
+      "name": "continue_email_thread",
+      "state": "inherit"
+    },
+    {
+      "name": "delete_message",
+      "state": "review"
+    },
+    {
+      "name": "delete_messages",
+      "state": "review"
+    },
+    {
+      "name": "find_unreplied_messages",
+      "state": "inherit"
+    },
+    {
+      "name": "get_message",
+      "state": "inherit"
+    },
+    {
+      "name": "get_messages",
+      "state": "inherit"
+    },
+    {
+      "name": "list_mailboxes",
+      "state": "allow"
+    },
+    {
+      "name": "move_message",
+      "state": "inherit"
+    },
+    {
+      "name": "move_messages",
+      "state": "inherit"
+    },
+    {
+      "name": "reply_to_email",
+      "state": "inherit"
+    },
+    {
+      "name": "save_attachment",
+      "state": "inherit"
+    },
+    {
+      "name": "search_messages",
+      "state": "allow"
+    },
+    {
+      "name": "send_email",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "trustClass": "external",
+  "version": "1.0.0"
+}

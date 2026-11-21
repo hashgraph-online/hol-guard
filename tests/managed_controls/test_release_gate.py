@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.ci.managed_controls_release_gate import validate_release_gate
+from scripts.ci.managed_controls_release_gate import CAPABILITY_MODULE, validate_release_gate
 
 CAPABILITIES = {
     "extension-catalog.v1",
@@ -21,7 +21,7 @@ def _write_fixture(root: Path) -> Path:
     batch_directory = root / "docs/guard/managed-controls/batches"
     batch_directory.mkdir(parents=True)
     (root / "evidence.txt").write_text("verified\n", encoding="utf-8")
-    capability_path = root / "src/codex_plugin_scanner/guard/runtime/extension_catalog_sync.py"
+    capability_path = root / CAPABILITY_MODULE
     capability_path.parent.mkdir(parents=True)
     capability_path.write_text(
         f"MANAGED_CONTROLS_RUNTIME_CAPABILITIES = {tuple(sorted(CAPABILITIES))!r}\n",
@@ -148,7 +148,7 @@ def test_release_gate_rejects_non_contiguous_task_ranges(tmp_path: Path) -> None
 
 def test_release_gate_reads_production_runtime_capability_advertisement(tmp_path: Path) -> None:
     directory = _write_fixture(tmp_path)
-    capability_path = tmp_path / "src/codex_plugin_scanner/guard/runtime/extension_catalog_sync.py"
+    capability_path = tmp_path / CAPABILITY_MODULE
     capability_path.write_text(
         "# extension-catalog.v1 extension-control-layer.v1 "
         "policy-extension-targets.v1 managed-controls-atomic-apply.v1\n"
@@ -161,7 +161,7 @@ def test_release_gate_reads_production_runtime_capability_advertisement(tmp_path
 
 def test_release_gate_reports_missing_capability_module(tmp_path: Path) -> None:
     directory = _write_fixture(tmp_path)
-    capability_path = tmp_path / "src/codex_plugin_scanner/guard/runtime/extension_catalog_sync.py"
+    capability_path = tmp_path / CAPABILITY_MODULE
     capability_path.unlink()
     with pytest.raises(SystemExit, match="missing capability module"):
         validate_release_gate(tmp_path, directory)

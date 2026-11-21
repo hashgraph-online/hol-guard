@@ -8,6 +8,9 @@ rerun `hol-guard connect` while review items stopped syncing.
 
 from __future__ import annotations
 
+import base64
+import email.message
+import hashlib
 import json
 import urllib.error
 import urllib.parse
@@ -67,14 +70,13 @@ class _SuccessResponse:
 
 
 def _invalid_grant_http_error() -> urllib.error.HTTPError:
+    return _oauth_error_http_error("invalid_grant", "The grant is missing, expired, or already consumed.")
+
+
+def _oauth_error_http_error(error: str, description: str) -> urllib.error.HTTPError:
     class _ErrorResponse:
         def read(self) -> bytes:
-            return json.dumps(
-                {
-                    "error": "invalid_grant",
-                    "error_description": "The grant is missing, expired, or already consumed.",
-                }
-            ).encode("utf-8")
+            return json.dumps({"error": error, "error_description": description}).encode("utf-8")
 
         def close(self) -> None:
             return None
@@ -274,7 +276,6 @@ def test_invalid_grant_retry_persists_and_returns_effective_credentials(tmp_path
 
 
 def _rate_limited_http_error(retry_after: str) -> urllib.error.HTTPError:
-    import email.message
 
     class _ErrorResponse:
         def read(self) -> bytes:
@@ -297,6 +298,16 @@ def _rate_limited_http_error(retry_after: str) -> urllib.error.HTTPError:
         hdrs=headers,
         fp=_ErrorResponse(),
     )
+
+
+def _circuit_fingerprint(store: GuardStore, refresh_grant: str) -> str:
+    """The circuit's PBKDF2 fingerprint of a grant under the stored salt, minting one if absent."""
+    payload = store.get_sync_payload("guard_oauth_refresh_circuit_fingerprint_salt")
+    if not isinstance(payload, dict) or not isinstance(payload.get("salt"), str):
+        payload = {"salt": base64.b64encode(bytes(range(32))).decode("ascii")}
+        store.set_sync_payload("guard_oauth_refresh_circuit_fingerprint_salt", payload, guard_runner_module._now())
+    salt = base64.b64decode(str(payload["salt"]))
+    return hashlib.pbkdf2_hmac("sha256", refresh_grant.encode("utf-8"), salt, 600_000).hex()[:32]
 
 
 def _oauth_circuit_state(store: GuardStore) -> dict[str, object]:
@@ -351,10 +362,7 @@ def test_circuit_probe_extends_backoff_geometrically(tmp_path, monkeypatch) -> N
     store = _store_with_oauth_credentials(tmp_path)
     credentials = store.get_oauth_local_credentials(allow_primary=True)
     assert credentials is not None
-    fingerprint = guard_runner_module._oauth_refresh_circuit_fingerprint(
-        str(credentials["refresh_token"]),
-        guard_runner_module._oauth_refresh_circuit_salt(store),
-    )
+    fingerprint = _circuit_fingerprint(store, str(credentials["refresh_token"]))
     past = "2026-06-01T00:00:00+00:00"
     store.set_sync_payload(
         "guard_oauth_refresh_circuit",
@@ -501,9 +509,7 @@ def test_rate_limit_circuit_fingerprints_reloaded_token(tmp_path, monkeypatch) -
 
     assert seen_tokens == ["refresh-token-1", "refresh-token-2"]
     state = _oauth_circuit_state(store)
-    assert state["refresh_token_fingerprint"] == guard_runner_module._oauth_refresh_circuit_fingerprint(
-        "refresh-token-2", guard_runner_module._oauth_refresh_circuit_salt(store)
-    )
+    assert state["refresh_token_fingerprint"] == _circuit_fingerprint(store, "refresh-token-2")
 
 
 def test_fresh_peer_credentials_clear_needs_reauthorization(tmp_path, monkeypatch) -> None:

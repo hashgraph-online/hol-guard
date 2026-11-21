@@ -1,10 +1,11 @@
 import { useCallback } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { SectionLabel } from "./approval-center-primitives";
-import type { ApprovalScopeChoice } from "./approval-scopes";
+import { scopeChoiceWithDuration, type ApprovalScopeChoice } from "./approval-scopes";
+import { retryWindowText } from "./approval-retry-guidance";
 import type { DecisionScope } from "./guard-types";
 
-type ReviewScopeControlsProps = {
+export type ReviewScopeControlsProps = {
   commonScopeOptions: ApprovalScopeChoice[];
   broaderScopeOptions: ApprovalScopeChoice[];
   advancedScopeOptions: ApprovalScopeChoice[];
@@ -12,37 +13,51 @@ type ReviewScopeControlsProps = {
   hasAllowScope: boolean;
   taskCapabilityCopy: string | null;
   exactActionPersistenceEligible: boolean;
+  versionBoundScript?: boolean;
   rememberExactAction: boolean;
+  /** One-time approvals of this request never let the agent's next call through. */
+  oneTimeRetryBlocked?: boolean;
+  /** Minutes a one-time approval stays usable for a retry. */
+  retryWindowMinutes?: number;
   allowScope: DecisionScope;
   blockScope: DecisionScope;
   onAllowScopeChange: (scope: DecisionScope) => void;
   onBlockScopeChange: (scope: DecisionScope) => void;
   onRememberExactActionChange: (checked: boolean) => void;
+  /** Drop the heading and outer spacing, for controls that sit inside another disclosure. */
+  bare?: boolean;
 };
 
 export function ReviewScopeControls(props: ReviewScopeControlsProps) {
   return (
-    <div className="mt-6 space-y-2">
-      <SectionLabel>Approval scope</SectionLabel>
+    <div className={props.bare === true ? "space-y-2" : "mt-6 space-y-2"}>
+      {props.bare !== true && <SectionLabel>Approval scope</SectionLabel>}
       {!props.hasAllowScope && (
         <p className="text-sm text-brand-attention" role="status">
-          This action cannot be approved under its current Guard policy.
+          {props.oneTimeRetryBlocked
+            ? "Guard cannot bind this app's retry to the reviewed version. Execution approval is unavailable."
+            : "This action cannot be approved under its current Guard policy."}
         </p>
       )}
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Allow scope selection">
-        {props.commonScopeOptions.map((choice) => (
-          <ScopeChoiceButton
-            key={choice.value}
-            choice={choice}
-            checked={props.allowScope === choice.value}
-            onScopeChange={props.onAllowScopeChange}
-          />
-        ))}
-      </div>
+      {props.commonScopeOptions.length > 0 && (
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Allow scope selection">
+          {props.commonScopeOptions.map((choice) => (
+            <ScopeChoiceButton
+              key={choice.value}
+              choice={scopeChoiceWithDuration(choice, props.rememberExactAction && props.exactActionPersistenceEligible)}
+              checked={props.allowScope === choice.value}
+              onScopeChange={props.onAllowScopeChange}
+            />
+          ))}
+        </div>
+      )}
       {props.exactActionPersistenceEligible && props.allowScope === "artifact" && (
         <ExactActionPersistenceChoice
           checked={props.rememberExactAction}
           onChange={props.onRememberExactActionChange}
+          oneTimeRetryBlocked={props.oneTimeRetryBlocked === true}
+          retryWindowMinutes={props.retryWindowMinutes ?? 15}
+          versionBoundScript={props.versionBoundScript === true}
         />
       )}
       {props.broaderScopeOptions.length > 0 && (
@@ -115,7 +130,13 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
   );
 }
 
-function ExactActionPersistenceChoice(props: { checked: boolean; onChange: (checked: boolean) => void }) {
+function ExactActionPersistenceChoice(props: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  oneTimeRetryBlocked: boolean;
+  retryWindowMinutes: number;
+  versionBoundScript: boolean;
+}) {
   const handleOnce = useCallback(() => props.onChange(false), [props.onChange]);
   const handleAlways = useCallback(() => props.onChange(true), [props.onChange]);
 
@@ -123,7 +144,7 @@ function ExactActionPersistenceChoice(props: { checked: boolean; onChange: (chec
     <fieldset className="rounded-lg border border-brand-blue/20 bg-brand-blue/[0.03] p-3">
       <legend className="px-1 text-sm font-semibold text-brand-dark">How long should Guard allow it?</legend>
       <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className={exactActionChoiceClassName(!props.checked)}>
+        {!props.oneTimeRetryBlocked && <label className={exactActionChoiceClassName(!props.checked)}>
           <input
             type="radio"
             name="exact-action-approval-duration"
@@ -132,9 +153,13 @@ function ExactActionPersistenceChoice(props: { checked: boolean; onChange: (chec
             onChange={handleOnce}
             className="sr-only"
           />
-          <span className="block text-sm font-semibold text-brand-dark">This time</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">Retry within 15 minutes.</span>
-        </label>
+          <span className="block text-sm font-semibold text-brand-dark">
+            {props.versionBoundScript ? "Run once" : "This time"}
+          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {`Retry within ${retryWindowText(props.retryWindowMinutes)}.`}
+          </span>
+        </label>}
         <label className={exactActionChoiceClassName(props.checked)}>
           <input
             type="radio"
@@ -144,8 +169,14 @@ function ExactActionPersistenceChoice(props: { checked: boolean; onChange: (chec
             onChange={handleAlways}
             className="sr-only"
           />
-          <span className="block text-sm font-semibold text-brand-dark">Always allow exact action</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">Changed commands still need review.</span>
+          <span className="block text-sm font-semibold text-brand-dark">
+            {props.versionBoundScript ? "Always allow this version in this project" : "Always allow exact action"}
+          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {props.versionBoundScript
+              ? "Guard checks code, arguments, dependencies, and policy before every run. Changes need review."
+              : "Changed commands still need review."}
+          </span>
         </label>
       </div>
     </fieldset>
@@ -183,8 +214,15 @@ function ScopeChoiceButton(props: {
   );
 }
 
-export function allowButtonLabel(scope: DecisionScope): string {
+export function allowButtonLabel(
+  scope: DecisionScope,
+  versionBoundScript = false,
+  persistExactAction = false,
+): string {
   if (scope === "artifact") {
+    if (versionBoundScript) {
+      return persistExactAction ? "Always allow this version in this project" : "Run once";
+    }
     return "Allow just this once";
   }
   if (scope === "workspace") {

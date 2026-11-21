@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.cloud_review_settings import cloud_review_settings_status
+from codex_plugin_scanner.guard.cloud_control.cloud_review_settings import cloud_review_settings_status
 from codex_plugin_scanner.guard.runtime.cloud_review_event_delivery import _normalize_response
 from tests.guard_exact_cloud_review_support import connected_exact_review_store
 

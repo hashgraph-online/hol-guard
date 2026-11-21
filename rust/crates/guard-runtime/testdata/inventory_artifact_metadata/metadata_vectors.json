@@ -1,0 +1,133 @@
+{
+  "home_dir": "/nonexistent-agent/home",
+  "workspace_dir": "/nonexistent-agent/work",
+  "cwd": "/nonexistent-agent/work",
+  "vectors": [
+    {
+      "name": "empty",
+      "artifact": "{\"metadata\": {}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "non_dict_metadata",
+      "artifact": "{\"metadata\": {}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "string_metadata",
+      "artifact": "{\"metadata\": {}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "scalars",
+      "artifact": "{\"metadata\": {\"n\": 3, \"f\": 1.5, \"big\": 1000000000000000000000000000000, \"neg\": -7, \"t\": true, \"f2\": false, \"none\": null}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"n\":3,\"f\":1.5,\"big\":1000000000000000000000000000000,\"neg\":-7,\"t\":true,\"f2\":false,\"none\":null,\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "nested",
+      "artifact": "{\"metadata\": {\"outer\": {\"inner\": [\"/nonexistent-agent/home/x\", [\"/nonexistent-agent/work/y\", \"rel/z\"], {\"deep\": \"/opt/tool/bin\"}]}}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"outer\":{\"inner\":[\"{home}/x\",[\"{workspace}/y\",\"rel/z\"],{\"deep\":\"bin\"}]},\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "paths",
+      "artifact": "{\"metadata\": {\"home\": \"/nonexistent-agent/home/.config/app.json\", \"work\": \"/nonexistent-agent/work/src/main.py\", \"outside\": \"/var/lib/thing/data.db\", \"relative\": \"src/app.py\", \"home_itself\": \"/nonexistent-agent/home\", \"dotdot\": \"/nonexistent-agent/home/../other/file\"}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"home\":\"{home}/.config/app.json\",\"work\":\"{workspace}/src/main.py\",\"outside\":\"data.db\",\"relative\":\"src/app.py\",\"home_itself\":\"{home}/.\",\"dotdot\":\"file\",\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "urls",
+      "artifact": "{\"metadata\": {\"endpoint\": \"https://user:pw@api.example.com:8443/v1?token=abc&x=1#frag\", \"ws\": \"ws://127.0.0.1:9000/socket?api_key=k\", \"bad\": \"http://[::1/x\", \"plain\": \"mailto://someone\"}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"endpoint\":\"https://api.example.com:8443/v1?token=redacted&x=1#frag\",\"ws\":\"ws://127.0.0.1:9000/socket?api_key=redacted\",\"bad\":\"malformed_url_redacted\",\"plain\":\"mailto://someone\",\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "sensitive",
+      "artifact": "{\"metadata\": {\"token\": \"abc\", \"apiKey\": true, \"api-key\": false, \"\\u017fecret\": \"s\", \"evidenceAuthority\": \"local\", \"EVIDENCEAUTHORITY\": \"local\", \"password\": {\"nested\": \"x\"}, \"authHeader\": [\"a\"], \"credentials\": null, \"bearer\": 5}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"token\":\"present_redacted\",\"apiKey\":true,\"api-key\":false,\"ſecret\":\"present_redacted\",\"password\":\"present_redacted\",\"authHeader\":\"present_redacted\",\"credentials\":\"present_redacted\",\"bearer\":\"present_redacted\",\"unverifiedAdapterEvidence\":{\"source\":\"adapter_metadata\",\"verificationStatus\":\"unverified\",\"affectsTrustScore\":false,\"trustClaims\":{\"evidenceAuthority\":\"local\",\"EVIDENCEAUTHORITY\":\"local\"}},\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "trust_keys",
+      "artifact": "{\"metadata\": {\"trustScore\": 90, \"verified\": true, \"Trust_Status\": \"ok\", \"attestation\": {\"sig\": \"x\"}, \"signature\": \"abc\", \"\\u212aeyId\": \"k\", \"trust-attestation-x\": {\"a\": 1}, \"name\": \"server\", \"affects_v4_score\": true, \"trustLayers\": [{\"id\": 1, \"signature\": \"s\", \"publicKey\": \"p\"}]}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"name\":\"server\",\"unverifiedAdapterEvidence\":{\"source\":\"adapter_metadata\",\"verificationStatus\":\"unverified\",\"affectsTrustScore\":false,\"trustClaims\":{\"trustScore\":90,\"verified\":true,\"Trust_Status\":\"ok\",\"affects_v4_score\":true,\"trustLayers\":[{\"id\":1}]}},\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "proof_keys",
+      "artifact": "{\"metadata\": {\"verification\": {\"keyId\": \"k\", \"payloadHash\": \"h\", \"signedAt\": \"t\", \"status\": \"ok\", \"nested\": {\"fingerprintSha256\": \"f\", \"keep\": 1}}, \"publicKey\": \"pk\", \"privateKeyRef\": \"x\", \"label\": \"a\"}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"label\":\"a\",\"unverifiedAdapterEvidence\":{\"source\":\"adapter_metadata\",\"verificationStatus\":\"unverified\",\"affectsTrustScore\":false,\"trustClaims\":{\"verification\":{\"status\":\"ok\",\"nested\":{\"keep\":1}}}},\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "existing_evidence_valid",
+      "artifact": "{\"metadata\": {\"unverifiedAdapterEvidence\": {\"source\": \"adapter_metadata\", \"verificationStatus\": \"unverified\", \"trustClaims\": {\"trustScore\": 5, \"signature\": \"drop\", \"verified\": {\"attestation\": \"x\", \"ok\": true}}}, \"trustScore\": 7}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"unverifiedAdapterEvidence\":{\"source\":\"adapter_metadata\",\"verificationStatus\":\"unverified\",\"affectsTrustScore\":false,\"trustClaims\":{\"trustScore\":7,\"signature\":\"drop\",\"verified\":{\"ok\":true}}},\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "existing_evidence_valid_only",
+      "artifact": "{\"metadata\": {\"unverifiedAdapterEvidence\": {\"source\": \"adapter_metadata\", \"verificationStatus\": \"unverified\", \"trustClaims\": {\"a\": 1}}}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"unverifiedAdapterEvidence\":{\"source\":\"adapter_metadata\",\"verificationStatus\":\"unverified\",\"affectsTrustScore\":false,\"trustClaims\":{\"a\":1}},\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "existing_evidence_invalid",
+      "artifact": "{\"metadata\": {\"unverifiedAdapterEvidence\": {\"source\": \"other\", \"verificationStatus\": \"unverified\", \"trustClaims\": {\"trustScore\": 5}}, \"name\": \"x\"}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"name\":\"x\",\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "existing_evidence_bad_claims",
+      "artifact": "{\"metadata\": {\"unverifiedAdapterEvidence\": {\"source\": \"adapter_metadata\", \"verificationStatus\": \"unverified\", \"trustClaims\": [\"x\"]}}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "fields_present",
+      "artifact": "{\"metadata\": {\"name\": \"s\"}, \"artifact_type\": \"mcp_server\", \"config_path\": \"/nonexistent-agent/home/.cursor/mcp.json\", \"command\": \"node /nonexistent-agent/home/srv/index.js --token secret https://h.example.com/?password=p\", \"url\": \"https://api.example.com/mcp?apikey=1\", \"transport\": \"stdio\"}",
+      "expected": "{\"name\":\"s\",\"configPath\":\"{home}/.cursor/mcp.json\",\"command\":\"node {home}/srv/index.js --token redacted https://h.example.com/?password=redacted\",\"url\":\"https://api.example.com/mcp?apikey=redacted\",\"endpointHostClass\":\"remote_public\",\"transport\":\"stdio\",\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "fields_workspace",
+      "artifact": "{\"metadata\": {}, \"artifact_type\": \"mcp_server\", \"config_path\": \"/nonexistent-agent/work/.mcp.json\", \"command\": \"/usr/local/bin/tool --api-key abc\", \"url\": \"http://10.0.0.5:8080/\", \"transport\": \"http\"}",
+      "expected": "{\"configPath\":\"{workspace}/.mcp.json\",\"command\":\"tool --api-key redacted\",\"url\":\"http://10.0.0.5:8080/\",\"endpointHostClass\":\"local_private\",\"transport\":\"http\",\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "fields_empty",
+      "artifact": "{\"metadata\": {\"a\": \"b\"}, \"artifact_type\": \"mcp_server\", \"config_path\": \"\", \"command\": \"\", \"url\": \"\", \"transport\": \"\"}",
+      "expected": "{\"a\":\"b\",\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "fields_non_str",
+      "artifact": "{\"metadata\": {\"a\": \"b\"}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"a\":\"b\",\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "fields_relative",
+      "artifact": "{\"metadata\": {}, \"artifact_type\": \"mcp_server\", \"config_path\": \"relative/config.json\", \"command\": \"npx -y pkg\", \"url\": \"localhost:3000\", \"transport\": \"sse\"}",
+      "expected": "{\"configPath\":\"relative/config.json\",\"command\":\"npx -y pkg\",\"url\":\"localhost:3000\",\"endpointHostClass\":\"remote_public\",\"transport\":\"sse\",\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "existing_keys_keep_place",
+      "artifact": "{\"metadata\": {\"artifactType\": \"old\", \"configPath\": \"old\", \"first\": 1, \"url\": \"x\", \"endpointHostClass\": \"y\", \"transport\": \"z\", \"command\": \"c\"}, \"artifact_type\": \"skill\", \"config_path\": \"/nonexistent-agent/home/c.json\", \"command\": \"run\", \"url\": \"https://localhost/\", \"transport\": \"stdio\"}",
+      "expected": "{\"artifactType\":\"skill\",\"configPath\":\"{home}/c.json\",\"first\":1,\"url\":\"https://localhost/\",\"endpointHostClass\":\"local_loopback\",\"transport\":\"stdio\",\"command\":\"run\"}"
+    },
+    {
+      "name": "key_collision",
+      "artifact": "{\"metadata\": {\"1\": \"b\", \"2.5\": \"c\"}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"1\":\"b\",\"2.5\":\"c\",\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "unicode",
+      "artifact": "{\"metadata\": {\"name\": \"caf\\u00e9 \\ud83d\\ude00\", \"path\": \"/nonexistent-agent/home/d\\u00e9j\\u00e0/file\"}, \"artifact_type\": \"plugin\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"name\":\"café 😀\",\"path\":\"{home}/déjà/file\",\"artifactType\":\"plugin\"}"
+    },
+    {
+      "name": "trust_moves_after_sanitize",
+      "artifact": "{\"metadata\": {\"trustScore\": \"/nonexistent-agent/home/proof\", \"verified\": \"https://x.example.com/?token=t\"}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"unverifiedAdapterEvidence\":{\"source\":\"adapter_metadata\",\"verificationStatus\":\"unverified\",\"affectsTrustScore\":false,\"trustClaims\":{\"trustScore\":\"{home}/proof\",\"verified\":\"https://x.example.com/?token=redacted\"}},\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "sensitive_trust",
+      "artifact": "{\"metadata\": {\"signatureToken\": \"abc\", \"trustSecret\": \"x\"}, \"artifact_type\": \"mcp_server\", \"config_path\": null, \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"trustSecret\":\"present_redacted\",\"artifactType\":\"mcp_server\"}"
+    },
+    {
+      "name": "no_workspace",
+      "workspace_dir": null,
+      "artifact": "{\"metadata\": {\"p\": \"/nonexistent-agent/work/a\", \"h\": \"/nonexistent-agent/home/b\"}, \"artifact_type\": \"mcp_server\", \"config_path\": \"/nonexistent-agent/work/cfg.json\", \"command\": null, \"url\": null, \"transport\": null}",
+      "expected": "{\"p\":\"a\",\"h\":\"{home}/b\",\"configPath\":\"cfg.json\",\"artifactType\":\"mcp_server\"}"
+    }
+  ]
+}

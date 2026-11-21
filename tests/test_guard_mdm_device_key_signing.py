@@ -5,11 +5,12 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock
+from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import utils
 
+from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.mdm import device_key_native
 from codex_plugin_scanner.guard.mdm.contracts import MachinePaths
 
@@ -22,6 +23,46 @@ def _paths(root: Path) -> MachinePaths:
         log_root=root / "logs",
         manifest_path=root / "runtime" / "release-manifest.json",
     )
+
+
+def _fake_native(
+    monkeypatch: pytest.MonkeyPatch, answer: object, *, features: tuple[str, ...] | None = None
+) -> list[dict[str, object]]:
+    """Route the device-key helper through a fake runtime that records each request.
+
+    The claims check still reaches the real runtime, so only the device-key helper answer is faked.
+    """
+
+    requests: list[dict[str, object]] = []
+    real_status = native_runtime.native_runtime_status
+    real_spawn = native_runtime._run_native_process
+    helper_features = features if features is not None else (device_key_native.DEVICE_KEY_HELPER_FEATURE,)
+
+    def status(**kwargs: object) -> object:
+        real = real_status(**kwargs)  # pyright: ignore[reportArgumentType]
+        real_features = real.capabilities.features if real.capabilities is not None else ()
+        return SimpleNamespace(
+            available=True,
+            compatible=True,
+            identity=real.identity or SimpleNamespace(path=Path("/opt/hol-guard/hol-guard-native")),
+            capabilities=SimpleNamespace(
+                features=tuple(
+                    feature for feature in real_features if feature != device_key_native.DEVICE_KEY_HELPER_FEATURE
+                )
+                + helper_features
+            ),
+        )
+
+    def spawn(native_path: Path, args: tuple[str, ...], *, input_text: str, **kwargs: object) -> str | None:
+        if args[:1] != ("device-key-helper",):
+            return real_spawn(native_path, args, input_text=input_text, **kwargs)  # pyright: ignore[reportArgumentType]
+        assert args == ("device-key-helper", "--stdin")
+        requests.append(json.loads(input_text))
+        return json.dumps(answer)
+
+    monkeypatch.setattr(native_runtime, "native_runtime_status", status)
+    monkeypatch.setattr(native_runtime, "_run_native_process", spawn)
+    return requests
 
 
 def _canonical_claims(**changes: object) -> bytes:
@@ -44,20 +85,8 @@ def _canonical_claims(**changes: object) -> bytes:
     return json.dumps(claims, sort_keys=True, separators=(",", ":")).encode()
 
 
-def _successful_result(signature: bytes) -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(
-        ["helper"],
-        0,
-        json.dumps(
-            {
-                "ok": True,
-                "signature": base64.b64encode(signature).decode(),
-                "signatureAlgorithm": "ecdsa-p256-sha256",
-                "signatureEncoding": "asn1-der",
-            }
-        ),
-        "",
-    )
+def _signature_answer(signature: bytes) -> dict[str, object]:
+    return {"ok": True, "signature": base64.b64encode(signature).decode()}
 
 
 def _canonical_protection_lease(**changes: object) -> bytes:
@@ -87,27 +116,29 @@ def test_protection_lease_signing_uses_distinct_purpose_bound_native_operation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     signature = utils.encode_dss_signature(1, 2)
-    run = Mock(return_value=_successful_result(signature))
-    monkeypatch.setattr(device_key_native.subprocess, "run", run)
+    requests = _fake_native(monkeypatch, _signature_answer(signature))
     lease = _canonical_protection_lease()
 
     result = device_key_native.sign_protection_lease(_paths(tmp_path), "d" * 32, lease, system_name="Darwin")
 
     assert result.signature == signature
-    assert run.call_args.args[0] == [
-        str(tmp_path / "runtime" / "hol-guard-device-key"),
-        "sign-protection-lease",
-        "d" * 32,
+    assert requests == [
+        {
+            "schema": "device-key-helper.v1",
+            "platform": "macos",
+            "runtime_root": str(tmp_path / "runtime"),
+            "verb": "sign-protection-lease",
+            "generation": "d" * 32,
+            "payload": lease.decode(),
+        }
     ]
-    assert run.call_args.kwargs["input"] == lease.decode()
 
 
 def test_health_key_registration_signing_uses_distinct_purpose_bound_native_operation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     signature = utils.encode_dss_signature(1, 2)
-    run = Mock(return_value=_successful_result(signature))
-    monkeypatch.setattr(device_key_native.subprocess, "run", run)
+    requests = _fake_native(monkeypatch, _signature_answer(signature))
     registration = json.dumps(
         {
             "algorithm": "ecdsa-p256-sha256",
@@ -130,10 +161,15 @@ def test_health_key_registration_signing_uses_distinct_purpose_bound_native_oper
     )
 
     assert result.signature == signature
-    assert run.call_args.args[0] == [
-        str(tmp_path / "runtime" / "hol-guard-device-key"),
-        "sign-health-key-registration",
-        "d" * 32,
+    assert requests == [
+        {
+            "schema": "device-key-helper.v1",
+            "platform": "macos",
+            "runtime_root": str(tmp_path / "runtime"),
+            "verb": "sign-health-key-registration",
+            "generation": "d" * 32,
+            "payload": registration.decode(),
+        }
     ]
 
 
@@ -141,8 +177,7 @@ def test_health_lease_signing_uses_only_purpose_bound_native_operation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     signature = utils.encode_dss_signature(1, 2)
-    run = Mock(return_value=_successful_result(signature))
-    monkeypatch.setattr(device_key_native.subprocess, "run", run)
+    requests = _fake_native(monkeypatch, _signature_answer(signature))
     claims = _canonical_claims()
 
     result = device_key_native.sign_health_lease(_paths(tmp_path), "d" * 32, claims, system_name="Darwin")
@@ -150,19 +185,23 @@ def test_health_lease_signing_uses_only_purpose_bound_native_operation(
     assert result.signature == signature
     assert result.algorithm == "ecdsa-p256-sha256"
     assert result.encoding == "asn1-der"
-    assert run.call_args.args[0] == [
-        str(tmp_path / "runtime" / "hol-guard-device-key"),
-        "sign-health-lease",
-        "d" * 32,
+    assert requests == [
+        {
+            "schema": "device-key-helper.v1",
+            "platform": "macos",
+            "runtime_root": str(tmp_path / "runtime"),
+            "verb": "sign-health-lease",
+            "generation": "d" * 32,
+            "payload": claims.decode(),
+        }
     ]
-    assert run.call_args.kwargs["input"] == claims.decode()
     with pytest.raises(ValueError, match="device_key_request_invalid"):
         device_key_native.run_helper(_paths(tmp_path), "sign", "d" * 32, system_name="Darwin")
 
 
 def test_health_lease_signing_accepts_uint64_sequence_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     signature = utils.encode_dss_signature(1, 2)
-    monkeypatch.setattr(device_key_native.subprocess, "run", Mock(return_value=_successful_result(signature)))
+    _fake_native(monkeypatch, _signature_answer(signature))
     claims = _canonical_claims(
         sequence=(1 << 64) - 1,
         previousLeaseDigest="e" * 64,
@@ -186,13 +225,12 @@ def test_health_lease_signing_accepts_uint64_sequence_boundary(tmp_path: Path, m
 def test_health_lease_signing_rejects_oversized_unknown_or_noncanonical_claims(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, claims: bytes
 ) -> None:
-    run = Mock()
-    monkeypatch.setattr(device_key_native.subprocess, "run", run)
+    requests = _fake_native(monkeypatch, _signature_answer(utils.encode_dss_signature(1, 2)))
 
     with pytest.raises(ValueError, match="health_lease_claims_invalid"):
         device_key_native.sign_health_lease(_paths(tmp_path), "d" * 32, claims, system_name="Darwin")
 
-    run.assert_not_called()
+    assert requests == []
 
 
 @pytest.mark.parametrize(
@@ -211,67 +249,16 @@ def test_health_lease_signing_rejects_oversized_unknown_or_noncanonical_claims(
 def test_health_lease_signing_revalidates_claim_values_before_native_execution(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, claims: bytes
 ) -> None:
-    run = Mock()
-    monkeypatch.setattr(device_key_native.subprocess, "run", run)
+    requests = _fake_native(monkeypatch, _signature_answer(utils.encode_dss_signature(1, 2)))
 
     with pytest.raises(ValueError, match="health_lease_claims_invalid"):
         device_key_native.sign_health_lease(_paths(tmp_path), "d" * 32, claims, system_name="Darwin")
 
-    run.assert_not_called()
+    assert requests == []
 
 
-@pytest.mark.parametrize(
-    "response_mutation",
-    [
-        {"extra": True},
-        {"signatureAlgorithm": "ecdsa-p256"},
-        {"signatureEncoding": "p1363"},
-        {"signature": "not-base64"},
-    ],
-)
-def test_health_lease_signing_rejects_noncontractual_helper_output(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, response_mutation: dict[str, object]
-) -> None:
-    payload: dict[str, object] = {
-        "ok": True,
-        "signature": base64.b64encode(utils.encode_dss_signature(1, 2)).decode(),
-        "signatureAlgorithm": "ecdsa-p256-sha256",
-        "signatureEncoding": "asn1-der",
-    }
-    payload.update(response_mutation)
-    monkeypatch.setattr(
-        device_key_native.subprocess,
-        "run",
-        Mock(return_value=subprocess.CompletedProcess(["helper"], 0, json.dumps(payload), "")),
-    )
-
-    with pytest.raises(OSError, match="device_key_probe_failed"):
-        device_key_native.sign_health_lease(_paths(tmp_path), "d" * 32, _canonical_claims(), system_name="Darwin")
-
-
-def test_health_lease_signing_rejects_oversized_helper_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        device_key_native.subprocess,
-        "run",
-        Mock(return_value=subprocess.CompletedProcess(["helper"], 0, "x" * (16 * 1024 + 1), "")),
-    )
-
-    with pytest.raises(OSError, match="device_key_probe_failed"):
-        device_key_native.sign_health_lease(_paths(tmp_path), "d" * 32, _canonical_claims(), system_name="Darwin")
-
-
-@pytest.mark.parametrize(
-    "signature",
-    [
-        b"\x30\x06\x02\x01\x01\x02\x01\x02\x00",
-        b"\x30\x07\x02\x02\x00\x01\x02\x01\x02",
-        utils.encode_dss_signature(0, 2),
-    ],
-)
-def test_health_lease_signing_rejects_noncanonical_or_out_of_range_der(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signature: bytes
-) -> None:
-    monkeypatch.setattr(device_key_native.subprocess, "run", Mock(return_value=_successful_result(signature)))
+def test_health_lease_signing_refuses_a_failed_runtime_answer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_native(monkeypatch, {"ok": False, "reason_code": "device_key_probe_failed"})
 
     with pytest.raises(OSError, match="device_key_probe_failed"):
         device_key_native.sign_health_lease(_paths(tmp_path), "d" * 32, _canonical_claims(), system_name="Darwin")

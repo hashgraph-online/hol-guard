@@ -1,0 +1,68 @@
+{
+  "project": "hashgraph-online_hol-guard",
+  "analysis_id": "a07c28e7-16d8-4dae-8f98-d98cb1e91ced",
+  "revision": "7399202ef348a022faa364d648f9a2bc95a95a87",
+  "source_url": "https://sonarcloud.io/api/qualitygates/project_status?analysisId=a07c28e7-16d8-4dae-8f98-d98cb1e91ced",
+  "retrieved_at": "2026-10-04T17:21:05.708496+00:00",
+  "projectStatus": {
+    "status": "ERROR",
+    "conditions": [
+      {
+        "status": "OK",
+        "metricKey": "new_reliability_rating",
+        "comparator": "GT",
+        "periodIndex": 1,
+        "errorThreshold": "1",
+        "actualValue": "1"
+      },
+      {
+        "status": "OK",
+        "metricKey": "new_security_rating",
+        "comparator": "GT",
+        "periodIndex": 1,
+        "errorThreshold": "1",
+        "actualValue": "1"
+      },
+      {
+        "status": "OK",
+        "metricKey": "new_maintainability_rating",
+        "comparator": "GT",
+        "periodIndex": 1,
+        "errorThreshold": "1",
+        "actualValue": "1"
+      },
+      {
+        "status": "ERROR",
+        "metricKey": "new_coverage",
+        "comparator": "LT",
+        "periodIndex": 1,
+        "errorThreshold": "80",
+        "actualValue": "61.8"
+      },
+      {
+        "status": "OK",
+        "metricKey": "new_duplicated_lines_density",
+        "comparator": "GT",
+        "periodIndex": 1,
+        "errorThreshold": "3",
+        "actualValue": "1.1"
+      },
+      {
+        "status": "OK",
+        "metricKey": "new_security_hotspots_reviewed",
+        "comparator": "LT",
+        "periodIndex": 1,
+        "errorThreshold": "100",
+        "actualValue": "100.0"
+      }
+    ],
+    "periods": [
+      {
+        "index": 1,
+        "mode": "previous_version",
+        "date": "2026-09-04T13:19:40+0000"
+      }
+    ],
+    "ignoredConditions": false
+  }
+}

@@ -6,11 +6,9 @@ export { isLocalCliId } from "./local-cli-fields";
 export { normalizeLocalCliItem, normalizeLocalCliCommand, normalizeLocalCliList } from "./local-cli-normalize";
 import { startCancelableDiscoveryJob } from "./discovery-job-start";
 import type { LocalCliContinuity } from "./custom-extension-continuity-api";
+import type { LocalCliCapabilityChoices, LocalCliCapabilityFields } from "./local-cli-capability";
 
-export type {
-  LocalCliContinuity,
-  LocalCliContinuityStatus,
-} from "./custom-extension-continuity-api";
+export type { LocalCliContinuity, LocalCliContinuityStatus } from "./custom-extension-continuity-api";
 
 export type LocalCliKind = "executable" | "script";
 export type LocalCliState = "unset" | "allowed" | "blocked";
@@ -28,6 +26,7 @@ export type LocalCliCommand = {
   parent_id: string | null;
   state: LocalCliCommandState;
   classification?: McpClassification;
+  suggested_state?: LocalCliCommandState;
 };
 
 export type LocalMcpCatalog = {
@@ -60,6 +59,7 @@ export type LocalCliItem = {
   help_status: "ok" | "empty" | "failed" | null;
   surface: LocalCliSurface;
   server_identity_hash: string | null;
+  shares_enrolled_server?: boolean;
   source_label: string | null;
   state: LocalCliState;
   stale: boolean;
@@ -79,19 +79,26 @@ export type LocalCliItem = {
     account_binding: "unverified";
   };
   permission_scope?: "configured-connection" | "host-namespace" | "legacy-device";
-};
+  remote_origin?: string; // a remote server; Guard never connects to it
+  profile_id?: string;
+  brand?: string;
+  display_name?: string;
+  seeded?: boolean;
+  installed?: boolean;
+} & LocalCliCapabilityFields;
 
 export type LocalCliListResponse = {
   host_inventory?: import("./codex-host-inventory").CodexHostInventory;
   schema_version: string;
   revision: number;
-  discovery_issue?: "catalog_limit_reached" | "observed_provider_scan_failed" | "configured_host_scan_failed" | "package_catalog_refresh_failed";
+  discovery_issue?: "catalog_limit_reached" | "observed_provider_scan_failed" | "configured_host_scan_failed" | "configured_host_persist_failed" | "package_catalog_refresh_failed";
   native_publication?: {
     state: "acknowledged" | "pending" | "failed" | "unavailable";
     revision: number;
     generation?: number;
   };
   items: LocalCliItem[];
+  seeded_items: LocalCliItem[];
   cloud: {
     sync_local_only: boolean;
     continuity_enabled?: boolean;
@@ -110,9 +117,12 @@ export type LocalCliMutationPayload = {
   previous_revision: number;
   session_nonce: string;
   commands?: Array<{ command_id: string; state: LocalCliCommandState }>;
+  /** The MCP catalog revision these choices were made against; saving reviews its new and changed tools. */
+  mcp_catalog_revision?: number;
   provider_actions?: Array<{ tool_slug: string; state: "review" | "block"; revision: number }>;
   approval_password?: string;
   approval_totp_code?: string;
+  capabilities?: LocalCliCapabilityChoices;
 };
 
 export class LocalCliApiError extends Error {
@@ -127,6 +137,12 @@ export function addedCustomExtensions(items: readonly LocalCliItem[]): LocalCliI
   return items.filter((item) => item.state !== "unset");
 }
 
+/** Tools new or changed since the last listing that no saved choice has reviewed yet. */
+export function unreviewedToolChangeCount(item: LocalCliItem): number {
+  const changes = item.mcp_catalog?.changes;
+  return (changes?.added.length ?? 0) + (changes?.changed.length ?? 0);
+}
+
 /** True when the connector needs a decision: not enrolled yet, stale, or its tool inventory changed. */
 export function customExtensionNeedsReview(item: LocalCliItem): boolean {
   return item.stale || item.state === "unset" || item.mcp_catalog?.stale
@@ -134,10 +150,16 @@ export function customExtensionNeedsReview(item: LocalCliItem): boolean {
     || Boolean(item.mcp_catalog?.changes?.changed.length);
 }
 
-export function connectorWorkspaceItems(items: readonly LocalCliItem[], query = ""): LocalCliItem[] {
+export function connectorWorkspaceItems(
+  items: readonly LocalCliItem[], query = "", seeded: readonly LocalCliItem[] = [],
+): LocalCliItem[] {
   const needle = query.trim().toLowerCase();
-  return items.filter((item) => item.state !== "unset" || (item.surface === "mcp" && item.suggestable))
-    .filter((item) => !needle || [item.name, item.source_label, item.surface,
+  const known = new Set(items.map((item) => item.cli_id));
+  const seededRows = seeded.filter((item) => item.seeded === true && !known.has(item.cli_id));
+  return [...items, ...seededRows]
+    .filter((item) => item.state !== "unset" || (item.suggestable && (item.surface === "mcp" || item.surface === "cli"))
+      || item.seeded === true)
+    .filter((item) => !needle || [item.name, item.display_name, item.source_label, item.surface,
       ...item.commands.flatMap((command) => [command.name, command.usage, command.description])]
       .some((value) => value?.toLowerCase().includes(needle)))
     .sort((a, b) => Number(customExtensionNeedsReview(b)) - Number(customExtensionNeedsReview(a))
@@ -225,6 +247,7 @@ export function filterPackageScriptCommands(
   return commands.filter((command) => commandMatchesQuery(command, needle));
 }
 
+/** The script name in a pasted `npm run guard:audit`, when it names a script in the catalog. */
 export function commandMatchesQuery(command: LocalCliCommand, needle: string): boolean {
   const haystacks = [command.name, command.usage, command.description];
   if (haystacks.some((value) => value.toLowerCase().includes(needle))) return true;
@@ -293,7 +316,7 @@ function colonPartsMatch(name: string, needle: string): boolean {
   return index === queryParts.length;
 }
 
-function packageScriptFilterNeedle(query: string): string {
+export function packageScriptFilterNeedle(query: string): string {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) return "";
   return trimmed.replace(/^(npm|pnpm|yarn|bun)(?:\.cmd)?(?:\s+run(?:-script)?)?\s*/, "").trim();
@@ -337,13 +360,13 @@ function suggestionMatchesQuery(item: LocalCliItem, needle: string): boolean {
   return item.commands.some((command) => commandMatchesQuery(command, compact));
 }
 
-async function readJson(response: Response): Promise<unknown> {
+export async function readJson(response: Response): Promise<unknown> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const record = isRecord(payload) ? payload : {};
     const code = typeof record.error === "string" ? record.error : "local_cli_request_failed";
-    const message = typeof record.message === "string"
-      ? record.message
+    const message = typeof record.message === "string" && record.message.trim() ? record.message : response.status === 401
+      ? "Guard could not confirm this dashboard session. Reload this page, then try again."
       : "Guard could not update this custom extension.";
     throw new LocalCliApiError(code, message);
   }
@@ -395,8 +418,8 @@ export async function recognizeLocalCli(
   };
 }
 
-export async function applyLocalCliMutation(payload: LocalCliMutationPayload): Promise<void> {
-  await readJson(await fetchLocalCliApi("/v1/local-clis/apply", {
+export async function applyLocalCliMutation(payload: LocalCliMutationPayload): Promise<unknown> {
+  return readJson(await fetchLocalCliApi("/v1/local-clis/apply", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -413,6 +436,25 @@ export async function refreshMcpInventory(
       body: JSON.stringify(configuredConnections
         ? { operation: "configured-connections", client_job_id: clientJobId, ...(forceRefresh ? { force_refresh: true } : {}) }
         : { cli_id: cliId, confirm_process_start: true, client_job_id: clientJobId }),
+    },
+  )));
+  if (initialJob === null) return;
+  await waitForMcpDiscoveryJob(cliId, initialJob, signal);
+}
+
+/**
+ * Reads a recorded command-line tool's --help. A script is found by the full
+ * `path` the operator gives, since Guard records no location for it; the
+ * daemon runs it only when that file is still the one it recorded.
+ */
+export async function loadLocalCliCommands(cliId: string, signal: AbortSignal, path?: string): Promise<void> {
+  if (signal.aborted) return;
+  const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
+    "/v1/local-clis/refresh-job", {
+      method: "POST", headers: { "Content-Type": "application/json" }, signal,
+      body: JSON.stringify({
+        cli_id: cliId, confirm_process_start: true, client_job_id: clientJobId, ...(path === undefined ? {} : { path }),
+      }),
     },
   )));
   if (initialJob === null) return;
@@ -479,6 +521,7 @@ export async function fetchMcpProviderActions(
   });
   const nextOffset = body.next_offset;
   if (nextOffset !== null && (typeof nextOffset !== "number" || !Number.isSafeInteger(nextOffset)
-    || nextOffset !== options.offset + 50 || nextOffset > 10_000)) throw new Error("Invalid provider inventory page");
+    || nextOffset <= options.offset || nextOffset > options.offset + 50
+    || nextOffset > 10_000)) throw new Error("Invalid provider inventory page");
   return { actions, nextOffset, catalogToken: body.catalog_token };
 }

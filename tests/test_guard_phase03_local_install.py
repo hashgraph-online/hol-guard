@@ -3,27 +3,24 @@
 from __future__ import annotations
 
 import argparse
+import builtins
 import io
 import json
 import os
 import subprocess
-import urllib.request
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import MagicMock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.cli import update_artifact as update_artifact_module
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_open_command
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
-from codex_plugin_scanner.guard.daemon import update_refresh_program
-from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import CommandSafetyExtensionRegistry
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -32,6 +29,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
 )
 from codex_plugin_scanner.guard.shims import _trusted_import_root, _trusted_python_flags
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.updates import update_refresh_program
 from tests.update_context_test_support import (
     build_legacy_status_distribution,
     build_legacy_update_context,
@@ -40,10 +38,16 @@ from tests.update_context_test_support import (
 
 
 @pytest.fixture(autouse=True)
-def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch) -> None:
+def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"test-runtime")
+    runtime.chmod(0o700)
     monkeypatch.setattr(update_commands, "build_trusted_update_context", build_legacy_update_context)
     monkeypatch.setattr(update_commands, "_status_installed_distribution", build_legacy_status_distribution)
     monkeypatch.setattr(update_commands, "stage_trusted_wheel", stage_legacy_wheel)
+    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: runtime)
+    monkeypatch.setattr(update_commands, "resolve_guard_home", lambda: tmp_path / "guard-home")
+    monkeypatch.setattr(update_commands, "_retire_native_resident_before_update", lambda _guard_home: True)
     monkeypatch.setattr(
         update_commands,
         "record_local_wheel_receipt",
@@ -78,7 +82,7 @@ def test_extension_control_authority_blocks_only_downgrades_after_enrollment(
 ) -> None:
     class FakeStore:
         def read_extension_control_authority_for_registry(
-            self, registry: CommandSafetyExtensionRegistry
+            self, registry: CommandSafetyExtensionRegistry, **_kwargs
         ) -> ExtensionControlAuthorityView:
             return ExtensionControlAuthorityView(health, 0, registry.catalog_digest, ())
 
@@ -114,7 +118,7 @@ def test_update_blocks_protected_authority_downgrade_before_installer_execution(
 
     class ProtectedAuthorityStore:
         def read_extension_control_authority_for_registry(
-            self, registry: CommandSafetyExtensionRegistry
+            self, registry: CommandSafetyExtensionRegistry, **_kwargs
         ) -> ExtensionControlAuthorityView:
             return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ())
 
@@ -129,6 +133,76 @@ def test_update_blocks_protected_authority_downgrade_before_installer_execution(
     assert payload["status"] == "blocked"
     assert payload["changed"] is False
     assert payload["reason_code"] == "extension_control_authority_downgrade_blocked"
+
+
+def test_update_retires_native_resident_before_installer_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wheel = tmp_path / "hol_guard-2.2.3-py3-none-any.whl"
+    wheel.write_bytes(b"fake-wheel")
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"new-runtime")
+    runtime.chmod(0o700)
+    events: list[tuple[str, object]] = []
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.2.1")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda *_args, **_kwargs: "2.2.3")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.2.3")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: runtime)
+    monkeypatch.setattr(
+        update_commands,
+        "_retire_native_resident_before_update",
+        lambda guard_home: events.append(("retire", guard_home)) or True,
+    )
+    monkeypatch.setattr(update_commands, "_refresh_package_shims_after_update", lambda **_: (None, None))
+    monkeypatch.setattr(update_commands, "_repair_supported_harnesses", lambda **_: ([], []))
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        events.append(("install", command))
+        return subprocess.CompletedProcess(command, 0, "installed local wheel", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(
+        dry_run=False,
+        wheel=str(wheel),
+        guard_home=tmp_path / "guard-home",
+    )
+
+    assert exit_code == 0, json.dumps(payload, sort_keys=True)
+    assert payload["status"] == "updated"
+    assert [event[0] for event in events] == ["retire", "install"]
+
+
+def test_update_aborts_when_native_resident_retirement_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wheel = tmp_path / "hol_guard-2.2.3-py3-none-any.whl"
+    wheel.write_bytes(b"fake-wheel")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.2.1")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.2.3")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(update_commands, "_retire_native_resident_before_update", lambda _guard_home: False)
+    monkeypatch.setattr(
+        update_commands.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("installer must not execute")),
+    )
+
+    payload, exit_code = update_commands.run_guard_update(
+        dry_run=False,
+        wheel=str(wheel),
+        guard_home=tmp_path / "guard-home",
+    )
+
+    assert exit_code == 1
+    assert payload["status"] == "failed"
+    assert payload["changed"] is False
+    assert payload["reason_code"] == "update_native_resident_retirement_failed"
 
 
 def test_daemon_refresh_after_update_uses_fresh_interpreter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -173,290 +247,6 @@ def test_daemon_refresh_after_update_skips_when_daemon_is_not_running(tmp_path: 
 
     assert payload is None
     assert note is None
-
-
-def test_daemon_refresh_retains_verified_newer_desktop_runtime(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from codex_plugin_scanner.guard.daemon import live_identity
-
-    context = _context(tmp_path)
-    context.guard_home.mkdir(parents=True)
-    (context.guard_home / "daemon-state.json").write_text("signed", encoding="utf-8")
-    state: dict[str, object] = {
-        "guard_home": str(context.guard_home.resolve()),
-        "host": "127.0.0.1",
-        "port": 5245,
-        "pid": 4242,
-        "compatibility_version": 2,
-        "package_version": "3.0.0a253",
-        "runtime_fingerprint": "desktop-core-fingerprint",
-    }
-    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
-    monkeypatch.setattr(update_commands.package_version, "__version__", "2.2.123")
-
-    class Response:
-        status = 200
-
-        def __enter__(self) -> Response:
-            return self
-
-        def __exit__(self, *_args: object) -> None:
-            return None
-
-        def read(self, limit: int) -> bytes:
-            assert limit == 65_537
-            return json.dumps({**state, "ok": True}).encode("utf-8")
-
-    def urlopen(request: urllib.request.Request, *, timeout: float, policy: ManagedNetworkPolicy) -> Response:
-        assert request.full_url == "http://127.0.0.1:5245/v1/healthz/details"
-        assert request.headers["X-guard-token"] == "daemon-token"
-        assert timeout == 1.0
-        assert policy.proxy_mode == "none"
-        assert policy.proxy_url is None
-        return Response()
-
-    monkeypatch.setattr(live_identity, "_proxy_disabled_health_details", lambda _url, _token: {**state, "ok": True})
-
-    payload, note = update_commands.refresh_guard_daemon_after_update(
-        context,
-    )
-
-    assert payload == {
-        "status": "retained_newer_runtime",
-        "daemon_url": "http://127.0.0.1:5245",
-        "daemon_version": "3.0.0a253",
-        "cli_version": "2.2.123",
-        "runtime_verified": True,
-    }
-    assert note == "Kept the newer HOL Guard runtime active while updating the shell CLI."
-
-
-def test_daemon_refresh_restarts_runtime_older_than_installed_target(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from codex_plugin_scanner.guard.daemon import live_identity
-
-    context = _context(tmp_path)
-    context.guard_home.mkdir(parents=True)
-    (context.guard_home / "daemon-state.json").write_text("signed", encoding="utf-8")
-    state: dict[str, object] = {
-        "guard_home": str(context.guard_home.resolve()),
-        "host": "127.0.0.1",
-        "port": 5245,
-        "pid": 4242,
-        "compatibility_version": 2,
-        "package_version": "2.2.123",
-        "runtime_fingerprint": "old-runtime-fingerprint",
-    }
-    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
-    monkeypatch.setattr(update_commands.package_version, "__version__", "2.2.122")
-
-    class Response:
-        status = 200
-
-        def __enter__(self) -> Response:
-            return self
-
-        def __exit__(self, *_args: object) -> None:
-            return None
-
-        def read(self, limit: int) -> bytes:
-            assert limit == 65_537
-            return json.dumps({**state, "ok": True}).encode("utf-8")
-
-    monkeypatch.setattr(live_identity, "_proxy_disabled_health_details", lambda _url, _token: {**state, "ok": True})
-    restart = SimpleNamespace(
-        returncode=0,
-        stdout='{"status":"restarted","runtime_verified":true}',
-        stderr="",
-        output_limited=False,
-    )
-
-    class RestartContext:
-        def python_command(self, script: str, *_args: str) -> list[str]:
-            return ["/trusted/python", "-c", script]
-
-        def run(self, *_args: object, **_kwargs: object) -> SimpleNamespace:
-            return restart
-
-    monkeypatch.setattr(update_commands, "_standalone_update_context", lambda _context: RestartContext())
-    payload, note = update_commands.refresh_guard_daemon_after_update(
-        context,
-        minimum_version="2.2.124",
-    )
-
-    assert payload == {"status": "restarted", "runtime_verified": True}
-    assert note == "Restarted the Guard daemon to load the updated package."
-
-
-def test_daemon_refresh_does_not_trust_newer_state_when_live_identity_differs(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from codex_plugin_scanner.guard.daemon import live_identity
-
-    context = _context(tmp_path)
-    context.guard_home.mkdir(parents=True)
-    (context.guard_home / "daemon-state.json").write_text("signed", encoding="utf-8")
-    state: dict[str, object] = {
-        "guard_home": str(context.guard_home.resolve()),
-        "host": "127.0.0.1",
-        "port": 5245,
-        "pid": 4242,
-        "compatibility_version": 2,
-        "package_version": "3.0.0a253",
-        "runtime_fingerprint": "signed-state-fingerprint",
-    }
-    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
-    monkeypatch.setattr(update_commands.package_version, "__version__", "2.2.123")
-
-    class Response:
-        status = 200
-
-        def __enter__(self) -> Response:
-            return self
-
-        def __exit__(self, *_args: object) -> None:
-            return None
-
-        def read(self, limit: int) -> bytes:
-            assert limit == 65_537
-            return json.dumps({**state, "ok": True, "runtime_fingerprint": "different-live-fingerprint"}).encode()
-
-    monkeypatch.setattr(
-        live_identity,
-        "_proxy_disabled_health_details",
-        lambda _url, _token: {**state, "ok": True, "runtime_fingerprint": "different-live-fingerprint"},
-    )
-    restart = SimpleNamespace(
-        returncode=0,
-        stdout='{"status":"restarted","runtime_verified":true}',
-        stderr="",
-        output_limited=False,
-    )
-
-    class RestartContext:
-        def python_command(self, script: str, *_args: str) -> list[str]:
-            return ["/trusted/python", "-c", script]
-
-        def run(self, *_args: object, **_kwargs: object) -> SimpleNamespace:
-            return restart
-
-    monkeypatch.setattr(update_commands, "_standalone_update_context", lambda _context: RestartContext())
-    payload, note = update_commands.refresh_guard_daemon_after_update(
-        context,
-    )
-
-    assert payload == {"status": "restarted", "runtime_verified": True}
-    assert note == "Restarted the Guard daemon to load the updated package."
-
-
-def test_daemon_refresh_falls_back_when_authenticated_host_is_malformed(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from codex_plugin_scanner.guard.daemon import live_identity
-
-    context = _context(tmp_path)
-    context.guard_home.mkdir(parents=True)
-    (context.guard_home / "daemon-state.json").write_text("signed", encoding="utf-8")
-    state: dict[str, object] = {
-        "guard_home": str(context.guard_home.resolve()),
-        "host": ["127.0.0.1"],
-        "port": 5245,
-        "pid": 4242,
-        "compatibility_version": 2,
-        "package_version": "3.0.0a253",
-        "runtime_fingerprint": "desktop-core-fingerprint",
-    }
-    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
-    health_probe = MagicMock()
-    monkeypatch.setattr(live_identity, "_proxy_disabled_health_details", health_probe)
-    restart = SimpleNamespace(
-        returncode=0,
-        stdout='{"status":"restarted","runtime_verified":true}',
-        stderr="",
-        output_limited=False,
-    )
-
-    class RestartContext:
-        def python_command(self, script: str, *_args: str) -> list[str]:
-            return ["/trusted/python", "-c", script]
-
-        def run(self, *_args: object, **_kwargs: object) -> SimpleNamespace:
-            return restart
-
-    monkeypatch.setattr(update_commands, "_standalone_update_context", lambda _context: RestartContext())
-    payload, note = update_commands.refresh_guard_daemon_after_update(context)
-
-    assert payload == {"status": "restarted", "runtime_verified": True}
-    assert note == "Restarted the Guard daemon to load the updated package."
-    health_probe.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("compatibility_version", 3),
-        ("runtime_fingerprint", None),
-        ("pid", None),
-    ],
-)
-def test_daemon_refresh_falls_back_for_incomplete_or_incompatible_identity(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    field: str,
-    value: object,
-) -> None:
-    from codex_plugin_scanner.guard.daemon import live_identity
-
-    context = _context(tmp_path)
-    context.guard_home.mkdir(parents=True)
-    (context.guard_home / "daemon-state.json").write_text("signed", encoding="utf-8")
-    state: dict[str, object] = {
-        "guard_home": str(context.guard_home.resolve()),
-        "host": "127.0.0.1",
-        "port": 5245,
-        "pid": 4242,
-        "compatibility_version": 2,
-        "package_version": "3.0.0a253",
-        "runtime_fingerprint": "desktop-core-fingerprint",
-    }
-    if value is None:
-        state.pop(field)
-    else:
-        state[field] = value
-    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
-    health_probe = MagicMock()
-    monkeypatch.setattr(live_identity, "_proxy_disabled_health_details", health_probe)
-    restart = SimpleNamespace(
-        returncode=0,
-        stdout='{"status":"restarted","runtime_verified":true}',
-        stderr="",
-        output_limited=False,
-    )
-
-    class RestartContext:
-        def python_command(self, script: str, *_args: str) -> list[str]:
-            return ["/trusted/python", "-c", script]
-
-        def run(self, *_args: object, **_kwargs: object) -> SimpleNamespace:
-            return restart
-
-    monkeypatch.setattr(update_commands, "_standalone_update_context", lambda _context: RestartContext())
-    payload, note = update_commands.refresh_guard_daemon_after_update(context)
-
-    assert payload == {"status": "restarted", "runtime_verified": True}
-    assert note == "Restarted the Guard daemon to load the updated package."
-    health_probe.assert_not_called()
 
 
 def test_daemon_refresh_authorizes_breakaway_only_for_restart_child(tmp_path: Path) -> None:
@@ -541,14 +331,15 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard import native_daemon_manage as manager
+    from codex_plugin_scanner.guard import native_daemon_peer as runtime_peer
 
     context = _context(tmp_path)
     context.home_dir.mkdir(parents=True)
     context.guard_home.mkdir(parents=True)
     (context.guard_home / "daemon-state.json").write_text('{"port":5474}', encoding="utf-8")
     retirement_checks = iter([False, True])
-    monotonic_values = iter([0.0, 6.0, 10.0])
+    monotonic_values = iter([0.0, 6.0, 10.0, 10.0])
     retire_calls: list[Path] = []
 
     def fake_retire(guard_home: Path) -> list[int]:
@@ -574,8 +365,16 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     monkeypatch.setattr(manager, "publish_approval_center_locator", lambda _home, _url: None)
     monkeypatch.setattr(manager, "ensure_guard_daemon_after_update", fake_ensure)
     monkeypatch.setattr(manager, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:5474")
-    monkeypatch.setattr(update_commands.time, "monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr(update_commands.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(runtime_peer, "live_desktop_owned_daemon", lambda _home: None)
+    clock = SimpleNamespace(monotonic=lambda: next(monotonic_values), sleep=lambda _seconds: None)
+    script_globals = {
+        "__builtins__": {
+            **vars(builtins),
+            "__import__": lambda name, *args, **kwargs: (
+                clock if name == "time" else builtins.__import__(name, *args, **kwargs)
+            ),
+        }
+    }
     monkeypatch.setattr(
         update_commands.sys,
         "stdin",
@@ -590,7 +389,7 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     )
 
     with pytest.raises(SystemExit) as exit_info:
-        exec(update_commands._DAEMON_REFRESH_SCRIPT, {})
+        exec(update_commands._DAEMON_REFRESH_SCRIPT, script_globals)
 
     assert exit_info.value.code == 0
     payload = json.loads(capsys.readouterr().out)
@@ -854,17 +653,15 @@ def test_update_preserves_requested_wheel_during_broken_pipx_recovery(
         "-m",
         "pip",
         "install",
-        "--force-reinstall",
         str(wheel),
     ]
     assert commands == [
-        ["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)],
+        ["pipx", "runpip", "hol-guard", "install", str(wheel)],
         [
             "/opt/guard/bin/python",
             "-m",
             "pip",
             "install",
-            "--force-reinstall",
             str(wheel),
         ],
     ]
@@ -1197,7 +994,7 @@ def test_update_requested_local_wheel_bypasses_python_incompatible_latest_releas
     payload, exit_code = update_commands.run_guard_update(dry_run=False, wheel=str(wheel))
 
     assert exit_code == 0
-    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)]]
+    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", str(wheel)]]
     assert payload["status"] == "updated"
     assert payload["upgrade_source"] == "local_wheel"
     assert payload["requested_wheel"] == str(wheel)
@@ -1428,7 +1225,7 @@ def test_update_installs_requested_local_wheel_with_pipx(monkeypatch: pytest.Mon
     payload, exit_code = update_commands.run_guard_update(dry_run=False, wheel=str(wheel))
 
     assert exit_code == 0
-    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)]]
+    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", str(wheel)]]
     assert payload["upgrade_source"] == "local_wheel"
     assert payload["requested_wheel"] == str(wheel)
     assert payload["resulting_version"] == "2.0.345"
@@ -1511,7 +1308,7 @@ def test_update_installs_requested_local_wheel_from_editable_install(
     payload, exit_code = update_commands.run_guard_update(dry_run=False, wheel=str(wheel))
 
     assert exit_code == 0
-    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)]]
+    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", str(wheel)]]
     assert payload["upgrade_source"] == "local_wheel"
 
 
@@ -1539,7 +1336,6 @@ def test_update_resolves_requested_wheel_from_directory(monkeypatch: pytest.Monk
         "runpip",
         "hol-guard",
         "install",
-        "--force-reinstall",
         str(newer_wheel),
     ]
     assert payload["message"] == "Review the planned local wheel install command before updating."
@@ -2346,6 +2142,7 @@ def test_current_update_does_not_repair_artifacts_owned_by_newer_desktop_runtime
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
     monkeypatch.setattr(update_commands, "_verified_newer_guard_daemon", lambda *_args, **_kwargs: retained)
+    monkeypatch.setattr(update_commands, "bundled_native_runtime_missing", lambda: False)
     monkeypatch.setattr(
         update_commands,
         "_refresh_package_shims_after_update",
@@ -2830,9 +2627,8 @@ def test_install_aliases_resolve_to_native_contracts() -> None:
     }
 
     for alias, canonical in aliases.items():
-        adapter = get_adapter(alias)
-        contract = adapter.setup_contract()
-        assert adapter.harness == canonical
+        contract = harness_ops.setup_contract(alias)
+        assert harness_ops.canonical_harness(alias) == canonical
         assert alias in contract.install_aliases
         assert contract.coverage.browser_fallback is True
         assert contract.coverage.native_hooks == (canonical in {"claude-code", "codex", "copilot"})

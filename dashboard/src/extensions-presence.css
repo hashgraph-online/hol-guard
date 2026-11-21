@@ -1,0 +1,383 @@
+/**
+ * Extension presence: the state pills and posture bar on the catalog, and the
+ * paid-placement surfaces in Discover. Kept out of styles.css so catalog work
+ * does not have to read through the whole dashboard stylesheet.
+ */
+.guard-state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--brand-dark) 12%, transparent);
+  padding: 0.125rem 0.5rem;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25rem;
+  color: color-mix(in srgb, var(--brand-dark) 70%, transparent);
+  background: #fff;
+}
+
+.guard-state-pill-dot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--brand-dark) 35%, transparent);
+}
+
+.guard-state-pill[data-tone="safe"] { color: #14532d; border-color: rgba(13, 122, 58, 0.22); background: #f1faf4; }
+.guard-state-pill[data-tone="safe"] .guard-state-pill-dot { background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16); }
+.guard-state-pill[data-tone="info"] { color: var(--brand-dark); border-color: color-mix(in srgb, var(--brand-blue) 28%, transparent); background: color-mix(in srgb, var(--brand-blue) 7%, #fff); }
+.guard-state-pill[data-tone="info"] .guard-state-pill-dot { background: var(--brand-blue); }
+.guard-state-pill[data-tone="attention"] { color: #7c2d12; border-color: rgba(180, 83, 9, 0.24); background: #fdf6ec; }
+.guard-state-pill[data-tone="attention"] .guard-state-pill-dot { background: #d97706; }
+.guard-state-pill[data-tone="danger"] { color: #7f1d1d; border-color: rgba(185, 28, 28, 0.24); background: #fdf2f2; }
+.guard-state-pill[data-tone="danger"] .guard-state-pill-dot { background: #dc2626; }
+
+.guard-posture-bar {
+  display: flex;
+  height: 0.5rem;
+  gap: 2px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--brand-dark) 6%, transparent);
+}
+
+.guard-posture-segment {
+  flex-basis: 0;
+  min-width: 0.375rem;
+  background: color-mix(in srgb, var(--brand-dark) 22%, transparent);
+  transform-origin: left;
+  animation: guard-posture-grow 560ms var(--ease-out-quart) both;
+}
+
+.guard-posture-segment[data-state="Allowed"] { background: #16a34a; }
+.guard-posture-segment[data-state="Required"] { background: var(--brand-blue); }
+.guard-posture-segment[data-state="Managed"] { background: color-mix(in srgb, var(--brand-blue) 55%, #fff); }
+.guard-posture-segment[data-state="Lockdown"] { background: #dc2626; }
+.guard-posture-segment[data-state="Unavailable"] { background: #d97706; }
+
+@keyframes guard-posture-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guard-posture-segment { animation: none; }
+}
+
+/* Discover spotlight + paid placements. Paid content is always labeled and
+   tinted purple so it never reads as a protection signal. */
+.guard-sponsor-label {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0.0625rem 0.5rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.25rem;
+  color: #5b21a6;
+  background: color-mix(in srgb, var(--brand-purple) 14%, #fff);
+  border: 1px solid color-mix(in srgb, var(--brand-purple) 35%, transparent);
+}
+
+.guard-sponsor-label-inverse {
+  color: #fff;
+  background: rgb(255 255 255 / 0.14);
+  border-color: rgb(255 255 255 / 0.28);
+}
+
+.guard-spotlight-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+@media (min-width: 768px) {
+  .guard-spotlight-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* A shelf with no organic cell to give up keeps every bought card, so the
+     slot follows them across the full width instead of as a lone stub. */
+  .guard-spotlight-slot[data-full="true"] { grid-column: 1 / -1; }
+}
+
+/* One card shape for the whole shelf, so a bought cell is the same object as
+   an organic one and a maker can judge the placement in context. Cards size to
+   their content and the grid aligns them to the top, so a short card is never
+   stretched to the height of the longer slot copy beside it. */
+.guard-spotlight-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border-radius: 1rem;
+  padding: 1rem 1.125rem;
+  background: #fff;
+  border: 1px solid rgb(63 65 116 / 0.1);
+  animation: guard-discover-rise 420ms var(--ease-out-quint) both;
+}
+
+/* Paid cells are the only dark cards on the page: unmistakable, and always
+   carrying the Sponsored label rather than relying on the treatment alone. */
+.guard-spotlight-card-paid {
+  color: #fff;
+  border-color: transparent;
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--brand-purple) 55%, transparent) 0%, transparent 55%),
+    radial-gradient(90% 120% at 0% 100%, color-mix(in srgb, var(--brand-blue) 45%, transparent) 0%, transparent 60%),
+    var(--brand-dark);
+  box-shadow: 0 24px 60px -32px rgb(63 65 116 / 0.65);
+}
+
+.guard-spotlight-slot {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--brand-blue) 35%, transparent);
+  background: color-mix(in srgb, var(--brand-blue) 5%, #fff);
+  gap: 0.625rem;
+}
+
+.guard-spotlight-slot[data-state="sold-out"] {
+  border-color: rgb(63 65 116 / 0.18);
+  background: #fff;
+}
+
+.guard-spotlight-slot-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  color: var(--brand-blue);
+  background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
+}
+
+/* The open slot's mark sits in the eyebrow row, so it stays small enough not to
+   make the card taller than the organic cards beside it. */
+.guard-spotlight-slot-mark-sm {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.5rem;
+}
+
+/* The on/off pill reports effective protection state and nothing else; it is
+   a label, never a control. */
+.guard-spotlight-state {
+  flex: none;
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgb(63 65 116 / 0.6);
+  background: rgb(63 65 116 / 0.07);
+}
+
+.guard-spotlight-state-on {
+  color: color-mix(in srgb, var(--brand-blue) 80%, #1b1c33);
+  background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
+}
+
+.guard-spotlight-skeleton {
+  border-color: transparent;
+  background: linear-gradient(100deg, rgb(63 65 116 / 0.05) 30%, rgb(63 65 116 / 0.1) 50%, rgb(63 65 116 / 0.05) 70%);
+  background-size: 200% 100%;
+  animation: guard-discover-shimmer 1.4s linear infinite;
+}
+
+/* The bookable row keeps the catalog's rhythm and never imitates a row that
+   represents real protection state. The rows around it are separated by
+   hairlines that run edge to edge, so the dashed box floats clear of them
+   instead of sharing an edge, and its content sits well inside the dashes. */
+.guard-catalog-slot-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  margin-block: 0.75rem;
+  border-radius: 1rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px dashed color-mix(in srgb, var(--brand-blue) 35%, transparent);
+  background: color-mix(in srgb, var(--brand-blue) 5%, #fff);
+}
+
+.guard-discover-cta {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding: 0 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--brand-dark);
+  transition: background-color 160ms var(--ease-out-quart);
+}
+
+/* Touch targets keep the full 44px; a pointer can aim at the tighter button. */
+@media (pointer: coarse) {
+  .guard-discover-cta { min-height: 44px; }
+}
+
+.guard-discover-cta:hover { background: #2d2f56; }
+
+/* The quiet variant is the shelf's repeated action. Only the paid and slot
+   buttons stay solid, so the cards that cost something are the ones that pull
+   the eye, and a row of "Review protection" never reads as three ads. */
+.guard-discover-cta-quiet {
+  color: var(--brand-dark);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgb(63 65 116 / 0.2);
+}
+
+.guard-discover-cta-quiet:hover { background: rgb(63 65 116 / 0.06); }
+
+.guard-discover-cta:focus-visible,
+.guard-featured-row:focus-within {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}
+
+.guard-discover-cta-inverse {
+  color: var(--brand-dark);
+  background: #fff;
+}
+
+.guard-discover-cta-inverse:hover { background: rgb(255 255 255 / 0.88); }
+
+/* The list switch is one control with two states, not two tabs to a different
+   page: a recessed track, with the current list lifted onto a white thumb. */
+.guard-list-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-top: 2.5rem;
+}
+
+.guard-list-switch-track {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-radius: 0.875rem;
+  padding: 0.25rem;
+  background: rgb(63 65 116 / 0.07);
+}
+
+.guard-list-switch-option {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.625rem;
+  padding: 0 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(63 65 116 / 0.78);
+  transition:
+    background-color 160ms var(--ease-out-quart),
+    color 160ms var(--ease-out-quart),
+    box-shadow 160ms var(--ease-out-quart);
+}
+
+.guard-list-switch-option:hover { color: var(--brand-dark); }
+
+.guard-list-switch-option[aria-pressed="true"] {
+  color: var(--brand-dark);
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(63 65 116 / 0.14);
+}
+
+.guard-list-switch-option:focus-visible,
+.guard-list-switch-add:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}
+
+.guard-list-switch-count {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.guard-list-switch-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--brand-blue);
+}
+
+.guard-list-switch-add {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--brand-blue);
+}
+
+.guard-list-switch-add:hover { color: var(--brand-dark); }
+
+@media (min-width: 640px) {
+  .guard-list-switch-add { margin-left: auto; }
+}
+
+@media (pointer: coarse) {
+  .guard-list-switch-option,
+  .guard-list-switch-add { min-height: 44px; }
+}
+
+.guard-discover-offers {
+  display: flex;
+  flex-direction: column;
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+  border: 1px dashed color-mix(in srgb, var(--brand-dark) 22%, transparent);
+  background: color-mix(in srgb, var(--brand-blue) 5%, #fff);
+}
+
+.guard-discover-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  border-radius: 0.875rem;
+  padding: 0.75rem 0.875rem;
+  background: #fff;
+  border: 1px solid rgb(63 65 116 / 0.1);
+}
+
+.guard-discover-offer[data-availability="sold_out"] { opacity: 0.6; }
+
+.guard-discover-skeleton {
+  height: 15rem;
+  border-radius: 1.5rem;
+  background: linear-gradient(100deg, rgb(63 65 116 / 0.05) 30%, rgb(63 65 116 / 0.1) 50%, rgb(63 65 116 / 0.05) 70%);
+  background-size: 200% 100%;
+  animation: guard-discover-shimmer 1.4s linear infinite;
+}
+
+.guard-featured-row {
+  margin-bottom: 0.5rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--brand-purple) 30%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand-purple) 7%, #fff) 0%, #fff 70%);
+}
+
+@keyframes guard-discover-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes guard-discover-shimmer {
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guard-spotlight-card,
+  .guard-spotlight-skeleton { animation: none; }
+  .guard-discover-cta,
+  .guard-list-switch-option { transition: none; }
+}

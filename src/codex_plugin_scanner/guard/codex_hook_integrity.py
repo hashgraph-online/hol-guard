@@ -1,151 +1,164 @@
 """Authenticated local identity records for Guard-managed Codex hooks.
 
 The Codex configuration is user-editable and therefore cannot establish Guard
-ownership by itself.  This module keeps the ownership authority in a private,
-Guard-owned key file and authenticates canonical manifests with HMAC-SHA256.
-Manifests contain only public identity material; the HMAC key is never copied
-into Codex configuration or returned by status APIs.
+ownership by itself.  Ownership rests on a private, Guard-owned key file that only the native
+runtime creates, reads, signs with and removes; canonical manifests are
+authenticated with HMAC-SHA256 under it. Python sees only the key's public
+identity, and the key is never copied into Codex configuration or returned
+by status APIs.
 """
 
 from __future__ import annotations
 
 import base64
-import hashlib
-import hmac
-import json
 import os
-import secrets
-import stat
-import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from .codex_hook_file_integrity import CodexHookIntegrityError, canonical_path
-from .durable_io import fsync_directory as _fsync_directory
-from .local_authority_integrity import (
-    LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM,
-    sign_local_authority_payload,
-    verify_local_authority_payload,
-)
-from .private_file_io import read_private_regular_text
+from .codex_hook_file_integrity import CodexHookIntegrityError, check_hook_validation_deadline
+from .local_authority_integrity import LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM
 
 HOOK_MANIFEST_SCHEMA_VERSION = 2
 HOOK_MANIFEST_MAC_ALGORITHM = LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM
-_HOOK_SECRET_SCHEMA_VERSION = 1
-_HOOK_KEY_BYTES = 32
-_HOOK_MANIFEST_INTEGRITY_PURPOSE = "codex-managed-hook-manifest"
 _PRIVATE_FILE_MODE = 0o600
-_MAX_HOOK_MANIFEST_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
 class HookSecretMaterial:
+    """The Codex hook key's public identity; the native runtime alone holds the key."""
+
     installation_id: str
     key_id: str
-    key: bytes = field(repr=False)
+    fingerprint: str
+    guard_home: Path = field(compare=False)
 
 
-def hook_manifest_path(guard_home: Path, config_path: Path) -> Path:
-    target_hash = hashlib.sha256(canonical_path(config_path).encode("utf-8")).hexdigest()[:24]
-    return guard_home / "managed" / "codex" / f"hooks-{target_hash}.manifest.json"
+_KEY_MISSING_MESSAGE = (
+    "The private Codex hook authentication key is missing; run `hol-guard install codex` to repair it."
+)
+_KEY_UNAVAILABLE_REASONS = frozenset({"runtime_unavailable", "invalid"})
 
 
-def hook_secret_path(guard_home: Path) -> Path:
-    return guard_home / "managed" / "codex" / "hook-manifest.key"
+_PATHS_FEATURE = "native-codex-hook-paths-v1"
+_PATHS_COMMAND = "codex-hook-paths"
+_PATHS_TIMEOUT_SECONDS = 10.0
 
 
-def canonical_manifest_bytes(payload: Mapping[str, object]) -> bytes:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+@dataclass(frozen=True, slots=True)
+class HookPaths:
+    """The hook identity files one config target owns in a Guard home, as the runtime names them."""
+
+    manifest: Path
+    receipt: Path
+    key: Path
 
 
-def load_or_create_hook_secret(guard_home: Path) -> HookSecretMaterial:
-    path = hook_secret_path(guard_home)
-    _ensure_private_directory(path.parent, repair_mode=True)
-    if path.exists() or path.is_symlink():
-        return load_hook_secret(guard_home)
+def _paths_answer(guard_home: Path, config_path: Path | None) -> dict[str, object]:
+    """The runtime's ``codex-hook-paths`` answer; a runtime that does not answer is
+    a refused operation the caller repairs, never a guessed path."""
 
-    payload = {
-        "installation_id": secrets.token_hex(16),
-        "key": base64.urlsafe_b64encode(secrets.token_bytes(_HOOK_KEY_BYTES)).decode("ascii"),
-        "key_id": secrets.token_hex(12),
-        "schema_version": _HOOK_SECRET_SCHEMA_VERSION,
-    }
-    encoded = canonical_manifest_bytes(payload) + b"\n"
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        descriptor = os.open(path, flags, _PRIVATE_FILE_MODE)
-    except FileExistsError:
-        return load_hook_secret(guard_home)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(path, _PRIVATE_FILE_MODE)
-        _fsync_directory(path.parent)
-    except BaseException:
-        path.unlink(missing_ok=True)
-        raise
-    return _parse_hook_secret_payload(payload)
+    from .mdm.runtime_request import runtime_answer
+
+    request: dict[str, object] = {"guard_home": str(guard_home)}
+    if config_path is not None:
+        target = config_path.expanduser()
+        request["config_path"] = str(target if target.is_absolute() else Path(os.getcwd()) / target)
+    check_hook_validation_deadline()
+    answer = runtime_answer(
+        _PATHS_FEATURE,
+        _PATHS_COMMAND,
+        request,
+        output_limit=64 * 1024,
+        timeout_seconds=_PATHS_TIMEOUT_SECONDS,
+    )
+    check_hook_validation_deadline()
+    if answer is None:
+        raise hook_key_refusal("runtime_unavailable")
+    return answer
+
+
+def _named(answer: Mapping[str, object], key: str) -> Path:
+    value = answer.get(key)
+    if not isinstance(value, str) or not value:
+        raise hook_key_refusal("runtime_unavailable")
+    return Path(value)
+
+
+def hook_paths(guard_home: Path, config_path: Path) -> HookPaths:
+    """The manifest, receipt and key files ``config_path`` owns in ``guard_home``."""
+    answer = _paths_answer(guard_home, config_path)
+    return HookPaths(_named(answer, "manifest_path"), _named(answer, "receipt_path"), _named(answer, "key_path"))
+
+
+def hook_manifest_file(guard_home: Path, config_path: Path) -> Path:
+    """The manifest ``config_path`` owns in ``guard_home``, as the runtime names it."""
+    return hook_paths(guard_home, config_path).manifest
+
+
+def hook_secret_file(guard_home: Path) -> Path:
+    """The Guard home's hook key file, as the runtime names it."""
+    return _named(_paths_answer(guard_home, None), "key_path")
+
+
+@contextmanager
+def _ordinary_hook_writer(guard_home: Path, target: Path, *, actor: str) -> Iterator[None]:
+    from .native_owned import codex_install_transaction
+    from .runtime_transition import assert_transition_mutation_allowed
+
+    assert_transition_mutation_allowed(guard_home)
+    with codex_install_transaction(guard_home, target, actor=actor):
+        assert_transition_mutation_allowed(guard_home)
+        yield
 
 
 def load_hook_secret(guard_home: Path) -> HookSecretMaterial:
-    path = hook_secret_path(guard_home)
-    if not path.exists() and not path.is_symlink():
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_secret_missing",
-            "The private Codex hook authentication key is missing; run `hol-guard install codex` to repair it.",
-        )
-    _ensure_private_directory(path.parent, repair_mode=False)
-    _validate_private_regular_file(
-        path,
-        reason_prefix="codex_hook_manifest_secret",
-        label="Codex hook authentication key",
-    )
+    return _hook_key("key_identity", guard_home)
+
+
+def _home_text(guard_home: Path) -> str:
+    return os.path.abspath(guard_home)
+
+
+_KeyOp = Literal["key_identity", "key_ensure", "key_remove_if_unused"]
+
+
+def _hook_key_answer(op: _KeyOp, guard_home: Path) -> dict[str, object]:
+    from .codex_hook_authority_record import AuthorityRecordRefusedError, hook_key_answer
+
     try:
-        value: object = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_secret_invalid",
-            "The private Codex hook authentication key is unreadable; repair the Codex installation.",
-        ) from exc
-    if not isinstance(value, dict):
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_secret_invalid",
-            "The private Codex hook authentication key has an invalid format; repair the Codex installation.",
+        return hook_key_answer(op, _home_text(guard_home))
+    except AuthorityRecordRefusedError as exc:
+        raise hook_key_refusal(exc.reason) from exc
+
+
+def hook_key_refusal(reason: str) -> CodexHookIntegrityError:
+    """The error a refused hook key operation raises."""
+    if reason in _KEY_UNAVAILABLE_REASONS:
+        return CodexHookIntegrityError(
+            "codex_hook_manifest_verification_unavailable",
+            "Guard's native runtime did not answer for the Codex hook key; run `hol-guard repair`.",
         )
-    return _parse_hook_secret_payload(value)
+    message = (
+        _KEY_MISSING_MESSAGE
+        if reason == "codex_hook_manifest_secret_missing"
+        else "The private Codex hook authentication key is not usable; repair the Codex installation."
+    )
+    return CodexHookIntegrityError(reason, message)
 
 
-def sign_hook_manifest(unsigned_manifest: dict[str, object], secret: HookSecretMaterial) -> dict[str, object]:
-    if "authentication" in unsigned_manifest:
-        raise ValueError("Unsigned Codex hook manifests must not contain authentication metadata.")
-    generated_at = unsigned_manifest.get("generated_at")
-    if not isinstance(generated_at, str) or not generated_at:
-        raise ValueError("Unsigned Codex hook manifests require a generation time.")
-    payload = dict(unsigned_manifest)
-    payload["authentication"] = {
-        "algorithm": HOOK_MANIFEST_MAC_ALGORITHM,
-        **sign_local_authority_payload(
-            payload,
-            key=secret.key,
-            key_id=secret.key_id,
-            purpose=_HOOK_MANIFEST_INTEGRITY_PURPOSE,
-            signed_at=generated_at,
-        ),
-    }
-    return payload
-
-
-def load_authenticated_hook_manifest(
-    guard_home: Path,
-    config_path: Path,
-) -> dict[str, object]:
-    return load_authenticated_hook_manifest_path(guard_home, hook_manifest_path(guard_home, config_path))
+def _hook_key(op: _KeyOp, guard_home: Path) -> HookSecretMaterial:
+    answer = _hook_key_answer(op, guard_home)
+    fields = (answer.get("installation_id"), answer.get("key_id"), answer.get("fingerprint"))
+    if not all(isinstance(value, str) and value for value in fields):
+        raise CodexHookIntegrityError(
+            "codex_hook_manifest_verification_unavailable",
+            "Guard's native runtime did not answer for the Codex hook key; run `hol-guard repair`.",
+        )
+    installation_id, key_id, fingerprint = (str(value) for value in fields)
+    return HookSecretMaterial(installation_id, key_id, fingerprint, guard_home)
 
 
 def load_authenticated_hook_manifest_path(
@@ -154,260 +167,117 @@ def load_authenticated_hook_manifest_path(
 ) -> dict[str, object]:
     """Authenticate an explicit private manifest path without creating state."""
 
-    if not path.exists() and not path.is_symlink():
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_missing",
-            "The authenticated Codex hook manifest is missing; run `hol-guard install codex` to repair it.",
-        )
-    _validate_private_regular_file(path, reason_prefix="codex_hook_manifest", label="Codex hook manifest")
-    raw = read_private_regular_text(path, max_bytes=_MAX_HOOK_MANIFEST_BYTES)
-    if raw is None:
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_invalid",
-            "The authenticated Codex hook manifest is unreadable; run `hol-guard install codex` to repair it.",
-        )
-    try:
-        value: object = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_invalid",
-            "The authenticated Codex hook manifest is unreadable; run `hol-guard install codex` to repair it.",
-        ) from exc
-    if not isinstance(value, dict):
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_invalid",
-            "The authenticated Codex hook manifest has an invalid format; repair the Codex installation.",
-        )
-    manifest = {str(key): item for key, item in value.items() if isinstance(key, str)}
-    authentication = manifest.get("authentication")
-    if not isinstance(authentication, dict):
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_authentication_missing",
-            "The Codex hook manifest is not authenticated; run `hol-guard install codex` to repair it.",
-        )
-    algorithm = authentication.get("algorithm")
-    if algorithm != HOOK_MANIFEST_MAC_ALGORITHM:
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_authentication_invalid",
-            "The Codex hook manifest authentication metadata is invalid; repair the Codex installation.",
-        )
+    return _authenticated(guard_home, path=os.path.abspath(path))
 
-    secret = load_hook_secret(guard_home)
-    unsigned = dict(manifest)
-    unsigned.pop("authentication", None)
-    verification = verify_local_authority_payload(
-        unsigned,
-        authentication,
-        key=secret.key,
-        key_id=secret.key_id,
-        purpose=_HOOK_MANIFEST_INTEGRITY_PURPOSE,
-    )
-    if verification.status == "missing_integrity":
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_authentication_invalid",
-            "The Codex hook manifest authentication metadata is invalid; repair the Codex installation.",
-        )
-    if verification.status == "unknown_key":
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_key_mismatch",
-            "The Codex hook manifest belongs to another Guard installation; run `hol-guard install codex`.",
-        )
-    if verification.status != "valid":
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_mac_invalid",
-            "The Codex hook manifest authentication failed; run `hol-guard install codex` to repair it.",
-        )
-    installation_id = manifest.get("installation_id")
-    if not isinstance(installation_id, str) or not hmac.compare_digest(installation_id, secret.installation_id):
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_installation_mismatch",
-            "The Codex hook manifest belongs to another Guard installation; run `hol-guard install codex`.",
-        )
-    if authentication.get("signed_at") != manifest.get("generated_at"):
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_authentication_invalid",
-            "The Codex hook manifest generation binding is invalid; repair the Codex installation.",
-        )
+
+def authenticate_hook_manifest_text(
+    guard_home: Path,
+    raw: str,
+    *,
+    _secret: HookSecretMaterial | None = None,
+) -> dict[str, object]:
+    """Authenticate captured text; the runtime refuses more than 1 MiB. This does not validate its file or package."""
+
+    if _secret is None:
+        return _authenticated(guard_home, text=raw)
+    return _authenticated(_secret.guard_home, text=raw, key_id=_secret.key_id, installation_id=_secret.installation_id)
+
+
+_REPAIR = "run `hol-guard install codex` to repair it."
+_MANIFEST_MESSAGES = {
+    "codex_hook_manifest_missing": f"The authenticated Codex hook manifest is missing; {_REPAIR}",
+    "codex_hook_manifest_not_regular": "The Codex hook manifest must be a private regular file, not a symlink.",
+    "codex_hook_manifest_owner_mismatch": "The Codex hook manifest has an unexpected owner.",
+    "codex_hook_manifest_permissions_unsafe": "The Codex hook manifest permissions are not owner-only.",
+    "codex_hook_manifest_invalid": f"The authenticated Codex hook manifest is unreadable; {_REPAIR}",
+    "codex_hook_manifest_authentication_missing": f"The Codex hook manifest is not authenticated; {_REPAIR}",
+    "codex_hook_manifest_authentication_invalid": (
+        "The Codex hook manifest authentication metadata is invalid; repair the Codex installation."
+    ),
+    "codex_hook_manifest_key_mismatch": (
+        "The Codex hook manifest belongs to another Guard installation; run `hol-guard install codex`."
+    ),
+    "codex_hook_manifest_installation_mismatch": (
+        "The Codex hook manifest belongs to another Guard installation; run `hol-guard install codex`."
+    ),
+    "codex_hook_manifest_mac_invalid": f"The Codex hook manifest authentication failed; {_REPAIR}",
+    "codex_hook_manifest_secret_missing": _KEY_MISSING_MESSAGE,
+}
+
+
+def _authenticated(guard_home: Path, **request: str | None) -> dict[str, object]:
+    from .codex_hook_authority_record import AuthorityRecordRefusedError, authenticated_manifest
+
+    check_hook_validation_deadline()
+    try:
+        manifest = authenticated_manifest(_home_text(guard_home), **request)
+    except AuthorityRecordRefusedError as exc:
+        check_hook_validation_deadline()
+        raise manifest_refusal(exc.reason) from exc
+    check_hook_validation_deadline()
     return manifest
 
 
-def write_hook_manifest(guard_home: Path, config_path: Path, manifest: dict[str, object]) -> Path:
-    path = hook_manifest_path(guard_home, config_path)
-    _ensure_private_directory(path.parent, repair_mode=True)
-    atomic_write_bytes(path, canonical_manifest_bytes(manifest) + b"\n", mode=_PRIVATE_FILE_MODE, private=True)
-    return path
+def manifest_refusal(reason: str) -> CodexHookIntegrityError:
+    """The status-safe refusal for a native manifest-authentication reason."""
 
-
-def remove_hook_manifest(guard_home: Path, config_path: Path) -> None:
-    path = hook_manifest_path(guard_home, config_path)
-    if path.is_symlink():
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_not_regular",
-            "Guard refused to remove a symlink in place of the Codex hook manifest.",
+    if reason in _KEY_UNAVAILABLE_REASONS:
+        return CodexHookIntegrityError(
+            "codex_hook_manifest_verification_unavailable",
+            "Guard could not verify the Codex hook installation; run repair and retry.",
         )
-    if path.exists():
-        path.unlink()
-
-
-def remove_hook_secret_if_unused(guard_home: Path) -> None:
-    """Remove the private key after an explicit uninstall removes its last manifest."""
-
-    path = hook_secret_path(guard_home)
-    managed_directory = path.parent
-    if not managed_directory.is_dir():
-        return
-    if any(
-        candidate.exists() or candidate.is_symlink() for candidate in managed_directory.glob("hooks-*.manifest.json")
-    ):
-        return
-    if not path.exists() and not path.is_symlink():
-        return
-    _validate_private_regular_file(
-        path,
-        reason_prefix="codex_hook_manifest_secret",
-        label="Codex hook authentication key",
+    message = _MANIFEST_MESSAGES.get(
+        reason, "The private Codex hook authentication key is not usable; repair the Codex installation."
     )
-    path.unlink()
-    _fsync_directory(managed_directory)
+    return CodexHookIntegrityError(reason, message)
 
 
-def snapshot_regular_file(path: Path) -> bytes | None:
-    if not path.exists() and not path.is_symlink():
-        return None
-    if path.is_symlink() or not path.is_file():
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_not_regular",
-            "Guard refused to replace a non-regular Codex hook manifest.",
-        )
-    return path.read_bytes()
+def atomic_write_text(
+    path: Path,
+    text: str,
+    *,
+    mode: int = _PRIVATE_FILE_MODE,
+    on_publish: Callable[[tuple[int, int, int, int, int]], None] | None = None,
+) -> None:
+    atomic_write_bytes(path, text.encode("utf-8"), mode=mode, private=False, on_publish=on_publish)
 
 
-def restore_private_file(path: Path, payload: bytes | None) -> None:
-    if payload is None:
-        if path.is_symlink():
+def atomic_write_bytes(
+    path: Path,
+    payload: bytes,
+    *,
+    mode: int,
+    private: bool,
+    on_publish: Callable[[tuple[int, int, int, int, int]], None] | None = None,
+    before_publish: Callable[[], None] | None = None,
+) -> None:
+    """Publish ``payload`` through the resident; it journals the write."""
+
+    if before_publish is not None:
+        before_publish()
+    identity = _native(
+        "write", path.parent, path=_path_text(path), payload=_encode(payload), mode=mode, private=private
+    )
+    if on_publish is not None:
+        if not isinstance(identity, list) or len(identity) != 5 or not all(isinstance(part, int) for part in identity):
             raise CodexHookIntegrityError(
-                "codex_hook_manifest_not_regular",
-                "Guard refused to replace a symlink in place of the Codex hook manifest.",
+                "codex_hook_transaction_target_changed", "Codex configuration changed during publication."
             )
-        path.unlink(missing_ok=True)
-        return
-    atomic_write_bytes(path, payload, mode=_PRIVATE_FILE_MODE, private=True)
+        on_publish((identity[0], identity[1], identity[2], identity[3], identity[4]))
 
 
-def atomic_write_text(path: Path, text: str, *, mode: int = _PRIVATE_FILE_MODE) -> None:
-    atomic_write_bytes(path, text.encode("utf-8"), mode=mode, private=False)
+def _path_text(path: Path) -> str:
+    return os.path.abspath(path.expanduser())
 
 
-def atomic_write_bytes(path: Path, payload: bytes, *, mode: int, private: bool) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_symlink() or (path.exists() and not path.is_file()):
-        raise CodexHookIntegrityError(
-            "codex_hook_transaction_target_not_regular",
-            f"Guard refused to replace a non-regular managed file at {path}.",
-        )
-    if private:
-        _ensure_private_directory(path.parent, repair_mode=True)
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    temporary_path = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            fchmod = getattr(os, "fchmod", None)
-            if fchmod is not None:
-                fchmod(handle.fileno(), mode)
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary_path, path)
-        os.chmod(path, mode)
-        _fsync_directory(path.parent)
-    finally:
-        temporary_path.unlink(missing_ok=True)
+def _encode(payload: bytes | None) -> str | None:
+    return None if payload is None else base64.b64encode(payload).decode("ascii")
 
 
-def _parse_hook_secret_payload(payload: dict[str, Any]) -> HookSecretMaterial:
-    version = payload.get("schema_version")
-    installation_id = payload.get("installation_id")
-    key_id = payload.get("key_id")
-    encoded_key = payload.get("key")
-    if (
-        version != _HOOK_SECRET_SCHEMA_VERSION
-        or not isinstance(installation_id, str)
-        or len(installation_id) < 32
-        or not isinstance(key_id, str)
-        or len(key_id) < 24
-        or not isinstance(encoded_key, str)
-    ):
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_secret_invalid",
-            "The private Codex hook authentication key has an invalid format; repair the installation.",
-        )
-    try:
-        key = base64.urlsafe_b64decode(encoded_key.encode("ascii"))
-    except (ValueError, UnicodeEncodeError) as exc:
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_secret_invalid",
-            "The private Codex hook authentication key has invalid encoding; repair the installation.",
-        ) from exc
-    if len(key) != _HOOK_KEY_BYTES:
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_secret_invalid",
-            "The private Codex hook authentication key has an invalid length; repair the installation.",
-        )
-    return HookSecretMaterial(installation_id=installation_id, key_id=key_id, key=key)
+def _native(op: str, home: Path, **fields: Any) -> object:
+    from .native_transition_files import publication
 
-
-def _ensure_private_directory(path: Path, *, repair_mode: bool) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-    metadata = path.lstat()
-    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_directory_unsafe",
-            "The Codex managed-hook directory is not a private regular directory.",
-        )
-    if os.name == "nt":
-        return
-    current_uid = os.getuid() if hasattr(os, "getuid") else None
-    if current_uid is not None and metadata.st_uid != current_uid:
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_directory_owner_mismatch",
-            "The Codex managed-hook directory has an unexpected owner.",
-        )
-    mode = stat.S_IMODE(metadata.st_mode)
-    if mode & 0o077:
-        if not repair_mode:
-            raise CodexHookIntegrityError(
-                "codex_hook_manifest_directory_permissions_unsafe",
-                "The Codex managed-hook directory permissions are not owner-only.",
-            )
-        # Owner-only access is required for this secret-bearing directory; the
-        # generic file-permission rule incorrectly recommends world-readable
-        # 0644, which is both unsuitable for a directory and less restrictive.
-        os.chmod(path, 0o700)  # nosemgrep
-
-
-def _validate_private_regular_file(path: Path, *, reason_prefix: str, label: str) -> None:
-    try:
-        metadata = path.lstat()
-    except OSError as exc:
-        raise CodexHookIntegrityError(f"{reason_prefix}_missing", f"The {label} is missing.") from exc
-    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
-        raise CodexHookIntegrityError(
-            f"{reason_prefix}_not_regular",
-            f"The {label} must be a private regular file, not a symlink.",
-        )
-    if os.name == "nt":
-        return
-    current_uid = os.getuid() if hasattr(os, "getuid") else None
-    if current_uid is not None and metadata.st_uid != current_uid:
-        raise CodexHookIntegrityError(
-            f"{reason_prefix}_owner_mismatch",
-            f"The {label} has an unexpected owner.",
-        )
-    if stat.S_IMODE(metadata.st_mode) & 0o077:
-        raise CodexHookIntegrityError(
-            f"{reason_prefix}_permissions_unsafe",
-            f"The {label} permissions are not owner-only.",
-        )
+    return publication(op, home, **fields)
 
 
 __all__ = [
@@ -416,16 +286,7 @@ __all__ = [
     "CodexHookIntegrityError",
     "HookSecretMaterial",
     "atomic_write_text",
-    "canonical_path",
-    "hook_manifest_path",
-    "hook_secret_path",
-    "load_authenticated_hook_manifest",
+    "hook_manifest_file",
+    "hook_secret_file",
     "load_authenticated_hook_manifest_path",
-    "load_or_create_hook_secret",
-    "remove_hook_manifest",
-    "remove_hook_secret_if_unused",
-    "restore_private_file",
-    "sign_hook_manifest",
-    "snapshot_regular_file",
-    "write_hook_manifest",
 ]

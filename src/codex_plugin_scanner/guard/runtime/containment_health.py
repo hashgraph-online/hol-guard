@@ -4,28 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import sys
-import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Final, cast
 
 from .containment_contract import (
     CONTAINMENT_POLICY_VERSION,
     CONTAINMENT_SCHEMA_VERSION,
-    ContainmentAttestation,
     ContainmentBackend,
-    ContainmentRequest,
 )
-from .effect_contract import (
-    EFFECT_CONTRACT_SCHEMA_VERSION,
-    ProofRequirement,
-    UncertaintyKind,
-)
-from .effect_decision import EFFECT_DECISION_SCHEMA_VERSION, PositiveProof
+from .effect_contract import EFFECT_CONTRACT_SCHEMA_VERSION
+from .effect_decision import EFFECT_DECISION_SCHEMA_VERSION
 from .protection_health import ProtectionCheckStatus, ProtectionSignal
 
 CONTAINMENT_HEALTH_SCHEMA_VERSION: Final = "guard.containment-health.v1"
@@ -34,8 +27,9 @@ CONTAINMENT_POLICY_CONTRACT_DIGEST: Final = hashlib.sha256(
 ).hexdigest()
 _SHA256: Final = re.compile(r"[0-9a-f]{64}")
 _UNSUPPORTED_BACKEND_DIGEST: Final = hashlib.sha256(b"unavailable:unsupported").hexdigest()
-_PROBE_MAX_AGE: Final = timedelta(minutes=5)
-_FUTURE_TOLERANCE: Final = timedelta(seconds=5)
+_CONTAINMENT_CHECK_IDS: Final = frozenset(
+    {"policy_engine", "decision_plane_compatibility", "containment_compatibility", "sandbox"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,68 +118,24 @@ class ContainmentHealthEvidence:
             "schema_version": self.schema_version,
         }
 
-    def compatibility_errors(self, *, now: datetime, runtime_fingerprint: str | None = None) -> tuple[str, ...]:
-        errors: list[str] = []
-        if self.backend is ContainmentBackend.UNSUPPORTED:
-            errors.append("unsupported_platform")
-        if self.containment_schema_version != CONTAINMENT_SCHEMA_VERSION:
-            errors.append("containment_schema_mismatch")
-        if self.policy_version != CONTAINMENT_POLICY_VERSION:
-            errors.append("policy_version_mismatch")
-        if self.effect_contract_schema_version != EFFECT_CONTRACT_SCHEMA_VERSION:
-            errors.append("effect_contract_mismatch")
-        if self.effect_decision_schema_version != EFFECT_DECISION_SCHEMA_VERSION:
-            errors.append("decision_plane_mismatch")
-        if self.policy_contract_digest != CONTAINMENT_POLICY_CONTRACT_DIGEST:
-            errors.append("policy_digest_mismatch")
-        if self.daemon_fingerprint != self.runtime_fingerprint:
-            errors.append("daemon_runtime_drift")
-        if runtime_fingerprint is not None and self.daemon_fingerprint != runtime_fingerprint:
-            errors.append("daemon_runtime_drift")
-        if not self.probe_enforced:
-            errors.append("containment_probe_failed")
-        probe_time = _parse_time(self.probe_at)
-        normalized_now = _normalized_now(now)
-        age = normalized_now - probe_time
-        if age < -_FUTURE_TOLERANCE:
-            errors.append("containment_probe_future")
-        elif age > _PROBE_MAX_AGE:
-            errors.append("containment_probe_stale")
-        return tuple(sorted(errors))
-
     def binding_digest(self) -> str:
         encoded = json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
         return hashlib.sha256(len(encoded).to_bytes(8, "big") + encoded).hexdigest()
 
 
-def contained_positive_proof(
-    attestation: ContainmentAttestation,
-    request: ContainmentRequest,
-    health: ContainmentHealthEvidence,
+def probe_containment_health(
     *,
-    requirements: Sequence[ProofRequirement],
-    now: datetime,
-    runtime_fingerprint: str,
-) -> PositiveProof:
-    """Construct contained proof only when execution and current runtime health agree."""
+    daemon_fingerprint: str,
+    guard_home: Path,
+) -> ContainmentHealthEvidence:
+    """Report containment health from the resident's own execution-owned probe.
 
-    if _SHA256.fullmatch(runtime_fingerprint) is None:
-        raise ValueError("runtime fingerprint must be a lowercase SHA-256 digest")
-    errors = health.compatibility_errors(now=now, runtime_fingerprint=runtime_fingerprint)
-    if errors:
-        raise ValueError(f"containment health is incompatible: {errors[0]}")
-    if attestation.backend is not health.backend or attestation.backend_digest != health.backend_digest:
-        raise ValueError("containment backend identity drifted")
-    base = attestation.execution_bound_proof(request, requirements=requirements)
-    digest = hashlib.sha256(f"{base.binding_digest}:{health.binding_digest()}".encode()).hexdigest()
-    return PositiveProof(base.route, digest, base.satisfied_requirements, enforced=True)
+    The resident selects the backend, runs the enforcement self-probe and builds
+    the evidence, so this never recalculates any of it. A resident that cannot
+    answer is reported as unavailable by raising, not by guessing a verdict here.
+    """
 
-
-def probe_containment_health(*, daemon_fingerprint: str) -> ContainmentHealthEvidence:
-    """Run a fresh execution-owned backend probe in the daemon process."""
-
-    from .containment_contract import ContainmentPolicy, ContainmentRequest
-    from .containment_executor import execute_contained, file_sha256
+    from ..native_execution import containment_health_probe_native
 
     if _SHA256.fullmatch(daemon_fingerprint) is None:
         raise ValueError("daemon fingerprint must be a lowercase SHA-256 digest")
@@ -199,98 +149,65 @@ def probe_containment_health(*, daemon_fingerprint: str) -> ContainmentHealthEvi
             probe_at=datetime.now(timezone.utc).isoformat(),
             probe_enforced=False,
         )
-    executable = next((path for path in ("/usr/bin/true", "/bin/true") if os.path.isfile(path)), None)
-    if executable is None:
-        raise RuntimeError("containment probe executable is unavailable")
-    with tempfile.TemporaryDirectory(prefix="guard-containment-probe-") as workspace_value:
-        workspace = os.path.realpath(workspace_value)
-        request = ContainmentRequest(
-            argv=(executable,),
-            cwd=workspace,
-            environment=(),
-            policy=ContainmentPolicy(workspace, ()),
-            inputs=(),
-            launch_digest=hashlib.sha256(b"guard-containment-health-probe-v1").hexdigest(),
-            executable_digest=file_sha256(executable),
-            operation_id="health-probe",
-        )
-        result = execute_contained(request, timeout_seconds=5.0)
-    return ContainmentHealthEvidence(
-        backend=result.attestation.backend,
-        backend_digest=result.attestation.backend_digest,
-        policy_contract_digest=CONTAINMENT_POLICY_CONTRACT_DIGEST,
+    payload = containment_health_probe_native(
         daemon_fingerprint=daemon_fingerprint,
-        runtime_fingerprint=daemon_fingerprint,
-        probe_at=datetime.now(timezone.utc).isoformat(),
-        probe_enforced=result.enforced and result.exit_code == 0 and not result.timed_out,
+        guard_home=guard_home,
     )
+    if payload is None:
+        raise RuntimeError("native_containment_health_probe_unavailable")
+    return ContainmentHealthEvidence.from_mapping(payload)
 
 
 def containment_health_signals(
     value: object,
     *,
     now: datetime,
+    guard_home: Path | None = None,
 ) -> dict[str, ProtectionSignal]:
-    """Map runtime evidence into existing protection-health check IDs."""
+    """The four containment-owned checks the resident proves from this evidence.
+
+    The resident decides them exactly as it does inside the full report, so a
+    repair confirmation can never disagree with the health the operator sees.
+    A resident that cannot answer raises ``NativeProtectionHealthError``,
+    except for evidence from a platform with no backend: that stays a
+    platform limit (``unsupported_platform``) rather than an unreachable
+    runtime. Whenever the resident answers, its answer is the one returned.
+    """
+
+    from ..native_protection_health import NativeProtectionHealthError, protection_health_report
 
     try:
-        evidence = ContainmentHealthEvidence.from_mapping(value)
-    except (TypeError, ValueError):
-        return _failed_signals("containment_health_invalid")
-    if evidence.backend is ContainmentBackend.UNSUPPORTED:
-        return _failed_signals("unsupported_platform")
-    errors = evidence.compatibility_errors(now=now)
-    if not errors:
-        return {
-            "policy_engine": ProtectionSignal(ProtectionCheckStatus.PASS, "policy_engine_compatible"),
-            "decision_plane_compatibility": ProtectionSignal(
-                ProtectionCheckStatus.PASS,
-                "decision_plane_compatible",
-            ),
-            "containment_compatibility": ProtectionSignal(
-                ProtectionCheckStatus.PASS,
-                "containment_compatible",
-            ),
-            "sandbox": ProtectionSignal(ProtectionCheckStatus.PASS, "containment_backend_enforced"),
-        }
-    reason = errors[0]
-    policy_error = reason in {
-        "policy_version_mismatch",
-        "policy_digest_mismatch",
-        "effect_contract_mismatch",
-        "decision_plane_mismatch",
-        "containment_schema_mismatch",
-    }
-    return _failed_signals("policy_version_mismatch" if policy_error else reason)
-
-
-def containment_health_uncertainties(
-    value: object,
-    *,
-    now: datetime,
-) -> tuple[UncertaintyKind, ...]:
-    try:
-        evidence = ContainmentHealthEvidence.from_mapping(value)
-    except (TypeError, ValueError):
-        return (UncertaintyKind.DEGRADED_CONTAINMENT, UncertaintyKind.PROTECTION_HEALTH_DEGRADED)
-    errors = evidence.compatibility_errors(now=now)
-    result: set[UncertaintyKind] = set()
-    if errors:
-        result.add(UncertaintyKind.DEGRADED_CONTAINMENT)
-    if any("policy" in item or "schema" in item or "decision_plane" in item for item in errors):
-        result.add(UncertaintyKind.POLICY_VERSION_MISMATCH)
-    if "daemon_runtime_drift" in errors:
-        result.add(UncertaintyKind.PROTECTION_HEALTH_DEGRADED)
-    return tuple(sorted(result, key=lambda item: item.value))
-
-
-def _failed_signals(reason: str) -> dict[str, ProtectionSignal]:
+        report = protection_health_report(
+            {
+                "now": now.isoformat(),
+                "managed_installs": [],
+                "hook_verification": None,
+                "daemon": {"registration_status": None, "last_heartbeat_at": None, "containment_health": value},
+                "remembered_rules": None,
+                "runtime_protection": None,
+                "decision_stream": None,
+            },
+            guard_home=guard_home,
+        )
+    except NativeProtectionHealthError:
+        if not _unsupported_backend(value):
+            raise
+        unsupported = ProtectionSignal(ProtectionCheckStatus.FAIL, "unsupported_platform")
+        return dict.fromkeys(sorted(_CONTAINMENT_CHECK_IDS), unsupported)
+    checks = cast(list[dict[str, str]], report["checks"])
     return {
-        "policy_engine": ProtectionSignal(ProtectionCheckStatus.FAIL, reason),
-        "decision_plane_compatibility": ProtectionSignal(ProtectionCheckStatus.FAIL, reason),
-        "containment_compatibility": ProtectionSignal(ProtectionCheckStatus.FAIL, reason),
-        "sandbox": ProtectionSignal(ProtectionCheckStatus.FAIL, reason),
+        row["check_id"]: ProtectionSignal(ProtectionCheckStatus(row["status"]), row["reason_code"])
+        for row in checks
+        if row["check_id"] in _CONTAINMENT_CHECK_IDS
     }
+
+
+def _unsupported_backend(value: object) -> bool:
+    try:
+        evidence = ContainmentHealthEvidence.from_mapping(value)
+    except (TypeError, ValueError):
+        return False
+    return evidence.backend is ContainmentBackend.UNSUPPORTED
 
 
 def _parse_time(value: str) -> datetime:
@@ -301,12 +218,6 @@ def _parse_time(value: str) -> datetime:
     if parsed.tzinfo is None:
         raise ValueError("probe_at must include a timezone")
     return parsed.astimezone(timezone.utc)
-
-
-def _normalized_now(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("now must include a timezone")
-    return value.astimezone(timezone.utc)
 
 
 def _require_string(value: object, name: str) -> str:
@@ -325,8 +236,6 @@ __all__ = (
     "CONTAINMENT_HEALTH_SCHEMA_VERSION",
     "CONTAINMENT_POLICY_CONTRACT_DIGEST",
     "ContainmentHealthEvidence",
-    "contained_positive_proof",
     "containment_health_signals",
-    "containment_health_uncertainties",
     "probe_containment_health",
 )

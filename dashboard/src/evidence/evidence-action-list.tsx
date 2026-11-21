@@ -310,7 +310,7 @@ function ActionRow({
         </button>
       </td>
       <td className="px-3 py-2.5">
-        <DecisionBadge decision={receipt.policy_decision} />
+        <DecisionBadge decision={receipt.policy_decision} userOverride={receipt.user_override} />
       </td>
       <td className="px-3 py-2.5 hidden lg:table-cell">
         <span className="text-xs text-slate-400 whitespace-nowrap">

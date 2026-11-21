@@ -10,19 +10,12 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import (
-    CLAUDE_GUARD_DAEMON_HOOK_MARKER,
-    ClaudeCodeHarnessAdapter,
-)
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS, harness_contracts_table
-from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.gemini import GeminiHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from codex_plugin_scanner.guard.cli.install_commands import list_harness_setup_items
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import harness_ops_support as harness_support
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -51,7 +44,7 @@ def test_gr091_cursor_adapter_detects_workspace_mcp_smoke(tmp_path: Path) -> Non
         encoding="utf-8",
     )
 
-    detection = CursorHarnessAdapter().detect(context)
+    detection = harness_ops.detect("cursor", context)
 
     assert detection.installed is True
     assert detection.artifacts[0].harness == "cursor"
@@ -67,7 +60,7 @@ def test_gr092_gemini_adapter_detects_cli_settings_smoke(tmp_path: Path) -> None
         encoding="utf-8",
     )
 
-    detection = GeminiHarnessAdapter().detect(context)
+    detection = harness_ops.detect("gemini", context)
 
     assert detection.installed is True
     assert detection.artifacts[0].harness == "gemini"
@@ -114,29 +107,19 @@ def test_gr094_inactive_harness_copy_says_observed_not_protected(tmp_path: Path)
     assert cursor_item["observed_copy"] == "Observed locally, not protected by Guard yet."
 
 
-def test_gr095_harness_capabilities_table_covers_prompt_tool_shell_mcp_support() -> None:
-    table = harness_contracts_table()
-
-    assert "Event Surfaces" in table
-    for expected in ("shell", "prompt", "mcp_tool", "file_read"):
-        assert expected in table
-    for contract in HARNESS_CONTRACTS:
-        assert contract.harness in table
-
-
 def test_gr096_managed_hook_json_matches_each_harness_schema(tmp_path: Path) -> None:
     context = _context(tmp_path)
 
-    codex_manifest = CodexHarnessAdapter().install(context)
-    ClaudeCodeHarnessAdapter().install(context)
+    codex_manifest = harness_support.install("codex", context)
+    harness_support.install("claude-code", context)
     opencode_config = context.home_dir / ".config" / "opencode" / "opencode.json"
     opencode_config.parent.mkdir(parents=True, exist_ok=True)
     opencode_config.write_text(
         json.dumps({"mcp": {"team-tools": {"type": "local", "command": ["node", "server.js"]}}}),
         encoding="utf-8",
     )
-    opencode_manifest = OpenCodeHarnessAdapter().install(context)
-    CopilotHarnessAdapter().install(context)
+    opencode_manifest = harness_support.install("opencode", context)
+    harness_support.install("copilot", context)
 
     codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_hook_config_path"])))
     claude_hooks = json.loads((context.home_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))["hooks"]
@@ -156,9 +139,9 @@ def test_gr096_managed_hook_json_matches_each_harness_schema(tmp_path: Path) -> 
 def test_gr099_managed_hooks_use_lightweight_cli_entrypoints(tmp_path: Path) -> None:
     context = _context(tmp_path)
 
-    codex_manifest = CodexHarnessAdapter().install(context)
-    ClaudeCodeHarnessAdapter().install(context)
-    CopilotHarnessAdapter().install(context)
+    codex_manifest = harness_support.install("codex", context)
+    harness_support.install("claude-code", context)
+    harness_support.install("copilot", context)
 
     codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_hook_config_path"])))
     claude_hooks = json.loads((context.home_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))["hooks"]
@@ -171,10 +154,3 @@ def test_gr099_managed_hooks_use_lightweight_cli_entrypoints(tmp_path: Path) -> 
     assert "dashboard" not in serialized.lower()
     assert "react" not in serialized.lower()
     assert "vite" not in serialized.lower()
-
-
-def test_gr100_harness_docs_match_generated_contract_table() -> None:
-    docs = Path("docs/guard/harness-support.md").read_text(encoding="utf-8")
-    generated_table = harness_contracts_table().strip()
-
-    assert generated_table in docs

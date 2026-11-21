@@ -3,6 +3,7 @@ use super::*;
 use crate::native_command_controls::CompiledNativeCommandControls;
 use crate::pretool::evaluate_pre_tool_envelope_with_extensions;
 use guard_contracts::{NativeCommandControlBindingV1, PreToolResultV1};
+use sha2::{Digest, Sha256};
 use std::hint::black_box;
 use std::path::Path;
 

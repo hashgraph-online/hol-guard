@@ -9,12 +9,15 @@ from pathlib import Path
 
 import pytest
 
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError, update_settings
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.cloud_review_settings import (
+from codex_plugin_scanner.guard.cloud_control.cloud_review_settings import (
     CloudReviewSettingsError,
     change_cloud_review_settings,
     cloud_review_settings_status,
+)
+from codex_plugin_scanner.guard.cloud_control.server_control_connect_state import (
+    _guard_cloud_connect_required_for_insights,
 )
 from codex_plugin_scanner.guard.review_contracts import build_local_review_request_claim
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import _oauth_metadata
@@ -74,6 +77,77 @@ def test_status_counts_only_current_binding_and_uses_source_sync_state(tmp_path:
     assert result["last_synced_at"] is None
     assert result["delivery_state"] == "error"
     assert result["pending_uploads"] == 0
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        {"last_error_code": "cloud_auth_expired"},
+        {"last_error": "Guard authorization expired. Run `hol-guard connect` to sign in again."},
+        {"last_error": "HTTP Error 401: Unauthorized"},
+    ],
+)
+def test_expired_cloud_sign_in_needs_reconnect_not_new_review_consent(tmp_path: Path, error: dict[str, str]) -> None:
+    store = connected_exact_review_store(tmp_path)
+    change_cloud_review_settings(store, _payload(), refresh_workers=_refresh)
+    now = datetime.now(timezone.utc).isoformat()
+    store.set_sync_payload("guard_cloud_review_sync_state", {"state": "error", **error}, now)
+
+    status = cloud_review_settings_status(store)
+    assert status["connected"] is True
+    assert status["enabled"] is True
+    assert status["reconnect_required"] is True
+    assert _guard_cloud_connect_required_for_insights(store) is True
+    assert not any(secret in repr(status) for secret in ("refresh-token", "dpop_private_key", "access_token"))
+
+    store.set_sync_payload("guard_cloud_review_sync_state", {"state": "idle", "last_error": None}, now)
+    assert cloud_review_settings_status(store)["reconnect_required"] is False
+    assert _guard_cloud_connect_required_for_insights(store) is False
+
+
+def test_completed_sign_in_clears_stale_cloud_auth_error_without_losing_delivery_history(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    now = datetime.now(timezone.utc).isoformat()
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    delivery_binding = {key: value for key, value in binding.items() if key != "oauth_source"}
+    store.set_sync_payload(
+        "guard_cloud_review_sync_state",
+        {
+            "state": "error",
+            "last_error_code": "cloud_auth_expired",
+            "last_error": "Guard authorization expired.",
+            "last_delivery_at": now,
+            "last_delivery_binding": delivery_binding,
+        },
+        now,
+    )
+    assert cloud_review_settings_status(store)["reconnect_required"] is True
+
+    store.clear_cloud_sync_state_for_reconnect(now=now)
+
+    status = cloud_review_settings_status(store)
+    assert status["reconnect_required"] is False
+    assert status["delivery_state"] == "idle"
+    assert status["last_synced_at"] == now
+    assert _guard_cloud_connect_required_for_insights(store) is False
+
+
+def test_delivery_error_does_not_demand_new_cloud_sign_in(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    store.set_sync_payload(
+        "guard_cloud_review_sync_state",
+        {"state": "error", "last_error": "ConnectionError", "last_error_code": "cloud_transport_error"},
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+    status = cloud_review_settings_status(store)
+    assert status["delivery_state"] == "error"
+    assert status["reconnect_required"] is False
+    assert _guard_cloud_connect_required_for_insights(store) is False
+
+    store.clear_cloud_sync_state_for_reconnect()
+    assert cloud_review_settings_status(store)["delivery_state"] == "error"
 
 
 def test_reauthorization_refreshes_existing_pending_request(tmp_path: Path) -> None:
@@ -197,7 +271,7 @@ def test_quick_recovery_checks_the_request_history_identity(tmp_path: Path) -> N
 def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
     update_settings(store.guard_home, {"enabled": True, "new_password": "test-pass", "confirm_password": "test-pass"})
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon = NativeGuardDaemon(store, home_dir=tmp_path)
     daemon.start()
     try:
         url = f"http://127.0.0.1:{daemon.port}/v1/cloud-review"
@@ -212,7 +286,7 @@ def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) 
         with pytest.raises(urllib.error.HTTPError) as missing_session:
             send({}, _payload())
         assert missing_session.value.code == 401
-        headers = {"X-Guard-Token": daemon._server.auth_token, "Content-Type": "application/json"}
+        headers = {"X-Guard-Token": daemon.auth_token, "Content-Type": "application/json"}
         with pytest.raises(urllib.error.HTTPError) as remote_origin:
             send({**headers, "Origin": "https://hol.org"}, _payload())
         assert remote_origin.value.code == 403
@@ -224,3 +298,16 @@ def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) 
         assert send(headers)["enabled"] is True
     finally:
         daemon.stop()
+
+
+def test_stale_outbox_401_text_after_sync_start_does_not_demand_new_sign_in(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    store.set_sync_payload(
+        "guard_cloud_review_sync_state",
+        {"state": "error", "last_error": "HTTP Error 401: Unauthorized", "last_error_code": None},
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+    status = cloud_review_settings_status(store)
+    assert status["reconnect_required"] is False
+    assert _guard_cloud_connect_required_for_insights(store) is False

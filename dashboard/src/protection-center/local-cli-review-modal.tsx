@@ -14,16 +14,22 @@ export function CustomExtensionReviewModal(props: {
   nextState: LocalCliState;
   commandChanges: ReturnType<typeof commandPermissionChanges>;
   providerUpdates: ProviderActionDraft[];
+  capabilityChange?: { label: string; next: "on" | "off" };
   busy: boolean;
   error: string | null;
   approvalGate: GuardApprovalGatePublicConfig | null;
+  /** The last save was refused for a missing code, so a recent proof no longer stands in. */
+  requireFreshTotp?: boolean;
   onCancel: () => void;
   onConfirm: (credentials: { approval_password?: string; approval_totp_code?: string }) => void;
 }) {
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
   const dialogRef = useModalDialog<HTMLFormElement>(props.onCancel, !props.busy);
-  const title = props.providerUpdates.length > 0 ? "Review app action permissions" : reviewTitle(props.item.name, props.nextState);
+  const change = props.capabilityChange;
+  const title = change
+    ? `${change.next === "on" ? "Turn on" : "Turn off"} ${change.label.toLowerCase()} for ${props.item.name}`
+    : props.providerUpdates.length > 0 ? "Review app action permissions" : reviewTitle(props.item.name, props.nextState);
   const handlePassword = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setPassword(event.target.value);
   }, []);
@@ -37,13 +43,13 @@ export function CustomExtensionReviewModal(props: {
     props.onConfirm(buildApprovalProofCredentials(props.approvalGate, {
       approvalPassword: password,
       approvalTotpCode: totp,
-    }));
+    }, props.requireFreshTotp === true));
   }, [password, props, totp]);
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.approvalGate,
     { approvalPassword: password, approvalTotpCode: totp },
     props.busy,
-    false,
+    props.requireFreshTotp === true,
     true,
   );
   return (
@@ -51,12 +57,15 @@ export function CustomExtensionReviewModal(props: {
       <form ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="custom-extension-review-title" onSubmit={handleSubmit} className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl focus:outline-none">
         <h2 id="custom-extension-review-title" className="text-xl font-semibold text-brand-dark">{title}</h2>
         <p className="mt-2 text-sm leading-6 text-brand-dark/80">
-          {reviewModalDetail(props.approvalGate)}
+          {reviewModalDetail(props.approvalGate, props.requireFreshTotp === true)}
         </p>
         {props.item.surface === "mcp" ? <div className="mt-3 text-sm leading-6 text-brand-dark">
           <p>{props.item.source_label || "This host"} · This configured connection</p>
           <p>{connectionReviewMessage(props.nextState)}</p>
         </div> : null}
+        {change ? <p className="mt-4 text-sm leading-6 text-brand-dark">
+          {change.label}: {change.next === "on" ? "Off → On" : "On → Off"}. This applies to this device only.
+        </p> : null}
         {props.commandChanges.length > 0 ? <section aria-label="Permission changes" className="mt-4 text-sm leading-6 text-brand-dark">
           <p className="font-semibold">{props.commandChanges.length} {props.item.surface === "mcp" ? "tool" : "command"} changes</p>
           <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
@@ -83,6 +92,7 @@ export function CustomExtensionReviewModal(props: {
             approvalGate={props.approvalGate}
             approvalPassword={password}
             approvalTotpCode={totp}
+            requireFreshTotp={props.requireFreshTotp === true}
             requireGate={true}
             onApprovalPasswordChange={handlePassword}
             onApprovalTotpCodeChange={handleTotp}

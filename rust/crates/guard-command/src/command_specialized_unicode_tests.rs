@@ -61,6 +61,16 @@ fn unicode_configurations_cannot_enter_the_ascii_comparison_contract() {
             "unsupported_specialized_unicode_config"
         );
     }
+    for config in [
+        serde_json::json!({"launchers":[["éxec","tui-runner"]]}),
+        serde_json::json!({"leading_options_with_values":["--é"]}),
+        serde_json::json!({"expansion_markers":["é"]}),
+    ] {
+        assert_eq!(
+            SpecializedMatcher::from_config("tui-runner-expansion.v1", config).unwrap_err(),
+            "unsupported_specialized_unicode_config"
+        );
+    }
 }
 
 #[test]

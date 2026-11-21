@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.creatoros-studio",
+  "version": "1.0.0",
+  "name": "CreatorOS Studio",
+  "description": "Lets agents direct a self-hosted ComfyUI studio: photos, clips and finished reels rendered on your own GPU with open weights. Long renders return a job ID. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.theploggy",
+    "displayName": "thePloggy",
+    "url": "https://github.com/thePloggy"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://github.com/thePloggy/CreatorOS-Studio",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "creatoros-studio-mcp"
+  },
+  "riskClasses": [
+    "local-gpu-compute",
+    "local-file-write",
+    "local-data-access"
+  ],
+  "tools": [
+    {
+      "name": "generate_photo",
+      "state": "review"
+    },
+    {
+      "name": "image_to_video",
+      "state": "review"
+    },
+    {
+      "name": "make_reel",
+      "state": "review"
+    },
+    {
+      "name": "get_status",
+      "state": "inherit"
+    },
+    {
+      "name": "list_library",
+      "state": "inherit"
+    },
+    {
+      "name": "list_characters",
+      "state": "inherit"
+    },
+    {
+      "name": "machine_status",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/thePloggy/CreatorOS-Studio#use-it-from-a-terminal-or-an-ai-agent"
+  ],
+  "saferAlternatives": [
+    "Keep generate_photo, image_to_video and make_reel on review so every render is approved before it takes the GPU; the other tools only read status."
+  ]
+}

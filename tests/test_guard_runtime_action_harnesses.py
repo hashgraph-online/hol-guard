@@ -2,21 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.actions import (
-    action_envelope_harnesses,
-    normalize_claude_hook_payload,
-    normalize_copilot_payload,
-    normalize_gemini_payload,
-    normalize_harness_payload,
-    normalize_kimi_payload,
-    normalize_opencode_payload,
-)
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 
 
 def test_normalize_claude_pre_tool_read_payload(tmp_path: Path) -> None:
@@ -26,7 +16,9 @@ def test_normalize_claude_pre_tool_read_payload(tmp_path: Path) -> None:
         "tool_input": {"file_path": "~/.npmrc"},
     }
 
-    envelope = normalize_claude_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload(
+        "claude-code", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path
+    )
 
     assert envelope.harness == "claude-code"
     assert envelope.event_name == "PreToolUse"
@@ -41,7 +33,9 @@ def test_normalize_claude_user_prompt_submit_payload(tmp_path: Path) -> None:
         "prompt": "Please print ~/.env to debug local setup.",
     }
 
-    envelope = normalize_claude_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload(
+        "claude-code", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path
+    )
 
     assert envelope.harness == "claude-code"
     assert envelope.action_type == "prompt"
@@ -56,7 +50,9 @@ def test_normalize_claude_pre_tool_bash_payload(tmp_path: Path) -> None:
         "tool_input": {"command": "cat ~/.npmrc"},
     }
 
-    envelope = normalize_claude_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload(
+        "claude-code", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path
+    )
 
     assert envelope.harness == "claude-code"
     assert envelope.action_type == "shell_command"
@@ -71,7 +67,7 @@ def test_normalize_opencode_mcp_payload(tmp_path: Path) -> None:
         "tool_input": {"target": "workspace"},
     }
 
-    envelope = normalize_opencode_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("opencode", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.harness == "opencode"
     assert envelope.event_name == "PermissionRequest"
@@ -88,7 +84,7 @@ def test_normalize_copilot_autopilot_shell_payload(tmp_path: Path) -> None:
         "toolInput": {"command": "cat ~/.npmrc"},
     }
 
-    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("copilot", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.harness == "copilot"
     assert envelope.event_name == "PreToolUse"
@@ -104,7 +100,7 @@ def test_normalize_copilot_hook_name_payload(tmp_path: Path) -> None:
         "toolInput": {"command": "cat ~/.npmrc"},
     }
 
-    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("copilot", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.event_name == "PermissionRequest"
     assert envelope.action_type == "shell_command"
@@ -117,7 +113,7 @@ def test_normalize_copilot_slash_mcp_payload(tmp_path: Path) -> None:
         "toolInput": {"message": "hello"},
     }
 
-    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("copilot", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "mcp_tool"
     assert envelope.mcp_server == "danger_lab"
@@ -132,7 +128,7 @@ def test_normalize_copilot_prefixed_mcp_payload(tmp_path: Path) -> None:
         "mcpServers": {"danger_lab": {}},
     }
 
-    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("copilot", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "mcp_tool"
     assert envelope.mcp_server == "danger_lab"
@@ -147,7 +143,7 @@ def test_normalize_copilot_three_part_prefixed_mcp_payload(tmp_path: Path) -> No
         "mcpServers": {"guard_lab": {}},
     }
 
-    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("copilot", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "mcp_tool"
     assert envelope.mcp_server == "guard_lab"
@@ -162,7 +158,7 @@ def test_normalize_copilot_long_server_prefixed_mcp_payload(tmp_path: Path) -> N
         "mcpServers": {"my_server_name": {}},
     }
 
-    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("copilot", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "mcp_tool"
     assert envelope.mcp_server == "my_server_name"
@@ -177,7 +173,7 @@ def test_normalize_copilot_single_token_tool_prefixed_mcp_payload(tmp_path: Path
         "mcpServers": {"guard_team_lab": {}},
     }
 
-    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("copilot", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "mcp_tool"
     assert envelope.mcp_server == "guard_team_lab"
@@ -191,7 +187,7 @@ def test_normalize_copilot_unknown_prefixed_mcp_payload_stays_untyped(tmp_path: 
         "toolInput": {"target": "workspace"},
     }
 
-    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("copilot", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "config_change"
     assert envelope.mcp_server is None
@@ -206,7 +202,7 @@ def test_normalize_copilot_tokenized_server_prefixed_mcp_payload(tmp_path: Path)
         "mcpServers": {"shared-tools": {}},
     }
 
-    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("copilot", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "mcp_tool"
     assert envelope.mcp_server == "shared-tools"
@@ -220,7 +216,9 @@ def test_normalize_generic_tool_alias_does_not_set_mcp_tool(tmp_path: Path) -> N
         "tool_input": {"path": "~/.npmrc"},
     }
 
-    envelope = normalize_claude_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload(
+        "claude-code", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path
+    )
 
     assert envelope.action_type == "file_read"
     assert envelope.tool_name == "Read"
@@ -255,7 +253,7 @@ def test_normalize_opencode_merges_partial_mcp_details(tmp_path: Path) -> None:
         "toolInput": {"target": "workspace"},
     }
 
-    envelope = normalize_opencode_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("opencode", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "mcp_tool"
     assert envelope.mcp_server == "guard_lab"
@@ -270,7 +268,7 @@ def test_normalize_opencode_merges_snake_case_partial_mcp_details(tmp_path: Path
         "tool_input": {"target": "workspace"},
     }
 
-    envelope = normalize_opencode_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("opencode", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "mcp_tool"
     assert envelope.mcp_server == "guard_lab"
@@ -283,7 +281,7 @@ def test_normalize_gemini_prompt_payload(tmp_path: Path) -> None:
         "prompt": "Inspect ~/.npmrc, then explain risk.",
     }
 
-    envelope = normalize_gemini_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("gemini", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.harness == "gemini"
     assert envelope.event_name == "UserPromptSubmit"
@@ -293,7 +291,9 @@ def test_normalize_gemini_prompt_payload(tmp_path: Path) -> None:
 
 
 def test_normalize_kimi_prompt_payload_flattens_content_parts(tmp_path: Path) -> None:
-    envelope = normalize_kimi_payload(
+    envelope = normalize_harness_payload(
+        "kimi",
+        "",
         {
             "event": "UserPromptSubmit",
             "prompt": [{"text": "Inspect ~/.npmrc"}, {"text": "then explain the risk."}],
@@ -307,67 +307,6 @@ def test_normalize_kimi_prompt_payload_flattens_content_parts(tmp_path: Path) ->
     assert envelope.action_type == "prompt"
     assert envelope.prompt_excerpt == "Inspect ~/.npmrc then explain the risk."
     assert envelope.target_paths == ("~/.npmrc",)
-
-
-def test_shared_action_envelope_contract_covers_every_registered_harness(tmp_path: Path) -> None:
-    """Every registered native-hook harness preserves the safe common shell shape."""
-
-    payload = {"tool_name": "Bash", "tool_input": {"command": "cat ~/.npmrc"}}
-    expected_harnesses = {
-        "claude": "claude-code",
-        "cline-cli": "cline",
-        "cline-vscode": "cline",
-        "zai": "zcode",
-        "devin-cli": "devin",
-        "cognition-devin": "devin",
-    }
-    for harness in action_envelope_harnesses():
-        envelope = normalize_harness_payload(
-            harness,
-            "PreToolUse",
-            payload,
-            workspace=tmp_path / "workspace",
-            home_dir=tmp_path,
-        )
-        case_id = f"ADAPTER-ENVELOPE-001:{harness}"
-        expected = {
-            "harness": expected_harnesses.get(harness, harness),
-            "event_name": "PreToolUse",
-            "action_type": "shell_command",
-            "target_paths": ("~/.npmrc",),
-        }
-        actual = {
-            "harness": envelope.harness,
-            "event_name": envelope.event_name,
-            "action_type": envelope.action_type,
-            "target_paths": envelope.target_paths,
-        }
-        assert actual == expected, f"{case_id}: input={payload!r} expected={expected!r} actual={actual!r}"
-
-
-def test_hook_runtime_helpers_survive_action_normalizer_first_import(tmp_path: Path) -> None:
-    """A native hook cannot lose runtime helpers because another hook loads first."""
-
-    script = "\n".join(
-        (
-            "from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload",
-            "normalize_harness_payload('kimi', 'PreToolUse', "
-            "{'tool_name': 'Bash', 'tool_input': {'command': 'printf safe'}})",
-            "from codex_plugin_scanner.guard.cli.commands_hook_native_generic import _artifact_id_from_event",
-            "from codex_plugin_scanner.guard.cli.commands_support_codex_paths import _collect_codex_tool_response_text",
-            "assert _artifact_id_from_event('pi', {'tool_name': 'Bash'}).endswith(':Bash')",
-            "assert _collect_codex_tool_response_text({'stdout': 'safe'}) == 'safe'",
-        )
-    )
-    completed = subprocess.run(
-        [sys.executable, "-c", script],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert completed.returncode == 0, completed.stderr
 
 
 def test_normalize_harness_payload_dispatches_grok(tmp_path: Path) -> None:

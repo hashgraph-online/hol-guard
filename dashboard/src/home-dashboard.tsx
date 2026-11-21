@@ -18,23 +18,30 @@ import {
   Badge,
   EmptyState,
   SectionLabel,
-  GuardHero,
 } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime, formatNumber } from "./approval-center-utils";
 import { useFocusTrap } from "./use-focus-trap";
 import { DeviceProofCard, OperatorHealthCard, resolveCloudIntelCopy } from "./runtime-overview";
 import { HomeProtectionModule } from "./home-protection-module";
-import { approvalProofRequiresPassword } from "./approval-proof-inline";
+import { ContextHomeStatus } from "./context-assistance/home-status";
+import { HomeHero, buildHomeHeroModel } from "./home-hero";
+import { HomeHowGuardWorks, useHowGuardWorksReveal } from "./home-how-guard-works";
+import { HomeSetupCard, WhatStaysLocalCard, resolveSetupApps } from "./home-setup-card";
+import { approvalProofRequiresPassword, approvalProofUsesPulse } from "./approval-proof-inline";
 import { EvidenceInsightsHomePreview } from "./evidence/evidence-insights-home-preview";
 import { EvidenceInsightsShareModal } from "./evidence/evidence-insights-share-modal";
 import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
 import { HomeCommandActivityCard } from "./command-activity/command-activity-home-card";
 import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
 import { WatchProtectionBanner } from "./watch-protection-banner";
-import { updateSettings } from "./guard-api";
+import { watchBannerModel } from "./harness-posture-ui";
 import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
+import { approvalLeftActionStopped } from "./evidence/approval-outcome";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import { buildHomeRuntimeErrorCopy } from "./home-runtime-error";
+import { ServiceRecoveryPanel } from "./service-recovery-panel";
+import type { RecoveryHandoffResult, RecoveryInstallMode } from "./service-recovery";
+import { RuntimeErrorState } from "./runtime-error-state";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
@@ -106,11 +113,12 @@ export function redactHomeArtifactLabel(value: string | null | undefined): strin
 }
 
 export function buildRecentProtectionCopy(receipt: GuardReceipt): string {
-  return guardActionActivityCopy(
-    receipt.policy_decision,
-    harnessDisplayName(receipt.harness),
-    redactHomeArtifactLabel(receipt.artifact_name),
-  );
+  const harness = harnessDisplayName(receipt.harness);
+  const label = redactHomeArtifactLabel(receipt.artifact_name);
+  if (approvalLeftActionStopped(receipt)) {
+    return `${harness} stayed stopped on ${label} after a one-time approval`;
+  }
+  return guardActionActivityCopy(receipt.policy_decision, harness, label);
 }
 
 type HomeRequestState =
@@ -132,6 +140,7 @@ export function HomeWorkspace(props: {
   requests: HomeRequestState;
   runtime: HomeRuntimeState;
   policies: HomePolicyState;
+  receipts?: readonly GuardReceipt[];
   onOpenInbox: () => void;
   onOpenFleet: () => void;
   onOpenEvidence: () => void;
@@ -139,8 +148,11 @@ export function HomeWorkspace(props: {
   onOpenInsights?: () => void;
   onOpenCommands: () => void;
   onOpenSettings: () => void;
+  onOpenCigar?: () => void;
   onRefreshRuntime?: () => Promise<void> | void;
   onReconnectSession?: () => Promise<void> | void;
+  onOpenRecovery?: () => RecoveryHandoffResult | void | Promise<RecoveryHandoffResult | void>;
+  recoveryInstallMode?: RecoveryInstallMode;
   onOpenSupplyChain?: () => void;
   onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
   onOpenAppDetail: (harness: string) => void;
@@ -149,6 +161,8 @@ export function HomeWorkspace(props: {
   onConfirmClear: (credentials?: { approval_password?: string; approval_totp_code?: string }) => Promise<void>;
   onCancelClear: () => void;
   onOpenHelp?: () => void;
+  onOpenRequest?: (requestId: string) => void;
+  onConnectHarness?: (harness: string) => void;
 }) {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [clearPassword, setClearPassword] = useState("");
@@ -182,18 +196,10 @@ export function HomeWorkspace(props: {
     props.onClearPolicies(scope);
   }, [props.onClearPolicies]);
 
-  const handleTurnProtectionOn = useCallback(() => {
-    void updateSettings({ protection_posture: "protected" })
-      .then(async () => {
-        await props.onRefreshRuntime?.();
-        props.onOpenSettings();
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "Unable to turn protection on.";
-        showToast(message);
-        props.onOpenSettings();
-      });
-  }, [props.onOpenSettings, props.onRefreshRuntime, showToast]);
+  const handleProtectionTurnedOn = useCallback(async () => {
+    showToast("Protection is on.");
+    await props.onRefreshRuntime?.();
+  }, [props.onRefreshRuntime, showToast]);
 
   const handleClearPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setClearPassword(event.target.value);
@@ -210,10 +216,13 @@ export function HomeWorkspace(props: {
     setClearSubmitting(true);
     setClearError(null);
     try {
-      await props.onConfirmClear({
-        ...(clearPassword ? { approval_password: clearPassword } : {}),
-        ...(clearTotpCode ? { approval_totp_code: clearTotpCode } : {}),
-      });
+      const credentials = approvalProofUsesPulse(props.approvalGate)
+        ? undefined
+        : {
+          ...(clearPassword ? { approval_password: clearPassword } : {}),
+          ...(clearTotpCode ? { approval_totp_code: clearTotpCode } : {}),
+        };
+      await props.onConfirmClear(credentials);
       setClearPassword("");
       setClearTotpCode("");
       if (confirm?.harness) {
@@ -226,7 +235,7 @@ export function HomeWorkspace(props: {
     } finally {
       setClearSubmitting(false);
     }
-  }, [clearPassword, clearTotpCode, props.clearConfirm, props.onConfirmClear, showToast]);
+  }, [clearPassword, clearTotpCode, props.approvalGate, props.clearConfirm, props.onConfirmClear, showToast]);
 
   const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
   const queuedCount = resolveHomeQueuedCount({
@@ -278,6 +287,17 @@ export function HomeWorkspace(props: {
     [snapshot, queuedCount]
   );
 
+  const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
+  const heroModel = buildHomeHeroModel({
+    status: state.heroStatus,
+    watchedAppsCount,
+    queuedCount,
+    queuedItems,
+    latestReceipts: snapshot?.latest_receipts ?? [],
+    analytics: analyticsState.kind === "ready" ? analyticsState.data : null,
+  });
+  const howGuardWorks = useHowGuardWorksReveal();
+
   const ctaAction =
     state.ctaTarget === "inbox"
       ? props.onOpenInbox
@@ -296,35 +316,39 @@ export function HomeWorkspace(props: {
 
   if (props.runtime.kind === "error") {
     const errorCopy = buildHomeRuntimeErrorCopy(props.runtime.message);
-    const handlePrimary = () => {
-      if (errorCopy.kind === "session") {
-        void props.onReconnectSession?.();
-        return;
-      }
-      void props.onRefreshRuntime?.();
-    };
-    const handleSecondary = errorCopy.kind === "session" ? props.onOpenInbox : props.onOpenSettings;
+    if (errorCopy.kind === "daemon") {
+      return (
+        <ServiceRecoveryPanel
+          title={errorCopy.title}
+          body={errorCopy.body}
+          onRetryConnection={props.onRefreshRuntime}
+          onOpenRecovery={props.onOpenRecovery}
+          installMode={props.recoveryInstallMode}
+        />
+      );
+    }
     return (
-      <EmptyState
-        title={errorCopy.title}
-        body={errorCopy.body}
-        action={
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <ActionButton onClick={handlePrimary}>{errorCopy.primaryCta}</ActionButton>
-            <ActionButton variant="outline" onClick={handleSecondary}>{errorCopy.secondaryCta}</ActionButton>
-          </div>
-        }
-        tone="teach"
+      <RuntimeErrorState
+        message={props.runtime.message}
+        onReconnectSession={props.onReconnectSession}
+        onRefreshRuntime={props.onRefreshRuntime}
+        onOpenInbox={props.onOpenInbox}
+        onOpenSettings={props.onOpenSettings}
       />
     );
   }
 
   if (!snapshot) return null;
+  const watchBanner = watchBannerModel(snapshot);
 
   return (
     <div className="space-y-6">
-      {snapshot.protection_posture === "watch" ? (
-        <WatchProtectionBanner onTurnProtectionOn={handleTurnProtectionOn} />
+      {watchBanner !== null ? (
+        <WatchProtectionBanner
+          model={watchBanner}
+          onTurnedOn={handleProtectionTurnedOn}
+          onOpenSettings={props.onOpenSettings}
+        />
       ) : null}
       {shareOpen && analyticsState.kind === "ready" ? (
         <EvidenceInsightsShareModal
@@ -340,15 +364,38 @@ export function HomeWorkspace(props: {
         </div>
       )}
 
-      <GuardHero
+      <HomeHero
         status={state.heroStatus}
         headline={state.headline}
         subheadline={state.subheadline}
+        facts={heroModel.facts}
+        liveLabel={heroModel.liveLabel}
+        queue={heroModel.queue}
         cta={
           <ActionButton onClick={ctaAction} data-primary="true">
             {state.ctaLabel}
           </ActionButton>
         }
+        secondaryCta={
+          <ActionButton variant="outline" onClick={howGuardWorks.reveal}>
+            {state.heroStatus === "setup_gap" ? "See how it works" : "How Guard works"}
+          </ActionButton>
+        }
+        onOpenRequest={props.onOpenRequest}
+      />
+
+      {state.heroStatus === "setup_gap" ? (
+        <HomeSetupCard
+          apps={resolveSetupApps(managedInstalls, observedHarnesses)}
+          onConnectHarness={props.onConnectHarness ?? props.onOpenAppDetail}
+          onOpenProtect={props.onOpenFleet}
+        />
+      ) : null}
+
+      <HomeHowGuardWorks
+        receiptCount={snapshot.receipt_count ?? 0}
+        connectedHarnesses={activeInstalls.map((item: GuardManagedInstall) => item.harness)}
+        openSignal={howGuardWorks.openSignal}
       />
 
       {snapshot.operator_health ? <OperatorHealthCard health={snapshot.operator_health} /> : null}
@@ -380,19 +427,22 @@ export function HomeWorkspace(props: {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
         <section className="space-y-6">
-          <AppsAtAGlance
-            managedInstalls={managedInstalls}
-            observedHarnesses={observedHarnesses}
-            queuedItems={props.requests.kind === "ready" ? props.requests.items : []}
-            onOpenAppDetail={props.onOpenAppDetail}
-          />
+          {state.heroStatus !== "setup_gap" && (
+            <AppsAtAGlance
+              managedInstalls={managedInstalls}
+              observedHarnesses={observedHarnesses}
+              queuedItems={queuedItems}
+              onOpenAppDetail={props.onOpenAppDetail}
+            />
+          )}
 
           <HomeProtectionModule
             snapshot={snapshot}
-            managedInstalls={managedInstalls}
+            receipts={props.receipts}
             onOpenFleet={props.onOpenFleet}
             onOpenSupplyChain={props.onOpenSupplyChain}
           />
+          <ContextHomeStatus onOpenSettings={props.onOpenCigar ?? props.onOpenSettings} />
 
           {dailyStory && (
             <CollapsibleCard
@@ -422,6 +472,8 @@ export function HomeWorkspace(props: {
         </section>
 
         <section className="space-y-6">
+          {state.heroStatus === "setup_gap" && <WhatStaysLocalCard />}
+
           {snapshot.latest_receipts.length > 0 && (
             <RecentProtectionSection receipts={snapshot.latest_receipts} />
           )}
@@ -476,6 +528,20 @@ export function HomeWorkspace(props: {
   );
 }
 
+/** Which proof fields the "Clear remembered decisions?" window shows. */
+export function resolveClearDecisionsProof(
+  gate: GuardApprovalGatePublicConfig | null,
+  password: string,
+  totpCode: string,
+): { usesPulse: boolean; needsProof: boolean; needsPassword: boolean; proofIncomplete: boolean } {
+  const usesPulse = approvalProofUsesPulse(gate);
+  // With Yanez Pulse the YID app is the proof, so there is no field to fill.
+  const needsProof = gate?.enabled === true && gate.configured === true && !usesPulse;
+  const needsPassword = approvalProofRequiresPassword(gate);
+  const proofIncomplete = needsProof && (needsPassword ? password.trim() === "" : totpCode.trim() === "");
+  return { usesPulse, needsProof, needsPassword, proofIncomplete };
+}
+
 function ClearConfirmDialog(props: {
   clearConfirm: { harness?: string; all?: boolean };
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -490,10 +556,11 @@ function ClearConfirmDialog(props: {
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(true, dialogRef);
-  const needsProof = props.approvalGate?.enabled === true && props.approvalGate.configured === true;
-  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  const proofIncomplete = needsProof
-    && (needsPassword ? props.clearPassword.trim() === "" : props.clearTotpCode.trim() === "");
+  const { usesPulse, needsProof, needsPassword, proofIncomplete } = resolveClearDecisionsProof(
+    props.approvalGate,
+    props.clearPassword,
+    props.clearTotpCode,
+  );
 
   return (
     <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Confirm clear decisions">
@@ -507,6 +574,11 @@ function ClearConfirmDialog(props: {
                 <p className="mt-2 text-sm text-muted-foreground">
                   This will remove {props.clearConfirm.all ? "all saved approvals" : `decisions for ${props.clearConfirm.harness ?? "this app"}`}. Guard will ask again next time matching actions run.
                 </p>
+                {usesPulse && (
+                  <p className="mt-4 rounded-xl border border-brand-blue/20 bg-brand-blue/5 px-3 py-2 text-sm text-brand-dark">
+                    You will approve this in the YID app with a face scan.
+                  </p>
+                )}
                 {needsProof && (
                   <div className="mt-4 grid gap-3">
                     {needsPassword ? (
@@ -602,9 +674,9 @@ export function deriveHomeState(input: {
   if (!hasActiveInstalls && !hasObservedHarnesses) {
     return {
       heroStatus: "setup_gap",
-      headline: "Guard is ready",
-      subheadline: "Connect your first AI app so Guard can start protecting it.",
-      ctaLabel: "Open Protect",
+      headline: "Welcome to Guard",
+      subheadline: "Guard sits between your AI apps and this computer. Routine work runs, harmful actions are stopped, and Guard asks you when it can’t tell.",
+      ctaLabel: "See setup steps",
       ctaTarget: "protect",
     };
   }
@@ -613,8 +685,8 @@ export function deriveHomeState(input: {
     return {
       heroStatus: "setup_gap",
       headline: "Finish setup",
-      subheadline: "Guard detected apps but they need setup to be fully protected.",
-      ctaLabel: "Open Protect",
+      subheadline: "Guard found apps on this computer, but they need setup before they are fully protected.",
+      ctaLabel: "Finish setup",
       ctaTarget: "protect",
     };
   }

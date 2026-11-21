@@ -73,6 +73,11 @@ function isApprovalCredentialPromptCode(code: string | null): boolean {
   return APPROVAL_CREDENTIAL_PROMPT_MESSAGE.test(code);
 }
 
+/** True when the daemon is still running an earlier package protection change, such as a sync that outlived the dashboard's wait. */
+export function isPackageFirewallOperationInProgressError(error: unknown): boolean {
+  return readHarnessActionErrorCode(error) === "operation_in_progress";
+}
+
 export function isSupplyChainSyncConnectError(error: unknown): boolean {
   const code = readHarnessActionErrorCode(error);
   return code !== null && SUPPLY_CHAIN_CONNECT_ERROR_CODES.has(code);
@@ -97,6 +102,13 @@ export function readHarnessActionUserMessage(error: unknown, fallback: string): 
     return structuredMessage;
   }
   return fallback;
+}
+
+export function readPackageFirewallActionFailure(error: unknown): string {
+  if (error instanceof Error && GUARD_FETCH_NETWORK_ERROR_MESSAGE.test(error.message)) {
+    return "Guard lost connection to the local daemon. Confirm it is still running, then try again.";
+  }
+  return error instanceof Error ? error.message : "Action failed.";
 }
 
 export function isApprovalGateRequiredError(error: unknown): boolean {
@@ -130,4 +142,23 @@ export function resolveApprovalGateSyncFailure(
     kind: "failed",
     message: readHarnessActionUserMessage(error, "Sync failed."),
   };
+}
+
+// What the setup panel shows when a connect, test, repair or disconnect fails.
+// Guard's own explanation wins over its reason code: a refusal such as
+// codex_hook_owner_conflict carries the one edit that clears it.
+export function setupActionErrorMessage(error: GuardHarnessActionError): string {
+  if (error.payload?.error === "confirmation_required") {
+    return "Disconnect requires confirmation so accidental clicks cannot remove local protection.";
+  }
+  if (error.payload?.error === "approval_gate_totp_required") {
+    return "Enter a fresh authenticator code to disconnect this app.";
+  }
+  if (
+    error.payload?.error === "approval_gate_required"
+    || error.payload?.error === "approval_gate_password_required"
+  ) {
+    return "Enter your approval password to disconnect this app.";
+  }
+  return error.payload?.message ?? error.payload?.error ?? error.message;
 }

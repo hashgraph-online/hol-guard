@@ -11,14 +11,15 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, TextIO
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..adapters.base import HarnessContext
     from ..config import GuardConfig
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 from ..dashboard_launcher import (
@@ -520,8 +521,8 @@ def desktop_bootstrap_document_for_running_daemon(
     """Build or reuse the bootstrap document for the daemon that is already up."""
 
     def build() -> dict[str, object]:
-        from ..adapters.base import HarnessContext
         from ..config import load_guard_config, overlay_synced_guard_policy
+        from ..harness_context import HarnessContext
         from ..synced_policy import synced_policy_payload
 
         context = HarnessContext(
@@ -568,24 +569,84 @@ def _run_guard_desktop_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
-    del workspace, input_text
+    del input_text
+    if getattr(args, "desktop_command", None) == "converge" and context is not None and store is not None:
+        from .desktop_converge import run_desktop_converge
+
+        out = output_stream or sys.stdout
+        return run_desktop_converge(args, context=context, store=store, workspace=workspace, output_stream=out)
+    if getattr(args, "desktop_command", None) == "qualify-owned":
+        from .desktop_owned_qualification import run_desktop_owned_qualification
+
+        if context is None or store is None:
+            raise RuntimeError("Guard owned qualification requires local Guard context")
+        return run_desktop_owned_qualification(
+            args,
+            context=context,
+            store=store,
+            output_stream=output_stream or sys.stdout,
+        )
+    if getattr(args, "desktop_command", None) in {
+        "transition-status",
+        "transition-recover",
+        "transition-activate",
+        "transition-finalize",
+    }:
+        from .desktop_runtime_transition import run_desktop_runtime_transition
+
+        if context is None or store is None:
+            raise RuntimeError("Guard transition requires local Guard context")
+        return run_desktop_runtime_transition(
+            args,
+            context=context,
+            store=store,
+            output_stream=output_stream or sys.stdout,
+        )
+    if getattr(args, "desktop_command", None) == "qualify":
+        from .desktop_qualification import run_desktop_qualification
+
+        if context is None or store is None:
+            raise RuntimeError("Guard candidate qualification requires local Guard context")
+        return run_desktop_qualification(args, context=context, store=store, output_stream=output_stream or sys.stdout)
+    if getattr(args, "desktop_command", None) == "library-call":
+        from pathlib import Path as _Path
+
+        from .desktop_library_call import run_library_call
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard library call requires --guard-home.", file=sys.stderr)
+            return 2
+        return run_library_call(_Path(resolved_home))
+    if getattr(args, "desktop_command", None) == "library-serve":
+        from pathlib import Path as _Path
+
+        from .desktop_library_call import serve_library_calls
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard library calls require --guard-home.", file=sys.stderr)
+            return 2
+        return serve_library_calls(_Path(resolved_home))
+    if getattr(args, "desktop_command", None) == "daemon-workers":
+        from pathlib import Path as _Path
+
+        from ..workers.host import run_worker_host
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard daemon workers require --guard-home.", file=sys.stderr)
+            return 2
+        return run_worker_host(_Path(resolved_home))
     if getattr(args, "desktop_command", None) == "dashboard-update":
-        from ..daemon.dashboard_update_runner import main as dashboard_update_main
+        from ..updates.dashboard_update_runner import main as dashboard_update_main
 
         resolved_home = getattr(args, "guard_home", None) or guard_home
         if resolved_home is None:
             print("Guard dashboard update requires --guard-home.", file=sys.stderr)
             return 2
-        argv = [
-            "--guard-home",
-            str(resolved_home),
-            "--daemon-pid",
-            str(args.daemon_pid),
-            "--daemon-port",
-            str(args.daemon_port),
-            "--update-token",
-            str(args.update_token),
-        ]
+        argv = ["--guard-home", str(resolved_home), "--daemon-pid", str(args.daemon_pid)]
+        argv += ["--daemon-port", str(args.daemon_port), "--update-token", str(args.update_token)]
         if bool(getattr(args, "force_pypi_reinstall", False)):
             argv.append("--force-pypi-reinstall")
         if bool(getattr(args, "alpha", False)):
@@ -607,12 +668,23 @@ def _run_guard_desktop_command(
             guard_home=resolved_guard_home,
             home_dir=getattr(context, "home_dir", None),
         )
-    payload = assemble_desktop_bootstrap_document(
-        context=context,
-        store=store,
-        config=config,
-        session_url=session_url,
-    )
+    # The projection makes ~30 short reads. One shared connection avoids a
+    # connect/close (and WAL checkpoint) per read, which Desktop's bounded
+    # update preflight cannot afford on a loaded machine. The scope holds the
+    # shared storage gate, so it covers only these reads, not daemon start/adopt
+    # or output.
+    with ExitStack() as scope:
+        try:
+            scope.enter_context(store.connection_scope())
+        except (OSError, TimeoutError, ValueError) as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2
+        payload = assemble_desktop_bootstrap_document(
+            context=context,
+            store=store,
+            config=config,
+            session_url=session_url,
+        )
     print(json.dumps(payload, sort_keys=True), file=output_stream or sys.stdout)
     return 0
 

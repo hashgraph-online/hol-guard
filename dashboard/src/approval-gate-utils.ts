@@ -4,6 +4,8 @@ export type BulkGateCredentials = {
   approval_password?: string;
   approval_totp_code?: string;
   approval_gate_use_cooldown?: boolean;
+  /** Ask the YID app instead: Pulse replaces the password and the code. */
+  approval_gate_pulse?: boolean;
 };
 
 export function approvalGateLockRemainingSeconds(
@@ -54,4 +56,11 @@ export function requiresApprovalPasswordPrompt(
     return true;
   }
   return strictAllDecisions;
+}
+
+/** The saved cooldown setting is the default; the per-dialog checkbox only opts out. */
+export function defaultUseApprovalCooldown(
+  gate: GuardApprovalGatePublicConfig | null | undefined,
+): boolean {
+  return (gate?.cooldown_seconds ?? 0) > 0 && gate?.totp_enabled !== true;
 }

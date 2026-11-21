@@ -5,6 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+  AUTO_RETRY_WINDOW_MS,
   CHUNK_LOAD_ERROR_BODY,
   CHUNK_LOAD_ERROR_HEADLINE,
   DASHBOARD_GO_HOME_LABEL,
@@ -14,6 +15,8 @@ import {
   GENERIC_ERROR_BODY,
   GENERIC_ERROR_HEADLINE,
   dashboardErrorCopy,
+  shouldAutoRetry,
+  showsRetryPlaceholder,
 } from "./error-boundary";
 
 function assert(condition: boolean, message: string): void {
@@ -38,6 +41,34 @@ assert(genericCopy.kind === "generic", "render failures use generic recovery cop
 assert(genericCopy.headline === GENERIC_ERROR_HEADLINE, "generic headline stays non-technical");
 assert(genericCopy.body === GENERIC_ERROR_BODY, "generic body offers reload or home");
 assert(!genericCopy.body.includes("Cannot read properties"), "generic copy hides the raw exception");
+
+const renderError = new TypeError("Cannot read properties of undefined (reading 'length')");
+assert(shouldAutoRetry(renderError, null, 1_000), "first generic render failure retries once on its own");
+assert(
+  !shouldAutoRetry(renderError, 1_000, 1_000 + AUTO_RETRY_WINDOW_MS - 1),
+  "a second failure inside the window shows the error screen instead of looping",
+);
+assert(
+  shouldAutoRetry(renderError, 1_000, 1_000 + AUTO_RETRY_WINDOW_MS),
+  "a later unrelated failure gets its own retry",
+);
+assert(!shouldAutoRetry(chunkError, null, 1_000), "chunk-load failures keep their reload recovery, not an in-place retry");
+assert(
+  showsRetryPlaceholder({ error: renderError, retrying: false, retryDecided: false }, null, 1_000),
+  "a fresh generic failure holds the placeholder until the retry decision",
+);
+assert(
+  !showsRetryPlaceholder(
+    { error: renderError, retrying: false, retryDecided: true },
+    1_000,
+    1_000 + AUTO_RETRY_WINDOW_MS + 60_000,
+  ),
+  "a declined retry keeps the error screen after the retry window expires",
+);
+assert(
+  showsRetryPlaceholder({ error: renderError, retrying: true, retryDecided: true }, 1_000, 1_000),
+  "a pending retry shows the placeholder",
+);
 
 const markup = renderToStaticMarkup(
   createElement(

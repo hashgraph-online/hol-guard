@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.native_github_capability_support import github_cli_assessment
 
 
 def _classify(command: str, cwd: Path):
@@ -13,7 +13,7 @@ def _classify(command: str, cwd: Path):
 
 
 def test_github_auth_switch_help_is_local_metadata() -> None:
-    assessment = classify_github_cli(("auth", "switch", "--help"))
+    assessment = github_cli_assessment(("auth", "switch", "--help"))
 
     assert assessment.capability == "read_local"
     assert assessment.reason_code == "github.command.local-help"

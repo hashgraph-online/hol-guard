@@ -90,7 +90,76 @@
         ],
         "rule_id": "command.guard-self-protection.self-authorization",
         "rule_version": "1.0.0",
-        "safe_variants": [],
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "hol-guard"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [
+                      "--guard-home",
+                      "--home",
+                      "--workspace"
+                    ],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "approvals",
+                      "approve"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "hol-guard"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [
+                      "--guard-home",
+                      "--home",
+                      "--workspace"
+                    ],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "approvals",
+                      "approve"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
         "safer_alternatives": [
           "Approve the request through Guard's authenticated approval surface."
         ],

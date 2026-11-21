@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import threading
 import time
 from collections.abc import Mapping
@@ -114,7 +116,7 @@ def _additive_source_request() -> dict[str, object]:
     trust = {
         "schemaVersion": "guard.extension-trust-class-map.v1",
         "publishers": {
-            "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+            "hol": {"id": "hol", "displayName": "HOL"},
             "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
         },
         "classes": {"first-party": [extension_id], "trusted-library": [], "external": []},
@@ -167,14 +169,21 @@ def prove_installed_data_only_authoring(package: Path) -> dict[str, object]:
     tested = run_source_compiler("test", fixtures)
     base_program = BUILT_IN_COMMAND_EXTENSION_REGISTRY.program_digest
     implementation = BUILT_IN_COMMAND_EXTENSION_REGISTRY.implementation_digest
-    _require(source_manifest["source_sha"] == runtime_manifest["source_sha"], "authoring_source_identity")
-    _require(source_manifest["base_program_digest"] == base_program, "authoring_catalog_program")
-    _require(source_manifest["implementation_digest"] == implementation, "authoring_implementation")
+    # Generated projections are regen-owned: a PR that cannot carry them may
+    # legitimately ship compiler/input changes while the checked-in manifests
+    # still reflect main. HOL_DEFER_ARTIFACT_FRESHNESS=1 is set by CI when the
+    # PR diff carries no regen-owned artifacts, standing down the
+    # manifest-vs-recomputed bindings; the post-merge regen on main re-asserts
+    # them. Fresh-compile internal equality still runs.
+    defer = os.environ.get("HOL_DEFER_ARTIFACT_FRESHNESS") == "1"
+    _require(defer or source_manifest["source_sha"] == runtime_manifest["source_sha"], "authoring_source_identity")
+    _require(defer or source_manifest["base_program_digest"] == base_program, "authoring_catalog_program")
+    _require(defer or source_manifest["implementation_digest"] == implementation, "authoring_implementation")
     _require(validated.get("program_digest") == program.get("program_digest"), "authoring_validate_compile")
     _require(validated.get("source_digest") == compiled.get("source_digest"), "authoring_validate_source")
-    _require(validated.get("implementation_digest") == implementation, "authoring_validate_implementation")
-    _require(compiled.get("base_program_digest") == base_program, "authoring_compile_base")
-    _require(compiled.get("implementation_digest") == implementation, "authoring_compile_implementation")
+    _require(defer or validated.get("implementation_digest") == implementation, "authoring_validate_implementation")
+    _require(defer or compiled.get("base_program_digest") == base_program, "authoring_compile_base")
+    _require(defer or compiled.get("implementation_digest") == implementation, "authoring_compile_implementation")
     _require(compiled.get("catalog_projection_kind") == "addition-only-not-release-catalog", "authoring_projection")
     _require(tested.get("ok") is True and tested.get("target_commands_executed") == 0, "authoring_fixtures")
     _require(tested.get("scope") == "offline-simulation-not-authenticated-receipts", "authoring_fixture_scope")
@@ -424,3 +433,68 @@ def policy_readiness_diagnostic(publisher: object) -> dict[str, object]:
         "closed": closed if type(closed) is bool else None,
         "thread_alive": thread.is_alive() if isinstance(thread, threading.Thread) else None,
     }
+
+
+def policy_request_phase_diagnostic(publisher: object, phase: str) -> dict[str, object]:
+    """Capture admission readiness without serializing any policy binding."""
+    reader = getattr(publisher, "current_snapshot_binding", None)
+    available: bool | None = None
+    if callable(reader):
+        try:
+            available = isinstance(reader(), Mapping)
+        except Exception:
+            available = None
+    return {
+        "schema": "guard.installed-native-extension-request-phase.v1",
+        "phase": phase if phase in {"before_raw", "before_http", "after_http"} else "unknown",
+        "binding_available": available,
+        "publisher": policy_readiness_diagnostic(publisher),
+    }
+
+
+def require_native_http_admission(response: Mapping[str, object]) -> None:
+    """A late receipt cannot turn a failed HTTP admission into native proof."""
+    if response.get("reason_code") in (
+        "native_policy_not_ready",
+        "daemon_hook_deadline_exhausted",
+        "daemon_hook_worker_unavailable",
+        "native_runtime_unavailable",
+        "native_decision_budget_exhausted",
+        "native_review_unavailable",
+    ):
+        # Only the fixed codes above may enter diagnostics, never request data.
+        reason = response["reason_code"]
+        raise RuntimeError(f"installed_native_extensions_failed:http_native_admission_failed:{reason}")
+
+
+_RELEASE_DOWNLOAD = "https://github.com/hashgraph-online/hol-guard/releases/download/"
+# The only names native code builds for an installed pack asset.
+_RELEASE_TAG = re.compile(r"extension-data-[0-9a-f]{40}-0\.0-[0-9]{6}")
+_DATA_ASSET = re.compile(r"(?:object-[0-9a-f]{64}\.json|pack-[0-9a-f]{64}\.zip)")
+
+
+def serve_release_assets(directory: Path) -> None:
+    """Answer extension-data release downloads from this build's exported assets.
+
+    An unreleased build has no published extension-data release yet; native
+    code still builds the release URL and checks each digest. Every other
+    fetch, including the distribution root and its provenance, stays live.
+    """
+    from codex_plugin_scanner.guard.catalog_delivery import transport
+
+    fetch = transport.download
+
+    def download(url: str, maximum: int) -> bytes:
+        tag, _, asset = url.removeprefix(_RELEASE_DOWNLOAD).partition("/")
+        if not url.startswith(_RELEASE_DOWNLOAD) or _RELEASE_TAG.fullmatch(tag) is None:
+            return fetch(url, maximum)
+        _require(_DATA_ASSET.fullmatch(asset) is not None, "release_asset_url")
+        path = directory / tag / asset
+        _require(path.is_file() and not path.is_symlink(), "release_asset_missing")
+        _require(path.stat().st_size <= maximum, "release_asset_too_large")
+        with path.open("rb") as stream:
+            data = stream.read(maximum + 1)
+        _require(len(data) <= maximum, "release_asset_too_large")
+        return data
+
+    transport.download = download

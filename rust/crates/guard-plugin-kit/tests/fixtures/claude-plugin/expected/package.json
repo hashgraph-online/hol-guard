@@ -1,0 +1,326 @@
+{
+  "agent-plugins/mcp.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+    "mcpServers": {
+      "docs": {
+        "type": "streamable-http",
+        "url": "https://mcp.acme.example/docs"
+      },
+      "pdf": {
+        "args": [
+          "-y",
+          "@acme/pdf-mcp@1.4.0"
+        ],
+        "command": "npx",
+        "type": "stdio"
+      }
+    }
+  },
+  "agent-plugins/plugin.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+    "author": {
+      "name": "Acme Labs"
+    },
+    "description": "Fill PDF forms and extract text from PDFs.",
+    "homepage": "https://acme.example/pdf-tools",
+    "keywords": [
+      "pdf",
+      "forms"
+    ],
+    "license": "MIT",
+    "name": "pdf-tools",
+    "repository": "https://github.com/acme/pdf-tools",
+    "version": "1.4.0"
+  },
+  "agent-plugins/skills/pdf-tools/SKILL.md": "sha256:c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124",
+  "agent-plugins/skills/pdf-tools/reference.md": "sha256:689497a5264b2dcc1efa43a9db83a1ce893d07f1e16678e75bb2d5e323ef2314",
+  "agent-skills/skills/pdf-tools/SKILL.md": "sha256:c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124",
+  "agent-skills/skills/pdf-tools/reference.md": "sha256:689497a5264b2dcc1efa43a9db83a1ce893d07f1e16678e75bb2d5e323ef2314",
+  "claude-code/.claude-plugin/plugin.json": {
+    "author": {
+      "name": "Acme Labs"
+    },
+    "description": "Fill PDF forms and extract text from PDFs.",
+    "homepage": "https://acme.example/pdf-tools",
+    "keywords": [
+      "pdf",
+      "forms"
+    ],
+    "license": "MIT",
+    "name": "pdf-tools",
+    "repository": "https://github.com/acme/pdf-tools",
+    "version": "1.4.0"
+  },
+  "claude-code/.mcp.json": {
+    "mcpServers": {
+      "docs": {
+        "type": "http",
+        "url": "https://mcp.acme.example/docs"
+      },
+      "pdf": {
+        "args": [
+          "-y",
+          "@acme/pdf-mcp@1.4.0"
+        ],
+        "command": "npx",
+        "env": {
+          "PDF_API_KEY": "${PDF_API_KEY}"
+        }
+      }
+    }
+  },
+  "claude-code/agents/reviewer.md": "sha256:b7b3cfb26aab4766bf06150ae4b27be4fa01338637389aa13dfe5477b91e4b56",
+  "claude-code/commands/summarize.md": "sha256:4ed0a1e075c17c04e5424847c7a386ac7e8c15f2c82aa64910cfdb66bb2cf68a",
+  "claude-code/hooks/check.sh": "sha256:306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb",
+  "claude-code/hooks/hooks.json": {
+    "hooks": {
+      "PostToolUse": [
+        {
+          "hooks": [
+            {
+              "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/check.sh",
+              "type": "command"
+            }
+          ],
+          "matcher": "Write"
+        }
+      ]
+    }
+  },
+  "claude-code/skills/pdf-tools/SKILL.md": "sha256:c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124",
+  "claude-code/skills/pdf-tools/reference.md": "sha256:689497a5264b2dcc1efa43a9db83a1ce893d07f1e16678e75bb2d5e323ef2314",
+  "codex/.codex-plugin/plugin.json": {
+    "author": {
+      "name": "Acme Labs"
+    },
+    "description": "Fill PDF forms and extract text from PDFs.",
+    "homepage": "https://acme.example/pdf-tools",
+    "keywords": [
+      "pdf",
+      "forms"
+    ],
+    "license": "MIT",
+    "mcpServers": "./.mcp.json",
+    "name": "pdf-tools",
+    "repository": "https://github.com/acme/pdf-tools",
+    "skills": "./skills/",
+    "version": "1.4.0"
+  },
+  "codex/.mcp.json": {
+    "mcpServers": {
+      "docs": {
+        "type": "http",
+        "url": "https://mcp.acme.example/docs"
+      },
+      "pdf": {
+        "args": [
+          "-y",
+          "@acme/pdf-mcp@1.4.0"
+        ],
+        "command": "npx",
+        "env": {
+          "PDF_API_KEY": "${PDF_API_KEY}"
+        }
+      }
+    }
+  },
+  "codex/skills/pdf-tools/SKILL.md": "sha256:c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124",
+  "codex/skills/pdf-tools/reference.md": "sha256:689497a5264b2dcc1efa43a9db83a1ce893d07f1e16678e75bb2d5e323ef2314",
+  "cursor/.cursor/mcp.json": {
+    "mcpServers": {
+      "docs": {
+        "url": "https://mcp.acme.example/docs"
+      },
+      "pdf": {
+        "args": [
+          "-y",
+          "@acme/pdf-mcp@1.4.0"
+        ],
+        "command": "npx",
+        "env": {
+          "PDF_API_KEY": "${env:PDF_API_KEY}"
+        }
+      }
+    }
+  },
+  "gemini-cli/gemini-extension.json": {
+    "description": "Fill PDF forms and extract text from PDFs.",
+    "mcpServers": {
+      "docs": {
+        "httpUrl": "https://mcp.acme.example/docs"
+      },
+      "pdf": {
+        "args": [
+          "-y",
+          "@acme/pdf-mcp@1.4.0"
+        ],
+        "command": "npx",
+        "env": {
+          "PDF_API_KEY": "$PDF_API_KEY"
+        }
+      }
+    },
+    "name": "pdf-tools",
+    "settings": [
+      {
+        "description": "PDF_API_KEY for the pdf MCP server.",
+        "envVar": "PDF_API_KEY",
+        "name": "PDF_API_KEY",
+        "sensitive": true
+      }
+    ],
+    "version": "1.4.0"
+  },
+  "hol.provenance.json": {
+    "files": [
+      {
+        "path": "agent-plugins/mcp.json",
+        "sha256": "86f04f4d6faa5cad05768540eefb07fb64b5aa93027911757cf604e04a158244"
+      },
+      {
+        "path": "agent-plugins/plugin.json",
+        "sha256": "53f26035dd81bf06a1ddb1ed5f4a59fa3729480e3b87ab9c021f338367fd1773"
+      },
+      {
+        "path": "agent-plugins/skills/pdf-tools/SKILL.md",
+        "sha256": "c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124"
+      },
+      {
+        "path": "agent-plugins/skills/pdf-tools/reference.md",
+        "sha256": "689497a5264b2dcc1efa43a9db83a1ce893d07f1e16678e75bb2d5e323ef2314"
+      },
+      {
+        "path": "agent-skills/skills/pdf-tools/SKILL.md",
+        "sha256": "c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124"
+      },
+      {
+        "path": "agent-skills/skills/pdf-tools/reference.md",
+        "sha256": "689497a5264b2dcc1efa43a9db83a1ce893d07f1e16678e75bb2d5e323ef2314"
+      },
+      {
+        "path": "claude-code/.claude-plugin/plugin.json",
+        "sha256": "ac7393b5152d336524a84ecfdffecebfba765a553a4e1b5abeb5692b5fee3648"
+      },
+      {
+        "path": "claude-code/.mcp.json",
+        "sha256": "232a57be2aa9ac91da2dd55e7bbffa698d15e5f1d6c6986d1b59fc8986ea120c"
+      },
+      {
+        "path": "claude-code/agents/reviewer.md",
+        "sha256": "b7b3cfb26aab4766bf06150ae4b27be4fa01338637389aa13dfe5477b91e4b56"
+      },
+      {
+        "path": "claude-code/commands/summarize.md",
+        "sha256": "4ed0a1e075c17c04e5424847c7a386ac7e8c15f2c82aa64910cfdb66bb2cf68a"
+      },
+      {
+        "path": "claude-code/hooks/check.sh",
+        "sha256": "306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb"
+      },
+      {
+        "path": "claude-code/hooks/hooks.json",
+        "sha256": "b14b8fc6cd967ea05260767e50d639c1adb5bc105d5b3566a3111435a493d024"
+      },
+      {
+        "path": "claude-code/skills/pdf-tools/SKILL.md",
+        "sha256": "c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124"
+      },
+      {
+        "path": "claude-code/skills/pdf-tools/reference.md",
+        "sha256": "689497a5264b2dcc1efa43a9db83a1ce893d07f1e16678e75bb2d5e323ef2314"
+      },
+      {
+        "path": "codex/.codex-plugin/plugin.json",
+        "sha256": "38113c02d11f083f692386fc5ec35c6459c79c967b72c42af2d6008f04ee35fb"
+      },
+      {
+        "path": "codex/.mcp.json",
+        "sha256": "232a57be2aa9ac91da2dd55e7bbffa698d15e5f1d6c6986d1b59fc8986ea120c"
+      },
+      {
+        "path": "codex/skills/pdf-tools/SKILL.md",
+        "sha256": "c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124"
+      },
+      {
+        "path": "codex/skills/pdf-tools/reference.md",
+        "sha256": "689497a5264b2dcc1efa43a9db83a1ce893d07f1e16678e75bb2d5e323ef2314"
+      },
+      {
+        "path": "cursor/.cursor/mcp.json",
+        "sha256": "8b1994fa693a7ab4dab730be2611da9ee4a55b5e5038ff4030a67877588f54a7"
+      },
+      {
+        "path": "gemini-cli/gemini-extension.json",
+        "sha256": "c2f8e8b48999880c240aa4905bb045e2d164bb9ed4133a593607bc2ef5871cd5"
+      },
+      {
+        "path": "opencode/opencode.json",
+        "sha256": "ab5899b8b5057bb865807e6e4a7e2825587a9c178d9dbfbe9950f35a6a1351d5"
+      },
+      {
+        "path": "vscode/.vscode/mcp.json",
+        "sha256": "1271c066bab573c2b5f16b230333e8f72b68e4016cfb5742d9222387dc0ed3cc"
+      }
+    ],
+    "generator": {
+      "name": "hol-guard plugin-kit",
+      "version": "<version>"
+    },
+    "plugin": {
+      "name": "pdf-tools",
+      "version": "1.4.0"
+    },
+    "repository": "https://github.com/acme/pdf-tools",
+    "runtimes": [
+      "claude-code",
+      "codex",
+      "gemini-cli",
+      "cursor",
+      "vscode",
+      "opencode",
+      "agent-skills",
+      "agent-plugins"
+    ],
+    "schema": "hol.plugin-kit.provenance.v1",
+    "source_digest": "sha256:bd336a7ce363e6b9e46b39c96376063c4107628f2b3692124d3de17f88b215cd"
+  },
+  "opencode/opencode.json": {
+    "$schema": "https://opencode.ai/config.json",
+    "mcp": {
+      "docs": {
+        "type": "remote",
+        "url": "https://mcp.acme.example/docs"
+      },
+      "pdf": {
+        "command": [
+          "npx",
+          "-y",
+          "@acme/pdf-mcp@1.4.0"
+        ],
+        "environment": {
+          "PDF_API_KEY": "{env:PDF_API_KEY}"
+        },
+        "type": "local"
+      }
+    }
+  },
+  "vscode/.vscode/mcp.json": {
+    "servers": {
+      "docs": {
+        "type": "http",
+        "url": "https://mcp.acme.example/docs"
+      },
+      "pdf": {
+        "args": [
+          "-y",
+          "@acme/pdf-mcp@1.4.0"
+        ],
+        "command": "npx",
+        "env": {
+          "PDF_API_KEY": "${env:PDF_API_KEY}"
+        },
+        "type": "stdio"
+      }
+    }
+  }
+}

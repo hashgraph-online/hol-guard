@@ -22,17 +22,21 @@ import {
 } from "react-icons/hi2";
 import { FaDocker, FaGitAlt, FaGithub } from "react-icons/fa";
 import {
-  harnessDisplayName,
   isWatchOnlyObservation,
   resolveStoppedCommandText,
 } from "./approval-center-utils";
 import type { GuardApprovalRequest } from "./guard-types";
 import {
   formatQueueRequestDate,
+  queueCommandExtensionId,
   resolveQueueCategory,
   riskScore,
   type QueueCategoryId,
 } from "./queue-state";
+import { ExtensionBrandMark } from "./protection-center/components/extension-brand-mark";
+import { explainMcpCall } from "./mcp-call/explain-mcp-call";
+import { McpAppMark } from "./mcp-call/mcp-app-mark";
+import { listedMcpPreview, queueMcpMarkName, queueRequesterName } from "./mcp-call/mcp-queue-name";
 import type { RequestReadState } from "./request-read-state";
 
 type RiskLevel = "high" | "medium" | "low";
@@ -62,8 +66,14 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
 }) {
   const risk = riskScore(item);
   const riskLevel = riskLevelFromScore(risk);
+  const nativeDisplayOnly = item.native_business_review_display_only === true;
+  const riskLabel = nativeDisplayOnly ? "Risk: unassessed" : `Risk: ${riskLevel}`;
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
+  const extensionId = queueCommandExtensionId(item);
+  // An MCP call shows the app it goes to (Gmail, Slack, a browser), the way a command shows its extension.
+  const mcpMarkName = extensionId ? null : queueMcpMarkName(item);
+  const iconLabel = mcpMarkName ?? category.label;
   const preview = queueItemPreview(item);
   const isRead = readState.isRead(item.request_id);
   const watchOnlyObservation = isWatchOnlyObservation(item);
@@ -101,7 +111,7 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
   );
 
   const checkboxLabel = canSelect
-    ? `Select ${preview} for bulk approval`
+    ? `Select ${preview}`
     : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
 
   const rowClassName = (() => {
@@ -150,30 +160,34 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
               {preview}
             </p>
             <p className="truncate text-[11px] text-muted-foreground">
-              {harnessDisplayName(item.harness)} · {formatQueueRequestDate(item)}
+              {queueRequesterName(item)} · {formatQueueRequestDate(item)}
               {watchOnlyObservation ? " · Would have stopped" : ""}
             </p>
           </div>
           <span
             role="img"
-            aria-label={`Risk: ${riskLevel}`}
+            aria-label={riskLabel}
             className="group/icon relative flex h-2 w-2 shrink-0 items-center justify-center"
           >
-            <span className={`h-2 w-2 rounded-full ${riskIndicatorClass(riskLevel)}`} />
+            <span className={`h-2 w-2 rounded-full ${nativeDisplayOnly ? "bg-slate-400" : riskIndicatorClass(riskLevel)}`} />
             <span className="pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100">
-              {`Risk: ${riskLevel}`}
+              {riskLabel}
             </span>
           </span>
           <span
             role="img"
-            aria-label={category.label}
+            aria-label={iconLabel}
             className={`group/icon relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
               active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
             }`}
           >
-            <CategoryIcon className="h-4 w-4" aria-hidden="true" />
+            <QueueItemIcon
+              extensionId={extensionId && category.id !== "guard_bypass" ? extensionId : null}
+              mcpMarkName={mcpMarkName}
+              CategoryIcon={CategoryIcon}
+            />
             <span className="pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100">
-              {category.label}
+              {iconLabel}
             </span>
           </span>
         </button>
@@ -247,6 +261,12 @@ function iconForQueueCategory(categoryId: QueueCategoryId) {
 
 export function queueItemPreview(item: GuardApprovalRequest): string {
   const envelope = item.action_envelope_json;
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return mcpCall.queueDetail !== null ? `${mcpCall.queueTitle} — ${mcpCall.queueDetail}` : mcpCall.queueTitle;
+  }
+  const listedMcp = listedMcpPreview(item);
+  if (listedMcp !== null) return listedMcp;
   return (
     envelope?.command ??
     item.queue_preview ??
@@ -256,4 +276,23 @@ export function queueItemPreview(item: GuardApprovalRequest): string {
     envelope?.package_name ??
     resolveStoppedCommandText(item)
   );
+}
+
+/** An extension's mark, else the MCP app's mark, else the queue category's icon. */
+function QueueItemIcon({
+  extensionId,
+  mcpMarkName,
+  CategoryIcon,
+}: {
+  extensionId: string | null;
+  mcpMarkName: string | null;
+  CategoryIcon: ReturnType<typeof iconForQueueCategory>;
+}) {
+  if (extensionId !== null) {
+    return <ExtensionBrandMark extension_id={extensionId} size="sm" />;
+  }
+  if (mcpMarkName !== null) {
+    return <McpAppMark name={mcpMarkName} size="sm" />;
+  }
+  return <CategoryIcon className="h-4 w-4" aria-hidden="true" />;
 }

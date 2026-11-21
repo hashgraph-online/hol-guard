@@ -4,24 +4,20 @@ from __future__ import annotations
 
 import io
 import json
+import sqlite3
 import sys
+import time
 from pathlib import Path
 
 import pytest
 import yaml as pyyaml
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _event_name
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
-from codex_plugin_scanner.guard.adapters.hermes_runtime_hooks import (
-    apply_hermes_doctor_protection_label,
-    guard_pretool_hook_registered,
-    hermes_bridge_response,
-    hermes_native_decision,
-)
-from codex_plugin_scanner.guard.runtime.actions import normalize_hermes_payload
-from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.cli import commands_hook_native_authority
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
+from tests import harness_ops_support as harness_support
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 
@@ -61,8 +57,7 @@ def _config(tmp_path: Path) -> dict[str, object]:
 
 def test_install_writes_fail_closed_pretool_hook(tmp_path: Path) -> None:
     _config(tmp_path)
-    adapter = HermesHarnessAdapter()
-    adapter.install(_ctx(tmp_path))
+    harness_support.install("hermes", _ctx(tmp_path))
 
     config = pyyaml.safe_load((tmp_path / ".hermes" / "config.yaml").read_text(encoding="utf-8"))
     entries = config["hooks"]["pre_tool_call"]
@@ -77,7 +72,7 @@ def test_install_writes_fail_closed_pretool_hook(tmp_path: Path) -> None:
     allowlist = json.loads((tmp_path / ".hermes" / "shell-hooks-allowlist.json").read_text(encoding="utf-8"))
     assert allowlist["approvals"][0]["event"] == "pre_tool_call"
     assert allowlist["approvals"][0]["command"] == guard_entries[0]["command"]
-    probe = adapter.runtime_probe(_ctx(tmp_path))
+    probe = harness_ops.runtime_probe("hermes", _ctx(tmp_path))
     assert probe is not None
     assert probe["runtime_hook_registered"] is True
     assert probe["managed_install_ready"] is True
@@ -85,10 +80,9 @@ def test_install_writes_fail_closed_pretool_hook(tmp_path: Path) -> None:
 
 def test_install_is_idempotent_for_runtime_hooks(tmp_path: Path) -> None:
     _config(tmp_path)
-    adapter = HermesHarnessAdapter()
     context = _ctx(tmp_path)
-    adapter.install(context)
-    adapter.install(context)
+    harness_support.install("hermes", context)
+    harness_support.install("hermes", context)
     config = pyyaml.safe_load((tmp_path / ".hermes" / "config.yaml").read_text(encoding="utf-8"))
     guard_entries = [entry for entry in config["hooks"]["pre_tool_call"] if entry.get("id") == "hol-guard-pretool"]
     assert len(guard_entries) == 1
@@ -96,10 +90,9 @@ def test_install_is_idempotent_for_runtime_hooks(tmp_path: Path) -> None:
 
 def test_uninstall_removes_guard_hook_and_keeps_user_hooks(tmp_path: Path) -> None:
     _config(tmp_path)
-    adapter = HermesHarnessAdapter()
     context = _ctx(tmp_path)
-    adapter.install(context)
-    adapter.uninstall(context)
+    harness_support.install("hermes", context)
+    harness_support.uninstall("hermes", context)
     config = pyyaml.safe_load((tmp_path / ".hermes" / "config.yaml").read_text(encoding="utf-8"))
     entries = config["hooks"]["pre_tool_call"]
     assert entries == [
@@ -112,34 +105,37 @@ def test_uninstall_removes_guard_hook_and_keeps_user_hooks(tmp_path: Path) -> No
 
 def test_runtime_probe_is_not_ready_without_registered_hook(tmp_path: Path) -> None:
     _config(tmp_path)
-    adapter = HermesHarnessAdapter()
     context = _ctx(tmp_path)
-    adapter.install(context)
+    harness_support.install("hermes", context)
     config_path = tmp_path / ".hermes" / "config.yaml"
     payload = pyyaml.safe_load(config_path.read_text(encoding="utf-8"))
     payload["hooks"]["pre_tool_call"] = [
         {"matcher": "write_file", "command": "/usr/bin/true", "fail_closed": False},
     ]
     config_path.write_text(pyyaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-    probe = adapter.runtime_probe(context)
+    probe = harness_ops.runtime_probe("hermes", context)
     assert probe is not None
     assert probe["runtime_hook_registered"] is False
     assert probe["managed_install_ready"] is False
-    warnings = adapter.diagnostic_warnings(adapter.detect(context), probe)
+    warnings = harness_ops.diagnostic_warnings("hermes", harness_ops.detect("hermes", context), probe)
     assert any("launch-review only" in warning for warning in warnings)
 
 
-def test_doctor_protection_label_is_launch_review_only_without_hook() -> None:
-    payload: dict[str, object] = {
-        "protection_label": "Protected",
-        "runtime_probe": {"managed_install_present": True, "runtime_hook_registered": False},
-    }
-    apply_hermes_doctor_protection_label(payload)
-    assert payload["runtime_protection_label"] == "launch-review only"
+def test_doctor_protection_label_is_launch_review_only_without_hook(tmp_path: Path) -> None:
+    _config(tmp_path)
+    context = _ctx(tmp_path)
+    harness_support.install("hermes", context)
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    payload = pyyaml.safe_load(config_path.read_text(encoding="utf-8"))
+    payload["hooks"]["pre_tool_call"] = []
+    config_path.write_text(pyyaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    assert harness_ops.diagnostics("hermes", context)["runtime_protection_label"] == "launch-review only"
 
 
 def test_pretool_call_payload_classifies_recursive_delete(tmp_path: Path) -> None:
-    envelope = normalize_hermes_payload(
+    envelope = normalize_harness_payload(
+        "hermes",
+        "",
         {
             "hook_event_name": "pre_tool_call",
             "tool_name": "terminal",
@@ -157,7 +153,9 @@ def test_pretool_call_payload_classifies_recursive_delete(tmp_path: Path) -> Non
 
 
 def test_pretool_call_args_payload_is_normalized(tmp_path: Path) -> None:
-    envelope = normalize_hermes_payload(
+    envelope = normalize_harness_payload(
+        "hermes",
+        "",
         {
             "hook_event_name": "pre_tool_call",
             "tool_name": "terminal",
@@ -170,86 +168,36 @@ def test_pretool_call_args_payload_is_normalized(tmp_path: Path) -> None:
     assert "rm -rf" in envelope.command
 
 
-def test_event_name_maps_pre_tool_call() -> None:
-    assert _event_name('{"hook_event_name":"pre_tool_call"}') == "PreToolUse"
-
-
-def test_hermes_bridge_maps_review_to_block() -> None:
-    stdout, stderr, code = hermes_bridge_response(
-        {"policy_action": "review", "reason": "recursive delete"},
-        event_name="PreToolUse",
-    )
-    payload = json.loads(stdout)
-    assert payload == {"decision": "block", "reason": "recursive delete"}
-    assert stderr == ""
-    assert code == 2
-    native_stdout, native_stderr, native_code = hermes_bridge_response(
+def test_hermes_bridge_fails_closed_without_resident(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(commands_hook_native_authority, "native_hermes_bridge", lambda *_args, **_kwargs: None)
+    stdout, stderr, code = commands_hook_native_authority._bridge_hook_output(
+        "hermes",
         {"policy_action": "allow", "reason": "ok"},
         event_name="PreToolUse",
+        guard_home=tmp_path / "guard-home",
+        deadline=None,
     )
-    assert json.loads(native_stdout)["decision"] == "allow"
-    assert native_stderr == ""
-    assert native_code == 0
+    assert json.loads(stdout) == {"decision": "block", "reason": "HOL Guard blocked this action."}
+    assert stderr == ""
+    assert code == 2
 
 
-def test_hermes_native_decision_never_emits_deny() -> None:
-    assert hermes_native_decision(policy_action="block", reason="no")["decision"] == "block"
-    assert hermes_native_decision(policy_action="review", reason="ask")["decision"] == "block"
-    assert hermes_native_decision(policy_action="allow", reason="ok")["decision"] == "allow"
+def test_hermes_bridge_render_stops_at_the_hook_deadline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_hook_render
 
+    def forbidden(**_kwargs: object) -> None:
+        raise AssertionError("an expired hook budget must not reach the resident")
 
-def test_guard_pretool_hook_registered_requires_fail_closed() -> None:
-    command = "python -c bounded_cli_hook_bridge"
-    assert (
-        guard_pretool_hook_registered(
-            {
-                "hooks": {
-                    "pre_tool_call": [
-                        {
-                            "id": "hol-guard-pretool",
-                            "matcher": ".*",
-                            "command": command,
-                            "fail_closed": False,
-                        }
-                    ]
-                }
-            }
-        )
-        is False
+    monkeypatch.setattr(native_hook_render, "_resident_request", forbidden)
+    stdout, _stderr, code = commands_hook_native_authority._bridge_hook_output(
+        "hermes",
+        {"policy_action": "allow", "reason": "ok"},
+        event_name="PreToolUse",
+        guard_home=tmp_path / "guard-home",
+        deadline=time.monotonic() - 0.01,
     )
-    assert (
-        guard_pretool_hook_registered(
-            {
-                "hooks": {
-                    "pre_tool_call": [
-                        {
-                            "id": "hol-guard-pretool",
-                            "matcher": ".*",
-                            "command": command,
-                            "fail_closed": True,
-                        }
-                    ]
-                }
-            }
-        )
-        is True
-    )
-    assert (
-        guard_pretool_hook_registered(
-            {
-                "hooks": {
-                    "pre_tool_call": [
-                        {
-                            "command": command,
-                            "matcher": ".*",
-                            "fail_closed": True,
-                        }
-                    ]
-                }
-            }
-        )
-        is False
-    )
+    assert json.loads(stdout) == {"decision": "block", "reason": "HOL Guard blocked this action."}
+    assert code == 2
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -265,7 +213,7 @@ def test_pretool_call_records_runtime_receipt(
     _write(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     _write(home_dir / ".hermes" / "config.yaml", "mcp_servers: {}\n")
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
-    HermesHarnessAdapter().install(context)
+    harness_support.install("hermes", context)
     capsys.readouterr()
     monkeypatch.setattr(
         sys,
@@ -294,10 +242,10 @@ def test_pretool_call_records_runtime_receipt(
         ]
     )
     captured = capsys.readouterr()
-    receipts = GuardStore(home_dir).list_receipts()
-    assert returncode == 2
-    assert receipts
-    assert receipts[0]["harness"] == "hermes"
+    with sqlite3.connect(home_dir / "guard.db") as connection:
+        receipts = list(connection.execute("select harness, decision from native_hook_decision_receipts"))
+    assert returncode == 2, captured.out
+    assert receipts == [("hermes", "deny")]
     native = json.loads(captured.out.strip().splitlines()[-1])
     assert native["decision"] == "block"
     assert "hookSpecificOutput" not in native
@@ -305,9 +253,8 @@ def test_pretool_call_records_runtime_receipt(
 
 def test_reinstall_retires_stale_allowlist_commands(tmp_path: Path) -> None:
     _config(tmp_path)
-    adapter = HermesHarnessAdapter()
     context = _ctx(tmp_path)
-    adapter.install(context)
+    harness_support.install("hermes", context)
     allowlist_path = tmp_path / ".hermes" / "shell-hooks-allowlist.json"
     stale = "python stale-guard-hook"
     payload = json.loads(allowlist_path.read_text(encoding="utf-8"))
@@ -319,7 +266,7 @@ def test_reinstall_retires_stale_allowlist_commands(tmp_path: Path) -> None:
         if entry.get("id") == "hol-guard-pretool":
             entry["command"] = stale
     config_path.write_text(pyyaml.safe_dump(config, sort_keys=False), encoding="utf-8")
-    adapter.install(context)
+    harness_support.install("hermes", context)
     allowlist = json.loads(allowlist_path.read_text(encoding="utf-8"))
     commands = [item["command"] for item in allowlist["approvals"]]
     assert stale not in commands
@@ -331,7 +278,7 @@ def test_malformed_allowlist_refuses_install(tmp_path: Path) -> None:
     allowlist_path = tmp_path / ".hermes" / "shell-hooks-allowlist.json"
     allowlist_path.write_text('{"approvals": {}}\n', encoding="utf-8")
     with pytest.raises(ValueError, match="malformed"):
-        HermesHarnessAdapter().install(_ctx(tmp_path))
+        harness_support.install("hermes", _ctx(tmp_path))
 
 
 def test_install_accepts_symlinked_custom_hermes_home_authority(
@@ -349,13 +296,12 @@ def test_install_accepts_symlinked_custom_hermes_home_authority(
     monkeypatch.setenv("HERMES_HOME", str(selected_home))
     (tmp_path / "workspace").mkdir()
 
-    adapter = HermesHarnessAdapter()
-    adapter.install(_ctx(tmp_path))
+    harness_support.install("hermes", _ctx(tmp_path))
 
     allowlist_path = real_home / "shell-hooks-allowlist.json"
     assert allowlist_path.is_file()
     assert json.loads(allowlist_path.read_text(encoding="utf-8"))["approvals"]
-    probe = adapter.runtime_probe(_ctx(tmp_path))
+    probe = harness_ops.runtime_probe("hermes", _ctx(tmp_path))
     assert probe is not None
     assert probe["runtime_hook_registered"] is True
 
@@ -372,7 +318,7 @@ def test_install_rejects_symlinked_allowlist_without_touching_target(tmp_path: P
         pytest.skip("file symlinks are unavailable")
 
     with pytest.raises(ValueError, match="regular file directly under"):
-        HermesHarnessAdapter().install(_ctx(tmp_path))
+        harness_support.install("hermes", _ctx(tmp_path))
 
     assert allowlist_path.is_symlink()
     assert outside.read_text(encoding="utf-8") == original
@@ -391,39 +337,12 @@ def test_user_hook_with_marker_substring_is_preserved(tmp_path: Path) -> None:
         ),
     )
     (tmp_path / "workspace").mkdir(exist_ok=True)
-    adapter = HermesHarnessAdapter()
-    adapter.install(_ctx(tmp_path))
-    adapter.uninstall(_ctx(tmp_path))
+    harness_support.install("hermes", _ctx(tmp_path))
+    harness_support.uninstall("hermes", _ctx(tmp_path))
     config = pyyaml.safe_load((tmp_path / ".hermes" / "config.yaml").read_text(encoding="utf-8"))
     assert config["hooks"]["pre_tool_call"] == [
         {"matcher": "write_file", "command": "echo bounded_cli_hook_bridge", "fail_closed": False},
     ]
-
-
-def test_registered_requires_allowlist_and_matcher(tmp_path: Path) -> None:
-    command = "python hol-guard-hook"
-    allowlist_path = tmp_path / "shell-hooks-allowlist.json"
-    allowlist_path.write_text(
-        json.dumps({"approvals": [{"event": "pre_tool_call", "command": command}]}) + "\n",
-        encoding="utf-8",
-    )
-    config = {
-        "hooks": {
-            "pre_tool_call": [
-                {
-                    "id": "hol-guard-pretool",
-                    "matcher": "write_file",
-                    "command": command,
-                    "fail_closed": True,
-                }
-            ]
-        }
-    }
-    assert guard_pretool_hook_registered(config, allowlist_path=allowlist_path) is False
-    config["hooks"]["pre_tool_call"][0]["matcher"] = ".*"
-    assert guard_pretool_hook_registered(config, allowlist_path=allowlist_path) is True
-    allowlist_path.write_text('{"approvals": []}\n', encoding="utf-8")
-    assert guard_pretool_hook_registered(config, allowlist_path=allowlist_path) is False
 
 
 def test_protection_display_name_skips_blank_runtime_label() -> None:
@@ -436,25 +355,3 @@ def test_protection_display_name_skips_blank_runtime_label() -> None:
         )
         == "Protected"
     )
-
-
-def test_hermes_merge_preserves_unrelated_bounded_hooks_text(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.hermes_runtime_hooks import merge_guard_pretool_hook
-
-    config: dict[str, object] = {
-        "hooks": {
-            "pre_tool_call": [
-                {
-                    "matcher": "write_file",
-                    "command": "echo mention managed/bounded-hooks in docs",
-                    "fail_closed": False,
-                }
-            ]
-        }
-    }
-    expected = (tmp_path / "python3", "-I", str(tmp_path / "managed" / "bounded-hooks" / "hermes.py"))
-    changed, removed = merge_guard_pretool_hook(config, command=expected, timeout_seconds=5)
-    assert changed is True
-    assert removed == []
-    commands = [entry.get("command") for entry in config["hooks"]["pre_tool_call"] if isinstance(entry, dict)]
-    assert any(isinstance(command, str) and "echo mention" in command for command in commands)

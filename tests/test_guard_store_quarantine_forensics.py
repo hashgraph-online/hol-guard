@@ -149,3 +149,63 @@ def test_restored_recovery_marks_the_forensics_outcome(
     assert payload["outcome"] == "restored"
     # A monkeypatched decision supplies no probe detail, so the record is null.
     assert payload["probe"] is None
+
+
+def test_forensics_record_header_diagnosis_and_sqlite_version(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir()
+    page = bytearray(4096)
+    page[0:8] = bytes([0x0D, 0, 0, 0, 1, 0x0F, 0x85, 0])
+    (guard_home / "guard.db").write_bytes(bytes(page) * 3)
+
+    GuardStore(guard_home, prime_policy_integrity=False)
+
+    record = json.loads(_forensics_records(guard_home)[0].read_text(encoding="utf-8"))
+    assert record["sqlite_version"] == sqlite3.sqlite_version
+    assert isinstance(record["sqlite_wal_reset_bug_possible"], bool)
+    assert record["header"]["header_magic_ok"] is False
+    assert record["header"]["page1_looks_like_btree_page"] == "leaf-table"
+    assert record["header"]["file_size"] == 3 * 4096
+
+
+def test_no_runtime_records_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import datetime, timezone
+
+    from codex_plugin_scanner.guard import sqlite_quarantine_forensics
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir()
+
+    with pytest.raises(RuntimeError, match="native runtime"):
+        sqlite_quarantine_forensics.write_quarantine_forensics(
+            guard_home=guard_home,
+            quarantine_id="20260101T000000000000Z-test",
+            quarantined_at=datetime.now(timezone.utc),
+            error=sqlite3.DatabaseError("database disk image is malformed"),
+            probe=None,
+            files={},
+        )
+    with pytest.raises(RuntimeError, match="native runtime"):
+        sqlite_quarantine_forensics.update_quarantine_forensics_outcome(
+            guard_home, "20260101T000000000000Z-test", outcome="restored"
+        )
+    assert list(guard_home.iterdir()) == []
+
+
+def test_a_failed_native_write_names_its_reason(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import sqlite_quarantine_forensics
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    answers = iter([{"written": False, "error": "PermissionDenied"}, {"written": False, "error": "/home/x"}])
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: next(answers))
+
+    with pytest.raises(RuntimeError, match=r"were not written: PermissionDenied$"):
+        sqlite_quarantine_forensics.update_quarantine_forensics_outcome(
+            tmp_path, "20260101T000000000000Z-test", outcome="restored"
+        )
+    with pytest.raises(RuntimeError, match=r"were not written: unknown$"):
+        sqlite_quarantine_forensics.update_quarantine_forensics_outcome(
+            tmp_path, "20260101T000000000000Z-test", outcome="restored"
+        )

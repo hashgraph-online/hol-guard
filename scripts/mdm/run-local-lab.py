@@ -8,11 +8,13 @@ import hashlib
 import json
 import platform
 import subprocess
+import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+FAILURE_TAIL_LINES = 120
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +150,11 @@ def run_suite(suite: Suite) -> Result:
     started = time.monotonic()
     completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
     output = f"{completed.stdout}\n{completed.stderr}"
+    if completed.returncode != 0:
+        # The JSON report keeps only a digest, so surface the bounded failure
+        # tail on stderr for whoever reads the job log.
+        print(f"--- {suite.name}: last {FAILURE_TAIL_LINES} output lines ---", file=sys.stderr)
+        print("\n".join(output.splitlines()[-FAILURE_TAIL_LINES:]), file=sys.stderr)
     return Result(
         name=suite.name,
         capabilities=suite.capabilities,

@@ -10,14 +10,14 @@ mod ranges_b;
 use ranges_a::PYTHON_ALNUM_RANGES_A;
 use ranges_b::PYTHON_ALNUM_RANGES_B;
 
-pub(crate) fn python_is_alphanumeric(character: char) -> bool {
+pub fn python_is_alphanumeric(character: char) -> bool {
     if character.is_ascii() {
         return character.is_ascii_alphanumeric();
     }
     python_alphanumeric_kind(character).is_some()
 }
 
-pub(crate) fn python_is_alphabetic(character: char) -> bool {
+pub fn python_is_alphabetic(character: char) -> bool {
     if character.is_ascii() {
         return character.is_ascii_alphabetic();
     }

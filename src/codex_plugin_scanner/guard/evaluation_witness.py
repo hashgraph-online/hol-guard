@@ -9,7 +9,6 @@ from __future__ import annotations
 import os
 import socket
 import stat
-import sys
 import weakref
 from dataclasses import dataclass
 from http.client import HTTPConnection
@@ -371,25 +370,6 @@ class LocalSideEffectWitness:
         )
         self._file_pairs.add((pair.denied_target, pair.allowed_target))
         return pair
-
-    def new_tool_pair(self) -> FileWitnessPair:
-        pair = self.new_file_pair()
-        denied_script = self.root / f"{uuid4().hex}-denied.py"
-        allowed_script = self.root / f"{uuid4().hex}-allowed.py"
-        for script, target in (
-            (denied_script, pair.denied_target),
-            (allowed_script, pair.allowed_target),
-        ):
-            script.write_text(
-                "from pathlib import Path\n" + f"Path({str(target)!r}).write_bytes(b'hit')\n",
-                encoding="utf-8",
-            )
-        return FileWitnessPair(
-            denied_target=pair.denied_target,
-            allowed_target=pair.allowed_target,
-            denied_tool=(sys.executable, str(denied_script)),
-            allowed_tool=(sys.executable, str(allowed_script)),
-        )
 
     def new_network_pair(self) -> NetworkWitnessPair:
         if self._server is None:

@@ -6,10 +6,11 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.approval_scope_support import (
     package_request_portable_workspace_scope,
     package_request_runtime_workspace_scope,
-    supported_request_scopes,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.package_execution_context import (
@@ -17,14 +18,38 @@ from codex_plugin_scanner.guard.package_execution_context import (
     changed_package_execution_context_components,
 )
 
+pytestmark = pytest.mark.usefixtures("_native_package_context_authority")
 
-def _write_repository(root: Path, *, common_git_dir: Path | None = None) -> Path:
+
+@pytest.fixture
+def _native_package_context_authority(native_context_digest: Path) -> None:
+    from codex_plugin_scanner.guard import native_context
+
+    home = native_context.context_digest_guard_home()
+    assert home is not None, "package context controls require a bound guard home"
+    result = native_context.native_context_digest(
+        "canonical_sha256",
+        {"material": None, "prefix": None},
+        guard_home=home,
+        timeout_seconds=5.0,
+    )
+    from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
+
+    assert result is not None and result["status"] == "ok", native_resident_client_failure_code()
+
+
+def _write_repository(
+    root: Path,
+    *,
+    common_git_dir: Path | None = None,
+    origin: str = "https://example.test/team/app.git",
+) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     if common_git_dir is None:
         common_git_dir = root / ".git"
         common_git_dir.mkdir(parents=True)
         (common_git_dir / "config").write_text(
-            '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = https://example.test/team/app.git\n',
+            f'[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = {origin}\n',
             encoding="utf-8",
         )
     else:
@@ -94,7 +119,10 @@ def _component_digest(context, name: str) -> str:
     return next(component.digest for component in context.components if component.name == name)
 
 
-def test_portable_context_matches_across_linked_git_worktrees(tmp_path: Path) -> None:
+def test_portable_context_matches_across_linked_git_worktrees(
+    tmp_path: Path,
+    package_workspace_scope_native: Path,
+) -> None:
     primary = tmp_path / "primary"
     linked = tmp_path / "linked"
     common = _write_repository(primary)
@@ -126,11 +154,29 @@ def test_portable_context_matches_across_linked_git_worktrees(tmp_path: Path) ->
     assert primary_scope is not None and primary_scope.startswith("package-request-workspace:v2:")
 
 
+def test_separate_clone_of_the_same_origin_shares_context(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "elsewhere" / "second"
+    _write_repository(first, origin="git@example.test:team/app.git")
+    _write_repository(second, origin="https://example.test/team/app")
+    _write_package_files(first)
+    _write_package_files(second)
+    environment = _environment(tmp_path)
+    artifact = _artifact()
+
+    first_context = _context(first, artifact, environment)
+    second_context = _context(second, artifact, environment)
+
+    assert first_context.portable is True
+    assert changed_package_execution_context_components(first_context, second_context) == ()
+    assert first_context.digest == second_context.digest
+
+
 def test_identical_files_in_unrelated_repositories_do_not_share_context(tmp_path: Path) -> None:
     first = tmp_path / "first"
     second = tmp_path / "second"
     _write_repository(first)
-    _write_repository(second)
+    _write_repository(second, origin="https://example.test/other/app.git")
     _write_package_files(first)
     _write_package_files(second)
     environment = _environment(tmp_path)
@@ -314,6 +360,38 @@ def test_script_backed_manager_binds_env_selected_interpreter_content_and_path(t
     assert _component_digest(first, component) != _component_digest(content_changed, component)
 
 
+def test_manager_digest_ignores_path_entries_that_do_not_change_the_resolved_binary(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    environment = _environment(tmp_path)
+    shim_bin = tmp_path / "agent-shim-1234"
+    shim_bin.mkdir()
+    shadow_bin = tmp_path / "shadow-bin"
+    shadow_bin.mkdir()
+    shadow = shadow_bin / "pnpm"
+    shadow.write_text("#!/bin/sh\n# pnpm-v1\n", encoding="utf-8")
+    shadow.chmod(0o755)
+    artifact = _artifact()
+
+    baseline = _context(workspace, artifact, environment)
+    prefixed = _context(
+        workspace,
+        artifact,
+        {**environment, "PATH": os.pathsep.join((str(shim_bin), environment["PATH"]))},
+    )
+    shadowed = _context(
+        workspace,
+        artifact,
+        {**environment, "PATH": os.pathsep.join((str(shadow_bin), environment["PATH"]))},
+    )
+
+    component = "package_manager_executable"
+    assert baseline.portable is True
+    assert _component_digest(baseline, component) == _component_digest(prefixed, component)
+    assert _component_digest(baseline, component) != _component_digest(shadowed, component)
+
+
 def test_script_backed_manager_binds_nested_python_module_loaded_by_shebang(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     _write_repository(workspace)
@@ -369,7 +447,10 @@ def test_unbound_nested_node_preload_in_shebang_disables_package_approval_reuse(
     assert first.digest != second.digest
 
 
-def test_oversized_or_dynamic_configuration_is_not_portable(tmp_path: Path) -> None:
+def test_oversized_or_dynamic_configuration_is_not_portable(
+    tmp_path: Path,
+    package_workspace_scope_native: Path,
+) -> None:
     workspace = tmp_path / "workspace"
     _write_repository(workspace)
     _write_package_files(workspace)
@@ -438,25 +519,121 @@ def test_context_evidence_never_contains_configuration_values(tmp_path: Path) ->
     assert "registry.example.test" not in serialized
 
 
-def test_package_project_scope_requires_future_bound_v2_proof(tmp_path: Path) -> None:
+def test_native_build_failure_cannot_produce_reusable_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
+) -> None:
+    from codex_plugin_scanner.guard import native_package_context_build
+
     workspace = tmp_path / "workspace"
     _write_repository(workspace)
     _write_package_files(workspace)
     environment = _environment(tmp_path)
-    portable = _context(workspace, _artifact(), environment)
-    request = {
-        "artifact_id": "guard-cli:project:package-request:context-test",
-        "artifact_type": "package_request",
-        "policy_action": "review",
-        "workspace": str(workspace),
-        "scanner_evidence": [portable.to_evidence()],
-    }
+    monkeypatch.setattr(native_package_context_build, "_resident_request", lambda **_kwargs: None)
+    with pytest.raises(ValueError, match=r"native_package_context_build_|native_"):
+        _context(workspace, _artifact(), environment)
 
-    assert supported_request_scopes(request) == ("artifact",)
-    nonportable_evidence = {
-        **portable.to_evidence(),
-        "portable": False,
-        "non_portable_reason": "dynamic_manager_configuration",
-    }
-    assert supported_request_scopes({**request, "scanner_evidence": [nonportable_evidence]}) == ("artifact",)
-    assert supported_request_scopes({**request, "scanner_evidence": []}) == ("artifact",)
+
+def test_unavailable_resident_leaves_a_package_request_without_a_saved_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A probe's own guard home has no resident; the evaluation must still run.
+
+    The scope is the key a saved approval is matched under.  Without the
+    resident there is no key, so the lookup finds nothing and the request is
+    decided as if nothing had been saved - the closed outcome.  Raising here
+    would take the whole package evaluation down with it.
+    """
+
+    from codex_plugin_scanner.guard import local_supply_chain
+    from codex_plugin_scanner.guard.native_package_workspace_scope import NativePackageWorkspaceScopeError
+
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    artifact = _artifact()
+    context = _context(workspace, artifact, _environment(tmp_path))
+
+    def _unavailable(**_kwargs: object) -> tuple[str | None, str | None]:
+        raise NativePackageWorkspaceScopeError("Native package workspace scope unavailable")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.approval_scope_support.native_package_workspace_scopes",
+        _unavailable,
+    )
+
+    candidates = local_supply_chain._package_policy_workspace_candidates(
+        artifact=artifact,
+        artifact_hash="sha256:1234",
+        workspace_dir=workspace,
+        execution_context=context,
+        guard_home=tmp_path / "guard-home",
+    )
+
+    assert candidates == ()
+
+
+def test_the_resident_s_own_reply_discriminator_is_accepted(
+    tmp_path: Path,
+    package_workspace_scope_native: Path,
+) -> None:
+    """The compiled resident's scope reply reaches the caller intact.
+
+    The transport this op shares with the package-authority family used to
+    accept only that family's reply discriminator, so every answer this op
+    actually sends was discarded as malformed and no package scope could ever
+    be derived.  This exercises the real round trip end to end.
+    """
+
+    from codex_plugin_scanner.guard.native_package_workspace_scope import (
+        _RESULT_SCHEMA,
+        native_package_workspace_scopes,
+    )
+
+    assert _RESULT_SCHEMA == "guard-package-workspace-scope-result.v1"
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    artifact = _artifact()
+    context = _context(workspace, artifact, _environment(tmp_path))
+
+    portable, runtime = native_package_workspace_scopes(
+        artifact_id=artifact.artifact_id,
+        artifact_hash="b" * 64,
+        artifact_type=artifact.artifact_type,
+        execution_context=context,
+    )
+
+    assert portable is not None and portable.startswith("package-request-workspace:v2:")
+    # A portable context has no second identity. The runtime scope a policy
+    # lookup uses is that same portable scope, so the reply carries it twice;
+    # the exact scope is the fallback for a context that cannot travel, and
+    # test_oversized_or_dynamic_configuration_is_not_portable covers it.
+    assert runtime == portable
+
+
+def test_a_request_without_an_execution_context_never_reaches_the_resident(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both scopes bind a context, so a caller without one has nothing to ask.
+
+    An approval saved against an MCP artifact arrives here with no context.
+    Asking anyway spends a round trip on a pair of nulls, and fails outright
+    wherever the resident is down.
+    """
+
+    from codex_plugin_scanner.guard import native_package_workspace_scope
+
+    def _unreachable(**_kwargs: object) -> dict[str, object]:
+        raise AssertionError("a contextless request must not reach the resident")
+
+    monkeypatch.setattr(native_package_workspace_scope, "_resident_request", _unreachable)
+
+    assert native_package_workspace_scope.native_package_workspace_scopes(
+        artifact_id="artifact",
+        artifact_hash="b" * 64,
+        artifact_type="package-request",
+        execution_context=None,
+    ) == (None, None)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import http.server
 import json
 import secrets
@@ -13,20 +12,19 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import NoReturn, TypedDict
-from uuid import uuid4
 
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from typing_extensions import Unpack
 
 from ...version import __version__
 from ..browser_opener import open_browser_url
+from ..dpop_key_binding import signed_dpop_proof
 from ..mdm.network import managed_urlopen
-from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_access_token_claims
-from ..oauth_token_claims import oauth_device_id
+from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
+from ..native_policy_bundle import PolicyBundleNativeError, PolicyBundleNativeUnavailableError
+from ..native_runner_authority import NativeRunnerAuthorityError
+from ..oauth_token_claims import oauth_access_token_expires_at, oauth_token_identity
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
@@ -36,6 +34,14 @@ from ..portable_command import portable_command_payload
 from ..runtime.runner import prepare_guard_cloud_connect_authorization
 from ..store import GuardStore
 from ..store_connect import build_connect_state_response
+from .commands_parser_constants import DEFAULT_GUARD_CONNECT_URL
+from .commands_parser_constants import DEFAULT_GUARD_SYNC_URL as DEFAULT_GUARD_SYNC_URL
+from .connect_cloud_actions import (
+    CloudActionsConnectReport,
+    connect_status_cloud_actions,
+    parse_cloud_actions_connect_report,
+    record_connect_cloud_actions,
+)
 from .oauth_client import (
     GuardDpopKeyMaterial,
     GuardOAuthClientConfig,
@@ -47,8 +53,6 @@ from .oauth_client import (
 )
 from .oauth_credential_persistence import OAuthCredentialUpdateParams, persist_oauth_local_credentials
 
-DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
-DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
 DEFAULT_GUARD_DEVICE_SCOPES = (
     "guard:runtime.sync",
     "guard:receipt.write",
@@ -63,11 +67,12 @@ CI_SAFE_GUARD_DEVICE_SCOPES = (
 CONNECT_COMMAND = "hol-guard connect"
 CONNECT_STATUS_COMMAND = "hol-guard connect status"
 CONNECT_REPAIR_COMMAND = "hol-guard connect repair"
-DISCONNECT_COMMAND = "hol-guard disconnect"
-HEADLESS_CONNECT_COMMAND = "hol-guard connect --headless"
 CONNECT_SYNC_AUTH_CONTEXT_KEY = "_guard_sync_auth_context"
 DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 DEVICE_CODE_SLOW_DOWN_SECONDS = 5
+DEVICE_CODE_TRANSIENT_MAX_INTERVAL_SECONDS = 60
+# How many fresh device codes HOL Guard requests after Guard Cloud's approval answer is lost.
+DEVICE_CODE_LOST_APPROVAL_RESTARTS = 1
 HEADLESS_RUNTIME_ID = "hol-guard"
 HEADLESS_RUNTIME_LABEL = "HOL Guard CLI"
 _GUARD_OAUTH_USER_AGENT = f"hol-guard/{__version__}"
@@ -118,19 +123,21 @@ class GuardOAuthTokenExchangeResult:
     device_id: str | None = None
     cloud_user_profile: dict[str, str] | None = None
     access_token_expires_at: str | None = None
+    cloud_actions: CloudActionsConnectReport | None = None
 
     def __post_init__(self) -> None:
         if self.access_token_expires_at is not None:
             return
-        object.__setattr__(
-            self,
-            "access_token_expires_at",
-            _guard_access_token_expires_at(
-                access_token=self.access_token,
+        try:
+            expires_at = oauth_access_token_expires_at(
+                self.access_token,
                 expires_in=self.expires_in,
                 now=datetime.now(timezone.utc),
-            ),
-        )
+            )
+        except (NativeRunnerAuthorityError, OSError):
+            # No saved expiry only means the token is refreshed before reuse.
+            expires_at = None
+        object.__setattr__(self, "access_token_expires_at", expires_at)
 
     def target_binding(self, *, machine_fallback: str | None = None) -> GuardOAuthTargetBinding:
         return {
@@ -170,15 +177,6 @@ class GuardOAuthBrowserSession:
         self._thread.join(timeout=2)
 
 
-def _base64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
-
-
-def _base64url_decode(data: str) -> bytes:
-    padding = "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode(f"{data}{padding}")
-
-
 def _read_nested_string(payload: dict[str, object], *path: str) -> str | None:
     current: object = payload
     for segment in path:
@@ -186,25 +184,6 @@ def _read_nested_string(payload: dict[str, object], *path: str) -> str | None:
             return None
         current = current.get(segment)
     return current if isinstance(current, str) and current else None
-
-
-def _guard_access_token_expires_at(
-    *,
-    access_token: str,
-    expires_in: int,
-    now: datetime,
-) -> str | None:
-    claims = _decode_access_token_claims(access_token)
-    exp = claims.get("exp")
-    if isinstance(exp, (int, float)) and float(exp) > 0:
-        return datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
-    if expires_in <= 0:
-        return None
-    return (now + timedelta(seconds=expires_in)).isoformat()
-
-
-def _encode_jwt_segment(payload: dict[str, object]) -> str:
-    return _base64url_encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
 
 
 def _int_payload_value(payload: dict[str, object], key: str, default: int) -> int:
@@ -227,34 +206,25 @@ def _sign_dpop_proof(
     dpop_key_material: GuardDpopKeyMaterial,
     now: datetime,
     nonce: str | None = None,
+    access_token: str | None = None,
 ) -> str:
-    issued_at = int(now.timestamp())
-    header: dict[str, object] = {
-        "alg": dpop_key_material.algorithm,
-        "jwk": dpop_key_material.public_jwk,
-        "typ": "dpop+jwt",
-    }
-    claims: dict[str, object] = {
-        "htu": token_endpoint,
-        "htm": "POST",
-        "iat": issued_at,
-        "jti": str(uuid4()),
-    }
-    if isinstance(nonce, str):
-        normalized_nonce = nonce.strip()
-        if normalized_nonce:
-            claims["nonce"] = normalized_nonce
-    signing_input = f"{_encode_jwt_segment(header)}.{_encode_jwt_segment(claims)}".encode("ascii")
-    private_key = serialization.load_pem_private_key(
-        dpop_key_material.private_key_pem.encode("ascii"),
-        password=None,
-    )
-    if not isinstance(private_key, ec.EllipticCurvePrivateKey):
-        raise RuntimeError("Guard DPoP key must be an EC private key.")
-    der_signature = private_key.sign(signing_input, ec.ECDSA(hashes.SHA256()))
-    r_value, s_value = decode_dss_signature(der_signature)
-    jose_signature = _base64url_encode(r_value.to_bytes(32, byteorder="big") + s_value.to_bytes(32, byteorder="big"))
-    return f"{signing_input.decode('ascii')}.{jose_signature}"
+    # The native errors subclass ValueError, which connect reports as bad input;
+    # a signing failure is operational, so it leaves here as a RuntimeError.
+    try:
+        return signed_dpop_proof(
+            private_key_pem=dpop_key_material.private_key_pem,
+            algorithm=dpop_key_material.algorithm,
+            public_jwk=dpop_key_material.public_jwk,
+            request_url=token_endpoint,
+            method="POST",
+            issued_at=int(now.timestamp()),
+            access_token=access_token,
+            nonce=nonce,
+        )
+    except PolicyBundleNativeUnavailableError as exc:
+        raise RuntimeError("Guard could not sign the Guard Cloud request. Try again shortly.") from exc
+    except PolicyBundleNativeError as exc:
+        raise RuntimeError("Guard Cloud authorization key is invalid. Reconnect Guard Cloud.") from exc
 
 
 def _oauth_response_header_value(response: object, header_name: str) -> str | None:
@@ -306,22 +276,27 @@ def _build_browser_authorize_url(
     code_challenge: str,
     machine_id: str,
     machine_label: str,
+    cloud_workspace_id: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> str:
-    query = urllib.parse.urlencode(
-        {
-            "response_type": "code",
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "state": state,
-            "scope": " ".join(DEFAULT_GUARD_DEVICE_SCOPES),
-            "code_challenge": code_challenge,
-            "code_challenge_method": "S256",
-            "requested_machine_id": machine_id,
-            "requested_machine_label": machine_label,
-            "requested_runtime_id": "hol-guard",
-            "requested_runtime_label": "HOL Guard CLI",
-        }
-    )
+    params: dict[str, str] = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "state": state,
+        "scope": " ".join(DEFAULT_GUARD_DEVICE_SCOPES),
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "requested_machine_id": machine_id,
+        "requested_machine_label": machine_label,
+        "requested_runtime_id": "hol-guard",
+        "requested_runtime_label": "HOL Guard CLI",
+    }
+    if cloud_workspace_id is not None:
+        params["workspace_id"] = cloud_workspace_id
+    if cloud_actions_declined:
+        params["cloud_actions"] = "off"
+    query = urllib.parse.urlencode(params)
     return f"{authorize_endpoint}?{query}"
 
 
@@ -421,6 +396,8 @@ def start_guard_browser_session(
     connect_url: str,
     machine_id: str,
     machine_label: str,
+    cloud_workspace_id: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> GuardOAuthBrowserSession:
     _, allowed_origin = resolve_connect_url(connect_url)
     client = resolve_guard_oauth_client_config(allowed_origin)
@@ -443,6 +420,8 @@ def start_guard_browser_session(
         code_challenge=build_pkce_s256_challenge(pkce_verifier),
         machine_id=machine_id,
         machine_label=machine_label,
+        cloud_workspace_id=cloud_workspace_id,
+        cloud_actions_declined=cloud_actions_declined,
     )
     session.authorize_url = authorize_url
     session.pkce_verifier = pkce_verifier
@@ -487,6 +466,7 @@ def build_device_authorization_request_body(
     runtime_label: str,
     client_id: str,
     scopes: tuple[str, ...] = DEFAULT_GUARD_DEVICE_SCOPES,
+    cloud_actions_declined: bool = False,
 ) -> str:
     payload = {
         "client_id": client_id,
@@ -498,6 +478,8 @@ def build_device_authorization_request_body(
     }
     if isinstance(machine_location_label, str) and machine_location_label.strip():
         payload["requested_machine_location_label"] = machine_location_label.strip()
+    if cloud_actions_declined:
+        payload["cloud_actions"] = "off"
     return urllib.parse.urlencode(payload)
 
 
@@ -523,34 +505,58 @@ def _require_string(payload: dict[str, object], key: str) -> str:
     return value
 
 
-def _parse_guard_token_exchange_payload(payload: dict[str, object]) -> GuardOAuthTokenExchangeResult:
+def _parse_guard_token_exchange_payload(
+    payload: dict[str, object],
+    *,
+    require_entitlement: bool = True,
+) -> GuardOAuthTokenExchangeResult:
+    """Parse a token response; a refresh passes ``require_entitlement=False``.
+
+    A connect replaces the stored credentials, so it needs the plan the
+    response grants. A refresh must still save a rotated refresh token when
+    the runtime cannot read the plan, and keeps the entitlement it stored.
+    """
     access_token = _require_string(payload, "access_token")
     token_type = _require_string(payload, "token_type")
     if token_type.lower() != "bearer":
         raise RuntimeError("Guard OAuth token exchange failed: missing access token.")
     now = datetime.now(timezone.utc)
-    claims = _decode_access_token_claims(access_token)
     expires_in = _int_payload_value(payload, "expires_in", 0)
+    try:
+        identity = oauth_token_identity(access_token)
+    except (NativeRunnerAuthorityError, OSError) as error:
+        if require_entitlement:
+            # A new connection saved before its claims were read would leave a
+            # row no later sync can tell apart from an unbound one.
+            raise RuntimeError(
+                "Guard OAuth token exchange failed: Guard's local runtime could not read the access token."
+            ) from error
+        # A refresh keeps the binding already saved with the credential; the
+        # rotated refresh token must still reach the store.
+        identity: dict[str, str | None] = dict.fromkeys(("grant_id", "machine_id", "workspace_id", "device_id"))
+    try:
+        access_token_expires_at = oauth_access_token_expires_at(access_token, expires_in=expires_in, now=now)
+    except (NativeRunnerAuthorityError, OSError):
+        # No saved expiry only means the token is refreshed before reuse.
+        access_token_expires_at = None
     return GuardOAuthTokenExchangeResult(
         access_token=access_token,
-        access_token_expires_at=_guard_access_token_expires_at(
-            access_token=access_token,
-            expires_in=expires_in,
-            now=now,
-        ),
+        access_token_expires_at=access_token_expires_at,
         refresh_token=str(payload.get("refresh_token") or "").strip() or None,
         expires_in=expires_in,
         scope=str(payload.get("scope") or "").strip(),
         token_type=token_type,
-        grant_id=_read_nested_string(claims, "grant", "grantId"),
-        machine_id=_read_nested_string(claims, "machine", "machineId"),
-        device_id=oauth_device_id(claims),
+        grant_id=identity["grant_id"],
+        machine_id=identity["machine_id"],
+        device_id=identity["device_id"],
         supply_chain_entitlement=build_oauth_package_firewall_entitlement(
             payload,
             now=now,
+            required=require_entitlement,
         ),
-        workspace_id=_read_nested_string(claims, "workspace", "workspaceId"),
+        workspace_id=identity["workspace_id"],
         cloud_user_profile=_extract_cloud_user_profile(payload),
+        cloud_actions=parse_cloud_actions_connect_report(payload),
     )
 
 
@@ -622,11 +628,6 @@ def _load_error_payload(error: urllib.error.HTTPError) -> dict[str, object] | No
     except json.JSONDecodeError:
         return None
     return payload if isinstance(payload, dict) else None
-
-
-def device_authorization_endpoint_from_connect_url(connect_url: str) -> str:
-    _, allowed_origin = resolve_connect_url(connect_url)
-    return resolve_guard_oauth_client_config(allowed_origin).device_authorization_endpoint
 
 
 def request_device_authorization(url: str, body: str) -> dict[str, object]:
@@ -715,6 +716,31 @@ def _require_guard_oauth_payload(payload: object) -> dict[str, object]:
     return payload
 
 
+def _is_transient_device_poll_error(error: OSError) -> bool:
+    """Return True when a poll got no answer; RFC 8628 says to back off and keep polling."""
+    if isinstance(error, urllib.error.URLError):
+        return isinstance(error.reason, (TimeoutError, ConnectionError))
+    return isinstance(error, (TimeoutError, ConnectionError))
+
+
+def _unanswered_device_poll_error() -> RuntimeError:
+    return RuntimeError(
+        "Guard Cloud did not answer while HOL Guard waited for approval. "
+        "Retry `hol-guard connect --headless` to request a new code."
+    )
+
+
+class GuardDeviceApprovalLostError(RuntimeError):
+    """Guard Cloud redeemed the device code on a poll whose answer never arrived."""
+
+
+def _device_approval_lost_error() -> GuardDeviceApprovalLostError:
+    return GuardDeviceApprovalLostError(
+        "Guard Cloud approved this device, but its answer was lost on the way back. "
+        "Device codes work only once, so HOL Guard needs a new code to finish connecting."
+    )
+
+
 def exchange_guard_device_code(
     *,
     token_endpoint: str,
@@ -735,6 +761,7 @@ def exchange_guard_device_code(
     current_interval = max(interval_seconds, 1)
     dpop_nonce: str | None = None
     nonce_retry_count = 0
+    poll_went_unanswered = False
     while True:
         request = _guard_token_request_with_dpop(
             token_endpoint,
@@ -755,6 +782,8 @@ def exchange_guard_device_code(
                 continue
             oauth_error = str(payload.get("error") or "").strip() if isinstance(payload, dict) else ""
             if oauth_error == "authorization_pending":
+                # An answered pending poll proves the code was not redeemed yet.
+                poll_went_unanswered = False
                 if time.monotonic() >= deadline:
                     raise RuntimeError(
                         "Guard OAuth approval timed out. Retry `hol-guard connect --headless` to request a new code."
@@ -762,6 +791,7 @@ def exchange_guard_device_code(
                 sleep(float(current_interval))
                 continue
             if oauth_error == "slow_down":
+                poll_went_unanswered = False
                 current_interval = max(current_interval + DEVICE_CODE_SLOW_DOWN_SECONDS, 1)
                 if time.monotonic() >= deadline:
                     raise RuntimeError(
@@ -777,12 +807,36 @@ def exchange_guard_device_code(
                 raise RuntimeError(
                     "Guard OAuth approval was denied. Retry `hol-guard connect --headless` to request a new code."
                 ) from error
+            if oauth_error == "invalid_grant" and poll_went_unanswered:
+                # A poll that never answered can still have redeemed the code,
+                # and Guard Cloud refuses a code twice, so this code is spent.
+                raise _device_approval_lost_error() from error
             message = (
                 str(payload.get("error_description") or oauth_error or error.reason)
                 if isinstance(payload, dict)
                 else str(error.reason)
             )
             raise RuntimeError(f"Guard OAuth token exchange failed: {message}") from error
+        except (TimeoutError, ConnectionError, urllib.error.URLError) as error:
+            if not _is_transient_device_poll_error(error):
+                raise
+            poll_went_unanswered = True
+            # The device code stays valid while one poll goes unanswered, so a
+            # slow or briefly unreachable Guard Cloud must not end the wait.
+            remaining_seconds = deadline - time.monotonic()
+            if remaining_seconds <= 0:
+                raise _unanswered_device_poll_error() from error
+            # Back off, but never below the interval Guard Cloud asked for.
+            current_interval = max(
+                current_interval,
+                min(current_interval * 2, DEVICE_CODE_TRANSIENT_MAX_INTERVAL_SECONDS),
+            )
+            sleep(float(min(current_interval, remaining_seconds)))
+            # Never start a poll after the wait window closes, even when the
+            # backoff sleep ran up to the deadline.
+            if time.monotonic() >= deadline:
+                raise _unanswered_device_poll_error() from error
+            continue
         if not isinstance(payload, dict):
             raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
         return _parse_guard_token_exchange_payload(payload)
@@ -836,7 +890,7 @@ def refresh_guard_access_token(
         now=now,
         on_http_error=_raise_guard_oauth_token_exchange_error,
     )
-    return _parse_guard_token_exchange_payload(_require_guard_oauth_payload(payload))
+    return _parse_guard_token_exchange_payload(_require_guard_oauth_payload(payload), require_entitlement=False)
 
 
 class GuardOAuthTokenExchangeError(RuntimeError):
@@ -894,7 +948,7 @@ def revoke_guard_self_oauth_grant(
     urlopen=managed_urlopen,
     now: datetime | None = None,
 ) -> None:
-    revoke_url = f"{oauth_client.issuer.rstrip('/')}/api/guard/oauth/revoke/self"
+    revoke_url = f"{oauth_client.issuer.rstrip('/')}{_SELF_REVOKE_PATH}"
     dpop_nonce: str | None = None
     nonce_retry_count = 0
     while True:
@@ -912,6 +966,7 @@ def revoke_guard_self_oauth_grant(
                         dpop_key_material=dpop_key_material,
                         now=now or datetime.now(timezone.utc),
                         nonce=dpop_nonce,
+                        access_token=access_token,
                     ),
                 ),
                 "Authorization": f"Bearer {access_token}",
@@ -1090,6 +1145,7 @@ def run_guard_device_connect_command(
     ci_safe: bool = False,
     machine_label: str | None = None,
     include_sync_auth_context: bool = False,
+    cloud_actions_declined: bool = False,
 ) -> dict[str, object]:
     prepare_guard_cloud_connect_authorization(store)
     device = store.get_device_metadata()
@@ -1105,37 +1161,59 @@ def run_guard_device_connect_command(
         runtime_label=HEADLESS_RUNTIME_LABEL,
         client_id=oauth_client.client_id,
         scopes=_resolve_guard_device_scopes(ci_safe=ci_safe),
+        cloud_actions_declined=cloud_actions_declined,
     )
-    response = request_device_authorization(
-        oauth_client.device_authorization_endpoint,
-        request_body,
-    )
-    payload = build_device_authorization_copy_payload(response)
-    payload["connect_mode"] = "device_code"
-    if open_browser is not None:
-        next_action = payload.get("next_action")
-        target = next_action.get("target") if isinstance(next_action, dict) else None
-        opened = False
-        if isinstance(target, str) and target:
-            opened = bool(open_browser(target))
-        payload["browser_opened"] = opened
-    if announce_copy is not None:
-        announce_copy(payload)
-    device_code = str(response.get("device_code") or "").strip()
-    if not device_code:
-        raise ValueError("Device authorization response is missing device_code.")
-    token_result = exchange_guard_device_code(
-        token_endpoint=oauth_client.token_endpoint,
-        client_id=oauth_client.client_id,
-        device_code=device_code,
-        dpop_key_material=dpop_key_material,
-        interval_seconds=_int_payload_value(response, "interval", 5),
-        expires_in_seconds=_int_payload_value(response, "expires_in", 0),
-        wait_timeout_seconds=wait_timeout_seconds,
-        urlopen=token_urlopen,
-        sleep=sleep,
-        now=datetime.fromisoformat(now) if now else None,
-    )
+    restarts_left = DEVICE_CODE_LOST_APPROVAL_RESTARTS
+    approval_lost = False
+    # A restart with a new code shares the caller's wait budget instead of
+    # starting a fresh one.
+    command_deadline = time.monotonic() + wait_timeout_seconds if wait_timeout_seconds is not None else None
+    while True:
+        response = request_device_authorization(
+            oauth_client.device_authorization_endpoint,
+            request_body,
+        )
+        payload = build_device_authorization_copy_payload(response)
+        payload["connect_mode"] = "device_code"
+        if approval_lost:
+            payload["approval_lost"] = True
+        if open_browser is not None:
+            next_action = payload.get("next_action")
+            target = next_action.get("target") if isinstance(next_action, dict) else None
+            opened = False
+            if isinstance(target, str) and target:
+                opened = bool(open_browser(target))
+            payload["browser_opened"] = opened
+        if announce_copy is not None:
+            announce_copy(payload)
+        device_code = str(response.get("device_code") or "").strip()
+        if not device_code:
+            raise ValueError("Device authorization response is missing device_code.")
+        try:
+            token_result = exchange_guard_device_code(
+                token_endpoint=oauth_client.token_endpoint,
+                client_id=oauth_client.client_id,
+                device_code=device_code,
+                dpop_key_material=dpop_key_material,
+                interval_seconds=_int_payload_value(response, "interval", 5),
+                expires_in_seconds=_int_payload_value(response, "expires_in", 0),
+                wait_timeout_seconds=(
+                    max(command_deadline - time.monotonic(), 0) if command_deadline is not None else None
+                ),
+                urlopen=token_urlopen,
+                sleep=sleep,
+                now=datetime.fromisoformat(now) if now else None,
+            )
+        except GuardDeviceApprovalLostError as error:
+            out_of_time = command_deadline is not None and time.monotonic() >= command_deadline
+            if restarts_left <= 0 or out_of_time:
+                raise RuntimeError(f"{error} Retry `hol-guard connect --headless` to request a new code.") from error
+            # The spent code cannot be redeemed again; ask for a new one and
+            # show it, so the user approves once more instead of starting over.
+            restarts_left -= 1
+            approval_lost = True
+            continue
+        break
     if token_result.refresh_token is None:
         raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
     timestamp = now or datetime.now(timezone.utc).isoformat()
@@ -1168,6 +1246,9 @@ def run_guard_device_connect_command(
             "connect_command": CONNECT_COMMAND,
             "connect_status_command": CONNECT_STATUS_COMMAND,
             "connect_repair_command": CONNECT_REPAIR_COMMAND,
+            "cloud_actions": record_connect_cloud_actions(
+                store, grant_id=token_result.grant_id, report=token_result.cloud_actions, now=timestamp
+            ),
         }
     )
     if include_sync_auth_context:
@@ -1189,6 +1270,8 @@ def run_guard_browser_connect_command(
     now: str | None = None,
     wait_timeout_seconds: float = 180,
     include_sync_auth_context: bool = False,
+    cloud_workspace_id: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> dict[str, object]:
     from .progress import GuardProgress
 
@@ -1205,6 +1288,8 @@ def run_guard_browser_connect_command(
             connect_url=connect_url,
             machine_id=str(device["installation_id"]),
             machine_label=str(device["device_label"]),
+            cloud_workspace_id=cloud_workspace_id,
+            cloud_actions_declined=cloud_actions_declined,
         )
         try:
             bar.step("Opening browser for sign-in...")
@@ -1260,6 +1345,9 @@ def run_guard_browser_connect_command(
         "connect_command": CONNECT_COMMAND,
         "connect_status_command": CONNECT_STATUS_COMMAND,
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
+        "cloud_actions": record_connect_cloud_actions(
+            store, grant_id=token_result.grant_id, report=token_result.cloud_actions, now=timestamp
+        ),
     }
     if include_sync_auth_context:
         payload[CONNECT_SYNC_AUTH_CONTEXT_KEY] = _build_sync_auth_context(
@@ -1277,15 +1365,21 @@ def build_connect_status_payload(
     connect_url: str,
     action: str = "status",
 ) -> dict[str, object]:
-    review_event_binding = store.get_review_event_oauth_binding()
-    review_event_status = store.review_event_outbox_status(
-        now=datetime.now(timezone.utc).isoformat(),
-        **(
-            {key: value for key, value in review_event_binding.items() if key != "oauth_source"}
-            if review_event_binding is not None
-            else {}
-        ),
-    )
+    review_event_binding: dict[str, str] | None
+    review_event_status: dict[str, object]
+    try:
+        review_event_binding = store.get_review_event_oauth_binding()
+        review_event_status = store.review_event_outbox_status(
+            now=datetime.now(timezone.utc).isoformat(),
+            **(
+                {key: value for key, value in review_event_binding.items() if key != "oauth_source"}
+                if review_event_binding is not None
+                else {}
+            ),
+        )
+    except NativeGuardStoreUnavailable as error:
+        review_event_binding = None
+        review_event_status = unavailable_outbox_status(error)
     latest_state = store.get_effective_guard_connect_state(now=datetime.now(timezone.utc).isoformat())
     cloud_profile = store.get_cloud_sync_profile()
     oauth_storage_health = store.get_oauth_local_credential_health()
@@ -1336,6 +1430,7 @@ def build_connect_status_payload(
         "connect_status_command": CONNECT_STATUS_COMMAND,
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
         "review_event_outbox": review_event_status,
+        "cloud_actions": connect_status_cloud_actions(store, oauth_storage_health=oauth_storage_health),
     }
     if review_event_status.get("binding_state") == "quarantined" and review_event_binding is not None:
         source = review_event_binding["oauth_source"]
@@ -1450,12 +1545,3 @@ def resolve_guard_cloud_state(
     if sync_completed or remote_payload_active:
         return "paired_active"
     return "paired_waiting"
-
-
-def resolve_guard_cloud_repair_detail(
-    *,
-    shared_proof_recorded: bool,
-    first_sync_message: str,
-    resume_message: str,
-) -> str:
-    return resume_message if shared_proof_recorded else first_sync_message

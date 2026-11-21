@@ -20,8 +20,11 @@ import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolve
 import { detectCategory, getCategoryInfo } from "./categories";
 import { SectionLabel } from "../approval-center-primitives";
 import { DecisionBadge } from "./decision-badge";
+import { APPROVAL_LEFT_STOPPED_LABEL, approvalLeftActionStopped } from "./approval-outcome";
 import { LoggedActionPanel } from "../logged-action-panel";
 import { guardActionPresentation } from "../guard-action";
+import { attachedNativeDecision } from "../context-assistance/native-decision-selector";
+import { ContextHistoryPanel } from "../context-assistance/history-panel";
 
 interface EvidenceActionDetailProps {
   receipt: GuardReceipt | null;
@@ -204,6 +207,9 @@ function DetailRow({ label, value, mono }: DetailRowProps) {
 }
 
 export function nextSafeStep(receipt: GuardReceipt): string | null {
+  if (approvalLeftActionStopped(receipt)) {
+    return "A one-time approval cannot let the agent run this command. Run it yourself, or approve the next request with \"Always allow exact action\" when that option is offered.";
+  }
   const action = guardActionPresentation(receipt.policy_decision).action;
   if (action === "block") {
     return "This action is blocked. Review the governing policy or choose a safer alternative; it cannot be approved from the review queue.";
@@ -244,6 +250,8 @@ function NextSafeCommandHint({ receipt }: { receipt: GuardReceipt }) {
 
 function EvidenceTimeline({ receipt }: { receipt: GuardReceipt }) {
   const action = guardActionPresentation(receipt.policy_decision);
+  // A one-time approval the retry could not reuse records an allow, but the action stayed stopped.
+  const stopped = approvalLeftActionStopped(receipt);
   const events = [
     {
       label: "Action received",
@@ -251,9 +259,9 @@ function EvidenceTimeline({ receipt }: { receipt: GuardReceipt }) {
       icon: "start",
     },
     {
-      label: action.label,
+      label: stopped ? APPROVAL_LEFT_STOPPED_LABEL : action.label,
       time: receipt.timestamp,
-      icon: action.disposition,
+      icon: stopped ? "blocked" : action.disposition,
     },
   ];
   return (
@@ -361,7 +369,7 @@ export function EvidenceActionDetail({
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <DecisionBadge decision={receipt.policy_decision} />
+          <DecisionBadge decision={receipt.policy_decision} userOverride={receipt.user_override} />
           <span className="text-xs text-slate-500">
             {harnessDisplayName(receipt.harness)}
           </span>
@@ -423,15 +431,17 @@ export function EvidenceActionDetail({
           </div>
         )}
 
-        {guardActionPresentation(receipt.policy_decision).disposition !== "allowed" && (
-          <NextSafeCommandHint receipt={receipt} />
-        )}
+        {(guardActionPresentation(receipt.policy_decision).disposition !== "allowed" ||
+          approvalLeftActionStopped(receipt)) && <NextSafeCommandHint receipt={receipt} />}
 
         <ScannerEvidenceSection signals={signals} />
 
         <EvidenceTimeline receipt={receipt} />
 
         <TechnicalSection receipt={receipt} />
+        {attachedNativeDecision(receipt.action_envelope_json, receipt.harness) ? <ContextHistoryPanel key={receipt.receipt_id}
+          decisionId={attachedNativeDecision(receipt.action_envelope_json, receipt.harness)!}
+          harness={receipt.harness} /> : null}
 
         <button
           type="button"

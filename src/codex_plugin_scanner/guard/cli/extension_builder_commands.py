@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import TextIO
 
 from ..extension_builder.errors import BuilderError
-from ..extension_builder.io import canonical_json, list_value, object_value, read_json
+from ..extension_builder.io import canonical_json, object_value, read_json
+from .inventory_list_commands import configure_inventory_list_parser
 
 _METADATA_FLAGS = (
     "slug",
@@ -22,6 +23,8 @@ _METADATA_FLAGS = (
     "executable",
     "launcher",
     "package",
+    "license",
+    "description",
 )
 _HANDOFF_TIMEOUT_SECONDS = 1_500
 
@@ -31,9 +34,14 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
         "extensions", help="Generate and review extension contributions from offline metadata"
     )
     commands = parser.add_subparsers(dest="extension_builder_command", required=True)
+    list_parser = commands.add_parser("list", help="List the plugins and extensions in the local Guard inventory")
+    configure_inventory_list_parser(list_parser)
     generate = commands.add_parser("generate", help="Compile an offline inventory into a new contribution kit")
     generate.add_argument(
-        "--from", dest="source_adapter", required=True, choices=("cli", "help", "click", "oclif", "mcp", "snapshot")
+        "--from",
+        dest="source_adapter",
+        required=True,
+        choices=("cli", "help", "click", "oclif", "mcp", "snapshot", "openapi"),
     )
     generate.add_argument("--input", type=Path, required=True, help="Local exported inventory or discovery snapshot")
     generate.add_argument(
@@ -43,12 +51,20 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
     for name in _METADATA_FLAGS:
         generate.add_argument("--" + name.replace("_", "-"))
     generate.add_argument(
+        "--cloud",
+        action="store_true",
+        help="Draft a cloud action pack from an OpenAPI document or MCP tool list; --output names a new file",
+    )
+    generate.add_argument("--host", help="API host for --cloud drafts; required for MCP tool lists")
+    generate.add_argument("--auth-mode", choices=("none", "oauth2", "api-key"), help="Auth mode for MCP --cloud drafts")
+    generate.add_argument(
         "--topic-separator", choices=("colon", "space"), help="oclif invocation topic separator; defaults to colon"
     )
     validate = commands.add_parser(
         "validate", help="Rebuild a kit and verify every byte without importing generated code"
     )
-    validate.add_argument("kit", type=Path)
+    validate.add_argument("kit", type=Path, help="Kit directory, or a pack file with --cloud")
+    validate.add_argument("--cloud", action="store_true", help="Validate a cloud action pack and run its fixtures")
     diff = commands.add_parser("diff", help="Compare valid kits; exit 1 when their inventories or reviews differ")
     diff.add_argument("previous", type=Path)
     diff.add_argument("current", type=Path)
@@ -77,6 +93,12 @@ def _generate(args: argparse.Namespace) -> dict[str, object]:
     from ..extension_builder.models import Metadata
     from ..extension_builder.review import default_review, load_review
 
+    if args.cloud:
+        from .extension_builder_cloud import generate_cloud_draft
+
+        return generate_cloud_draft(args)
+    if args.source_adapter == "openapi":
+        raise BuilderError("cloud_source", "OpenAPI input drafts a cloud action pack; add --cloud.")
     metadata: Metadata | None = None
     if args.source_adapter == "snapshot":
         if any(getattr(args, name) is not None for name in _METADATA_FLAGS):
@@ -100,6 +122,8 @@ def _generate(args: argparse.Namespace) -> dict[str, object]:
             executable=args.executable or "",
             launcher=args.launcher or "",
             package=args.package or "",
+            license=args.license or "",
+            description=args.description or "",
         )
     discovery = discover(args.source_adapter, args.input, metadata, topic_separator=args.topic_separator)
     review = load_review(read_json(args.review), discovery) if args.review is not None else default_review(discovery)
@@ -126,28 +150,19 @@ def _handoff(args: argparse.Namespace) -> dict[str, object]:
     expected_fixture = repo / "tests" / "fixtures" / f"command-source-{extension_id.removeprefix('command.')}.v1.json"
     if source_path != expected_source or fixture_path != expected_fixture:
         raise BuilderError("canonical_paths", "Source and fixture must use their canonical repository paths.")
-    trust_map = object_value(
-        read_json(repo / "contracts" / "extensions" / "trust-class-map.v1.json"), code="trust_shape"
-    )
-    if trust_map.get("schemaVersion") != "guard.extension-trust-class-map.v1":
-        raise BuilderError("trust_schema", "Trust map must use guard.extension-trust-class-map.v1.")
-    classes = object_value(trust_map.get("classes"), code="trust_shape")
-    external = list_value(classes.get("external"), maximum=4096)
-    if not all(isinstance(item, str) for item in external):
-        raise BuilderError("trust_shape", "Trust map must list extension IDs as strings.")
-    other_classes = {
-        class_name
-        for class_name in ("first-party", "trusted-library")
-        if extension_id in list_value(classes.get(class_name), maximum=4096)
-    }
-    if extension_id not in external:
-        if other_classes:
-            raise BuilderError(
-                "trust_class", "External contributions must remain in the reviewed external trust class."
-            )
-        raise BuilderError("missing_external_trust", "Trust map must list the extension under external.")
-    if other_classes:
-        raise BuilderError("trust_class", "Trust map must assign the extension to only the external trust class.")
+    bindings = repo / "contracts" / "extensions" / "trust"
+    if not bindings.is_dir():
+        raise BuilderError("trust_shape", "Repository authored trust bindings are missing.")
+    from ..runtime.extension_trust import trust_binding_index
+
+    try:
+        trust_class = trust_binding_index(bindings).get(extension_id)
+    except (OSError, ValueError) as exc:
+        raise BuilderError("trust_shape", "Repository trust bindings are invalid.") from exc
+    if trust_class is None:
+        raise BuilderError("missing_external_trust", "The extension needs a reviewed external trust binding.")
+    if trust_class != "external":
+        raise BuilderError("trust_class", "External contributions must remain in the reviewed external trust class.")
     script = repo / "scripts" / "prepare_extension_contribution.py"
     if script.is_symlink() or not script.is_file():
         raise BuilderError("repository_layout", "Repository preparation tooling is unavailable.")
@@ -204,6 +219,10 @@ def _operate(args: argparse.Namespace) -> dict[str, object]:
     if command == "handoff":
         return _handoff(args)
     if command == "validate":
+        if args.cloud:
+            from .extension_builder_cloud import validate_cloud_pack
+
+            return validate_cloud_pack(args.kit)
         return {**load_kit(args.kit).summary(), "validated": True}
     if command == "diff":
         return diff_kits(load_kit(args.previous), load_kit(args.current))
@@ -228,6 +247,15 @@ def _emit(result: dict[str, object], command: str, output: TextIO) -> None:
         print("Kits differ." if result["changed"] else "Kits are identical.", file=output)
         for name in ("addedOperations", "removedOperations", "changedOperations", "changedReviews"):
             print(f"{name}: {result[name]}", file=output)
+    elif command == "generate" and result.get("cloud"):
+        from .extension_builder_cloud import emit_cloud_summary
+
+        emit_cloud_summary(result, output)
+    elif command == "validate" and result.get("cloud"):
+        print(
+            f"Validated {result['providerId']}: {result['actions']} actions, {result['fixtures']} fixtures passed.",
+            file=output,
+        )
     elif command == "handoff":
         print(f"Contribution handoff is ready for {result['contributionId']}.", file=output)
         print("Source, fixture, external trust mapping, and generated projections agree.", file=output)

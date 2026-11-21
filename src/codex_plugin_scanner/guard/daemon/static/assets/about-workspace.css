@@ -1,0 +1,127 @@
+/* The page's one moment: on load, the rail through Fig. 1 draws itself from
+   the agents, through Guard, to your decision, and each arrowhead lands as
+   the rail reaches its node. */
+.about-page ::selection {
+  background: rgb(85 153 254 / 0.24);
+  color: var(--brand-dark);
+}
+
+/* Phones: the nodes stack and the rail runs down their left side, with a
+   tick into each node's title line. */
+.about-figure .about-flow {
+  position: relative;
+  display: grid;
+  gap: 1rem;
+  padding-left: 1.5rem;
+}
+
+.about-figure .about-flow > li::before,
+.about-figure .about-flow > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  background: var(--brand-blue);
+}
+
+.about-figure .about-flow > li::before {
+  top: 1.375rem;
+  left: -1rem;
+  width: 1rem;
+  height: 2px;
+  translate: 0 -50%;
+}
+
+/* Each node carries the rail segment that runs on to the next one, so the
+   segments meet end to end whatever height a node grows to. */
+.about-figure .about-flow > li:not(:last-child)::after {
+  top: 1.375rem;
+  left: -1rem;
+  width: 2px;
+  height: calc(100% + 1rem);
+  translate: -50% -1px;
+  transform-origin: top center;
+}
+
+/* Wide screens: three equal columns, the rail runs beneath them and rises
+   into each node. */
+@media (min-width: 768px) {
+  .about-figure .about-flow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2rem;
+    padding-left: 0;
+    padding-bottom: 1rem;
+  }
+
+  .about-figure .about-flow > li::before {
+    top: 100%;
+    left: 50%;
+    width: 2px;
+    height: 1rem;
+    translate: -50% 0;
+  }
+
+  .about-figure .about-flow > li:not(:last-child)::after {
+    top: calc(100% + 1rem);
+    left: 50%;
+    width: calc(100% + 2rem);
+    height: 2px;
+    translate: -1px -50%;
+    transform-origin: center left;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .about-figure .about-flow > li::before {
+    animation: about-fade 200ms ease-out 150ms both;
+  }
+
+  .about-figure .about-flow > li:not(:last-child)::after {
+    animation: about-rail-y 500ms cubic-bezier(0.65, 0, 0.35, 1) 300ms both;
+  }
+
+  .about-figure .about-flow > li:nth-child(2)::before,
+  .about-figure .about-flow > li:nth-child(2) .about-arrowhead {
+    animation: about-fade 200ms ease-out 750ms both;
+  }
+
+  .about-figure .about-flow > li:nth-child(2):not(:last-child)::after {
+    animation-delay: 850ms;
+  }
+
+  .about-figure .about-flow > li:nth-child(3)::before,
+  .about-figure .about-flow > li:nth-child(3) .about-arrowhead {
+    animation: about-fade 200ms ease-out 1300ms both;
+  }
+
+  @media (min-width: 768px) {
+    .about-figure .about-flow > li:not(:last-child)::after {
+      animation-name: about-rail-x;
+    }
+  }
+}
+
+@keyframes about-rail-y {
+  from {
+    scale: 1 0;
+  }
+  to {
+    scale: 1 1;
+  }
+}
+
+@keyframes about-rail-x {
+  from {
+    scale: 0 1;
+  }
+  to {
+    scale: 1 1;
+  }
+}
+
+@keyframes about-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

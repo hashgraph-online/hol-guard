@@ -3,21 +3,26 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-import threading
-import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import (
-    RuntimeHookEvidenceWriter,
-    _NativeDecisionReceiptRecord,
+from ci.native_runtime.post_tool_review import response_from_payload
+from codex_plugin_scanner.guard.native_decision_receipt import (
+    receipt_matches_edge,
+    validate_native_decision_receipt,
 )
-from codex_plugin_scanner.guard.native_decision_receipt import receipt_matches_edge, validate_native_decision_receipt
-from codex_plugin_scanner.guard.native_response_decoder import response_from_payload
+from codex_plugin_scanner.guard.native_hook_adapter import native_review_query
+from codex_plugin_scanner.guard.runtime.actions import (
+    GuardActionEnvelope,
+    normalize_harness_payload,
+    stable_action_hash,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_native_decision_receipts import native_decision_receipt_schema_statement
+from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
 
 
 def _receipt(**overrides: object) -> dict[str, object]:
@@ -50,7 +55,20 @@ def _receipt(**overrides: object) -> dict[str, object]:
     identity = {
         "schema": "guard-native-hook-decision-identity.v1",
         "version": 1,
-        **{key: value[key] for key in value if key not in {"schema", "version", "authority", "decision_id"}},
+        **{
+            key: value[key]
+            for key in value
+            if key
+            not in {
+                "schema",
+                "version",
+                "authority",
+                "decision_id",
+                "origin_authentication",
+                "execution_intent_digest",
+                "review_anchor_digest",
+            }
+        },
     }
     value["decision_id"] = hashlib.sha256(
         json.dumps(identity, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -70,6 +88,131 @@ def test_receipt_is_strictly_redacted_and_identity_bound() -> None:
     with_mutated_identity = dict(receipt)
     with_mutated_identity["reason_code"] = "native_other_reason"
     assert validate_native_decision_receipt(with_mutated_identity) is None
+
+
+def test_business_review_binding_is_strict_and_changes_receipt_identity() -> None:
+    ordinary = _receipt()
+    business = _receipt(business_review_binding="e" * 64)
+    assert validate_native_decision_receipt(business) == business
+    assert business["decision_id"] != ordinary["decision_id"]
+    assert hashlib.sha256(canonical_receipt_bytes(business)).hexdigest() == business["decision_id"]
+    for invalid in (None, "", "E" * 64, "e" * 63, "e" * 64 + "\n"):
+        assert validate_native_decision_receipt(_receipt(business_review_binding=invalid)) is None
+    # Shared vector with native_hook_receipt::tests in the Rust producer.
+    native_vector = _receipt(
+        request_id="request",
+        harness="codex",
+        event_name="PreToolUse",
+        policy_digest=None,
+        rule_digest=None,
+        runtime_identity=None,
+        model_output_action="not_applicable",
+        reason_code="test",
+        deadline_budget_ms=100,
+        business_review_binding="b" * 64,
+    )
+    assert validate_native_decision_receipt(native_vector) == native_vector
+    assert native_vector["decision_id"] == "c3613993d236fb3d798bcbcd227fb80875328e5bb072590151e17bad67b424ed"
+
+
+def test_origin_authentication_is_optional_and_not_decision_identity() -> None:
+    legacy = _receipt()
+    sealed = _receipt(origin_authentication="e" * 64)
+    assert validate_native_decision_receipt(sealed) == sealed
+    assert sealed["decision_id"] == legacy["decision_id"]
+    assert canonical_receipt_bytes(sealed) == canonical_receipt_bytes(legacy)
+
+    malformed = dict(sealed)
+    malformed["origin_authentication"] = "E" * 64
+    assert validate_native_decision_receipt(malformed) is None
+    for field in _receipt():
+        missing_required = dict(sealed)
+        _ = missing_required.pop(field)
+        assert validate_native_decision_receipt(missing_required) is None
+    unknown = dict(sealed)
+    unknown["unexpected"] = True
+    assert validate_native_decision_receipt(unknown) is None
+
+
+def test_execution_intent_evidence_is_optional_and_not_decision_identity() -> None:
+    legacy = _receipt()
+    evidence = _receipt(execution_intent_digest="f" * 64)
+    assert validate_native_decision_receipt(evidence) == evidence
+    assert evidence["decision_id"] == legacy["decision_id"]
+    assert canonical_receipt_bytes(evidence) == canonical_receipt_bytes(legacy)
+    for invalid in (None, 1, "", "f" * 63, "F" * 64, "f" * 65):
+        malformed = dict(evidence)
+        malformed["execution_intent_digest"] = invalid
+        assert validate_native_decision_receipt(malformed) is None
+
+
+def test_review_anchor_is_optional_and_not_decision_identity() -> None:
+    legacy = _receipt()
+    anchored = _receipt(review_anchor_digest="a" * 64)
+    assert validate_native_decision_receipt(anchored) == anchored
+    assert anchored["decision_id"] == legacy["decision_id"]
+    assert canonical_receipt_bytes(anchored) == canonical_receipt_bytes(legacy)
+    for invalid in (None, 1, "", "a" * 63, "A" * 64, "a" * 65):
+        malformed = dict(anchored)
+        malformed["review_anchor_digest"] = invalid
+        assert validate_native_decision_receipt(malformed) is None
+
+
+def _review_envelope(payload: dict[str, object], receipt: dict[str, object], workspace: Path) -> dict[str, object]:
+    review = {
+        "result": {"decision": "review", "reason": "Review this command."},
+        "native_receipt": receipt,
+        "request_id": uuid.uuid4().hex,
+        "approval_center_url": "http://127.0.0.1:4781/approvals",
+        "guard_home": str(workspace),
+        "review_binding": None,
+        "exact_token": None,
+        "once_only_reason": None,
+        "queue_group_id": None,
+        "bound_bash": None,
+    }
+    query = native_review_query("cursor", payload, review, workspace=workspace, home_dir=workspace)
+    # Each review queues in its own home so no earlier pending row answers for it.
+    store = GuardStore(workspace / uuid.uuid4().hex)
+    row = store.queue_native_review(query, datetime.now(tz=timezone.utc).isoformat())
+    assert row is not None
+    envelope = row["action_envelope_json"]
+    assert isinstance(envelope, dict)
+    return envelope
+
+
+def test_sealed_receipt_is_detached_without_raw_input_leakage(tmp_path: Path) -> None:
+    receipt = _receipt(origin_authentication="f" * 64)
+    tool_input = {"command": "cat .env", "token": "private-token-value"}
+    payload = {
+        "tool_name": "Shell",
+        "tool_input": tool_input,
+    }
+    envelope = _review_envelope(payload, receipt, tmp_path)
+    detached = envelope.get("native_origin_receipt")
+    assert isinstance(detached, dict)
+    assert detached == receipt
+    receipt["origin_authentication"] = "a" * 64
+    assert detached["origin_authentication"] == "f" * 64
+    assert "private-token-value" not in json.dumps(envelope, sort_keys=True)
+    tool_input["token"] = "changed-after-normalization"
+    assert "changed-after-normalization" not in json.dumps(envelope, sort_keys=True)
+
+    stored = GuardActionEnvelope.from_dict(envelope)
+    fresh = (
+        normalize_harness_payload("cursor", "PreToolUse", payload, workspace=tmp_path, home_dir=tmp_path)
+        .with_pre_execution_result("review")
+        .to_dict()
+    )
+    assert stored.action_id == fresh["action_id"]
+    assert stable_action_hash(stored) == stable_action_hash(GuardActionEnvelope.from_dict(fresh))
+
+    shell = {"tool_name": "Shell", "tool_input": {"command": "cat .env"}}
+    legacy = _review_envelope(shell, _receipt(), tmp_path)
+    assert "native_origin_receipt" not in legacy
+
+    malformed_envelope = _review_envelope(shell, _receipt(origin_authentication="b" * 63), tmp_path)
+    assert "native_origin_receipt" not in malformed_envelope
 
 
 def test_prompt_receipt_requires_matching_native_prompt_result() -> None:
@@ -126,130 +269,12 @@ def test_prompt_risk_classes_reject_unknown_duplicate_or_unbounded_values(classe
     assert validate_native_decision_receipt(tool) is None
 
 
-def test_receipt_handoff_never_waits_for_persistence(tmp_path: Path) -> None:
-    entered = threading.Event()
-    release = threading.Event()
-
-    def persist(**_kwargs: object) -> bool:
-        entered.set()
-        assert release.wait(timeout=1)
-        return True
-
-    with patch(
-        "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_native_decision_receipt",
-        side_effect=persist,
-    ):
-        writer = RuntimeHookEvidenceWriter(store=GuardStore(tmp_path / "guard-home"), batch_wait_seconds=0)
-        try:
-            started = time.monotonic()
-            assert writer.submit_native_decision_receipt(receipt=_receipt())
-            assert time.monotonic() - started < 0.1
-            assert entered.wait(timeout=1)
-            journal = (tmp_path / "guard-home" / "runtime-hook-evidence.jsonl").read_text(encoding="utf-8")
-            assert "private command" not in journal
-            release.set()
-            assert writer.stop(timeout_seconds=1)
-        finally:
-            release.set()
-            if writer.stats()["running"]:
-                writer.stop(timeout_seconds=1)
-    assert writer.stats()["receipt_processed"] == 1
-
-
-def test_receipt_shutdown_journals_before_expiry(tmp_path: Path) -> None:
-    writer = RuntimeHookEvidenceWriter(
-        store=GuardStore(tmp_path / "guard-home"),
-        batch_wait_seconds=0,
-    )
-    try:
-        with patch.object(writer, "_drain_expired", return_value=True):
-            assert writer.submit_native_decision_receipt(receipt=_receipt())
-            assert writer.stop(timeout_seconds=1)
-        journal = (tmp_path / "guard-home" / "runtime-hook-evidence.jsonl").read_text(encoding="utf-8")
-    finally:
-        if writer.stats()["running"]:
-            assert writer.stop(timeout_seconds=1)
-
-    assert "private command" not in journal
-    assert writer.stats()["receipt_processed"] == 0
-    assert writer.stats()["receipt_durable_pending"] == 1
-
-
-def test_journal_rewrite_preserves_another_writer_receipt(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    first = RuntimeHookEvidenceWriter(store=GuardStore(guard_home), batch_wait_seconds=0)
-    second = RuntimeHookEvidenceWriter(store=GuardStore(guard_home), batch_wait_seconds=0)
-    first_record = _NativeDecisionReceiptRecord(receipt=_receipt(request_id="first"), payload_bytes=0)
-    second_record = _NativeDecisionReceiptRecord(receipt=_receipt(request_id="second"), payload_bytes=0)
-    try:
-        first._append_journal(first_record)
-        second._append_journal(second_record)
-        first._rewrite_journal(remove_record_id=first_record.record_id)
-    finally:
-        assert first.stop(timeout_seconds=1)
-        assert second.stop(timeout_seconds=1)
-
-    lines = (guard_home / "runtime-hook-evidence.jsonl").read_text(encoding="utf-8").splitlines()
-    assert len(lines) == 1
-    assert json.loads(lines[0])["request_id"] == "second"
-
-
-def test_receipt_queue_full_degrades_without_changing_decision(tmp_path: Path) -> None:
-    entered = threading.Event()
-    release = threading.Event()
-
-    def persist(**_kwargs: object) -> bool:
-        entered.set()
-        assert release.wait(timeout=1)
-        return True
-
-    with patch(
-        "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_native_decision_receipt",
-        side_effect=persist,
-    ):
-        writer = RuntimeHookEvidenceWriter(
-            store=GuardStore(tmp_path / "guard-home"),
-            max_records=1,
-            batch_wait_seconds=0,
-        )
-        try:
-            assert writer.submit_native_decision_receipt(receipt=_receipt())
-            assert entered.wait(timeout=1)
-            assert writer.submit_native_decision_receipt(receipt=_receipt(request_id="request-2"))
-            assert not writer.submit_native_decision_receipt(receipt=_receipt(request_id="request-3"))
-            assert writer.stats()["receipt_dropped"] == 1
-        finally:
-            release.set()
-            assert writer.stop(timeout_seconds=1)
-
-
-def test_receipt_sqlite_failure_is_recoverable_and_bounded(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    failed = threading.Event()
-
-    def fail(**_kwargs: object) -> bool:
-        failed.set()
-        raise sqlite3.OperationalError("database is locked")
-
-    with patch(
-        "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_native_decision_receipt",
-        side_effect=fail,
-    ):
-        first = RuntimeHookEvidenceWriter(store=GuardStore(guard_home), batch_wait_seconds=0)
-        assert first.submit_native_decision_receipt(receipt=_receipt())
-        assert failed.wait(timeout=1)
-        assert first.stop(timeout_seconds=0.1)
-        assert first.stats()["receipt_durable_pending"] == 1
-
-    with patch(
-        "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_native_decision_receipt",
-        return_value=True,
-    ):
-        recovered = RuntimeHookEvidenceWriter(store=GuardStore(guard_home), batch_wait_seconds=0)
-        assert recovered.stop(timeout_seconds=1)
-    assert recovered.stats()["recovered"] == 1
-    assert recovered.stats()["receipt_processed"] == 1
-    assert recovered.stats()["receipt_durable_pending"] == 0
+def _receipt_row_count(store: GuardStore) -> int:
+    with store._connect() as connection:
+        return connection.execute(
+            "select (select count(*) from native_hook_decision_receipts) + "
+            "(select count(*) from native_prompt_decision_receipts)"
+        ).fetchone()[0]
 
 
 def test_store_receipt_insert_is_idempotent(tmp_path: Path) -> None:
@@ -257,7 +282,7 @@ def test_store_receipt_insert_is_idempotent(tmp_path: Path) -> None:
     receipt = _receipt()
     assert store.record_native_decision_receipt(receipt)
     assert store.record_native_decision_receipt(receipt)
-    assert store.native_decision_receipt_count() == 1
+    assert _receipt_row_count(store) == 1
 
 
 def test_prompt_receipt_persists_without_rewriting_tool_receipt_schema(tmp_path: Path) -> None:
@@ -273,9 +298,11 @@ def test_prompt_receipt_persists_without_rewriting_tool_receipt_schema(tmp_path:
     )
     assert store.record_native_decision_receipt(tool)
     assert store.record_native_decision_receipt(prompt)
-    assert store.native_decision_receipt_count() == 2
-    assert store.get_native_decision_receipt(tool["decision_id"]) == tool
-    assert store.get_native_decision_receipt(prompt["decision_id"]) == prompt
+    assert _receipt_row_count(store) == 2
+    tool_id, prompt_id = tool["decision_id"], prompt["decision_id"]
+    assert isinstance(tool_id, str) and isinstance(prompt_id, str)
+    assert store.get_native_decision_receipt(tool_id) == tool
+    assert store.get_native_decision_receipt(prompt_id) == prompt
     with store._connect() as connection:
         legacy = connection.execute(
             "select sql from sqlite_schema where type = 'table' and name = 'native_hook_decision_receipts'"
@@ -286,8 +313,8 @@ def test_prompt_receipt_persists_without_rewriting_tool_receipt_schema(tmp_path:
             "update native_prompt_decision_receipts set prompt_risk_classes_json = ? where decision_id = ?",
             ('["guard_bypass_intent"]', prompt["decision_id"]),
         )
-    assert store.get_native_decision_receipt(prompt["decision_id"]) is None
-    assert store.get_native_decision_receipt(tool["decision_id"]) == tool
+    assert store.get_native_decision_receipt(prompt_id) is None
+    assert store.get_native_decision_receipt(tool_id) == tool
 
 
 def test_existing_tool_receipt_schema_gains_prompt_storage_additively(tmp_path: Path) -> None:
@@ -308,8 +335,10 @@ def test_existing_tool_receipt_schema_gains_prompt_storage_additively(tmp_path: 
     )
     assert store.record_native_decision_receipt(existing)
     assert store.record_native_decision_receipt(prompt)
-    assert store.get_native_decision_receipt(existing["decision_id"]) == existing
-    assert store.get_native_decision_receipt(prompt["decision_id"]) == prompt
+    existing_id, prompt_id = existing["decision_id"], prompt["decision_id"]
+    assert isinstance(existing_id, str) and isinstance(prompt_id, str)
+    assert store.get_native_decision_receipt(existing_id) == existing
+    assert store.get_native_decision_receipt(prompt_id) == prompt
     with store._connect() as connection:
         legacy = connection.execute(
             "select sql from sqlite_schema where type = 'table' and name = 'native_hook_decision_receipts'"
@@ -331,7 +360,8 @@ def test_store_initializes_receipt_schema_marker_and_recorded_at_index(tmp_path:
     assert "idx_native_hook_decision_receipts_recorded_at" in indexes
 
 
-def test_post_tool_edge_decoder_requires_receipt_bound_to_result() -> None:
+def test_post_tool_edge_decoder_requires_a_receipt() -> None:
+    # Whether the receipt records this result is the edge's own check now.
     result = {
         "decision": "allow",
         "model_output_action": "allow_original",
@@ -356,7 +386,3 @@ def test_post_tool_edge_decoder_requires_receipt_bound_to_result() -> None:
     missing_receipt = dict(edge)
     del missing_receipt["receipt"]
     assert response_from_payload(missing_receipt) is None
-
-    mutated_result = dict(edge)
-    mutated_result["result"] = {**result, "decision": "deny"}
-    assert response_from_payload(mutated_result) is None

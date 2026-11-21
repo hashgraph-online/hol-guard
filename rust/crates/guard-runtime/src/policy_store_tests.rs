@@ -1,3 +1,5 @@
+#[cfg(windows)]
+use super::normalize_scope_text;
 use super::{
     authority_fingerprint, now_ms, read_private_json, scope_digest, GenerationFloorV1,
     PersistBoundary, PolicySnapshotStore, AUTHORITY_RECORD_MAX_BYTES, AUTHORITY_RECORD_SCHEMA,
@@ -21,29 +23,34 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-#[cfg(windows)]
-use super::normalize_scope_text;
-
+#[path = "policy_store_business_floor_tests.rs"]
+mod business_floor_tests;
+#[path = "policy_store_business_source_tests.rs"]
+mod business_source_tests;
 #[path = "policy_store_command_authority_tests.rs"]
 mod command_authority_tests;
 #[path = "policy_store_command_floor_tests.rs"]
 mod command_floor_tests;
+#[path = "policy_store_command_pack_tests.rs"]
+mod command_pack_tests;
 #[path = "policy_store_fault_tests.rs"]
 mod fault_tests;
 #[path = "policy_store_fixture_tests.rs"]
 mod fixture_tests;
 #[path = "policy_store_migration_tests.rs"]
 mod migration_tests;
+#[path = "policy_store_verify_once_tests.rs"]
+mod verify_once_tests;
 
 use fixture_tests::policy;
 
-fn policy_with_default(default_action: &str) -> EffectiveNativePolicyV3 {
+pub(super) fn policy_with_default(default_action: &str) -> EffectiveNativePolicyV3 {
     let mut value = policy();
     value.default_action = default_action.to_owned();
     value
 }
 
-fn fixture_directory(path: &Path) {
+pub(crate) fn fixture_directory(path: &Path) {
     #[cfg(windows)]
     {
         crate::resident_state::ensure_private_directory(path, true).unwrap();
@@ -52,7 +59,7 @@ fn fixture_directory(path: &Path) {
     fs::create_dir(path).unwrap();
 }
 
-fn fixture_file(path: &Path, bytes: &[u8]) {
+pub(super) fn fixture_file(path: &Path, bytes: &[u8]) {
     #[cfg(windows)]
     {
         use std::io::Write;
@@ -66,11 +73,11 @@ fn fixture_file(path: &Path, bytes: &[u8]) {
     fs::write(path, bytes).unwrap();
 }
 
-fn signed_snapshot(generation: u64, key: &[u8], guard_home: &Path) -> PolicySnapshotV3 {
+pub(crate) fn signed_snapshot(generation: u64, key: &[u8], guard_home: &Path) -> PolicySnapshotV3 {
     signed_snapshot_with_policy(generation, key, guard_home, policy())
 }
 
-fn signed_snapshot_with_policy(
+pub(super) fn signed_snapshot_with_policy(
     generation: u64,
     key: &[u8],
     guard_home: &Path,
@@ -94,8 +101,10 @@ fn signed_snapshot_with_policy(
         },
         effective_policy,
         command_extensions: None,
+        business_policy: None,
         issued_at_ms: now_ms().unwrap().saturating_sub(1),
-        expires_at_ms: now_ms().unwrap() + 60_000,
+        // Long enough that a loaded runner cannot outlast it mid-test.
+        expires_at_ms: now_ms().unwrap() + 3_600_000,
         integrity: SnapshotIntegrityV3 {
             algorithm: POLICY_SNAPSHOT_INTEGRITY_ALGORITHM.into(),
             key_id: verifier_key_id(key),
@@ -107,7 +116,7 @@ fn signed_snapshot_with_policy(
     snapshot
 }
 
-fn test_root(label: &str) -> PathBuf {
+pub(crate) fn test_root(label: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-policy-store-{label}-{}-{}",
         std::process::id(),
@@ -119,13 +128,51 @@ fn test_root(label: &str) -> PathBuf {
     root
 }
 
-fn install_test_key(root: &Path, value: u8) -> [u8; VERIFIER_KEY_BYTES] {
+pub(super) fn install_test_key(root: &Path, value: u8) -> [u8; VERIFIER_KEY_BYTES] {
     let key = [value; VERIFIER_KEY_BYTES];
     let path = root.join(VERIFIER_KEY_FILE_NAME);
     fixture_file(&path, &key);
     #[cfg(unix)]
     fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
     key
+}
+
+fn workspace_source(root: &Path) -> GuardHookSourceMetadataV2 {
+    GuardHookSourceMetadataV2 {
+        cwd: Some("/workspace".into()),
+        home_dir: "/home/test".into(),
+        guard_home: root.to_string_lossy().into_owned(),
+        source_ref_external_allowed: false,
+        execution_environment: None,
+    }
+}
+
+/// A `PreToolUse` envelope bound to generation 1 of `snapshot`.
+fn pre_tool_envelope(
+    request_id: &str,
+    raw_payload: Value,
+    snapshot: &PolicySnapshotV3,
+    root: &Path,
+) -> GuardHookEnvelopeV2 {
+    GuardHookEnvelopeV2 {
+        schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
+        request_id: Some(request_id.into()),
+        harness: "claude-code".into(),
+        event: "PreToolUse".into(),
+        raw_payload,
+        deadline_budget_ms: Some(750),
+        policy_generation: 1,
+        policy_snapshot: serde_json::to_value(snapshot).unwrap(),
+        source: workspace_source(root),
+        recording_only: false,
+        local_cli_rules: None,
+        observe_local_cli: false,
+        record_receipt: false,
+        record_activity: false,
+        record_pre_tool_activity: false,
+        structured_output_config: None,
+        containment_sink: None,
+    }
 }
 
 #[cfg(windows)]
@@ -317,30 +364,22 @@ fn restarted_resident_applies_installed_policy_without_request_time_io() {
         }))
         .unwrap();
     let restarted = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
-    let envelope = GuardHookEnvelopeV2 {
-        schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
-        request_id: Some("resident-policy-test".into()),
-        harness: "claude-code".into(),
-        event: "PreToolUse".into(),
-        raw_payload: serde_json::json!({
+    let envelope = pre_tool_envelope(
+        "resident-policy-test",
+        serde_json::json!({
             "hook_event_name": "PreToolUse",
             "tool_name": "read_file",
             "tool_input": {"file_path": "README.md"}
         }),
-        deadline_budget_ms: Some(750),
-        policy_generation: 1,
-        policy_snapshot: serde_json::to_value(&snapshot).unwrap(),
-        source: GuardHookSourceMetadataV2 {
-            cwd: Some("/workspace".into()),
-            home_dir: "/home/test".into(),
-            guard_home: root.to_string_lossy().into_owned(),
-            source_ref_external_allowed: false,
-        },
-    };
+        &snapshot,
+        &root,
+    );
     let result = crate::edge::evaluate_envelope_with_store(envelope, &restarted).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
     assert_eq!(result.result["minimum_action"], "block");
     assert_eq!(result.result["authority"], "rust");
+    assert!(result.receipt.origin_authentication.is_some());
+    crate::policy_store::native_review_origin::verify(&restarted, &result.receipt).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -356,25 +395,15 @@ fn authenticated_edge_preserves_clean_default_warning() {
             "snapshot": snapshot,
         }))
         .unwrap();
-    let envelope = GuardHookEnvelopeV2 {
-        schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
-        request_id: Some("warning-edge-test".into()),
-        harness: "claude-code".into(),
-        event: "PreToolUse".into(),
-        raw_payload: serde_json::json!({
+    let envelope = pre_tool_envelope(
+        "warning-edge-test",
+        serde_json::json!({
             "hook_event_name": "PreToolUse",
             "tool_input": {"command": "pwd"}
         }),
-        deadline_budget_ms: Some(750),
-        policy_generation: 1,
-        policy_snapshot: serde_json::to_value(&snapshot).unwrap(),
-        source: GuardHookSourceMetadataV2 {
-            cwd: Some("/workspace".into()),
-            home_dir: "/home/test".into(),
-            guard_home: root.to_string_lossy().into_owned(),
-            source_ref_external_allowed: false,
-        },
-    };
+        &snapshot,
+        &root,
+    );
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
     assert_eq!(result.result["minimum_action"], "warn");
@@ -398,26 +427,16 @@ fn authenticated_observe_edge_preserves_intrinsic_pretool_floor() {
             "snapshot": snapshot,
         }))
         .unwrap();
-    let envelope = GuardHookEnvelopeV2 {
-        schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
-        request_id: Some("observe-edge-test".into()),
-        harness: "claude-code".into(),
-        event: "PreToolUse".into(),
-        raw_payload: serde_json::json!({
+    let envelope = pre_tool_envelope(
+        "observe-edge-test",
+        serde_json::json!({
             "hook_event_name": "PreToolUse",
             "tool_name": "Bash",
             "tool_input": {"command": "rm -rf /"}
         }),
-        deadline_budget_ms: Some(750),
-        policy_generation: 1,
-        policy_snapshot: serde_json::to_value(&snapshot).unwrap(),
-        source: GuardHookSourceMetadataV2 {
-            cwd: Some("/workspace".into()),
-            home_dir: "/home/test".into(),
-            guard_home: root.to_string_lossy().into_owned(),
-            source_ref_external_allowed: false,
-        },
-    };
+        &snapshot,
+        &root,
+    );
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
     assert_eq!(result.result["minimum_action"], "block");
@@ -474,7 +493,6 @@ fn authority_fingerprint_detects_same_size_in_place_rewrite() {
     file.seek(SeekFrom::Start(offset as u64)).unwrap();
     file.write_all(&[replacement]).unwrap();
     file.sync_all().unwrap();
-
     let after = authority_fingerprint(&path).unwrap();
     assert_ne!(before, after);
     assert!(!store.test_authorities_unchanged());

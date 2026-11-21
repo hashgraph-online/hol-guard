@@ -41,6 +41,7 @@ function authorityNoticeView(
   health: EffectiveExtensionControls["health"],
   approvalGateReady: boolean | null,
   terminalCommands: EffectiveExtensionControls["terminal_commands"] | undefined,
+  approvalConfigured: boolean,
 ): AuthorityNoticeView {
   const commands = terminalCommands ?? DEFAULT_TERMINAL_COMMANDS;
   const terminalName = terminalCommands?.shell === "powershell" ? "PowerShell" : "your terminal";
@@ -109,10 +110,12 @@ function authorityNoticeView(
       if (!approvalGateReady) {
         return {
           tone: "info",
-          title: "Set up local approval before enrollment",
-          body: "Extension controls require this device's local approval gate. Guard Cloud sign-in and account MFA are separate and do not enable this gate. In Settings > Approval gate, enable Ask for proof on allow decisions and set an Approval password, then return here to enroll. Optionally connect an Authenticator app; once enabled, its code replaces the Approval password for every protected action and disables cooldown.",
+          title: approvalConfigured ? "Local approval is off" : "Set up local approval",
+          body: approvalConfigured
+            ? "Enable local approval to change extension permissions. Your password stays on this device; Guard Cloud is not required."
+            : "Choose a password to protect changes to extension permissions. It stays on this device; Guard Cloud is not required.",
           action: { kind: "configure-approval" },
-          actionLabel: "Set up approval",
+          actionLabel: "Open approval settings",
           actionDetail: null,
           command: "",
           commandLabel: "",
@@ -122,8 +125,8 @@ function authorityNoticeView(
       }
       return {
         tone: "info",
-        title: "Finish setting up protection",
-        body: "Command protection settings are not enrolled on this device yet. One command in your terminal creates this device's trusted settings. Local command checking already runs without them.",
+        title: "Finish extension setup",
+        body: "Run this command to save this device's trusted extension settings. Guard is already checking commands locally.",
         action: { kind: "none" },
         actionLabel: null,
         actionDetail: null,
@@ -149,7 +152,7 @@ export function ProtectionAuthorityNotice(props: {
   const approvalGateReady = props.approvalGate === null
     ? null
     : props.approvalGate.configured && props.approvalGate.enabled;
-  const view = authorityNoticeView(health, approvalGateReady, props.effective.terminal_commands);
+  const view = authorityNoticeView(health, approvalGateReady, props.effective.terminal_commands, props.approvalGate?.configured === true);
   const [proofOpen, setProofOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<"repair" | "acknowledge" | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
@@ -223,13 +226,13 @@ export function ProtectionAuthorityNotice(props: {
             onClick={() => { void copyCommand(); }}
             className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white hover:bg-brand-dark"
           >{copyState === "copied" ? <HiMiniClipboardDocumentCheck className="size-4" aria-hidden="true" /> : <HiMiniClipboard className="size-4" aria-hidden="true" />}{copyState === "copied" ? "Command copied" : view.copyButtonLabel}</button> : null}
-          <button
+          {view.action.kind !== "configure-approval" ? <button
             type="button"
             disabled={props.busy || checkPending}
             aria-busy={checkPending}
             onClick={() => { void checkAgain(); }}
             className="inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-dark hover:border-brand-blue/40 disabled:opacity-60"
-          >{checkPending ? "Checking…" : "Check again"}</button>
+          >{checkPending ? "Checking…" : "Check again"}</button> : null}
         </div>
         {props.busy ? <p role="status" className={`mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`}>{pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…"}</p> : null}
         {checkPending ? <p role="status" aria-live="polite" className={`mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`}>Checking current protection status…</p> : null}

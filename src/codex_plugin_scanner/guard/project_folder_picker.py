@@ -28,10 +28,12 @@ def project_folder_picker_command(
     which: Callable[[str], str | None] = shutil.which,
 ) -> tuple[str, ...] | None:
     if platform_name == "darwin":
-        return (
-            "/usr/bin/osascript",
-            "-e",
-            f'POSIX path of (choose folder with prompt "{_PROMPT}")',
+        return tuple(
+            [
+                "/usr/bin/osascript",
+                "-e",
+                f'POSIX path of (choose folder with prompt "{_PROMPT}")',
+            ]
         )
     if platform_name == "win32":
         script = (
@@ -42,13 +44,13 @@ def project_folder_picker_command(
             "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
             "Write-Output $dialog.SelectedPath }"
         )
-        return ("powershell", "-NoProfile", "-STA", "-Command", script)
+        return tuple(["powershell", "-NoProfile", "-STA", "-Command", script])
     zenity = which("zenity")
     if zenity:
-        return (zenity, "--file-selection", "--directory", f"--title={_PROMPT}")
+        return tuple([zenity, "--file-selection", "--directory", f"--title={_PROMPT}"])
     kdialog = which("kdialog")
     if kdialog:
-        return (kdialog, "--getexistingdirectory", ".", _PROMPT)
+        return tuple([kdialog, "--getexistingdirectory", ".", _PROMPT])
     return None
 
 

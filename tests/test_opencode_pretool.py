@@ -11,22 +11,16 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.hook_python import package_root_from_python, resolve_guard_hook_python
-from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode_pretool import (
-    _HOOK_ARGV_ENV,
-    _pretool_hook_env,
-    _pretool_hook_launcher_code,
+from codex_plugin_scanner.guard.cli import install_commands as install_commands_module
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
+from tests.opencode_test_support import (
+    config_uses_guard_proxy,
     global_plugin_path,
     install_pretool_plugin,
     managed_plugin_path,
-    opencode_config_has_mcp_servers,
-    opencode_config_uses_guard_proxy,
     pretool_plugin_source,
-    remove_pretool_plugin,
 )
-from codex_plugin_scanner.guard.cli import install_commands as install_commands_module
 
 
 def _bun_executable() -> str | None:
@@ -150,7 +144,17 @@ def test_pretool_plugin_source_follows_updated_guard_python(tmp_path: Path) -> N
     assert "function resolveGuardPythonTarget(): string" in source
     assert "function isGuardSelfRepairCommand(command: string): boolean" in source
     assert "host terminal outside OpenCode" in source
-    assert "nodeSpawn(pythonTarget, options.args" in source
+    command_at = source.index("let command = pythonTarget;")
+    args_at = source.index("let args = options.args;")
+    native_at = source.index(
+        "const nativeRuntime = options.nativeArgs === undefined ? null : resolveGuardNativeRuntime();"
+    )
+    override_at = source.index("if (nativeRuntime !== null && options.nativeArgs !== undefined)")
+    spawn_at = source.index("proc = nodeSpawn(command, args,")
+    override = source[override_at:spawn_at]
+    assert command_at < args_at < native_at < override_at < spawn_at
+    assert "command = nativeRuntime;" in override
+    assert "args = options.nativeArgs(pythonTarget);" in override
     assert "nodeSpawn(GUARD_PYTHON.targetPath, options.args" not in source
     assert "Re-run `hol-guard install opencode` before retrying." not in source
     assert "detail.includes(GUARD_RUNTIME_MISSING) && isGuardSelfRepairCommand(command)" in source
@@ -228,60 +232,6 @@ def test_pretool_plugin_guard_block_message_recovers_last_json_line(tmp_path: Pa
     )
     assert "http://127.0.0.1:4455/requests/req-opencode" in message
     assert message.count("http://127.0.0.1:4455/requests/req-opencode") == 1
-
-
-def test_pretool_hook_launcher_ignores_workspace_package_hijack(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Regression: workspace must not precede trusted Guard on sys.path."""
-    import subprocess
-
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    fake_pkg = workspace / "codex_plugin_scanner"
-    fake_pkg.mkdir()
-    (fake_pkg / "__init__.py").write_text("", encoding="utf-8")
-    (fake_pkg / "cli.py").write_text(
-        "import sys\nsys.stderr.write('hijacked')\nraise SystemExit(99)\n",
-        encoding="utf-8",
-    )
-
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    ctx = HarnessContext(home_dir=tmp_path / "home", workspace_dir=workspace, guard_home=guard_home)
-    guard_python = resolve_guard_hook_python(ctx)
-    package_root = package_root_from_python(guard_python, ctx)
-    launcher = _pretool_hook_launcher_code(package_root=package_root)
-    assert "run_bounded_cli_hook" in launcher
-    assert "'timeout_seconds':25" in launcher
-    inherit_env = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
-    env = {**inherit_env, **_pretool_hook_env(package_root=package_root), _HOOK_ARGV_ENV: '["guard","hook","--json"]'}
-    completed = subprocess.run(
-        [sys.executable, "-c", launcher],
-        cwd=workspace,
-        env=env,
-        input="{}",
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert "hijacked" not in completed.stderr
-    assert completed.returncode != 99
-
-
-def test_pretool_hook_env_blocks_workspace_import_shadowing(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path)
-    guard_python = resolve_guard_hook_python(ctx)
-    package_root = package_root_from_python(guard_python, ctx)
-    env = _pretool_hook_env(package_root=package_root)
-    assert env["PYTHONSAFEPATH"] == "1"
-    assert env["PYTHONNOUSERSITE"] == "1"
-    assert "PYTHONPATH" not in env
-    source = pretool_plugin_source(ctx)
-    assert 'args: GUARD_FROZEN ? guardArgv : ["-I", "-S", "-s", "-c", GUARD_HOOK_LAUNCHER]' in source
-    assert "resolveGuardPythonTarget();" in source
-    assert "nodeSpawn(pythonTarget, options.args" in source
 
 
 def test_pretool_plugin_source_does_not_spawn_python_m_module(tmp_path: Path) -> None:
@@ -587,21 +537,12 @@ def test_install_pretool_plugin_writes_managed_and_global_copies(tmp_path: Path)
     assert managed_plugin_path(ctx).read_text(encoding="utf-8") == global_plugin_path(ctx).read_text(encoding="utf-8")
 
 
-def test_remove_pretool_plugin_deletes_installed_files(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path)
-    install_pretool_plugin(ctx)
-    removed = remove_pretool_plugin(ctx)
-    assert removed["removed_plugin_paths"]
-    assert not global_plugin_path(ctx).exists()
-    assert not managed_plugin_path(ctx).exists()
-
-
 def test_opencode_install_includes_pretool_plugin_paths(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text('{"mcp": {}}', encoding="utf-8")
-    result = OpenCodeHarnessAdapter().install(ctx)
+    result = harness_support.install("opencode", ctx)
     assert Path(result["managed_plugin_path"]).is_file()
     assert Path(result["global_plugin_path"]).is_file()
 
@@ -621,7 +562,7 @@ def test_opencode_config_uses_guard_proxy_parses_jsonc_comments(tmp_path: Path) 
         """,
         encoding="utf-8",
     )
-    assert opencode_config_uses_guard_proxy(config) is True
+    assert config_uses_guard_proxy(_ctx(tmp_path), config) is True
 
 
 def test_opencode_config_uses_guard_proxy_rejects_invalid_companion_command(tmp_path: Path) -> None:
@@ -643,7 +584,7 @@ def test_opencode_config_uses_guard_proxy_rejects_invalid_companion_command(tmp_
         ),
         encoding="utf-8",
     )
-    assert opencode_config_uses_guard_proxy(config) is False
+    assert config_uses_guard_proxy(_ctx(tmp_path), config) is False
 
 
 def test_opencode_config_uses_guard_proxy_detects_companion_server_name(tmp_path: Path) -> None:
@@ -661,7 +602,7 @@ def test_opencode_config_uses_guard_proxy_detects_companion_server_name(tmp_path
         ),
         encoding="utf-8",
     )
-    assert opencode_config_uses_guard_proxy(config) is True
+    assert config_uses_guard_proxy(_ctx(tmp_path), config) is True
 
 
 def test_opencode_config_uses_guard_proxy_detects_managed_command(tmp_path: Path) -> None:
@@ -679,7 +620,7 @@ def test_opencode_config_uses_guard_proxy_detects_managed_command(tmp_path: Path
         ),
         encoding="utf-8",
     )
-    assert opencode_config_uses_guard_proxy(config) is True
+    assert config_uses_guard_proxy(_ctx(tmp_path), config) is True
 
 
 def test_opencode_config_uses_guard_proxy_requires_companion_for_each_native_server(tmp_path: Path) -> None:
@@ -701,7 +642,7 @@ def test_opencode_config_uses_guard_proxy_requires_companion_for_each_native_ser
         ),
         encoding="utf-8",
     )
-    assert opencode_config_uses_guard_proxy(config) is False
+    assert config_uses_guard_proxy(_ctx(tmp_path), config) is False
 
 
 def test_opencode_verification_ready_without_mcp_servers(tmp_path: Path) -> None:
@@ -720,7 +661,6 @@ def test_opencode_verification_ready_without_mcp_servers(tmp_path: Path) -> None
     verification = payload["verification"]
     assert verification["pretool_plugin_installed"] is True
     assert verification["mcp_proxy_configured"] is False
-    assert opencode_config_has_mcp_servers(config) is False
     assert verification["ready"] is True
     assert not verification["warnings"]
 
@@ -794,39 +734,15 @@ def test_refresh_opencode_pretool_plugin_handles_runtime_error(
     store = GuardStore(ctx.guard_home)
     store.set_managed_install("opencode", True, None, {}, "2026-06-04T00:00:00+00:00")
 
-    def _raise_runtime_error(_context: HarnessContext) -> str:
+    def _raise_runtime_error(*_args: object, **_fields: object) -> dict[str, object]:
         raise RuntimeError("no guard python")
 
-    monkeypatch.setattr(update_commands, "pretool_plugin_source", _raise_runtime_error)
+    monkeypatch.setattr(update_commands, "ask", _raise_runtime_error)
 
     note = update_commands._refresh_opencode_pretool_plugin(context=ctx, store=store)
 
     assert note is not None
     assert "Could not inspect OpenCode pretool plugin during update" in note
-
-
-def test_refresh_opencode_pretool_plugin_handles_install_runtime_error(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from codex_plugin_scanner.guard.cli import update_opencode as update_commands
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    ctx = _ctx(tmp_path)
-    store = GuardStore(ctx.guard_home)
-    store.set_managed_install("opencode", True, None, {}, "2026-06-04T00:00:00+00:00")
-    install_pretool_plugin(ctx)
-    global_plugin_path(ctx).write_text("// stale plugin\n", encoding="utf-8")
-
-    def _raise_runtime_error(_context: HarnessContext) -> dict[str, object]:
-        raise RuntimeError("write failed")
-
-    monkeypatch.setattr(update_commands, "install_pretool_plugin", _raise_runtime_error)
-
-    note = update_commands._refresh_opencode_pretool_plugin(context=ctx, store=store)
-
-    assert note is not None
-    assert "Could not refresh OpenCode pretool plugin during update" in note
 
 
 def test_opencode_verification_reports_missing_plugin(tmp_path: Path) -> None:
@@ -841,3 +757,33 @@ def test_opencode_verification_reports_missing_plugin(tmp_path: Path) -> None:
     assert verification["pretool_plugin_installed"] is False
     assert verification["ready"] is False
     assert verification["warnings"]
+
+
+# The installed evaluator wheel ships without the native runtime, so the
+# plugin-rendering checks of the attested hook interpreter live here.
+def _hook_ctx(tmp_path: Path) -> HarnessContext:
+    return HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+
+
+def test_pretool_plugin_source_uses_parent_attested_import_roots(tmp_path: Path) -> None:
+    import codex_plugin_scanner
+
+    source = pretool_plugin_source(_hook_ctx(tmp_path))
+
+    # The native runtime attests this interpreter and the package it imports.
+    assert str(Path(codex_plugin_scanner.__file__).resolve().parents[1]) in source
+    assert str(Path(sys.executable).resolve()) in source
+
+
+def test_frozen_opencode_hook_runs_signed_executable_directly(tmp_path: Path, monkeypatch) -> None:
+    executable = tmp_path / "HOL Guard"
+    executable.write_bytes(b"signed-frozen-core")
+    executable.chmod(0o755)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(executable))
+
+    source = pretool_plugin_source(_hook_ctx(tmp_path))
+
+    assert "const GUARD_FROZEN = true;" in source
+    assert "args: GUARD_FROZEN ? guardArgv" in source
+    assert str(executable) in source

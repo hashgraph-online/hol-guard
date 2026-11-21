@@ -1,8 +1,132 @@
 //! Static REST capability attribution. GraphQL and external bodies need a richer proof.
 use super::{one, Capabilities};
 
+/// `gh api` short options that take a value: `-q` is `--jq`, `-t` is `--template`.
+const SHORT_VALUE_OPTIONS: [&str; 8] = ["-f", "-F", "-H", "-X", "-h", "-p", "-q", "-t"];
+
 fn field_is_static(value: &str) -> bool {
     !value.contains(['$', '`', '@', '\0', '\n', '\r'])
+}
+
+/// `-f`/`--raw-field` values are always literal strings, and a typed `-F`/`--field`
+/// value reads a file only when it starts with `@`. Either may mention an `@user`.
+fn literal_field_is_static(name: &str, value: &str) -> bool {
+    let Some((key, text)) = value.split_once('=') else {
+        return false;
+    };
+    let reads_file = matches!(name, "--field" | "-F") && text.starts_with('@');
+    !reads_file && field_is_static(key) && !text.contains(['$', '`', '\0', '\r'])
+}
+
+/// GraphQL documents may span lines and declare `$variables`. Every `$name` must be
+/// declared in the document itself, so a shell-expanded `$HOME` never qualifies.
+pub(super) fn graphql_text_is_static(value: &str) -> bool {
+    if value.contains(['`', '@', '\0', '\r']) {
+        return false;
+    }
+    let mut rest = value;
+    while let Some(position) = rest.find('$') {
+        rest = &rest[position + 1..];
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        if name.is_empty()
+            || !value.contains(&format!("${name}:")) && !value.contains(&format!("${name} :"))
+        {
+            return false;
+        }
+    }
+    true
+}
+
+/// gojq can print the process environment (`env`) or load modules from disk
+/// (`import`, `include`). A response filter needs none of them.
+pub(super) fn jq_is_static(value: &str) -> bool {
+    !value
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .any(|word| {
+            matches!(
+                word,
+                "env" | "import" | "include" | "input_filename" | "get_search_list"
+            )
+        })
+}
+
+/// A `--jq` filter may render with a format string such as `@tsv`; in jq `@`
+/// only names a formatter, never a file the way a typed `-F` value does. A
+/// `$` may only name a variable the filter binds itself.
+///
+/// A filter may span lines, since jq reads a newline as a space. A `#` opens a
+/// comment that a newline closes, so a quote inside one would mislead the
+/// string-aware format check below; a multi-line filter must carry none.
+fn jq_filter_is_static(value: &str) -> bool {
+    let commented_lines = value.contains('\n') && value.contains('#');
+    if commented_lines || value.contains(['`', '\0', '\r']) {
+        return false;
+    }
+    (!value.contains('$') || crate::pretool::safe_reads::jq_variables_bound(value))
+        && jq_is_static(value)
+        && jq_formats_are_bare(value)
+}
+
+/// Every `@` names a format the jq read grammar accepts and stands bare, so
+/// `@sh` and a `@text "..."` template stay in review. An `@` in a string
+/// literal's text is text; the code inside a `\(...)` interpolation is
+/// screened like the rest of the filter.
+pub(super) fn jq_formats_are_bare(value: &str) -> bool {
+    outside_strings(value).split('@').skip(1).all(|tail| {
+        let end = tail
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .unwrap_or(tail.len());
+        crate::pretool::safe_reads::jq_rendering_format(&tail[..end])
+            && !tail[end..].trim_start().starts_with('"')
+    })
+}
+
+/// The filter with each string literal's text removed. Quotes stay, and so
+/// does the code inside each `\(...)` interpolation, nested strings and all.
+/// A `#` in code opens a comment, where a quote or parenthesis is text that
+/// this scan would misread, so a filter with one is screened whole.
+fn outside_strings(value: &str) -> String {
+    let mut code = String::with_capacity(value.len());
+    // One entry per open interpolation: the parenthesis depth in its code.
+    let mut interpolations: Vec<usize> = Vec::new();
+    let mut in_string = false;
+    let mut characters = value.chars();
+    while let Some(character) = characters.next() {
+        if in_string {
+            match character {
+                // An escape takes the next character; `\(` opens code.
+                '\\' => {
+                    if characters.next() == Some('(') {
+                        interpolations.push(0);
+                        in_string = false;
+                        code.push('(');
+                    }
+                }
+                '"' => {
+                    in_string = false;
+                    code.push('"');
+                }
+                _ => {}
+            }
+            continue;
+        }
+        match (character, interpolations.last_mut()) {
+            ('"', _) => in_string = true,
+            ('#', _) => return value.to_owned(),
+            ('(', Some(depth)) => *depth += 1,
+            (')', Some(0)) => {
+                interpolations.pop();
+                in_string = true;
+            }
+            (')', Some(depth)) => *depth -= 1,
+            _ => {}
+        }
+        code.push(character);
+    }
+    code
 }
 
 fn safe_header(value: &str) -> bool {
@@ -33,10 +157,52 @@ fn safe_header(value: &str) -> bool {
         })
 }
 
+/// Whether `value` names one fixed endpoint.
+///
+/// The path is spelled from a closed byte set, so no expansion, traversal
+/// trick or second endpoint can hide in it. A read's query string also admits
+/// `<` and `>`, the comparison operators GitHub's own search syntax is written
+/// with (`created:>=2026-10-29`, `comments:>10`). They sit after the first
+/// literal `?`, so they can never reach the path the capability is attributed
+/// from, and an encoded `%3F` stays data rather than opening the query.
+fn static_endpoint(value: &str, read_only: bool) -> bool {
+    let mut bytes = value.bytes();
+    let mut decoded = Vec::with_capacity(value.len());
+    let mut in_query = false;
+    while let Some(byte) = bytes.next() {
+        if byte == b'%' && read_only {
+            let Some(high) = bytes.next().and_then(|byte| (byte as char).to_digit(16)) else {
+                return false;
+            };
+            let Some(low) = bytes.next().and_then(|byte| (byte as char).to_digit(16)) else {
+                return false;
+            };
+            let byte = (high * 16 + low) as u8;
+            if byte.is_ascii_control() {
+                return false;
+            }
+            decoded.push(byte);
+        } else if byte.is_ascii_alphanumeric() || b"_./{}:+,@=?&-".contains(&byte) {
+            in_query |= byte == b'?';
+            decoded.push(byte);
+        } else if read_only && in_query && matches!(byte, b'<' | b'>') {
+            decoded.push(byte);
+        } else {
+            return false;
+        }
+    }
+    let decoded = String::from_utf8_lossy(&decoded);
+    let path = decoded
+        .split_once('?')
+        .map_or(decoded.as_ref(), |(path, _)| path);
+    !path.trim_matches('/').eq_ignore_ascii_case("graphql")
+}
+
 pub(super) fn classify(arguments: &[String]) -> Capabilities {
     let mut endpoint: Option<&str> = None;
     let mut method: Option<&str> = None;
     let mut fields: Vec<(&str, &str)> = Vec::new();
+    let mut relaxed_query = false;
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         if argument == "--" {
@@ -46,21 +212,29 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
             endpoint = Some(&arguments[index + 1]);
             break;
         }
-        let (mut name, mut attached) = argument
-            .split_once('=')
-            .map_or((argument.as_str(), None), |(a, b)| (a, Some(b)));
-        if attached.is_none()
-            && argument.len() > 2
-            && ["-f", "-F", "-H", "-X", "-h", "-p"]
-                .iter()
-                .any(|prefix| argument.starts_with(prefix))
-        {
-            name = &argument[..2];
-            attached = Some(&argument[2..]);
-        }
+        // pflag reads an attached short value (`-q.sha`, `-q=.sha`, `-fkey=v`)
+        // before any `=`, dropping one leading `=`; long options split at `=`.
+        let short = argument
+            .get(..2)
+            .filter(|head| argument.len() > 2 && SHORT_VALUE_OPTIONS.contains(head));
+        let (name, attached) = match short {
+            Some(head) => (
+                head,
+                Some(argument[2..].strip_prefix('=').unwrap_or(&argument[2..])),
+            ),
+            None => argument
+                .split_once('=')
+                .map_or((argument.as_str(), None), |(a, b)| (a, Some(b))),
+        };
         if matches!(
             name,
-            "--include" | "--paginate" | "--silent" | "--slurp" | "--verbose" | "-i"
+            "--allow-escape-sequences"
+                | "--include"
+                | "--paginate"
+                | "--silent"
+                | "--slurp"
+                | "--verbose"
+                | "-i"
         ) {
             if attached.is_some() {
                 return None;
@@ -86,6 +260,8 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                 | "-f"
                 | "-h"
                 | "-p"
+                | "-q"
+                | "-t"
         ) {
             let value = if let Some(value) = attached {
                 value
@@ -93,7 +269,23 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                 index += 1;
                 arguments.get(index)?.as_str()
             };
-            if !field_is_static(value) {
+            let query_field = matches!(name, "--field" | "--raw-field" | "-f" | "-F")
+                && value.split_once('=').is_some_and(|(key, _)| key == "query");
+            if query_field {
+                let (_, text) = value.split_once('=')?;
+                if !graphql_text_is_static(text) {
+                    return None;
+                }
+                relaxed_query |= !field_is_static(text);
+            } else if matches!(name, "--field" | "--raw-field" | "-f" | "-F") {
+                if !literal_field_is_static(name, value) {
+                    return None;
+                }
+            } else if matches!(name, "--jq" | "-q") {
+                if !jq_filter_is_static(value) {
+                    return None;
+                }
+            } else if !field_is_static(value) {
                 return None;
             }
             match name {
@@ -117,23 +309,69 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
         index += 1;
     }
     let endpoint = endpoint?;
-    if endpoint.is_empty()
-        || endpoint.starts_with('-')
-        || endpoint.contains("://")
-        || !endpoint
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"_./{}:+,@=?&-".contains(&byte))
-        || endpoint.eq_ignore_ascii_case("graphql")
+    if endpoint.trim_matches('/').eq_ignore_ascii_case("graphql") && !endpoint.contains(['%', '?'])
     {
+        return graphql_read(method, &fields);
+    }
+    if relaxed_query {
         return None;
     }
     let method = method
         .unwrap_or(if fields.is_empty() { "GET" } else { "POST" })
         .to_ascii_uppercase();
-    if matches!(method.as_str(), "GET" | "HEAD") {
+    let read_only = matches!(method.as_str(), "GET" | "HEAD");
+    if endpoint.is_empty()
+        || endpoint.starts_with('-')
+        || endpoint.contains("://")
+        || !static_endpoint(endpoint, read_only)
+    {
+        return None;
+    }
+    if read_only {
         return one("read_remote");
     }
     Some(mutation_capabilities(endpoint, &method, &fields))
+}
+
+/// A single static `query` field against the GraphQL endpoint is attributed by the
+/// shared GraphQL classifier. That classifier ignores strings and comments, so a field
+/// argument that mentions "mutation" stays a read, and every mutation root field maps
+/// to its own capability owner. Unclassifiable documents stay unsupported.
+fn graphql_read(method: Option<&str>, fields: &[(&str, &str)]) -> Capabilities {
+    use crate::github_capability_contract::GitHubCommandCapability as Cap;
+    if !method.is_none_or(|value| value.eq_ignore_ascii_case("POST")) {
+        return None;
+    }
+    let mut queries = fields.iter().filter(|(key, _)| *key == "query");
+    let (_, document) = queries.next()?;
+    if queries.next().is_some() {
+        return None;
+    }
+    let owned: Vec<(String, String)> = fields
+        .iter()
+        .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+        .collect();
+    if crate::github_command_capabilities::is_routine_review_thread_resolution(document, &owned) {
+        return one("routine_review_thread_remote");
+    }
+    let assessment = crate::github_command_capabilities::classify_graphql_document(document);
+    if assessment.capabilities.contains(&Cap::Unknown)
+        || (assessment
+            .capabilities
+            .iter()
+            .any(|capability| *capability != Cap::ReadRemote)
+            && !crate::github_command_capabilities::graphql_mutation_fields_proven(document))
+    {
+        return None;
+    }
+    let mut capabilities: Vec<&'static str> = assessment
+        .capabilities
+        .iter()
+        .map(|capability| capability.as_str())
+        .collect();
+    capabilities.sort_unstable();
+    capabilities.dedup();
+    (!capabilities.is_empty()).then_some(capabilities)
 }
 
 fn mutation_capabilities(
@@ -233,3 +471,7 @@ fn mutation_capabilities(
     }
     capabilities
 }
+
+#[cfg(test)]
+#[path = "github_api_tests.rs"]
+mod encoded_endpoint_tests;

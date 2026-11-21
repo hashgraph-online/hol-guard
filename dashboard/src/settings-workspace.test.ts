@@ -145,15 +145,15 @@ assert(
   "approval-password: configured copy points to save flow",
 );
 assert(
-  resolveApprovalPasswordSectionCopy(true, false).includes("Turn on Ask for proof"),
-  "approval-password: configured copy explains credentials stay put while the gate is off",
+  resolveApprovalPasswordSectionCopy(true, false).includes("Choose a password to enable it again"),
+  "approval-password: disabled configured gate points to password setup",
 );
 assert(
   resolveApprovalPasswordSectionCopy(false).includes("setup action"),
   "approval-password: first-time copy points to the explicit setup action",
 );
 assert(
-  resolveApprovalPasswordSectionCopy(false, false).includes("turns on Ask for proof"),
+  resolveApprovalPasswordSectionCopy(false, false).includes("turns on password checks"),
   "approval-password: disabled first-time copy explains setup turns the gate on",
 );
 assert(

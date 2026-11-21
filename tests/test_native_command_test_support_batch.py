@@ -78,7 +78,7 @@ def test_iterator_keeps_all_commands_in_bounded_ordered_batches(size: int, monke
     batches: list[tuple[str, ...]] = []
     projection_contexts: list[dict[str, object]] = []
 
-    def fixtures(batch: tuple[str, ...]) -> tuple[str, ...]:
+    def fixtures(batch: tuple[str, ...], cwd: object = None, home_dir: object = None) -> tuple[str, ...]:
         batches.append(batch)
         return batch
 

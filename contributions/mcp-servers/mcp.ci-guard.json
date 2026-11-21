@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.ci-guard",
+  "version": "1.0.0",
+  "name": "CI Guard MCP",
+  "description": "Read-only pre-flight security and configuration auditor for repositories: detects leaked secrets, GitHub Actions workflow hazards, and environment variable drift across .env, Dockerfiles, and Compose files. Never executes project scripts or Git hooks, and redacts secret values. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.carelessdept",
+    "displayName": "Careless Dept",
+    "url": "https://github.com/carelessdept/ci-guard-mcp"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0B0F14"
+  },
+  "homepage": "https://github.com/carelessdept/ci-guard-mcp",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "ci-guard-mcp"
+  },
+  "riskClasses": [
+    "external-filesystem-read",
+    "package-or-source-installation"
+  ],
+  "tools": [
+    {
+      "name": "scan_repo",
+      "state": "inherit"
+    },
+    {
+      "name": "check_secret_leaks",
+      "state": "inherit"
+    },
+    {
+      "name": "audit_github_workflows",
+      "state": "inherit"
+    },
+    {
+      "name": "check_env_drift",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/carelessdept/ci-guard-mcp",
+    "https://github.com/carelessdept/ci-guard-mcp#readme",
+    "https://www.npmjs.com/package/ci-guard-mcp"
+  ],
+  "saferAlternatives": [
+    "All four tools (scan_repo, check_secret_leaks, audit_github_workflows, check_env_drift) are read-only (readOnlyHint: true), confine paths to the launch root, redact matched secrets, and disable Git hooks and fsmonitor.",
+    "Review any call that passes includeIgnored: true on check_secret_leaks or scan_repo, since it scans Git-tracked files even when they match .gitignore rules.",
+    "Pin the package version or commit when launching via npx so only the audited release runs."
+  ]
+}

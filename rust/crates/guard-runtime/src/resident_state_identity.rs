@@ -83,6 +83,22 @@ pub(crate) fn validate_package_process_identity_with_marker(
     Ok(())
 }
 
+#[cfg(windows)]
+pub(crate) fn validate_package_process_identity(process_id: u32) -> Result<(), String> {
+    let executable = guard_runtime_windows_process::running_process_image_path(process_id)
+        .map_err(|_| "native_resident_process_identity_unavailable".to_owned())?;
+    let expected_path = std::env::current_exe()
+        .and_then(fs::canonicalize)
+        .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
+    let process_path = fs::canonicalize(executable)
+        .map_err(|_| "native_resident_process_identity_unavailable".to_owned())?;
+    if process_path != expected_path {
+        return Err("native_resident_process_identity_mismatch".to_owned());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
 pub(crate) fn validate_package_process_identity(process_id: u32) -> Result<(), String> {
     let pid = Pid::from_u32(process_id);
     let mut system = System::new();

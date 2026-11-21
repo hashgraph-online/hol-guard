@@ -6,8 +6,19 @@ import {
   ApprovalProofFieldInputs,
   approvalProofRecentlySatisfied,
   approvalProofRequiresPassword,
+  approvalProofUsesPulse,
   isApprovalProofSubmitDisabled,
 } from "./approval-proof-inline";
+
+/** The "skip the password for a while" checkbox: password gates only, not the authenticator or Pulse. */
+export function approvalProofCooldownOptionShown(gate: GuardApprovalGatePublicConfig): boolean {
+  return (
+    gate.cooldown_seconds > 0 &&
+    !gate.cooldown_active &&
+    gate.totp_enabled !== true &&
+    !approvalProofUsesPulse(gate)
+  );
+}
 
 type WhyThisPausedProps = {
   item: GuardApprovalRequest;
@@ -107,10 +118,19 @@ type ApprovalPasswordModalProps = {
   onSubmit: () => void;
   onCancel: () => void;
   submitLabel: string;
+  busy?: boolean;
+  /** Guard refused a decision without a code, so a recent confirmation no longer counts. */
+  requireFreshTotp?: boolean;
 };
 
-function approvalProofModalTitle(locked: boolean, recentlySatisfied: boolean, needsPassword: boolean): string {
+export function approvalProofModalTitle(
+  locked: boolean,
+  recentlySatisfied: boolean,
+  needsPassword: boolean,
+  usesPulse = false,
+): string {
   if (locked) return "Approval gate temporarily locked";
+  if (usesPulse) return "Approve in the YID app";
   if (recentlySatisfied) return "Recently confirmed";
   if (needsPassword) return "Approval password required";
   return "Authenticator code required";
@@ -119,14 +139,16 @@ function approvalProofModalTitle(locked: boolean, recentlySatisfied: boolean, ne
 export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
   const passwordRef = useRef<HTMLInputElement>(null);
   const [now, setNow] = useState(() => Date.now());
-  const recentlySatisfied = approvalProofRecentlySatisfied(props.gate);
+  const requireFreshTotp = props.requireFreshTotp === true;
+  const recentlySatisfied = !requireFreshTotp && approvalProofRecentlySatisfied(props.gate);
   const needsPassword = approvalProofRequiresPassword(props.gate);
   const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.gate, now);
   const gateLocked = lockRemainingSeconds > 0;
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
-    false,
+    props.busy === true,
+    requireFreshTotp,
   );
   useEffect(() => {
     if (!gateLocked) return undefined;
@@ -149,24 +171,20 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
     modalDescription = `Approval gate is temporarily locked. Try again in ${lockRemainingSeconds} seconds.`;
   }
 
-  const showCooldownOption =
-    props.gate.cooldown_seconds > 0 &&
-    !props.gate.cooldown_active &&
-    props.gate.totp_enabled !== true;
+  // Pulse has its own cooldown, chosen at setup; the password cooldown does not apply.
+  const showCooldownOption = approvalProofCooldownOptionShown(props.gate);
 
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.target === e.currentTarget) props.onCancel();
+      if (e.target === e.currentTarget && props.busy !== true) props.onCancel();
     },
-    [props.onCancel]
+    [props.onCancel, props.busy]
   );
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === "Enter" && !submitDisabled) {
-        e.preventDefault();
-        props.onSubmit();
-      }
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!submitDisabled) props.onSubmit();
     },
     [props.onSubmit, submitDisabled]
   );
@@ -175,12 +193,11 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm"
       onClick={handleBackdropClick}
-      onKeyDown={handleKeyDown}
       role="dialog"
       aria-modal="true"
       aria-labelledby="approval-password-modal-title"
     >
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+      <form onSubmit={handleSubmit} className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
         <div className="flex items-center gap-3">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10">
             <HiMiniKey className="h-5 w-5 text-brand-blue" aria-hidden="true" />
@@ -190,7 +207,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
               id="approval-password-modal-title"
               className="text-lg font-semibold tracking-tight text-brand-dark"
             >
-              {approvalProofModalTitle(gateLocked, recentlySatisfied, needsPassword)}
+              {approvalProofModalTitle(gateLocked, recentlySatisfied, needsPassword, approvalProofUsesPulse(props.gate))}
             </h2>
             <p className="text-sm text-brand-dark/70">{modalDescription}</p>
           </div>
@@ -208,6 +225,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
                 approvalPassword={props.approvalPassword}
                 approvalTotpCode={props.approvalTotpCode}
                 passwordRef={passwordRef}
+                requireFreshTotp={requireFreshTotp}
                 onApprovalPasswordChange={props.onApprovalPasswordChange}
                 onApprovalTotpCodeChange={props.onApprovalTotpCodeChange}
               />
@@ -219,7 +237,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
                     onChange={props.onUseCooldownChange}
                     className="h-4 w-4 accent-brand-blue"
                   />
-                  Skip password for next {approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase()} (use cooldown)
+                  Skip the password for the next {approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase()} (uncheck to be asked every time)
                 </label>
               )}
             </>
@@ -230,20 +248,20 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
           <button
             type="button"
             onClick={props.onCancel}
+            disabled={props.busy === true}
             className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50"
           >
             Go back
           </button>
           <button
-            type="button"
-            onClick={props.onSubmit}
+            type="submit"
             disabled={submitDisabled}
             className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {props.submitLabel}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

@@ -4,12 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.contracts import (
-    HARNESS_CONTRACTS,
-    HarnessProtectionContract,
-    contract_for,
-    harness_contracts_table,
-)
+from codex_plugin_scanner.guard.setup_contract_registry import harness_contracts
+from codex_plugin_scanner.guard.setup_contracts import HarnessProtectionContract, contract_for
 
 
 class TestHarnessProtectionContract:
@@ -47,7 +43,7 @@ class TestHarnessProtectionContract:
 
 class TestHarnessRegistry:
     def test_all_harnesses_present(self) -> None:
-        names = {c.harness for c in HARNESS_CONTRACTS}
+        names = {c.harness for c in harness_contracts()}
         assert "codex" in names
         assert "claude-code" in names
         assert "opencode" in names
@@ -58,26 +54,26 @@ class TestHarnessRegistry:
         assert "openclaw" in names
 
     def test_every_contract_has_smoke_command(self) -> None:
-        for c in HARNESS_CONTRACTS:
+        for c in harness_contracts():
             assert c.smoke_command.strip(), f"{c.harness} missing smoke_command"
 
     def test_every_contract_has_known_blind_spots(self) -> None:
-        for c in HARNESS_CONTRACTS:
+        for c in harness_contracts():
             assert c.known_blind_spots.strip(), f"{c.harness} missing known_blind_spots"
 
     def test_every_contract_states_native_approval(self) -> None:
-        for c in HARNESS_CONTRACTS:
+        for c in harness_contracts():
             assert isinstance(c.native_approval, bool), f"{c.harness} native_approval must be bool"
 
     def test_every_contract_has_at_least_one_alias(self) -> None:
-        for c in HARNESS_CONTRACTS:
+        for c in harness_contracts():
             assert len(c.install_aliases) > 0, f"{c.harness} must have at least one install alias"
 
     def test_all_aliases_are_unique(self) -> None:
         from collections import Counter
 
         all_aliases: list[str] = []
-        for c in HARNESS_CONTRACTS:
+        for c in harness_contracts():
             all_aliases.extend(c.install_aliases)
         counts = Counter(all_aliases)
         duplicates = {alias: count for alias, count in counts.items() if count > 1}
@@ -100,11 +96,11 @@ class TestContractFor:
         assert c is not None
         assert "claude" in c.install_aliases and "claude-code" in c.install_aliases
 
-    def test_claude_code_does_not_claim_removed_prompt_hook(self) -> None:
+    def test_claude_code_claims_its_prompt_hook(self) -> None:
         c = contract_for("claude-code")
         assert c is not None
-        assert "prompt" not in c.event_surfaces
-        assert "UserPromptSubmit" in c.known_blind_spots
+        assert "prompt" in c.event_surfaces
+        assert "UserPromptSubmit" not in c.known_blind_spots
 
     def test_opencode_alias(self) -> None:
         c = contract_for("opencode")
@@ -157,36 +153,17 @@ class TestInstallAliases:
         assert "antigravity" in c.install_aliases
 
 
-class TestHarnessContractsTable:
-    def test_returns_markdown(self) -> None:
-        table = harness_contracts_table()
-        assert "| Harness |" in table
-        assert "codex" in table
-        assert "claude-code" in table
-
-    def test_all_harnesses_in_table(self) -> None:
-        table = harness_contracts_table()
-        for c in HARNESS_CONTRACTS:
-            assert c.harness in table
-
-    def test_columns_present(self) -> None:
-        table = harness_contracts_table()
-        assert "Native Approval" in table
-        assert "Browser Fallback" in table
-        assert "Resume" in table
-
-
 class TestContractAliasesMatchAdapter:
-    """All install_aliases in every contract must be accepted by get_adapter()."""
+    """All install_aliases in every contract must be accepted by the native harness ops."""
 
     def test_all_install_aliases_are_resolvable(self) -> None:
-        from codex_plugin_scanner.guard.adapters import get_adapter
+        from codex_plugin_scanner.guard.native_harness_ops import canonical_harness
 
-        for contract in HARNESS_CONTRACTS:
+        for contract in harness_contracts():
             for alias in contract.install_aliases:
                 try:
-                    get_adapter(alias)
+                    canonical_harness(alias)
                 except ValueError:
                     pytest.fail(
-                        f"Contract '{contract.harness}' lists alias '{alias}' but get_adapter() does not recognize it"
+                        f"Contract '{contract.harness}' lists alias '{alias}' but the native harness ops do not recognize it"
                     )

@@ -1,0 +1,46 @@
+[
+ [
+  "{\"a\": 1, \"b\": \"x\", \"c\": true, \"d\": null, \"e\": 1.5, \"f\": [], \"g\": {}}",
+  "a: 1\nb: x\nc: true\nd: null\ne: 1.5\nf: []\ng: {}\n"
+ ],
+ [
+  "{\"mcp_servers\": {\"srv\": {\"command\": \"/usr/bin/hol-guard\", \"args\": [\"guard\", \"mcp-proxy\", \"--x\"], \"env\": {\"K\": \"v\"}}}, \"hooks\": {\"pre_tool_call\": [{\"command\": \"a b\", \"timeout\": 30}]}}",
+  "mcp_servers:\n  srv:\n    command: /usr/bin/hol-guard\n    args:\n    - guard\n    - mcp-proxy\n    - --x\n    env:\n      K: v\nhooks:\n  pre_tool_call:\n  - command: a b\n    timeout: 30\n"
+ ],
+ [
+  "[[\"a\", \"b\"], {\"k\": [1, 2]}, []]",
+  "- - a\n  - b\n- k:\n  - 1\n  - 2\n- []\n"
+ ],
+ [
+  "{\"s\": [\"\", \"yes\", \"123\", \"1.0\", \"null\", \"~\", \"- x\", \"a: b\", \"#c\", \"x #y\", \"it's\", \" lead\", \"trail \", \"tab\\there\", \"multi\\nline\", \"uni\\u00e9\", \"emoji\\ud83d\\ude00\", \"---x\", \"?x\", \":x\", \"a:b\", \"@x\", \"x,y\", \"<<\", \"=\", \"2024-01-02\", \"0x1F\", \"1_000\", \"+1\", \".5\", \"1e5\", \"C:\\\\path\\\\x\", \"\\\"q\\\"\"]}",
+  "s:\n- ''\n- 'yes'\n- '123'\n- '1.0'\n- 'null'\n- '~'\n- '- x'\n- 'a: b'\n- '#c'\n- 'x #y'\n- it's\n- ' lead'\n- 'trail '\n- \"tab\\there\"\n- 'multi\n\n  line'\n- \"uni\\xE9\"\n- \"emoji\\U0001F600\"\n- '---x'\n- ?x\n- :x\n- a:b\n- '@x'\n- x,y\n- '<<'\n- '='\n- '2024-01-02'\n- '0x1F'\n- '1_000'\n- '+1'\n- '.5'\n- 1e5\n- C:\\path\\x\n- '\"q\"'\n"
+ ],
+ [
+  "{\"long\": \"word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word end\", \"longq\": \"it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's end\", \"longd\": \"\\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 \\u00e9 end\", \"longpath\": \"/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+  "long: word word word word word word word word word word word word word word word word\n  word word word word word word word word word word word word word word end\nlongq: it's it's it's it's it's it's it's it's it's it's it's it's it's it's it's\n  it's it's it's it's it's it's it's it's it's it's end\nlongd: \"\\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9\\\n  \\ \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9\\\n  \\ \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9 \\xE9\\\n  \\ \\xE9 \\xE9 \\xE9 end\"\nlongpath: /aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+ ],
+ [
+  "{\"\": 1, \"kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\": 2, \"multi\\nkey\": 3, \"it's\": 4, \"\\u00e9\": 5}",
+  "? ''\n: 1\n? kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\n: 2\n? 'multi\n\n  key'\n: 3\nit's: 4\n\"\\xE9\": 5\n"
+ ],
+ [
+  "{\"f\": [1e+16, 1e-05, 100000.0, -0.0, 2.5e-300, 123456789012345678901234567890]}",
+  "f:\n- 1.0e+16\n- 1.0e-05\n- 100000.0\n- -0.0\n- 2.5e-300\n- 123456789012345678901234567890\n"
+ ],
+ [
+  "{\"nested\": [{\"a\": {\"b\": [{\"c\": []}]}}, [[]]], \"blank_line\": \"a\\n\\nb\", \"trailing_nl\": \"x\\n\", \"space_nl\": \"a \\nb\", \"nl_space\": \"a\\n b\"}",
+  "nested:\n- a:\n    b:\n    - c: []\n- - []\nblank_line: 'a\n\n\n  b'\ntrailing_nl: 'x\n\n  '\nspace_nl: \"a \\nb\"\nnl_space: \"a\\n b\"\n"
+ ],
+ [
+  "\"plain root\"",
+  "plain root\n...\n"
+ ],
+ [
+  "\"\"",
+  "''\n"
+ ],
+ [
+  "[]",
+  "[]\n"
+ ]
+]

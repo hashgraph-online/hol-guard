@@ -12,18 +12,17 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cline_hooks import _hook_source
-from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, cline_plugin_state
-from codex_plugin_scanner.guard.adapters.contracts import contract_for
+from codex_plugin_scanner.guard.cli import install_commands
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _apps_disconnect_confirm_command
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification
-from codex_plugin_scanner.guard.product_model import (
-    CANONICAL_HARNESS_VALUES,
-    SUPPORTED_HARNESS_VALUES,
-    export_product_model_v1,
-)
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.setup_contract_registry import harness_names
+from codex_plugin_scanner.guard.setup_contracts import contract_for
+from tests.cline_test_support import plugin_source as _plugin_source
+from tests.cline_test_support import plugin_state as cline_plugin_state
+from tests.cline_worker_config import worker_config as _worker_config
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -62,11 +61,14 @@ else:
     return path
 
 
-def _run_native(source: str, tmp_path: Path, payload: dict[str, object]) -> dict[str, object]:
-    worker = tmp_path / "native.py"
-    worker.write_text(source, encoding="utf-8")
+def _run_native(config: str, tmp_path: Path, payload: dict[str, object]) -> dict[str, object]:
+    runtime = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if not runtime or not os.path.isfile(runtime):
+        pytest.skip("the native Cline hook worker needs the built runtime")
+    worker = tmp_path / "PreToolUse.json"
+    worker.write_text(config, encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, str(worker)],
+        [runtime, "cline-hook-worker", str(worker)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -99,20 +101,7 @@ def test_cline_is_in_static_supported_contracts() -> None:
     assert contract_for("cline-cli") is contract
     assert contract_for("cline-vscode") is contract
     assert contract.surface_capabilities == ("auto", "hooks", "plugin", "cli", "all")
-    assert "cline" in CANONICAL_HARNESS_VALUES
-    assert "cline" in SUPPORTED_HARNESS_VALUES
-
-
-def test_checked_product_schema_matches_exported_cline_membership() -> None:
-    schema_path = (
-        Path(__file__).parents[1] / "src" / "codex_plugin_scanner" / "guard" / "schemas" / "guard_product_model_v1.json"
-    )
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    exported = export_product_model_v1()
-    assert schema["canonical_harnesses"] == exported["canonical_harnesses"]
-    assert schema["supported_harnesses"] == exported["supported_harnesses"]
-    assert "cline" in schema["canonical_harnesses"]
-    assert "cline" in schema["supported_harnesses"]
+    assert "cline" in harness_names()
 
 
 def test_apps_parser_accepts_every_cline_transport_surface() -> None:
@@ -133,9 +122,9 @@ def test_native_proof_requires_actual_block_outcome(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "hooks")
     guard = _fake_guard(tmp_path)
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
     allowed = _run_native(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "echo safe"}}},
     )
@@ -146,7 +135,7 @@ def test_native_proof_requires_actual_block_outcome(tmp_path: Path) -> None:
     assert proof["outcome"] == "allowed"
 
     blocked = _run_native(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "BLOCK_ME"}}},
     )
@@ -231,7 +220,15 @@ def test_plugin_ready_requires_block_and_replacement_proofs(tmp_path: Path) -> N
     source = "// HOL_GUARD_MANAGED_CLINE_PLUGIN_V1\nexport default {};\n"
     index.write_bytes(source.encode("utf-8"))
     package = root / "package.json"
-    package.write_text('{"name":"hol-guard-cline-plugin"}\n', encoding="utf-8")
+    package.write_text(
+        json.dumps(
+            {
+                "name": "hol-guard-cline-plugin",
+                "cline": {"plugins": [{"paths": ["./index.js"], "capabilities": ["hooks"]}]},
+            }
+        ),
+        encoding="utf-8",
+    )
     state_path = context.guard_home / "managed" / "cline" / "plugin-state.json"
     state_path.parent.mkdir(parents=True)
     state_path.write_text(
@@ -276,7 +273,7 @@ def test_plugin_ready_requires_block_and_replacement_proofs(tmp_path: Path) -> N
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_real_guard_policy_requires_review_for_cline_env_read(tmp_path: Path) -> None:
+def test_real_guard_policy_blocks_cline_env_read_without_prompt_by_default(tmp_path: Path) -> None:
     context = _context(tmp_path)
     secret_path = context.workspace_dir / ".env"
     secret_name = "OPENAI_" + "API_KEY"
@@ -317,11 +314,14 @@ def test_real_guard_policy_requires_review_for_cline_env_read(tmp_path: Path) ->
         timeout=30,
         check=False,
     )
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     response = json.loads(result.stdout)
-    assert response["policy_action"] == "require-reapproval"
-    assert response["artifact_id"].startswith("cline:project:file-read:")
-    assert response["policy_composition"]["current_config_action"] == "require-reapproval"
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert response["policy_action"] == "block"
+    assert response["reason_code"] == "native_policy_reapproval_required"
+    assert response["blocked_request_mode"] == "safe-alternative"
+    assert response["prompted"] is False
+    assert secret_value not in result.stdout
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -363,11 +363,9 @@ def test_real_guard_policy_withholds_cline_credential_output(tmp_path: Path) -> 
         timeout=30,
         check=False,
     )
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     response = json.loads(result.stdout)
-    assert response["policy_action"] == "require-reapproval"
-    assert ":tool-output:" in response["artifact_id"]
-    assert response["policy_composition"]["current_config_action"] == "require-reapproval"
+    assert response == {"decision": "deny", "model_output_action": "block", "policy_action": "block"}
     serialized = json.dumps(response)
     assert credential not in serialized
 
@@ -391,7 +389,7 @@ def test_cline_safe_verification_reports_live_plugin_readiness(tmp_path: Path, m
         "mcp": {"configured": False, "ready": True},
         "duplicate_managed_transports": False,
     }
-    monkeypatch.setattr(ClineHarnessAdapter, "runtime_probe", lambda self, _context: runtime)
+    monkeypatch.setattr(install_commands, "harness_runtime_probe", lambda _harness, _context: runtime)
 
     payload = build_harness_verification("cline", context, surface="plugin")
 
@@ -417,7 +415,7 @@ def test_cline_safe_verification_does_not_trust_inactive_plugin(
         "mcp": {"configured": False, "ready": True},
         "duplicate_managed_transports": True,
     }
-    monkeypatch.setattr(ClineHarnessAdapter, "runtime_probe", lambda self, _context: runtime)
+    monkeypatch.setattr(install_commands, "harness_runtime_probe", lambda _harness, _context: runtime)
 
     payload = build_harness_verification("cline", context, surface="plugin")
 

@@ -32,7 +32,7 @@ def test_resolve_submission_metadata_prefers_manifest_fields() -> None:
     assert metadata.plugin_name == "Example Good Plugin"
     assert metadata.plugin_url == "https://github.com/hashgraph-online/hol-guard"
     assert metadata.description == "Reusable security-first plugin fixture"
-    assert metadata.author == "Hashgraph Online"
+    assert metadata.author == "HOL"
     assert metadata.category == "Community Plugins"
 
 
@@ -57,7 +57,7 @@ def test_submission_payload_and_issue_body_include_registry_data() -> None:
         plugin_name="Example Good Plugin",
         plugin_url="https://github.com/hashgraph-online/example-good-plugin",
         description="Reusable security-first plugin fixture",
-        author="Hashgraph Online",
+        author="HOL",
         category="Community Plugins",
     )
 
@@ -90,7 +90,7 @@ def test_submission_issue_title_uses_plugin_prefix() -> None:
         plugin_name="Example Good Plugin",
         plugin_url="https://github.com/hashgraph-online/example-good-plugin",
         description="Reusable security-first plugin fixture",
-        author="Hashgraph Online",
+        author="HOL",
         category="Community Plugins",
     )
 

@@ -1,0 +1,354 @@
+# Frozen pre-native snapshot constructor for synthetic legacy activation tests only.
+# Production never reads or imports this fixture.
+"""Prepare authenticated policy data without changing controls or activation."""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import re
+import tempfile
+import time
+from collections import deque
+from dataclasses import dataclass
+from pathlib import Path
+
+from ..extension_builder.native_source_compiler import check_pack_cache
+from ..native_command_control_binding import NativeCommandProgramMetadata
+from . import lifecycle
+from .located_store import LocatedStore
+from .metadata_objects import ObjectStore, encoded
+from .cache_io import Lease, stage_archive
+from .pack_store import PackReader, durable_directory, read_object
+from .preparation_authority import publication
+from .transport import cached_fetcher
+from extension_delivery_objects import entries
+from extension_delivery_policy_lookup import lookup
+from extension_delivery_revocations import check as check_revocation
+
+IDENTITY = re.compile(r"command\.[a-z0-9]+(?:[.-][a-z0-9]+)*")
+MAX_SELECTED = 32768
+MAX_TRANSFER_BYTES = 512 * 1024 * 1024
+MAX_CATALOG_BYTES = 128 * 1024 * 1024
+
+
+class UnavailablePackError(ValueError):
+    """An authenticated release does not include the requested policy."""
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class PreparedCommandPacks:
+    _cache_lease: object
+    directory: Path
+    metadata: NativeCommandProgramMetadata
+    engine: str
+    selected: frozenset[str]
+    source_sha: str
+    publication_id: str
+    root_digest: str
+    authority_epoch: int
+    revocation_epoch: int
+    registry_ids: frozenset[str]
+    candidate_executables: tuple[str, ...]
+    _catalog_refs: tuple[bytes, ...]
+    _registry_refs: tuple[bytes, ...]
+    _selection_ref: bytes
+    _publication: bytes
+    authority_profile: str
+    predecessor_digest: str | None
+    release_version: str | None
+
+    def catalogs(self):
+        """Read verified per-pack metadata; matching remains entirely native."""
+        from .pack_store import decode
+
+        reader = PackReader(self.directory / "objects")
+        for reference in self._catalog_refs:
+            values = reader.json(decode(reference))
+            if not isinstance(values, list) or len(values) != 1:
+                raise ValueError("prepared pack catalog shape invalid")
+            yield values[0]
+
+    def registry_catalogs(self):
+        """Metadata closure for controls, including retained inactive intents."""
+        from .pack_store import decode
+
+        store = LocatedStore(self.directory / "objects")
+        for reference in self._registry_refs:
+            values = store.json(decode(reference))
+            if not isinstance(values, list) or len(values) != 1:
+                raise ValueError("prepared registry catalog shape invalid")
+            yield values[0]
+
+
+def _directory(path):
+    for parent in (path, *path.parents):
+        if parent.is_symlink():
+            raise ValueError("pack preparation directory traverses a symlink")
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+
+
+def _identity(engine, identities):
+    def digest(domain, value):
+        return hashlib.sha256(domain + encoded(value)).hexdigest()
+
+    return NativeCommandProgramMetadata(
+        digest(b"hol-guard.active-command-program.v1\0", {"engine": engine, "packs": identities}),
+        digest(b"hol-guard.active-command-catalog.v1\0", identities),
+        digest(b"hol-guard.active-command-trust.v1\0", identities),
+    )
+
+
+def prepare(
+    verified, enabled_external_ids, directory: Path, *, engine: str, retained_extension_ids=(), now=None, fetch=None
+):
+    lease = Lease(directory)
+    try:
+        result = _prepare(verified, enabled_external_ids, directory, engine=engine,
+                          retained_extension_ids=retained_extension_ids, now=now, fetch=fetch)
+        object.__setattr__(result, "_cache_lease", lease)
+        return result
+    except BaseException:
+        lease.close()
+        raise
+
+
+def _prepare(
+    verified, enabled_external_ids, directory: Path, *, engine: str, retained_extension_ids=(), now=None, fetch=None
+):
+    """Materialize a complete closure, then run native admission before return.
+
+    Requested IDs express preparation intent only. The subsequent authenticated
+    control transaction must independently authorize every enabled extension.
+    """
+    root, publication_data, root_digest, profile = publication(verified)
+    now = int(time.time()) if now is None else now
+    if type(now) is not int or (profile == "remote" and not root["issued_at"] <= now < root["expires_at"]):
+        raise ValueError("new pack preparation requires fresh authenticated metadata")
+    if profile == "committed-subset" and directory != verified.directory:
+        raise ValueError("offline subset requires the committed cache")
+    if root["engine"] != engine:
+        raise ValueError("pack publication requires a different native engine")
+    requested = set()
+    for identity in enabled_external_ids:
+        if not isinstance(identity, str) or len(identity) > 256 or IDENTITY.fullmatch(identity) is None:
+            raise ValueError("requested pack selection invalid")
+        requested.add(identity)
+        if len(requested) > MAX_SELECTED:
+            raise ValueError("requested pack selection exceeds admission budget")
+    _directory(directory)
+    objects = directory / "objects"
+    sets = directory / "sets"
+    _directory(objects)
+    _directory(sets)
+    if profile == "installed":
+        transfer = verified.fetch
+    elif profile == "committed-subset":
+
+        def transfer(target, maximum) -> bytes:
+            raise ValueError("offline subset cannot fetch uncached policy")
+    else:
+        transfer = cached_fetcher(directory / "transfers") if fetch is None else fetch
+    transferred = 0
+
+    def bounded_fetch(target, maximum):
+        nonlocal transferred
+        data = transfer(target, maximum)
+        transferred += len(data)
+        if transferred > MAX_TRANSFER_BYTES:
+            raise ValueError("pack preparation transfer budget exceeded")
+        return data
+
+    store = LocatedStore(objects, fetch=bounded_fetch)
+    reader = PackReader(objects)
+    policy = root["policy"]
+    defaults = policy["defaults"]
+    if defaults["count"] > MAX_SELECTED:
+        raise ValueError("default pack selection exceeds admission budget")
+    default_ids = set()
+    default_references = {}
+    for identity, reference in entries(store, defaults["index"], defaults["count"]) if defaults["count"] else ():
+        default_ids.add(identity)
+        default_references[identity] = reference
+    pending = deque(sorted(default_ids | requested))
+    queued = set(pending)
+    details = {}
+    catalog_bytes = 0
+
+    def metadata(identity):
+        nonlocal catalog_bytes
+        if profile == "committed-subset" and identity not in verified.registry_ids:
+            raise ValueError("offline subset cannot add uncommitted control metadata")
+        if identity in details:
+            return details[identity]
+        if len(details) >= MAX_SELECTED:
+            raise ValueError("pack interface expansion exceeds admission budget")
+        record = lookup(
+            store, policy["root"], policy["transport"], identity, expected_reference=default_references.get(identity)
+        )
+        if record is None:
+            # Rust's typed reason, which alone authorizes the remote fallback.
+            raise UnavailablePackError("pack_policy_unavailable")
+        if identity in default_ids and record["trust_class"] == "external":
+            raise ValueError("external policy cannot be selected by defaults")
+        catalog = store.json(record["catalog_metadata"])
+        catalog_bytes += len(encoded(catalog))
+        if catalog_bytes > MAX_CATALOG_BYTES or not isinstance(catalog, list) or len(catalog) != 1:
+            raise ValueError("pack metadata exceeds admission budget")
+        value = catalog[0]
+        if value.get("extension_id") != identity or any(
+            value.get(field) != record[field] for field in ("dependencies", "trust_class", "required", "activation")
+        ):
+            raise ValueError("pack availability differs from catalog metadata")
+        details[identity] = record, value
+        return record, value
+
+    selected = {}
+    archives = set()
+    executables = set()
+    while pending:
+        identity = pending.popleft()
+        if profile == "committed-subset" and identity not in verified.selected:
+            raise ValueError("offline subset cannot activate uncommitted policy")
+        record, catalog = metadata(identity)
+        check_revocation(verified, store, identity, record["manifest"]["sha256"])
+        for archive in record["archives"]:
+            if profile != "committed-subset" and archive["sha256"] not in archives:
+                stage_archive(directory, archive, bounded_fetch)
+                archives.add(archive["sha256"])
+        manifest = reader.json(record["manifest"])
+        program = reader.json(manifest["program"])
+        executables.update(
+            executable for rule in program.get("rules", []) for executable in rule["candidate_executables"]
+        )
+        native_catalog = reader.json(manifest["catalog"])
+        if (
+            native_catalog != [catalog]
+            or program.get("catalog_digest") != hashlib.sha256(encoded(native_catalog)).hexdigest()
+        ):
+            raise ValueError("pack metadata differs from compiled policy")
+        selected[identity] = manifest, program["catalog_digest"]
+        dependencies = set(catalog["dependencies"])
+        owned = {permission["permission_id"] for permission in catalog["permissions"]}
+        references = {
+            reference
+            for permission in catalog["permissions"]
+            for field in ("dependencies", "implied_permissions")
+            for reference in permission[field]
+        } - owned
+        for reference in references:
+            owners = []
+            for candidate in record["related_interfaces"]:
+                if reference.startswith(candidate + ".permission."):
+                    _, interface = metadata(candidate)
+                    if any(permission["permission_id"] == reference for permission in interface["permissions"]):
+                        owners.append(candidate)
+            if len(owners) != 1:
+                raise ValueError("selected permission dependency has no unique authenticated owner")
+            dependencies.add(owners[0])
+        for dependency in sorted(dependencies - queued):
+            if len(queued) >= MAX_SELECTED:
+                raise ValueError("pack dependency expansion exceeds admission budget")
+            queued.add(dependency)
+            pending.append(dependency)
+    if not selected:
+        raise ValueError("pack selection is empty")
+    # Control migration must retain Deny and still-inactive intent targets.
+    # Related interfaces are metadata only; they never select policy payload.
+    interfaces = deque(details)
+    seen_interfaces = set(interfaces)
+    for identity in retained_extension_ids:
+        if not isinstance(identity, str) or len(identity) > 256 or IDENTITY.fullmatch(identity) is None:
+            raise ValueError("retained control target invalid")
+        if identity not in seen_interfaces:
+            if len(seen_interfaces) >= MAX_SELECTED:
+                raise ValueError("control metadata expansion exceeds admission budget")
+            interfaces.append(identity)
+            seen_interfaces.add(identity)
+    while interfaces:
+        identity = interfaces.popleft()
+        record, _ = metadata(identity)
+        for related in record["related_interfaces"]:
+            if related not in seen_interfaces:
+                if len(seen_interfaces) >= MAX_SELECTED:
+                    raise ValueError("control metadata expansion exceeds admission budget")
+                interfaces.append(related)
+                seen_interfaces.add(related)
+    identities = [
+        {
+            "extension": identity,
+            "program": manifest["program_digest"],
+            "catalog": catalog_digest,
+            "trust": manifest["trust_digest"],
+        }
+        for identity, (manifest, catalog_digest) in sorted(selected.items())
+    ]
+    metadata_value = _identity(engine, identities)
+    local = ObjectStore(objects)
+    release = local.put_json(policy["root"])
+    next_page = None
+    ordered = sorted(selected)
+    for offset in reversed(range(0, len(ordered), 64)):
+        next_page = local.put_json(
+            {"schema": "guard.command-pack-selection-page.v1", "ids": ordered[offset : offset + 64], "next": next_page}
+        )
+    value = encoded(
+        {
+            "schema": "guard.command-pack-cache.v1",
+            "release": release,
+            "selection": next_page,
+            "selected_count": len(ordered),
+        }
+    )
+    destination = sets / (metadata_value.program_digest + ".json")
+    # Keep an existing representation of the same enforcement identity. A new
+    # discovery publication alone must not replace the active set or its bytes.
+    if destination.exists() or destination.is_symlink():
+        read_object(destination)
+    else:
+        with tempfile.NamedTemporaryFile(dir=sets, prefix=".set-", delete=False) as stream:
+            temporary = Path(stream.name)
+            try:
+                stream.write(value)
+                stream.flush()
+                os.fsync(stream.fileno())
+                stream.close()
+                try:
+                    os.link(temporary, destination)
+                except FileExistsError:
+                    read_object(destination)
+            finally:
+                temporary.unlink(missing_ok=True)
+    durable_directory(sets)
+    checked = check_pack_cache(directory, metadata_value.program_digest)
+    if any(
+        checked.get(field) != getattr(metadata_value, field)
+        for field in ("program_digest", "catalog_digest", "trust_digest")
+    ):
+        raise ValueError("native pack admission differs from prepared identities")
+    if checked.get("engine") != engine or checked.get("extensions") != len(selected):
+        raise ValueError("native pack admission differs from selected inventory")
+    result = object.__new__(PreparedCommandPacks)
+    fields = {
+        "release_version": lifecycle.installed_identity(verified)["version"] if profile == "installed" else None,
+        "directory": directory,
+        "metadata": metadata_value,
+        "engine": engine,
+        "selected": frozenset(selected),
+        "source_sha": root["source_sha"],
+        "publication_id": root["publication_id"],
+        "root_digest": root_digest,
+        "authority_epoch": root["authority_epoch"],
+        "revocation_epoch": policy["revocations"]["epoch"],
+        "registry_ids": frozenset(details),
+        "candidate_executables": tuple(sorted(executables)),
+        "_catalog_refs": tuple(encoded(selected[identity][0]["catalog"]) for identity in ordered),
+        "_registry_refs": tuple(encoded(details[identity][0]["catalog_metadata"]) for identity in sorted(details)),
+        "_selection_ref": encoded(next_page),
+        "_publication": publication_data,
+        "authority_profile": profile,
+        "predecessor_digest": verified.record_digest if profile == "committed-subset" else None,
+    }
+    for field, item in fields.items():
+        object.__setattr__(result, field, item)
+    return result

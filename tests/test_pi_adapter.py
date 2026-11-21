@@ -2,32 +2,25 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.contracts import contract_for
-from codex_plugin_scanner.guard.adapters.pi_extension_source import (
-    legacy_managed_extension_source,
-    managed_extension_source,
-)
-from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
-from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages import (
-    _codex_tool_output_request_summary,
-    _codex_tool_output_runtime_reason,
-    _codex_tool_output_runtime_summary,
-)
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.consumer import artifact_hash
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
-from codex_plugin_scanner.guard.models import HarnessDetection
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
-from codex_plugin_scanner.guard.runtime.secret_sensitivity import classify_secret_content
+from codex_plugin_scanner.guard.setup_contracts import contract_for
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import harness_ops_support as harness_support
+from tests.live_hook_review_support import LIVE_REVIEWS_RETIRED_ALLOW, assert_secret_output_held, live_post_tool_flag
+from tests.pi_extension_support import managed_extension_source, previous_managed_extension_source
 
 
 def _write_worktree_git_marker(checkout_root: Path) -> None:
@@ -51,6 +44,12 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _executable(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    path.chmod(0o755)
+
+
 def _write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
@@ -58,19 +57,18 @@ def _write_text(path: Path, content: str) -> None:
 
 class TestPiAdapterIdentity:
     def test_harness_identifier_is_pi(self) -> None:
-        adapter = get_adapter("pi")
-        assert adapter.harness == "pi"
+        assert harness_ops.canonical_harness("pi") == "pi"
 
     def test_pi_aliases_resolve_to_pi(self) -> None:
         for alias in ("pi", "pi-agent", "pi-coding-agent"):
-            assert get_adapter(alias).harness == "pi"
+            assert harness_ops.canonical_harness(alias) == "pi"
 
     def test_omp_aliases_resolve_to_omp(self) -> None:
         for alias in ("omp", "oh-my-pi"):
-            assert get_adapter(alias).harness == "omp"
+            assert harness_ops.canonical_harness(alias) == "omp"
 
     def test_pi_is_registered(self) -> None:
-        assert "pi" in {item.harness for item in list_adapters()}
+        assert "pi" in set(harness_ops.list_harnesses())
 
     def test_contract_exists(self) -> None:
         contract = contract_for("pi")
@@ -88,7 +86,7 @@ class TestPiAdapterIdentity:
         assert contract_for("oh-my-pi") == contract
 
     def test_managed_approval_flow_auto_opens_approval_center_once_as_fallback(self) -> None:
-        flow = get_adapter("pi").approval_flow(managed_install={"active": True, "manifest": {}})
+        flow = harness_ops.approval_flow("pi", managed_install={"active": True, "manifest": {}})
 
         assert flow["tier"] == "approval-center"
         assert flow["prompt_channel"] == "native-fallback"
@@ -96,7 +94,7 @@ class TestPiAdapterIdentity:
         assert _approval_surface_policy_for_flow("auto-open-once", flow) == "auto-open-once"
 
     def test_unmanaged_approval_flow_keeps_browser_fallback_visible(self) -> None:
-        flow = get_adapter("pi").approval_flow(managed_install=None)
+        flow = harness_ops.approval_flow("pi", managed_install=None)
 
         assert flow["tier"] == "approval-center"
         assert flow["prompt_channel"] == "browser"
@@ -104,7 +102,7 @@ class TestPiAdapterIdentity:
         assert _approval_surface_policy_for_flow("auto-open-once", flow) == "auto-open-once"
 
     def test_unmanaged_omp_approval_flow_names_oh_my_pi(self) -> None:
-        flow = get_adapter("omp").approval_flow(managed_install=None)
+        flow = harness_ops.approval_flow("omp", managed_install=None)
 
         assert flow["summary"] == "Guard routes Oh My Pi approvals through the local approval center."
         assert flow["fallback_hint"] == "Resolve pending Oh My Pi requests from the Guard approval center."
@@ -113,12 +111,10 @@ class TestPiAdapterIdentity:
 class TestPiDetect:
     def test_detect_marks_omp_cli_as_available(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi._resolve_command",
-            lambda command, candidates=(): "/opt/homebrew/bin/omp" if command == "omp" else None,
-        )
+        _executable(tmp_path / "path-bin" / "omp")
+        monkeypatch.setenv("PATH", str(tmp_path / "path-bin"))
 
-        result = get_adapter("omp").detect(ctx)
+        result = harness_ops.detect("omp", ctx)
 
         assert result.installed is True
         assert result.command_available is True
@@ -129,15 +125,9 @@ class TestPiDetect:
         executable.parent.mkdir(parents=True, exist_ok=True)
         executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         executable.chmod(0o755)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi._resolve_command",
-            lambda command, candidates=(): next(
-                (str(candidate) for candidate in candidates if candidate.is_file() and command == "omp"),
-                None,
-            ),
-        )
+        monkeypatch.setenv("PATH", str(tmp_path / "empty-path"))
 
-        result = get_adapter("omp").detect(ctx)
+        result = harness_ops.detect("omp", ctx)
 
         assert result.installed is True
         assert result.command_available is True
@@ -145,14 +135,10 @@ class TestPiDetect:
     def test_detect_omp_warning_mentions_omp(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         _write_json(ctx.home_dir / ".omp" / "agent" / "settings.json", {"extensions": []})
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi._resolve_command",
-            lambda command, candidates=(): None,
-        )
+        monkeypatch.setenv("PATH", str(tmp_path / "empty-path"))
 
-        adapter = get_adapter("omp")
-        result = adapter.detect(ctx)
-        warnings = adapter.diagnostic_warnings(result, runtime_probe=None)
+        result = harness_ops.detect("omp", ctx)
+        warnings = harness_ops.diagnostic_warnings("omp", result, None)
 
         assert any("omp command" in warning for warning in warnings)
 
@@ -172,12 +158,12 @@ class TestPiDetect:
         _write_text(ctx.home_dir / ".pi" / "agent" / "themes" / "night.json", "{}\n")
         _write_text(ctx.workspace_dir / ".pi" / "extensions" / "local.ts", "export default function () {}\n")
 
-        result = get_adapter("pi").detect(ctx)
+        result = harness_ops.detect("pi", ctx)
 
         assert result.harness == "pi"
         assert any(path.endswith(".pi/agent/settings.json") for path in result.config_paths)
         artifact_ids = {artifact.artifact_id for artifact in result.artifacts}
-        assert f"pi:pi-global:package:{stable_suffix('npm:@demo/pi-tools@1.2.3')}" in artifact_ids
+        assert f"pi:pi-global:package:{hashlib.sha256(b'npm:@demo/pi-tools@1.2.3').hexdigest()[:16]}" in artifact_ids
         assert "pi:pi-global:extension:demo.ts" in artifact_ids
         assert "pi:pi-global:skill:skills/ship" in artifact_ids
         assert "pi:pi-global:prompt:review.md" in artifact_ids
@@ -188,7 +174,7 @@ class TestPiDetect:
         ctx = _ctx(tmp_path)
         _write_text(ctx.home_dir / ".pi" / "agent" / "settings.json", "{}\n")
 
-        result = get_adapter("pi").detect(ctx)
+        result = harness_ops.detect("pi", ctx)
 
         assert str(ctx.home_dir / ".pi" / "agent" / "settings.json") in result.config_paths
         assert result.installed is True
@@ -201,7 +187,7 @@ class TestPiDetect:
         )
         _write_text(ctx.home_dir / ".omp" / "agent" / "extensions" / "omp-ext.ts", "export default function () {}\n")
 
-        result = get_adapter("omp").detect(ctx)
+        result = harness_ops.detect("omp", ctx)
 
         assert result.harness == "omp"
         assert str(ctx.home_dir / ".omp" / "agent" / "settings.json") in result.config_paths
@@ -213,13 +199,13 @@ class TestPiDetect:
         _write_text(ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts", "export default 'omp';\n")
 
         pi_snapshot = inventory_snapshot_from_detection(
-            get_adapter("pi").detect(ctx),
+            harness_ops.detect("pi", ctx),
             generated_at="2026-06-29T00:00:00Z",
             home_dir=ctx.home_dir,
             workspace_dir=ctx.workspace_dir,
         )
         omp_snapshot = inventory_snapshot_from_detection(
-            get_adapter("omp").detect(ctx),
+            harness_ops.detect("omp", ctx),
             generated_at="2026-06-29T00:00:00Z",
             home_dir=ctx.home_dir,
             workspace_dir=ctx.workspace_dir,
@@ -235,8 +221,8 @@ class TestPiDetect:
         _write_json(ctx.home_dir / ".pi" / "agent" / "settings.json", {"extensions": [str(shared_extension)]})
         _write_json(ctx.home_dir / ".omp" / "agent" / "settings.json", {"extensions": [str(shared_extension)]})
 
-        pi_ids = {artifact.artifact_id for artifact in get_adapter("pi").detect(ctx).artifacts}
-        omp_ids = {artifact.artifact_id for artifact in get_adapter("omp").detect(ctx).artifacts}
+        pi_ids = {artifact.artifact_id for artifact in harness_ops.detect("pi", ctx).artifacts}
+        omp_ids = {artifact.artifact_id for artifact in harness_ops.detect("omp", ctx).artifacts}
         assert "pi:pi-global:extension:hol-guard.ts" in pi_ids
         assert "omp:omp-global:extension:hol-guard.ts" in omp_ids
 
@@ -251,7 +237,7 @@ class TestPiDetect:
             {"extensions": ["../../shared/pi-exts/*.ts"]},
         )
 
-        result = get_adapter("pi").detect(ctx)
+        result = harness_ops.detect("pi", ctx)
 
         artifact_ids = {artifact.artifact_id for artifact in result.artifacts}
         assert "pi:pi-project:extension:one.ts" in artifact_ids
@@ -262,7 +248,7 @@ class TestPiDetect:
         ctx = _ctx(tmp_path)
         _write_text(ctx.home_dir / ".pi" / "agent" / "skills" / "SKILL.md", "# Root\n")
 
-        result = get_adapter("pi").detect(ctx)
+        result = harness_ops.detect("pi", ctx)
 
         skills = [artifact for artifact in result.artifacts if artifact.artifact_type == "skill"]
         assert skills[0].artifact_id == "pi:pi-global:skill:skills"
@@ -272,12 +258,8 @@ class TestPiDetect:
 class TestPiInstall:
     def test_install_writes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
-        manifest = get_adapter("pi").install(ctx)
+        manifest = harness_support.install("pi", ctx)
 
         assert manifest["harness"] == "pi"
         extension_path = Path(str(manifest["config_path"]))
@@ -289,7 +271,8 @@ class TestPiInstall:
         assert 'pi.on("tool_result"' in text
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
-        assert "    if (originalOutputProof) return undefined;\n" in text
+        assert "    if (originalOutputProof) {\n" in text
+        assert "before preserving the original result." in text
         assert (
             "return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);" in text
         )
@@ -341,7 +324,9 @@ class TestPiInstall:
         assert "return waitForGuardCliChildExit(child, 200)" in text
         assert "guardCliContainmentFailed = true" in text
         assert "containmentFailure," in text
-        assert 'reason_code: "guard_cli_containment_failed"' in text
+        # Containment failure only stops daemon recovery; the decision path
+        # never falls back to the Python CLI.
+        assert 'reason_code: "guard_cli_containment_failed"' not in text
         assert "{ code: 'ECONTAINMENT' }" in text
         recovery_block = text.split("async function recoverGuardDaemon(", 1)[1].split(
             "async function daemonGuardResponse(",
@@ -365,7 +350,10 @@ class TestPiInstall:
         assert "sourceFileRefForPostToolUse" in text
         assert "isVirtualSourcePath" in text
         assert "isAbsoluteSourcePath" not in text
-        assert "if (!path || isVirtualSourcePath(path)) return null;" in text
+        assert (
+            "if (!path || isVirtualSourcePath(path) || isJsonQueryPath(path) || isPathListRead(path)) return null;"
+            in text
+        )
         assert "text_excerpt: toolOutput" in text
         assert "GUARD_SOURCE_REF_MAX_OUTPUT_CHARS" in text
         assert "GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES" in text
@@ -376,10 +364,9 @@ class TestPiInstall:
         assert "daemonResponseCanReturn(payload, daemonAttempt.response)" in text
         assert 'if (response.decision === "allow" || response.decision === "deny") return true;' in text
         assert "observe_mode?: boolean;" in text
-        assert "if (response.observe_mode === true) return undefined;" in text
-        assert text.index("if (response.observe_mode === true) return undefined;") < text.index(
-            "if (outputTruncated) {"
-        )
+        assert "if (response.observe_mode === true && structuredMediation === undefined) return undefined;" in text
+        watch_shortcut = "if (response.observe_mode === true && structuredMediation === undefined) return undefined;"
+        assert text.index(watch_shortcut) < text.index("if (outputTruncated) {")
         # digestOutputText must only hash text-bearing fields, not metadata
         # like {type: "text"} - otherwise structured source reads never match
         assert "record.type === 'text'" in text
@@ -388,35 +375,58 @@ class TestPiInstall:
         # guard_payload_ref fallback still present
         assert "guard_payload_ref" in text
         # Reviewed excerpt still returned when not proven safe
-        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+        assert (
+            "return reviewedToolResult(reviewedContent, event.details, event.isError === true, hookDeadlineAt);" in text
+        )
+
+    def test_watch_records_output_findings_without_bypassing_protected_tool_checks(self, tmp_path: Path) -> None:
+        source = managed_extension_source(
+            guard_home=tmp_path / "guard-home",
+            home_dir=tmp_path,
+            settings_path=tmp_path / "settings.json",
+            harness="omp",
+        )
+        tool_call = source.split('  pi.on("tool_call", async (event, ctx) => {', 1)[1].split(
+            '  pi.on("message_end"', 1
+        )[0]
+        assert "if (!guardWatchPostureActive())" in tool_call
+        assert "Running without containment (Watch)." not in tool_call
+        assert "if (response.observe_mode === true) return undefined;" in tool_call
+        tool_result = source.split('  pi.on("tool_result", async (event, ctx) => {', 1)[1]
+        assert "watchPostureActive && response.decision === \"deny\"" in tool_result
+        assert "'output_secret_match', 'source_secret_match', 'sensitive_path', 'model_output_action'" in tool_result
+        assert "WATCH_WITHHELD_OUTPUT_CODES" in tool_result
+        assert "response.observe_mode === true &&" in tool_result
+        assert "WATCH_WITHHELD_OUTPUT_CODES.has(response.reason_code ?? \"\")" in tool_result
+        assert "The protected text was not shown to the model." in tool_result
+        assert (
+            "return reviewedToolResult([{ type: 'text', text: watchNotice }], event.details, false, hookDeadlineAt);"
+            in tool_result
+        )
 
     def test_install_writes_managed_extension_that_denies_on_hook_errors(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
-        manifest = get_adapter("pi").install(ctx)
+        manifest = harness_support.install("pi", ctx)
 
         text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
         assert "serializedPayload = JSON.stringify(payloadToSend);" in text
         assert "serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS" in text
-        assert "[...GUARD_CLI_WRAPPER_ARGS, JSON.stringify(args)]" in text
         assert "async function daemonGuardResponse(" in text
         assert "await fetch(`http://127.0.0.1:${connection.port}/v1/hooks/pi?" in text
         assert "serializedPayload, cwd, GUARD_DAEMON_TIMEOUT_MS, deadlineAt" in text
         assert "parsedPayload.guard_remaining_ms" in text
         assert "body: daemonPayload" in text
-        assert 'recoveryKind: "authenticated-control-plane-failure",\n        };' in text
+        assert 'recoveryKind: "authenticated-control-plane-failure",\n      };' in text
         assert "const response = await runGuard(" in text
-        assert "if (result.error) {" in text
-        assert "const errorMessage = result.error.message;" in text
-        assert "const errorCode =" in text
         assert 'decision: "deny"' in text
-        assert "errorCode === 'ETIMEDOUT'" in text
-        assert "could not complete fallback review before the Pi deadline" in text
-        assert "HOL Guard Pi hook failed before completing review" in text
+        # A daemon that stays unreachable after recovery denies the hook; no
+        # Python CLI reviews it instead.
+        assert 'return fallbackGuardResponse(\n    "daemon_unavailable",' in text
+        assert "could not complete fallback review" not in text
+        assert "HOL Guard Pi hook failed before completing review" not in text
+        decision_block = text.split("async function runGuard(", 1)[1]
+        assert "runGuardCliCommand(" not in decision_block
 
     def test_managed_extension_fails_safe_on_ambiguous_success_payloads(
         self,
@@ -424,24 +434,19 @@ class TestPiInstall:
         monkeypatch,
     ) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
-        manifest = get_adapter("pi").install(ctx)
+        manifest = harness_support.install("pi", ctx)
         text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
 
         assert 'if (!raw) return { response: null, recoveryKind: "transport-failure" };' in text
         assert "function normalizeGuardResponse(" in text
-        assert "const normalized = normalizeGuardResponse(parsed);" in text
+        assert "const normalized = normalizePromptGuardResponse(" in text
         assert 'parsed.reason !== undefined && parsed.reason !== null && typeof parsed.reason !== "string"' in text
         assert 'if (parsed.decision === "block")' in text
         assert "Array.isArray(value)" in text
         assert "function fallbackGuardResponse(" in text
-        assert '"guard_cli_invalid_response"' in text
-        assert 'normalized !== null && (result.status === 0 || normalized.decision === "deny")' in text
-        assert "if (result.status !== 0)" in text
+        assert '"guard_cli_invalid_response"' not in text
+        assert '"daemon_unavailable",' in text
         assert 'hook_event_name: "PreToolUse"' in text
 
     def test_install_writes_managed_extension_that_truncates_post_tool_payloads(
@@ -450,12 +455,8 @@ class TestPiInstall:
         monkeypatch,
     ) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
-        manifest = get_adapter("pi").install(ctx)
+        manifest = harness_support.install("pi", ctx)
 
         text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
         assert "const GUARD_TEXT_LIMIT_CHARS =" in text
@@ -478,8 +479,10 @@ class TestPiInstall:
         assert "value.toString()" in text
         assert "new WeakSet<object>()" in text
         assert "[deep object omitted by HOL Guard]" in text
-        assert "const boundedContent = boundValue(event.content);" in text
-        assert "const boundedStdout = boundedOutputText(event.content);" in text
+        assert "const preprocessBudget = createTraversalBudget(hookDeadlineAt);" in text
+        assert "const digest = digestOutputText(event.content, hookDeadlineAt, preprocessBudget);" in text
+        assert "const boundedContent = boundValue(event.content, 0, new WeakSet(), preprocessBudget);" in text
+        assert "const boundedStdout = boundedOutputText(event.content, hookDeadlineAt, preprocessBudget);" in text
         assert (
             "const reviewedContent = outputTruncated ? [{ type: 'text', text: toolOutput }] : boundedContent.value;"
             in text
@@ -495,7 +498,8 @@ class TestPiInstall:
         assert "const toolCallId = toolCallIdKey(event.toolCallId);" in text
         assert "function modelVisibleBlockedReason(reason: string, reasonCode?: string): string" in text
         assert "Do not retry the same tool call automatically" in text
-        assert 'reasonCode === "guard_cli_recovery_timeout"' in text
+        assert 'reasonCode === "daemon_unavailable"' in text
+        assert 'reasonCode === "guard_cli_recovery_timeout"' not in text
         assert 'reasonCode === "daemon_hook_deadline_exhausted"' in text
         assert "const modelReason = modelVisibleBlockedReason(reason, response.reason_code);" in text
         assert "if (toolCallId) blockedToolResults.set(toolCallId, modelReason);" in text
@@ -511,7 +515,9 @@ class TestPiInstall:
         # When truncated, the reviewed excerpt (not the full unreviewed output) is
         # returned to Pi so omitted content never reaches the model.
         assert "function reviewedToolResult(" in text
-        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+        assert (
+            "return reviewedToolResult(reviewedContent, event.details, event.isError === true, hookDeadlineAt);" in text
+        )
         assert "guardPayload.tool_response = event.content" in text
         assert "stdout: toolOutput" not in text
         assert "tool_response: toolOutput" in text
@@ -539,23 +545,21 @@ class TestPiInstall:
         # guard_payload_ref fallback still present
         assert "guard_payload_ref" in text
         # Reviewed excerpt still returned when not proven safe
-        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+        assert (
+            "return reviewedToolResult(reviewedContent, event.details, event.isError === true, hookDeadlineAt);" in text
+        )
 
     def test_omp_install_writes_only_omp_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-omp"), "notes": []},
-        )
 
-        manifest = get_adapter("omp").install(ctx)
+        manifest = harness_support.install("omp", ctx)
 
         extension_path = Path(str(manifest["config_path"]))
         assert manifest["harness"] == "omp"
         assert extension_path == ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts"
         assert '"--harness", "omp"' in extension_path.read_text(encoding="utf-8")
         assert "/v1/hooks/omp?" in extension_path.read_text(encoding="utf-8")
-        assert "Oh My Pi hook failed before completing review" in extension_path.read_text(encoding="utf-8")
+        assert "HOL Guard could not serialize Oh My Pi hook payload" in extension_path.read_text(encoding="utf-8")
         assert "before Pi could use it" not in extension_path.read_text(encoding="utf-8")
         assert not (ctx.home_dir / ".pi" / "agent" / "extensions" / "hol-guard.ts").exists()
 
@@ -576,20 +580,15 @@ class TestPiInstall:
         assert str(home_dir) in source
         assert "Oh My Pieter" not in source
         assert "Pieter/Oh My Pi" not in source
-        assert "Oh My Pi hook failed before completing review" in source
+        assert "HOL Guard could not serialize Oh My Pi hook payload" in source
 
     def test_uninstall_removes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
+            "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
         )
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
-        adapter = get_adapter("pi")
-        manifest = adapter.install(ctx)
+        manifest = harness_support.install("pi", ctx)
         extension_path = Path(str(manifest["config_path"]))
         settings_path = ctx.home_dir / ".pi" / "agent" / "settings.json"
         omp_extension_path = ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts"
@@ -599,18 +598,18 @@ class TestPiInstall:
         omp_settings_path.parent.mkdir(parents=True, exist_ok=True)
         omp_settings_path.write_text(json.dumps({"extensions": [str(omp_extension_path)]}), encoding="utf-8")
 
-        uninstall_manifest = adapter.uninstall(ctx)
+        uninstall_manifest = harness_support.uninstall("pi", ctx)
 
         assert uninstall_manifest["active"] is False
         assert not extension_path.exists()
         assert omp_extension_path.exists()
-        assert json.loads(settings_path.read_text(encoding="utf-8"))["extensions"] == []
+        assert "extensions" not in json.loads(settings_path.read_text(encoding="utf-8"))
         assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == [str(omp_extension_path)]
 
     def test_uninstall_removes_verified_legacy_omp_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
         )
         omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
@@ -627,26 +626,26 @@ class TestPiInstall:
         )
         _write_json(omp_settings_path, {"extensions": [str(omp_extension_path)]})
 
-        get_adapter("pi").uninstall(ctx)
+        harness_support.uninstall("pi", ctx)
 
         assert not omp_extension_path.exists()
-        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
+        assert "extensions" not in json.loads(omp_settings_path.read_text(encoding="utf-8"))
 
-    def test_uninstall_removes_pre_response_contract_legacy_omp_extension(
+    def test_uninstall_removes_merge_base_previous_omp_extension(
         self,
         tmp_path: Path,
         monkeypatch,
     ) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
         )
         omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
         omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
         omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
         omp_extension_path.write_text(
-            legacy_managed_extension_source(
+            previous_managed_extension_source(
                 guard_home=ctx.guard_home,
                 home_dir=ctx.home_dir,
                 settings_path=omp_settings_path,
@@ -656,26 +655,26 @@ class TestPiInstall:
         )
         _write_json(omp_settings_path, {"extensions": [str(omp_extension_path)]})
 
-        get_adapter("pi").uninstall(ctx)
+        harness_support.uninstall("pi", ctx)
 
         assert not omp_extension_path.exists()
-        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
+        assert "extensions" not in json.loads(omp_settings_path.read_text(encoding="utf-8"))
 
-    def test_uninstall_preserves_modified_pre_response_contract_legacy_omp_extension(
+    def test_uninstall_preserves_modified_previous_omp_extension(
         self,
         tmp_path: Path,
         monkeypatch,
     ) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
         )
         omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
         omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
         omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
         modified_source = (
-            legacy_managed_extension_source(
+            previous_managed_extension_source(
                 guard_home=ctx.guard_home,
                 home_dir=ctx.home_dir,
                 settings_path=omp_settings_path,
@@ -686,7 +685,7 @@ class TestPiInstall:
         omp_extension_path.write_text(modified_source, encoding="utf-8")
         _write_json(omp_settings_path, {"extensions": [str(omp_extension_path)]})
 
-        get_adapter("pi").uninstall(ctx)
+        harness_support.uninstall("pi", ctx)
 
         assert omp_extension_path.read_text(encoding="utf-8") == modified_source
         assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == [str(omp_extension_path)]
@@ -737,12 +736,12 @@ class TestPiRuntime:
         assert envelope.raw_payload_redacted["stdout"] == "[redacted]"
         assert "tool_response" in envelope.raw_payload_redacted
 
-    def test_pi_post_tool_output_creates_runtime_artifact(self, tmp_path: Path) -> None:
-        secret_path = tmp_path / ".npmrc"
+    def test_pi_post_tool_output_creates_runtime_artifact(self, live_hook_root: Path) -> None:
+        secret_path = live_hook_root / ".npmrc"
         secret_line = "//registry.npmjs.org/:_authToken=npm_abcdefghijklmnopqrstuvwxyz012345\n"
         secret_path.write_text(secret_line, encoding="utf-8")
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "tool_name": "read",
@@ -750,40 +749,31 @@ class TestPiRuntime:
                 "tool_response": [{"type": "text", "text": secret_line.strip()}],
                 "stdout": secret_line.strip(),
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
-            cwd=tmp_path,
-            home_dir=tmp_path,
+            cwd=live_hook_root,
+            home_dir=live_hook_root,
         )
 
-        assert artifact is not None
-        assert artifact.harness == "pi"
-        assert artifact.artifact_id.startswith("pi:")
-        assert artifact.metadata["guard_default_action"] == "require-reapproval"
+        assert_secret_output_held(artifact)
 
-    def test_pi_stdout_only_post_tool_output_creates_runtime_artifact(self, tmp_path: Path) -> None:
-        secret_path = tmp_path / ".npmrc"
+    def test_pi_stdout_only_post_tool_output_creates_runtime_artifact(self, live_hook_root: Path) -> None:
+        secret_path = live_hook_root / ".npmrc"
         secret_line = "//registry.npmjs.org/:_authToken=npm_abcdefghijklmnopqrstuvwxyz012345\n"
         secret_path.write_text(secret_line, encoding="utf-8")
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "tool_name": "read",
                 "tool_input": {"filePath": str(secret_path)},
                 "stdout": secret_line.strip(),
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
-            cwd=tmp_path,
-            home_dir=tmp_path,
+            cwd=live_hook_root,
+            home_dir=live_hook_root,
         )
 
-        assert artifact is not None
-        assert artifact.harness == "pi"
-        assert artifact.artifact_id.startswith("pi:")
+        assert_secret_output_held(artifact)
 
-    def test_pi_grep_post_tool_output_records_rendered_command(self, tmp_path: Path) -> None:
+    def test_pi_grep_post_tool_output_records_rendered_command(self, live_hook_root: Path) -> None:
         payload = {
             "tool_name": "grep",
             "tool_input": {"pattern": "SupplyChainContextRow|context.*agent|context.*row", "path": "context"},
@@ -791,22 +781,22 @@ class TestPiRuntime:
             "stdout": "context/file.ts:2: credential = 'sk-test-secret'",
         }
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload=payload,
-            config_path="~/.omp/agent/settings.json",
-            source_scope="project",
-            cwd=tmp_path,
-            home_dir=tmp_path,
+            cwd=live_hook_root,
+            home_dir=live_hook_root,
         )
-        envelope = normalize_harness_payload("pi", "PostToolUse", payload, workspace=tmp_path, home_dir=tmp_path)
+        envelope = normalize_harness_payload(
+            "pi", "PostToolUse", payload, workspace=live_hook_root, home_dir=live_hook_root
+        )
 
-        assert artifact is not None
-        assert artifact.metadata["command_text"] == "grep 'SupplyChainContextRow|context.*agent|context.*row' context"
+        assert_secret_output_held(artifact)
         assert envelope.command == "grep 'SupplyChainContextRow|context.*agent|context.*row' context"
 
-    def test_pi_post_tool_use_allows_medium_matches_from_external_source_search(self, tmp_path: Path) -> None:
-        home = (tmp_path / "home").resolve()
+    @LIVE_REVIEWS_RETIRED_ALLOW
+    def test_pi_post_tool_use_allows_medium_matches_from_external_source_search(self, live_hook_root: Path) -> None:
+        home = (live_hook_root / "home").resolve()
         workspace = (home / "workspace").resolve()
         source_path = (home / "sibling-source" / "scripts" / "guard-cloud" / "guard-test").resolve()
         home.mkdir()
@@ -822,9 +812,8 @@ class TestPiRuntime:
                 f"{source_path}:43:  email: test@example.com",
             )
         )
-        assert any(match.sensitivity == "medium" for match in classify_secret_content(output))
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "hook_event_name": "PostToolUse",
@@ -833,26 +822,24 @@ class TestPiRuntime:
                 "tool_response": [{"type": "text", "text": output}],
                 "stdout": output,
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
             cwd=workspace,
             home_dir=home,
         )
 
         assert artifact is None
 
-    def test_pi_post_tool_use_rejects_external_source_search_outside_home(self, tmp_path: Path) -> None:
-        home = (tmp_path / "home").resolve()
+    def test_pi_post_tool_use_rejects_external_source_search_outside_home(self, live_hook_root: Path) -> None:
+        home = (live_hook_root / "home").resolve()
         workspace = (home / "workspace").resolve()
-        source_path = (tmp_path / "outside-home" / "scripts" / "guard-cloud" / "guard-test").resolve()
+        source_path = (live_hook_root / "outside-home" / "scripts" / "guard-cloud" / "guard-test").resolve()
         home.mkdir()
         workspace.mkdir()
         source_path.parent.mkdir(parents=True)
         source_path.write_text("#!/bin/sh\n", encoding="utf-8")
-        _write_worktree_git_marker(tmp_path / "outside-home")
+        _write_worktree_git_marker(live_hook_root / "outside-home")
         output = f"{source_path}:42: auth_token = browser-proof-header-value-12345"
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "hook_event_name": "PostToolUse",
@@ -861,16 +848,14 @@ class TestPiRuntime:
                 "tool_response": [{"type": "text", "text": output}],
                 "stdout": output,
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
             cwd=workspace,
             home_dir=home,
         )
 
         assert artifact is not None
 
-    def test_pi_external_source_search_still_blocks_dangerous_variants(self, tmp_path: Path) -> None:
-        home = (tmp_path / "home").resolve()
+    def test_pi_external_source_search_still_blocks_dangerous_variants(self, live_hook_root: Path) -> None:
+        home = (live_hook_root / "home").resolve()
         workspace = (home / "workspace").resolve()
         source_path = (home / "sibling-source" / "scripts" / "guard-test").resolve()
         home.mkdir()
@@ -896,7 +881,7 @@ class TestPiRuntime:
             f"rg 'auth_token' {source_path}",
             f"git grep 'auth_token' {source_path}",
         ):
-            artifact = _codex_post_tool_output_artifact(
+            artifact = live_post_tool_flag(
                 harness="pi",
                 payload={
                     "hook_event_name": "PostToolUse",
@@ -905,16 +890,14 @@ class TestPiRuntime:
                     "tool_response": [{"type": "text", "text": output}],
                     "stdout": output,
                 },
-                config_path="~/.pi/agent/settings.json",
-                source_scope="project",
                 cwd=workspace,
                 home_dir=home,
             )
 
             assert artifact is not None
 
-    def test_pi_external_source_search_still_blocks_real_credentials(self, tmp_path: Path) -> None:
-        home = (tmp_path / "home").resolve()
+    def test_pi_external_source_search_still_blocks_real_credentials(self, live_hook_root: Path) -> None:
+        home = (live_hook_root / "home").resolve()
         workspace = (home / "workspace").resolve()
         source_path = (home / "sibling-source" / "scripts" / "guard-test").resolve()
         home.mkdir()
@@ -925,7 +908,7 @@ class TestPiRuntime:
         real_key = "sk-proj-" + "A" * 32
         output = f"{source_path}:42: OPENAI_API_KEY = {real_key}"
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "hook_event_name": "PostToolUse",
@@ -934,76 +917,36 @@ class TestPiRuntime:
                 "tool_response": [{"type": "text", "text": output}],
                 "stdout": output,
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
             cwd=workspace,
             home_dir=home,
         )
 
         assert artifact is not None
 
-    def test_pi_source_file_read_with_credential_like_code_does_not_block(self, tmp_path: Path) -> None:
-        source_path = tmp_path / "src" / "lib" / "guard-notion-api.ts"
+    def test_pi_source_file_read_with_credential_like_code_does_not_block(self, live_hook_root: Path) -> None:
+        source_path = live_hook_root / "src" / "lib" / "guard-notion-api.ts"
         source_path.parent.mkdir(parents=True)
         source_path.write_text("export const NOTION_API_KEY = process.env.NOTION_API_KEY;\n", encoding="utf-8")
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "tool_name": "Read",
                 "tool_input": {"file_path": str(source_path)},
                 "tool_response": [{"type": "text", "text": source_path.read_text(encoding="utf-8")}],
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
-            cwd=tmp_path,
-            home_dir=tmp_path,
+            cwd=live_hook_root,
+            home_dir=live_hook_root,
         )
 
         assert artifact is None
 
-    def test_pi_focused_pytest_messages_label_pi_runtime(self) -> None:
-        assert _codex_tool_output_request_summary(
-            harness_label="Pi",
-            tool_name="Bash",
-            command_text=(
-                "python3 -m pytest "
-                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
-                "test_release_checklist_references_smoke_evidence -q 2>&1"
-            ),
-            local_secret_source=None,
-            focused_pytest=True,
-            merged_output_capture=True,
-        ) == (
-            "Pi tool `Bash` ran focused pytest, merged stderr into stdout while running "
-            "`python3 -m pytest "
-            "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
-            "test_release_checklist_references_smoke_evidence -q 2>&1`, and the captured output "
-            "looked credential-like."
-        )
-        assert _codex_tool_output_runtime_summary(
-            None,
-            harness_label="Pi",
-            focused_pytest=True,
-            merged_output_capture=True,
-        ) == (
-            "Focused pytest merged stderr into stdout and emitted credential-looking output before "
-            "it reached Pi. Pytest can execute repository-controlled code, so this could be a real "
-            "local secret."
-        )
-        assert _codex_tool_output_runtime_reason(
-            None,
-            harness_label="Pi",
-            focused_pytest=True,
-            merged_output_capture=True,
-        ) == (
-            "Guard stopped this pytest output because pytest executes repository-controlled code, "
-            "and merging stderr into stdout can forward real local secrets to Pi. If you only need "
-            "the exit status, rerun without `2>&1` or keep stderr out of model-visible output."
-        )
-
-    def test_pi_repeated_blocked_tool_output_reuses_pending_approval(self, tmp_path: Path) -> None:
-        store = GuardStore(tmp_path / "guard-home")
+    def test_pi_repeated_blocked_tool_output_reuses_pending_approval(self, live_hook_root: Path) -> None:
+        store = GuardStore(live_hook_root / "guard-home")
+        # Provisioning the resident's verifier key writes a fake keyring beside
+        # the guard home. The shell context below hashes this directory, so
+        # provision before the first request instead of between the two.
+        assert ensure_resident_prerequisite(live_hook_root / "guard-home")
         command = 'cd /tmp/fix-skills-503-rb && rg "deps.config" src/api/server/internal/routes.ts 2>&1 | head -5'
 
         def queue_for(output: str) -> list[dict[str, object]]:
@@ -1013,15 +956,20 @@ class TestPiRuntime:
                 "tool_input": {"command": command},
                 "stdout": output,
             }
-            artifact = _codex_post_tool_output_artifact(
-                harness="pi",
-                payload=payload,
-                config_path="~/.pi/agent/settings.json",
-                source_scope="project",
-                cwd=tmp_path,
-                home_dir=tmp_path,
+            assert (
+                live_post_tool_flag(harness="pi", payload=payload, cwd=live_hook_root, home_dir=live_hook_root)
+                is not None
             )
-            assert artifact is not None
+            # The queue keys on the reviewed request, never on the output it carried.
+            artifact = GuardArtifact(
+                artifact_id="pi:project:tool-output:Bash",
+                name="Bash output",
+                harness="pi",
+                artifact_type="tool_action_request",
+                source_scope="project",
+                config_path="~/.pi/agent/settings.json",
+                metadata={"command_text": command, "runtime_request_summary": "Pi tool output held for review."},
+            )
             return queue_blocked_approvals(
                 detection=HarnessDetection(
                     harness="pi",
@@ -1047,8 +995,8 @@ class TestPiRuntime:
                                 "pi",
                                 "PostToolUse",
                                 payload,
-                                workspace=tmp_path,
-                                home_dir=tmp_path,
+                                workspace=live_hook_root,
+                                home_dir=live_hook_root,
                             ).to_dict(),
                         }
                     ]

@@ -54,4 +54,19 @@ def capability_contract(compatibility_modes: Iterable[str]) -> list[dict[str, ob
             "python_decision_time_disk_io": False,
             "failure": "fail_closed",
         },
+        {
+            "id": "managed_structured_output_destination_mediation",
+            "authority": "rust",
+            "rust_symbols": [
+                "guard_runtime::edge_structured::attach",
+                "guard_runtime::hook_direct_pi::mediate",
+                "guard_command::content_sensitivity::evaluate",
+            ],
+            "python_semantic_fallback": False,
+            # The daemon reads the managed-policy view from Guard config,
+            # which only it can, before the edge call and again to confirm an
+            # allowed answer. Rust decides the disposition from that view.
+            "python_decision_time_disk_io": True,
+            "failure": "fail_closed",
+        },
     ]

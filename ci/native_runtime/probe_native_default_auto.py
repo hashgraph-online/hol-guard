@@ -23,9 +23,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.append(str(_REPO_ROOT))
 
 import codex_plugin_scanner
-from codex_plugin_scanner.guard.config import hook_fast_path_enabled
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_resident_client import (
     close_native_residents,
     native_resident_client_failure_code,
@@ -37,17 +34,54 @@ from codex_plugin_scanner.guard.native_runtime import (
     native_mode,
     native_runtime_health,
     native_runtime_status,
-    review_post_tool_native,
 )
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 from codex_plugin_scanner.guard.store import GuardStore
 from scripts.native_probe_receipts import (
     receipt_corpus_is_complete,
     wait_for_receipt_corpus,
     wait_for_route_corpus,
 )
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 from scripts.native_slo_adapter import is_allowed
 from scripts.native_slo_contract import MAX_READINESS_P95_MS, proof_environment_violations
+
+# Loaded by path like the hook client: when a script under `scripts/` loads
+# this probe, `scripts/ci` shadows the top-level `ci` package.
+_POST_TOOL_REVIEW_SPEC = importlib.util.spec_from_file_location(
+    "hol_guard_post_tool_review",
+    Path(__file__).with_name("post_tool_review.py"),
+)
+if _POST_TOOL_REVIEW_SPEC is None or _POST_TOOL_REVIEW_SPEC.loader is None:
+    raise RuntimeError("native_default_auto_probe_failed: PostToolUse review client could not be loaded")
+_POST_TOOL_REVIEW_MODULE = importlib.util.module_from_spec(_POST_TOOL_REVIEW_SPEC)
+# Dataclasses resolve their annotations through sys.modules while the module loads.
+sys.modules[_POST_TOOL_REVIEW_SPEC.name] = _POST_TOOL_REVIEW_MODULE
+_POST_TOOL_REVIEW_SPEC.loader.exec_module(_POST_TOOL_REVIEW_MODULE)
+
+# The daemon harness is loaded by path for the same reason: an installed
+# dependency can own the top-level `ci` name, so `import ci.…` would miss it.
+_DAEMON_HARNESS_SPEC = importlib.util.spec_from_file_location(
+    "hol_guard_daemon_harness",
+    _REPO_ROOT / "ci" / "guard_daemon_harness.py",
+)
+if _DAEMON_HARNESS_SPEC is None or _DAEMON_HARNESS_SPEC.loader is None:
+    raise RuntimeError("native_default_auto_probe_failed: daemon harness could not be loaded")
+_DAEMON_HARNESS_MODULE = importlib.util.module_from_spec(_DAEMON_HARNESS_SPEC)
+sys.modules[_DAEMON_HARNESS_SPEC.name] = _DAEMON_HARNESS_MODULE
+_DAEMON_HARNESS_SPEC.loader.exec_module(_DAEMON_HARNESS_MODULE)
+GuardDaemonServer = _DAEMON_HARNESS_MODULE.GuardDaemonServer
+review_post_tool_native = _POST_TOOL_REVIEW_MODULE.review_post_tool_native
+HookReviewRequest = _POST_TOOL_REVIEW_MODULE.HookReviewRequest
+_POLICY_SUPPORT_SPEC = importlib.util.spec_from_file_location(
+    "hol_guard_native_policy_test_support",
+    Path(__file__).with_name("native_policy_test_support.py"),
+)
+if _POLICY_SUPPORT_SPEC is None or _POLICY_SUPPORT_SPEC.loader is None:
+    raise RuntimeError("native_default_auto_probe_failed: native policy test support could not be loaded")
+_POLICY_SUPPORT_MODULE = importlib.util.module_from_spec(_POLICY_SUPPORT_SPEC)
+sys.modules[_POLICY_SUPPORT_SPEC.name] = _POLICY_SUPPORT_MODULE
+_POLICY_SUPPORT_SPEC.loader.exec_module(_POLICY_SUPPORT_MODULE)
+native_policy_snapshot = _POLICY_SUPPORT_MODULE.native_policy_snapshot
 
 _HOOK_CLIENT_SPEC = importlib.util.spec_from_file_location(
     "hol_guard_installed_hook_client",
@@ -147,7 +181,7 @@ def _stop_native_process(runtime: Path, guard_home: Path) -> bool:
             (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
             check=False,
             capture_output=True,
-            timeout=2,
+            timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
         print("native_default_auto_probe_cleanup_timeout", file=sys.stderr)
@@ -243,31 +277,50 @@ def _exercise_mode_invariants(
     workspace: Path,
 ) -> dict[str, dict[str, object]]:
     mode_invariants: dict[str, dict[str, object]] = {}
+    post_tool_payload: dict[str, object] = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Read",
+        "tool_response": [{"type": "text", "text": "mode invariant\n"}],
+    }
     try:
+        os.environ.pop("HOL_GUARD_NATIVE", None)
+        baseline = _installed_hook_request(
+            daemon, guard_home, workspace, "claude-code", "PostToolUse", dict(post_tool_payload)
+        )
+        if not isinstance(baseline, dict):
+            raise RuntimeError(f"native_default_auto_probe_failed: invalid baseline response: {baseline}")
         for mode in ("off", "shadow"):
             os.environ["HOL_GUARD_NATIVE"] = mode
             response = _installed_hook_request(
-                daemon,
-                guard_home,
-                workspace,
-                "claude-code",
-                "PostToolUse",
-                {
-                    "hook_event_name": "PostToolUse",
-                    "tool_name": "Read",
-                    "tool_response": [{"type": "text", "text": "mode invariant\n"}],
-                },
+                daemon, guard_home, workspace, "claude-code", "PostToolUse", dict(post_tool_payload)
             )
             if not isinstance(response, dict):
                 raise RuntimeError(f"native_default_auto_probe_failed: invalid mode response: {response}")
+            # Legacy values are accepted but resolve to auto: the native
+            # resident must decide exactly as it does with the variable unset.
+            # Current Claude PostToolUse contract: a non-blocking native
+            # outcome carries ``policy_action`` (allow/warn) plus the
+            # PostToolUse hook-specific envelope. It carries no ``continue``
+            # (that key only appears on terminal block responses) and no
+            # ``decision``; any block/stop key would mean the tool output was
+            # refused rather than passed through.
+            specific = response.get("hookSpecificOutput")
             _require(
-                response.get("continue") is True
-                and response.get("policy_action") == "allow"
-                and response.get("reason_code") in {"native_hook_disabled", "native_shadow_diagnostic_disabled"},
-                {"mode": mode, "response": response},
+                response.get("policy_action") in {"allow", "warn"}
+                and isinstance(specific, dict)
+                and specific.get("hookEventName") == "PostToolUse"
+                and "decision" not in response
+                and "continue" not in response
+                and "stopReason" not in response
+                and all(
+                    response.get(key) == baseline.get(key)
+                    for key in ("decision", "policy_action", "reason_code", "hookSpecificOutput")
+                ),
+                {"mode": mode, "response": response, "baseline": baseline},
             )
             mode_invariants[mode] = {
                 "decision": response.get("decision"),
+                "policy_action": response.get("policy_action"),
                 "reason_code": response.get("reason_code"),
                 "python_oracle": getattr(daemon._server.hook_worker, "test_oracle", None) is not None,
             }
@@ -324,12 +377,12 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
             timeout_seconds=45.0 if os.name == "nt" else 5.0,
         )
         writer = daemon._server.runtime_hook_evidence_writer
+        # Count the route corpus receipts before the mode invariants send their
+        # own PostToolUse requests, which write receipts of their own. A busy
+        # store sends records through the writer's retry backoff on any
+        # platform; the wait ends as soon as the corpus is durable.
+        evidence_stats = wait_for_receipt_corpus(writer, expected=len(route_receipts), timeout_seconds=45.0)
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
-        evidence_stats = wait_for_receipt_corpus(
-            writer,
-            expected=len(route_receipts),
-            timeout_seconds=45.0 if os.name == "nt" else 5.0,
-        )
     finally:
         daemon.stop()
     if not isinstance(worker_stats, Mapping) or not isinstance(evidence_stats, Mapping):
@@ -377,7 +430,6 @@ def _require_clean_probe_environment() -> None:
     ):
         _require(environment_name not in os.environ, f"{environment_name} must be unset")
     _require(native_mode() == "auto", f"unexpected native mode: {native_mode()}")
-    _require(hook_fast_path_enabled(), "unset fast-path configuration must be enabled")
     os.environ["HOL_GUARD_NATIVE"] = "invalid"
     try:
         _require(native_mode() == "auto", "invalid native mode must resolve to auto")
@@ -468,15 +520,16 @@ def _run_temporary_probe(identity: NativeRuntimeIdentity) -> dict[str, object]:
                 raise cleanup_error
 
 
-def _assert_native_disabled_mode() -> None:
-    os.environ["HOL_GUARD_NATIVE"] = "off"
-    try:
-        _require(native_mode() == "off", f"unexpected native mode: {native_mode()}")
-        disabled = native_runtime_status()
-        _require(disabled.mode == "off", disabled)
-        _require(disabled.reason == "native_disabled", disabled)
-    finally:
-        os.environ.pop("HOL_GUARD_NATIVE", None)
+def _assert_legacy_native_modes_resolve_to_auto() -> None:
+    for legacy in ("off", "shadow"):
+        os.environ["HOL_GUARD_NATIVE"] = legacy
+        try:
+            _require(native_mode() == "auto", f"legacy native mode {legacy} must resolve to auto: {native_mode()}")
+            resolved = native_runtime_status()
+            _require(resolved.mode == "auto", resolved)
+            _require(resolved.reason != "native_disabled", resolved)
+        finally:
+            os.environ.pop("HOL_GUARD_NATIVE", None)
 
 
 def _build_probe_receipt(
@@ -491,7 +544,7 @@ def _build_probe_receipt(
         "fast_path": "enabled",
         "runtime_reason": status.reason,
         "target": capabilities.target,
-        "rollback": "off",
+        "legacy_modes": "accepted_as_auto",
         "corpus_decisions": installed_corpus["route_count"],
         "resident_decisions": installed_corpus["route_count"],
         "resident_share": 1.0,
@@ -517,7 +570,7 @@ def main(*, json_path: Path | None = None) -> int:
     status, identity, capabilities = _probe_native_identity()
     _assert_binary_override_ignored(identity)
     installed_corpus = _run_temporary_probe(identity)
-    _assert_native_disabled_mode()
+    _assert_legacy_native_modes_resolve_to_auto()
     receipt = _build_probe_receipt(status, capabilities, installed_corpus)
     rendered = json.dumps(receipt, sort_keys=True)
     if json_path is not None:

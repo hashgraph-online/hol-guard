@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.receipts import build_receipt
@@ -37,6 +37,7 @@ def _context(tmp_path: Path) -> HarnessContext:
 def _saved_block_decision() -> ToolCallDecision:
     return ToolCallDecision(
         action="block",
+        policy_action="block",
         source="policy",
         signals=("tool name implies destructive file or system changes",),
         summary="Local Guard kept this tool call blocked by saved policy.",
@@ -51,6 +52,7 @@ def _saved_block_decision() -> ToolCallDecision:
 def _fresh_block_decision() -> ToolCallDecision:
     return ToolCallDecision(
         action="block",
+        policy_action="block",
         source="heuristic",
         signals=("tool name implies destructive file or system changes",),
         summary="The current call is destructive.",
@@ -61,6 +63,7 @@ def _fresh_block_decision() -> ToolCallDecision:
 def _saved_allow_decision() -> ToolCallDecision:
     return ToolCallDecision(
         action="allow",
+        policy_action="allow",
         source="policy",
         signals=("tool name implies destructive file or system changes",),
         summary="Local Guard reused an exact saved approval for this tool call.",

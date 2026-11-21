@@ -1,0 +1,7 @@
+{
+  "name": "weather-tools",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acme/weather-tools.git"
+  }
+}

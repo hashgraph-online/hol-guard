@@ -85,6 +85,19 @@ def _category_prefix(scan_root: Path, package: NormalizedPackage, package_count:
     return f"[{package.ecosystem.value}:{relative_label}] "
 
 
+# Component kinds whose files an agent loads as instructions, by relative path.
+_INSTRUCTION_COMPONENTS = ("agents", "commands", "context_files", "instructions", "prompts", "skills", "system_prompt")
+
+
+def _declared_instruction_files(package_root: Path, package: NormalizedPackage) -> tuple[Path, ...]:
+    """Files the manifest declares as agent instructions, for strict scanning of approval defaults."""
+    return tuple(
+        package_root / relative
+        for component in _INSTRUCTION_COMPONENTS
+        for relative in package.components.get(component, ())
+    )
+
+
 def _is_path_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -363,7 +376,7 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
                 needs_rebase,
             )
             security_checks = _maybe_rebase_checks(
-                run_security_checks(package_root),
+                run_security_checks(package_root, instruction_files=_declared_instruction_files(package_root, package)),
                 package_root,
                 scan_root_resolved,
                 needs_rebase,
@@ -396,7 +409,10 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
                 run_deepseek_harness_checks(package), package_root, scan_root_resolved, needs_rebase
             )
             security_checks = _maybe_rebase_checks(
-                run_security_checks(package_root), package_root, scan_root_resolved, needs_rebase
+                run_security_checks(package_root, instruction_files=_declared_instruction_files(package_root, package)),
+                package_root,
+                scan_root_resolved,
+                needs_rebase,
             )
             operational_checks = _maybe_rebase_checks(
                 run_operational_security_checks(package_root), package_root, scan_root_resolved, needs_rebase
@@ -423,7 +439,7 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
                 needs_rebase,
             )
             security_checks = _maybe_rebase_checks(
-                run_security_checks(package_root),
+                run_security_checks(package_root, instruction_files=_declared_instruction_files(package_root, package)),
                 package_root,
                 scan_root_resolved,
                 needs_rebase,
@@ -459,7 +475,7 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
                 needs_rebase,
             )
             security_checks = _maybe_rebase_checks(
-                run_security_checks(package_root),
+                run_security_checks(package_root, instruction_files=_declared_instruction_files(package_root, package)),
                 package_root,
                 scan_root_resolved,
                 needs_rebase,

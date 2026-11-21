@@ -16,12 +16,13 @@ import sys
 import tempfile
 import time
 from contextlib import contextmanager
+from hashlib import sha256
 from pathlib import Path
 from typing import cast
 
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
@@ -36,10 +37,22 @@ from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provisio
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
-from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
+from codex_plugin_scanner.guard.runtime.observed_mcp_tools import ObservedMcpTool
 from codex_plugin_scanner.guard.store import GuardStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
+def fixture_tool(index: int, name: str) -> ObservedMcpTool:
+    server = f"fixture_{index:03}"
+    namespace = f"mcp__{server}__"
+    return ObservedMcpTool("codex", namespace, name, namespace + name, server)
+
+
+def observed_command_id(tool: ObservedMcpTool) -> str:
+    """The command id the native discovery gives an observed tool."""
+
+    return "tool-" + sha256(tool.qualified_name.encode()).hexdigest()[:24]
 
 
 def p95(samples: list[float]) -> float:
@@ -94,12 +107,13 @@ with tempfile.TemporaryDirectory(prefix="guard-mcp-scale-") as scratch, isolated
     servers = []
     setup_start = time.perf_counter()
     for index in range(connection_count):
-        observed = [observed_mcp_tool("codex", f"mcp__fixture_{index:03}__{name}") for name in names]
-        assert all(tool is not None for tool in observed)
-        tools = [tool for tool in observed if tool is not None]
+        tools = [fixture_tool(index, name) for name in names]
         server, identity = tools[0].server_identity, tools[0].identity
         commands = (
-            *(LocalCliCommand(tool.command_id, tool.name, tool.qualified_name, "Fixture tool") for tool in tools),
+            *(
+                LocalCliCommand(observed_command_id(tool), tool.name, tool.qualified_name, "Fixture tool")
+                for tool in tools
+            ),
             LocalCliCommand("other", "Other tools", "fixture ...", "Unknown tools need review"),
         )
         catalog = McpCatalogResult(
@@ -131,7 +145,7 @@ with tempfile.TemporaryDirectory(prefix="guard-mcp-scale-") as scratch, isolated
             expected_revision=store.read_local_cli_revision(),
             updated_at=seen_at,
             command_states={
-                tool.command_id: "allow" if tool_index % 2 == 0 else "block"
+                observed_command_id(tool): "allow" if tool_index % 2 == 0 else "block"
                 for tool_index, tool in enumerate(tools[: options.permissions_per_connection])
             },
         )

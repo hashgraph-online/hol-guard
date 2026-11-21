@@ -1,11 +1,14 @@
 """Guard CLI parser shared helper functions."""
 
 # fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: I001
 
 from __future__ import annotations
 
-from ._commands_shared import *
+import argparse
+import urllib.parse
+
+from ..aibom_models import AibomCliOptions
 
 def _add_guard_common_args(
     parser: argparse.ArgumentParser,

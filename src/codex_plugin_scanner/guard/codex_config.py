@@ -1,84 +1,106 @@
-"""Helpers for Guard-managed Codex MCP configuration."""
+"""Wire form for Codex payloads handed to the native runtime."""
 
 from __future__ import annotations
 
-import importlib
 import json
-import re
-from pathlib import Path
+import math
+from collections.abc import Mapping, Sequence
+from datetime import date, datetime, time
+from typing import Any
+from uuid import uuid4
 
-tomllib = importlib.import_module("tomllib" if __import__("sys").version_info >= (3, 11) else "tomli")
-
-
-_BARE_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
-
-
-def read_toml_payload(path: Path) -> dict[str, object]:
-    if not path.is_file():
-        return {}
-    try:
-        with path.open("rb") as handle:
-            payload = tomllib.load(handle)
-    except (OSError, tomllib.TOMLDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
+# The range the native ``codex_hook_identity`` op takes as a JSON integer.
+_EXACT_INT_MIN = -(2**63)
+_EXACT_INT_MAX = 2**64 - 1
 
 
-def write_toml_payload(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(dump_toml(payload), encoding="utf-8")
-
-
-def dump_toml(payload: dict[str, object]) -> str:
-    lines: list[str] = []
-    _emit_table(lines, (), payload)
-    rendered = "\n".join(line for line in lines if line is not None).strip()
-    return f"{rendered}\n" if rendered else ""
-
-
-def _emit_table(lines: list[str], path: tuple[str, ...], payload: dict[str, object]) -> None:
-    scalar_items = [(key, value) for key, value in payload.items() if value is not None and not isinstance(value, dict)]
-    nested_items = [(key, value) for key, value in payload.items() if isinstance(value, dict)]
-
-    if path:
-        lines.append(f"[{'.'.join(_format_key(part) for part in path)}]")
-    for key, value in scalar_items:
-        lines.append(f"{_format_key(key)} = {_format_value(value)}")
-    if path and (scalar_items or nested_items):
-        lines.append("")
-
-    for index, (key, value) in enumerate(nested_items):
-        _emit_table(lines, (*path, key), value)
-        if index != len(nested_items) - 1:
-            lines.append("")
-
-
-def _format_key(key: str) -> str:
-    if _BARE_KEY_PATTERN.fullmatch(key):
-        return key
-    return json.dumps(key)
-
-
-def _format_value(value: object) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, int | float):
-        return str(value)
+def _strings_in(value: object, found: set[str]) -> None:
     if isinstance(value, str):
-        return json.dumps(value)
-    if isinstance(value, dict):
-        return _format_inline_table(value)
-    if isinstance(value, list):
-        return "[" + ", ".join(_format_value(item) for item in value) + "]"
-    if isinstance(value, tuple):
-        return "[" + ", ".join(_format_value(item) for item in value) + "]"
-    return json.dumps(str(value))
+        found.add(value)
+    elif isinstance(value, Mapping):
+        for key, item in value.items():
+            _strings_in(key, found)
+            _strings_in(item, found)
+    elif isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
+        for item in value:
+            _strings_in(item, found)
 
 
-def _format_inline_table(value: dict[object, object]) -> str:
-    items = []
-    for key, item in value.items():
-        if not isinstance(key, str):
-            continue
-        items.append(f"{_format_key(key)} = {_format_value(item)}")
-    return "{ " + ", ".join(items) + " }" if items else "{}"
+class _Wire:
+    """Order-preserving JSON for payloads read from TOML.
+
+    A scalar JSON cannot carry becomes a token naming its meaning, the form
+    the native ``codex_hook_identity`` op takes. Equal meanings share a token, so the
+    runtime compares tokens as it would the values. ``decode`` maps each token
+    back to the value it stood for. The prefix is drawn at random and checked
+    against every string the payloads hold.
+    """
+
+    def __init__(self, *payloads: object) -> None:
+        present: set[str] = set()
+        for payload in payloads:
+            _strings_in(payload, present)
+        prefix = uuid4().hex
+        while any(text.startswith(prefix) for text in present):
+            prefix = uuid4().hex
+        self._prefix = prefix
+        self._issued: dict[str, str] = {}
+        self._originals: dict[str, object] = {}
+        self.meanings: dict[str, object] = {}
+
+    def text(self, value: object) -> str:
+        return json.dumps(self._value(value), separators=(",", ":"))
+
+    def decode(self, text: str) -> Any:
+        return self._restore(json.loads(text))
+
+    def _token(self, original: object, meaning: dict[str, str]) -> str:
+        key = json.dumps(meaning, sort_keys=True)
+        token = self._issued.get(key)
+        if token is None:
+            token = f"{self._prefix}-{len(self.meanings)}"
+            self._issued[key] = token
+            self._originals[token] = original
+            self.meanings[token] = meaning
+        return token
+
+    def _string(self, value: str) -> str:
+        if value.startswith(self._prefix):
+            raise ValueError("A Codex payload string collides with Guard's wire tokens.")
+        return value
+
+    def _value(self, value: object) -> object:
+        # bool is an int and datetime a date, so each is settled first.
+        if value is None or isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return self._string(value)
+        if isinstance(value, int):
+            if _EXACT_INT_MIN <= value <= _EXACT_INT_MAX:
+                return value
+            return self._token(value, {"__int__": str(value)})
+        if isinstance(value, float):
+            if math.isfinite(value):
+                return value
+            return self._token(value, {"type": "float", "value": repr(value)})
+        if isinstance(value, Mapping):
+            wired: dict[str, object] = {}
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    raise ValueError("Codex payload keys must be strings.")
+                wired[self._string(key)] = self._value(item)
+            return wired
+        if isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
+            return [self._value(item) for item in value]
+        if isinstance(value, datetime | date | time):
+            return self._token(value, {"type": type(value).__name__, "value": value.isoformat()})
+        return self._token(value, {"type": type(value).__name__, "value": repr(value)})
+
+    def _restore(self, value: object) -> object:
+        if isinstance(value, str):
+            return self._originals.get(value, value)
+        if isinstance(value, list):
+            return [self._restore(item) for item in value]
+        if isinstance(value, dict):
+            return {key: self._restore(item) for key, item in value.items()}
+        return value

@@ -1,0 +1,256 @@
+{
+ "repo": "semver",
+ "mutations": [
+  {
+   "path": "src/parse.rs",
+   "line": 248,
+   "qual": "identifier",
+   "orig": "                    && segment_len > 1\n",
+   "new": "                    || segment_len > 1\n",
+   "failing": [
+    "test_eq",
+    "test_new",
+    "test_prerelease"
+   ]
+  },
+  {
+   "path": "src/parse.rs",
+   "line": 247,
+   "qual": "identifier",
+   "orig": "                if pos == Position::Pre\n",
+   "new": "                if pos != Position::Pre\n",
+   "failing": [
+    "test_eq"
+   ]
+  },
+  {
+   "path": "src/eval.rs",
+   "line": 178,
+   "qual": "pre_is_compatible",
+   "orig": "        && cmp.minor == Some(ver.minor)\n",
+   "new": "        || cmp.minor == Some(ver.minor)\n",
+   "failing": [
+    "test_basic",
+    "test_caret",
+    "test_less_than",
+    "test_multiple",
+    "test_tilde"
+   ]
+  },
+  {
+   "path": "src/eval.rs",
+   "line": 148,
+   "qual": "matches_caret",
+   "orig": "            if cmp.major > 0 {\n",
+   "new": "            if cmp.major >= 0 {\n",
+   "failing": [
+    "test_caret"
+   ]
+  },
+  {
+   "path": "src/parse.rs",
+   "line": 406,
+   "qual": "version_req",
+   "orig": "    let len = version_req(text, out, depth + 1)?;\n",
+   "new": "    let len = version_req(text, out, depth - 1)?;\n",
+   "failing": [
+    "test_less_than",
+    "test_multiple",
+    "test_wildcard_and_another"
+   ]
+  },
+  {
+   "path": "src/eval.rs",
+   "line": 177,
+   "qual": "pre_is_compatible",
+   "orig": "    cmp.major == ver.major\n",
+   "new": "    cmp.major != ver.major\n",
+   "failing": [
+    "test_caret",
+    "test_exact",
+    "test_greater_than",
+    "test_less_than",
+    "test_multiple",
+    "test_pre"
+   ]
+  },
+  {
+   "path": "src/display.rs",
+   "line": 39,
+   "qual": "fmt",
+   "orig": "            if i > 0 {\n",
+   "new": "            if i >= 0 {\n",
+   "failing": [
+    "test_basic",
+    "test_cargo3202",
+    "test_exact",
+    "test_greater_than",
+    "test_less_than",
+    "test_multiple"
+   ]
+  },
+  {
+   "path": "src/parse.rs",
+   "line": 294,
+   "qual": "comparator",
+   "orig": "    let default_op = input.len() == text.len();\n",
+   "new": "    let default_op = input.len() != text.len();\n",
+   "failing": [
+    "test_cargo3202",
+    "test_comparator_parse",
+    "test_wildcard"
+   ]
+  },
+  {
+   "path": "src/parse.rs",
+   "line": 166,
+   "qual": "numeric_identifier",
+   "orig": "        if digit < b'0' || digit > b'9' {\n",
+   "new": "        if digit < b'0' || digit >= b'9' {\n",
+   "failing": [
+    "test_basic",
+    "test_caret",
+    "test_exact",
+    "test_less_than",
+    "test_multiple",
+    "test_tilde"
+   ]
+  },
+  {
+   "path": "src/parse.rs",
+   "line": 377,
+   "qual": "version_req",
+   "orig": "                if rest.is_empty() || rest.starts_with(',') {\n",
+   "new": "                if rest.is_empty() && rest.starts_with(',') {\n",
+   "failing": [
+    "test_wildcard_and_another"
+   ]
+  },
+  {
+   "path": "src/error.rs",
+   "line": 120,
+   "qual": "fmt",
+   "orig": "        if self.0 == '\\0' {\n",
+   "new": "        if self.0 != '\\0' {\n",
+   "failing": [
+    "test_parse"
+   ]
+  },
+  {
+   "path": "src/eval.rs",
+   "line": 61,
+   "qual": "matches_exact",
+   "orig": "    ver.pre == cmp.pre\n",
+   "new": "    ver.pre != cmp.pre\n",
+   "failing": [
+    "test_cargo3202",
+    "test_exact",
+    "test_greater_than",
+    "test_less_than",
+    "test_multiple",
+    "test_pre"
+   ]
+  },
+  {
+   "path": "src/parse.rs",
+   "line": 169,
+   "qual": "numeric_identifier",
+   "orig": "        if value == 0 && len > 0 {\n",
+   "new": "        if value == 0 || len > 0 {\n",
+   "failing": [
+    "test_align",
+    "test_display",
+    "test_eq",
+    "test_ge",
+    "test_gt",
+    "test_le"
+   ]
+  },
+  {
+   "path": "src/parse.rs",
+   "line": 271,
+   "qual": "op",
+   "orig": "    } else if bytes.first() == Some(&b'>') {\n",
+   "new": "    } else if bytes.first() != Some(&b'>') {\n",
+   "failing": [
+    "test_basic",
+    "test_caret",
+    "test_cargo3202",
+    "test_comparator_parse",
+    "test_digit_after_wildcard",
+    "test_greater_than"
+   ]
+  },
+  {
+   "path": "src/eval.rs",
+   "line": 169,
+   "qual": "matches_caret",
+   "orig": "    } else if ver.minor != minor || ver.patch != patch {\n",
+   "new": "    } else if ver.minor != minor && ver.patch != patch {\n",
+   "failing": [
+    "test_caret"
+   ]
+  },
+  {
+   "path": "src/parse.rs",
+   "line": 334,
+   "qual": "comparator",
+   "orig": "    let (pre, text) = if patch.is_some() && text.starts_with('-') {\n",
+   "new": "    let (pre, text) = if patch.is_some() || text.starts_with('-') {\n",
+   "failing": [
+    "test_basic",
+    "test_caret",
+    "test_comparator_parse",
+    "test_exact",
+    "test_greater_than",
+    "test_leading_digit_in_pre_and_build"
+   ]
+  },
+  {
+   "path": "src/eval.rs",
+   "line": 113,
+   "qual": "matches_less",
+   "orig": "    ver.pre < cmp.pre\n",
+   "new": "    ver.pre <= cmp.pre\n",
+   "failing": [
+    "test_less_than"
+   ]
+  },
+  {
+   "path": "src/parse.rs",
+   "line": 283,
+   "qual": "op",
+   "orig": "    } else if bytes.first() == Some(&b'~') {\n",
+   "new": "    } else if bytes.first() != Some(&b'~') {\n",
+   "failing": [
+    "test_basic",
+    "test_caret",
+    "test_cargo3202",
+    "test_comparator_parse",
+    "test_digit_after_wildcard",
+    "test_leading_digit_in_pre_and_build"
+   ]
+  },
+  {
+   "path": "src/display.rs",
+   "line": 71,
+   "qual": "fmt",
+   "orig": "            } else if self.op == Op::Wildcard {\n",
+   "new": "            } else if self.op != Op::Wildcard {\n",
+   "failing": [
+    "test_cargo3202",
+    "test_multiple"
+   ]
+  },
+  {
+   "path": "src/identifier.rs",
+   "line": 174,
+   "qual": "is_empty",
+   "orig": "        let is_empty = self.head == empty.head && self.tail == empty.tail;\n",
+   "new": "        let is_empty = self.head == empty.head || self.tail == empty.tail;\n",
+   "failing": [
+    "test_new"
+   ]
+  }
+ ]
+}

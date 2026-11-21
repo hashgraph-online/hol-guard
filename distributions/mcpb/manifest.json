@@ -6,7 +6,7 @@
   "description": "Local-first AI agent security evidence and approval workflows through HOL Guard's MCP server.",
   "long_description": "HOL Guard exposes sanitized local Guard status, security receipts, inventory, policy validation, and approval-backed policy workflows over stdio. The MCP bundle installs the open-source hol-guard Python package locally with uv and does not require Guard Cloud.",
   "author": {
-    "name": "Hashgraph Online",
+    "name": "HOL",
     "email": "support@hol.org",
     "url": "https://hol.org"
   },

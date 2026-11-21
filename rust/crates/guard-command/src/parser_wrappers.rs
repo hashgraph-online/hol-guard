@@ -2,20 +2,89 @@
 
 use crate::{assignment_name, executable_basename, CommandSegmentV1, RawSegment};
 
-pub(super) fn unwrap_sudo(
+#[path = "parser_env_prefix.rs"]
+mod env_prefix;
+#[path = "parser_launchers.rs"]
+mod launchers;
+
+pub(crate) use launchers::launcher_program;
+
+/// Strips `sudo` wrappers and `timeout`/`command`/`time`/`env` prefixes, and
+/// the scheduling prefixes `launchers` reads.
+///
+/// `sudo` changes who runs the program, so it stays in the wrapper chain.
+/// A bare `timeout 30 pytest -q` runs the program this text already names,
+/// as this user and in this directory, and signals that one child when the
+/// clock runs out: it bounds how long the work may take, not what it may do,
+/// so it leaves no wrapper behind. `./timeout` and `bin/timeout` are not that
+/// clock. They stay in the wrapper chain, and the duration is still skipped
+/// so the program they name stays the executable. `command` and `time` run
+/// the next word as the program.
+/// `env` does that for the assignments it carries, whatever they name, and for
+/// the names it removes; all of them join `environment_names`. An operand
+/// `env` would take as an assignment of its own leaves `env` as the executable.
+/// Any option on `command` or `time` leaves that prefix as the executable,
+/// which keeps `command -v` and `time -p` on their existing paths.
+pub(super) fn unwrap_wrappers(
     tokens: &[String],
     mut index: usize,
+    environment_names: &mut Vec<String>,
 ) -> Result<(usize, Vec<String>), &'static str> {
     let mut wrappers = Vec::new();
-    while tokens
-        .get(index)
-        .is_some_and(|token| executable_basename(token) == "sudo")
-    {
-        if wrappers.len() == 4 {
+    let mut prefixes = 0usize;
+    loop {
+        if let Some((next, names)) = transparent_prefix(tokens, index) {
+            if wrappers.len() + prefixes == 4 {
+                return Err("command_wrapper_limit_exceeded");
+            }
+            prefixes += 1;
+            environment_names.extend(names);
+            index = next;
+            continue;
+        }
+        if let Some(next) = launchers::launcher_program(tokens, index) {
+            if wrappers.len() + prefixes == 4 {
+                return Err("command_wrapper_limit_exceeded");
+            }
+            prefixes += 1;
+            index = next;
+            continue;
+        }
+        if !tokens
+            .get(index)
+            .is_some_and(|token| matches!(executable_basename(token), "sudo" | "timeout"))
+        {
+            break;
+        }
+        if wrappers.len() + prefixes == 4 {
             return Err("command_wrapper_limit_exceeded");
         }
-        wrappers.push("sudo".to_owned());
+        let clock = trusted_timeout(&tokens[index]);
+        let wrapper = executable_basename(&tokens[index]);
         index += 1;
+        if wrapper == "timeout" {
+            if clock {
+                prefixes += 1;
+            } else {
+                wrappers.push(wrapper.to_owned());
+            }
+            if tokens.get(index).is_some_and(|value| value == "--") {
+                index += 1;
+            }
+            if !tokens.get(index).is_some_and(|value| timeout(value)) {
+                return Err("transparent_wrapper_not_yet_supported");
+            }
+            index += 1;
+            let Some(command) = tokens.get(index) else {
+                return Err("transparent_wrapper_not_yet_supported");
+            };
+            if command.is_empty() || command.starts_with('-') || assignment_name(command).is_some()
+            {
+                return Err("transparent_wrapper_not_yet_supported");
+            }
+            continue;
+        }
+        wrappers.push(wrapper.to_owned());
         while let Some(option) = tokens.get(index) {
             match option.as_str() {
                 "--" => {
@@ -51,8 +120,175 @@ pub(super) fn unwrap_sudo(
     Ok((index, wrappers))
 }
 
+/// The spellings of `env` this parser reads as a prefix rather than as the
+/// program itself. `./env` and `/opt/bin/env` are files of the user's own that
+/// share the name and do whatever they were written to do, so neither is one.
+pub(crate) fn env_spelling(token: &str) -> bool {
+    matches!(token, "env" | "/usr/bin/env" | "/bin/env")
+}
+
+/// `command X`, `time X` and `env NAME=value... X` run `X` with no other
+/// change. Bare `env X` is left alone: it only bypasses shell functions, and
+/// extension floors key on that spelling.
+///
+/// An `env` prefix carries its names the way the shell's own prefix does.
+/// `env FOO=1 npm test` and `FOO=1 npm test` run the same program with the
+/// same environment, and the second models exactly, so the first reading as a
+/// wrapper this parser does not model left ordinary work refused outright
+/// with no approval to give it. Each name joins `environment_names`, where
+/// `PATH` already marks the command as pointing the program elsewhere and the
+/// compatibility layer reads the rest; an `env` that names no program at all,
+/// or whose next operand `env` would take as an assignment of its own, is
+/// still the environment dump, and keeps its own spelling.
+///
+/// `env_prefix` reads the controls that only decide which names the program
+/// starts with; each name it collects joins `environment_names` as a written
+/// one does, so `-u PATH` keeps the review a written `PATH=` keeps.
+pub(crate) fn transparent_prefix(tokens: &[String], index: usize) -> Option<(usize, Vec<String>)> {
+    let mut next = index + 1;
+    let mut names = Vec::new();
+    let mut is_env = false;
+    match tokens.get(index)?.as_str() {
+        "command" | "time" => {}
+        token if env_spelling(token) => {
+            is_env = true;
+            let (position, decided) = env_prefix::env_names(tokens, next)?;
+            next = position;
+            names = decided;
+        }
+        _ => return None,
+    }
+    let program = tokens.get(next)?;
+    // `env` consumes every operand holding an `=`, not only the ones that
+    // spell a shell name, so `env FOO=1 A-B=1 rm -rf ~` sets `A-B` and runs
+    // `rm`. The bare prefix `FOO=1 A-B=1 rm -rf ~` really does run a program
+    // named `A-B=1`, so reading the two alike would model the wrong program.
+    // A word the shell would not take as an assignment ends the prefix and
+    // leaves `env` itself to be judged.
+    let consumed_by_env = is_env && program.contains('=');
+    (!program.is_empty()
+        && !program.starts_with('-')
+        && assignment_name(program).is_none()
+        && !consumed_by_env)
+        .then_some((next, names))
+}
+
+/// Whether this word is the system clock rather than a file that happens to
+/// be named for it. The shell resolves a bare `timeout` on `PATH`, and the
+/// two system paths name the same program; `./timeout`, `bin/timeout` and
+/// `/tmp/timeout` are whatever that file holds, so they stay wrappers and
+/// keep the command under review.
+pub(crate) fn trusted_timeout(token: &str) -> bool {
+    matches!(token, "timeout" | "/usr/bin/timeout" | "/bin/timeout")
+}
+
+/// The seconds in a duration `timeout` reads: a number of seconds, or one
+/// carrying an `s`, `m`, `h` or `d` unit, and `None` for anything else.
+///
+/// `timeout 5m npm run build` bounds the same single child that `timeout 300
+/// npm run build` bounds, so the unit a person writes cannot be what decides
+/// whether the command is read at all. Seconds are whole here, so a fractional
+/// duration rounds up: cutting `timeout 2.1` to two would end the run before
+/// the clock it was given. An exact zero turns `timeout` off and is answered
+/// as `0`, which bounds nothing.
+pub(crate) fn clock_seconds(value: &str) -> Option<u64> {
+    let number = value.strip_suffix(['s', 'm', 'h', 'd']).unwrap_or(value);
+    let unit = match value.bytes().last() {
+        Some(b'm') => 60u64,
+        Some(b'h') => 3600,
+        Some(b'd') => 86400,
+        _ => 1,
+    };
+    let (whole, fraction) = number.split_once('.').unwrap_or((number, ""));
+    if number.len() > 10
+        || whole.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    let duration = number.parse::<f64>().ok()? * unit as f64;
+    Some(if duration == 0.0 {
+        0
+    } else {
+        duration.ceil() as u64
+    })
+}
+
+/// Whether this word is a duration `timeout` reads.
 fn timeout(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 10 && value.bytes().all(|byte| byte.is_ascii_digit())
+    clock_seconds(value).is_some()
+}
+
+/// `command -v NAME` reports a path or a name and runs nothing, so the segment
+/// stays a plain `command` segment. `command -V` prints a function body, so it
+/// is not a lookup and stays unproven.
+pub(super) fn is_command_lookup(executable: Option<&str>, arguments: &[String]) -> bool {
+    let options = arguments
+        .iter()
+        .take_while(|argument| argument.starts_with('-') && argument.as_str() != "--")
+        .collect::<Vec<_>>();
+    executable.is_some_and(|value| executable_basename(value) == "command")
+        && !options.is_empty()
+        && options.iter().all(|option| {
+            option.len() > 1
+                && option[1..]
+                    .chars()
+                    .all(|letter| matches!(letter, 'p' | 'v'))
+        })
+        && options.iter().any(|option| option.contains('v'))
+}
+
+pub(super) fn is_file_shell_invocation(executable: Option<&str>, arguments: &[String]) -> bool {
+    if !executable.is_some_and(|value| matches!(executable_basename(value), "sh" | "bash" | "zsh"))
+    {
+        return false;
+    }
+    let arguments = if arguments.first().is_some_and(|value| value == "--") {
+        &arguments[1..]
+    } else {
+        arguments
+    };
+    // This represents the interpreter invocation, not the script's contents.
+    // It keeps native execution review; shell options and inline code stay opaque.
+    arguments
+        .first()
+        .is_some_and(|script| names_a_script_file(script))
+}
+
+/// Whether a first operand names a file this interpreter opens and runs.
+///
+/// A shell runs the file the word names, whatever the name ends in, so the
+/// suffix is not what makes a run readable: `sh ./gradlew test`,
+/// `bash ./mvnw -q test` and `sh ./configure` are the same shape as
+/// `sh ./build.sh`, and a wrapper an ecosystem ships without an extension is
+/// the ordinary way those builds are driven. Requiring `.sh` left every one of
+/// them unmodelled, which is a command no owner can approve rather than a
+/// stricter reading of it.
+///
+/// A word carrying shell syntax is not a file name: what `sh $PLAN`,
+/// `sh "$(pick)"` or `sh build-*` runs is settled by expansion the text does
+/// not fix, so those keep the uncertainty they arrive with, and so does a home
+/// path the shell expands. A directory is not a script either, and a leading
+/// `-` is an option. A space is none of that: the word reaches here already
+/// split, so `sh -- './pre flight.sh'` names one file the shell opens.
+///
+/// Braces and a leading `=` are expansions the word carries inside itself, so
+/// they are refused with the rest of the syntax rather than read as part of a
+/// name. `sh ./build{,}` runs `sh ./build ./build` and `sh =make` runs whatever
+/// `make` resolves to on this `PATH`; reading either as one file would bind an
+/// approval, and the credential scan behind it, to a path that is never opened.
+fn names_a_script_file(script: &str) -> bool {
+    !script.is_empty()
+        && !script.starts_with('-')
+        && !script.starts_with('~')
+        && !script.starts_with('=')
+        && !script.ends_with('/')
+        && script != "."
+        && script != ".."
+        && !script.contains([
+            '$', '*', '?', '[', ']', '{', '}', '`', '"', '\'', '\\', '\n', '\t', '\r', '\0',
+        ])
 }
 
 pub(super) fn is_encoded_stdin_shell(
@@ -79,94 +315,131 @@ pub(super) fn is_encoded_stdin_shell(
         && previous.arguments.iter().any(|argument| argument == "-d")
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::{parse_command, CommandModelRequestV1};
+/// Shells that take their whole script in one `-c` word and read no startup
+/// file before running it.
+///
+/// `zsh` is not one of them: it reads `~/.zshenv` whatever option it is given,
+/// so its script is never the whole command.
+/// Words that run their first operand with other credentials.
+///
+/// `sudo`, and the four spellings that stand in for it, pick who runs the
+/// program rather than which program runs, so the word after one is the
+/// command. Only `sudo` is also read as an interpreter, which is why the
+/// other four need naming here: every reader that walks past a wrapper to
+/// the program behind it reads this one list.
+pub(crate) const PRIVILEGE_WRAPPERS: &[&str] = &["doas", "gsudo", "pkexec", "run0", "sudo"];
 
-    fn parse(command: &str) -> crate::CanonicalCommandV1 {
-        parse_command(&CommandModelRequestV1 {
-            command: command.to_owned(),
-            dialect: "posix".to_owned(),
-            transport: "shell_string".to_owned(),
-            extraction_provenance: "guard-shell".to_owned(),
-        })
-        .unwrap()
-    }
+const INLINE_SHELLS: &[&str] = &["sh", "bash", "dash", "ash"];
 
-    #[test]
-    fn sudo_keeps_source_and_wrapper_evidence_for_destructive_arguments() {
-        for command in [
-            "sudo -n git push origin main --force",
-            "sudo --command-timeout 10 git --config-env token=TOKEN push origin main --force",
-            "sudo -T 10 -- git push origin main --force",
-        ] {
-            let model = parse(command);
-            assert_eq!(model.confidence, "exact", "{command}");
-            assert_eq!(model.wrapper_chain, ["sudo"]);
-            assert_eq!(model.segments[0].wrapper_chain, ["sudo"]);
-            assert_eq!(model.segments[0].text, command);
-            assert_eq!(model.segments[0].tokens[0], "sudo");
-            assert_eq!(model.segments[0].executable.as_deref(), Some("git"));
-            assert_eq!(model.segments[0].arguments.last().unwrap(), "--force");
-        }
+/// The script a shell carries in this same text, when the text is nothing but
+/// that invocation.
+///
+/// `sh -c 'npm run build'` runs the programs those words name and nothing the
+/// text does not say, so the script is the command to model. An expansion or a
+/// substitution builds a word this text does not hold, so it is left alone, as
+/// is any other spelling: an option the shell reads differently (a login
+/// shell's `-lc` sources the profile files first), a `$0`, a script on stdin,
+/// a prefix or assignment in front of the shell, and a pipeline or redirect
+/// around it all keep their existing paths.
+pub(super) fn inline_shell_script(raw: &str) -> Option<String> {
+    if raw.len() > crate::MAX_COMMAND_BYTES
+        || raw.contains(['$', '`', '\n', '\r'])
+        || carries_unquoted_operator(raw)
+    {
+        return None;
     }
-
-    #[test]
-    fn unknown_wrapper_modes_cannot_hide_or_fabricate_executables() {
-        for command in [
-            "sudo -s git push --force",
-            "sudo -i git status",
-            "sudo -u user git status",
-            "sudo --command-timeout git push --force",
-            "sudo -n FOO=bar git status",
-            "sudo sudo sudo sudo sudo git status",
-            "sudo -n",
-            "sudo -- sh -c 'rm -rf /tmp/x'",
-        ] {
-            let model = parse(command);
-            assert_eq!(model.confidence, "uncertain", "{command}");
-            assert!(model.segments.is_empty());
-        }
+    let tokens = crate::shell_tokens(raw, false).ok()?;
+    let (shell, rest) = tokens.split_first()?;
+    if !INLINE_SHELLS.contains(&shell.as_str()) {
+        return None;
     }
-
-    #[test]
-    fn only_observed_decoder_pipelines_accept_bare_shell_consumers() {
-        let source = "echo 'cm0gLXJmIC4vYnVpbGQ=' | base64 -d | sh";
-        let model = parse(source);
-        assert_eq!(model.confidence, "exact");
-        assert_eq!(model.segments.len(), 3);
-        assert_eq!(model.segments[2].executable.as_deref(), Some("sh"));
-        for source in [
-            "echo arbitrary | sh",
-            "base64 -d; sh",
-            "base64 -d | sh -c payload",
-            "sh",
-        ] {
-            assert_eq!(parse(source).confidence, "uncertain", "{source}");
-        }
+    let [script] = shell_options::carries_script(rest)? else {
+        return None;
+    };
+    if script.trim().is_empty() {
+        return None;
     }
-
-    #[test]
-    fn posix_embedded_braces_are_arguments_but_brace_groups_are_unsupported() {
-        let model = parse("aws s3api put-object-tagging --tagging TagSet=[{Key=env,Value=prod}]");
-        assert_eq!(model.confidence, "exact");
-        assert_eq!(
-            model.segments[0].arguments.last().unwrap(),
-            "TagSet=[{Key=env,Value=prod}]"
-        );
-        for source in [
-            "{ rm -rf /tmp/x; }",
-            "true;{ rm -rf /tmp/x;}",
-            "true&&{ rm -rf /tmp/x;}",
-            "printf x|{ rm -rf /tmp/x;}",
-            "printf %s ${COMMAND}",
-            "${COMMAND} --force",
-            "sudo -n git ${ACTION}",
-        ] {
-            let model = parse(source);
-            assert_eq!(model.confidence, "uncertain", "{source}");
-            assert!(model.segments.is_empty(), "{source}");
-        }
-        assert_eq!(parse("printf %s '${COMMAND}'").confidence, "exact");
-    }
+    Some(script.clone())
 }
+
+/// The plain `bash -c` spelling of a shell carrying its script under options
+/// Guard does not model, such as a login shell's `-lc`, a `--posix` or any
+/// `zsh`, when Guard reads that spelling. Those options run startup files or
+/// change how the script's words are read, so the invocation stays blocked;
+/// this only names the spelling a caller may check as a recovery.
+///
+/// The options are walked in order: a `--`, a word that is not an option, or
+/// an earlier `-c` means the last two words are not the flag and its script.
+pub(crate) fn refused_inline_shell(raw: &str) -> Option<String> {
+    if raw.len() > crate::MAX_COMMAND_BYTES
+        || raw.contains(['$', '`', '\n', '\r'])
+        || carries_unquoted_operator(raw)
+        || inline_shell_script(raw).is_some()
+    {
+        return None;
+    }
+    let tokens = crate::shell_tokens(raw, false).ok()?;
+    let [shell, options @ .., flag, script] = tokens.as_slice() else {
+        return None;
+    };
+    if !(INLINE_SHELLS.contains(&shell.as_str()) || shell == "zsh")
+        || !is_short_option(flag)
+        || !flag.contains('c')
+        || script.contains('\'')
+    {
+        return None;
+    }
+    let mut words = options.iter();
+    while let Some(word) = words.next() {
+        let takes_operand = match word.strip_prefix("--") {
+            Some(long) if !long.is_empty() => matches!(long, "rcfile" | "init-file"),
+            Some(_) => return None,
+            None if is_short_option(word) && !word.contains('c') => word.ends_with(['o', 'O']),
+            None => return None,
+        };
+        if takes_operand && words.next().is_none() {
+            return None;
+        }
+    }
+    let plain = format!("bash -c '{script}'");
+    inline_shell_script(&plain).map(|_| plain)
+}
+
+fn is_short_option(word: &str) -> bool {
+    word.len() > 1 && word.starts_with(['-', '+']) && !word.starts_with("--")
+}
+
+/// Whether an operator stands outside the quoting, where the shell reads it as
+/// its own word.
+///
+/// The tokenizer splits on whitespace alone, so `sh -c 'a; b'>out` comes back
+/// as three words with the redirect stuck to the script. The shell instead
+/// redirects the whole invocation, so the script is not the command this text
+/// runs and the invocation keeps its existing path.
+fn carries_unquoted_operator(raw: &str) -> bool {
+    let mut quote: Option<char> = None;
+    let mut characters = raw.chars();
+    while let Some(character) = characters.next() {
+        match (quote, character) {
+            (None, '\\') | (Some('"'), '\\') => {
+                characters.next();
+            }
+            (Some(open), closing) if closing == open => quote = None,
+            (None, '\'' | '"') => quote = Some(character),
+            (None, '<' | '>' | '|' | '&' | ';' | '(' | ')') => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+#[path = "parser_wrappers_shell_options.rs"]
+mod shell_options;
+
+#[cfg(test)]
+#[path = "parser_wrappers_tests.rs"]
+mod tests;
+
+#[cfg(test)]
+#[path = "parser_wrappers_shell_options_tests.rs"]
+mod shell_options_tests;

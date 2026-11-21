@@ -1,0 +1,208 @@
+"""Container batching preserves fixed bounds and independent member integrity."""
+
+from __future__ import annotations
+
+import hashlib
+import importlib
+import json
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.catalog_delivery import containers, transport
+
+
+@pytest.fixture
+def plan_type(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
+    return importlib.import_module("extension_delivery_assets").AssetPlan
+
+
+@pytest.fixture
+def build_containers(plan_type):
+    # Publishing builds containers without the native runtime installed.
+    return importlib.import_module("extension_delivery_containers")
+
+
+def test_batched_metadata_uses_one_download_and_checks_each_selected_member(
+    plan_type, build_containers, monkeypatch, tmp_path
+):
+    plan = plan_type(tmp_path / "assets", "1" * 40)
+    one, two = b'{"one":1}', b'{"two":2}'
+    first, second = plan.asset(one, "object"), plan.asset(two, "object")
+    assert first["asset"] == second["asset"] and first["member"] != second["member"]
+    assert len(plan.pending) == 1
+    reads = []
+
+    def download(url, maximum):
+        reads.append((url, maximum))
+        return (plan.directory / first["tag"] / first["asset"]).read_bytes()
+
+    monkeypatch.setattr(transport, "download", download)
+    fetch = transport.cached_fetcher(tmp_path / "cache")
+    assert fetch(first, len(one)) == one and fetch(second, len(two)) == two
+    assert len(reads) == 1 and reads[0][1] == build_containers.METADATA_BYTES
+    with pytest.raises(ValueError, match="length"):
+        fetch(first, len(one) + 1)
+    assert len(reads) == 2
+
+    cached = next((tmp_path / "cache").glob("*.zip"))
+    cached.write_bytes(b"truncated untrusted cache")
+    assert fetch(first, len(one)) == one
+    assert len(reads) == 3
+    assert fetch(second, len(two)) == two and len(reads) == 3
+
+
+def test_concurrent_misses_in_one_container_download_it_once(plan_type, monkeypatch, tmp_path):
+    # Active-security fetches a round's misses side by side. Two members of one
+    # container must not each download the whole container on a cold cache.
+    plan = plan_type(tmp_path / "assets", "1" * 40)
+    one, two = b'{"one":1}', b'{"two":2}'
+    first, second = plan.asset(one, "object"), plan.asset(two, "object")
+    assert first["asset"] == second["asset"]
+    plan.finish()
+    reads = []
+
+    def download(url, maximum):
+        reads.append(url)
+        time.sleep(0.3)
+        return (plan.directory / first["tag"] / first["asset"]).read_bytes()
+
+    monkeypatch.setattr(transport, "download", download)
+    fetch = transport.cached_fetcher(tmp_path / "cache")
+    results = {}
+    threads = [
+        threading.Thread(target=lambda key=key, ref=ref, size=size: results.update({key: fetch(ref, size)}))
+        for key, ref, size in (("one", first, len(one)), ("two", second, len(two)))
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert results == {"one": one, "two": two}
+    assert len(reads) == 1
+    assert transport._CONTAINERS == {}
+
+
+def test_callers_waiting_on_a_failed_container_download_do_not_repeat_it(plan_type, monkeypatch, tmp_path):
+    # During an outage, members of one container waiting on its download must
+    # report the failure, not each download again. A later fetch still retries.
+    plan = plan_type(tmp_path / "assets", "1" * 40)
+    one, two = b'{"one":1}', b'{"two":2}'
+    first, second = plan.asset(one, "object"), plan.asset(two, "object")
+    plan.finish()
+    reads = []
+
+    def failing(url, maximum):
+        reads.append(url)
+        time.sleep(0.3)
+        raise OSError("release transport unavailable")
+
+    monkeypatch.setattr(transport, "download", failing)
+    fetch = transport.cached_fetcher(tmp_path / "cache")
+    errors = {}
+
+    def run(key, ref, size):
+        try:
+            fetch(ref, size)
+        except OSError as error:
+            errors[key] = str(error)
+
+    threads = [
+        threading.Thread(target=run, args=(key, ref, size))
+        for key, ref, size in (("one", first, len(one)), ("two", second, len(two)))
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == {"one": "release transport unavailable", "two": "release transport unavailable"}
+    assert len(reads) == 1
+    assert transport._CONTAINERS == {}
+
+    monkeypatch.setattr(
+        transport, "download", lambda url, maximum: (plan.directory / first["tag"] / first["asset"]).read_bytes()
+    )
+    assert fetch(first, len(one)) == one
+
+
+def test_uncached_fetches_of_one_container_are_not_serialized(plan_type, monkeypatch, tmp_path):
+    # An uncached fetch writes nothing the next caller could reuse, so holding
+    # the container lock would only make concurrent misses wait on each other.
+    plan = plan_type(tmp_path / "assets", "1" * 40)
+    one, two = b'{"one":1}', b'{"two":2}'
+    first, second = plan.asset(one, "object"), plan.asset(two, "object")
+    plan.finish()
+    in_flight = [0, 0]
+    counter = threading.Lock()
+
+    def download(url, maximum):
+        with counter:
+            in_flight[0] += 1
+            in_flight[1] = max(in_flight[1], in_flight[0])
+        time.sleep(0.3)
+        with counter:
+            in_flight[0] -= 1
+        return (plan.directory / first["tag"] / first["asset"]).read_bytes()
+
+    monkeypatch.setattr(transport, "download", download)
+    results = {}
+    threads = [
+        threading.Thread(
+            target=lambda key=key, ref=ref, size=size: results.update({key: transport.fetch_object(ref, size)})
+        )
+        for key, ref, size in (("one", first, len(one)), ("two", second, len(two)))
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert results == {"one": one, "two": two}
+    assert in_flight[1] == 2
+    assert transport._CONTAINERS == {}
+
+
+def test_containers_split_without_changing_member_or_byte_bounds(plan_type, build_containers, tmp_path):
+    plan = plan_type(tmp_path / "assets", "1" * 40)
+    for number in range(build_containers.MAX_MEMBERS + 1):
+        plan.asset(json.dumps({"entry": number}).encode(), "object")
+    assert len(plan.pending) == 2
+    counts = []
+    for row in plan.pending:
+        target = row["location"]
+        data = (plan.directory / target["tag"] / target["asset"]).read_bytes()
+        archive, infos = build_containers.inspect(data, target["asset"])
+        counts.append(len(infos))
+        archive.close()
+        assert len(data) <= build_containers.METADATA_BYTES
+    assert counts == [build_containers.MAX_MEMBERS, 1]
+
+
+def test_new_container_cannot_publish_unreferenced_bytes(plan_type, tmp_path):
+    from extension_delivery_inventory import InventoryStore, read_plan
+
+    plan = plan_type(tmp_path / "assets", "1" * 40, publication_id="12.1")
+    data = b"reviewed public metadata"
+    target = plan.asset(data, "object")
+    plan.asset(b"unbound bytes", "object")
+    row = plan.pending[0]
+    (tmp_path / "asset-plan.jsonl").write_text(json.dumps(row) + "\n")
+    inventory = InventoryStore(tmp_path / "metadata")
+    inventory.mark("object", hashlib.sha256(data).hexdigest(), len(data), target)
+    with pytest.raises(ValueError, match="unbound"):
+        read_plan(tmp_path, inventory.assets, "1" * 40, "12.1")
+
+
+def test_selected_member_cannot_be_substituted_by_same_length_data(plan_type, tmp_path):
+    plan = plan_type(tmp_path / "assets", "1" * 40)
+    data = b"reviewed object"
+    target = plan.asset(data, "object")
+    plan.finish()
+    raw = (plan.directory / target["tag"] / target["asset"]).read_bytes()
+    wrong = "object-" + hashlib.sha256(b"untrusted bytes").hexdigest() + ".json"
+    with pytest.raises(ValueError, match="missing"):
+        containers.member(raw, target["asset"], wrong, len(data))
+    with pytest.raises(ValueError, match="terminator"):
+        containers.member(raw[:-1], target["asset"], target["member"], len(data))

@@ -81,6 +81,13 @@ export type McpToolDefaultState = "inherit" | "allow" | "review" | "block";
 
 export type McpLaunch =
   | {
+      kind: "unsupported";
+    }
+  | {
+      kind: "direct-command";
+      command: string;
+    }
+  | {
       kind: "package-launcher";
       command: string;
       package: string;
@@ -124,9 +131,24 @@ export type ExtensionCatalogItem = {
   rules: ExtensionRule[];
   permission_count: number;
   permissions: ExtensionPermission[];
-  surface?: "mcp";
+  // "unsupported" marks a surface from a newer Guard that this dashboard cannot render.
+  surface?: "mcp" | "unsupported";
   mcp_launch?: McpLaunch;
   mcp_tools?: McpToolDefault[];
+};
+
+/**
+ * One row of the catalog index. A full ExtensionCatalogItem is also a valid
+ * summary, so list code accepts either; permissions, rules and MCP tools
+ * come only from the per-extension detail read.
+ */
+export type ExtensionCatalogSummary = Pick<
+  ExtensionCatalogItem,
+  | "extension_id" | "name" | "description" | "enabled" | "required" | "trust_class" | "activation"
+  | "publisher" | "icon" | "source" | "version" | "aliases" | "ecosystem_ids" | "executables"
+  | "action_classes" | "risk_classes" | "rule_count" | "permission_count" | "surface"
+> & {
+  content_revision?: string;
 };
 
 export type ExtensionControlLayer = {
@@ -318,6 +340,7 @@ export class ExtensionControlApiError extends Error {
     readonly status: number,
     readonly code?: string,
     readonly recoveryAction?: string,
+    readonly cause?: string,
   ) {
     super(message);
   }
@@ -342,6 +365,7 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
         typeof (error.recovery as Record<string, unknown>).action === "string"
         ? (error.recovery as Record<string, unknown>).action as string
         : undefined,
+      typeof error.cause === "string" ? error.cause : undefined,
     );
   }
   return payload;
@@ -366,6 +390,37 @@ export async function fetchEffectiveExtensionControls(): Promise<EffectiveExtens
     throw new ExtensionControlApiError("Guard returned an inconsistent extension-control projection", 502);
   }
   return { ...normalized, projection };
+}
+
+/**
+ * Ask the daemon to re-read durable authority and serve the catalog it was
+ * read for. The daemon publishes the catalog and the effective controls from
+ * two bindings that a restart can leave on different catalogs; this is the
+ * route that puts them back together, so a reader that sees two catalog
+ * digests calls it before reading again instead of giving up. The response is
+ * discarded: the caller reads both endpoints again, and only that pair tells
+ * it whether the two bindings now agree.
+ *
+ * The daemon waits on the authority lease here, and its own budget for that
+ * wait is far longer than a page should hold a load on. The deadline below
+ * bounds the wait so the retry ladder keeps moving instead of stalling on one
+ * repair; the caller already treats a failed repair as a reason to read again.
+ */
+export const REFRESH_DEADLINE_MS = 5_000;
+
+export async function refreshEffectiveExtensionControls(timeoutMs = REFRESH_DEADLINE_MS): Promise<void> {
+  const deadline = new AbortController();
+  const expired = setTimeout(() => deadline.abort(), timeoutMs);
+  try {
+    await request("/v1/extension-controls/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      signal: deadline.signal,
+    });
+  } finally {
+    clearTimeout(expired);
+  }
 }
 
 export async function fetchExtensionControlHistory(): Promise<ExtensionControlHistoryResponse> {

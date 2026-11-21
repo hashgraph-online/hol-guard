@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
+from cloud_control import ENROLL_SCHEMA
 from lab_common import ADMIN_HEADER, http_request
 from orchestrator_support import (
     ALPHA,
@@ -15,8 +16,6 @@ from orchestrator_support import (
     _state,
     _sync,
 )
-
-from codex_plugin_scanner.guard.mdm.cloud_control import ENROLL_SCHEMA
 
 
 def _record_endpoint_enrollment(

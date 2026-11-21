@@ -1,0 +1,32 @@
+{
+  "schema": "hol-guard.expiry-boundaries.v1",
+  "version": 1,
+  "note": "Controlled-clock oracle for RM-011: guard_contracts::timestamp_has_expired, sqlite_julianday, canonical_utc_timestamp vs Python store_base._parse_utc_timestamp/_canonical_utc_timestamp and SQLite julianday row filters. Boundary is INCLUSIVE-expired (e <= n); unparseable input is expired-equivalent (fail-closed), matching julianday() NULL row filtering.",
+  "julianday_vectors": [
+    {"input": "2026-10-01T00:00:00Z", "expected": 2461314.5},
+    {"input": "2026-10-01T23:59:59.999999Z", "expected": 2461315.4999999885},
+    {"input": "2026-10-02T00:00:00Z", "expected": 2461315.5},
+    {"input": "2026-10-02T00:00:00.000001Z", "expected": 2461315.5000000116},
+    {"input": "2026-10-03T00:00:00", "expected": 2461316.5, "note": "naive -> UTC"},
+    {"input": "2026-10-02 02:00:00+02:00", "expected": 2461315.5, "note": "space separator + +02:00 offset rolls back to 2026-10-02T00:00Z"},
+    {"input": "2026-10-01T23:30:00-00:30", "expected": 2461315.5, "note": "negative offset crosses UTC midnight"},
+    {"input": "not-a-date", "expected": null},
+    {"input": "2000-01-01T12:00:00Z", "expected": 2451545.0}
+  ],
+  "canonical_utc_timestamp_vectors": [
+    {"input": "2026-10-02T00:00:00+00:00", "expected": "2026-10-02T00:00:00.000000+00:00"},
+    {"input": "2026-10-03T00:00:00", "expected": "2026-10-03T00:00:00.000000+00:00"},
+    {"input": "2026-10-02 02:00:00+02:00", "expected": "2026-10-02T00:00:00.000000+00:00"},
+    {"input": "2026-10-01T23:30:00-00:30", "expected": "2026-10-02T00:00:00.000000+00:00", "note": "UTC rollover"},
+    {"input": "not-a-date", "expected": null}
+  ],
+  "timestamp_has_expired_vectors": [
+    {"expires_at": "2026-10-02T00:00:00.000001+00:00", "now": "2026-10-02T00:00:00+00:00", "expected": false, "label": "valid-1us-before"},
+    {"expires_at": "2026-10-02T00:00:00+00:00", "now": "2026-10-02T00:00:00+00:00", "expected": true, "label": "exact-boundary-expired"},
+    {"expires_at": "2026-10-01T23:59:59.999999+00:00", "now": "2026-10-02T00:00:00+00:00", "expected": true, "label": "utc-rollover-expired"},
+    {"expires_at": "2026-10-02T00:00:00+00:00", "now": "2026-10-01T23:59:59+00:00", "expected": false, "label": "utc-rollover-still-valid"},
+    {"expires_at": "2026-10-03T00:00:00", "now": "2026-10-02T00:00:00+00:00", "expected": false, "label": "naive-expires-as-utc"},
+    {"expires_at": "not-a-date", "now": "2026-10-02T00:00:00+00:00", "expected": true, "label": "unparseable-fail-closed"},
+    {"expires_at": "2026-10-02T00:00:00+00:00", "now": "not-a-date", "expected": true, "label": "unparseable-now-fail-closed"}
+  ]
+}

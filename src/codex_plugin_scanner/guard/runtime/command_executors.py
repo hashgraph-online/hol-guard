@@ -7,13 +7,10 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
 from ..cli.install_commands import (
     apply_managed_install,
     build_harness_verification,
     list_harness_setup_items,
-    uninstall_confirmation_token,
 )
 from ..cli.update_commands import (
     build_guard_update_status_payload,
@@ -21,21 +18,21 @@ from ..cli.update_commands import (
 )
 from ..config import load_guard_config
 from ..continuation_runtime import continue_request_after_application
+from ..harness_context import HarnessContext
 from ..harness_resume import resume_harness_operation, safe_resume_metadata
 from ..local_supply_chain import (
-    build_workspace_audit_payload,
     managed_install_audit_workspace_dirs,
-    resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
+from ..native_command_job_plan import CommandJobPlanError, plan_command_job
 from ..package_shim_status import record_package_shim_audit_result
 from ..shims import (
     activate_package_shims,
     package_shim_status,
-    package_shim_supported_managers,
     probe_package_shim_intercepts,
 )
 from ..store import GuardStore
+from ..supply_chain_workspace_audit import build_workspace_audit_payload, resolve_supply_chain_audit_workspace_dir
 from .audit_workspace import audit_workspace_is_bound_to_context, bind_relative_audit_workspace
 from .command_payload import mapping as _mapping
 from .command_payload import optional_text as _text
@@ -82,85 +79,104 @@ def execute_guard_command_job(
     store: GuardStore,
     now: Callable[[], str] | None = None,
 ) -> dict[str, object]:
+    """Run one leased job as the native runtime plans it.
+
+    The runtime decides the job's family, checks its manager, harness and
+    surface arguments, and builds the local confirmation for removals. This
+    function only runs the planned operation's local side effects.
+    """
+
     operation = command_job_operation(job)
     generated_at = now() if now is not None else _now()
     payload = _job_payload(job)
     try:
+        plan = plan_command_job(job.get("operation"), payload, guard_home=store.guard_home)
+    except CommandJobPlanError as error:
+        return _failure(error.code, "HOL Guard could not plan this command on this machine.")
+    try:
         if operation in PACKAGE_SHIM_OPERATIONS:
             return _execute_package_shim_operation(
                 operation,
+                plan=plan,
                 payload=payload,
                 context=context,
                 store=store,
                 generated_at=generated_at,
             )
-        if operation in APP_OPERATIONS:
+        if plan["action"] != "run":
+            return _apply_non_run_plan(plan, generated_at=generated_at)
+        family = plan["family"]
+        if family == "app":
             return _execute_app_operation(
                 operation,
-                payload=payload,
+                plan=plan,
                 context=context,
                 store=store,
                 generated_at=generated_at,
             )
-        if operation in EXACT_CLOUD_REVIEW_OPERATIONS:
+        if family == "exact_cloud_review":
             return execute_exact_cloud_review_operation(
                 payload=payload,
                 store=store,
                 generated_at=generated_at,
                 resume_after_approval=_resume_after_remote_approval,
             )
-        if operation in POLICY_MEMORY_OPERATIONS:
+        if family == "policy_memory":
             return _result(
                 execute_review_policy_memory(payload, store=store, generated_at=generated_at),
                 generated_at=generated_at,
             )
     except ValueError as error:
         failure_code = str(error) or "invalid_payload"
-        return {
-            "failureCode": failure_code,
-            "failureMessage": failure_code.replace("_", " "),
-        }
-    return {
-        "failureCode": "unsupported_operation",
-        "failureMessage": f"Unsupported Guard command operation: {operation or 'unknown'}",
-    }
+        return _failure(failure_code, failure_code.replace("_", " "))
+    return _failure("unsupported_operation", f"Unsupported Guard command operation: {operation or 'unknown'}")
+
+
+def _apply_non_run_plan(plan: dict[str, object], *, generated_at: str) -> dict[str, object]:
+    if plan["action"] == "confirm":
+        data = plan["data"]
+        return _waiting_local_confirm(dict(data) if isinstance(data, dict) else {}, generated_at=generated_at)
+    return _failure(str(plan["failure_code"]), str(plan["failure_message"]))
+
+
+def _failure(code: str, message: str) -> dict[str, object]:
+    return {"failureCode": code, "failureMessage": message}
+
+
+def _planned_managers(plan: dict[str, object]) -> tuple[str, ...] | None:
+    managers = plan.get("managers")
+    return tuple(str(manager) for manager in managers) if isinstance(managers, list) else None
 
 
 def _execute_package_shim_operation(
     operation: str,
     *,
+    plan: dict[str, object],
     payload: dict[str, object],
     context: HarnessContext,
     store: GuardStore,
     generated_at: str,
 ) -> dict[str, object]:
     if operation == "guard.packageShims.audit" and not audit_workspace_is_bound_to_context(payload, context):
-        return {
-            "failureCode": "workspace_scope_mismatch",
-            "failureMessage": "Cloud audit requests must target the active local workspace.",
-        }
+        return _failure("workspace_scope_mismatch", "Cloud audit requests must target the active local workspace.")
     if operation == "guard.packageShims.audit":
         payload = bind_relative_audit_workspace(payload, context)
+    # The workspace is resolved before the plan's own failure applies, so a
+    # job with a bad workspace and bad managers reports the workspace.
     command_context = _package_shim_context(payload, base_context=context, store=store)
+    if plan["action"] != "run":
+        return _apply_non_run_plan(plan, generated_at=generated_at)
+    managers = _planned_managers(plan)
     if operation == "guard.packageShims.status":
         return _result(package_shim_status(command_context), generated_at=generated_at)
     if operation == "guard.packageShims.install":
-        managers = _package_shim_managers(payload)
         return _result(activate_package_shims(command_context, managers=managers), generated_at=generated_at)
     if operation == "guard.packageShims.repair":
-        managers = _package_shim_managers(payload)
         return _result(
             activate_package_shims(command_context, managers=managers, repair=True),
             generated_at=generated_at,
         )
-    if operation == "guard.packageShims.remove":
-        managers = _package_shim_managers(payload)
-        return _waiting_local_confirm(
-            _package_shim_remove_confirmation_payload(managers),
-            generated_at=generated_at,
-        )
     if operation == "guard.packageShims.test":
-        managers = _package_shim_managers(payload)
         return _result(
             probe_package_shim_intercepts(
                 command_context,
@@ -179,10 +195,7 @@ def _execute_package_shim_operation(
         )
     if operation == "guard.packageShims.audit":
         if command_context.workspace_dir is None:
-            return {
-                "failureCode": "workspace_required",
-                "failureMessage": "Package shim audit requires a workspace path.",
-            }
+            return _failure("workspace_required", "Package shim audit requires a workspace path.")
         audit_payload, exit_code = build_workspace_audit_payload(
             command_name="audit",
             config=load_guard_config(store.guard_home),
@@ -193,29 +206,29 @@ def _execute_package_shim_operation(
         )
         audit_payload["exit_code"] = exit_code
         if exit_code == 0:
-            record_package_shim_audit_result(command_context, audited_at=generated_at)
+            proof = record_package_shim_audit_result(command_context, audited_at=generated_at)
+            if isinstance(proof, dict):
+                audit_payload.update(proof)
         return _result(audit_payload, generated_at=generated_at)
-    return {
-        "failureCode": "unsupported_operation",
-        "failureMessage": f"Unsupported package shim operation: {operation}",
-    }
+    return _failure("unsupported_operation", f"Unsupported package shim operation: {operation}")
 
 
 def _execute_app_operation(
     operation: str,
     *,
-    payload: dict[str, object],
+    plan: dict[str, object],
     context: HarnessContext,
     store: GuardStore,
     generated_at: str,
 ) -> dict[str, object]:
-    harness = _optional_string(payload.get("harness"))
-    surface = _optional_surface(payload.get("surface"))
+    harness = plan.get("harness")
+    surface = plan.get("surface")
+    harness = harness if isinstance(harness, str) else None
+    surface = surface if isinstance(surface, str) else None
     workspace = str(context.workspace_dir) if context.workspace_dir is not None else None
     if operation == "guard.app.status":
         if harness is None:
             return _result({"items": list_harness_setup_items(context, store)}, generated_at=generated_at)
-        get_adapter(harness)
         return _result(build_harness_verification(harness, context, store, surface=surface), generated_at=generated_at)
     if operation == "guard.app.update":
         return _result(
@@ -227,36 +240,12 @@ def _execute_app_operation(
             _execute_app_update_check(context=context, generated_at=generated_at),
             generated_at=generated_at,
         )
-    if harness is None:
-        return {"failureCode": "harness_required", "failureMessage": "App command requires a harness."}
-    get_adapter(harness)
-    if operation == "guard.app.connect":
-        return _result(
-            apply_managed_install("install", harness, False, context, store, workspace, generated_at, surface=surface),
-            generated_at=generated_at,
-        )
+    if harness is None or operation not in {"guard.app.connect", "guard.app.repair"}:
+        return _failure("unsupported_operation", f"Unsupported app operation: {operation}")
+    result = apply_managed_install("install", harness, False, context, store, workspace, generated_at, surface=surface)
     if operation == "guard.app.repair":
-        result = apply_managed_install(
-            "install",
-            harness,
-            False,
-            context,
-            store,
-            workspace,
-            generated_at,
-            surface=surface,
-        )
         result["action"] = "repair"
-        return _result(result, generated_at=generated_at)
-    if operation == "guard.app.remove":
-        return _waiting_local_confirm(
-            _app_remove_confirmation_payload(harness=harness, surface=surface),
-            generated_at=generated_at,
-        )
-    return {
-        "failureCode": "unsupported_operation",
-        "failureMessage": f"Unsupported app operation: {operation}",
-    }
+    return _result(result, generated_at=generated_at)
 
 
 def _execute_app_update(
@@ -372,70 +361,13 @@ def _package_shim_context(
         workspace_value=payload.get("workspace"),
         allowed_roots=allowed_roots,
         managed_workspace_dirs=managed_install_audit_workspace_dirs(store),
+        guard_home=store.guard_home,
     )
     return HarnessContext(
         home_dir=base_context.home_dir,
         workspace_dir=workspace_dir or base_context.workspace_dir,
         guard_home=base_context.guard_home,
     )
-
-
-def _package_shim_managers(payload: dict[str, object]) -> tuple[str, ...] | None:
-    managers = payload.get("managers")
-    if managers is None:
-        return None
-    if not isinstance(managers, list) or not managers:
-        raise ValueError("invalid_managers")
-    normalized = tuple(manager.strip().lower() for manager in managers if isinstance(manager, str) and manager.strip())
-    if len(normalized) != len(managers):
-        raise ValueError("invalid_managers")
-    if len(normalized) != len(set(normalized)):
-        raise ValueError("duplicate_manager")
-    supported = set(package_shim_supported_managers())
-    if not set(normalized).issubset(supported):
-        raise ValueError("unsupported_manager")
-    return normalized
-
-
-def _package_shim_remove_confirmation_payload(
-    managers: tuple[str, ...] | None,
-) -> dict[str, object]:
-    confirm_parts = ["hol-guard", "package-shims", "uninstall"]
-    if managers:
-        for manager in managers:
-            confirm_parts.extend(["--manager", manager])
-    summary = "Run the local package-shim uninstall command on this machine to confirm removal."
-    if managers:
-        summary = (
-            "Run the local package-shim uninstall command on this machine to "
-            f"confirm removal for {', '.join(managers)}."
-        )
-    return {
-        "confirm_command": " ".join(confirm_parts),
-        "managers": list(managers or ()),
-        "summary": summary,
-    }
-
-
-def _app_remove_confirmation_payload(
-    *,
-    harness: str,
-    surface: str | None,
-) -> dict[str, object]:
-    confirmation_phrase = uninstall_confirmation_token(harness)
-    confirm_parts = ["hol-guard", "apps", "disconnect", harness]
-    if surface is not None:
-        confirm_parts.extend(["--surface", surface])
-    confirm_parts.extend(["--confirm", confirmation_phrase])
-    return {
-        "confirm_command": " ".join(confirm_parts),
-        "confirmation_phrase": confirmation_phrase,
-        "harness": harness,
-        "summary": (
-            f"Run the local disconnect command on this machine to confirm removing Guard protection for {harness}."
-        ),
-        "surface": surface,
-    }
 
 
 def command_job_operation(job: dict[str, object]) -> str:
@@ -449,15 +381,6 @@ def _job_payload(job: dict[str, object]) -> dict[str, object]:
 
 def _optional_string(value: object) -> str | None:
     return _text(value)
-
-
-def _optional_surface(value: object) -> str | None:
-    surface = _optional_string(value)
-    if surface is None:
-        return None
-    if surface not in {"editor", "cli"}:
-        raise ValueError("unsupported_surface")
-    return surface
 
 
 def _result(data: dict[str, object], *, generated_at: str) -> dict[str, object]:

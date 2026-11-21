@@ -1,0 +1,278 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "action_classes": [
+      "rwxmap forced output overwrite command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews rwxmap commands that overwrite existing output files with --force. A run without --force only creates new files and is not matched; `rwxmap --help` and `rwxmap --version` are read-only.",
+    "ecosystem_ids": [],
+    "executables": [
+      "rwxmap"
+    ],
+    "extension_id": "command.rwxmap",
+    "homepage": "https://github.com/hamr0/rwxmap",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "Apache-2.0",
+    "name": "rwxmap command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "rwxmap forced output overwrite command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `rwxmap ... --force`, which replaces existing `<vendor>.rwxmap.json`, `<vendor>.rwxmap.review.json` and `<vendor>.openapi.rwx.json` files in the output folder (-o, default the current folder). Without --force rwxmap refuses to overwrite and writes nothing. Covers the installed bin and npx, bunx and pnpx launches of the rwxmap package. This rule does not gate rwxmap's optional Jev pass, which sends operation text to api.typesafe.ai on any run when RWXMAP_JEV_KEY is set in the environment or a working-directory .env.",
+        "example_command": "rwxmap ./openapi.json -o out --force",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "rwxmap forced output overwrite",
+        "permission_id": "command.rwxmap.permission.force",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Run rwxmap without --force first; it refuses to overwrite and names the existing files.",
+          "Point -o at a new, empty folder instead of overwriting earlier output.",
+          "Do not set RWXMAP_JEV_KEY, and check the working directory for a .env that sets it, when processing private API schemas: with the key set, any rwxmap run, with or without --force, sends each operation's method, path, operationId, summary and description to api.typesafe.ai. This extension's --force rule does not gate that optional network disclosure."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.rwxmap",
+      "url": "https://github.com/hamr0"
+    },
+    "reference_urls": [
+      "https://github.com/hamr0/rwxmap/blob/main/src/cli.js",
+      "https://www.npmjs.com/package/rwxmap"
+    ],
+    "required": false,
+    "risk_classes": [
+      "local_write"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "rwxmap forced output overwrite command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `rwxmap ... --force`, which replaces existing `<vendor>.rwxmap.json`, `<vendor>.rwxmap.review.json` and `<vendor>.openapi.rwx.json` files in the output folder (-o, default the current folder). Without --force rwxmap refuses to overwrite and writes nothing. Covers the installed bin and npx, bunx and pnpx launches of the rwxmap package. This rule does not gate rwxmap's optional Jev pass, which sends operation text to api.typesafe.ai on any run when RWXMAP_JEV_KEY is set in the environment or a working-directory .env.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "rwxmap",
+                  "rwxmap.cmd",
+                  "rwxmap.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "-o",
+                  "--vendor"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+              }
+            },
+            {
+              "op": "versioned-package-subcommand.v1",
+              "config": {
+                "executables": [
+                  "npx",
+                  "npx.cmd",
+                  "npx.exe",
+                  "bunx",
+                  "bunx.cmd",
+                  "bunx.exe",
+                  "pnpx",
+                  "pnpx.cmd",
+                  "pnpx.exe"
+                ],
+                "interspersed_flags": [
+                  "--force",
+                  "-h",
+                  "--help",
+                  "-v",
+                  "--version",
+                  "--yes",
+                  "-y",
+                  "--no",
+                  "--no-install",
+                  "--bun",
+                  "--silent",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "-o",
+                  "--vendor",
+                  "--package",
+                  "-p"
+                ],
+                "leading_subcommands": [],
+                "package": "rwxmap",
+                "required_flags": [
+                  "--force"
+                ],
+                "subcommands": []
+              }
+            }
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.rwxmap.permission.force",
+        "risk_classes": [
+          "local_write"
+        ],
+        "rule_id": "command.rwxmap.force",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "rwxmap",
+                      "rwxmap.cmd",
+                      "rwxmap.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "rwxmap",
+                      "rwxmap.cmd",
+                      "rwxmap.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "rwxmap",
+                      "rwxmap.cmd",
+                      "rwxmap.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "rwxmap",
+                      "rwxmap.cmd",
+                      "rwxmap.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  }
+                }
+              ]
+            },
+            "title": "rwxmap help and version",
+            "variant_id": "help-and-version"
+          }
+        ],
+        "safer_alternatives": [
+          "Run rwxmap without --force, or write to a new -o folder."
+        ],
+        "severity": "low",
+        "title": "rwxmap forced output overwrite"
+      }
+    ],
+    "safer_alternatives": [
+      "Run rwxmap without --force, or write to a new -o folder."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  }
+}

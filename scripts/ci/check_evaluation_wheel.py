@@ -55,12 +55,13 @@ def main() -> int:
         for name in (
             "__init__.py",
             "evaluation_cli_fixtures.py",
+            "test_guard_evaluation_cleanup_descriptor.py",
             "test_guard_evaluation_cli.py",
+            "test_guard_evaluation_cli_recovery.py",
             "test_guard_evaluation_cli_package.py",
             "test_guard_evaluation_preflight.py",
+            "test_guard_evaluation_runner.py",
             "test_guard_evaluation_witness_ownership.py",
-            "test_opencode_hook_python.py",
-            "test_opencode_hook_python_isolation.py",
         ):
             shutil.copy2(repo / "tests" / name, test_root / name)
         configuration = root / "pytest.ini"

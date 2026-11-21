@@ -74,3 +74,23 @@ installed native runtime before activating the registry entry.
 The issuer does not generate keys, change client consent, configure a registry,
 or publish policies. Those operations retain their existing authenticated
 owners.
+
+## Replay Evidence
+
+The resident retains consumed claims permanently, including their semantic
+decision digests after transport expiry. The platform secure store anchors an
+immutable hash-verified index for new decisions. Older installations retain a
+bounded inline history during migration. Each new decision moves at most one
+inline record and commits both representations
+atomically; no consumed evidence is discarded to make room.
+
+Authority rotation and revocation preserve this index. Missing or modified
+index objects fail closed, and uncommitted objects cannot authorize a decision.
+An indexed receipt proves decision consumption, not external action execution.
+
+The inline migration tail is limited to 1,024 records; validation and secure
+state writes remain proportional to that bounded tail until it drains. Index
+insertion writes a bounded tree path and retains unreachable objects after
+interrupted writes. Disk quotas and authenticated garbage collection are not
+implemented here. Platform secure-store crash and rollback guarantees still
+require platform-specific verification; file-backed tests do not prove them.

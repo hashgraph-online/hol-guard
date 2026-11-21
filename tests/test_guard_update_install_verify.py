@@ -201,6 +201,7 @@ def test_update_fails_when_installed_code_disagrees_with_version_metadata(
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.2.3")
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(update_commands, "_retire_native_resident_before_update", lambda _guard_home: True)
     monkeypatch.setattr(
         update_commands.subprocess,
         "run",

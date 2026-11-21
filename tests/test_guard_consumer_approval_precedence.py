@@ -10,65 +10,67 @@ import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex_remote_control
-from codex_plugin_scanner.guard.adapters import grok as grok_adapter_module
-from codex_plugin_scanner.guard.adapters import grok_executable as grok_executable_module
-from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode_artifacts import runtime_config_path
+from codex_plugin_scanner.guard import codex_remote_client as codex_remote_control
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import evaluate_detection
-from codex_plugin_scanner.guard.consumer.service import _consumer_execution_identity
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
+from codex_plugin_scanner.guard.runtime import guard_run_launch as guard_run_launch
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
+from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.runtime.approval_context import (
+    approval_context_token_is_well_formed,
     build_approval_context_token,
-    parse_approval_context_token,
+    build_runtime_launch_identity,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import codex_hook_publication_helpers as publication_helpers
+from tests.launch_stub_support import use_launch, use_native_launch
+
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
+
+def _ordinary_codex_launch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The runtime starts no app-server: the launch stays the ordinary command."""
+    ask = codex_remote_control._ask  # pyright: ignore[reportPrivateUsage]
+
+    def without_remote(op: str, fields: dict[str, object], budget: float | None = None) -> dict[str, object]:
+        return {} if op == "run" else ask(op, fields, budget)
+
+    monkeypatch.setattr(codex_remote_control, "_ask", without_remote)
 
 
 @pytest.fixture(autouse=True)
 def _stable_guard_run_launch_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep consumer precedence tests independent from real harness startup."""
 
-    class LaunchAdapter(HarnessAdapter):
-        def launch_command(self, _context: HarnessContext, args: list[str]) -> list[str]:
-            return [sys.executable, "-c", "pass", *args]
-
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
-
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: LaunchAdapter())
+    use_launch(monkeypatch, lambda _context, args: [sys.executable, "-c", "pass", *args])
 
 
-def test_consumer_execution_identity_resolves_dot_slash_from_runtime_cwd(tmp_path: Path) -> None:
+def test_consumer_launch_identity_resolves_dot_slash_from_runtime_cwd(tmp_path: Path) -> None:
     runtime_cwd = tmp_path / "runtime"
     runtime_cwd.mkdir()
     executable = runtime_cwd / "server"
     executable.write_bytes(b"#!/bin/sh\necho runtime\n")
     executable.chmod(0o755)
 
-    identity = _consumer_execution_identity("./server --stdio", cwd=runtime_cwd)
-
-    resolved = identity["resolved"]
+    resolved = build_runtime_launch_identity("./server --stdio", cwd=runtime_cwd, launch_env=os.environ)["executable"]
     assert isinstance(resolved, dict)
     assert resolved["path"] == str(executable.resolve())
     assert resolved["launch_cwd"] == str(runtime_cwd.resolve())
     assert resolved["status"] == "verified"
 
 
-def test_consumer_execution_identity_resolves_relative_path_entries_from_runtime_cwd(
+def test_consumer_launch_identity_resolves_relative_path_entries_from_runtime_cwd(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -80,9 +82,7 @@ def test_consumer_execution_identity_resolves_relative_path_entries_from_runtime
     executable.chmod(0o755)
     monkeypatch.setenv("PATH", "bin")
 
-    identity = _consumer_execution_identity("server --stdio", cwd=runtime_cwd)
-
-    resolved = identity["resolved"]
+    resolved = build_runtime_launch_identity("server --stdio", cwd=runtime_cwd, launch_env=os.environ)["executable"]
     assert isinstance(resolved, dict)
     assert resolved["path"] == str(executable.resolve())
     assert resolved["launch_cwd"] == str(runtime_cwd.resolve())
@@ -181,25 +181,15 @@ def _write_test_executable(path: Path, body: str = "#!/bin/sh\nexit 0\n") -> Pat
 
 def _install_codex_native_hooks(context: HarnessContext) -> None:
     payload: dict[str, object] = {"features": {"hooks": True}}
-    CodexHarnessAdapter._install_config_hooks(payload, context)
-    config_path = CodexHarnessAdapter._hook_config_path(context)
+    config_path = codex_paths(context).config
+    publication_helpers.install_config_hooks(payload, context, config_path=config_path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    CodexHarnessAdapter._write_authenticated_hook_config(
+    publication_helpers.write_authenticated_hook_config(
         context,
         config_path=config_path,
         payload=payload,
         previous_manifest=None,
     )
-
-
-def test_guard_run_launch_environment_hash_is_canonical_and_value_sensitive() -> None:
-    first = guard_runner_module._guard_run_launch_environment_hash({"B": "two", "A": "one"})
-    reordered = guard_runner_module._guard_run_launch_environment_hash({"A": "one", "B": "two"})
-    changed = guard_runner_module._guard_run_launch_environment_hash({"A": "one", "B": "changed"})
-
-    assert first == reordered
-    assert first != changed
-    assert len(first) == 64
 
 
 def test_unchanged_raw_interpreted_tool_action_preserves_exact_approval_boundary(tmp_path: Path) -> None:
@@ -309,7 +299,7 @@ def test_saved_review_allow_never_lowers_current_stronger_action_and_is_not_cons
     baseline = evaluate_detection(detection, store, _config(tmp_path), persist=False)
     baseline_item = baseline["artifacts"][0]
     context_hash = str(baseline_item["approval_context_hash"])
-    assert parse_approval_context_token(context_hash) is not None
+    assert approval_context_token_is_well_formed(context_hash)
     _record_once(
         store,
         artifact=artifact,
@@ -375,16 +365,16 @@ def test_guard_run_claims_exact_saved_review_allow_only_at_real_launch(
     context_hash = str(initial["artifacts"][0]["approval_context_hash"])
     _record_once(store, artifact=artifact, context_hash=context_hash, workspace=tmp_path / "workspace")
     launch_calls: list[object] = []
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *args, **kwargs: (
             launch_calls.append((args, kwargs)) or subprocess.CompletedProcess(args=[], returncode=0)
         ),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -446,33 +436,20 @@ def test_guard_run_executes_canonical_launch_argv_pinned_after_saved_claim(
     preview_calls: list[tuple[str, ...]] = []
     authority_events: list[str] = []
 
-    class LaunchAdapter(HarnessAdapter):
-        @staticmethod
-        def _command(args: list[str]) -> tuple[str, ...]:
-            return (str(executable_alias), "-c", "pass", *args)
+    def launch_argv(args: list[str]) -> tuple[str, ...]:
+        return (str(executable_alias), "-c", "pass", *args)
 
-        def preview_launch_commands(
-            self,
-            _context: HarnessContext,
-            args: list[str],
-        ) -> tuple[list[str], ...]:
-            command = self._command(args)
-            preview_calls.append(command)
-            authority_events.append("preview")
-            return (list(command),)
+    def preview_launch(_context: HarnessContext, args: list[str]) -> tuple[list[str], ...]:
+        command = launch_argv(args)
+        preview_calls.append(command)
+        authority_events.append("preview")
+        return (list(command),)
 
-        def launch_command(self, _context: HarnessContext, args: list[str]) -> list[str]:
-            command = self._command(args)
-            adapter_calls.append(command)
-            authority_events.append("launch-setup")
-            return list(command)
-
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
+    def launch_command(_context: HarnessContext, args: list[str]) -> list[str]:
+        command = launch_argv(args)
+        adapter_calls.append(command)
+        authority_events.append("launch-setup")
+        return list(command)
 
     launch_calls: list[list[str]] = []
 
@@ -489,12 +466,12 @@ def test_guard_run_executes_canonical_launch_argv_pinned_after_saved_claim(
         authority_events.append("claim")
         return original_claim(decisions, **kwargs)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: LaunchAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    use_launch(monkeypatch, launch_command, preview=preview_launch)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_and_record)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", launch)
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", launch)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -535,7 +512,7 @@ def test_guard_run_rejects_opencode_overlay_environment_changed_after_saved_clai
         workspace_dir=workspace,
         guard_home=config.guard_home,
     )
-    overlay_path = runtime_config_path(context)
+    overlay_path = context.guard_home / "opencode" / "runtime-config.json"
     overlay_path.parent.mkdir(parents=True, exist_ok=True)
     overlay_path.write_text(json.dumps({"permission": {"bash": "ask"}}), encoding="utf-8")
     executable_alias = tmp_path / "bin" / "opencode"
@@ -558,16 +535,21 @@ def test_guard_run_rejects_opencode_overlay_environment_changed_after_saved_clai
             )
         return claimed
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: OpenCodeHarnessAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    # The run is for "codex"; the launch answers come from OpenCode's own native ops.
+    for name in ("preview_launch_commands", "launch_command_from_authorized_plan", "prepare_launch_environment"):
+        native_op = getattr(harness_ops, name)
+        monkeypatch.setattr(
+            guard_run_launch, name, lambda _harness, *args, _op=native_op, **kwargs: _op("opencode", *args, **kwargs)
+        )
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_mutate_overlay)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("a changed prepared launch environment must not execute"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         context,
         store,
@@ -610,21 +592,17 @@ def test_codex_postclaim_setup_uses_authorized_canonical_prefix_after_symlink_sw
     )
     _install_codex_native_hooks(context)
 
-    class SwapAtAuthorizedSetupAdapter(CodexHarnessAdapter):
-        def launch_command_from_authorized_plan(self, *args, **kwargs) -> list[str]:
-            executable_alias.unlink()
-            executable_alias.symlink_to(attacker_codex)
-            return super().launch_command_from_authorized_plan(*args, **kwargs)
+    def swap_at_authorized_setup(harness: str, *args, **kwargs) -> list[str]:
+        executable_alias.unlink()
+        executable_alias.symlink_to(attacker_codex)
+        return harness_ops.launch_command_from_authorized_plan(harness, *args, **kwargs)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(
-        guard_runner_module,
-        "get_adapter",
-        lambda _harness: SwapAtAuthorizedSetupAdapter(),
-    )
-    monkeypatch.setattr(codex_remote_control, "_start_direct_app_server", lambda **_kwargs: False)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    use_native_launch(monkeypatch)
+    monkeypatch.setattr(guard_run_launch, "launch_command_from_authorized_plan", swap_at_authorized_setup)
+    _ordinary_codex_launch(monkeypatch)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         context,
         store,
@@ -665,21 +643,17 @@ def test_no_saved_codex_setup_uses_previewed_canonical_prefix_after_symlink_swap
     )
     _install_codex_native_hooks(context)
 
-    class SwapAtAuthorizedSetupAdapter(CodexHarnessAdapter):
-        def launch_command_from_authorized_plan(self, *args, **kwargs) -> list[str]:
-            executable_alias.unlink()
-            executable_alias.symlink_to(attacker_codex)
-            return super().launch_command_from_authorized_plan(*args, **kwargs)
+    def swap_at_authorized_setup(harness: str, *args, **kwargs) -> list[str]:
+        executable_alias.unlink()
+        executable_alias.symlink_to(attacker_codex)
+        return harness_ops.launch_command_from_authorized_plan(harness, *args, **kwargs)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(
-        guard_runner_module,
-        "get_adapter",
-        lambda _harness: SwapAtAuthorizedSetupAdapter(),
-    )
-    monkeypatch.setattr(codex_remote_control, "_start_direct_app_server", lambda **_kwargs: False)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    use_native_launch(monkeypatch)
+    monkeypatch.setattr(guard_run_launch, "launch_command_from_authorized_plan", swap_at_authorized_setup)
+    _ordinary_codex_launch(monkeypatch)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         context,
         store,
@@ -721,32 +695,20 @@ def test_guard_run_executes_in_previewed_canonical_cwd_after_workspace_symlink_r
     ]
     events: list[str] = []
 
-    class RetargetingAdapter:
-        def preview_launch_commands(
-            self,
-            _context: HarnessContext,
-            _args: list[str],
-        ) -> tuple[list[str], ...]:
-            events.append("preview")
-            return (list(command),)
+    def preview_launch(_context: HarnessContext, _args: list[str]) -> tuple[list[str], ...]:
+        events.append("preview")
+        return (list(command),)
 
-        def launch_command_from_authorized_plan(self, *_args, **_kwargs) -> list[str]:
-            events.append("finalize")
-            workspace_alias.unlink()
-            workspace_alias.symlink_to(attacker_workspace, target_is_directory=True)
-            return list(command)
+    def finalize_launch(_context: HarnessContext, _args: list[str], **_kwargs) -> list[str]:
+        events.append("finalize")
+        workspace_alias.unlink()
+        workspace_alias.symlink_to(attacker_workspace, target_is_directory=True)
+        return list(command)
 
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    use_launch(monkeypatch, lambda _context, _args: list(command), preview=preview_launch, from_plan=finalize_launch)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: RetargetingAdapter())
-
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -777,31 +739,22 @@ def test_no_saved_pure_default_finalizer_launches_once_in_canonical_workspace(
     workspace = tmp_path / "workspace"
     command_constructions: list[tuple[str, ...]] = []
 
-    class PureDefaultAdapter(HarnessAdapter):
-        def launch_command(self, _context: HarnessContext, args: list[str]) -> list[str]:
-            command = (sys.executable, "-c", "pass", *args)
-            command_constructions.append(command)
-            return list(command)
+    def launch_command(_context: HarnessContext, args: list[str]) -> list[str]:
+        command = (sys.executable, "-c", "pass", *args)
+        command_constructions.append(command)
+        return list(command)
 
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
-
-    adapter = PureDefaultAdapter()
     executions: list[tuple[list[str], Path]] = []
 
     def execute(command: list[str], *, cwd: Path, **_kwargs) -> subprocess.CompletedProcess[str]:
         executions.append((list(command), cwd))
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: adapter)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", execute)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    use_launch(monkeypatch, launch_command)
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", execute)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=config.guard_home),
         store,
@@ -814,6 +767,34 @@ def test_no_saved_pure_default_finalizer_launches_once_in_canonical_workspace(
     assert executions == [([str(Path(sys.executable).resolve()), "-c", "pass"], workspace.resolve())]
     assert result["blocked"] is False
     assert result["launched"] is True
+
+
+def _record_grok_launch(
+    monkeypatch: pytest.MonkeyPatch, events: list[str], registration: Path, executable: Path
+) -> None:
+    """Grok whose launcher answers stand in for the native trust checks.
+
+    The runtime refuses launchers under shared temporary roots, so these answers
+    model it: a preview resolves without registering, a launch registers the
+    explicit selection.
+    """
+    use_native_launch(monkeypatch)
+    ask = harness_ops.run_op
+
+    def recording_op(harness: str, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
+        if op == "preview_launch":
+            events.append("preview")
+            assert registration.exists() is False
+        elif op == "launch_command":
+            events.append("launch-setup")
+            events.append("register")
+            registration.parent.mkdir(parents=True, exist_ok=True)
+            registration.write_text("{}\n", encoding="utf-8")
+        else:
+            return ask(harness, op, context, **fields)
+        return {"argv": [str(executable.resolve()), *fields["args"]]}
+
+    monkeypatch.setattr(harness_ops, "run_op", recording_op)
 
 
 def test_grok_previews_do_not_register_and_final_setup_registers_once_after_claim(
@@ -843,21 +824,7 @@ def test_grok_previews_do_not_register_and_final_setup_registers_once_after_clai
     _record_once(store, artifact=artifact, context_hash=context_hash, workspace=workspace)
     events: list[str] = []
 
-    class RecordingGrokAdapter(GrokHarnessAdapter):
-        def preview_launch_commands(self, *args, **kwargs) -> tuple[list[str], ...]:
-            events.append("preview")
-            assert registration.exists() is False
-            return super().preview_launch_commands(*args, **kwargs)
-
-        def launch_command(self, *args, **kwargs) -> list[str]:
-            events.append("launch-setup")
-            return super().launch_command(*args, **kwargs)
-
-    original_register = grok_adapter_module.register_trusted_grok_executable
-
-    def register_once(*args, **kwargs):
-        events.append("register")
-        return original_register(*args, **kwargs)
+    _record_grok_launch(monkeypatch, events, registration, executable)
 
     original_claim = store.claim_approval_reuse_decisions
 
@@ -870,14 +837,11 @@ def test_grok_previews_do_not_register_and_final_setup_registers_once_after_clai
         events.append("execute")
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
-    monkeypatch.setattr(grok_adapter_module, "register_trusted_grok_executable", register_once)
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: RecordingGrokAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_and_record)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", execute)
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", execute)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "grok",
         context,
         store,
@@ -920,33 +884,16 @@ def test_no_saved_grok_preview_registers_once_only_in_authorized_finalizer(
     registration = config.guard_home / "managed" / "grok" / "trusted-executable.json"
     events: list[str] = []
 
-    class RecordingGrokAdapter(GrokHarnessAdapter):
-        def preview_launch_commands(self, *args, **kwargs) -> tuple[list[str], ...]:
-            events.append("preview")
-            assert registration.exists() is False
-            return super().preview_launch_commands(*args, **kwargs)
-
-        def launch_command(self, *args, **kwargs) -> list[str]:
-            events.append("launch-setup")
-            return super().launch_command(*args, **kwargs)
-
-    original_register = grok_adapter_module.register_trusted_grok_executable
-
-    def register_once(*args, **kwargs):
-        events.append("register")
-        return original_register(*args, **kwargs)
+    _record_grok_launch(monkeypatch, events, registration, executable)
 
     def execute(command, **_kwargs) -> subprocess.CompletedProcess[str]:
         events.append("execute")
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
-    monkeypatch.setattr(grok_adapter_module, "register_trusted_grok_executable", register_once)
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: RecordingGrokAdapter())
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", execute)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", execute)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "grok",
         context,
         store,
@@ -976,18 +923,10 @@ def test_guard_run_rejects_launch_plan_changed_after_saved_claim(
     executable_alias.symlink_to(Path(sys.executable).resolve())
     adapter_calls: list[tuple[str, ...]] = []
 
-    class LaunchAdapter(HarnessAdapter):
-        def launch_command(self, _context: HarnessContext, args: list[str]) -> list[str]:
-            command = (str(executable_alias), "-c", "pass", *args)
-            adapter_calls.append(command)
-            return list(command)
-
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
+    def launch_command(_context: HarnessContext, args: list[str]) -> list[str]:
+        command = (str(executable_alias), "-c", "pass", *args)
+        adapter_calls.append(command)
+        return list(command)
 
     original_claim = store.claim_approval_reuse_decisions
 
@@ -998,16 +937,16 @@ def test_guard_run_rejects_launch_plan_changed_after_saved_claim(
             executable_alias.symlink_to("/bin/echo")
         return claimed
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: LaunchAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    use_launch(monkeypatch, launch_command)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_replace_executable)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("a changed post-claim executable must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1059,15 +998,15 @@ def test_guard_run_reloads_local_config_after_claim_before_launch(
         config_refreshes.append(fresh)
         return fresh
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_block)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("a stronger refreshed config must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1118,14 +1057,14 @@ def test_guard_run_reloads_current_config_after_unpersisted_interactive_allow_on
         config_refreshes.append(current_config)
         return current_config
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("an allow-once approved under stale policy must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1196,15 +1135,15 @@ def test_guard_run_redetects_interpreted_entrypoint_after_claim_before_launch(
             entrypoint.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
         return claimed
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", detect_current)
+    monkeypatch.setattr(wrapper_run, "detect_harness", detect_current)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_mutate)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("changed post-claim entrypoint must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1315,15 +1254,15 @@ def test_guard_run_redetects_changed_mcp_command_immediately_after_claim(
         claim_completed = claimed
         return claimed
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", detect_current)
+    monkeypatch.setattr(wrapper_run, "detect_harness", detect_current)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_and_expose_changed_config)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("changed post-claim MCP command must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=tmp_path / "guard-home"),
         store,
@@ -1372,16 +1311,16 @@ def test_guard_run_successful_persistent_exact_claim_finalizes_safe_persistence(
         "2026-07-17T00:00:00+00:00",
     )
     launch_calls: list[object] = []
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *args, **kwargs: (
             launch_calls.append((args, kwargs)) or subprocess.CompletedProcess(args=[], returncode=0)
         ),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1450,15 +1389,15 @@ def test_guard_run_retained_claim_disappearing_after_claim_fails_closed(
                     connection.execute("delete from policy_decisions where decision_id = ?", (decision_id,))
         return True
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_delete_retained_row)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("missing retained approval must not be treated as consumed proof"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1507,14 +1446,14 @@ def test_guard_run_successful_reusable_exact_claim_finalizes_safe_persistence(
         workspace=tmp_path / "workspace",
         request_id="consumer-reusable-exact",
     )
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *args, **_kwargs: subprocess.CompletedProcess(args=args, returncode=0),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1556,9 +1495,9 @@ def test_guard_run_dry_run_never_claims_exact_saved_review_allow(
     initial = evaluate_detection(detection, store, config, persist=False)
     context_hash = str(initial["artifacts"][0]["approval_context_hash"])
     _record_once(store, artifact=artifact, context_hash=context_hash, workspace=tmp_path / "workspace")
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1622,14 +1561,14 @@ def test_guard_run_blocked_sibling_leaves_saved_review_allow_unclaimed(
         context_hash=context_hash,
         workspace=tmp_path / "workspace",
     )
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("blocked aggregate must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1670,31 +1609,20 @@ def test_guard_run_unverified_preclaim_launch_identity_is_persisted_separately_f
     _record_once(store, artifact=artifact, context_hash=context_hash, workspace=tmp_path / "workspace")
     claim_calls: list[object] = []
 
-    class MissingLaunchAdapter(HarnessAdapter):
-        def launch_command(self, _context: HarnessContext, args: list[str]) -> list[str]:
-            return [str(tmp_path / "missing-harness-executable"), *args]
-
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
-
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: MissingLaunchAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    use_launch(monkeypatch, lambda _context, args: [str(tmp_path / "missing-harness-executable"), *args])
     monkeypatch.setattr(
         store,
         "claim_approval_reuse_decisions",
         lambda *_args, **_kwargs: claim_calls.append(object()) or True,
     )
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("an unverified launch identity must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1756,15 +1684,15 @@ def test_guard_run_atomic_claim_exception_is_persisted_without_error_disclosure_
     def raise_claim_error(*_args, **_kwargs) -> bool:
         raise sqlite3.OperationalError(raw_database_error)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", raise_claim_error)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("an exceptional approval claim must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1823,14 +1751,14 @@ def test_guard_run_batch_claim_failure_consumes_no_saved_review_allow(
         return False
 
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", fail_batch_claim)
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("failed approval claim must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1991,7 +1919,8 @@ def test_matching_saved_allow_is_composed_non_consumingly_before_any_claim(
     store = GuardStore(tmp_path / "guard-home")
 
     def exact_saved_allow(*_args: object, **kwargs: object) -> dict[str, object]:
-        assert kwargs["consume_one_shot"] is False
+        # The memory-pattern lookup only peeks: it has no consuming mode.
+        assert "consume_one_shot" not in kwargs
         return {
             "decision": {
                 "action": "allow",
@@ -2023,6 +1952,7 @@ def test_matching_saved_allow_is_composed_non_consumingly_before_any_claim(
     assert item["approval_reuse_reason_code"] == reason_code
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_evaluation_records_exact_saved_allow_without_claiming_before_launch(
     tmp_path: Path,
 ) -> None:
@@ -2228,13 +2158,13 @@ def _with_runtime_detector_telemetry(
 
 
 def test_runtime_detector_context_excludes_only_elapsed_and_normalizes_semantics() -> None:
-    context = guard_runner_module._runtime_detector_context(
+    context = guard_runner_module._authority.detector_authority(
         _with_runtime_detector_telemetry(
             {"blocked": False, "artifacts": []},
             status="ok",
             elapsed_ms=917,
         )
-    )
+    ).context
 
     assert context is not None
     assert context["telemetry"] == [
@@ -2269,7 +2199,7 @@ def test_runtime_detector_telemetry_status_change_after_claim_prevents_launch(
         status="ok",
         elapsed_ms=1,
     )
-    initial_detector_context = guard_runner_module._runtime_detector_context(initial_detector_evaluation)
+    initial_detector_context = guard_runner_module._authority.detector_authority(initial_detector_evaluation).context
     assert initial_detector_context is not None
     initial = evaluate_detection(
         detection,
@@ -2291,15 +2221,15 @@ def test_runtime_detector_telemetry_status_change_after_claim_prevents_launch(
             error_type=error_type,
         )
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "_evaluation_with_detector_registry", detector_evaluation)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "_evaluation_with_detector_registry", detector_evaluation)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("changed detector execution status must prevent launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -2333,7 +2263,7 @@ def test_runtime_detector_unchanged_status_ignores_elapsed_ms_and_launches_after
         status="ok",
         elapsed_ms=1,
     )
-    initial_detector_context = guard_runner_module._runtime_detector_context(initial_detector_evaluation)
+    initial_detector_context = guard_runner_module._authority.detector_authority(initial_detector_evaluation).context
     assert initial_detector_context is not None
     initial = evaluate_detection(
         detection,
@@ -2359,11 +2289,11 @@ def test_runtime_detector_unchanged_status_ignores_elapsed_ms_and_launches_after
         launches.append(list(command))
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "_evaluation_with_detector_registry", detector_evaluation)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", launch)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "_evaluation_with_detector_registry", detector_evaluation)
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", launch)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -2382,7 +2312,24 @@ def test_runtime_detector_unchanged_status_ignores_elapsed_ms_and_launches_after
     assert len(launches) == 1
 
 
-def test_runtime_detector_signal_change_invalidates_exact_saved_approval(
+def test_turning_the_detector_registry_off_changes_the_approval_context(
+    tmp_path: Path,
+) -> None:
+    artifact = _artifact(tmp_path)
+    detection = _detection(artifact)
+    config = _config(tmp_path)
+    store = GuardStore(tmp_path / "guard-home")
+    detectors_ran = {"telemetry": [{"detector_id": "persistence", "status": "ok"}]}
+
+    ran = evaluate_detection(detection, store, config, persist=False, runtime_detector_context=detectors_ran)
+    registry_off = evaluate_detection(detection, store, config, persist=False, runtime_detector_context=None)
+
+    # A clean run and a run without the detector registry both have no
+    # failures; the approval still tells them apart.
+    assert ran["artifacts"][0]["approval_context_hash"] != registry_off["artifacts"][0]["approval_context_hash"]
+
+
+def test_runtime_detector_finding_change_keeps_exact_saved_approval(
     tmp_path: Path,
 ) -> None:
     artifact = _artifact(tmp_path)
@@ -2427,11 +2374,12 @@ def test_runtime_detector_signal_change_invalidates_exact_saved_approval(
         runtime_detector_context=second_detector_context,
     )
 
+    # A new detector finding is reported, not re-asked: the approval covers
+    # the unchanged artifact.
     assert unchanged["artifacts"][0]["approval_context_hash"] == first_context_hash
     assert unchanged["artifacts"][0]["policy_action"] == "allow"
-    assert changed["artifacts"][0]["approval_context_hash"] != first_context_hash
-    assert changed["artifacts"][0]["policy_action"] == "review"
-    assert changed["artifacts"][0]["approval_reuse_reason_code"] == ("approval_reuse_capability_changed")
+    assert changed["artifacts"][0]["approval_context_hash"] == first_context_hash
+    assert changed["artifacts"][0]["policy_action"] == "allow"
     assert (
         store.peek_local_once_approval(
             harness=artifact.harness,
@@ -2520,7 +2468,7 @@ def test_changed_effective_workspace_rejects_review_allow_as_identity_change(tmp
     )
 
 
-def test_changed_scanner_provenance_rejects_review_allow_as_capability_change(tmp_path: Path) -> None:
+def test_blocking_publisher_advisory_still_blocks_a_saved_review_allow(tmp_path: Path) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
     config = _config(tmp_path)
@@ -2553,7 +2501,9 @@ def test_changed_scanner_provenance_rejects_review_allow_as_capability_change(tm
     assert item["policy_composition"]["current_action"] == "block"
     assert item["policy_composition"]["scanner_action"] == "block"
     assert item["approval_reuse_status"] == "rejected"
-    assert item["approval_reuse_reason_code"] == "approval_reuse_capability_changed"
+    # Provenance is not part of the approval context; the blocking advisory
+    # changes the current action, and a saved allow never lowers a block.
+    assert item["approval_reuse_reason_code"] == "approval_reuse_policy_changed"
     assert item["provenance"]["publisher_trust"] == "flagged"
     assert result["blocked"] is True
     assert (
@@ -2569,7 +2519,10 @@ def test_changed_scanner_provenance_rejects_review_allow_as_capability_change(tm
     )
 
 
-def test_saved_block_remains_authoritative_after_current_review_is_computed(tmp_path: Path) -> None:
+def test_saved_block_remains_authoritative_after_current_review_is_computed(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
     store = GuardStore(tmp_path / "guard-home")
@@ -2596,6 +2549,7 @@ def test_saved_block_remains_authoritative_after_current_review_is_computed(tmp_
 
 def test_consumer_current_allow_and_exact_allow_do_not_hide_tampered_broader_authority(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
@@ -2652,6 +2606,7 @@ def test_consumer_current_allow_and_exact_allow_do_not_hide_tampered_broader_aut
 
 def test_consumer_current_allow_detects_tampered_block_moved_out_of_exact_lookup(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
@@ -2696,7 +2651,9 @@ def test_consumer_current_allow_detects_tampered_block_moved_out_of_exact_lookup
     assert item["approval_reuse_reason_code"] == "approval_reuse_integrity_failure"
 
 
-def test_consumer_current_allow_ignores_tampered_nonmatching_local_row(tmp_path: Path) -> None:
+def test_consumer_current_allow_ignores_tampered_nonmatching_local_row(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
     store = GuardStore(tmp_path / "guard-home")
@@ -2740,11 +2697,12 @@ def test_consumer_current_allow_ignores_tampered_nonmatching_local_row(tmp_path:
 def test_approval_queue_persists_exact_v1_context_instead_of_legacy_content_hash(
     tmp_path: Path,
     queued_action: GuardAction,
+    native_context_digest: Path,
 ) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
     store = GuardStore(tmp_path / "guard-home")
-    config = _config(tmp_path, action=queued_action)
+    config = replace(_config(tmp_path, action=queued_action), guard_home=native_context_digest)
     evaluation = evaluate_detection(detection, store, config, persist=False)
 
     queued = queue_blocked_approvals(
@@ -2757,6 +2715,6 @@ def test_approval_queue_persists_exact_v1_context_instead_of_legacy_content_hash
     assert len(queued) == 1
     assert queued[0]["policy_action"] == queued_action
     assert queued[0]["artifact_hash"] == evaluation["artifacts"][0]["approval_context_hash"]
-    assert parse_approval_context_token(queued[0]["artifact_hash"]) is not None
+    assert approval_context_token_is_well_formed(queued[0]["artifact_hash"])
     assert queued[0]["artifact_hash"] != evaluation["artifacts"][0]["artifact_hash"]
     assert queued[0]["workspace"] == str((tmp_path / "workspace").resolve())

@@ -11,6 +11,7 @@ from codex_plugin_scanner.checks.code_quality import (
     check_no_shell_injection,
     run_code_quality_checks,
 )
+from codex_plugin_scanner.models import Severity
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -36,6 +37,100 @@ class TestCheckNoEval:
         with tempfile.TemporaryDirectory() as tmpdir:
             r = check_no_eval(Path(tmpdir))
             assert r.passed and r.points == 5
+
+    @pytest.mark.parametrize(
+        "source",
+        (
+            "eval(untrustedInput);",
+            "eval?.(untrustedInput);",
+            "globalThis.eval(untrustedInput);",
+            "globalThis?.eval?.(untrustedInput);",
+            "window.eval(untrustedInput);",
+            "global.eval(untrustedInput);",
+            "builtins.eval(untrusted_input)",
+            "__builtins__.eval(untrusted_input)",
+            'new Function("return untrustedInput");',
+        ),
+    )
+    def test_detects_direct_or_explicit_global_dynamic_execution(self, source: str):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "unsafe.js").write_text(source, encoding="utf-8")
+
+            result = check_no_eval(root)
+
+            assert result.passed is False
+            assert result.points == 0
+            assert result.findings
+            assert all(finding.severity is Severity.HIGH for finding in result.findings)
+
+    def test_ignores_member_eval_apis_and_method_declarations(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "safe.js").write_text(
+                "await page.$eval('#status', node => node.textContent);\n"
+                "await page.$$eval('.item', nodes => nodes.length);\n"
+                "await client.eval('document.title');\n"
+                "await client. eval('document.title');\n"
+                "await client?. eval('document.title');\n"
+                "await this.#eval('document.title');\n"
+                "await client.window.eval('document.title');\n"
+                "class RuntimeClient {\n"
+                "  async eval(expression, { awaitPromise = true } = {}) {\n"
+                "    return this.send('Runtime.evaluate', { expression, awaitPromise });\n"
+                "  }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            (root / "safe.ts").write_text(
+                "class RegexClient { eval(value = /)/) /* note */ {} }\n"
+                "interface TypedClient { eval(source: string): (value: string) => unknown; }\n",
+                encoding="utf-8",
+            )
+            (root / "safe.py").write_text(
+                "class RuntimeClient:\n"
+                "    def eval(self, expression):\n"
+                "        return expression\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_eval(root)
+
+            assert result.passed is True
+            assert result.points == 5
+
+    @pytest.mark.parametrize(
+        "source",
+        (
+            "await client. /* comment */ eval('document.title');\n",
+            "await client. // comment\n eval('document.title');\n",
+        ),
+    )
+    def test_ignores_member_eval_apis_with_comments(self, source: str):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "safe.js").write_text(source, encoding="utf-8")
+
+            result = check_no_eval(root)
+
+            assert result.passed is True
+            assert result.points == 5
+
+    def test_does_not_skip_direct_eval_followed_by_standalone_block(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "unsafe.js").write_text(
+                "eval(untrustedInput)\n"
+                "{\n"
+                "  audit();\n"
+                "}\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_eval(root)
+
+            assert result.passed is False
+            assert result.points == 0
 
     def test_ignores_symlinked_code_files_outside_root(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -65,11 +160,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "dispatcher.ts").write_text(
-                "const message = `failed ${reason}`;\n"
-                "switch (kind) {\n"
-                "  case 'spawn':\n"
-                "    return message;\n"
-                "}\n",
+                "const message = `failed ${reason}`;\nswitch (kind) {\n  case 'spawn':\n    return message;\n}\n",
                 encoding="utf-8",
             )
 
@@ -137,8 +228,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "runner.js").write_text(
-                "const cmd = `echo ${userInput}`;\n"
-                'require("node:child_process").exec(cmd);\n',
+                'const cmd = `echo ${userInput}`;\nrequire("node:child_process").exec(cmd);\n',
                 encoding="utf-8",
             )
 
@@ -152,8 +242,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "runner.ts").write_text(
-                "export const command: string = `echo ${userInput}`;\n"
-                "child_process.exec(command);\n",
+                "export const command: string = `echo ${userInput}`;\nchild_process.exec(command);\n",
                 encoding="utf-8",
             )
 
@@ -168,8 +257,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "runner.ts").write_text(
-                f"const cmd = `echo ${{userInput}}` {suffix};\n"
-                "child_process.exec(cmd);\n",
+                f"const cmd = `echo ${{userInput}}` {suffix};\nchild_process.exec(cmd);\n",
                 encoding="utf-8",
             )
 

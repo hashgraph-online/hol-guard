@@ -5,13 +5,13 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from codex_plugin_scanner.guard.action_lattice import GUARD_ACTION_LATTICE, GUARD_ACTION_SEVERITY
+from codex_plugin_scanner.guard.action_lattice import (
+    GUARD_ACTION_LATTICE,
+    GUARD_ACTION_SEVERITY,
+    most_restrictive_guard_action,
+)
 from codex_plugin_scanner.guard.runtime.effect_contract import (
     EFFECT_CONTRACT_SCHEMA_VERSION,
-    TRUTHFUL_STATE_GLOSSARY,
-    UNCERTAINTY_FLOOR,
-    BoundaryVersionClassification,
-    BoundaryVersionStatus,
     ContainmentRequirement,
     DecisionBasis,
     EffectAssessment,
@@ -21,20 +21,9 @@ from codex_plugin_scanner.guard.runtime.effect_contract import (
     EffectKind,
     EffectReversibility,
     EffectTargetScope,
-    EnforcementOutcome,
-    PostExecutionOutcome,
-    PostExecutionProof,
-    PostProofEligibility,
     ProofRequirement,
     ProofRoute,
-    ProtectionHealth,
-    TruthfulState,
     UncertaintyKind,
-    apply_uncertainty_floor,
-    decode_boundary_version,
-    derive_activity_state,
-    derive_protection_state,
-    maximum_action_floor,
 )
 
 
@@ -141,9 +130,9 @@ def test_unknown_effect_dimensions_require_non_exact_typed_uncertainty(field: st
 
 
 def test_canonical_guard_action_floor_is_used_and_absence_reviews() -> None:
-    assert maximum_action_floor(()) == "review"
+    assert most_restrictive_guard_action() == "review"
     for left, right in itertools.product(GUARD_ACTION_LATTICE, repeat=2):
-        result = maximum_action_floor((left, right))
+        result = most_restrictive_guard_action(left, right)
         assert GUARD_ACTION_SEVERITY[result] >= GUARD_ACTION_SEVERITY[left]
         assert GUARD_ACTION_SEVERITY[result] >= GUARD_ACTION_SEVERITY[right]
 
@@ -159,146 +148,3 @@ def test_proof_route_is_separate_from_canonical_action_floor() -> None:
         DecisionBasis("invalid-action", ProofRoute.VERIFIED)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="ProofRoute"):
         DecisionBasis("allow", "verified")  # type: ignore[arg-type]
-
-
-def test_every_typed_uncertainty_retains_or_raises_every_canonical_floor() -> None:
-    assert set(UNCERTAINTY_FLOOR) == set(UncertaintyKind)
-    for current, uncertainty in itertools.product(GUARD_ACTION_LATTICE, UncertaintyKind):
-        result = apply_uncertainty_floor(current, (uncertainty,))
-        assert GUARD_ACTION_SEVERITY[result] >= GUARD_ACTION_SEVERITY[current]
-        assert GUARD_ACTION_SEVERITY[result] >= GUARD_ACTION_SEVERITY[UNCERTAINTY_FLOOR[uncertainty]]
-    with pytest.raises(ValueError, match="exact UncertaintyKind"):
-        apply_uncertainty_floor("review", ("parser-failure",))  # type: ignore[arg-type]
-
-
-def test_protection_state_is_derived_from_typed_health() -> None:
-    healthy = ProtectionHealth(True, True, True, True, True)
-    partial = ProtectionHealth(True, True, True, True, False)
-    degraded = ProtectionHealth(False, True, True, True, True)
-
-    assert derive_protection_state(healthy) is TruthfulState.PROTECTED
-    assert derive_protection_state(partial) is TruthfulState.PARTIAL
-    assert derive_protection_state(degraded) is TruthfulState.DEGRADED
-    assert TRUTHFUL_STATE_GLOSSARY[TruthfulState.PARTIAL].label == "Partial"
-    with pytest.raises(ValueError, match="ProtectionHealth fields must be booleans"):
-        ProtectionHealth("false", True, True, True, True)  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize(
-    "health",
-    [
-        {"required_hooks": True},
-        "healthy",
-        type("DuckHealth", (), {"required_hooks": True})(),
-    ],
-)
-def test_protection_state_rejects_non_contract_health_objects(health: object) -> None:
-    with pytest.raises(ValueError, match="health must be a ProtectionHealth"):
-        derive_protection_state(health)  # type: ignore[arg-type]
-
-
-def test_confirmed_states_require_strong_correlated_post_execution_proof() -> None:
-    absent = PostExecutionProof(PostProofEligibility.INELIGIBLE, None)
-    success = PostExecutionProof(PostProofEligibility.STRONG_CORRELATION, PostExecutionOutcome.SUCCESS)
-    failure = PostExecutionProof(PostProofEligibility.STRONG_CORRELATION, PostExecutionOutcome.FAILURE)
-
-    assert derive_activity_state(EnforcementOutcome.PERMITTED, absent) is TruthfulState.ALLOWED_UNCONFIRMED
-    assert derive_activity_state(EnforcementOutcome.PERMITTED, success) is TruthfulState.CONFIRMED_SUCCESS
-    assert derive_activity_state(EnforcementOutcome.PERMITTED, failure) is TruthfulState.CONFIRMED_FAILURE
-    with pytest.raises(ValueError, match="ineligible"):
-        PostExecutionProof(PostProofEligibility.INELIGIBLE, PostExecutionOutcome.SUCCESS)
-    with pytest.raises(ValueError, match="only a permitted"):
-        derive_activity_state(EnforcementOutcome.BLOCKED, success)
-    with pytest.raises(ValueError, match="PostProofEligibility"):
-        PostExecutionProof("ineligible", None)  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="PostExecutionOutcome"):
-        PostExecutionProof(PostProofEligibility.STRONG_CORRELATION, "success")  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="EnforcementOutcome"):
-        derive_activity_state("permitted", absent)  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize(
-    "proof",
-    [
-        {"outcome": None},
-        "success",
-        type("DuckProof", (), {"outcome": None})(),
-    ],
-)
-def test_activity_state_rejects_non_contract_proof_objects(proof: object) -> None:
-    with pytest.raises(ValueError, match="proof must be a PostExecutionProof"):
-        derive_activity_state(EnforcementOutcome.PERMITTED, proof)  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize(
-    ("value", "status", "uncertainty"),
-    [
-        ("1.0.0", BoundaryVersionStatus.CURRENT, None),
-        (None, BoundaryVersionStatus.MALFORMED, UncertaintyKind.MALFORMED_BOUNDARY_VERSION),
-        ("1.0", BoundaryVersionStatus.MALFORMED, UncertaintyKind.MALFORMED_BOUNDARY_VERSION),
-        ("01.0.0", BoundaryVersionStatus.MALFORMED, UncertaintyKind.MALFORMED_BOUNDARY_VERSION),
-        ("\u0661.\u0660.\u0660", BoundaryVersionStatus.MALFORMED, UncertaintyKind.MALFORMED_BOUNDARY_VERSION),
-        ("2.0.0", BoundaryVersionStatus.UNKNOWN, UncertaintyKind.UNKNOWN_BOUNDARY_VERSION),
-        ("0.9.0", BoundaryVersionStatus.ROLLBACK, UncertaintyKind.ROLLBACK_BOUNDARY_VERSION),
-    ],
-)
-def test_boundary_version_decoder_classifies_drift_fail_closed(
-    value: object,
-    status: BoundaryVersionStatus,
-    uncertainty: UncertaintyKind | None,
-) -> None:
-    classification = decode_boundary_version(value)
-
-    assert classification.status is status
-    assert classification.uncertainty is uncertainty
-    assert classification.action_floor is (None if uncertainty is None else "block")
-
-
-def test_boundary_version_decoder_bounds_numeric_input_before_integer_conversion() -> None:
-    classification = decode_boundary_version(f"1.{('9' * 5000)}.0")
-
-    assert classification.status is BoundaryVersionStatus.MALFORMED
-    assert classification.uncertainty is UncertaintyKind.MALFORMED_BOUNDARY_VERSION
-    assert classification.action_floor == "block"
-
-
-@pytest.mark.parametrize(
-    "arguments",
-    [
-        (BoundaryVersionStatus.CURRENT, "2.0.0", "1.0.0", None, None),
-        (
-            BoundaryVersionStatus.CURRENT,
-            "1.0.0",
-            "1.0.0",
-            UncertaintyKind.UNKNOWN_BOUNDARY_VERSION,
-            "block",
-        ),
-        (
-            BoundaryVersionStatus.MALFORMED,
-            "invalid",
-            "1.0.0",
-            UncertaintyKind.MALFORMED_BOUNDARY_VERSION,
-            "block",
-        ),
-        (
-            BoundaryVersionStatus.UNKNOWN,
-            "0.9.0",
-            "1.0.0",
-            UncertaintyKind.UNKNOWN_BOUNDARY_VERSION,
-            "block",
-        ),
-        (
-            BoundaryVersionStatus.ROLLBACK,
-            "2.0.0",
-            "1.0.0",
-            UncertaintyKind.ROLLBACK_BOUNDARY_VERSION,
-            "block",
-        ),
-        (BoundaryVersionStatus.UNKNOWN, "2.0.0", "1.0.0", "unknown-boundary-version", "allow"),
-        ("current", "1.0.0", "1.0.0", None, None),
-        (BoundaryVersionStatus.CURRENT, "1.0.0", "invalid", None, None),
-    ],
-)
-def test_boundary_version_classification_rejects_direct_forgery(arguments: tuple[object, ...]) -> None:
-    with pytest.raises(ValueError):
-        BoundaryVersionClassification(*arguments)  # type: ignore[arg-type]
