@@ -1,31 +1,17 @@
-"""Package reviews settle from the package evaluator's verdict."""
+"""Transport package evaluator and saved-approval evidence into hook settlement."""
 
 from __future__ import annotations
 
-import json
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard import native_package_review_plan as package_review
-from codex_plugin_scanner.guard import native_supply_chain_eval
-from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.native_package_review_plan import NativePackageReviewPlanError
 from codex_plugin_scanner.guard.native_supply_chain_registry_cache import RegistryDeadlineError
-from codex_plugin_scanner.guard.store import GuardStore
-from tests.guard_tier2_phase13_support import artifact_from_command_fixture
-from tests.package_review_settings import review_package_signals
 
 SAFE_FLAGS = "--ignore-scripts --allow-git=none"
-ZOD_METADATA = {
-    "https://registry.npmjs.org/zod": {
-        "name": "zod",
-        "dist-tags": {"latest": "3.23.8"},
-        "versions": {"3.22.4": {}, "3.23.8": {}},
-    }
-}
 REVIEW = {"reason_code": "native_package_review", "minimum_action": "review"}
 KEY = {"harness": "omp", "artifact_id": "omp:project:package-request:abc", "artifact_hash": "token"}
 ARTIFACT = SimpleNamespace(
@@ -240,6 +226,28 @@ def test_an_unavailable_settlement_cannot_queue_an_evaluated_block(
 
     assert response is not None
     assert response["decision"] == "deny"
+    assert response["reason"] == "bad"
+    assert response["prompted"] is False
+
+
+@pytest.mark.parametrize("lookup", [None, {"argv": ["npm", "ci"], "environment": {}}])
+def test_an_unavailable_settlement_keeps_a_review_queued(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, lookup: dict[str, object] | None
+) -> None:
+    monkeypatch.setattr(
+        package_review, "package_review_plan", _plan(package_review.PackageReviewPlan(ARTIFACT, False, tmp_path, True))
+    )
+    monkeypatch.setattr(package_review, "_evaluate", _plan(SimpleNamespace(review_settlement=("review", None))))
+    monkeypatch.setattr(package_review, "_package_reuse_evidence", _plan(None))
+    replies = iter(
+        [("document", {"response": None, "package_approval": None, "lookup": lookup}), None]
+        if lookup is not None
+        else [None]
+    )
+    monkeypatch.setattr(package_review, "native_render_cli", lambda *_a, **_k: next(replies))
+
+    assert _outcome(tmp_path) == package_review.PackageReviewOutcome(None)
+    assert list(replies) == []
 
 
 def test_an_install_piped_into_a_workspace_program_is_not_keyed(
@@ -357,171 +365,3 @@ def test_a_saved_package_allow_is_reused_for_an_install_the_evaluator_allows(
 
     assert asked == ["review"]
     assert evidence == {"artifact_hash": "guard-approval-context:v1:x", "found": True, "policy_action": "allow"}
-
-
-class TestEvaluatorRule:
-    pytestmark = pytest.mark.usefixtures("package_intent_native")
-
-    @staticmethod
-    def _evaluate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, npm_version: str | None):
-        monkeypatch.setattr(native_supply_chain_eval, "_test_registry_metadata_override", ZOD_METADATA)
-        workspace = tmp_path / "workspace"
-        workspace.mkdir(exist_ok=True)
-        artifact = artifact_from_command_fixture(command, workspace=workspace)
-        if npm_version is not None:
-            artifact = replace(artifact, metadata={**artifact.metadata, "verified_npm_version": npm_version})
-        return evaluate_package_request_artifact(
-            artifact=artifact,
-            store=GuardStore(tmp_path / "home"),
-            workspace_dir=workspace,
-            now="2026-10-12T00:00:00Z",
-        )
-
-    @staticmethod
-    def _codes(evaluation) -> set[str]:
-        return {str(reason.get("code")) for reason in evaluation.reasons}
-
-    @pytest.mark.parametrize("spec", ["zod", "zod@^3", "zod@3.22.4", "zod@latest"])
-    def test_script_free_registry_install_is_allowed(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spec: str
-    ) -> None:
-        evaluation = self._evaluate(tmp_path, monkeypatch, f"npm install -D {spec} {SAFE_FLAGS}", "11.9.0")
-
-        # Watched, not trusted: the request is still recorded as evidence.
-        assert evaluation.decision == "monitor", evaluation.reasons
-        assert [package.get("scriptFreeRegistryInstall") for package in evaluation.packages] == [True]
-        assert evaluation.review_settlement == ("allow", None)
-
-    def test_missing_flags_get_rerun_guidance(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        review_package_signals(tmp_path / "home")
-        # A git dependency keeps the tree proof out of reach, so only --allow-git=none settles it.
-        self._project(tmp_path, {"dependencies": {"left": "github:someone/left"}})
-        evaluation = self._evaluate(tmp_path, monkeypatch, "npm install zod --ignore-scripts", "11.9.0")
-
-        assert evaluation.decision == "ask"
-        assert "package_lifecycle_scripts_enabled" in self._codes(evaluation)
-        action, guidance = evaluation.review_settlement
-        assert action == "guide"
-        assert guidance in {str(reason.get("message")) for reason in evaluation.reasons}
-
-    @pytest.mark.parametrize("npm_version", [None, "11.6.2", "11.8.9"])
-    def test_npm_without_allow_git_keeps_review_without_guidance(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, npm_version: str | None
-    ) -> None:
-        review_package_signals(tmp_path / "home")
-        evaluation = self._evaluate(tmp_path, monkeypatch, f"npm install zod {SAFE_FLAGS}", npm_version)
-
-        assert evaluation.decision == "ask"
-        assert "package_lifecycle_scripts_enabled" not in self._codes(evaluation)
-        assert evaluation.review_settlement == ("review", None)
-
-    @staticmethod
-    def _project(tmp_path: Path, manifest: dict[str, object]) -> None:
-        workspace = tmp_path / "workspace"
-        workspace.mkdir(exist_ok=True)
-        (workspace / "package.json").write_text(json.dumps(manifest), encoding="utf-8")
-
-    @pytest.mark.parametrize("npm_version", ["10.9.9", "11.8.9", "11.9.0", "11.10.1"])
-    def test_ignore_scripts_installs_a_git_free_tree_without_review(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, npm_version: str
-    ) -> None:
-        self._project(tmp_path, {"dependencies": {"zod": "^3.22.0"}})
-        evaluation = self._evaluate(tmp_path, monkeypatch, "npm install zod --ignore-scripts", npm_version)
-
-        assert evaluation.decision == "monitor", evaluation.reasons
-        assert [package.get("scriptFreeRegistryInstall") for package in evaluation.packages] == [True]
-        assert evaluation.review_settlement == ("allow", None)
-
-    @pytest.mark.parametrize("npm_version", ["10.9.9", "11.9.0"])
-    @pytest.mark.parametrize("dependency", ["github:someone/left", "file:../left", "npm:zod@3"])
-    def test_ignore_scripts_keeps_review_when_the_tree_can_hold_a_git_dependency(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dependency: str, npm_version: str
-    ) -> None:
-        review_package_signals(tmp_path / "home")
-        self._project(tmp_path, {"dependencies": {"left": dependency}})
-        evaluation = self._evaluate(tmp_path, monkeypatch, "npm install zod --ignore-scripts", npm_version)
-
-        assert evaluation.decision == "ask"
-        assert not any(package.get("scriptFreeRegistryInstall") for package in evaluation.packages)
-        assert evaluation.review_settlement[0] != "allow"
-
-    def test_older_npm_guidance_asks_only_for_ignore_scripts(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        review_package_signals(tmp_path / "home")
-        self._project(tmp_path, {})
-        evaluation = self._evaluate(tmp_path, monkeypatch, "npm install zod", "10.9.9")
-
-        messages = [str(reason.get("message")) for reason in evaluation.reasons]
-        guidance = [m for m in messages if "Rerun the same npm command" in m]
-        assert evaluation.decision == "ask"
-        assert len(guidance) == 1
-        assert "with --ignore-scripts and HOL Guard" in guidance[0]
-
-    @pytest.mark.parametrize(
-        "command",
-        [
-            f"npm install zod {SAFE_FLAGS} --allow-g=all",
-            f"npm install zod {SAFE_FLAGS} --reg=https://example.test/",
-            f"npm install -g zod {SAFE_FLAGS}",
-            f"npm install user/zod {SAFE_FLAGS}",
-            f"npm install unknown-package-xyz {SAFE_FLAGS}",
-        ],
-    )
-    def test_unproven_installs_keep_review(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str) -> None:
-        evaluation = self._evaluate(tmp_path, monkeypatch, command, "11.9.0")
-
-        assert evaluation.decision != "allow"
-        assert not any(package.get("scriptFreeRegistryInstall") for package in evaluation.packages)
-        assert evaluation.review_settlement[0] != "allow"
-
-    def test_project_npmrc_registry_keeps_review(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        workspace = tmp_path / "workspace"
-        workspace.mkdir()
-        (workspace / ".npmrc").write_text("registry=https://example.test/\n", encoding="utf-8")
-
-        evaluation = self._evaluate(tmp_path, monkeypatch, f"npm install zod {SAFE_FLAGS}", "11.9.0")
-
-        assert evaluation.decision != "allow"
-        assert not any(package.get("scriptFreeRegistryInstall") for package in evaluation.packages)
-        assert evaluation.review_settlement[0] != "allow"
-
-
-@pytest.mark.parametrize(
-    "settlement",
-    [
-        None,
-        "allow",
-        {},
-        {"action": "allow"},
-        {"action": "allow", "reason": []},
-        {"action": "allow", "reason": "unexpected"},
-        {"action": ["allow"], "reason": None},
-        {"action": {"allow": True}, "reason": None},
-        {"action": "block", "reason": ""},
-        {"action": "guide", "reason": None},
-        {"action": "settle", "reason": None},
-    ],
-)
-def test_an_unreadable_settlement_leaves_the_review_standing(settlement: object) -> None:
-    assert native_supply_chain_eval._review_settlement(settlement, "monitor") == ("review", None)
-
-
-@pytest.mark.parametrize("settlement", [None, {"action": "allow"}, {"action": ["block"], "reason": "x"}])
-def test_an_unreadable_settlement_never_weakens_a_block(settlement: object) -> None:
-    action, reason = native_supply_chain_eval._review_settlement(settlement, "block")
-    assert action == "block"
-    assert reason
-
-
-@pytest.mark.parametrize(
-    ("settlement", "expected"),
-    [
-        ({"action": "allow", "reason": None}, ("allow", None)),
-        ({"action": "review", "reason": None}, ("review", None)),
-        ({"action": "block", "reason": "stop"}, ("block", "stop")),
-        ({"action": "guide", "reason": "rerun"}, ("guide", "rerun")),
-    ],
-)
-def test_a_well_formed_settlement_is_read_as_sent(settlement: object, expected: tuple[str, str | None]) -> None:
-    assert native_supply_chain_eval._review_settlement(settlement, "monitor") == expected

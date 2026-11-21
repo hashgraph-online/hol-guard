@@ -244,11 +244,20 @@ def native_package_review_response(
         ):
             return PackageReviewOutcome(response, approval)
 
-    # An evaluated package may already have been blocked. Do not present a
-    # review card when the resident is unavailable to settle that verdict.
+    # Keep the original review queued when settlement is unavailable.
+    # An explicit evaluator block must still stop without a review card.
+    if action != "block":
+        return _UNSETTLED
+
     from .hook_review.hook_fail_closed import fail_closed_pre_tool
 
-    return PackageReviewOutcome(fail_closed_pre_tool(harness))
+    response = (
+        fail_closed_pre_tool(harness, reason=reason, reason_code=str(review_reason))
+        if reason
+        else fail_closed_pre_tool(harness)
+    )
+    response["prompted"] = False
+    return PackageReviewOutcome(response)
 
 
 def _settle(
