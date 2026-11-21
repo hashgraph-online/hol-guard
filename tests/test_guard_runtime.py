@@ -11174,7 +11174,9 @@ def test_guard_hook_claude_notification_notice_falls_back_when_tool_name_is_miss
     assert "keep blocked" in notification_output["systemMessage"].lower()
 
 
-def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(tmp_path, capsys, monkeypatch):
+def test_guard_hook_claude_notification_uses_native_notice_when_python_bridge_is_unavailable(
+    tmp_path, capsys, monkeypatch
+):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -11182,7 +11184,8 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
     )
 
-    # Hook authority state lives in the native resident, which reports a locked store as no reply.
+    # The Python bridge is unavailable, but the native lifecycle authority remains
+    # the source of the notice rendered for Claude.
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.native_hook_authority_state.hook_authority_state",
         lambda *_args, **_kwargs: None,
@@ -11231,11 +11234,12 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
     assert pre_tool_rc == 0
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert notification_rc == 0
-    # Without a reply there is no notice to read, so the prompt carries the
-    # generic hold copy and none of the review's reason.
+    # Native lifecycle rendering owns the notice text once Python is bypassed.
     assert notification_output["systemMessage"] == (
-        "HOL Guard is holding this Claude request for review. The HOL Guard runtime could not render "
-        "the full notice, so nothing in this prompt should be read as HOL Guard allowing the action."
+        "HOL Guard intercepted Claude's attempt to use Read and is routing it to a HOL Guard approval question. "
+        "This approval flow came from HOL Guard, not from Claude alone. HOL Guard requires fresh approval under "
+        "the installed policy's secret read setting. HOL Guard will ask the user to choose Allow once, Allow "
+        "during this session, or Keep blocked before Claude retries the action."
     )
 
 
