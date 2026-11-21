@@ -215,15 +215,29 @@ fn bounded(
         _ => None,
     };
     let exit_code = result?;
-    let Some((label, kind)) =
-        output.and_then(|output| Some((output.status_label.as_ref()?, output.kind)))
-    else {
+    let Some(output) = output else {
         return Ok(exit_code);
     };
-    signals
-        .output
-        .out(format!("{label}{}\n", status(kind, exit_code, chain)).as_bytes());
-    // The shell's status is the echo's own.
+    let ended = status(output.kind, exit_code, chain);
+    if let Some(label) = output.status_label.as_ref() {
+        signals.output.out(format!("{label}{ended}\n").as_bytes());
+        // The shell's status is the echo's own.
+        return Ok(0);
+    }
+    // A report with arms prints the one the shell would have reached, and the
+    // status is that echo's.
+    let arm = if ended == 0 {
+        output.success_label.as_ref()
+    } else {
+        output.failure_label.as_ref()
+    };
+    let Some(label) = arm else {
+        // The shell reached no echo, so the status is the one the run itself
+        // ended on: after a bounded filter the filter's, after a chain its
+        // last stage's, and otherwise the core's.
+        return Ok(ended);
+    };
+    signals.output.out(format!("{label}\n").as_bytes());
     Ok(0)
 }
 

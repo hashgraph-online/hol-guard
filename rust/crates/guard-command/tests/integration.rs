@@ -81,6 +81,7 @@ pub mod pretool_contained_loopback;
 pub mod pretool_contained_safety_guide;
 pub mod pretool_contained_script_tests;
 pub mod pretool_contained_tests;
+pub mod pretool_contained_trailing_reports;
 pub mod pretool_contained_wrappers;
 pub mod pretool_contained_wrappers_countless;
 pub mod pretool_cp_flags_temporary;

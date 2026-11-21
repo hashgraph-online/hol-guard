@@ -48,53 +48,10 @@ pub(super) fn segment_source(
     text(model, segment.span.start, segment.span.end)
 }
 
-/// A final `; echo "exit=$?"`: the sink prints the label and status itself.
-///
-/// The shell prints a single-quoted or backslash-escaped `$?` literally, and
-/// the Python sink cannot peel those forms. Accept only the source syntax the
-/// sink peels, so those commands stay on the normal review path.
-pub(in crate::pretool) fn status_echo(
-    model: &CanonicalCommandV1,
-    segment: &CommandSegmentV1,
-) -> bool {
-    segment.environment_names.is_empty()
-        && segment.wrapper_chain.is_empty()
-        && !segment.path_overridden
-        && segment.pipeline_index == 0
-        && segment.executable.as_deref() == Some("echo")
-        && segment.arguments.len() == 1
-        && text(model, segment.span.start, segment.span.end)
-            .is_some_and(|source| status_echo_syntax(&source))
-}
+#[path = "contained_trailing_report.rs"]
+pub(in crate::pretool) mod trailing_report;
 
-fn status_echo_syntax(source: &str) -> bool {
-    let Some(rest) = source.trim().strip_prefix("echo") else {
-        return false;
-    };
-    if !rest.starts_with([' ', '\t']) {
-        return false;
-    }
-    let argument = rest.trim();
-    let (label, quoted) = if let Some(inner) = argument
-        .strip_prefix('"')
-        .and_then(|body| body.strip_suffix('"'))
-    {
-        (inner, true)
-    } else if argument.contains(['\'', '\\', '"']) {
-        return false;
-    } else {
-        (argument, false)
-    };
-    let Some(label) = label.strip_suffix("$?") else {
-        return false;
-    };
-    label.len() <= 32
-        && label.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric()
-                || matches!(byte, b'_' | b'=' | b':' | b'-')
-                || (quoted && byte == b' ')
-        })
-}
+pub(in crate::pretool) use trailing_report::trailing_report_steps;
 
 // Parser spans count Unicode characters, not UTF-8 byte offsets.
 fn text(model: &CanonicalCommandV1, start: usize, end: usize) -> Option<String> {
@@ -412,18 +369,11 @@ pub(super) fn contained_core_in(
         }
         start = 1;
     }
-    let status = segments.len() >= start + 2
-        && segments
-            .last()
-            .is_some_and(|segment| status_echo(model, segment))
-        && text(
-            model,
-            segments[segments.len() - 2].span.end,
-            segments[segments.len() - 1].span.start,
-        )? == ";";
-    if status {
-        segments = &segments[..segments.len() - 1];
+    let reported = trailing_report_steps(model, segments, start);
+    if reported > 0 {
+        segments = &segments[..segments.len() - reported];
     }
+    let status = reported > 0;
     let filtered = filter_chain(model, segments.get(start..)?)? > 0;
     let mut core = segments[start].clone();
     let merged = core

@@ -249,3 +249,57 @@ fn an_unreadable_assignment_keeps_the_unprojected_text() {
         assert_eq!(projection(raw, cwd), None, "{raw}");
     }
 }
+
+/// A run closed with a line that says how it went projects like the run
+/// itself: the report is kept verbatim behind the rewritten `cd`, so the
+/// same work reaches the same reading whichever way the agent names the
+/// directory.
+#[test]
+fn a_trailing_report_rides_the_projection() {
+    let root = fixture("report");
+    let cwd = root.to_str().unwrap();
+    let web = root.join("web");
+    let web = web.to_str().unwrap();
+    for (raw, expected) in [
+        (
+            "bun --cwd web run test; echo done",
+            format!("cd {web} && bun run test; echo done"),
+        ),
+        (
+            "bun --cwd web run test && echo PASS",
+            format!("cd {web} && bun run test && echo PASS"),
+        ),
+        (
+            "bun --cwd web run test || echo FAIL",
+            format!("cd {web} && bun run test || echo FAIL"),
+        ),
+        (
+            "bun --cwd web run test && echo PASS || echo FAIL",
+            format!("cd {web} && bun run test && echo PASS || echo FAIL"),
+        ),
+        (
+            "bun --cwd web run test 2>&1 | tail -20 && echo PASS",
+            format!("cd {web} && bun run test 2>&1 | tail -20 && echo PASS"),
+        ),
+        (
+            "bun --cwd web run test; echo \"exit=$?\"",
+            format!("cd {web} && bun run test; echo \"exit=$?\""),
+        ),
+    ] {
+        assert_eq!(
+            projection(raw, cwd).as_deref(),
+            Some(expected.as_str()),
+            "{raw}"
+        );
+    }
+    // A step that is not a report is work of its own, and the projection
+    // leaves the whole command alone.
+    for raw in [
+        "bun --cwd web run test && cat notes.txt",
+        "bun --cwd web run test && echo PASS && echo AGAIN",
+        "bun --cwd web run test && echo -n",
+    ] {
+        assert_eq!(projection(raw, cwd), None, "{raw}");
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
