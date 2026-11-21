@@ -395,15 +395,15 @@ def test_worker_aibom_pass_answers(tmp_path: Path) -> None:
 
 
 def test_replayed_attention_reaches_the_worker_host_without_the_daemon_key(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.workers.host import DurableApprovalAttention, _take_attention
+    from codex_plugin_scanner.guard.workers.host import DurableApprovalAttention
 
     store = GuardStore(tmp_path)
     requests: list[dict[str, object]] = [{"request_id": "req-1", "approval_url": "http://127.0.0.1:1/approve/req-1"}]
     DurableApprovalAttention(store).schedule(operation_id="op-1", requests=requests, browser_url="http://x/?k=secret")
-    taken = _take_attention(store)
+    taken = store.take_approval_attention()
     assert taken == [{"operation_id": "op-1", "requests": requests}]
     assert "secret" not in json.dumps(taken)
-    assert _take_attention(store) == []
+    assert store.take_approval_attention() == []
 
 
 def test_hook_removal_needs_its_confirmation(tmp_path: Path) -> None:
