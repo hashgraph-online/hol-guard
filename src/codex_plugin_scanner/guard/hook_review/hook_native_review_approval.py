@@ -16,12 +16,12 @@ from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_adapter import NativeHookAdapterError, native_review_query
 from ..native_hook_authority_state import hook_authority_integrity_key
 from ..native_hook_edge import review_evidence_parts
-from ..native_hook_render import native_exact_command_block_response, native_saved_decision_response
+from ..native_hook_render import native_exact_command_block_response, native_render_cli, native_saved_decision_response
 from ..native_package_review_plan import native_package_review_response
 from ..native_payload_facts import native_connector_lookup, native_hook_facts
 from .hook_fail_closed import (
     canonical_harness,
-    render_accepted_allow,
+    fail_closed_pre_tool,
     render_pre_tool,
     render_pre_tool_review,
     render_silent_review_block,
@@ -128,28 +128,18 @@ def pause_native_pre_tool_for_approval(
         claimed_saved_allow_hash=claimed_saved_allow_hash,
         claimed_approval_request_id=claimed_approval_request_id,
     )
-    if reuse == "blocked":
-        blocked = dict(native_result)
-        blocked.update(
-            decision="deny",
-            minimum_action="block",
-            policy_action="block",
-            reason_code="native_review_user_block",
-            reason=(
-                "The user chose Keep blocked for this action. Do not retry it; continue with a permitted alternative."
-            ),
+    if reuse is not None:
+        rendered = native_render_cli(
+            "review_reuse",
+            harness,
+            {"outcome": reuse, "verdict": dict(native_result)},
+            guard_home=guard_home,
+            deadline=deadline,
         )
-        response = render_pre_tool(harness, blocked, guard_home=guard_home, deadline=deadline)
-        response["prompted"] = False
-        response["approval_reuse_status"] = "blocked"
-        return response
-    if reuse == "allowed":
-        allowed = dict(native_result)
-        allowed["decision"] = "allow"
-        allowed["minimum_action"] = "allow"
-        allowed["policy_action"] = "allow"
-        accepted = render_accepted_allow(harness, allowed, guard_home=guard_home, deadline=deadline)
-        return admit_accepted_call(store, harness=harness, payload=payload, response=accepted)
+        response = rendered[1] if rendered is not None and rendered[0] == "document" else None
+        return admit_accepted_call(
+            store, harness=harness, payload=payload, response=response or fail_closed_pre_tool(harness)
+        )
     package_review = native_package_review_response(
         store,
         harness=harness,
