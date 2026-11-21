@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .harness.contracts import display_name_for, harness_names
+from .setup_contracts import display_name_for, harness_names
 
 
 @dataclass(frozen=True, slots=True)

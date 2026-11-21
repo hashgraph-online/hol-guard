@@ -4,10 +4,16 @@ use super::{
 };
 use crate::CanonicalCommandV1;
 
+#[path = "segment_proof_fresh_checkout.rs"]
+mod fresh_checkout;
+
+use fresh_checkout::{fresh_checkout, listing_of_fresh_checkouts, reads_outside_fresh_checkouts};
+
 pub(crate) use super::stderr_merge::without_stderr_merge;
 
 #[path = "segment_proof_cwd.rs"]
 mod cwd;
+pub(in crate::pretool) use cwd::verified_leading_cd_target;
 #[path = "github_metadata_text.rs"]
 mod github_metadata_text;
 #[path = "jq_filter_text.rs"]
@@ -53,7 +59,7 @@ pub(crate) fn benign_command_segments(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
 ) -> Vec<usize> {
-    segment_proofs(model, context, false)
+    segment_proofs(model, context, false, None)
 }
 
 /// The segments that would pass as a command of their own, judged as if no
@@ -68,27 +74,35 @@ pub(crate) fn benign_command_segments(
 pub(crate) fn segments_safe_alone(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Vec<usize> {
-    segment_proofs(model, context, true)
+    segment_proofs(model, context, true, execution_environment)
 }
 
 fn segment_proofs(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
     alone: bool,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Vec<usize> {
     let cwd = verified_cwd_compound_context(model, context);
+    // A cwd transition changes the meaning of subsequent relative operands.
+    // When the transition is not proven -- a `;` after the `cd` leaves the
+    // rest running in the starting directory if the `cd` failed -- no later
+    // operand can be read against either directory. A step that names no path
+    // at all reads the same in both, so judged alone it keeps its proof while
+    // everything beside it loses one.
+    let unproven_cd_transition = cwd.is_none()
+        && model
+            .segments
+            .iter()
+            .any(|segment| segment.executable.as_deref() == Some("cd"));
     if model.confidence != "exact"
         || model.path_overridden
         || !model.wrapper_chain.is_empty()
         // Per-segment sleep proofs must not add up past the whole-command bound.
         || !super::safe_scalar::bounded_total_sleep(model)
-        // A cwd transition changes the meaning of subsequent relative operands.
-        || (cwd.is_none()
-            && model
-                .segments
-                .iter()
-                .any(|segment| segment.executable.as_deref() == Some("cd")))
+        || (unproven_cd_transition && !alone)
     {
         return Vec::new();
     }
@@ -109,7 +123,11 @@ fn segment_proofs(
         openssl_config_absent: context.openssl_config_absent,
         psql_environment: context.psql_environment,
         creates_nothing: super::search::command_creates_nothing(model),
-        cwd: cwd.as_deref().or(context.cwd),
+        cwd: if unproven_cd_transition {
+            None
+        } else {
+            cwd.as_deref().or(context.cwd)
+        },
     };
     let segment_benign: Vec<bool> = model
         .segments
@@ -126,6 +144,12 @@ fn segment_proofs(
         .collect();
     let mut all_previous_benign = true;
     let mut tree_may_change = false;
+    // The checkouts a proven `git worktree add` of this command creates, each
+    // with the repository it checks out. The destination does not exist yet,
+    // so the add writes no file a read of another path opens, and the
+    // repository is the directory a listing of the destination is screened
+    // as below.
+    let mut fresh_checkouts: Vec<(std::path::PathBuf, String)> = Vec::new();
     model
         .segments
         .iter()
@@ -135,7 +159,15 @@ fn segment_proofs(
             // trailing `2>&1` is not an ls target.
             let stripped = without_stderr_merge(original);
             let segment = stripped.as_ref().unwrap_or(original);
-            let benign = segment_benign[index];
+            // A listing of the checkout a proven `git worktree add` of this
+            // command creates prints the names the add writes there and opens
+            // none of them. Opening a file there keeps its review: the ref
+            // decides whether the name is a file or a link out of the
+            // checkout.
+            let from_new_checkout = alone
+                && !fresh_checkouts.is_empty()
+                && listing_of_fresh_checkouts(segment, proof_context, &fresh_checkouts);
+            let benign = segment_benign[index] || from_new_checkout;
             let basename = executable_basename(segment.executable.as_deref().unwrap_or(""));
             let stdin_filter = stdin_filter_segment(segment);
             let path_free = matches!(
@@ -148,6 +180,7 @@ fn segment_proofs(
                     | "echo"
                     | "printf"
                     | "which"
+                    | "whence"
                     | "whoami"
                     | "uname"
                     | "date"
@@ -270,7 +303,28 @@ fn segment_proofs(
             // which is proven only when that directory is verified.
             let path_context_verified =
                 || safe_reads::verified_path_context(proof_context.home_dir, proof_context.cwd);
+            // Reads nothing the working directory decides, so an unproven
+            // `cd` before it leaves its answer unchanged. An empty argument
+            // list is not enough: a build tool with no arguments still acts
+            // on whichever directory it runs in.
+            let cwd_independent = stdin_filter
+                || matches!(
+                    basename,
+                    "pwd"
+                        | "true"
+                        | "exit"
+                        | "break"
+                        | "continue"
+                        | "echo"
+                        | "printf"
+                        | "whoami"
+                        | "uname"
+                        | "date"
+                        | "sleep"
+                        | "uptime"
+                );
             let covered = benign
+                && (!unproven_cd_transition || cwd_independent)
                 && (ls_has_explicit_target || (alone && path_context_verified()))
                 && (!requires_path_context || path_context_verified())
                 // Judged alone, a file step needs no proven predecessor unless
@@ -279,10 +333,22 @@ fn segment_proofs(
                 // container start, still needs every predecessor proven.
                 && (path_free
                     || all_previous_benign
-                    || (alone && requires_path_context && !tree_may_change));
+                    || (alone
+                        && requires_path_context
+                        && !tree_may_change
+                        && (from_new_checkout
+                            || reads_outside_fresh_checkouts(
+                                segment,
+                                proof_context,
+                                &fresh_checkouts,
+                            ))));
             all_previous_benign = all_previous_benign && benign;
-            tree_may_change =
-                tree_may_change || (!benign && super::tree_writers::may_rewrite_tree(original));
+            if !benign && super::tree_writers::may_rewrite_tree(original) {
+                match fresh_checkout(model, index, proof_context, execution_environment) {
+                    Some(checkout) => fresh_checkouts.push(checkout),
+                    None => tree_may_change = true,
+                }
+            }
             covered.then_some(index)
         })
         .collect()
@@ -449,8 +515,13 @@ pub(super) fn exact_safe_segment_with_context(
         "exit" => super::shell_flow::safe_exit_arguments(&segment.arguments),
         "break" | "continue" => super::shell_flow::safe_loop_control_arguments(&segment.arguments),
         "unset" | "set" => super::inert_environment::safe_shell_setting(basename, segment),
-        "type" | "command" => {
-            super::lookup_reads::safe_lookup_arguments(basename, &segment.arguments)
+        // `whence` is zsh's spelling of `which`: it reports where a name
+        // resolves and runs nothing. Its proven flags are `-a`, `-p` and `-v`,
+        // none of which prints a function body. zsh's `where` is `whence -ca`,
+        // and the csh-style output prints the body of a matching function, so
+        // it stays under review next to `whence -f` and `type NAME`.
+        "type" | "command" | "whence" => {
+            super::lookup_reads::safe_path_lookup(basename, &segment.arguments)
         }
         "cargo" => super::rust_toolchain::safe_cargo_probe(&segment.arguments, context),
         "rustc" => super::rust_toolchain::safe_version_probe(&segment.arguments, context),

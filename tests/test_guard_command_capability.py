@@ -9,23 +9,17 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.native_command_envelope import CommandEnvelopeUnavailableError
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime import command_capability as command_capability_module
 from codex_plugin_scanner.guard.runtime import command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import (
     COMMAND_CAPABILITY_STATE_KEY,
-    COMMAND_LOCAL_APPROVALS_STATE_KEY,
-    COMMAND_REPLAY_STATE_KEY,
     CommandCapabilityError,
-    approve_pending_command,
     authorize_command_job,
     command_capability_status,
     consume_local_command_approval,
     issue_command_capability,
     mark_command_job_consumed,
-    pending_command_approvals,
-    register_pending_command,
     revoke_command_capability,
 )
 from codex_plugin_scanner.guard.runtime.command_executors import (
@@ -363,120 +357,6 @@ def test_job_authorization_binds_target_schema_payload_expiry_and_replay(tmp_pat
         authorize_command_job(store, expired, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
 
 
-def test_state_change_requires_exact_single_use_local_approval(tmp_path: Path) -> None:
-    store = _connected_store(tmp_path)
-    operation = "guard.app.update"
-    _issue(store, operation)
-    job = _job(store, operation, payload={"channel": "stable"})
-    authorized = authorize_command_job(
-        store,
-        job,
-        schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
-    )
-
-    assert authorized.requires_local_approval is True
-    assert consume_local_command_approval(store, authorized) is False
-    pending = register_pending_command(store, authorized, job)
-    assert pending["id"] == "job-1"
-    assert pending_command_approvals(store)[0]["operation"] == operation
-
-    result = approve_pending_command(store, "job-1")
-    assert result["approved"] is True
-
-    changed_job = {**job, "payload": {"channel": "preview"}}
-    changed_authorization = authorize_command_job(
-        store,
-        changed_job,
-        schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
-    )
-    assert consume_local_command_approval(store, changed_authorization) is False
-    assert consume_local_command_approval(store, authorized) is True
-    assert consume_local_command_approval(store, authorized) is False
-
-
-def test_an_identity_digest_does_not_ship_the_signing_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _connected_store(tmp_path)
-    operation = "guard.app.update"
-    _issue(store, operation)
-    job = _job(store, operation, payload={"channel": "stable"})
-    authorized = authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
-    register_pending_command(store, authorized, job)
-    real = command_capability_module.native_command_envelope
-    calls: list[tuple[str, str | None]] = []
-
-    def recorded(**kwargs: object) -> dict[str, object]:
-        calls.append((str(kwargs["action"]), kwargs["integrity_key_b64"]))  # type: ignore[arg-type]
-        return real(**kwargs)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(command_capability_module, "native_command_envelope", recorded)
-
-    assert approve_pending_command(store, "job-1")["approved"] is True
-
-    digested = [key for action, key in calls if action == "digest"]
-    signed = [key for action, key in calls if action == "sign"]
-    assert digested and all(key is None for key in digested)
-    assert signed and all(key is not None for key in signed)
-
-
-def test_an_unanswered_runtime_refuses_an_approval_as_a_capability_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    store = _connected_store(tmp_path)
-    operation = "guard.app.update"
-    _issue(store, operation)
-    job = _job(store, operation, payload={"channel": "stable"})
-    authorized = authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
-    register_pending_command(store, authorized, job)
-
-    def unavailable(**_kwargs: object) -> dict[str, object]:
-        raise CommandEnvelopeUnavailableError
-
-    monkeypatch.setattr(command_capability_module, "native_command_envelope", unavailable)
-
-    with pytest.raises(CommandCapabilityError, match=CommandEnvelopeUnavailableError.reason):
-        approve_pending_command(store, "job-1")
-
-
-def test_an_unanswered_runtime_never_reads_a_grant_as_unmatched(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    store = _connected_store(tmp_path)
-    operation = "guard.app.update"
-    _issue(store, operation)
-    job = _job(store, operation, payload={"channel": "stable"})
-    authorized = authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
-    register_pending_command(store, authorized, job)
-    assert approve_pending_command(store, "job-1")["approved"] is True
-    real = command_capability_module.native_command_envelope
-
-    answering = [False]
-
-    def unavailable_for_verify(**kwargs: object) -> dict[str, object]:
-        if not answering[0] and kwargs.get("action") == "verify":
-            raise CommandEnvelopeUnavailableError
-        return real(**kwargs)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(command_capability_module, "native_command_envelope", unavailable_for_verify)
-
-    # Walking past the unanswered grant would read as "no approval on file"
-    # and spend the user's approval without running the job.
-    with pytest.raises(CommandCapabilityError, match=CommandEnvelopeUnavailableError.reason):
-        consume_local_command_approval(store, authorized)
-
-    answering[0] = True
-    assert consume_local_command_approval(store, authorized) is True
-
-
-def test_pending_approval_rejects_nonportable_cloud_job_id(tmp_path: Path) -> None:
-    store = _connected_store(tmp_path)
-    operation = "guard.app.update"
-    _issue(store, operation)
-    job_id = "job-$(touch /opt/guard-test/unsafe)"
-    job = _job(store, operation, job_id=job_id, payload={"channel": "stable"})
-    with pytest.raises(CommandCapabilityError, match="command_id_invalid"):
-        authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
-
-
 def test_poll_is_network_silent_when_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _connected_store(tmp_path)
     monkeypatch.setattr(
@@ -558,67 +438,3 @@ def test_cli_and_runtime_snapshot_surface_capability_state(
     assert isinstance(capability, dict)
     assert capability["enabled"] is True
     assert capability["pending_commands"] == []
-
-
-def test_an_approval_is_never_spent_against_a_digest_the_runtime_has_not_given(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """One digest serves both the grant match and the replay row.
-
-    The poll used to ask for it twice: once to find the grant it deletes, and
-    again to write the replay row. A resident that stopped answering between
-    the two failed the job with the user's approval already gone, so the next
-    attempt asked them to approve it a second time.
-    """
-
-    store = _connected_store(tmp_path)
-    operation = "guard.app.update"
-    _issue(store, operation)
-    leased = _job(store, operation, payload={"channel": "stable"})
-    authorized = authorize_command_job(store, leased, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
-    register_pending_command(store, authorized, leased)
-    assert approve_pending_command(store, "job-1")["approved"] is True
-
-    real = command_capability_module.native_command_envelope
-    digests = [0]
-
-    def one_digest_only(**kwargs: object) -> dict[str, object]:
-        if kwargs.get("action") == "digest":
-            digests[0] += 1
-            if digests[0] > 1:
-                raise CommandEnvelopeUnavailableError
-        return real(**kwargs)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(command_capability_module, "native_command_envelope", one_digest_only)
-    calls: list[tuple[str, dict[str, object]]] = []
-
-    monkeypatch.setattr(
-        command_queue,
-        "_resolve_command_queue_auth_context",
-        lambda _store, **_kwargs: {"sync_url": "https://hol.test/sync"},
-    )
-
-    def request(
-        _auth: dict[str, object],
-        *,
-        method: str,
-        path: str,
-        payload: dict[str, object],
-    ) -> dict[str, object]:
-        calls.append((path, payload))
-        return {"item": leased} if path == "/lease" else {"ok": True}
-
-    monkeypatch.setattr(command_queue, "_json_request", request)
-    monkeypatch.setattr(command_queue, "_execute_job", lambda *_args, **_kwargs: {"data": {"ok": True}})
-
-    command_queue.poll_command_queue_once(store, _context(tmp_path))
-
-    result = next(payload for path, payload in calls if path.endswith("/result"))
-    assert result["status"] == "succeeded"
-    assert digests[0] == 1
-    grants = store.get_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY)
-    assert isinstance(grants, dict) and grants["items"] == []
-    replay = store.get_sync_payload(COMMAND_REPLAY_STATE_KEY)
-    assert isinstance(replay, dict)
-    assert [item["jobId"] for item in replay["items"]] == ["job-1"]

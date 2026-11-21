@@ -70,7 +70,8 @@ def prepare_guard_shim(
     display_name: str | None = None,
 ) -> PreparedGuardShim:
     """Render and snapshot both launchers without creating or changing files."""
-    from .harness.native_harness import ask, planned_files
+    from .native_harness_client import ask
+    from .native_harness_steps import planned_files
 
     answer = ask(
         "prepare_guard_shim",
@@ -102,44 +103,23 @@ def install_guard_shim(
     launcher_name: str | None = None,
     display_name: str | None = None,
 ) -> dict[str, object]:
-    """Publish the same prepared launcher bytes used by runtime transitions."""
-    from .native_owned import codex_install_transaction
-    from .runtime_transition import assert_transition_mutation_allowed
+    """Publish the same prepared launcher bytes used by runtime transitions.
 
-    with codex_install_transaction(context.guard_home, context.guard_home / "bin", actor="harness-shim.install"):
-        assert_transition_mutation_allowed(context.guard_home)
-        shim: dict[str, object] = {"harness": harness, "launcher_name": launcher_name, "display_name": display_name}
-        manifests = apply_guard_shims(context, shims=[shim])["shims"]
-        if not isinstance(manifests, list) or not manifests:
-            raise ValueError("Guard shim answer is malformed")
-        return json.loads(str(manifests[0]))
-
-
-def apply_guard_shims(
-    context: HarnessContextLike,
-    *,
-    shims: list[dict[str, object]],
-    profile: bool = False,
-) -> dict[str, object]:
-    """Render, check and publish launcher shims (and the profile PATH block) in one native call.
-
-    The caller holds installation ownership. Answers each shim manifest text in
-    order and the profile manifest (or ``None``).
+    The native runtime holds the installation transaction (or runs as the owner this thread already holds),
+    publishes the launcher and journals every write.
     """
-    from . import native_transition_files
-    from .harness.native_harness import ask
+    from .cli.native_managed_install import ask_managed
 
-    profile_fields = shell_profile_facts(context) if profile else None
-    answer = ask(
-        "apply_guard_shims",
+    answer = ask_managed(
+        "shim_install",
         context,  # pyright: ignore[reportArgumentType]
-        shims=shims,
-        interpreter=shim_interpreter(),
-        profile=profile_fields,
-        transition=native_transition_files.transition_context(),
+        [],
+        actor="harness-shim.install",
+        harness=harness,
+        launcher_name=launcher_name,
+        display_name=display_name,
     )
-    native_transition_files.settle(answer.get("publish"))
-    return answer
+    return json.loads(str(answer["manifest"]))
 
 
 def shell_profile_facts(context: HarnessContextLike) -> dict[str, object]:
@@ -205,7 +185,8 @@ def prepare_guard_shim_removal(
     display_name: str | None = None,
 ) -> PreparedGuardShim:
     """Snapshot every launcher an uninstall deletes, without changing files."""
-    from .harness.native_harness import ask, planned_files
+    from .native_harness_client import ask
+    from .native_harness_steps import planned_files
 
     answer = ask(
         "prepare_guard_shim_removal",
@@ -220,7 +201,8 @@ def prepare_guard_shim_removal(
 
 def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardShim:
     """Capture the selected shell profile and render its PATH block without writes."""
-    from .harness.native_harness import ask, planned_files
+    from .native_harness_client import ask
+    from .native_harness_steps import planned_files
 
     answer = ask(
         "prepare_guard_shim_shell_profile",
@@ -237,21 +219,15 @@ def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardSh
 
 def ensure_guard_shim_path_in_shell_profile(context: HarnessContext) -> dict[str, object]:
     """Prepend the harness launcher shim dir in the user's normal shell profile."""
-    from .native_owned import codex_install_transaction
-    from .runtime_transition import assert_transition_mutation_allowed
+    from .cli.native_managed_install import ask_managed
 
-    prepared = prepare_guard_shim_shell_profile(context)
-    if not prepared.files:
-        return prepared.manifest
-    assert_transition_mutation_allowed(context.guard_home)
-    with codex_install_transaction(context.guard_home, context.guard_home / "bin", actor="harness-profile.install"):
-        assert_transition_mutation_allowed(context.guard_home)
-        return profile_manifest(apply_guard_shims(context, shims=[], profile=True))
-
-
-def profile_manifest(answer: dict[str, object]) -> dict[str, object]:
-    """The profile manifest an ``apply_guard_shims`` answer rendered."""
-    manifest = answer.get("profile")
+    answer = ask_managed(
+        "profile_install",
+        context,  # pyright: ignore[reportArgumentType]
+        [],
+        actor="harness-profile.install",
+    )
+    manifest = answer.get("manifest")
     return dict(manifest) if isinstance(manifest, dict) else json.loads(str(manifest))
 
 
@@ -294,7 +270,6 @@ def _trusted_import_root() -> Path:
 __all__ = [
     "FROZEN_PACKAGE_SHIM_SENTINEL",
     "activate_package_shims",
-    "apply_guard_shims",
     "ensure_guard_shim_path_in_shell_profile",
     "ensure_package_shim_path_in_shell_profile",
     "get_path_order_status",

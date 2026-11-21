@@ -7,9 +7,6 @@ use std::sync::atomic::AtomicU8;
 use std::sync::mpsc::{self, SyncSender};
 use switching::jobs::{self, JobPhase, SwitchJob, SwitchRequest};
 
-#[cfg(all(test, target_os = "macos"))]
-#[path = "context_assistance_service_upgrade_actual_tests.rs"]
-mod actual_tests;
 #[path = "context_assistance_service_upgrade_cleanup.rs"]
 mod cleanup;
 #[path = "context_assistance_service_cold_selection.rs"]
@@ -289,9 +286,6 @@ impl Service {
             }
             drop(pool);
             return self.switch_job(&home, &request.job_id);
-        }
-        if registry::preparation_job_id_exists(&home, &request.job_id)? {
-            return Err(error("switch_idempotency_conflict"));
         }
         if registry::lifecycle_job_count(&home)? >= jobs::MAX_JOBS {
             return Err(error("switch_job_limit"));

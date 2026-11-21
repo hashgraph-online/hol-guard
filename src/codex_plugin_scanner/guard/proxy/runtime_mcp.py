@@ -23,7 +23,7 @@ from ..approvals import approval_prompt_flow, build_approval_browser_url, first_
 from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
 from ..config import GuardConfig
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..harness_posture import config_for_harness
 from ..local_supply_chain import (
     _cleanup_external_archive_downloads,

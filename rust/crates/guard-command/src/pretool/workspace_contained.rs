@@ -492,7 +492,8 @@ pub(crate) fn cursor_shell_route(harness: &str, payload: &Value) -> bool {
 }
 
 pub(super) fn sandbox_available() -> bool {
-    cfg!(target_os = "macos") || linux_workspace_sandbox_available()
+    !super::in_process_scope::active()
+        && (cfg!(target_os = "macos") || linux_workspace_sandbox_available())
 }
 
 /// Whether a redirect in `command` names a path outside `workspace`.

@@ -96,7 +96,7 @@ def _run_apps_command(
 
     if apps_command == "disconnect":
         try:
-            canonical_harness = get_adapter(harness).harness
+            canonical_harness = resolve_harness(harness)
         except ValueError as error:
             print(str(error), file=sys.stderr)
             return 2

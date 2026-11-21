@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from typing import TextIO
 
     from ..config import GuardConfig
-    from ..harness.base import HarnessContext
+    from ..harness_context import HarnessContext
     from ..runtime.harness_attribution import resolve_runtime_hook_harness
     from ..store import GuardStore
     from ._commands_shared import _require_guard_context, _require_guard_store

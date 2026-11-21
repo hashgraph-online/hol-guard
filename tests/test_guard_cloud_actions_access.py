@@ -34,6 +34,7 @@ from codex_plugin_scanner.guard.cli.connect_cloud_actions import record_cloud_ac
 from codex_plugin_scanner.guard.cli.oauth_client import GuardDpopKeyMaterial, resolve_guard_oauth_client_config
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support import cloud_sync_transport
 
 WS = "6f1c2a52-6a4e-4b8e-9f0e-3f3d6c1b2a10"
 OTHER_WS = "11111111-1111-4111-8111-111111111111"
@@ -254,15 +255,15 @@ def test_revoke_ends_one_ai_tools_access_through_the_pairing(
 ) -> None:
     sent: list[urllib.request.Request] = []
 
-    def request(_context: object, *, request_url: str, method: str, data: bytes) -> urllib.request.Request:
+    def request(_context: object, *, request_url: str, method: str, data: bytes, **_: object) -> urllib.request.Request:
         return urllib.request.Request(request_url, data=data, method=method)
 
     def urlopen(*, request: urllib.request.Request, **_: object) -> dict[str, object]:
         sent.append(request)
         return {"revoked_ai_tools": ["codex"]}
 
-    monkeypatch.setattr(runner, "_guard_sync_request", request)
-    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", urlopen)
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", request)
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", urlopen)
 
     assert revoke_cloud_actions_access(store, ai_tool="codex") == ["codex"]
     assert revoke_cloud_actions_access(store, ai_tool=None) == ["codex"]

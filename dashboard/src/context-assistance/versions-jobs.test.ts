@@ -29,18 +29,10 @@ for (const bad of [
   { ...recover, can_commit: true }, { ...recover, recovery_attempt: { ...attempt, expected_generation: "1" } },
   { ...recover, recovery_attempt: { ...attempt, expected_generation: 9007199254740992 } },
 ]) assert.throws(() => parseCigarVersionJob(bad), /incompatible CIGAR job data/);
-const preparation = { ...common, schema: "guard-cigar-install-job.v1", operation: "install", activation_granted: false,
+const install = { ...common, schema: "guard-cigar-install-job.v1", operation: "install", activation_granted: false,
   build_id: "cigar-build:final", interpreter_id: "python:chosen", runtime_id: "cigar:prepared", sdk_version: "0.99.1", core_version: "0.99.0" };
-assert.equal(parseCigarVersionJob(preparation).can_commit, false, "preparation alone does not permit selection");
-assert.equal(parseCigarVersionJob({ ...preparation, operation: "verify" }).operation, "verify");
-const setup = { ...common, schema: "guard-cigar-python-setup-job.v1", operation: "setup_interpreter",
-  activation_granted: false, build_id: "cpython:chosen", interpreter_id: null };
-assert.equal(parseCigarVersionJob(setup).operation, "setup_interpreter");
-assert.throws(() => parseCigarVersionJob({ ...setup, phase: "ready" }), /incompatible CIGAR job data/);
-const refresh = { ...common, schema: "guard-cigar-catalog-refresh-job.v1", operation: "refresh_catalog", activation_granted: false };
-assert.equal(parseCigarVersionJob(refresh).operation, "refresh_catalog");
-assert.throws(() => parseCigarVersionJob({ ...preparation, activation_granted: true }), /incompatible CIGAR job data/);
-assert.equal(parseCigarVersionJobs({ jobs: [select, { ...preparation, job_id: "ui:two" }, { ...refresh, job_id: "ui:three" }] }).length, 3);
+assert.throws(() => parseCigarVersionJob(install), /incompatible CIGAR job data/, "old download jobs are no longer read");
+assert.equal(parseCigarVersionJobs({ jobs: [select, { ...recover, job_id: "ui:two" }] }).length, 2);
 assert.throws(() => parseCigarVersionJobs({ jobs: [select, select] }), /incompatible CIGAR job data/);
 assert.throws(() => parseCigarVersionJobs({ jobs: Array(33).fill(select) }), /incompatible CIGAR job data/);
 console.log("CIGAR job families, native readiness separation, full generation precision and malformed projection checks passed.");

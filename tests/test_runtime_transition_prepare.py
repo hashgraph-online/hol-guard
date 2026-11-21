@@ -11,8 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_harness_install_ops as harness_install_ops
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.harness.base import HarnessContext, PreparedHarnessInstall
+from codex_plugin_scanner.guard.harness_context import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError, TransitionFile
 from codex_plugin_scanner.guard.store import GuardStore
@@ -64,18 +65,14 @@ def preparation(tmp_path, monkeypatch):
         store.set_managed_install(harness, True, None, {"binding": "old"}, "old-time")
     store.set_managed_install("cursor", False, None, {"binding": "inactive"}, "old-time")
 
-    class Adapter:
-        def __init__(self, harness):
-            self.harness = harness
+    def prepare_install(harness, current):
+        calls.append((harness, current))
+        path = bindings[harness]
+        return PreparedHarnessInstall(
+            (TransitionFile(path, path.read_bytes(), b"new binding"),), {"harness": harness, "binding": "new"}
+        )
 
-        def prepare_install(self, current):
-            calls.append((self.harness, current))
-            path = bindings[self.harness]
-            return PreparedHarnessInstall(
-                (TransitionFile(path, path.read_bytes(), b"new binding"),), {"harness": self.harness, "binding": "new"}
-            )
-
-    monkeypatch.setattr(module, "get_adapter", Adapter)
+    monkeypatch.setattr(module, "prepare_install", prepare_install)
     request = module.RuntimeTransitionPreparation(
         operation_id=str(uuid.uuid4()),
         predecessor=artifacts["predecessor"],
@@ -111,12 +108,12 @@ def test_preparation_captures_every_active_install_without_publication(preparati
 
 
 def test_preparation_composes_real_codex_and_claude_adapters_without_writes(preparation, monkeypatch):
-    from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from tests import harness_ops_support as harness_support
 
     module, _, context, store, _, _ = preparation
-    monkeypatch.setattr(module, "get_adapter", get_adapter)
+    monkeypatch.setattr(module, "prepare_install", harness_install_ops.prepare_install)
     for harness in ("codex", "claude"):
-        manifest = get_adapter(harness).install(context)
+        manifest = harness_support.install(harness, context)
         store.set_managed_install(harness, True, None, manifest, "old-time")
     before_rows = store.list_managed_installs()
     plan = prepare(preparation)
@@ -192,14 +189,14 @@ def test_ordinary_install_raises_the_restore_failure_from_the_publication_failur
 def test_preparation_refuses_unsupported_active_harness_before_publication(preparation, monkeypatch):
     module, _, _, store, bindings, _ = preparation
     store.set_managed_install("hermes", True, None, {}, "old-time")
-    get_adapter = module.get_adapter
+    prepare_install = module.prepare_install
 
-    def resolve(harness):
+    def resolve(harness, context):
         if harness == "hermes":
             raise TransitionError("adapter_preparation_unavailable")
-        return get_adapter(harness)
+        return prepare_install(harness, context)
 
-    monkeypatch.setattr(module, "get_adapter", resolve)
+    monkeypatch.setattr(module, "prepare_install", resolve)
     with pytest.raises(TransitionError, match="adapter_preparation_unavailable"):
         prepare(preparation)
     assert all(path.read_bytes().endswith(b" old") for path in bindings.values())
@@ -208,12 +205,11 @@ def test_preparation_refuses_unsupported_active_harness_before_publication(prepa
 def test_preparation_rejects_conflicting_selection_and_binding(preparation, monkeypatch):
     module, request, _, _, _, _ = preparation
 
-    class Adapter:
-        def prepare_install(self, context):
-            change = replace(request.selection_files[0], kind="binding", after=b"foreign")
-            return PreparedHarnessInstall((change,), {})
+    def prepare_install(_harness, _context):
+        change = replace(request.selection_files[0], kind="binding", after=b"foreign")
+        return PreparedHarnessInstall((change,), {})
 
-    monkeypatch.setattr(module, "get_adapter", lambda _: Adapter())
+    monkeypatch.setattr(module, "prepare_install", prepare_install)
     with pytest.raises(TransitionError, match="adapter_preparation_generation_conflict"):
         prepare(preparation)
 
@@ -244,21 +240,14 @@ def test_preparation_refuses_unreviewed_executable_bytes(preparation):
 
 def test_preparation_refuses_foreign_file_after_adapter_read(preparation, monkeypatch):
     module, _, _, _, bindings, _ = preparation
-    resolve = module.get_adapter
+    prepare_install = module.prepare_install
 
-    def adapter(harness):
-        original = resolve(harness)
-        prepare_install = original.prepare_install
+    def raced(harness, context):
+        result = prepare_install(harness, context)
+        bindings[harness].write_bytes(b"foreign edit")
+        return result
 
-        def raced(context):
-            result = prepare_install(context)
-            bindings[harness].write_bytes(b"foreign edit")
-            return result
-
-        original.prepare_install = raced
-        return original
-
-    monkeypatch.setattr(module, "get_adapter", adapter)
+    monkeypatch.setattr(module, "prepare_install", raced)
     with pytest.raises(TransitionError, match="generation_changed"):
         prepare(preparation)
 

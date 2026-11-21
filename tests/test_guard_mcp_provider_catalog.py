@@ -5,11 +5,11 @@ import pytest
 
 from codex_plugin_scanner.guard import store_mcp_provider_catalog
 from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
-from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioActionSchema
 from codex_plugin_scanner.guard.runtime.mcp_classification import McpClassificationUnavailableError
-from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_store_shims import record_composio_discovery
+from tests.python_oracles.composio_discovery import ComposioActionSchema
+from tests.python_oracles.observed_mcp_tools import observed_mcp_tool
 
 _FIRST = "2026-09-27T12:00:00Z"
 _SECOND = "2026-09-27T12:01:00Z"

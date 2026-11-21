@@ -2,7 +2,7 @@
 //!
 //! A payload crosses as order-preserving JSON text in which every scalar JSON
 //! cannot carry (a TOML date, an integer past 64 bits) is a token naming its
-//! meaning, the form `native_codex_hook_identity` sends. Equal meanings share
+//! meaning, the form the `codex_hook_identity` op takes. Equal meanings share
 //! a token, so comparing tokens compares the values. Python renders the TOML
 //! from the payload these ops return, mapping each token back.
 //!

@@ -11,20 +11,27 @@ returns ``None``; nothing is ever rendered in Python.
 from __future__ import annotations
 
 import json
+import logging
+import sqlite3
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 from .native_context import _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_store_policy import _payload
 
+if TYPE_CHECKING:
+    from .store_policy import PolicyLookupEvidence
+
 HOOK_RENDER_FEATURE = "hook-render-v2"
 _REQUEST_SCHEMA = "guard-hook-render-request.v1"
 _RESULT_SCHEMA = "guard-hook-render-result.v1"
 _TIMEOUT_SECONDS = 5.0
+_CURSOR_PROBE_TIMEOUT_SECONDS = 9.0
 _MAX_REQUEST_BYTES = 256 * 1024
 # ``cli_hook_emit`` carries a whole daemon answer as escaped JSON text and
 # ``cursor_shell_route`` carries the edge result the daemon already produced;
@@ -34,6 +41,7 @@ _CURSOR_ROUTE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 # The bridge kinds carry the whole daemon reply they render, which may be as
 # large as a native response, so they ask for the same larger budget.
 _DAEMON_REPLY_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+_LOGGER = logging.getLogger(__name__)
 
 
 def _render_payload(
@@ -42,11 +50,11 @@ def _render_payload(
     deadline: float | None = None,
     *,
     max_request_bytes: int = _MAX_REQUEST_BYTES,
+    timeout_seconds: float = _TIMEOUT_SECONDS,
 ) -> dict[str, object] | None:
-    timeout = _TIMEOUT_SECONDS
     if deadline is not None:
-        timeout = min(timeout, deadline - time.monotonic())
-        if timeout <= 0:
+        timeout_seconds = min(timeout_seconds, deadline - time.monotonic())
+        if timeout_seconds <= 0:
             return None
     home = Path(_resolve_digest_home(guard_home))
     if not ensure_resident_prerequisite(home):
@@ -57,7 +65,7 @@ def _render_payload(
             operation="hook_render",
             request=wire,
             guard_home=home,
-            timeout_seconds=timeout,
+            timeout_seconds=timeout_seconds,
             required_feature=HOOK_RENDER_FEATURE,
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=max_request_bytes,
@@ -74,6 +82,20 @@ def _render(
     payload = _render_payload(request, guard_home, deadline)
     rendered = payload.get("response") if payload is not None else None
     return dict(rendered) if isinstance(rendered, dict) else None
+
+
+def native_hook_availability(
+    payload: Mapping[str, object], *, guard_home: Path | None = None, deadline: float | None = None
+) -> dict[str, object] | None:
+    """Read event outage posture from the Rust renderer."""
+
+    rendered = _render_payload(
+        {"kind": "availability", "harness": "hook", "cli": {"payload": dict(payload)}},
+        guard_home,
+        deadline,
+    )
+    response = rendered.get("response") if rendered is not None else None
+    return dict(response) if isinstance(response, dict) else None
 
 
 def native_render_cli(
@@ -96,9 +118,17 @@ def native_render_cli(
     # ceiling can still read what this call offers.
     if kind == "cli_hook_emit":
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CLI_HOOK_EMIT_MAX_REQUEST_BYTES)
+    elif kind == "cursor_shell_route" and params.get("op") == "answer" and "probe_budget_ms" in params:
+        payload = _render_payload(
+            wire,
+            guard_home,
+            deadline,
+            max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES,
+            timeout_seconds=_CURSOR_PROBE_TIMEOUT_SECONDS,
+        )
     elif kind in {"cursor_shell_route", "binding_recording_only"}:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES)
-    elif kind in {"hermes_bridge", "muse_bridge"}:
+    elif kind in {"hermes_bridge", "muse_bridge", "saved_approval", "package_review_settle", "review_reuse"}:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_DAEMON_REPLY_MAX_REQUEST_BYTES)
     else:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_MAX_REQUEST_BYTES)
@@ -109,60 +139,156 @@ def native_render_cli(
     return str(outcome), dict(document) if isinstance(document, dict) else None
 
 
-def native_hermes_bridge(
-    response: Mapping[str, object], *, guard_home: Path | None = None, deadline: float | None = None
-) -> tuple[dict[str, object], int] | None:
-    """Read a Hermes daemon reply into its stdout document and exit status.
-
-    ``None`` when the resident cannot answer; the caller fails closed rather
-    than deciding here what the reply meant. ``deadline`` is the hook's
-    absolute ``time.monotonic()`` budget; the render gets only what remains.
-    """
-
-    rendered = native_render_cli(
-        "hermes_bridge", "hermes", {"response": dict(response)}, guard_home=guard_home, deadline=deadline
-    )
-    if rendered is None or rendered[1] is None:
-        return None
-    document = rendered[1].get("document")
-    exit_code = rendered[1].get("exit_code")
-    if not isinstance(document, dict) or not isinstance(exit_code, int) or isinstance(exit_code, bool):
-        return None
-    return dict(document), exit_code
-
-
-def native_muse_bridge(
-    response: Mapping[str, object],
+def native_cursor_shell_route(
+    payload: Mapping[str, object],
     *,
-    event_name: str,
-    guard_home: Path | None = None,
+    home_dir: Path,
+    guard_home: Path,
+    workspace: Path | None,
+    binding: Callable[[], Mapping[str, object] | None],
+    deadline: float | None,
+) -> dict[str, object] | None:
+    """Pass the hook and any requested workspace or launcher facts to Rust."""
+    from .contained_sink_command import contained_sink_command_prefix
+    from .native_hook_edge import _capture_deadline
+
+    params: dict[str, object] = {
+        "op": "answer",
+        "payload": dict(payload),
+        "workspace": str(workspace) if workspace is not None else None,
+        "home_dir": str(home_dir),
+        "guard_home": str(guard_home),
+        "native_sink": True,
+    }
+
+    def query(until: float | None) -> dict[str, object] | None:
+        try:
+            rendered = native_render_cli("cursor_shell_route", "cursor", params, guard_home=guard_home, deadline=until)
+        except Exception:
+            _LOGGER.warning("Cursor shell route unavailable", exc_info=True)
+            return None
+        return rendered[1] if rendered is not None else None
+
+    document = query(deadline)
+    if document is None:
+        return None
+    value = document.get("value")
+    needed = document.get("needs")
+    try:
+        if needed == "probe_binding":
+            snapshot = binding()
+            if snapshot is not None:
+                deadline, budget = _capture_deadline(deadline)
+                params["snapshot"] = {
+                    key: snapshot.get(key) for key in ("generation", "policy_digest", "runtime_identity")
+                }
+                params["harness_postures"] = snapshot.get("harness_postures")
+                params["probe_budget_ms"] = budget
+        if (needed == "sink_command" or "snapshot" in params) and (deadline is None or time.monotonic() < deadline):
+            params["sink_command"] = list(contained_sink_command_prefix())
+            answered = query(deadline)
+            if answered is not None and isinstance(answered.get("value"), dict):
+                value = answered["value"]
+    except Exception:
+        _LOGGER.warning("Cursor shell route inputs unavailable", exc_info=True)
+    return dict(value) if isinstance(value, dict) else None
+
+
+def native_saved_decision_response(
+    store: object,
+    *,
+    harness: str,
+    token: str | None,
+    artifact_id: str,
+    native_result: Mapping[str, object],
+    workspace: Path | None,
     deadline: float | None = None,
-) -> tuple[dict[str, object] | None, int] | None:
-    """Read a Muse daemon reply into its stdout document and exit status.
-
-    The document is ``None`` where Muse expects empty stdout, which is how it
-    reads a permitted call. ``None`` for the whole result means the resident
-    could not answer, and the caller fails closed rather than deciding here
-    what the reply meant. ``deadline`` is the hook's absolute
-    ``time.monotonic()`` budget; the render gets only what remains.
-    """
-
-    rendered = native_render_cli(
-        "muse_bridge",
-        "muse",
-        {"response": dict(response), "event_name": str(event_name)},
-        guard_home=guard_home,
-        deadline=deadline,
+) -> dict[str, object] | None:
+    if token is None:
+        return None
+    return _saved_approval_response(
+        store,
+        harness,
+        native_result,
+        workspace,
+        deadline,
+        {"check": "action", "artifact_id": artifact_id, "token": token},
     )
-    if rendered is None or rendered[1] is None:
+
+
+def native_exact_command_block_response(
+    store: object,
+    *,
+    harness: str,
+    command: str | None,
+    native_result: Mapping[str, object],
+    workspace: Path | None,
+    edge_hint: object = None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    if command is None or edge_hint is False:
         return None
-    document = rendered[1].get("document")
-    exit_code = rendered[1].get("exit_code")
-    if document is not None and not isinstance(document, dict):
+    return _saved_approval_response(
+        store,
+        harness,
+        native_result,
+        workspace,
+        deadline,
+        {"check": "command", "command": command, "edge_hint": edge_hint},
+    )
+
+
+def _saved_approval_response(
+    store: object,
+    harness: str,
+    native_result: Mapping[str, object],
+    workspace: Path | None,
+    deadline: float | None,
+    selector: dict[str, object],
+) -> dict[str, object] | None:
+    from .hook_review.hook_fail_closed import fail_closed_pre_tool
+
+    home = getattr(store, "guard_home", None)
+    procure = getattr(store, "policy_lookup_evidence", None)
+    if not isinstance(home, Path) or not callable(procure):
         return None
-    if not isinstance(exit_code, int) or isinstance(exit_code, bool):
-        return None
-    return (dict(document) if document is not None else None), exit_code
+    action = native_result.get("action")
+    inputs: dict[str, object] = {
+        **selector,
+        "guard_home": str(home),
+        "workspace": str(workspace) if workspace is not None else None,
+        # The preflight only reads the action type. Carry the full verdict
+        # when Rust has a saved decision to evaluate or render.
+        "verdict": {"action": {"action_type": action.get("action_type")}} if isinstance(action, Mapping) else {},
+    }
+
+    def request() -> dict[str, object] | None:
+        rendered = native_render_cli("saved_approval", harness, inputs, guard_home=home, deadline=deadline)
+        return rendered[1] if rendered is not None else None
+
+    answer = request()
+    if answer is not None and answer.get("needs_lookup") is True:
+        inputs["verdict"] = dict(native_result)
+        try:
+            evidence = cast("PolicyLookupEvidence", procure())
+        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+            _LOGGER.warning("Native saved decision evidence unavailable (%s)", type(error).__name__)
+            inputs["evidence"] = None
+        else:
+            inputs["evidence"] = {
+                "degraded": evidence.degraded_trust_status is not None,
+                "now": evidence.now,
+                "integrity_state": evidence.integrity_state,
+                "integrity_key_b64": evidence.integrity_key_b64,
+                "integrity_key_id": evidence.integrity_key_id,
+                "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
+                "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
+            }
+        answer = request()
+    if answer is None:
+        return fail_closed_pre_tool(harness)
+    value = answer.get("value")
+    return dict(value) if isinstance(value, dict) else None
 
 
 def native_cli_hook_emit(
@@ -278,6 +404,7 @@ __all__ = [
     "HOOK_RENDER_FEATURE",
     "native_cli_hook_emit",
     "native_evaluation_has_terminal_policy_action",
+    "native_hook_availability",
     "native_recording_only_for_binding",
     "native_render_cli",
     "native_render_pre_tool",

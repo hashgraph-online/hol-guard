@@ -10,8 +10,8 @@ from functools import lru_cache
 from typing import Final, cast
 
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity, is_guard_action
-from codex_plugin_scanner.guard.harness.contract_registry import harness_names
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.setup_contract_registry import harness_names
 
 from .effect_contract import EffectKind, UncertaintyKind
 from .extension_evidence import EvidenceSeverity, ExtensionRuleIdentity

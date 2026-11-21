@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import sys
 
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..native_daemon_manage import retire_all_guard_daemons_for_home
 from ..native_resident_update_lock import NativeResidentUpdateLockError, hold_native_resident_update_lock
 from ..redaction import redact_sensitive_text

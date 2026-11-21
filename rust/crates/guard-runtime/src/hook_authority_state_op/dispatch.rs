@@ -89,7 +89,7 @@ impl Env<'_> {
             "claude_remove_pending" => {
                 let session_id = required(&request.session_id)?;
                 let (pending_key, _) = claude_pending_target(session_id, request)?;
-                self.claude_remove_pending(session_id, &pending_key);
+                let _ = self.claude_remove_pending(session_id, &pending_key);
                 Ok(json!({}))
             }
             "claude_question_settle" => self.claude_question_settle(
@@ -97,6 +97,28 @@ impl Env<'_> {
                 request.payload.as_ref(),
                 request.tilde_home.as_deref(),
             ),
+            "claude_question_settle_hook" => {
+                let raw = request
+                    .payload
+                    .as_ref()
+                    .and_then(Value::as_str)
+                    .ok_or(ERROR_INVALID)?;
+                let session = required(&request.session_id)?;
+                let Some(question) = crate::claude_guard_question::project_hook_question(raw)
+                else {
+                    return Ok(json!({"outcome": "none"}));
+                };
+                self.claude_question_settle(session, Some(&question), request.tilde_home.as_deref())
+            }
+            "claude_question_save" => {
+                self.claude_question_save(required(&request.session_id)?, hook_payload(request)?)
+            }
+            "claude_question_consume" => {
+                self.claude_question_consume(required(&request.session_id)?, hook_payload(request)?)
+            }
+            "claude_lifecycle" => {
+                self.claude_lifecycle(request.session_id.as_deref(), hook_payload(request)?)
+            }
             "claude_permission_request" => Ok(self
                 .claude_permission_request(request.session_id.as_deref(), hook_payload(request)?)),
             "claude_permission_prompt" => {

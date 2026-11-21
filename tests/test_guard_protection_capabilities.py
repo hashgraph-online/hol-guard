@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.harness.contract_registry import harness_contracts
 from codex_plugin_scanner.guard.protection_capabilities import (
     capability_for,
     protection_capability_payloads,
 )
+from codex_plugin_scanner.guard.setup_contract_registry import harness_contracts
 
 
 def test_every_supported_harness_has_a_protection_capability() -> None:

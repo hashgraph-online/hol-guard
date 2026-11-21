@@ -68,13 +68,16 @@ def test_a_generic_stop_does_not_pass_a_write_case() -> None:
     assert "native_file_write_review" in FILE_WRITE_BLOCK_REASONS
 
 
-@pytest.mark.parametrize("harness", ["claude-code", "cursor"])
-def test_lanes_with_a_structured_write_tool_run_the_cases(harness: str) -> None:
+@pytest.mark.parametrize("harness", ["claude-code", "cursor", "codex"])
+def test_lanes_with_a_write_tool_run_the_cases(harness: str) -> None:
+    # Codex writes through apply_patch; the judge reads the target from the patch.
     assert set(CASES) <= {s.id for s in lane_catalog(harness)}
 
 
-def test_a_lane_without_a_structured_write_tool_skips_the_cases() -> None:
-    assert not set(CASES) & {s.id for s in lane_catalog("codex")}
+def test_codex_still_skips_native_tool_cases_it_has_no_tool_for() -> None:
+    native = {s.id for s in load_catalog() if s.oracle == "native-tools" and set(s.required_tools) - {"bash"}}
+    assert native
+    assert not native & {s.id for s in lane_catalog("codex")}
 
 
 def _row(**overrides: object) -> dict[str, object]:
@@ -124,3 +127,96 @@ def test_a_read_of_the_pinned_path_is_not_the_pinned_write() -> None:
     assert _targets_scenario({}, scenario, decision("write"))
     assert not _targets_scenario({}, scenario, decision("Read"))
     assert not _targets_scenario({}, scenario, decision("Edit"))
+
+
+def _patch_payload(patch: str) -> dict[str, object]:
+    return {"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "tool_input": {"command": patch}}
+
+
+def test_a_codex_patch_adding_the_pinned_file_is_the_pinned_write() -> None:
+    from ci.gauntlet.harness_judge import _patch_tool, _request, _targets_scenario
+
+    (scenario,) = load_catalog_data({"schema": CATALOG_SCHEMA, "scenarios": [_row()]})
+    payload = _patch_payload("*** Begin Patch\n*** Add File: notes.md\n+text\n*** End Patch\n")
+    command, path = _request(payload)
+    decision = {"tool": "apply_patch", "patch_tool": _patch_tool(payload), "command": command, "path": path}
+    assert command is None
+    assert path == "notes.md"
+    assert _targets_scenario({}, scenario, decision)
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        # An in-place change is an edit, not the write the case pins.
+        "*** Begin Patch\n*** Update File: notes.md\n@@\n+text\n*** End Patch\n",
+        # A second file means the patch is not the case's single attempt.
+        "*** Begin Patch\n*** Add File: notes.md\n+a\n*** Add File: other.md\n+b\n*** End Patch\n",
+        "*** Begin Patch\n*** Update File: old.md\n*** Move to: notes.md\n*** End Patch\n",
+        "*** Begin Patch\n*** Delete File: notes.md\n*** End Patch\n",
+        # An unfinished patch never runs, so it is not an attempt at the write.
+        "*** Begin Patch\n*** Add File: notes.md\n+text\n",
+        "*** Add File: notes.md\n+text\n*** End Patch\n",
+        "*** Add File: notes.md\n+text\n",
+        "*** Begin Patch\n*** Add File: notes.md\ntext\n*** End Patch\n",
+    ],
+)
+def test_other_codex_patches_are_not_the_pinned_write(patch: str) -> None:
+    from ci.gauntlet.harness_judge import _patch_tool, _request, _targets_scenario
+
+    (scenario,) = load_catalog_data({"schema": CATALOG_SCHEMA, "scenarios": [_row()]})
+    payload = _patch_payload(patch)
+    command, path = _request(payload)
+    decision = {"tool": "apply_patch", "patch_tool": _patch_tool(payload), "command": command, "path": path}
+    assert not _targets_scenario({}, scenario, decision)
+
+
+def _denied_write() -> dict[str, object]:
+    return {
+        "tool": "apply_patch",
+        "patch_tool": "write",
+        "command": None,
+        "path": "notes.md",
+        "decision": "deny",
+        "receipt_decision": "deny",
+        "reason_code": "native_file_write_review",
+    }
+
+
+def _shell(command: str, decision: str = "allow") -> dict[str, object]:
+    return {
+        "tool": "Bash",
+        "patch_tool": None,
+        "command": command,
+        "path": None,
+        "decision": decision,
+        "receipt_decision": decision,
+        "reason_code": "native_policy_warning",
+    }
+
+
+def test_reading_the_safety_guide_guard_installed_is_not_a_second_attempt() -> None:
+    # `hol-guard install codex` asks the agent to read this guide first.
+    from ci.gauntlet.harness_judge import _block_outcome
+
+    (scenario,) = load_catalog_data({"schema": CATALOG_SCHEMA, "scenarios": [_row()]})
+    decisions = [_shell("cat ~/.hol-support/SAFETY.md"), _denied_write()]
+    outcome, _ = _block_outcome(scenario, {}, decisions, [object()])
+    assert outcome == "pass"
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        _shell("cat ~/.hol-support/SAFETY.md && cat notes.md"),
+        _shell("cat ~/.hol-support/OTHER.md"),
+        _shell("cat notes.md"),
+        _shell("cat ~/.hol-support/SAFETY.md", decision="deny"),
+    ],
+)
+def test_any_other_request_still_leaves_the_case_unexercised(extra: dict[str, object]) -> None:
+    from ci.gauntlet.harness_judge import _block_outcome
+
+    (scenario,) = load_catalog_data({"schema": CATALOG_SCHEMA, "scenarios": [_row()]})
+    outcome, _ = _block_outcome(scenario, {}, [extra, _denied_write()], [object()])
+    assert outcome == "not-exercised"

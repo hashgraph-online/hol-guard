@@ -10,7 +10,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import hook_removal_sweep
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
 from codex_plugin_scanner.guard.cli.commands_lifecycle_gate import lifecycle_gate_requirement
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.harness_disconnect_gate import disconnect_requires_fresh_authenticator
 from codex_plugin_scanner.guard.hook_removal import remove_all_guard_hooks
 from codex_plugin_scanner.guard.hook_removal_presence import CONFIRMATION_PHRASE, require_typed_presence

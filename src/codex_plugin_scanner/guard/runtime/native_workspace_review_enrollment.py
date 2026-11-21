@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.error import HTTPError
@@ -15,42 +14,16 @@ from ..native_resident_client import native_resident_client_request
 from ..native_runtime import _isolated_environment, _run_native_process, native_runtime_status
 from .command_queue_protocol import command_api_url
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION, exact_cloud_review_operations
-from .runner import _guard_sync_request, _urlopen_json_with_timeout_retry
 
 if TYPE_CHECKING:
     from ..store import GuardStore
 
 _LOGGER = logging.getLogger(__name__)
 _STATE_KEY = "guard_cloud_review_workspace_enrollment"
-_CHECK_INTERVAL = timedelta(minutes=5)
+# The connection fields the native store builds the enrollment binding from.
+_BINDING_FIELDS = ("workspace_id", "machine_installation_id", "sync_url", "oauth_subject_hash")
 _MAX_RECORD_BYTES = 16 * 1024
 _RESIDENT_ENROLLMENT_FEATURE = "native-workspace-review-enrollment-resident-v1"
-
-
-def _binding(auth_context: dict[str, object]) -> list[str] | None:
-    fields = ("workspace_id", "machine_installation_id", "sync_url")
-    values = [auth_context.get(field) for field in fields]
-    if any(not isinstance(value, str) or not value for value in values):
-        return None
-    subject = auth_context.get("oauth_subject_hash")
-    if subject is not None and (not isinstance(subject, str) or not subject):
-        return None
-    return [str(value) for value in values] + ([subject] if isinstance(subject, str) else [])
-
-
-def _due(state: object, binding: list[str], now: datetime) -> bool:
-    if not isinstance(state, dict) or state.get("binding") != binding:
-        return True
-    next_check = state.get("next_check_at")
-    if not isinstance(next_check, str):
-        return True
-    try:
-        scheduled = datetime.fromisoformat(next_check)
-    except ValueError:
-        return True
-    if scheduled.tzinfo is None or scheduled - now > _CHECK_INTERVAL:
-        return True
-    return scheduled <= now
 
 
 def _fetch_authority(auth_context: dict[str, object]) -> bytes:
@@ -59,13 +32,15 @@ def _fetch_authority(auth_context: dict[str, object]) -> bytes:
         "/current",
         base_path="/api/guard/review/v2/authority",
     )
-    request = _guard_sync_request(
+    from . import cloud_bundle_sync
+
+    response = cloud_bundle_sync.cloud_json_request(
         auth_context,
-        request_url=url,
-        method="POST",
-        data=b'{"protocolVersion":2}',
+        url=url,
+        body=b'{"protocolVersion":2}',
+        timeout_seconds=5,
+        retry_timeout_seconds=5,
     )
-    response = _urlopen_json_with_timeout_retry(request=request, timeout_seconds=5, retry_timeout_seconds=5)
     if set(response) != {"authority", "protocolVersion"} or response["protocolVersion"] != 2:
         raise ValueError("native_workspace_review_authority_response_invalid")
     record = response["authority"]
@@ -138,6 +113,11 @@ def _install_authority(state_base: Path, encoded: bytes) -> None:
             candidate_path.unlink(missing_ok=True)
 
 
+def _state_base(store: GuardStore) -> Path:
+    """The native runtime state directory the enrollment records live in."""
+    return store.guard_home / "native-runtime"
+
+
 def refresh_native_workspace_review_authority(
     store: GuardStore,
     auth_context: dict[str, object],
@@ -147,22 +127,18 @@ def refresh_native_workspace_review_authority(
     """Return true only when a newly verified authority was installed."""
     if EXACT_CLOUD_REVIEW_OPERATION not in exact_cloud_review_operations(store):
         return False
-    binding = _binding(auth_context)
-    if binding is None:
-        return False
-    state_base = store.guard_home / "native-runtime"
+    state_base = _state_base(store)
     base_authority = state_base / "approval-authority.v1.json"
     if state_base.is_symlink() or base_authority.is_symlink() or not base_authority.is_file():
         return False
-    current = now or datetime.now(timezone.utc)
-    state = store.get_sync_payload(_STATE_KEY)
-    if not _due(state, binding, current):
+    current = (now or datetime.now(timezone.utc)).isoformat()
+    connection = {field: auth_context.get(field) for field in _BINDING_FIELDS}
+    binding = store.workspace_review_enrollment_due(connection, now=current)
+    if binding is None:
         return False
-    next_state: dict[str, object] = {
-        "binding": binding,
-        "next_check_at": (current + _CHECK_INTERVAL).isoformat(),
-    }
     changed = False
+    outcome = "unavailable"
+    detail: dict[str, object]
     try:
         encoded = _fetch_authority(auth_context)
         target = state_base / "workspace-review-authority.v1.json"
@@ -175,18 +151,19 @@ def refresh_native_workspace_review_authority(
             previous = None
         _install_authority(state_base, encoded)
         changed = previous != encoded
-        next_state["record_digest"] = hashlib.sha256(encoded).hexdigest()
-        next_state["status"] = "enrolled"
+        detail = {"record": encoded.decode("utf-8")}
+        outcome = "enrolled"
     except HTTPError as error:
-        next_state["status"] = "unavailable"
-        next_state["http_status"] = error.code
+        detail = {"http_status": error.code}
         _LOGGER.info("Cloud Review workspace enrollment unavailable: HTTP %d", error.code)
     except (OSError, RuntimeError, TypeError, ValueError) as error:
-        next_state["status"] = "unavailable"
-        code = str(error) if isinstance(error, ValueError) else ""
-        next_state["error_code"] = code if code.startswith("native_workspace_review_") else type(error).__name__
-        _LOGGER.warning("Cloud Review workspace enrollment failed: %s", next_state["error_code"])
-    store.set_sync_payload(_STATE_KEY, next_state, current.isoformat())
+        # Logged before the schedule write, so a failed write cannot hide it.
+        _LOGGER.warning("Cloud Review workspace enrollment failed: %s", type(error).__name__)
+        detail = {
+            "error_type": type(error).__name__,
+            "error_code": str(error) if isinstance(error, ValueError) else None,
+        }
+    store.record_workspace_review_enrollment(binding, outcome=outcome, now=current, **detail)
     return changed
 
 

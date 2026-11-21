@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_caller
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_discovery_client import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer, is_guard_proxy_command, proxy_cli_args
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection

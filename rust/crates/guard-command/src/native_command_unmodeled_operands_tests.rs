@@ -79,6 +79,12 @@ fn only_a_bare_operand_leaves_the_command_positions() {
         ("rg $NODE src", "rg $NODE"),
         ("rg FOO=node src", "rg FOO=node"),
         ("rg 'node' src", "rg 'node'"),
+        ("rg \"node\" src", "rg \"node\""),
+        // A quoted literal path is an operand like the unquoted one.
+        ("find \"/home/.nvm/versions/node\" -type d", "find -type d"),
+        // A test runs nothing, so none of its operands is a program.
+        ("[ -d \"$HOME/.nvm/versions/node\" ]", "["),
+        ("test -x node", "test"),
         // The option word is what tells the scan a nested executor is there at
         // all; the body's own words are operands the `-exec` reader bounds.
         (r"find src -exec sh -c cat", "find -exec sh -c cat"),

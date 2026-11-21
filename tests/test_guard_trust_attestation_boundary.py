@@ -15,7 +15,6 @@ from codex_plugin_scanner.guard.native_runner_authority import (
     NativeRunnerAuthorityRefusalError,
 )
 from codex_plugin_scanner.guard.runtime import trust_attestation
-from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     GuardTrustAttestationSigningConfig,
@@ -25,6 +24,7 @@ from codex_plugin_scanner.guard.runtime.trust_attestation import (
     trust_claim_hash,
 )
 from codex_plugin_scanner.guard.trust_metadata_boundary import separate_untrusted_adapter_trust_metadata
+from tests.python_oracles.evidence_hash import guard_evidence_hash
 from tests.trust_attestation_verify_support import (
     GuardTrustAttestationVerificationPolicy,
     build_trust_attestation_verification_key,

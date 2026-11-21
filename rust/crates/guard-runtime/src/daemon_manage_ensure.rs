@@ -655,12 +655,36 @@ fn adopt(context: &Context<'_>) -> Option<String> {
         let (Ok(port16), Ok(pid32)) = (u16::try_from(port), u32::try_from(pid)) else {
             continue;
         };
-        let config = launch_config(context, port16, None)?;
-        if standalone::publish(home, &config, port16, pid32).is_ok() {
+        if publish_adopted(context, port16, pid32)? {
             return Some(format!("http://127.0.0.1:{port}"));
         }
     }
     None
+}
+
+/// Publishes the daemon answering on `port` as this home's daemon, unless the
+/// home's authenticated state already names it there.
+///
+/// A starter that found no live daemon and then waited on the start lock can
+/// reach adoption after another starter's daemon has finished starting. That
+/// daemon has published its own state; writing it again from this caller's
+/// launch configuration would stamp it with this caller's runtime identity,
+/// and an older caller would leave the current daemon looking stale to every
+/// later start. `None` when this caller's launch configuration is invalid.
+fn publish_adopted(context: &Context<'_>, port: u16, pid: u32) -> Option<bool> {
+    let home = context.home();
+    if state_names(home, port, pid) {
+        return Some(true);
+    }
+    let config = launch_config(context, port, None)?;
+    Some(standalone::publish(home, &config, port, pid).is_ok())
+}
+
+/// Whether the home's authenticated state names `pid` serving on `port`.
+fn state_names(home: &Path, port: u16, pid: u32) -> bool {
+    load_authenticated_daemon_identity(home).is_some_and(|(state, _)| {
+        int(&state, "pid") == Some(i64::from(pid)) && int(&state, "port") == Some(i64::from(port))
+    })
 }
 
 /// `_initialize_existing_guard_daemon`: the pid of a current daemon of this
@@ -1192,3 +1216,7 @@ mod tests {
 #[cfg(test)]
 #[path = "daemon_manage_ensure_same_install_tests.rs"]
 mod same_install_tests;
+
+#[cfg(test)]
+#[path = "daemon_manage_ensure_adopt_tests.rs"]
+mod adopt_tests;

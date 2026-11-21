@@ -442,14 +442,18 @@ def native_command_capability_runtime(
     artifact skip, like the other compiled-runtime fixtures.
     """
 
-    from codex_plugin_scanner.guard import native_command_capability, native_command_envelope
+    from codex_plugin_scanner.guard import (
+        native_command_capability,
+        native_command_envelope,
+        native_command_job_plan,
+    )
 
     binary = _context_digest_runtime_binary()
     if binary is None:
         pytest.skip("command capability tests require the compiled Rust runtime")
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(binary.resolve()))
-    for module in (native_command_capability, native_command_envelope):
+    for module in (native_command_capability, native_command_envelope, native_command_job_plan):
         monkeypatch.setattr(
             module,
             "_resolve_digest_home",
@@ -473,7 +477,7 @@ def native_adapter_state_integrity_runtime(
     runtime call.
     """
 
-    from codex_plugin_scanner.guard import native_adapter_state_integrity
+    from tests.python_oracles import native_adapter_state_integrity
 
     binary = _context_digest_runtime_binary()
     if binary is None:

@@ -321,8 +321,7 @@ pub(super) fn detect(spec: &Spec, ask: &Ask, contents: Option<&Captured>) -> Ste
     }
     let mut answer = detection(spec, Ok(found), cli_available(ask)?)?;
     answer["warnings"] = json!([]);
-    answer["firewall"] = json!(true);
-    Ok(answer)
+    super::firewall::enrich(answer)
 }
 
 fn launch_command(ask: &Ask) -> Step<Value> {

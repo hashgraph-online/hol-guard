@@ -57,6 +57,8 @@ pub(super) enum Notice {
     },
     /// A request an MCP call was blocked on, as its record names it.
     Approval(Shown),
+    /// An MCP notice left to the drain, read from the stored request.
+    StoredApproval(String),
 }
 
 /// `_QueuedNotice`: the persisted request fields a notice reads.
@@ -72,8 +74,8 @@ pub(super) struct Shown {
 }
 
 /// Raise the notice of the request an MCP call was just blocked on, from the
-/// persisted fields `_QueuedNotice` reads. A notice the daemon could not read
-/// is left to the daemon, and says so by returning `false`.
+/// persisted fields `_QueuedNotice` reads. A notice the resident cannot
+/// hand off is left to the drain.
 pub(crate) fn raise_approval(guard_home: &str, source: &str, notice: &Value) -> bool {
     raise_approvals(guard_home, source, std::slice::from_ref(notice))
 }
@@ -89,6 +91,35 @@ pub(crate) fn raise_approvals(guard_home: &str, source: &str, notices: &[Value])
         source,
         shown.into_iter().map(Notice::Approval).collect(),
     )
+}
+
+pub(crate) fn raise_stored_approvals(
+    guard_home: &str,
+    source: &str,
+    request_ids: impl Iterator<Item = String>,
+) {
+    raise(
+        guard_home,
+        source,
+        request_ids.map(Notice::StoredApproval).collect(),
+    );
+}
+
+/// Send the notice for a connector review after the queue commits.
+pub(crate) fn raise_connector(
+    guard_home: &str,
+    source: &str,
+    request_id: &str,
+    connector_name: &str,
+) {
+    raise(
+        guard_home,
+        source,
+        vec![Notice::Connector {
+            request_id: request_id.to_owned(),
+            connector_name: connector_name.to_owned(),
+        }],
+    );
 }
 
 /// Every notice of one call, in order, or none when any is unreadable.
@@ -139,6 +170,30 @@ fn notify(guard_home: &str, source: &str, notice: Notice) {
     if disabled_by_env() {
         return;
     }
+    notify_with(
+        guard_home,
+        source,
+        notice,
+        crate::desktop_notification::send_approval,
+    );
+}
+
+#[cfg(all(test, unix))]
+pub(crate) fn notify_stored_for_test(
+    guard_home: &str,
+    source: &str,
+    request_id: String,
+    send: impl FnOnce(&str, &str, &str, &str) -> bool,
+) {
+    notify_with(guard_home, source, Notice::StoredApproval(request_id), send);
+}
+
+fn notify_with(
+    guard_home: &str,
+    source: &str,
+    notice: Notice,
+    send: impl FnOnce(&str, &str, &str, &str) -> bool,
+) {
     let shown = match notice {
         Notice::Connector {
             request_id,
@@ -148,8 +203,29 @@ fn notify(guard_home: &str, source: &str, notice: Notice) {
             None => return,
         },
         Notice::Approval(shown) => shown,
+        Notice::StoredApproval(request_id) => {
+            let Some(shown) = store(
+                guard_home,
+                source,
+                "get_approval_request",
+                &request_id,
+                None,
+            )
+            .as_ref()
+            .and_then(|row| pending_approval_row(row, &request_id)) else {
+                return;
+            };
+            shown
+        }
     };
-    show(guard_home, source, shown);
+    show(guard_home, source, shown, send);
+}
+
+fn pending_approval_row(row: &Value, request_id: &str) -> Option<Shown> {
+    if row["status"].as_str() != Some("pending") || row["request_id"].as_str() != Some(request_id) {
+        return None;
+    }
+    approval_notice(row)
 }
 
 /// The connector-setup notice of the stored row `request_id`.
@@ -159,20 +235,38 @@ fn connector_row(
     request_id: &str,
     connector_name: String,
 ) -> Option<Shown> {
-    let queued = store(guard_home, source, "get_approval_request", request_id, None)
-        .filter(Value::is_object)?;
+    let queued = store(guard_home, source, "get_approval_request", request_id, None)?;
+    pending_connector_row(&queued, request_id, connector_name)
+}
+
+fn pending_connector_row(
+    queued: &Value,
+    request_id: &str,
+    connector_name: String,
+) -> Option<Shown> {
     let field = |key: &str| text(queued.get(key));
+    if queued["status"] != "pending"
+        || queued["request_id"].as_str() != Some(request_id)
+        || !field("queue_group_id")?.starts_with("connector:")
+    {
+        return None;
+    }
     Some(Shown {
-        request_id: field("request_id")?,
+        request_id: request_id.to_owned(),
         harness: field("harness")?,
         workspace: field("workspace"),
         approval_url: field("approval_url")?,
-        connector: field("queue_group_id")?.starts_with("connector:"),
+        connector: true,
         subject: connector_name,
     })
 }
 
-fn show(guard_home: &str, source: &str, shown: Shown) {
+fn show(
+    guard_home: &str,
+    source: &str,
+    shown: Shown,
+    send: impl FnOnce(&str, &str, &str, &str) -> bool,
+) {
     let Shown {
         request_id,
         harness,
@@ -215,8 +309,7 @@ fn show(guard_home: &str, source: &str, shown: Shown) {
         .unwrap_or(approval_url);
     let title = if connector { TITLE } else { APPROVAL_TITLE };
     let message = message(&harness, &subject, connector);
-    let shown =
-        crate::desktop_notification::send_approval(&request_id, title, &message, &approval_url);
+    let shown = send(&request_id, title, &message, &approval_url);
     settle(&request_id, shown);
     if shown {
         let notified_at = Timestamp::now_utc().isoformat();

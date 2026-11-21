@@ -36,10 +36,10 @@ pub(super) fn fixture() -> Fixture {
     let _ = std::fs::remove_dir_all(&base);
     let (home, ws) = (base.join("home"), base.join("ws"));
     for file in [
-        "app/registry/[slug]/page.tsx",
-        "app/registry/[.x]/page.tsx",
-        "app/registry/[!x]/page.tsx",
-        "app/registry/alpha/page.tsx",
+        "app/items/[slug]/page.tsx",
+        "app/items/[.x]/page.tsx",
+        "app/items/[!x]/page.tsx",
+        "app/items/alpha/page.tsx",
         "app/password-reset-email.tsx",
         "app/secret-sandbox-x/page.tsx",
         "app/.well-known/ai-plugin.txt",
@@ -85,21 +85,21 @@ fn recursive_listing_and_globs_stay_inside_clean_trees() {
     let fixture = fixture();
     let ws = fixture.workspace.as_str();
     for command in [
-        "ls -R app/registry",
-        "ls -lR app/registry",
+        "ls -R app/items",
+        "ls -lR app/items",
         "ls -R src",
         "ls --recursive src",
-        "ls app/registry/*/",
-        "ls app/registry/a*/",
-        "ls \"app/registry/[slug]\"",
-        "ls -R 'app/registry/[slug]'",
+        "ls app/items/*/",
+        "ls app/items/a*/",
+        "ls \"app/items/[slug]\"",
+        "ls -R 'app/items/[slug]'",
         "ls src/*.ts",
         // Bash passes an unmatched bracket word through literally.
-        "ls app/registry/[slug]",
-        "ls -la app/registry/[slug]",
-        "ls app/registry/[slug] src",
+        "ls app/items/[slug]",
+        "ls -la app/items/[slug]",
+        "ls app/items/[slug] src",
         // The unmatched bracket drops out under nullglob; `src` remains.
-        "ls -R app/registry/[slug] src",
+        "ls -R app/items/[slug] src",
         // A recursion without `-a` prints no hidden name and descends into no
         // hidden directory, so the credential file below `bad` is not part of
         // what the listing can emit.
@@ -132,9 +132,9 @@ fn recursive_listing_and_globs_stay_inside_clean_trees() {
         "ls src/{a,b}",
         // An unmatched bracket operand is read literally only when no class
         // could match a dotfile and recursion could not fall back to the cwd.
-        "ls -R app/registry/[slug]",
-        "ls app/registry/[!x]",
-        "ls app/registry/[.x]",
+        "ls -R app/items/[slug]",
+        "ls app/items/[!x]",
+        "ls app/items/[.x]",
         "ls nothing/[slug]",
         // `[,-0]` includes `.`, so dotglob can select `.env`.
         "ls [,-0]env",
@@ -158,9 +158,9 @@ fn grep_tree_walk_matches_what_the_walk_can_emit() {
     let ws = fixture.workspace.as_str();
     for command in [
         "grep -rln registry src",
-        "grep -rn needle app/registry src",
-        "grep -r needle app/registry app/password-reset-email.tsx",
-        "grep -rl needle app/registry/alpha",
+        "grep -rn needle app/items src",
+        "grep -r needle app/items app/password-reset-email.tsx",
+        "grep -rl needle app/items/alpha",
     ] {
         assert!(allowed_in(&fixture, ws, command), "{command}");
     }

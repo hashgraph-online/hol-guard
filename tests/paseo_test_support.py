@@ -9,9 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import describe
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import describe
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
 PASEO_NATIVE_HARNESSES = {
@@ -33,7 +33,7 @@ class PaseoProvider:
 
 
 def paseo_config_path(context: HarnessContext) -> Path:
-    return get_adapter("paseo").policy_path(context)
+    return harness_ops.policy_path("paseo", context)
 
 
 def receipt_path(context: HarnessContext) -> Path:

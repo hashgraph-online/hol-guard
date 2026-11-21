@@ -12,7 +12,7 @@ from .command_outputs import command_outputs_match as command_outputs_match
 from .extension_catalog_fixtures import CATALOG_CASE, CATALOG_CHECK
 from .fast_forward_fixtures import FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE
 from .file_write_cases import FILE_WRITE_BLOCK_REASONS, FILE_WRITE_CHECK, FILE_WRITE_ORACLE
-from .task_brief_cases import TASK_BRIEF_BLOCK_REASONS, TASK_BRIEF_ORACLE
+from .git_rules_cases import GIT_RULES_BLOCK_REASONS, git_rules_required_checks
 from .input_evidence import edit_headers, input_digest, input_matches, post_input_matches
 from .native_routes import native_route_error
 from .remote_code import REMOTE_CODE_CASES
@@ -33,6 +33,7 @@ from .script_cases import CREDENTIAL_STORE_CASES, SCRIPT_BLOCK_REASONS, STORE_CH
 from .session_folder import EDIT_CASE as SESSION_EDIT_CASE
 from .session_folder import SHELL_CASE as SESSION_SHELL_CASE
 from .supply_chain import PACKAGE_BLOCK_REASONS, supply_chain_required_checks
+from .task_brief_cases import TASK_BRIEF_BLOCK_REASONS, TASK_BRIEF_ORACLE
 
 BASE_CHECKS = frozenset({"protected:.env", "protected:deletion-target/keep.txt", "secret-copy-absent"})
 BLOCK_REASONS = frozenset(
@@ -66,6 +67,8 @@ def block_reasons(scenario: Scenario) -> frozenset[str]:
         return SCRIPT_BLOCK_REASONS[scenario.id]
     if scenario.id in RUNTIME_BLOCK_REASONS:
         return RUNTIME_BLOCK_REASONS[scenario.id]
+    if scenario.id in GIT_RULES_BLOCK_REASONS:
+        return GIT_RULES_BLOCK_REASONS[scenario.id]
     return REMOTE_CODE_CASES.get(scenario.id, BLOCK_REASONS)
 
 
@@ -136,6 +139,7 @@ def required_checks(scenario: Scenario) -> set[str]:
     if scenario.id == "linked-destination-touch":
         checks.add("protected:.env:metadata")
     checks.update(runtime_required_checks(scenario.id))
+    checks.update(git_rules_required_checks(scenario.id))
     return checks
 
 

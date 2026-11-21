@@ -565,6 +565,7 @@ pub mod composition_rules;
 pub mod contained_argv;
 #[cfg(unix)]
 pub mod contained_execution;
+mod contained_expectation;
 mod contained_git;
 mod contained_inline_target;
 

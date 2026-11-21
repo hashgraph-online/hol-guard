@@ -3,13 +3,12 @@
 Run with the rig venv's python and HOME set to the rig Guard home:
     HOME=$W/ghome $W/gvenv/bin/python -I cigar_setup.py <work dir>
 Installs Guard's Codex hooks into <work>/ghome/.codex/config.toml (make_arms.py copies the prompt hook
-from there), sets up the private Python and the CIGAR runtime from the signed catalog, saves the
+from there), selects the CIGAR engine built into Guard, saves the
 preferences and activates. Touches nothing outside <work>.
 """
 
 import json
 import os
-import platform
 import subprocess
 import sys
 import time
@@ -97,54 +96,23 @@ def dash(path, body):
     return post(f"{client.daemon_url}{path}", body, init["dashboard_session_token"])
 
 
-def builds():
-    found = set()
-
-    def walk(o):
-        if isinstance(o, dict):
-            if "build_id" in o:
-                found.add(o["build_id"])
-            for v in o.values():
-                walk(v)
-        elif isinstance(o, list):
-            for v in o:
-                walk(v)
-
-    walk(ctx("versions"))
-    return found
-
-
-from codex_plugin_scanner.guard.harness.base import HarnessContext  # noqa: E402
-from codex_plugin_scanner.guard.harness.registry import get_adapter  # noqa: E402
+from codex_plugin_scanner.guard.harness_context import HarnessContext  # noqa: E402
+from codex_plugin_scanner.guard.native_harness_install_ops import install as install_harness  # noqa: E402
+from codex_plugin_scanner.guard.native_owned import owner_request  # noqa: E402
 
 guard.mkdir(parents=True, exist_ok=True)
 # Installing hooks asks the resident daemon, so start it first on a fresh home.
 subprocess.run([exe, "daemon", "ensure", "--guard-home", str(guard)], env=env, capture_output=True, timeout=300)
-get_adapter("codex").install(HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard))
+install_harness(
+    "codex",
+    HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard),
+    owner=owner_request(guard, actor="adapter.codex.adapter_install"),
+)
 log("codex hooks installed in rig home")
 subprocess.run([exe, "daemon", "ensure", "--guard-home", str(guard)], env=env, capture_output=True, timeout=300)
 if ctx("status").get("requested_enabled") is not True:
-    ids = builds()
-    system = {"darwin": "darwin", "linux": "linux", "win32": "win32"}[sys.platform]
-    # Windows has an x64 build only; on Windows on Arm it runs under emulation.
-    arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") and system != "win32" else "x64"
-    # Build ids end in darwin-arm64, win32-x64, linux-arm64-gnu or linux-arm64-musl (glibc wanted).
-    pythons = sorted(b for b in ids if b.startswith("cpython-") and b.removesuffix("-gnu").endswith(f"-{system}-{arch}"))
-    if not pythons:
-        log("no CPython build for", system, arch, sorted(ids))
-        log("versions answer:", json.dumps(ctx("versions"))[:1500])
-        sys.exit(1)
-    py = pythons[-1]
-    cigar = sorted(b for b in ids if b.startswith("cigar-"))[-1]
-    log("builds", py, cigar)
     job = f"cli:{uuid.uuid4()}"
-    ctx("setup-python", py, "--job-id", job)
-    interp = wait_job(job, "interpreter_id")
-    job = f"cli:{uuid.uuid4()}"
-    ctx("install", cigar, "--job-id", job, "--interpreter-id", interp)
-    runtime = wait_job(job, "runtime_id")
-    job = f"cli:{uuid.uuid4()}"
-    ctx("switch", runtime, "--job-id", job, "--generation", str(ctx("status").get("generation")))
+    ctx("switch", "builtin", "--job-id", job, "--generation", str(ctx("status").get("generation")))
     expected = wait_job(job, "expected_generation")
     ctx("commit", job, "--generation", str(expected))
     wait_job(job, "phase")

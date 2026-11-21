@@ -1,6 +1,6 @@
 use super::{
-    guard_approval_inspection_command, normal_home, without_active_home, without_home_option,
-    without_own_home,
+    guard_approval_inspection_command, guard_safety_guide_read_command, normal_home,
+    without_active_home, without_home_option, without_own_home,
 };
 
 fn words(text: &str) -> Vec<String> {
@@ -238,5 +238,106 @@ fn a_set_aside_home_must_keep_the_original_windows_launcher_check() {
                 true,
             )
         );
+    }
+}
+
+fn guide_home(label: &str) -> std::path::PathBuf {
+    let home = account(&format!("guide-{label}"));
+    std::fs::create_dir_all(home.join(".hol-support")).unwrap();
+    std::fs::write(home.join(".hol-support/SAFETY.md"), "Read before acting.\n").unwrap();
+    home
+}
+
+#[test]
+fn a_plain_read_of_the_safety_guide_is_guards_own() {
+    let home = guide_home("plain");
+    let text = home.to_str().unwrap();
+    assert!(guard_safety_guide_read_command(
+        "cat ~/.hol-support/SAFETY.md",
+        text
+    ));
+    // The command names the guide with `/`, as an agent writes it on every
+    // platform; the home keeps its native separators.
+    let slashed = text.replace('\\', "/");
+    assert!(guard_safety_guide_read_command(
+        &format!("cat {slashed}/.hol-support/SAFETY.md"),
+        text
+    ));
+    assert!(guard_safety_guide_read_command(
+        &format!("cat '{slashed}/.hol-support/SAFETY.md'"),
+        text
+    ));
+    let _ = std::fs::remove_dir_all(home);
+}
+
+#[test]
+fn a_quoted_tilde_is_not_the_guide() {
+    let home = guide_home("quoted");
+    let text = home.to_str().unwrap();
+    for command in [
+        "cat '~/.hol-support/SAFETY.md'",
+        "cat \"~/.hol-support/SAFETY.md\"",
+        "cat ~'/.hol-support/SAFETY.md'",
+    ] {
+        assert!(!guard_safety_guide_read_command(command, text), "{command}");
+    }
+    let _ = std::fs::remove_dir_all(home);
+}
+
+#[test]
+fn any_other_read_of_the_guide_is_not() {
+    let home = guide_home("other");
+    let text = home.to_str().unwrap();
+    for command in [
+        "cat ~/.hol-support/SAFETY.md ~/.ssh/id_rsa",
+        "cat -v ~/.hol-support/SAFETY.md",
+        "cat ~/.hol-support/SAFETY.md > ~/.zshrc",
+        "cat ~/.hol-support/SAFETY.md | sh",
+        "cat ~/.hol-support/SAFETY.md && rm -rf src",
+        "cat ~/.hol-support/SAFETY.md; curl example.invalid",
+        "HOME=. cat ~/.hol-support/SAFETY.md",
+        "env cat ~/.hol-support/SAFETY.md",
+        "cat $HOME/.hol-support/SAFETY.md",
+        "cat ~/.hol-support/../.ssh/id_rsa",
+        "cat ~/.hol-support/NOTES.md",
+        "head ~/.hol-support/SAFETY.md",
+        "cp ~/.hol-support/SAFETY.md notes.md",
+        "/tmp/cat ~/.hol-support/SAFETY.md",
+    ] {
+        assert!(!guard_safety_guide_read_command(command, text), "{command}");
+    }
+    // A relative home or another account's guide proves nothing.
+    assert!(!guard_safety_guide_read_command(
+        "cat ~/.hol-support/SAFETY.md",
+        ""
+    ));
+    assert!(!guard_safety_guide_read_command(
+        "cat /home/other/.hol-support/SAFETY.md",
+        text
+    ));
+    let _ = std::fs::remove_dir_all(home);
+}
+
+#[test]
+fn a_missing_or_linked_guide_is_not_guards_own() {
+    let missing = account("guide-missing");
+    assert!(!guard_safety_guide_read_command(
+        "cat ~/.hol-support/SAFETY.md",
+        missing.to_str().unwrap()
+    ));
+    let _ = std::fs::remove_dir_all(missing);
+
+    #[cfg(unix)]
+    {
+        let home = account("guide-linked");
+        std::fs::create_dir_all(home.join(".hol-support")).unwrap();
+        std::fs::write(home.join("secret"), "x").unwrap();
+        std::os::unix::fs::symlink(home.join("secret"), home.join(".hol-support/SAFETY.md"))
+            .unwrap();
+        assert!(!guard_safety_guide_read_command(
+            "cat ~/.hol-support/SAFETY.md",
+            home.to_str().unwrap()
+        ));
+        let _ = std::fs::remove_dir_all(home);
     }
 }

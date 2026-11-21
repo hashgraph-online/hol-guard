@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.repair_engine import build_report, repair_onefile_leaks, run_repair
 from codex_plugin_scanner.guard.resident_state_prune import (
     OWNER_LOCK_NAME,

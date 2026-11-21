@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from tests import harness_ops_support as harness_support
 from tests.opencode_test_support import pretool_plugin_source
 from tests.test_opencode_pretool import _bun_executable, _ctx
 
@@ -31,7 +31,7 @@ def _stale_companion(tmp_path: Path):
         ),
         encoding="utf-8",
     )
-    get_adapter("opencode").install(ctx)
+    harness_support.install("opencode", ctx)
     payload = json.loads(config.read_text(encoding="utf-8"))
     companion = payload["mcp"]["hol-guard::test"]
     argv = companion["command"]
@@ -42,7 +42,7 @@ def _stale_companion(tmp_path: Path):
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file mode contract")
 def test_refresh_preserves_jsonc_comments_and_existing_mode(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.jsonc import loads_jsonc
+    from codex_plugin_scanner.json_comment_stripping import strip_jsonc_comments
     from tests.opencode_test_support import refresh_opencode_proxy_launchers
 
     ctx, config, payload = _stale_companion(tmp_path)
@@ -59,7 +59,7 @@ def test_refresh_preserves_jsonc_comments_and_existing_mode(tmp_path: Path) -> N
     assert "// launcher note" in result
     assert stat.S_IMODE(config.stat().st_mode) == 0o640
     expected = payload["mcp"]["hol-guard::test"]["command"]
-    actual = loads_jsonc(result)
+    actual = json.loads(strip_jsonc_comments(result))
     actual["mcp"]["hol-guard::test"]["command"] = expected
     assert actual == payload
 
@@ -180,7 +180,7 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
         ),
         encoding="utf-8",
     )
-    get_adapter("opencode").install(ctx)
+    harness_support.install("opencode", ctx)
     payload = json.loads(config.read_text(encoding="utf-8"))
     companion = payload["mcp"]["hol-guard::test"]
     proxy_index = companion["command"].index("opencode-mcp-proxy")
@@ -194,11 +194,11 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
     before = json.loads(config.read_text(encoding="utf-8"))
 
     if frozen_runtime:
-        from codex_plugin_scanner.guard.harness import native_harness
+        from codex_plugin_scanner.guard import native_harness_client as harness_client
 
-        stamp = native_harness.caller_identity()
+        stamp = harness_client.caller_identity()
         monkeypatch.setattr(
-            native_harness,
+            harness_client,
             "caller_identity",
             lambda: {**stamp, "frozen": True, "executable_resolved": "/durable/current-hol-guard"},
         )

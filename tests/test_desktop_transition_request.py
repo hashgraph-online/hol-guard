@@ -13,7 +13,7 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import desktop_runtime_transition as command
 from codex_plugin_scanner.guard.cli.desktop_transition_request import REQUEST_SCHEMA, load_desktop_transition_request
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
 

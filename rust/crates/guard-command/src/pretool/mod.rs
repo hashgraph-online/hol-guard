@@ -85,6 +85,7 @@ pub fn contained_matcher_stage(program: &str, arguments: &[String]) -> bool {
 }
 pub(crate) mod curl_reads;
 mod cursor_session_outputs;
+mod in_process_scope;
 pub use curl_reads::bound_curl_read_destinations;
 
 /// Whether this host runs Guard's contained execution sink for a read-only
@@ -178,12 +179,13 @@ mod git_remote_config;
 mod git_remote_ops;
 mod git_routes;
 mod git_session_probe;
+mod git_step_preserves;
 mod git_worktree;
 pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
 mod guard_home_option;
-pub use guard_home_option::guard_approval_inspection_command;
+pub use guard_home_option::{guard_approval_inspection_command, guard_safety_guide_read_command};
 mod guard_names;
 mod helm_usage;
 pub(crate) mod help_probes;
@@ -213,6 +215,7 @@ mod tool_bin_listing;
 mod trailing_group;
 mod trusted_location;
 mod venv_program_path;
+mod windows_pytest_base;
 pub(crate) use git_routes::{
     git_dir_route_within_scope, git_route_within_workspace, git_route_without_repository,
     reads_without_repository,
@@ -225,6 +228,7 @@ mod literal_secrets;
 mod literal_ssn_echo;
 mod lockfile_install;
 mod omp_file_url;
+mod omp_hashline_recovery;
 mod omp_hashline_writes;
 pub(crate) mod pipe_attacks;
 mod planted_instructions;
@@ -317,9 +321,9 @@ pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
 };
-pub(crate) use git_read_after_allow::{
-    git_reads_after_allowed_steps, git_step_overwrites_what_runs_next,
-    step_preserves_later_programs,
+pub(crate) use git_read_after_allow::git_reads_after_allowed_steps;
+pub(crate) use git_step_preserves::{
+    git_step_overwrites_what_runs_next, step_preserves_later_programs,
 };
 pub use read_paths::proven_repository_hidden_document;
 pub use safe_scalar::PsqlEnvironment;
@@ -593,7 +597,30 @@ fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
     // would floor an ordinary `remote.*url` read. The pattern still faces the
     // markers the glob's own text names, the screen a search pattern faces.
     let patterns = git_config_reads::configuration_patterns(segment);
+    // A word after the standalone `--` delimiter is positional, even if it
+    // looks like `--name=value`. Git treats it as a pathspec, so discarding
+    // its prefix before screening could conceal credential-named files.
+    let mut positional = false;
+    // For grep/rg, -e/-f (or --regexp/--file) consume their next word as
+    // a pattern or pattern-file operand, even when that word is "--".
+    let pattern_options = matches!(
+        crate::command_compatibility::basename(segment).as_str(),
+        "grep" | "rg"
+    );
+    let mut pattern_value = false;
     arguments_outside_message(segment).any(|argument| {
+        let is_pattern_value = std::mem::take(&mut pattern_value);
+        if argument == "--" && !is_pattern_value {
+            positional = true;
+            return false;
+        }
+        if pattern_options
+            && !positional
+            && !is_pattern_value
+            && matches!(argument.as_str(), "-e" | "--regexp" | "-f" | "--file")
+        {
+            pattern_value = true;
+        }
         let last_component = argument.rsplit('/').next().unwrap_or(argument);
         if !argument.contains(['*', '?', '[', '{']) || readable_pattern(last_component).1 {
             return false;
@@ -602,6 +629,15 @@ fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
             return search::literal_glob_names_sensitive_path(&readable_pattern(argument).0);
         }
         match argument.split_once('=') {
+            // A long option's name is not a path. `grep --include=*.tsx`
+            // selects files called `*.tsx`; the `--include=` in front of the
+            // glob is the option. Reading the whole token as one glob makes
+            // it match `--include=private-key.tsx`, so an ordinary filtered
+            // search picks up a fixed floor no Allow can settle. The value
+            // after the `=` still faces every screen a bare operand faces.
+            Some((name, value)) if !positional && option_name(name) => {
+                sensitive_read_path_argument(&readable_pattern(value).0)
+            }
             Some((name, _))
                 if !argument.starts_with('-')
                     && !argument.contains('/')
@@ -634,6 +670,20 @@ fn sensitive_literal_path(value: &str) -> bool {
         sensitive_path_family(relative).is_some()
             || guard_secure_fs::credential_named_path(relative)
     })
+}
+
+/// Whether `name` is an option's name -- `--include`, `-I` -- rather than a
+/// path or a field name. A leading-dash word spelled with ordinary option
+/// characters qualifies; `--a/b` and `-./x` keep their path reading.
+fn option_name(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix('-') else {
+        return false;
+    };
+    let rest = rest.strip_prefix('-').unwrap_or(rest);
+    !rest.is_empty()
+        && rest
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
 }
 
 /// A field name such as `if`, `query` or `user.name`: no glob or brace
@@ -724,13 +774,33 @@ fn class_end(chars: &[char], start: usize) -> Option<(usize, bool)> {
 fn arguments_outside_message(
     segment: &crate::CommandSegmentV1,
 ) -> impl Iterator<Item = &String> + '_ {
+    // Git diff/log/show/checkout/restore use -m for merge handling, not
+    // for a message. Hiding the following "--" would hide a pathspec.
+    let merge_flag = crate::command_compatibility::basename(segment) == "git"
+        && crate::command_compatibility::git_command_index(&segment.arguments)
+            .and_then(|index| segment.arguments.get(index))
+            .is_some_and(|command| {
+                matches!(
+                    command.as_str(),
+                    "diff"
+                        | "diff-files"
+                        | "diff-index"
+                        | "diff-tree"
+                        | "log"
+                        | "show"
+                        | "whatchanged"
+                        | "checkout"
+                        | "restore"
+                )
+            });
     let mut message_value = false;
     segment.arguments.iter().filter(move |argument| {
         let is_message = std::mem::take(&mut message_value);
-        message_value = matches!(argument.as_str(), "-m" | "--message");
+        message_value = !merge_flag && matches!(argument.as_str(), "-m" | "--message");
         let lowered = argument.to_ascii_lowercase();
-        let attached_message = lowered.starts_with("--message=")
-            || (lowered.starts_with("-m") && !lowered.starts_with("--"));
+        let attached_message = !merge_flag
+            && (lowered.starts_with("--message=")
+                || (lowered.starts_with("-m") && !lowered.starts_with("--")));
         !(is_message || attached_message)
     })
 }
@@ -920,14 +990,17 @@ fn exact_safe_command_with_context(
         creates_nothing: search::command_creates_nothing(model),
         ..context
     };
-    if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
-        || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
-        || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
-    {
+    let cd_proof = |model: &CanonicalCommandV1| {
+        segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
+            || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
+            || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
+    };
+    if cd_proof(model) {
         return true;
     }
+    // The rest runs once, from its `cd`, whatever the proven prefix returned.
     if let Some(rest) = segment_proof::after_read_prefix(model, context) {
-        return segment_proof::exact_safe_cwd_compound(&rest, allow_git_helper_context, context);
+        return cd_proof(&rest);
     }
     if let Some(rest) =
         git_read_floor::after_safe_git_read_prefix(model, allow_git_helper_context, context)
@@ -1567,6 +1640,8 @@ fn evaluate_single_command(
 #[cfg(test)]
 #[path = "control_flow_tests.rs"]
 mod control_flow_tests;
+#[cfg(test)]
+mod fixed_glob_option_boundary_tests;
 #[cfg(test)]
 #[path = "for_loop_tests.rs"]
 mod for_loop_tests;

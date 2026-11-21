@@ -98,3 +98,13 @@ fn refuses_malformed_prepare_requests() {
         assert_eq!(dispatch(&request), Err(ERR_INVALID), "{request}");
     }
 }
+
+#[cfg(windows)]
+#[test]
+fn windows_has_no_direct_server_and_keeps_the_ordinary_launch() {
+    let home = tempfile::tempdir().unwrap();
+    for exit in [json!(1), Value::Null, json!(0)] {
+        let answer = ask(home.path(), "started", json!({ "exit": exit }));
+        assert_eq!(answer, json!({ "launch": "plain" }), "{exit}");
+    }
+}

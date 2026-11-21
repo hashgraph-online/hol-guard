@@ -13,8 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard import diagnostics_bridge
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.stable_guard_cli import (
     argv0_is_ephemeral_desktop_cli,
     desktop_core_shim_for_executable,
@@ -123,10 +124,10 @@ def _pinned(home: Path, monkeypatch: pytest.MonkeyPatch) -> str | None:
     """The replaced Core the Oh My Pi diagnostics name, or ``None``."""
 
     monkeypatch.setattr(
-        HarnessAdapter, "diagnostics", lambda _self, _context: {"setup_status": "active", "warnings": []}
+        diagnostics_bridge, "native_diagnostics", lambda **_kwargs: {"setup_status": "active", "warnings": []}
     )
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=home.parent / "guard-home")
-    report = get_adapter("omp").diagnostics(context)
+    report = harness_ops.diagnostics("omp", context)
     if report["setup_status"] != "broken":
         return None
     return str(report["warnings"][0]).split("pinned Desktop core (", 1)[1].split(")", 1)[0]
@@ -194,23 +195,22 @@ def test_an_extension_on_the_stable_launcher_or_another_cli_is_not_reported(
 def test_diagnostics_call_a_pinned_extension_broken_so_repair_regenerates_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
 ) -> None:
-    adapter = get_adapter(harness)
     launcher, _shim = _core(tmp_path)
     _select(launcher, _NEWER)
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
     extension = tmp_path / "home" / f".{harness}" / "agent" / "extensions" / "hol-guard.ts"
     extension.parent.mkdir(parents=True)
     extension.write_text(f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(launcher))};\n", encoding="utf-8")
-    healthy = {"harness": adapter.harness, "setup_status": "active", "warnings": ["existing"]}
-    monkeypatch.setattr(HarnessAdapter, "diagnostics", lambda _self, _context: dict(healthy))
+    healthy = {"harness": harness_ops.canonical_harness(harness), "setup_status": "active", "warnings": ["existing"]}
+    monkeypatch.setattr(diagnostics_bridge, "native_diagnostics", lambda **_kwargs: dict(healthy))
 
-    report = adapter.diagnostics(context)
+    report = harness_ops.diagnostics(harness, context)
 
     assert report["setup_status"] == "broken"
     assert report["warnings"][0] == "existing"
     assert "hol-guard repair" in report["warnings"][1]
     extension.write_text('const GUARD_CLI_WRAPPER_COMMAND = "/usr/bin/true";\n', encoding="utf-8")
-    assert adapter.diagnostics(context)["setup_status"] == "active"
+    assert harness_ops.diagnostics(harness, context)["setup_status"] == "active"
     extension.write_text(f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(launcher))};\n", encoding="utf-8")
     _select(launcher, _RELEASE)
-    assert adapter.diagnostics(context)["setup_status"] == "active"
+    assert harness_ops.diagnostics(harness, context)["setup_status"] == "active"

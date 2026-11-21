@@ -989,6 +989,18 @@ mod tests {
     }
 
     #[test]
+    fn a_test_runner_traceback_with_stand_in_credentials_stays_readable() {
+        let field = ["new_", "password"].concat();
+        let value = ["correct-", "password"].concat();
+        let traceback =
+            format!("tests/test_login.py:742: AssertionError\nkwargs = {{'{field}': '{value}'}}\n");
+
+        let response = review_post_tool(&request(json!({"stdout": traceback, "stderr": ""})));
+
+        assert_eq!(response.decision, "allow");
+    }
+
+    #[test]
     fn stderr_is_scanned_even_when_stdout_exists() {
         let response = review_post_tool(&request(
             json!({"stdout": "ok", "stderr": aws_like_access_key()}),

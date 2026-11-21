@@ -2,13 +2,10 @@
 //! Devin, Muse, OpenClaw, Paseo, Grok, ZCode, Pi, Oh My Pi, OpenCode,
 //! Cline, Copilot, Cursor, Claude Code, Hermes and Codex harness adapters.
 //!
-//! Python keeps one generic adapter class that holds the ownership locks,
-//! prepares and removes the launcher shim, builds the bounded hook argv and
-//! publishes the file plans this kind returns through the runtime transition
-//! journal. Everything else is answered here: the adapter descriptions, policy
-//! and config paths, detection and command lookup, the install and uninstall
-//! plans with their manifests, the launch environment, the runtime probe
-//! fields, the approval flow and Paseo's delegated native installs.
+//! The runtime answers the adapter descriptions, paths, detection, install and
+//! uninstall plans, their publication under one installation transaction, the
+//! managed-install records, the update repairs and Paseo's delegated native
+//! installs. The caller supplies only the facts of its own process.
 //!
 //! Every request carries `harness`, `op` and a `context` object:
 //! `{home, workspace, guard_home, home_override_explicit, cwd, user_home,
@@ -33,6 +30,7 @@ mod caller;
 mod claude;
 mod claude_argv;
 mod claude_install_target;
+mod claude_install_target_text;
 mod claude_settings;
 mod cline;
 mod cline_apply;
@@ -96,8 +94,11 @@ mod cursor_surfaces;
 mod describe;
 mod describe_env;
 mod desktop_core;
+pub(crate) use desktop_core::frozen_sink_launcher;
+mod detect_merged;
 mod durable_runtime;
 mod files;
+mod firewall;
 mod grok;
 mod grok_hook_command;
 mod grok_hook_files;
@@ -117,9 +118,14 @@ mod hook_render;
 mod install_apply;
 mod isolated_python;
 mod kimi;
+mod launch_default;
 mod live_hook_verification;
+mod managed_install;
+mod managed_install_target;
 mod managed_record;
 mod managed_servers;
+mod managed_store;
+mod managed_update;
 mod mcp_servers;
 mod openclaw;
 mod opencode;
@@ -138,10 +144,13 @@ mod probe_run;
 mod proof;
 mod proxy_launch;
 mod settings_hooks;
+mod setup_detection;
 mod shim_profile;
 mod shim_remove;
 mod shims_apply;
 mod simple;
+mod skills_scan;
+mod standalone_install;
 mod uninstall_apply;
 mod update_bounded;
 mod update_support;
@@ -152,13 +161,11 @@ mod zcode_desktop_keys;
 pub(crate) use codex_repair_verify::{verify_captured, Verdict};
 
 #[cfg(test)]
-#[path = "tests.rs"]
-mod tests;
-
-#[cfg(test)]
 #[path = "codex_owners_tests.rs"]
 mod codex_owners_tests;
-
+#[cfg(test)]
+#[path = "tests.rs"]
+mod tests;
 #[cfg(test)]
 #[path = "tests_mcp_launch.rs"]
 mod tests_mcp_launch;
@@ -168,6 +175,7 @@ pub(crate) use describe::Spec;
 
 /// The paths a harness adapter works from, as Python's `HarnessContext` and
 /// process hold them.
+#[derive(Clone)]
 pub(crate) struct Ctx {
     pub(crate) home: PathBuf,
     pub(crate) workspace: Option<PathBuf>,
@@ -341,6 +349,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if contract_config_paths::handles(op) {
         return answer(contract_config_paths::dispatch(&ctx, fields));
     }
+    if setup_detection::handles(op) {
+        return answer(setup_detection::dispatch(op, &ctx, fields));
+    }
     if live_hook_verification::handles(op) {
         return answer(live_hook_verification::dispatch(&ctx, fields));
     }
@@ -350,17 +361,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if op == "proof_verify" || op == "proof_bind" {
         return answer(proof::dispatch(op, &ctx, fields));
     }
-    if op == "managed_install_record" {
-        return answer(managed_record::record(&ctx, fields));
-    }
-    if op == "managed_install_guidance" {
-        return answer(managed_record::guidance_after(&ctx, fields));
-    }
-    if op == "bounded_hook_scripts" {
-        return answer(update_bounded::scripts(&ctx));
-    }
-    if op == "remove_bounded_hook_script" {
-        return answer(update_bounded::remove(&ctx, fields));
+    if let Some(done) = managed_install::route(op, &ctx, fields) {
+        return done;
     }
     if op == "prepare_guard_shim" {
         return answer(guard_shim::prepare(&ctx, fields));
@@ -379,6 +381,12 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .and_then(Value::as_str)
         .ok_or(ERR_INVALID)?;
     let spec = describe::spec(harness).ok_or(ERR_INVALID)?;
+    if op == "adapter_install" || op == "adapter_uninstall" {
+        return managed_install::adapter(op, spec, &ctx, fields);
+    }
+    if op == "detect_merged" {
+        return answer(detect_merged::one(spec, &ctx, fields));
+    }
     if op == "apply_uninstall" {
         return uninstall_apply::apply(spec, &ctx, fields);
     }
@@ -395,7 +403,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         return answer(probe_run::runtime(spec, &ctx, fields));
     }
     answer(if op == "default_launch" {
-        default_launch(spec, &ctx, fields)
+        launch_default::answer(spec, &ctx, fields)
     } else if op == "hook_config" {
         hook_config::answer(spec, &ctx, fields)
     } else if op == "hook_spec" {
@@ -425,30 +433,6 @@ fn route(spec: &Spec, op: &str, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
         "codex" => codex::dispatch(spec, op, ctx, fields),
         _ => Err(Failure::Invalid),
     }
-}
-
-/// `{"argv": [...]}`, the launch for a harness with no launcher of its own:
-/// its resolved executable or else its bare name, the workspace for the two
-/// harnesses that open one, then the caller's `args`.
-fn default_launch(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let args = fields
-        .get("args")
-        .and_then(Value::as_array)
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|arg| arg.as_str().map(str::to_owned).ok_or(Failure::Invalid))
-        .collect::<Step<Vec<_>>>()?;
-    let resolved = route(spec, "resolved_executable", ctx, fields)?;
-    let mut argv = vec![resolved
-        .get("path")
-        .and_then(Value::as_str)
-        .unwrap_or(spec.executable)
-        .to_owned()];
-    if matches!(spec.harness, "opencode" | "claude-code") {
-        argv.extend(ctx.workspace.as_deref().map(path_text));
-    }
-    argv.extend(args);
-    Ok(json!({ "argv": argv }))
 }
 
 /// `{"path": ...}` for `resolved_executable`, shared by every harness.

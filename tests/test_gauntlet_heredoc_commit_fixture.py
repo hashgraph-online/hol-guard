@@ -11,7 +11,7 @@ import pytest
 
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.fixtures import create_fixture, filesystem_checks
-from ci.gauntlet.heredoc_commit_fixtures import HEREDOC_COMMIT_CASE, heredoc_commit_checks
+from ci.gauntlet.heredoc_commit_fixtures import EVAL_COMMIT_CASE, HEREDOC_COMMIT_CASE, heredoc_commit_checks
 
 
 # The case command is a POSIX shell command; on Windows this resolves Git for Windows' sh.
@@ -57,3 +57,16 @@ def test_other_cases_keep_an_unchanged_readme(tmp_path: Path) -> None:
     assert heredoc_commit_checks(fixture.workspace, "omp-native-git-compound-reads") == {}
     status = _shell(fixture.home, fixture.workspace, "git status --porcelain -- README.md")
     assert status.returncode == 0 and status.stdout == ""
+
+
+def test_the_eval_commit_case_has_a_readme_change_and_checks_its_subject(tmp_path: Path) -> None:
+    scenario = next(item for item in load_catalog() if item.id == EVAL_COMMIT_CASE)
+    assert (scenario.expectation, scenario.oracle, scenario.required_tools) == ("allow", "native-tools", ("eval",))
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=EVAL_COMMIT_CASE)
+    before = heredoc_commit_checks(fixture.workspace, EVAL_COMMIT_CASE)
+    assert before and not any(before.values())
+    # The prelude writes the body itself, so only the subject is held to the case.
+    completed = _shell(fixture.home, fixture.workspace, "git add README.md && git commit -q -m 'Add notes' -m 'Body.'")
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    after = filesystem_checks(fixture, scenario.oracle, EVAL_COMMIT_CASE)
+    assert all(after.values()), {name: ok for name, ok in after.items() if not ok}

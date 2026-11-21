@@ -13,7 +13,7 @@ from datetime import date, datetime, time
 from pathlib import Path
 
 from codex_plugin_scanner.guard.codex_config import _Wire
-from codex_plugin_scanner.guard.codex_hook_inventory import (
+from tests.python_oracles.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_SOURCE_DUPLICATE,
     CODEX_HOOK_INVENTORY_SOURCE_MALFORMED,
 )

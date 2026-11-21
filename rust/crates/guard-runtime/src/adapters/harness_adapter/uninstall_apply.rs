@@ -25,7 +25,7 @@ fn os(error: std::io::Error) -> Failure {
     Failure::Os(error.to_string())
 }
 
-fn fault(fault: Fault) -> Failure {
+pub(super) fn fault(fault: Fault) -> Failure {
     match fault {
         Fault::Os(error) => os(error),
         Fault::Integrity(code, _) if code == "codex_hook_transaction_target_not_regular" => {

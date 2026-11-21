@@ -9,13 +9,16 @@ import pytest
 from codex_plugin_scanner.guard import native_runner_authority as authority
 from codex_plugin_scanner.guard import store_extension_control_authority_reads as authority_reads
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.review_decision_memory import payload_hash_for_decision_memory_bundle
 from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_command_job
 from codex_plugin_scanner.guard.runtime.extension_control_authority import ExtensionControlAuthorityError
 from codex_plugin_scanner.guard.runtime.review_policy_memory_executor import REVIEW_POLICY_MEMORY_OPERATION
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_review_signing_helpers import REVIEW_SIGNING_KEY_ID, review_verification_keys, sign_review_payload
+
+# Every job is planned by the native runtime before it runs.
+pytestmark = pytest.mark.usefixtures("native_command_capability_runtime")
 
 
 def _store(tmp_path: Path) -> GuardStore:

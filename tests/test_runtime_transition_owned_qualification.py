@@ -13,7 +13,7 @@ import pytest
 from codex_plugin_scanner.guard import runtime_transition_owned_qualification as qualification
 from codex_plugin_scanner.guard.cli import desktop_owned_qualification as cli
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity
 from codex_plugin_scanner.guard.runtime_transition import TransitionError

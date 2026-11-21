@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import ask
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 
 _SETTINGS = '{"mcpServers": {"local": {"command": "node", "args": []}}}'
 

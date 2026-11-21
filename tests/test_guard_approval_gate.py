@@ -41,7 +41,7 @@ from codex_plugin_scanner.guard.cli.commands import run_guard_command
 from codex_plugin_scanner.guard.cli.commands_support_permission_store import _write_claude_native_permission_plan
 from codex_plugin_scanner.guard.config import editable_guard_settings, load_guard_config, reset_guard_settings
 from codex_plugin_scanner.guard.consumer.service import record_policy
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_tool_calls import allow_tool_call
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
@@ -653,6 +653,96 @@ def test_approval_gate_cli_noninteractive_uses_active_cooldown(
 
     assert payload["resolved"] is True
     assert store.get_approval_request("req-cli-cooldown")["status"] == "resolved"
+
+
+def _approve_inline(store: GuardStore, request_id: str) -> dict[str, object]:
+    """Approve the way the package shim's y/a prompt does."""
+
+    return run_approval_command(
+        SimpleNamespace(
+            approvals_command="approve",
+            request_id=request_id,
+            approval_action="allow",
+            scope="artifact",
+            reason="Approved in the terminal that ran the install.",
+            remember=False,
+            trust_local_tool=False,
+            fresh_approval_gate=True,
+        ),
+        store=store,
+        workspace=None,
+    )
+
+
+def test_inline_install_approval_asks_for_the_password_inside_an_open_cooldown(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store, cooldown_seconds=900)
+    _add_request(store, "req-inline-prime")
+    _approve(
+        store,
+        "req-inline-prime",
+        gate_input=ApprovalGateInput(password=PASSWORD, use_cooldown=True),
+        now=datetime.now(timezone.utc).isoformat(),
+    )
+    assert public_config(store.guard_home).cooldown_active is True
+    _add_request(store, "req-inline")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    asked: list[str] = []
+    answers = iter((WRONG_PASSWORD, PASSWORD))
+
+    def fake_getpass(prompt: str) -> str:
+        asked.append(prompt)
+        return next(answers)
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.cli.approval_gate_prompt.getpass.getpass", fake_getpass)
+
+    rejected = _approve_inline(store, "req-inline")
+
+    assert rejected.get("resolved") is not True
+    assert str(rejected["error"]).startswith("approval_gate_")
+    assert store.get_approval_request("req-inline")["status"] == "pending"
+
+    accepted = _approve_inline(store, "req-inline")
+
+    assert accepted["resolved"] is True
+    assert store.get_approval_request("req-inline")["status"] == "resolved"
+    assert asked == ["Approval password: ", "Approval password: "]
+
+
+def test_inline_install_approval_asks_for_a_new_code_after_a_recent_one(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
+    now = datetime.now(timezone.utc).isoformat()
+    _add_request(store, "req-totp-prime")
+    _approve(
+        store,
+        "req-totp-prime",
+        gate_input=ApprovalGateInput(totp_code=totp_code_at_counter(secret=secret, counter=_counter(now))),
+        now=now,
+    )
+    _add_request(store, "req-totp-inline")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    asked: list[str] = []
+
+    def fake_getpass(prompt: str) -> str:
+        asked.append(prompt)
+        return "000000"
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.cli.approval_gate_prompt.getpass.getpass", fake_getpass)
+
+    payload = _approve_inline(store, "req-totp-inline")
+
+    assert asked == ["Authenticator code: "]
+    assert payload.get("resolved") is not True
+    assert str(payload["error"]).startswith("approval_gate_totp")
+    assert store.get_approval_request("req-totp-inline")["status"] == "pending"
 
 
 def test_approval_gate_cli_noninteractive_block_without_strict_mode_does_not_prompt(

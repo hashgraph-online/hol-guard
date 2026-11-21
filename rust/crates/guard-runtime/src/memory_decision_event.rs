@@ -13,8 +13,10 @@ use sha2::{Digest, Sha256};
 
 use crate::claude_guard_question::python_lower;
 use crate::cloud_request_text::{optional_string, py_strip, py_truthy};
+use crate::cloud_sync_privacy::command_display_part;
 use crate::memory_pattern::{verdict, MemoryRequest};
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
+use guard_command::cloud_scrub::cloud_scrub_text;
 
 const FILE_ACTION_TYPES: [&str; 4] = [
     "file_read",
@@ -24,6 +26,7 @@ const FILE_ACTION_TYPES: [&str; 4] = [
 ];
 const GENERIC_FRAGMENTS: [&str; 6] = ["bash", "rg", "cat", "tool", "mcp", "skill"];
 const APPROVAL_WRAPPER: &str = "hol-guard approvals approve ";
+const WITHHELD_DISPLAY: &str = "Command withheld";
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
     let (Some(Value::Object(request)), Some(action), Some(resolved_at)) = (
@@ -81,12 +84,22 @@ fn event(
                 .map(str::to_owned)
             })
             // With no raw command the state is always `withheld`.
-            .unwrap_or_else(|| "Command withheld".to_owned()),
+            .unwrap_or_else(|| WITHHELD_DISPLAY.to_owned()),
     };
+    // The event is queued for Guard Cloud. Its display line goes through the
+    // same scrub as every other cloud command display, whatever the redaction
+    // setting, so a secret or source excerpt in the command never leaves the
+    // machine in it.
+    let command_display = Some(command_display_part(&command_display))
+        .filter(|display| !display.is_empty())
+        .unwrap_or_else(|| WITHHELD_DISPLAY.to_owned());
     // A withheld command never falls back to `review_command`: it usually
     // holds the approval wrapper and would make an over-broad fingerprint.
+    // The pattern's target and fingerprint copy the command, so they are built
+    // from the scrubbed text the cloud may see.
+    let scrubbed_command = raw_command.map(cloud_scrub_text);
     let pattern = verdict(&MemoryRequest {
-        command: raw_command,
+        command: scrubbed_command.as_deref(),
         artifact_type,
         artifact_id,
         artifact_name,
@@ -115,7 +128,8 @@ fn event(
         "decision_action": decision_action,
         "decision_reason": text("resolution_reason").or_else(|| text("reason")),
         "command_display": command_display,
-        "command_raw": if redaction_state == "disabled" { raw_command } else { None },
+        // Redaction off shares the command itself, still without secrets.
+        "command_raw": if redaction_state == "disabled" { raw_command.map(cloud_scrub_text) } else { None },
         "redaction_state": redaction_state,
         "artifact_type": artifact_type,
         "artifact_id": artifact_id,

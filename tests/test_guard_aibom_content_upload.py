@@ -7,18 +7,19 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.aibom_content_upload import (
     GuardAibomPrimaryContentSource,
     primary_content_sources_from_artifacts,
     upload_primary_content_sources,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import (
     cloud_inventory_artifacts_from_detection,
     inventory_snapshot_from_detection,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from tests.support.cloud_json_request_transport import use_runner_transport
 
 
 def _source(skills_root: Path, index: int) -> GuardAibomPrimaryContentSource:
@@ -101,7 +102,9 @@ def test_primary_content_sources_include_skill_bodies_for_every_harness(
     assert sources[0].path == skill_path
 
 
-def test_gemini_directory_identity_still_has_uploadable_primary_content(tmp_path: Path) -> None:
+def test_gemini_directory_identity_still_has_uploadable_primary_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=None,
@@ -111,7 +114,7 @@ def test_gemini_directory_identity_still_has_uploadable_primary_content(tmp_path
     skill_path.parent.mkdir(parents=True)
     skill_path.write_text("# Gemini review\n", encoding="utf-8")
 
-    detection = get_adapter("gemini").detect(context)
+    detection = harness_ops.detect("gemini", context)
     skill_artifact = next(artifact for artifact in detection.artifacts if artifact.artifact_type == "skill")
     assert isinstance(skill_artifact.metadata.get("content_hash"), str)
     assert isinstance(skill_artifact.metadata.get("directory_hash"), str)
@@ -140,6 +143,7 @@ def test_gemini_directory_identity_still_has_uploadable_primary_content(tmp_path
             "failedCount": 0,
         },
     )
+    use_runner_transport(monkeypatch, runner)
     summary, _auth_context = upload_primary_content_sources(
         object(),
         runner,
@@ -168,7 +172,7 @@ def test_gemini_skill_through_symlinked_workspace_has_uploadable_primary_content
         guard_home=tmp_path / "guard-home",
     )
 
-    detection = get_adapter("gemini").detect(context)
+    detection = harness_ops.detect("gemini", context)
     snapshot = inventory_snapshot_from_detection(
         detection,
         generated_at="2026-07-10T00:00:00Z",

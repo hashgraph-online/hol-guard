@@ -175,4 +175,95 @@ const call = (server: string, tool: string, input: unknown) => request(envelope(
   assert(lone?.title === "Notion", "T-APP-44: a tool named only after its service keeps its name");
 }
 
+// Code for Composio's workspace reads as the actions it names, with the code one click away.
+{
+  const code = [
+    "import json",
+    "",
+    "# Search Gmail for episode exports",
+    "result, error = run_composio_tool('GMAIL_FETCH_EMAILS', {",
+    "    'query': 'riverside OR HLX',",
+    "    'max_results': 15,",
+    "    'verbose': False,",
+    "    'include_payload': Fa…",
+  ].join("\n");
+  const item = call("composio", "COMPOSIO_REMOTE_WORKBENCH", { code_to_execute: code, thought: "Find episode exports" });
+  const explained = explainMcpCall(item);
+  assert(explained?.title === "Get emails in Gmail", `T-APP-48: the card is titled by the action in the code, got ${explained?.title}`);
+  assert(explained?.headline === "Claude Code wants to get emails in Gmail, using code", `T-APP-49: the headline says code does it, got ${explained?.headline}`);
+  assert(explained?.effect === "run-code", "T-APP-50: running code still reads as running code");
+  assert(explained?.consequence.text.startsWith("Runs code that can use Gmail") === true, "T-APP-51: the warning names the app the code uses");
+  const details = explained?.steps[0]?.details ?? [];
+  assert(details.some((fact) => fact.value === "riverside OR HLX"), "T-APP-52: the search words are a row");
+  assert(details.some((fact) => fact.value === "15"), "T-APP-53: the result count is a row");
+  assert(details.every((fact) => fact.value !== "No"), "T-APP-54: yes/no settings stay in the code");
+  assert(explained?.code?.collapsed === true && explained.code.text === code, "T-APP-55: the code is kept whole, behind a toggle");
+  assert(explained?.queueTitle === "Gmail · Get emails", `T-APP-56: the row leads with Gmail, got ${explained?.queueTitle}`);
+  assert(queueMcpMarkName(item) === "Gmail", "T-APP-57: the row shows Gmail's mark");
+  const markup = renderToStaticMarkup(PrimaryActionCard({ item }));
+  assert(markup.includes('data-mcp-app="Gmail"') && markup.includes("What the code asks for"), "T-APP-58: the card shows Gmail and what the code asks for");
+  assert(markup.includes("See the code (8 lines)"), "T-APP-59: the code is behind a toggle that says how long it is");
+
+  const two = explainMcpCall(
+    call("composio", "COMPOSIO_REMOTE_WORKBENCH", {
+      code_to_execute: "x = run_composio_tool(\"GMAIL_FETCH_EMAILS\", {\"query\": \"a\"})\nlimit = 99\nrun_composio_tool('SLACK_SEND_MESSAGE', {'channel': 'C1', 'text': 'hi'})\nrun_composio_tool(name, {})",
+    }),
+  );
+  assert(two?.steps.length === 2 && two.title === "Run 2 actions in Gmail and Slack", `T-APP-60: each named action is a step, got ${two?.title}`);
+  assert(two?.steps[0]?.details.every((fact) => fact.value !== "99") === true, "T-APP-61: values after a call are not its inputs");
+  assert(two?.aside?.includes("ways Guard cannot read") === true && two.code?.collapsed === false, "T-APP-62: an action named by a variable is called out, and the code stays open");
+
+  const plain = explainMcpCall(call("composio", "COMPOSIO_REMOTE_WORKBENCH", { code_to_execute: "import os\nprint(os.listdir('.'))" }));
+  assert(plain?.title === "Run code in Composio's workspace" && plain.code?.collapsed !== true, "T-APP-63: code that names no action is shown as code");
+}
+
+// The agent writes the code, so nothing it can hide sets the card's words.
+{
+  const workbench = (code: string) => explainMcpCall(call("composio", "COMPOSIO_REMOTE_WORKBENCH", { code_to_execute: code }));
+  const commented = workbench("# run_composio_tool('GMAIL_FETCH_EMAILS', {'query': 'a'})\nimport os\nos.remove('notes.txt')");
+  assert(commented?.title === "Run code in Composio's workspace" && commented.code?.collapsed !== true, `T-APP-65: a call in a comment is not a call, got ${commented?.title}`);
+  const inString = workbench("s = \"run_composio_tool('GMAIL_FETCH_EMAILS', {})\"\nexec(s)");
+  assert(inString?.title === "Run code in Composio's workspace", `T-APP-66: a call in a string is not a call, got ${inString?.title}`);
+  const tripleQuoted = workbench("doc = '''\nrun_composio_tool('GMAIL_FETCH_EMAILS', {})\n'''\nprint(doc)");
+  assert(tripleQuoted?.title === "Run code in Composio's workspace", `T-APP-67: a call in a long string is not a call, got ${tripleQuoted?.title}`);
+
+  const joined = workbench("run_composio_tool('GMAIL_SEND_EMAIL', {'recipient_email': 'ann@example.com' + '.evil.example', 'subject': 'Hi'})");
+  const sent = joined?.steps[0];
+  assert(sent?.details.every((fact) => !fact.value.includes("ann@example.com")) === true, "T-APP-68: a value built from pieces is not shown as one of them");
+  assert(sent?.details.some((fact) => fact.value === "Hi") === true && (sent?.hiddenDetails ?? 0) >= 1, "T-APP-69: plain values still show, and the built one is counted");
+  const fString = workbench("run_composio_tool('GMAIL_SEND_EMAIL', {'recipient_email': f'{name}@example.com'})");
+  assert(fString?.steps[0]?.details.length === 0 && (fString?.steps[0]?.hiddenDetails ?? 0) === 1, "T-APP-70: an f-string value is counted, not shown");
+  const builtName = workbench("run_composio_tool('GMAIL_' + verb, {})\nrun_composio_tool('SLACK_SEND_MESSAGE', {'text': 'hi'})");
+  assert(builtName?.steps.length === 1 && builtName.aside?.includes("cannot read") === true, "T-APP-71: an action name built from pieces is not read as the first piece");
+
+  const apostrophe = workbench("# don't page through\nrun_composio_tool('GMAIL_FETCH_EMAILS', {'query': 'invoices'})");
+  assert(apostrophe?.steps[0]?.details.some((fact) => fact.value === "invoices") === true, "T-APP-72: an apostrophe in a comment does not hide the inputs");
+  const alias = workbench("send = run_composio_tool\nrun_composio_tool('GMAIL_FETCH_EMAILS', {'query': 'a'})\nsend('GMAIL_SEND_EMAIL', {})");
+  assert(alias?.aside?.includes("cannot read") === true && alias.code?.collapsed === false, "T-APP-73: the call function under another name is called out");
+  const imported = workbench("from composio import run_composio_tool\nrun_composio_tool('GMAIL_FETCH_EMAILS', {'query': 'a'})");
+  assert(imported?.code?.collapsed === true && imported.aside?.includes("cannot read") === false, "T-APP-74: importing the call function is not passing it around");
+  const named = "\nrun_composio_tool('GMAIL_FETCH_EMAILS', {'query': 'a'})\nsend('GMAIL_SEND_EMAIL', {})";
+  const renamed = workbench(`from composio import run_composio_tool as send${named}`);
+  assert(renamed?.aside?.includes("cannot read") === true && renamed.code?.collapsed === false, "T-APP-78: importing the call function under another name is called out");
+  const sameLine = workbench(`import os; send = run_composio_tool${named}`);
+  assert(sameLine?.aside?.includes("cannot read") === true, "T-APP-79: an alias after an import on the same line is called out");
+
+  const many = Array.from({ length: 11 }, (_, index) => `run_composio_tool('GMAIL_FETCH_EMAILS', {'query': 'q${index}'})`);
+  many.push("run_composio_tool('SLACK_SEND_MESSAGE', {'text': 'done'})");
+  const long = workbench(many.join("\n"));
+  assert(long?.title === "Run 12 actions in Gmail and Slack", `T-APP-75: every call counts toward the title, got ${long?.title}`);
+  assert(long?.steps.length === 10 && long.hiddenSteps === 2, "T-APP-76: rows past the limit are counted");
+  assert(long?.consequence.text.includes("Slack") === true, "T-APP-77: an app used only by a later call is still named");
+}
+
+// When Guard cannot confirm the account, the card says the approval is once only, once.
+{
+  const item = {
+    ...call("composio", "COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [{ tool_slug: "GMAIL_FETCH_EMAILS", arguments: { query: "x" } }] }),
+    scope_restrictions: ["provider_account_unverified_once_only"],
+  };
+  const markup = renderToStaticMarkup(PrimaryActionCard({ item }));
+  assert(markup.includes("You can allow this once") && !markup.includes("Always allow both"), "T-APP-64: a once-only call does not promise Always allow");
+}
+
 console.log("mcp-call app tests passed");

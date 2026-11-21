@@ -9,18 +9,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import overload
 
-from ..native_decision_receipt import edge_receipt
-
-# v2 drops ``policy_digest``: it is ``H(config_digest, rule_digest)`` over the
-# whole compiled snapshot, so it moves whenever the publisher republishes, even
-# for observed state that cannot weaken a verdict. The retry's own anchor
-# covers the configured policy, ``rule_digest`` and ``runtime_identity``, and
-# the receipt is still required to carry a well-formed ``policy_digest``.
-_SCHEMA = "guard.native-review-policy-binding.v2"
+from ..native_hook_review_binding import native_hook_review_policy_binding
 
 
 def native_review_policy_binding(
-    *, harness: str, native_result: Mapping[str, object], verified_receipt: object
+    *,
+    harness: str,
+    native_result: Mapping[str, object],
+    verified_receipt: object,
+    guard_home: Path,
+    deadline: float | None = None,
 ) -> dict[str, object] | None:
     """Capture only a typed native receipt; request payload metadata is not authority.
 
@@ -32,23 +30,16 @@ def native_review_policy_binding(
     receipt_bound = isinstance(verified_receipt, Mapping) and "command_extensions" in verified_receipt
     if "command_extensions" not in native_result and not receipt_bound:
         return None
-    receipt = edge_receipt(harness, native_result, verified_receipt)
-    if receipt is None:
+    binding = native_hook_review_policy_binding(
+        harness=harness,
+        native_result=native_result,
+        verified_receipt=verified_receipt if isinstance(verified_receipt, Mapping) else None,
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    if binding is None:
         raise ValueError("native_review_policy_binding_invalid")
-    if any(not isinstance(receipt.get(field), str) for field in ("policy_digest", "rule_digest", "runtime_identity")):
-        raise ValueError("native_review_policy_binding_invalid")
-    command_binding = receipt.get("command_extensions")
-    if not isinstance(command_binding, dict):
-        raise ValueError("native_review_policy_binding_invalid")
-    uncertainty_count = command_binding.get("uncertainty_count")
-    if type(uncertainty_count) is not int or uncertainty_count < 0:
-        raise ValueError("native_review_policy_binding_invalid")
-    return {
-        "schema": _SCHEMA,
-        "rule_digest": receipt["rule_digest"],
-        "runtime_identity": receipt["runtime_identity"],
-        "command_extensions": dict(command_binding),
-    }
+    return binding
 
 
 def native_review_settle(

@@ -141,7 +141,6 @@ fn version_routes_require_operator_authorization_and_resident_results_are_bound(
     for path in [
         "/v1/context-assistance/versions",
         "/v1/context-assistance/jobs",
-        "/v1/context-assistance/interpreters",
     ] {
         assert!(crate::daemon_route_paths::requires_header_token(path));
         assert!(crate::daemon_route_paths::session_path("GET", path));

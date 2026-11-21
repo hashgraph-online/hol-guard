@@ -16,6 +16,7 @@ pub mod bound_fs;
 pub mod bound_output;
 #[cfg(unix)]
 pub mod deferred_output;
+pub mod detached;
 #[cfg(target_os = "macos")]
 pub mod host_owner;
 pub mod probe;

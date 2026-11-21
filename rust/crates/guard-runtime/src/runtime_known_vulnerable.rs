@@ -114,7 +114,7 @@ pub(crate) fn apply_to_envelope(
 
 /// The shell text of a command tool call, a `[shell, -c, script, args...]`
 /// argv included.
-fn command_text(payload: &Value) -> Option<String> {
+pub(crate) fn command_text(payload: &Value) -> Option<String> {
     match payload.pointer("/tool_input/command")? {
         Value::String(text) => Some(text.clone()),
         Value::Array(argv) => {

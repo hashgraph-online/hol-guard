@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.cli import daemon_serve as native_serve
 def test_native_serve_is_the_default_unless_opted_out(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     called: list[object] = []
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.harness.native_hook_bridge.native_hook_bridge_executable",
+        "codex_plugin_scanner.guard.native_hook_bridge.native_hook_bridge_executable",
         lambda *args, **kwargs: called.append(args) or tmp_path / "runtime",
     )
     monkeypatch.setenv(native_serve.NATIVE_SERVE_ENV, "0")

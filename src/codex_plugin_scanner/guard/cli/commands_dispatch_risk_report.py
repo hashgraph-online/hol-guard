@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TextIO
 
 from ..config import GuardConfig
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..mdm.runtime_request import runtime_answer
 from ..store import GuardStore
 from .product import build_guard_status_payload

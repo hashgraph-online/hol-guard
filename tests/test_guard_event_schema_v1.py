@@ -5,11 +5,15 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import ClassVar
 
+import pytest
+
 from codex_plugin_scanner.guard.edge_events import _fingerprint
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime.runner import sync_guard_events, sync_receipts
 from codex_plugin_scanner.guard.schemas.guard_event_v1 import GuardEventV1
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.native_guard_events
 
 
 def build_receipt_event(
@@ -180,6 +184,7 @@ def test_receipt_persistence_dual_writes_pending_cloud_event(tmp_path) -> None:
     assert pending[0]["payload"]["payload"]["artifactId"] == "artifact-1"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_guard_events_posts_to_v1_ingest(tmp_path) -> None:
     store = GuardStore(tmp_path)
     store.add_receipt(_receipt())
@@ -206,6 +211,7 @@ def test_sync_guard_events_posts_to_v1_ingest(tmp_path) -> None:
     assert store.list_guard_events_v1(uploaded=False, limit=10) == []
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_guard_events_normalizes_registry_base_url(tmp_path) -> None:
     store = GuardStore(tmp_path)
     store.add_receipt(_receipt())
@@ -225,6 +231,7 @@ def test_sync_guard_events_normalizes_registry_base_url(tmp_path) -> None:
     assert _EventIngestHandler.requests[0]["path"] == "/api/v1/guard/events"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_receipts_uploads_pending_guard_events(tmp_path) -> None:
     store = GuardStore(tmp_path)
     store.add_receipt(_receipt())
@@ -254,6 +261,7 @@ def test_sync_receipts_uploads_pending_guard_events(tmp_path) -> None:
     assert result["aibom_inventory"]["reason"] == "background_deferred"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_receipts_runs_aibom_when_deep_sync_is_requested(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path)
     store.add_receipt(_receipt())
@@ -338,6 +346,7 @@ def test_sync_receipts_keeps_receipt_success_when_v1_events_endpoint_is_missing(
     assert len(pending) == 1  # The receipt.created event is still pending
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_guard_events_marks_rejected_events_terminal(tmp_path) -> None:
     store = GuardStore(tmp_path)
     store.add_receipt(_receipt())

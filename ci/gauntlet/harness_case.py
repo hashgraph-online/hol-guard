@@ -63,6 +63,7 @@ from .fixtures import (
     stage_directory,
 )
 from .git_allow_fixtures import GIT_ALLOW_CASES, configure_git_allow_controls
+from .git_rules_cases import stage_git_rules_cases
 from .guard_tap import GuardTap, read_tap
 from .harness_judge import assess_harness_case, guard_decisions
 from .harnesses import CredentialSeed, adapter, credential_environment, keep_login_shell_path, read_transcript
@@ -129,7 +130,7 @@ def install_harness_hooks(name: str, daemon: Any, *, home: Path, guard_home: Pat
     applied to a disposable HOME and Guard home the operator never uses.
     """
     from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=home,
@@ -179,6 +180,7 @@ def run_harness_case(
     stage_supply_chain(fixture.workspace, scenario.id)
     stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
     stage_runtime_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
+    stage_git_rules_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
     stage_bash_lifecycle(fixture.workspace, scenario.id)
     seed_session_folder(fixture.home, stage_directory(fixture.root), scenario.id)
     private = fixture.root / "private-evidence"

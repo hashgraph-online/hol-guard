@@ -19,7 +19,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands_support_hook_payload as guard_hook_payload_module
 from codex_plugin_scanner.guard.consumer.service import diff_artifact
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.runtime import wrapper_run_finish

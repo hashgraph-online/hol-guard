@@ -280,11 +280,24 @@ pub(super) fn auth_failure_reason(reason: &str, fallback: bool) -> (&'static str
     }
 }
 
+/// A sign-in refresh that could not reach Guard Cloud is an outage like the
+/// other availability failures, so it keeps the local-intelligence fallback a
+/// failed refresh always had: it is read as the validation failure it was.
+pub(super) fn refresh_outage_as_validation(error: &EvalError) -> Option<EvalError> {
+    let EvalError::Internal(message) = error else {
+        return None;
+    };
+    message
+        .strip_prefix(crate::guard_sync_transport::OAUTH_REFRESH_UNREACHABLE)
+        .map(|reason| EvalError::Validation(reason.trim().to_owned()))
+}
+
 #[cfg(test)]
 mod edge_block_tests {
     use super::super::cloud_evaluation::{classify_post_failure, PostFailure};
     use super::super::service_contracts::EvalError;
     use super::auth_failure_reason;
+    use super::refresh_outage_as_validation;
 
     const EDGE: &str = "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403, Ray ID a4a17d23bec08abe).";
 
@@ -324,5 +337,22 @@ mod edge_block_tests {
             assert_eq!(code, "cloud_auth_error");
             assert!(message.contains("not authorized"), "{message}");
         }
+    }
+
+    #[test]
+    fn an_unreachable_refresh_keeps_the_local_fallback() {
+        let unreachable = EvalError::Internal(format!(
+            "{} connection refused",
+            crate::guard_sync_transport::OAUTH_REFRESH_UNREACHABLE
+        ));
+        match refresh_outage_as_validation(&unreachable) {
+            Some(EvalError::Validation(reason)) => {
+                assert_eq!(reason, "connection refused");
+                let (code, _) = auth_failure_reason(&reason, true);
+                assert_eq!(code, "cloud_auth_error");
+            }
+            other => panic!("expected a validation failure, got {other:?}"),
+        }
+        assert!(refresh_outage_as_validation(&EvalError::Internal("other".to_owned())).is_none());
     }
 }

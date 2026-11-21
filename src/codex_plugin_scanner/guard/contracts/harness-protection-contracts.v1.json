@@ -186,7 +186,7 @@
       "native_approval": true,
       "browser_fallback": true,
       "resume_support": true,
-      "known_blind_spots": "Background agent sessions without an active terminal may not surface hook events.",
+      "known_blind_spots": "Sessions started with --bare, or with a --setting-sources or Agent SDK settingSources list that leaves out user, never load Guard's hooks. Background sessions (claude --bg) are not qualified.",
       "smoke_command": "hol-guard install claude --dry-run",
       "capability_events": [
         {
@@ -206,7 +206,8 @@
           "error_behavior": "Malformed input, hook transport failure, or unavailable Guard authority fails closed before tool execution.",
           "mandatory_compatibility": "Claude Code must invoke the managed PreToolUse hook and honor its deny/defer response.",
           "known_blind_spots": [
-            "Background sessions without an active terminal may not surface hook events."
+            "Sessions started with --bare, or with a --setting-sources or Agent SDK settingSources list that leaves out user, never load Guard's hooks and are unprotected.",
+            "Background sessions (claude --bg) load the same hooks but are not qualified with Guard. A review waits at Claude Code's confirmation prompt until someone attaches to the session."
           ],
           "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/claude_settings.rs:sync"
         },
@@ -308,7 +309,7 @@
           "known_blind_spots": [
             "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard unless OpenCode permission rules block them."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:opencode.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:opencode.event_surfaces"
         },
         {
           "event": "mcp_tool",
@@ -327,7 +328,7 @@
           "known_blind_spots": [
             "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard unless OpenCode permission rules block them."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:opencode.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:opencode.event_surfaces"
         },
         {
           "event": "UserPromptSubmit",
@@ -346,7 +347,7 @@
           "known_blind_spots": [
             "Prompt content is not available through the declared OpenCode hooks."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:opencode.known_blind_spots"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:opencode.known_blind_spots"
         }
       ]
     },
@@ -385,7 +386,7 @@
           "known_blind_spots": [
             "MCP tool calls routed through the VS Code extension are not visible to the CLI-level Guard hook."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:copilot.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:copilot.event_surfaces"
         },
         {
           "event": "prompt",
@@ -404,7 +405,7 @@
           "known_blind_spots": [
             "MCP tool calls routed through the VS Code extension are not visible to the CLI-level Guard hook."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:copilot.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:copilot.event_surfaces"
         }
       ]
     },
@@ -584,7 +585,7 @@
           "known_blind_spots": [
             "Prompt submission is not surfaced through the declared Cursor hooks."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:cursor.known_blind_spots"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:cursor.known_blind_spots"
         },
         {
           "event": "*",
@@ -903,7 +904,7 @@
           "known_blind_spots": [
             "Prompt submission events and file read/write operations are not currently observable through the Gemini hook surface."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:gemini.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:gemini.event_surfaces"
         },
         {
           "event": "mcp_tool",
@@ -922,7 +923,7 @@
           "known_blind_spots": [
             "Prompt submission events and file read/write operations are not currently observable through the Gemini hook surface."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:gemini.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:gemini.event_surfaces"
         }
       ]
     },
@@ -960,7 +961,7 @@
           "known_blind_spots": [
             "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:hermes.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:hermes.event_surfaces"
         },
         {
           "event": "mcp_tool",
@@ -979,7 +980,7 @@
           "known_blind_spots": [
             "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:hermes.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:hermes.event_surfaces"
         },
         {
           "event": "prompt",
@@ -998,7 +999,7 @@
           "known_blind_spots": [
             "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:hermes.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:hermes.event_surfaces"
         }
       ]
     },
@@ -1036,7 +1037,7 @@
           "known_blind_spots": [
             "Shell commands and prompt events are not currently observable. Guard only intercepts MCP tool calls via the proxy layer."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:openclaw.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:openclaw.event_surfaces"
         }
       ]
     },
@@ -1077,7 +1078,7 @@
           "known_blind_spots": [
             "Shell commands are not currently observable through the Antigravity hook surface. Guard intercepts extensions and MCP registrations via scan at launch time."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:antigravity.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:antigravity.event_surfaces"
         },
         {
           "event": "prompt",
@@ -1096,7 +1097,7 @@
           "known_blind_spots": [
             "Shell commands are not currently observable through the Antigravity hook surface. Guard intercepts extensions and MCP registrations via scan at launch time."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:antigravity.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:antigravity.event_surfaces"
         }
       ]
     },
@@ -1137,7 +1138,7 @@
           "known_blind_spots": [
             "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. Hooks run in parallel, so separate requests may be reviewed concurrently."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:kimi.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:kimi.event_surfaces"
         },
         {
           "event": "prompt",
@@ -1156,7 +1157,7 @@
           "known_blind_spots": [
             "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. Hooks run in parallel, so separate requests may be reviewed concurrently."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:kimi.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:kimi.event_surfaces"
         }
       ]
     },
@@ -1470,7 +1471,7 @@
           "known_blind_spots": [
             "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:zcode.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:zcode.event_surfaces"
         },
         {
           "event": "prompt",
@@ -1489,7 +1490,7 @@
           "known_blind_spots": [
             "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:zcode.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:zcode.event_surfaces"
         },
         {
           "event": "mcp_tool",
@@ -1508,7 +1509,7 @@
           "known_blind_spots": [
             "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:zcode.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:zcode.event_surfaces"
         },
         {
           "event": "file_read",
@@ -1527,7 +1528,7 @@
           "known_blind_spots": [
             "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:zcode.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:zcode.event_surfaces"
         }
       ]
     },
@@ -1827,7 +1828,7 @@
           "known_blind_spots": [
             "Protection is delegated to supported native providers on the Paseo daemon host. Paseo permission notifications are not blocking hooks. Terminals, daemon git/browser actions, plugin code, custom commands, ACP providers, relocated native homes, and remote hosts are not covered. Native runtime failure behavior and approval/resume support remain provider-specific."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/harness/contracts.py:paseo.event_surfaces"
+          "source_reference": "src/codex_plugin_scanner/guard/setup_contracts.py:paseo.event_surfaces"
         }
       ]
     }

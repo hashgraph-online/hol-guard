@@ -27,6 +27,14 @@ const MAX_NAME_CHARS: usize = 120;
 const MAX_NAMESPACE_CHARS: usize = 155;
 const MAX_CLI_ID_SEGMENTS: usize = 9;
 
+/// The local CLI command id of one observed tool. Names that slug to the
+/// same text keep separate permissions, so the id hashes the exact name.
+fn tool_command_id(qualified_name: &str) -> String {
+    let digest = Sha256::digest(qualified_name.as_bytes());
+    let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+    format!("tool-{}", &hex[..24])
+}
+
 /// `ObservedMcpTool`, reduced to the fields the compiler reads.
 pub(crate) struct ObservedTool {
     pub(crate) namespace: String,
@@ -35,11 +43,8 @@ pub(crate) struct ObservedTool {
 }
 
 impl ObservedTool {
-    /// Names that slug to the same text keep separate permissions.
     fn command_id(&self) -> String {
-        let digest = Sha256::digest(self.qualified_name.as_bytes());
-        let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
-        format!("tool-{}", &hex[..24])
+        tool_command_id(&self.qualified_name)
     }
 
     fn server_identity_hash(&self) -> String {

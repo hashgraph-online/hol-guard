@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from ..config import GuardConfig
-    from ..harness.base import HarnessContext
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 from ..dashboard_launcher import (
@@ -522,7 +522,7 @@ def desktop_bootstrap_document_for_running_daemon(
 
     def build() -> dict[str, object]:
         from ..config import load_guard_config, overlay_synced_guard_policy
-        from ..harness.base import HarnessContext
+        from ..harness_context import HarnessContext
         from ..synced_policy import synced_policy_payload
 
         context = HarnessContext(

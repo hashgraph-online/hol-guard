@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli.managed_install_context import managed_install_context
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 def _context(tmp_path: Path) -> HarnessContext:

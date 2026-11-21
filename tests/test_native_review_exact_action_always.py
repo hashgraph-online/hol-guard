@@ -15,18 +15,17 @@ import pytest
 
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.hook_review.hook_native_saved_approval import (
-    EXACT_ACTION_CONTEXT_TOKEN_KEY,
-    native_saved_decision_response,
-)
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.models import GuardAction, PolicyDecision
+from codex_plugin_scanner.guard.native_hook_render import native_saved_decision_response
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import native_launch_evidence_helpers
 from tests.native_launch_evidence_helpers import _inventory, _permission, native_exact_action, native_launch_evidence
 from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
 from tests.native_review_evidence_support import resident_review_evidence, with_review_evidence
 from tests.test_native_command_observations import _edge, _observations, _receipt
+
+EXACT_ACTION_CONTEXT_TOKEN_KEY = "exact_context_token"
 
 _HARNESS = "claude-code"
 _ARTIFACT_ID = "claude-code:native-pretool:Bash"
@@ -377,6 +376,9 @@ def test_saved_allow_reuses_every_review(
     allowed = native_saved_decision_response(store, token=token, native_result=result, **kwargs)
     assert allowed is not None and allowed["approval_reuse_status"] == "accepted"
     assert allowed["policy_action"] == "allow"
+    large_verdict = {**result, "observations": "x" * (64 * 1024)}
+    reused = native_saved_decision_response(store, token=token, native_result=large_verdict, **kwargs)
+    assert reused is not None and reused["approval_reuse_status"] == "accepted"
     blocked_verdict, _ = _verdict(policy_action="block", minimum_action="block")
     assert native_saved_decision_response(store, token=token, native_result=blocked_verdict, **kwargs) is None
     for action_type in ("guard_control", "package"):
@@ -398,8 +400,9 @@ def test_unsaved_token_skips_the_integrity_refreshing_lookup(
     def _unexpected_lookup(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("full policy lookup ran without a matching exact decision")
 
-    monkeypatch.setattr(store, "resolve_policy_decision_lookup", _unexpected_lookup)
+    monkeypatch.setattr(store, "policy_lookup_evidence", _unexpected_lookup)
     result, _ = _verdict()
+    result["large_observations"] = "x" * (300 * 1024)
     assert (
         native_saved_decision_response(
             store, harness=_HARNESS, token=token, artifact_id=_ARTIFACT_ID, native_result=result, workspace=workspace
@@ -702,7 +705,7 @@ def test_unreadable_saved_decision_fails_closed(
     def _broken_lookup(*_args: object, **_kwargs: object) -> None:
         raise sqlite3.OperationalError("database is locked")
 
-    monkeypatch.setattr(store, "resolve_policy_decision_lookup", _broken_lookup)
+    monkeypatch.setattr(store, "policy_lookup_evidence", _broken_lookup)
     result, _ = _verdict()
     response = native_saved_decision_response(
         store, harness=_HARNESS, token=token, artifact_id=_ARTIFACT_ID, native_result=result, workspace=workspace
@@ -710,6 +713,23 @@ def test_unreadable_saved_decision_fails_closed(
     assert response is not None
     assert response["policy_action"] == "block"
     assert response["reason_code"] == "saved_exact_action_unreadable"
+
+
+def test_unreadable_initial_probe_leaves_the_review_pending(tmp_path: Path, native_context_digest: Path) -> None:
+    import sqlite3
+
+    store = GuardStore(tmp_path / "guard-home")
+    verdict, _ = _verdict()
+
+    def lookup():
+        return native_saved_decision_response(
+            store, harness=_HARNESS, token="a" * 64, artifact_id=_ARTIFACT_ID, native_result=verdict, workspace=tmp_path
+        )
+
+    assert lookup() is None
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("alter table policy_decisions rename to unavailable_policy_decisions")
+    assert lookup() is None
 
 
 def test_saved_block_wins_over_a_pending_once_approval(

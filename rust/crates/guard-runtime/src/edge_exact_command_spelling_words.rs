@@ -6,13 +6,10 @@
 /// argument that starts with one, so the cut lands after them. `Err` means
 /// the words could not be lined up with the arguments, or that the text holds
 /// what this reading does not model: `$'...'` and `$"..."` quotes, whose
-/// escapes can hide a quote or spell `#`, and a `#` right after `;|&()<>`,
-/// where bash starts a comment without whitespace.
+/// escapes can hide a quote or spell `#`, and a `#` right after an unquoted
+/// `;|&()<>`, where bash starts a comment without whitespace.
 pub(super) fn comment_cut(text: &str, arguments: &[String]) -> Result<Option<usize>, ()> {
-    let glued = |m: char| text.contains(&format!("{m}#"));
-    if text.contains('#')
-        && (text.contains("$'") || text.contains("$\"") || ";|&()<>".chars().any(glued))
-    {
+    if text.contains('#') && (text.contains("$'") || text.contains("$\"") || glued_comment(text)) {
         return Err(());
     }
     let words = words(text);
@@ -25,6 +22,48 @@ pub(super) fn comment_cut(text: &str, arguments: &[String]) -> Result<Option<usi
     }
     let mut hashed = (0..arguments.len()).filter(|&index| arguments[index].starts_with('#'));
     hashed.nth(nth).map(Some).ok_or(())
+}
+
+/// Whether a `#` bash reads as the start of a comment is glued to one of
+/// `;|&()<>`. Both characters have to stand outside quotes: inside them the
+/// operator is ordinary text and so is the `#` after it, which is how a pull
+/// request number such as `"(#12)"` or an alternation such as `"a|## b"`
+/// reads. Matching either one anywhere in the line sent every such command to
+/// review as a line the spellings could not be read from.
+fn glued_comment(text: &str) -> bool {
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    let mut previous: Option<char> = None;
+    for c in text.chars() {
+        if escaped {
+            escaped = false;
+            previous = None;
+            continue;
+        }
+        match (quote, c) {
+            (Some('\''), '\'') | (Some('"'), '"') => {
+                quote = None;
+                previous = None;
+            }
+            (Some('"') | None, '\\') => {
+                escaped = true;
+                previous = None;
+            }
+            (Some(_), _) => previous = None,
+            (None, '\'' | '"') => {
+                quote = Some(c);
+                previous = None;
+            }
+            (None, '#') => {
+                if previous.is_some_and(|previous| ";|&()<>".contains(previous)) {
+                    return true;
+                }
+                previous = Some('#');
+            }
+            (None, _) => previous = Some(c),
+        }
+    }
+    false
 }
 
 /// The first character of `word` once bash removes its quotes. `Err` when

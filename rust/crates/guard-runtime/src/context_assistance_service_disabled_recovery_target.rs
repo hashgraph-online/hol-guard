@@ -42,12 +42,6 @@ impl RecoveryTarget {
             Self::Selected(target) => target.pointer(),
         }
     }
-    pub(super) fn rules(&self) -> &guard_cigar_release::UpdatePreferences {
-        match self {
-            Self::Initial { target, .. } => target.rules(),
-            Self::Selected(target) => target.rules(),
-        }
-    }
     pub(super) fn check(&self) -> Result<(), String> {
         match self {
             Self::Initial { target, .. } => target.check(),

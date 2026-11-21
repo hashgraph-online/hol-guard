@@ -7,6 +7,7 @@
 //! again. The SessionStart refresh writes the settings here; Python keeps
 //! the daemon start the SessionStart hook runs.
 
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use serde_json::{json, Map, Value};
@@ -246,6 +247,40 @@ fn hook_argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
 
 /// `_run_session_start_from_argv`'s path vector: the Guard home, the home,
 /// then the workspace when the hooks were installed for one.
+/// `json.dumps(text)`: quoted, with every character outside ASCII escaped.
+fn python_quoted(text: &str) -> String {
+    let mut quoted = String::from("\"");
+    for character in text.chars() {
+        match character {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\n' => quoted.push_str("\\n"),
+            '\r' => quoted.push_str("\\r"),
+            '\t' => quoted.push_str("\\t"),
+            '\u{8}' => quoted.push_str("\\b"),
+            '\u{c}' => quoted.push_str("\\f"),
+            ' '..='~' => quoted.push(character),
+            _ => {
+                let mut units = [0u16; 2];
+                for unit in character.encode_utf16(&mut units) {
+                    let _ = write!(quoted, "\\u{unit:04x}");
+                }
+            }
+        }
+    }
+    quoted.push('"');
+    quoted
+}
+
+/// What the SessionStart hook prints: the hook output naming `context`, as the
+/// compact JSON the Python entry used to print.
+pub(super) fn session_start_output(context: &str) -> String {
+    format!(
+        "{{\"hookSpecificOutput\":{{\"hookEventName\":\"SessionStart\",\"additionalContext\":{}}}}}",
+        python_quoted(context)
+    )
+}
+
 fn session_start(fields: &Map<String, Value>) -> Step<Value> {
     let argv = fields
         .get("argv")
@@ -261,11 +296,13 @@ fn session_start(fields: &Map<String, Value>) -> Step<Value> {
     {
         return Err(Failure::Refusal(SESSION_START_ERROR.to_owned()));
     }
+    let context = hook_contract()?.session_start_context;
     Ok(json!({
         "guard_home": argv[0],
         "home": argv[1],
         "workspace": argv.get(2),
-        "context": hook_contract()?.session_start_context,
+        "output": session_start_output(&context),
+        "context": context,
     }))
 }
 

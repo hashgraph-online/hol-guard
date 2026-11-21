@@ -2,8 +2,8 @@
 //!
 //! Before it queues a review, `pause_native_pre_tool_for_approval`
 //! (`hook_native_review_approval.py`) asks `native_package_review_response`
-//! (`hook_native_package_review.py`) to settle a package review. That step
-//! plans the settle through the resident's `package_review_plan` op, which
+//! (`native_package_review_plan.py`) to settle a package review. That step
+//! calls the resident's `package_review_plan` op, which
 //! reads the command and its shape exactly as this check does, and hands any
 //! JS package-manager install or exec to the package evaluator.
 //!

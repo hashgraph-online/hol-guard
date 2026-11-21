@@ -12,9 +12,9 @@ from pathlib import Path
 
 from .approvals import _live_hook_verification
 from .cli.install_commands import apply_managed_install
-from .harness.base import HarnessContext
-from .harness.cursor_client import rebind_stale_cursor_hooks
-from .harness.registry import get_adapter
+from .cursor_hook_ops import rebind_stale_cursor_hooks
+from .harness_context import HarnessContext
+from .native_harness_install_ops import prepare_install
 from .shim_refresh import refresh_stale_harness_shims
 from .shims import package_shim_dashboard_status, package_shim_status, repair_package_shims
 from .store import GuardStore
@@ -107,7 +107,7 @@ def _planned_artifact_paths(harness: str, context: HarnessContext) -> tuple[Path
     """
 
     try:
-        plan = get_adapter(harness).prepare_install(context)
+        plan = prepare_install(harness, context)
     except (OSError, RuntimeError, TypeError, ValueError, KeyError):
         return ()
     paths: list[Path] = []

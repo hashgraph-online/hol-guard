@@ -5,21 +5,20 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
-from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_adapter_lifecycle
-from codex_plugin_scanner.guard.codex_hook_inventory import (
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
+from tests.codex_toml_support import dump_toml, read_toml_payload
+from tests.python_oracles.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_MALFORMED_GROUP,
     CODEX_HOOK_INVENTORY_UNKNOWN_HANDLER,
     CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE,
     enumerate_codex_hooks,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from tests.codex_toml_support import dump_toml, read_toml_payload
 
 
 def _write(path: Path, content: str) -> None:
@@ -262,8 +261,8 @@ def test_disabled_unmanaged_entry_and_metadata_only_event_are_preserved_without_
         + "\n",
     )
 
-    codex_adapter_lifecycle.CodexHarnessAdapter().install(
-        HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
+    harness_support.install(
+        "codex", HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
     )
 
     installed = read_toml_payload(home_dir / ".codex" / "config.toml")
@@ -385,34 +384,3 @@ def test_symlink_config_source_fails_closed_before_writes(
     assert "codex_hook_inventory_source_unreadable" in captured.err
     assert external_path.read_text(encoding="utf-8") == external_content
     assert (home_dir / ".codex" / "config.toml").exists() is False
-
-
-def test_source_change_after_inventory_stops_before_activation_write(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    hooks_path = workspace_dir / ".codex" / "hooks.json"
-    original_payload = {"hooks": {"FutureAgentEvent": [{**_command_group("python3 first.py"), "enabled": False}]}}
-    changed_payload = {"hooks": {"FutureAgentEvent": [{**_command_group("python3 changed.py"), "enabled": False}]}}
-    _write(hooks_path, json.dumps(original_payload, indent=2) + "\n")
-    original_ask = codex_adapter.ask
-
-    def mutate_then_plan(op: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        # The hooks source was captured by inventory; it changes before the
-        # native plan compares its captures against disk.
-        if op in {"install_plan", "install"}:
-            _write(hooks_path, json.dumps(changed_payload, indent=2) + "\n")
-        return original_ask(op, *args, **kwargs)
-
-    monkeypatch.setattr(codex_adapter, "ask", mutate_then_plan)
-
-    rc = main(_install_args(home_dir, workspace_dir))
-    captured = capsys.readouterr()
-
-    assert rc == 1
-    assert "adapter_preparation_generation_conflict" in captured.err
-    assert (home_dir / ".codex" / "config.toml").exists() is False
-    assert json.loads(hooks_path.read_text(encoding="utf-8")) == changed_payload

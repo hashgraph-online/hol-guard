@@ -168,8 +168,8 @@ def prepare_authenticated_hook_manifest_repair(spec: CodexHookManifestSpec) -> P
     launch artifact, compares them and checks the plan. This sends the facts
     of this process and settles the answer.
     """
-    from .harness.base import HarnessContext
-    from .harness.native_harness import wire_context
+    from .harness_context import HarnessContext
+    from .native_harness_client import wire_context
     from .native_transition_files import publication
     from .runtime_transition import TransitionError
 

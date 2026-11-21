@@ -22,6 +22,10 @@ from tests.cloud_receipt_payload_client import cloud_sync_receipt_payload
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.policy_store_support import resolve_policy
 
+# Guard events and pain signals upload through the native command to the
+# loopback servers these tests start.
+pytestmark = pytest.mark.native_guard_events
+
 
 def _decode_transport_command(envelope: dict[str, object]) -> str | None:
     encoded = envelope.get("commandEncoded")

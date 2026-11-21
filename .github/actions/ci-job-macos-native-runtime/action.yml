@@ -36,6 +36,11 @@ runs:
       # and the macOS build then recompiles every crate (about 4 min). sccache
       # keys on content and main pushes write objects as they compile, so a
       # cancelled main run still warms it. PRs only read.
+      # The sccache server stops after 10 idle minutes and does not count a
+      # compile still running as activity. A change under a low crate such as
+      # guard-secure-fs rebuilds hol-guard-runtime, a single crate that takes
+      # longer than that in release mode, so the server quit mid-build and the
+      # crate started over without the cache. A timeout of 0 keeps it running.
       shell: bash
       env:
         SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
@@ -46,6 +51,7 @@ runs:
           echo "SCCACHE_GHA_VERSION=cross-platform-runtime"
           echo "SCCACHE_GHA_RW_MODE=${SCCACHE_MODE}"
           echo "SCCACHE_IGNORE_SERVER_IO_ERROR=1"
+          echo "SCCACHE_IDLE_TIMEOUT=0"
         } >> "$GITHUB_ENV"
     - name: Build the macOS native runtime
       if: steps.runtime-cache.outputs.cache-hit != 'true'

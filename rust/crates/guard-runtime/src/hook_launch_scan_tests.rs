@@ -37,7 +37,7 @@ fn stale(text: &str, digest: &str) -> bool {
 #[cfg(unix)]
 fn bootstrap() -> String {
     "import sys;sys.path.insert(0,'/site');\
-     from codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge import main_from_argv;\
+     from codex_plugin_scanner.guard.bounded_cli_hook_bridge import main_from_argv;\
      raise SystemExit(main_from_argv(sys.argv[1:]))"
         .to_owned()
 }

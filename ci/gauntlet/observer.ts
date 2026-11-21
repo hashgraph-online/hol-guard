@@ -123,6 +123,7 @@ function recordExchange(exchange: {
   body: JsonRecord;
   status: number;
   elapsedMs: number;
+  startedAtMs: number;
   transport?: string;
 }): void {
   const { request, probe, body } = exchange;
@@ -150,6 +151,7 @@ function recordExchange(exchange: {
     reviewed_output_sha256: body.reviewed_output_sha256,
     response_sha256: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
     elapsed_ms: exchange.elapsedMs,
+    started_at_ms: exchange.startedAtMs,
     ...(probe ? { probe_operation_id: probe.operation_id, probe_request_id: probe.request_id } : {}),
     ...(nativeObservation ? { native_observation: nativeObservation } : {}),
   });
@@ -170,6 +172,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
     record({ observer_error: true, observer_error_code: "probe_injection_failed" });
   }
   const started = performance.now();
+  const startedAtMs = Date.now();
   // Capture the event before transport so timeouts retain their event group.
   const event = request?.hook_event_name;
   const elapsed = () => Number((performance.now() - started).toFixed(3));
@@ -182,7 +185,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
   }
   try {
     const body = await response.clone().json();
-    recordExchange({ event, request, probe, body, status: response.status, elapsedMs: elapsed() });
+    recordExchange({ event, request, probe, body, status: response.status, elapsedMs: elapsed(), startedAtMs });
   } catch {
     record({ observer_error: true, event, elapsed_ms: elapsed() });
   }
@@ -204,6 +207,7 @@ type BridgeChild = {
 
 function observeBridge(child: BridgeChild): void {
   const started = performance.now();
+  const startedAtMs = Date.now();
   const elapsed = () => Number((performance.now() - started).toFixed(3));
   let request: JsonRecord = {};
   let probe: Probe | undefined;
@@ -265,6 +269,7 @@ function observeBridge(child: BridgeChild): void {
         body,
         status,
         elapsedMs: elapsed(),
+        startedAtMs,
         transport: "pi-hook-bridge",
       });
     } catch {

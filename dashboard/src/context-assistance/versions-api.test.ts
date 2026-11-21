@@ -19,7 +19,7 @@ globalThis.fetch = async (input, init) => {
   return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
 };
 try {
-  const paths = { releases: "versions", jobs: "jobs", catalog: "catalog", interpreters: "interpreters" } as const;
+  const paths = { jobs: "jobs" } as const;
   for (const action of Object.keys(paths) as (keyof typeof paths)[]) {
     const before = calls.length;
     const reply = await requestCigarVersions({ action }, { currentPassword: "unused-read-proof" });
@@ -32,7 +32,7 @@ try {
     assert.equal(call.init?.cache, "no-store");
     assert.equal(new Headers(call.init?.headers).get("X-Guard-Dashboard-Session"), "versions-test-session");
   }
-  for (const input of [{ action: "preferences" }, { action: "job", job_id: "ui:one" }, { action: "cancel", job_id: "ui:one" }] as const) {
+  for (const input of [{ action: "job", job_id: "ui:one" }, { action: "cancel", job_id: "ui:one" }] as const) {
     await requestCigarVersions(input, { currentPassword: "unused-proof" });
     assert.deepEqual(JSON.parse(String(calls.at(-1)!.init?.body)), { input });
   }
@@ -52,7 +52,7 @@ try {
   status = 409; payload = { code: "native_context_assistance_switch_selection_conflict" };
   await assert.rejects(requestCigarVersions(input), /settings changed/);
   status = 401; await assert.rejects(requestCigarVersions(input), /Reconnect to the local Guard session/);
-  status = 404; await assert.rejects(requestCigarVersions({ action: "releases" }), /Update Guard/);
+  status = 404; await assert.rejects(requestCigarVersions({ action: "jobs" }), /Update Guard/);
   status = 200; payload = { schema: "guard-cigar-versions-result.v1", result: { jobs: [] }, state: { ready: true } };
   await assert.rejects(requestCigarVersions({ action: "jobs" }), /incompatible status/);
   payload = { schema: "guard-cigar-versions-result.v1", result: [], state };

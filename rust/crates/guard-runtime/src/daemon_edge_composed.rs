@@ -31,16 +31,8 @@ const PACKAGE_FIREWALL_OPERATIONS: [&str; 8] = [
 ];
 
 /// `GET` paths whose Guard library handler writes the whole reply.
-const HANDLER_READS: [&str; 12] = [
+const HANDLER_READS: [&str; 4] = [
     "/v1/swarm",
-    "/v1/context-assistance",
-    "/v1/context-assistance/installations",
-    "/v1/context-assistance/codex-lean",
-    "/v1/context-assistance/usage",
-    "/v1/context-assistance/versions",
-    "/v1/context-assistance/jobs",
-    "/v1/context-assistance/interpreters",
-    "/v1/context-assistance/catalog",
     "/v1/policy/cloud-exception-requests",
     "/v1/supply-chain/workspace-assessments",
     "/v1/supply-chain/workspace-findings",
@@ -71,6 +63,7 @@ const SUPPLY_CHAIN_READS: [&str; 4] = [
 /// Whether the daemon composes `path` itself.
 pub(super) fn routed(path: &str) -> bool {
     HANDLER_READS.contains(&path)
+        || super::writes::context_assistance::reads(path)
         || CONTROL_READS.contains(&path)
         || SUPPLY_CHAIN_READS.contains(&path)
         || EXTENSION_CONTROL_READS.contains(&path)
@@ -142,6 +135,9 @@ pub(super) fn respond(
                     "home_dir": config.user_home.as_deref(),
                 }),
             ))
+        }
+        path if super::writes::context_assistance::reads(path) => {
+            super::writes::context_assistance::get(path, config)
         }
         path if HANDLER_READS.contains(&path) || path == FIX_PROPOSALS => whole_reply(call(
             "route.handler_get",

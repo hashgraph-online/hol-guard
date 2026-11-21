@@ -108,8 +108,6 @@ pub(super) fn write(request: &UpdateRequest, value: &PyVal) -> Result<Value, Fai
                     .map_err(Failure::Error)?,
             );
             identity.check(home)?;
-            crate::guard_config_load::cigar_updates::check_target(home, &id)
-                .map_err(Failure::Error)?;
             verify_assistance_opt_in(home, stored.as_deref(), &computed.text)?;
         }
     }

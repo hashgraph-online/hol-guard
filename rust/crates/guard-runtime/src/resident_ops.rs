@@ -15,6 +15,10 @@ use crate::resident_protocol::{
     encode_response, strict_json_value, ResidentOperationV1, ResidentRequestV1,
 };
 
+#[path = "resident_ops_scope.rs"]
+mod scope;
+use scope::{operation_guard_home, operation_store_path};
+
 pub(crate) fn evaluate_resident_bytes(
     bytes: &[u8],
     policy_store: Option<&PolicySnapshotStore>,
@@ -89,6 +93,8 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             policy_store.require_store_path(store_path)?;
         }
     }
+    let require_policy_store =
+        || policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned());
     match request {
         ResidentRequestV1::Edge(request) => {
             let policy_store =
@@ -131,18 +137,13 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 crate::oneshot::evaluate_pre_tool_request(&request)
             }
             ResidentOperationV1::PolicySnapshotPush(request) => {
-                let policy_store =
-                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-                policy_store.push(&request)
+                require_policy_store()?.push(&request)
             }
             ResidentOperationV1::HookDirect(request) => {
-                let policy_store =
-                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-                crate::hook_direct::evaluate(request, policy_store)
+                crate::hook_direct::evaluate(request, require_policy_store()?)
             }
             ResidentOperationV1::HookDirectEvidenceDrain(request) => {
-                let policy_store =
-                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                let policy_store = require_policy_store()?;
                 let source = policy_store.direct_lane_writer_source();
                 crate::hook_direct_evidence::drain(
                     &request,
@@ -150,15 +151,34 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     source.as_deref(),
                 )
             }
-            ResidentOperationV1::McpRelayDecide(request) => {
-                let policy_store =
+            ResidentOperationV1::HookDirectEvidenceCommit(request) => {
+                let store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-                crate::mcp_relay_decide::evaluate(request, policy_store)
+                crate::hook_direct_evidence::commit_page(&request, store)
+            }
+            ResidentOperationV1::HookPayloadFacts(request) => {
+                crate::hook_payload_facts_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookReviewBinding(request) => {
+                crate::hook_review_binding_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookPolicyAdmission(request) => {
+                crate::hook_policy_admission_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookConnectorFacts(request) => {
+                crate::hook_connector_facts_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookPolicyFenceWindow(request) => {
+                crate::hook_policy_fence_window_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookWorkspaceOverlayReadiness(request) => {
+                crate::policy_store::policy_store_direct_lane::subdirectory::evaluate_workspace_overlay_readiness(&request)
+            }
+            ResidentOperationV1::McpRelayDecide(request) => {
+                crate::mcp_relay_decide::evaluate(request, require_policy_store()?)
             }
             ResidentOperationV1::McpRelayReady(request) => {
-                let policy_store =
-                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-                crate::mcp_relay_ready::evaluate(&request, policy_store)
+                crate::mcp_relay_ready::evaluate(&request, require_policy_store()?)
             }
             ResidentOperationV1::McpRelayCommit(request) => {
                 let policy_store =
@@ -347,6 +367,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     &request,
                 )
             }
+            ResidentOperationV1::CommandJobPlan(request) => {
+                crate::command_job_plan_op::evaluate_command_job_plan_request(&request)
+            }
             ResidentOperationV1::GithubCliClassify(request) => {
                 crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)
             }
@@ -385,7 +408,7 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 )
             }
             ResidentOperationV1::HookRender(request) => {
-                crate::hook_render_op::evaluate_hook_render_request(&request)
+                crate::hook_render_op::evaluate_with_store(&request, policy_store)
             }
             ResidentOperationV1::ApprovalScope(request) => {
                 crate::approval_scope_op::evaluate_approval_scope_request(&request, policy_store)
@@ -860,146 +883,6 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 encode_response(&review_post_tool(&request))
             }
         }
-    }
-}
-
-/// The Guard home an operation acts on, for operations that open per-home state.
-fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
-    match operation {
-        ResidentOperationV1::ContextAssistance(request) => Some(&request.query.guard_home),
-        ResidentOperationV1::Swarm(request) => Some(&request.query.guard_home),
-        ResidentOperationV1::ContextAgent(request) => Some(&request.query.guard_home),
-        ResidentOperationV1::CloudCatalog(request) => {
-            if request["action"] == "begin" || request["action"] == "reuse" {
-                request["observation"]["guard_home"].as_str()
-            } else {
-                request["guard_home"].as_str()
-            }
-        }
-        ResidentOperationV1::CatalogReadV2(request) => request.guard_home.to_str(),
-        ResidentOperationV1::CatalogPrepareV1(request) => request.guard_home.to_str(),
-        ResidentOperationV1::CatalogReadPreparedV1(request) => request.guard_home.to_str(),
-        ResidentOperationV1::WindowsPrivateState(request) => Some(&request.guard_home),
-        ResidentOperationV1::NativeBashPrepare(request) => Some(&request.capture.guard_home),
-        ResidentOperationV1::NativeBashExecute(request) => Some(&request.capture.guard_home),
-        ResidentOperationV1::NativeBashCancel(request) => Some(&request.guard_home),
-        ResidentOperationV1::NativeBashActivity(request) => Some(&request.guard_home),
-        ResidentOperationV1::NativeBashAck(request) => Some(&request.guard_home),
-        ResidentOperationV1::NativeBashReviewCheck(request) => Some(&request.guard_home),
-        ResidentOperationV1::ArchiveAcquisition(request) => Some(&request.guard_home),
-        ResidentOperationV1::DirectoryTrust(request) => Some(&request.guard_home),
-        ResidentOperationV1::HookDirect(request) => Some(&request.guard_home),
-        ResidentOperationV1::HookDirectEvidenceDrain(request) => Some(&request.guard_home),
-        ResidentOperationV1::McpRelayDecide(request) => Some(&request.guard_home),
-        ResidentOperationV1::McpRelayCommit(request) => Some(&request.guard_home),
-        ResidentOperationV1::McpRelayReady(request) => Some(&request.guard_home),
-        ResidentOperationV1::McpRelayClaim(request) => Some(&request.guard_home),
-        ResidentOperationV1::McpRelayServerReport(request) => Some(&request.guard_home),
-        ResidentOperationV1::ApprovalReuseDiagnostic(request) => Some(&request.guard_home),
-        ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.guard_home),
-        ResidentOperationV1::GuardStore(request) => Some(&request.guard_home),
-        ResidentOperationV1::HookEvidenceWriter(request) => Some(&request.guard_home),
-        ResidentOperationV1::ApprovalGate(request) => Some(&request.guard_home),
-        ResidentOperationV1::SupplyChainEval(request) => Some(&request.guard_home),
-        ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.guard_home),
-        ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.guard_home),
-        ResidentOperationV1::CursorObserverProof(request) => Some(&request.guard_home),
-        ResidentOperationV1::HookAuthorityState(request) => Some(&request.guard_home),
-        ResidentOperationV1::ExtensionControlAuthority(request) => Some(&request.guard_home),
-        ResidentOperationV1::CommandPackRecord(request) => Some(&request.guard_home),
-        ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.guard_home),
-        ResidentOperationV1::PackageEvaluationCompose(request) => Some(&request.guard_home),
-        ResidentOperationV1::PackageReviewPlan(request) => Some(&request.guard_home),
-        ResidentOperationV1::PackageApprovalHash(request) => Some(&request.guard_home),
-        ResidentOperationV1::PackagePolicyResolve(request) => Some(&request.guard_home),
-        ResidentOperationV1::PackageProtectFinalize(request) => Some(&request.guard_home),
-        ResidentOperationV1::PackagePosture(request) => Some(&request.guard_home),
-        ResidentOperationV1::PackageAuditProjection(request) => Some(&request.guard_home),
-        ResidentOperationV1::WorkspaceInventory(request) => Some(&request.guard_home),
-        ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.guard_home),
-        ResidentOperationV1::ContainedNodeExecute(request) => Some(&request.guard_home),
-        ResidentOperationV1::ContainedTypescriptExecute(request) => Some(&request.guard_home),
-        ResidentOperationV1::ContainedPackageScriptExecute(request) => Some(&request.guard_home),
-        ResidentOperationV1::ContainedWorkspaceWriteExecute(request) => Some(&request.guard_home),
-        ResidentOperationV1::ContainedExecute(request) => Some(&request.guard_home),
-        ResidentOperationV1::ContainmentHealthProbe(request) => Some(&request.guard_home),
-        ResidentOperationV1::ShimAdmin(request) => Some(&request.guard_home),
-        ResidentOperationV1::PackageContextBuild(request) => Some(&request.guard_home),
-        ResidentOperationV1::McpStdioProbe(request) => Some(&request.guard_home),
-        ResidentOperationV1::PromptAnalyze(request) => Some(&request.guard_home),
-        ResidentOperationV1::McpRuntimeEvidence(request) => Some(&request.guard_home),
-        ResidentOperationV1::RuntimeDetectorRun(request) => Some(&request.guard_home),
-        ResidentOperationV1::RunnerAuthority(request) => Some(&request.guard_home),
-        ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
-        ResidentOperationV1::LocalCliHook(request) => Some(&request.guard_home),
-        ResidentOperationV1::HookLocalCliRule(request) => Some(&request.guard_home),
-        ResidentOperationV1::ConnectorSetupContext(request) => Some(&request.guard_home),
-        ResidentOperationV1::McpToolEvidence(request) => Some(&request.guard_home),
-        ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.guard_home),
-        ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.guard_home),
-        ResidentOperationV1::RichCommandModel(request) => Some(&request.guard_home),
-        ResidentOperationV1::RequestContextBuild(request) => Some(&request.guard_home),
-        ResidentOperationV1::SkillDirectoryIdentity(request) => Some(&request.guard_home),
-        #[cfg(unix)]
-        ResidentOperationV1::CodexBindingCapture(request) => Some(&request.guard_home),
-        ResidentOperationV1::ProtectRequest(request) => Some(&request.guard_home),
-        ResidentOperationV1::CodexRequestResume(request) => Some(&request.guard_home),
-        // Only the review responses read a file (the daemon token that signs
-        // their review link), so only they name the home they read.
-        ResidentOperationV1::HookDecide(request) => match &request.query {
-            guard_contracts::HookDecisionQueryV1::SilentReviewBlock { inputs } => {
-                Some(&inputs.guard_home)
-            }
-            guard_contracts::HookDecisionQueryV1::PausedReview { inputs } => {
-                Some(&inputs.guard_home)
-            }
-            _ => None,
-        },
-        ResidentOperationV1::PolicyIntegrityRows(request) => request
-            .generation
-            .as_ref()
-            .map(|generation| generation.guard_home.as_str()),
-        _ => None,
-    }
-}
-
-/// The store an operation opens, for operations that carry an explicit path.
-fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
-    match operation {
-        ResidentOperationV1::NativeBashExecute(request) => Some(request.authorization.store_path()),
-        ResidentOperationV1::NativeBashReviewCheck(request) => Some(&request.store_path),
-        ResidentOperationV1::NativeBashAck(request) => Some(&request.store_path),
-        ResidentOperationV1::ApprovalReuseDiagnostic(request) => Some(&request.store_path),
-        ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.store_path),
-        ResidentOperationV1::GuardStore(request) => Some(&request.store_path),
-        ResidentOperationV1::SupplyChainEval(request) => Some(&request.store_path),
-        ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.store_path),
-        ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.store_path),
-        ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.store_path),
-        ResidentOperationV1::PackageApprovalHash(request) => request.store_path.as_deref(),
-        ResidentOperationV1::PackageAuditProjection(request) => match &request.query {
-            guard_contracts::PackageAuditQueryV1::Receipt(query) => query.store_path.as_deref(),
-            guard_contracts::PackageAuditQueryV1::Aliases(query) => Some(&query.store_path),
-            guard_contracts::PackageAuditQueryV1::CloudPayload(query) => Some(&query.store_path),
-            _ => None,
-        },
-        ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
-        ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.store_path),
-        ResidentOperationV1::LocalCliHook(request) => Some(&request.store_path),
-        ResidentOperationV1::HookLocalCliRule(request) => Some(&request.store_path),
-        ResidentOperationV1::ConnectorSetupContext(request) => Some(&request.store_path),
-        ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.store_path),
-        ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.store_path),
-        ResidentOperationV1::HookAuthorityState(request) => Some(&request.store_path),
-        ResidentOperationV1::ExtensionControlAuthority(request) => Some(&request.store_path),
-        ResidentOperationV1::CommandPackRecord(request) => Some(&request.store_path),
-        ResidentOperationV1::ProtectRequest(request) => request.store_path.as_deref(),
-        ResidentOperationV1::CodexRequestResume(request) => Some(&request.store_path),
-        ResidentOperationV1::PolicyIntegrityRows(request) => request
-            .generation
-            .as_ref()
-            .map(|generation| generation.store_path.as_str()),
-        _ => None,
     }
 }
 

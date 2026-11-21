@@ -24,7 +24,7 @@ def test_hook_bridge_import_stays_off_heavy_modules(bridge: str) -> None:
     source_root = Path(__file__).resolve().parents[1] / "src"
     program = (
         "import sys\n"
-        f"from codex_plugin_scanner.guard.harness import {bridge}\n"
+        f"from codex_plugin_scanner.guard import {bridge}\n"
         f"print([name for name in {HEAVY_MODULES!r} if name in sys.modules])\n"
     )
     result = subprocess.run(

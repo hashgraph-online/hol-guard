@@ -10,12 +10,10 @@ import pytest
 from rich.console import Console
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.cli.doctor_readiness import doctor_runtime_readiness
 from codex_plugin_scanner.guard.cli.render import _render_doctor, emit_guard_payload
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
-from codex_plugin_scanner.guard.harness.base import _run_command_probe
-from codex_plugin_scanner.guard.harness.diagnostic_probes import without_command_probes
-from codex_plugin_scanner.guard.harness.registry import list_adapters
+from codex_plugin_scanner.guard.command_probes import _run_command_probe, without_command_probes
 from tests.codex_hook_state_support import fixed_hook_state
 
 
@@ -54,9 +52,8 @@ def test_doctor_json_does_not_promote_registration_or_cli_success_to_readiness(
         lambda _guard_home=None: availability,
     )
     monkeypatch.setattr(
-        CodexHarnessAdapter,
-        "diagnostics",
-        lambda _self, _context: {
+        "codex_plugin_scanner.guard.cli._commands_shared.harness_diagnostics",
+        lambda _harness, _context: {
             "harness": "codex",
             "installed": True,
             "command_available": True,
@@ -107,7 +104,7 @@ def test_global_doctor_reports_readiness_for_every_registered_harness(tmp_path, 
     payload = _doctor_json(rc, capsys)
 
     assert rc == 0
-    assert {item["harness"] for item in payload["adapters"]} == {item.harness for item in list_adapters()}
+    assert {item["harness"] for item in payload["adapters"]} == set(harness_ops.list_harnesses())
     assert all(item["runtime_readiness"]["state"] == "unknown" for item in payload["adapters"])
     assert payload["native_runtime"]["availability"]["reason_code"] == "native_status_probe_skipped"
     # Installation is answered from the files; compatibility needs the binary to run.
@@ -261,7 +258,6 @@ def test_global_doctor_validates_registration_without_executable_probes(tmp_path
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("codex_plugin_scanner.guard.codex_harness_lifecycle._command_available", lambda *_args: True)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.codex_harness_client.codex_native_hook_state",
         fixed_hook_state(verified=False, reason="codex_hook_interpreter_path_mismatch"),

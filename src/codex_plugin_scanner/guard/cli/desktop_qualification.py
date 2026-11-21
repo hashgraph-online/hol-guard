@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TextIO
 
 from ..dashboard_launcher import desktop_bootstrap_is_preflight
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..hook_review.hook_worker import HookWorker
 from ..native_resident_client import close_native_residents
 from ..native_runtime import native_runtime_status

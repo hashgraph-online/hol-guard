@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import GuardConfig
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..models import GuardArtifact, HarnessDetection
 from ..native_prompt import NativePromptAnalysisError
 from ..native_prompt import analyze as _prompt_analyze_native
@@ -313,7 +313,7 @@ def prompt_requests_to_artifacts(
 
 
 def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) -> Path:
-    from ..harness.registry import get_adapter
+    from ..native_harness_ops import policy_path
 
     config_candidates = _prompt_config_candidates(detection, context)
     if context.workspace_dir is not None:
@@ -323,7 +323,7 @@ def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) ->
                 return candidate
     if config_candidates:
         return Path(config_candidates[0])
-    return get_adapter(detection.harness).policy_path(context)
+    return policy_path(detection.harness, context)
 
 
 def _prompt_config_candidates(detection: HarnessDetection, context: HarnessContext) -> tuple[str, ...]:

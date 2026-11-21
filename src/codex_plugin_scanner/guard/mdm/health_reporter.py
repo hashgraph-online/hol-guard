@@ -31,6 +31,7 @@ _SAFE_TRANSPORT_REASON_CODES = frozenset(
         "health_lease_challenge_invalid",
         "health_lease_delivery_auth_invalid",
         "health_lease_delivery_response_oversized",
+        "health_lease_delivery_unavailable",
     }
 )
 _SAFE_HTTP_REASON = re.compile(r"health_(?:key_registration|lease_challenge|lease_delivery)_http_[1-5][0-9]{2}")

@@ -31,6 +31,7 @@ pytest_plugins = [
     "tests.native_resident_teardown",
     "tests.optional_command_catalog_fixtures",
     "tests.network_trust_fixtures",
+    "tests.cloud_json_request_fixtures",
 ]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
@@ -115,6 +116,16 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_alpha_tag_answers() -> Iterator[None]:
+    """Start each test without alpha tag answers remembered by an earlier one."""
+    from codex_plugin_scanner.guard.cli.update_alpha_tag_lookup import forget_alpha_tag_answers
+
+    forget_alpha_tag_answers()
+    yield
+    forget_alpha_tag_answers()
+
+
+@pytest.fixture(autouse=True)
 def _fresh_verified_runtime_copy() -> Iterator[None]:
     """Start each test without the process's reused runtime copy."""
     from codex_plugin_scanner.guard.extension_builder import native_executable_root
@@ -174,6 +185,64 @@ def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
     for module in (installed_bundle, object_native):
         monkeypatch.setattr(module, "_ANSWERS", type(module._ANSWERS)())
+
+
+@pytest.fixture(autouse=True)
+def _fresh_resident_health_circuit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start each test with a closed resident circuit.
+
+    Health is keyed by runtime digest and Guard home, and tests that share the
+    default home would otherwise inherit failures an earlier test recorded.
+    """
+    from codex_plugin_scanner.guard import native_runtime_resilience
+
+    monkeypatch.setattr(native_runtime_resilience, "_STATES", type(native_runtime_resilience._STATES)())
+
+
+@pytest.fixture(autouse=True)
+def _runtime_session_over_urllib(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Send the runtime session upload through the urllib a test fakes.
+
+    Mark a test ``native_runtime_session`` to post it with the native command.
+    Guard events and pain signals answer as an empty queue unless the test is
+    marked ``native_guard_events``.
+    """
+
+    native_session = request.node.get_closest_marker("native_runtime_session") is not None
+    native_events = request.node.get_closest_marker("native_guard_events") is not None
+    if native_session and native_events:
+        return
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
+    from tests.support.runtime_session_transport import runtime_session_over_urllib
+
+    monkeypatch.setattr(
+        cloud_bundle_sync,
+        "cloud_event_sync",
+        runtime_session_over_urllib(
+            cloud_bundle_sync.cloud_event_sync,
+            native_session=native_session,
+            native_events=native_events,
+        ),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _receipt_upload_over_urllib(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Send the receipt upload through the urllib a test fakes.
+
+    Mark a test ``native_receipt_upload`` to upload with the native command.
+    """
+
+    if request.node.get_closest_marker("native_receipt_upload") is not None:
+        return
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
+    from tests.support.receipt_upload_transport import receipt_upload_over_urllib
+
+    monkeypatch.setattr(
+        cloud_bundle_sync,
+        "cloud_receipt_upload",
+        receipt_upload_over_urllib(cloud_bundle_sync.cloud_receipt_upload),
+    )
 
 
 @pytest.fixture(autouse=True)

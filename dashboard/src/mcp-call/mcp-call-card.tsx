@@ -2,7 +2,7 @@ import { buildPrimaryReviewAction, isWatchOnlyObservation, resolveRequestWorking
 import type { GuardApprovalRequest } from "../guard-types";
 import { LoggedActionPanel } from "../logged-action-panel";
 import { plainMcpReason } from "./explain-mcp-call";
-import type { McpCallExplanation, McpFact } from "./mcp-call-types";
+import type { McpCallExplanation, McpCodeBlock, McpFact } from "./mcp-call-types";
 import { McpAppMark } from "./mcp-app-mark";
 import { actingApp, mcpMarkName } from "./mcp-brand";
 import { ConsequenceNote, EffectPill, FactList, StepRow } from "./mcp-call-parts";
@@ -18,12 +18,35 @@ function subtitleOf(explanation: McpCallExplanation, app: string): string {
   return app === explanation.connector ? `Tool from ${explanation.connector}` : `${app}, through ${explanation.connector}`;
 }
 
+// Core's catch-all sentence. It says nothing the page does not, so the card gives its own reason instead.
+const GENERIC_REASON = /needs your approval before this action can run/i;
+
+/** What approving covers. When Guard cannot confirm the account, it can only allow the call once, and says why. */
+function scopeNote(item: GuardApprovalRequest, connector: string): string {
+  if (item.scope_restrictions?.includes("provider_account_unverified_once_only") === true) {
+    return `You can allow this once, for these exact inputs. Guard cannot save it for next time, because it cannot confirm which ${connector} account it uses.`;
+  }
+  return "Allow once and Always allow both cover only these exact inputs. If the inputs change, Guard asks again.";
+}
+
+function CodePanel({ requestId, code }: { requestId: string; code: McpCodeBlock }) {
+  return (
+    <LoggedActionPanel
+      key={`${requestId}-code`}
+      label={code.collapsed === true ? "Code" : code.label}
+      text={code.text}
+      copyAriaLabel="Copy the code to clipboard"
+    />
+  );
+}
+
 /** What an MCP tool call is, in plain words, instead of the call's raw JSON. */
 export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest; explanation: McpCallExplanation }) {
   const watchOnly = isWatchOnlyObservation(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
   // Why Guard asked is said here, once. The alerts above the card leave this sentence out.
-  const reason = plainMcpReason(item, buildPrimaryReviewAction(item).detail) ?? explanation.whyAsked;
+  const coreReason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
+  const reason = coreReason !== null && !GENERIC_REASON.test(coreReason) ? coreReason : explanation.whyAsked;
   const app = actingApp(explanation);
   const facts: McpFact[] = [
     ...explanation.facts,
@@ -50,8 +73,16 @@ export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest;
       )}
       <ConsequenceNote explanation={explanation} />
 
+      {showsSteps(explanation) && explanation.stepsCaption !== undefined && (
+        <p className="border-t border-slate-100 px-4 pt-3 text-xs font-medium uppercase tracking-wide text-brand-dark/60 sm:px-5">
+          {explanation.stepsCaption}
+        </p>
+      )}
       {showsSteps(explanation) && (
-        <ol className="border-t border-slate-100" aria-label="Actions in this call">
+        <ol
+          className={explanation.stepsCaption !== undefined ? "" : "border-t border-slate-100"}
+          aria-label={explanation.stepsCaption ?? "Actions in this call"}
+        >
           {explanation.steps.map((step, index) => (
             <StepRow key={step.id} step={step} position={index + 1} total={explanation.steps.length} />
           ))}
@@ -83,15 +114,21 @@ export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest;
         </figure>
       )}
 
-      {explanation.code !== null && (
+      {explanation.code !== null && explanation.code.collapsed !== true && (
         <div className="mx-4 mb-4 sm:mx-5">
-          <LoggedActionPanel
-            key={`${item.request_id}-code`}
-            label={explanation.code.label}
-            text={explanation.code.text}
-            copyAriaLabel={`Copy ${explanation.code.label.toLowerCase()} to clipboard`}
-          />
+          <CodePanel requestId={item.request_id} code={explanation.code} />
         </div>
+      )}
+      {explanation.code !== null && explanation.code.collapsed === true && (
+        <details className="border-t border-slate-100 px-4 py-3 sm:px-5">
+          <summary className="cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30">
+            See {explanation.code.label.charAt(0).toLowerCase()}
+            {explanation.code.label.slice(1)}
+          </summary>
+          <div className="mt-3">
+            <CodePanel requestId={item.request_id} code={explanation.code} />
+          </div>
+        </details>
       )}
 
       <details className="border-t border-slate-100 px-4 py-3 sm:px-5">
@@ -120,8 +157,7 @@ export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest;
       <div className="space-y-1 border-t border-slate-100 px-4 py-3 text-xs leading-snug text-muted-foreground sm:px-5">
         <p>{reason}</p>
         <p>
-          Allow once and Always allow both match these exact inputs. If the agent asks again with different inputs,
-          Guard asks again.
+          {scopeNote(item, explanation.connector)}
           {explanation.truncated ? " Long text is shown shortened here." : ""}
         </p>
       </div>

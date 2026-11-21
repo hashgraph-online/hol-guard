@@ -1812,10 +1812,6 @@
     flex: 16rem;
   }
 
-  .flex-\[1_1_18rem\] {
-    flex: 18rem;
-  }
-
   .flex-\[1_1_20rem\] {
     flex: 20rem;
   }
@@ -2053,6 +2049,10 @@
 
   .items-start {
     align-items: flex-start;
+  }
+
+  .items-stretch {
+    align-items: stretch;
   }
 
   .justify-between {
@@ -6427,7 +6427,7 @@
     rotate: 180deg;
   }
 
-  .group-open\/import\:rotate-90:is(:where(.group\/import):is([open], :popover-open, :open) *), .group-open\/prev\:rotate-90:is(:where(.group\/prev):is([open], :popover-open, :open) *) {
+  .group-open\/prev\:rotate-90:is(:where(.group\/prev):is([open], :popover-open, :open) *) {
     rotate: 90deg;
   }
 
@@ -7394,6 +7394,16 @@
     }
   }
 
+  .focus\:ring-brand-blue\/40:focus {
+    --tw-ring-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus\:ring-brand-blue\/40:focus {
+      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 40%, transparent);
+    }
+  }
+
   .focus\:ring-rose-600\/30:focus {
     --tw-ring-color: #e700444d;
   }
@@ -7565,6 +7575,10 @@
 
   .focus-visible\:outline-offset-2:focus-visible {
     outline-offset: 2px;
+  }
+
+  .focus-visible\:outline-brand-attention:focus-visible {
+    outline-color: var(--brand-attention);
   }
 
   .focus-visible\:outline-brand-blue:focus-visible {
@@ -7961,10 +7975,6 @@
 
     .sm\:w-56 {
       width: calc(var(--spacing) * 56);
-    }
-
-    .sm\:w-72 {
-      width: calc(var(--spacing) * 72);
     }
 
     .sm\:w-auto {
@@ -8695,6 +8705,10 @@
 
     .lg\:grid-cols-\[1fr_340px\] {
       grid-template-columns: 1fr 340px;
+    }
+
+    .lg\:grid-cols-\[240px_minmax\(0\,1fr\)\] {
+      grid-template-columns: 240px minmax(0, 1fr);
     }
 
     .lg\:grid-cols-\[340px_minmax\(0\,1fr\)\] {

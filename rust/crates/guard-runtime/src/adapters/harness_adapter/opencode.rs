@@ -281,9 +281,7 @@ pub(super) fn detect(spec: &Spec, ctx: &Ctx) -> Step<Value> {
         })
         .collect();
     let found = crate::opencode_detect::detect(&detect_request(ctx, &configs, true));
-    let mut answer = detection(spec, found, command_available(spec, ctx))?;
-    answer["firewall"] = json!(true);
-    Ok(answer)
+    super::firewall::enrich(detection(spec, found, command_available(spec, ctx))?)
 }
 
 fn runtime_probe(spec: &Spec, ctx: &Ctx) -> Value {

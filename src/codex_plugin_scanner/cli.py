@@ -34,10 +34,10 @@ def _load_guard_command_hub() -> None:
 
 
 def _supported_harness_values() -> tuple[str, ...]:
-    # Deferred: product_model transitively imports the whole Guard command
+    # Deferred: the harness registry transitively imports the whole Guard command
     # surface, which short-lived invocations must not pay for.
-    from .guard.harness.contract_registry import harness_names
     from .guard.native_runner_authority import NativeRunnerAuthorityError
+    from .guard.setup_contract_registry import harness_names
 
     try:
         return harness_names()
@@ -383,11 +383,11 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
     if not bool(getattr(sys, "frozen", False)):
         return None
     if requested_argv[:1] == ["__guard-bounded-hook"]:
-        from .guard.harness.bounded_cli_hook_bridge import main_from_argv
+        from .guard.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(requested_argv[1:])
     if requested_argv[:1] == ["__guard-cursor-hook"]:
-        from .guard.harness.cursor_client import run_frozen_cursor_hook
+        from .guard.cursor_hook_ops import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(requested_argv[1:])
     if requested_argv[:1] == ["__guard-claude-hook"]:
@@ -427,11 +427,11 @@ def main(argv: list[str] | None = None) -> int:
     argv = _frozen_module_argv(sys.argv[1:] if argv is None else argv)
     effective_argv = argv
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-bounded-hook"]:
-        from .guard.harness.bounded_cli_hook_bridge import main_from_argv
+        from .guard.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(effective_argv[1:])
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-cursor-hook"]:
-        from .guard.harness.cursor_client import run_frozen_cursor_hook
+        from .guard.cursor_hook_ops import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(effective_argv[1:])
     program_name = _program_name(sys.argv[0])

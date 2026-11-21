@@ -143,8 +143,6 @@ fn malformed_answers_and_raised_calls_close_the_connection() {
 #[test]
 fn daemon_handlers_run_behind_one_call() {
     for path in [
-        "/v1/context-assistance/workspace-grant",
-        "/v1/context-assistance/codex-lean",
         "/v1/harness-versions/acknowledge",
         "/v1/supply-chain/workspace-assessments",
         "/v1/supply-chain/workspace-assessments/pause",
@@ -155,8 +153,14 @@ fn daemon_handlers_run_behind_one_call() {
         assert_eq!(name, "route.handler_post", "{path}");
         assert_eq!(args["path"], path);
     }
+    // The edge answers the built-in engine's routes itself.
     for path in [
         "/v1/context-assistance",
+        "/v1/context-assistance/workspace-grant",
+        "/v1/context-assistance/versions",
+        "/v1/context-assistance/activate",
+        "/v1/context-assistance/codex-lean",
+        "/v1/context-assistance/codex-short-replies",
         "/v1/harness-versions",
         "/v1/supply-chain/workspace-assessments/delete",
         "/v1/supply-chain/workspace-fix-proposals/p-1",

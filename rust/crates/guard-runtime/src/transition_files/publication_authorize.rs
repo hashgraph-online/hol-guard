@@ -21,7 +21,7 @@ const REPAIR_CAP_SECONDS: f64 = 60.0;
 const INVERSE_CAP_SECONDS: f64 = 60.0;
 const MICROS: f64 = 1_000_000.0;
 
-fn number(call: &Call<'_>, key: &str) -> Option<f64> {
+pub(super) fn number(call: &Call<'_>, key: &str) -> Option<f64> {
     call.args
         .get(key)
         .filter(|value| value.is_number())

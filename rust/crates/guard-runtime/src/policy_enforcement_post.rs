@@ -56,7 +56,7 @@ pub(crate) fn apply_post_tool_policy_with_delivery(
         payload_kind,
         response,
         delivery,
-        || false,
+        PostAdmission::default,
         recording_only,
     )
 }
@@ -71,40 +71,63 @@ pub(crate) fn apply_post_tool_policy_for_hook(
     response: HookReviewResponseV1,
     origin_store: Option<&crate::policy_store::PolicySnapshotStore>,
     recording_only: bool,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<HookReviewResponseV1, String> {
     let delivery = origin_store.and_then(|store| crate::bash_post_delivery::verify(request, store));
     // Guard's own approval wait on this hook's Guard home passed `PreToolUse`
     // on the same proof, so its result is not held either.
     let admitted_call = || {
-        origin_store.is_some_and(|store| store.require_guard_home(&request.guard_home).is_ok())
-            && (own_approval_wait(request)
-                || request.payload.as_object().is_some_and(|payload| {
-                    crate::native_admitted_call::admitted_for_post(
-                        &request.guard_home,
-                        &request.harness,
-                        payload,
-                    )
-                }))
+        if origin_store.is_none_or(|store| store.require_guard_home(&request.guard_home).is_err()) {
+            return PostAdmission::default();
+        }
+        PostAdmission {
+            approved: request.payload.as_object().is_some_and(|payload| {
+                crate::native_admitted_call::admitted_for_post(
+                    &request.guard_home,
+                    &request.harness,
+                    payload,
+                )
+            }),
+            inspection: own_approval_wait(request),
+        }
     };
-    apply_post_tool_policy_with_witness(
+    post_tool_policy(
         snapshot,
         request,
         payload_kind,
         response,
-        delivery.as_ref(),
-        admitted_call,
+        (delivery.as_ref(), admitted_call),
         recording_only,
+        execution_environment,
     )
 }
 
+/// What let this call run. `approved` is the user's Allow once or Always
+/// allow on this exact call; `inspection` is Guard's own approval wait on
+/// this hook's Guard home. Both may hold at once, and an approval waives
+/// more floors than the inspection proof does, so they are kept apart.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct PostAdmission {
+    pub(crate) approved: bool,
+    pub(crate) inspection: bool,
+}
+
+impl PostAdmission {
+    /// Whether anything at all admitted the call.
+    fn admitted(self) -> bool {
+        self.approved || self.inspection
+    }
+}
+
 /// Whether this output is Guard's own approval wait on the hook's Guard
-/// home, the same proof that let its `PreToolUse` through.
+/// home, or Guard's own safety guide below the hook's user home: the same
+/// proof that let its `PreToolUse` through.
 pub(crate) fn own_approval_wait(request: &NativeHookRequestV1) -> bool {
     super::guard_approval_inspection(
         &request.payload,
         &request.guard_home,
         request.cwd.as_deref(),
-    )
+    ) || super::guard_safety_guide_read(&request.payload, &request.home_dir)
 }
 
 /// `apply_post_tool_policy_with_delivery`, plus `admitted_call`: whether the
@@ -112,14 +135,41 @@ pub(crate) fn own_approval_wait(request: &NativeHookRequestV1) -> bool {
 /// (`native_admitted_call`). Asked only when an overridable execution floor
 /// would hold a clean, fully scanned output, so ordinary calls never read
 /// the store.
+#[cfg(test)]
 pub(crate) fn apply_post_tool_policy_with_witness(
     snapshot: &AdmittedPolicySnapshot,
     request: &NativeHookRequestV1,
     payload_kind: GuardHookPayloadKindV2,
-    mut response: HookReviewResponseV1,
+    response: HookReviewResponseV1,
     delivery: Option<&VerifiedBashDelivery>,
-    admitted_call: impl FnOnce() -> bool,
+    admitted_call: impl FnOnce() -> PostAdmission,
     recording_only: bool,
+) -> Result<HookReviewResponseV1, String> {
+    post_tool_policy(
+        snapshot,
+        request,
+        payload_kind,
+        response,
+        (delivery, admitted_call),
+        recording_only,
+        None,
+    )
+}
+
+/// The policy join, with the execution environment the hook stamped. An
+/// Oh My Pi eval's output is classified by rechecking the program as its
+/// `PreToolUse` judged it, which some proofs cannot do without it.
+fn post_tool_policy(
+    snapshot: &AdmittedPolicySnapshot,
+    request: &NativeHookRequestV1,
+    payload_kind: GuardHookPayloadKindV2,
+    mut response: HookReviewResponseV1,
+    (delivery, admitted_call): (
+        Option<&VerifiedBashDelivery>,
+        impl FnOnce() -> PostAdmission,
+    ),
+    recording_only: bool,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<HookReviewResponseV1, String> {
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());
@@ -158,7 +208,13 @@ pub(crate) fn apply_post_tool_policy_with_witness(
     let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
         && guard_command::pretool::bounded_task_metadata_output(&request.payload, &request.harness);
     let omp_output_action = (payload_kind == GuardHookPayloadKindV2::Inline)
-        .then(|| eval_output::bounded_output_action(request))
+        .then(|| {
+            eval_output::bounded_output_action_in(
+                request,
+                snapshot.command_extensions.as_ref(),
+                execution_environment,
+            )
+        })
         .flatten();
     let classified_action = post_action::post_action_type(request, payload_kind)?;
     let action_type = if task_metadata {
@@ -218,7 +274,7 @@ pub(crate) fn apply_post_tool_policy_with_witness(
     } else {
         response.reason_code.as_str()
     };
-    let floor_for = |verified: bool| {
+    let floor_for = |verified: bool, own_inspection: bool| {
         policy_floor_with_cause_and_delivery(
             &snapshot.effective_policy,
             &snapshot.compiled,
@@ -233,19 +289,23 @@ pub(crate) fn apply_post_tool_policy_with_witness(
                 operator_allowed_mcp_tool,
             },
             verified,
+            own_inspection,
         )
     };
-    let (mut floor, mut floor_cause) = floor_for(verified_delivery)?;
+    let (mut floor, mut floor_cause) = floor_for(verified_delivery, false)?;
     // The user approved this exact call before it ran. The floor that sent it
     // to review may not withhold its clean output; only the execution floors
     // `delivery_floor` lowers are lifted, so a secret, a network or a risk
     // floor on the output still holds.
-    if !verified_delivery
-        && full_scan
-        && action_rank(&floor) > action_rank(&intrinsic)
-        && admitted_call()
-    {
-        (floor, floor_cause) = floor_for(true)?;
+    if !verified_delivery && full_scan && action_rank(&floor) > action_rank(&intrinsic) {
+        // Guard's own inspection command is not itself an approved call, so
+        // on that proof alone the artifact, publisher and changed-hash
+        // reviews stand. When the user approved this exact call as well, it
+        // is an approved call and clears the floors any approval clears.
+        let admission = admitted_call();
+        if admission.admitted() {
+            (floor, floor_cause) = floor_for(admission.approved, admission.inspection)?;
+        }
     }
     let effective = join_action(&intrinsic, &floor)?;
     response.policy_action = Some(effective.clone());

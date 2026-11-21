@@ -70,6 +70,7 @@ mod archive_inspect_containment;
 mod archive_verdict_seam;
 mod artifact_content_hash_op;
 mod artifact_risk_op;
+mod auto_update_state;
 mod bash_post_delivery;
 #[cfg(unix)]
 mod binding_capture_capture;
@@ -202,6 +203,7 @@ mod cloud_sync_privacy;
 mod codex_app_server_socket;
 mod codex_app_server_target_op;
 mod codex_config_rpc;
+mod codex_config_switch;
 #[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;
 mod codex_hook_artifacts;
@@ -246,6 +248,8 @@ mod codex_proxy;
 mod codex_remote_launch;
 #[path = "adapters/codex_remote_prepare.rs"]
 mod codex_remote_prepare;
+#[path = "adapters/codex_remote_run.rs"]
+mod codex_remote_run;
 mod codex_request_resume_busy;
 mod codex_request_resume_capabilities;
 mod codex_request_resume_live;
@@ -264,11 +268,15 @@ mod command_capability_op;
 mod command_effect;
 mod command_envelope_op;
 mod command_expression_validate_op;
+mod command_job_plan_op;
 mod command_policy_decide_op;
 mod command_policy_repair;
 #[path = "adapters/command_probe.rs"]
 mod command_probe;
+mod command_queue_repair;
+mod command_result;
 mod command_risk_groups;
+mod command_state;
 mod composio_role_op;
 mod compound_git_args;
 mod compound_git_chain;
@@ -315,6 +323,7 @@ mod content_sensitivity_op;
 mod context_assistance_action_facts;
 mod context_assistance_agent_op;
 mod context_assistance_agents;
+mod context_assistance_client;
 mod context_assistance_data;
 mod context_assistance_engine;
 mod context_assistance_execution;
@@ -328,11 +337,14 @@ mod context_assistance_prompt_ignore;
 mod context_assistance_prompt_words;
 mod context_assistance_savings;
 mod context_assistance_service;
+mod context_cli;
 mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
 mod context_digest_package_scripts;
 mod context_digest_result_check;
+mod context_mcp;
+mod context_usage_meter;
 mod continuation_authority_op;
 mod continuation_grants;
 mod continuation_lineage;
@@ -460,8 +472,10 @@ mod edge_exact_command_allow;
 mod edge_exact_command_review;
 mod edge_exact_command_spelling;
 mod edge_git_push;
+mod edge_post_tool_delivery;
 mod edge_receipt;
 mod edge_review_evidence;
+mod edge_session_cascade;
 mod edge_structured;
 mod encrypted_secret_store;
 mod evaluation_contract;
@@ -493,6 +507,11 @@ mod git_execution_safety_probe;
 mod git_execution_safety_repo_tests;
 #[cfg(test)]
 mod git_execution_safety_tests;
+mod git_rules;
+mod git_rules_git;
+mod git_rules_inline;
+mod git_rules_match;
+mod git_rules_state;
 mod github_cli_classify_op;
 mod github_workflow_context_io;
 mod github_workflow_prepare_op;
@@ -518,6 +537,8 @@ mod grok_user_config_op;
 #[cfg(all(test, unix))]
 #[path = "adapters/detection/grok_user_config_tests.rs"]
 mod grok_user_config_tests;
+#[cfg(unix)]
+mod group_write_trust;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;
@@ -635,6 +656,8 @@ mod guard_store_native_review_consume_tests;
 mod guard_store_native_review_queue;
 mod guard_store_observed_mcp;
 mod guard_store_op;
+mod guard_store_op_dispatch;
+mod guard_store_op_kind;
 mod guard_store_outbox_append;
 mod guard_store_outbox_binding;
 mod guard_store_outbox_decode;
@@ -661,6 +684,7 @@ mod guard_store_receipt_decision;
 mod guard_store_receipt_envelope;
 mod guard_store_receipt_events;
 mod guard_store_receipt_reads;
+mod guard_store_receipt_redaction;
 mod guard_store_receipt_rollups;
 mod guard_store_receipt_writes;
 #[cfg(test)]
@@ -826,10 +850,27 @@ mod pyyaml_dump;
 mod runtime_output;
 mod runtime_output_directory;
 mod swarm_op;
+mod sync_state_ledger;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
+mod cloud_bundle_command;
+mod cloud_bundle_fetch;
+mod cloud_bundle_network;
+mod cloud_bundle_sync;
+mod cloud_command_lease;
+mod cloud_command_report;
+mod cloud_event_command;
+mod cloud_event_sync;
+mod cloud_json_request;
+mod cloud_oauth_refresh;
+mod cloud_pain_signal_sync;
+mod cloud_receipt_answers;
+mod cloud_receipt_upload;
+mod cloud_receipt_upload_rows;
+mod cloud_runtime_session_sync;
 mod codex_hook_identity_op;
 mod command_pack_record_op;
+mod hook_connector_facts_op;
 #[allow(dead_code)]
 mod hook_evidence_activity;
 #[allow(dead_code)]
@@ -846,11 +887,16 @@ mod hook_evidence_store_timeout;
 mod hook_evidence_store_wire;
 mod hook_evidence_writer_op;
 mod hook_launch_cli;
+mod hook_package_review_settlement;
 mod hook_path_rules;
+mod hook_payload_facts_op;
+mod hook_policy_admission_op;
 mod hook_policy_config;
+mod hook_policy_fence_window_op;
 mod hook_process_spawn;
 mod hook_render_op;
 mod hook_render_posture;
+mod hook_review_binding_op;
 mod insights_share_payload;
 mod installation_continuity;
 mod inventory_export_redaction;
@@ -873,13 +919,16 @@ mod kimi_hook_config;
 mod kimi_hook_config_tests;
 mod local_authority_integrity_op;
 mod local_cli_change_request;
+mod local_cli_discover;
 mod local_cli_grant_op;
 mod local_cli_help;
+mod local_cli_help_probe;
 mod local_cli_hook_contained;
 mod local_cli_hook_op;
 mod local_cli_identify;
 mod local_cli_observer;
 mod local_cli_script_source;
+mod local_identity;
 mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
@@ -928,6 +977,7 @@ mod mcp_proxy_route;
 mod mcp_proxy_shlex;
 mod mcp_proxy_signals;
 mod mcp_registry_page;
+mod mcp_registry_search;
 mod mcp_registry_setup;
 mod mcp_relay;
 mod mcp_relay_args;
@@ -978,6 +1028,7 @@ mod native_bash_reply_validation;
 mod native_bash_review_descriptor;
 mod native_bash_review_scope;
 mod native_decision_receipt;
+mod native_error_code;
 mod native_exact_action_op;
 mod native_hook_receipt;
 mod native_install_verdict;
@@ -991,7 +1042,9 @@ mod network_status_build;
 mod network_status_validation;
 mod oauth_package_firewall_entitlement;
 mod oauth_refresh;
+mod oauth_refresh_circuit;
 mod oauth_secret_authority;
+mod oauth_token_claims;
 mod oci_bundle_evidence;
 mod oci_bundle_mounts;
 mod oci_bundle_op;
@@ -1044,6 +1097,7 @@ mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_action;
 mod package_approval_hash_op;
+mod package_approval_key;
 mod package_audit_projection_op;
 mod package_authority_config;
 mod package_authority_op;
@@ -1082,6 +1136,8 @@ use guard_policy_bundle::{
     python as policy_bundle_py, time as policy_bundle_time,
 };
 mod background_loop_gate;
+mod plugin_telemetry_host;
+mod plugin_telemetry_weekly;
 mod policy_bundle_cloud_exceptions;
 mod policy_bundle_op;
 mod policy_bundle_payload_hash;
@@ -1103,6 +1159,8 @@ mod policy_lookup_portable;
 mod policy_lookup_reuse;
 mod policy_runtime_saved;
 mod policy_runtime_saved_reuse;
+mod policy_shadow_source;
+mod policy_shadow_verdict;
 mod policy_snapshot_build;
 mod policy_snapshot_publish;
 mod policy_store;
@@ -1418,6 +1476,11 @@ pub fn launch() {
     }
     if guard_command::source_cli::is_command(&arguments) {
         std::process::exit(guard_command::source_cli::main(arguments));
+    }
+    // CIGAR's bridges and worker run as private modes of this executable, so
+    // local context needs no Python and no second binary.
+    if guard_cigar_native::is_command(&arguments) {
+        std::process::exit(guard_cigar_native::main(&arguments));
     }
     // Neither the hook nor the error path may panic on a closed stderr: a
     // panic inside the panic hook aborts the process and loses the code.

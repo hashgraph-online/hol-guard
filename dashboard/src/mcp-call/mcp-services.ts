@@ -89,11 +89,19 @@ export function splitToolSlug(slug: string): { app: string | null; action: strin
   if (split <= 0) {
     return { app: null, action: sentenceCase(slug) };
   }
+  const action = words.slice(split);
+  action[0] = PLAIN_VERBS.get(action[0]) ?? action[0];
   return {
     app: serviceDisplayName(words.slice(0, split).join("_")),
-    action: capitalize(words.slice(split).join(" ")),
+    action: capitalize(action.join(" ")),
   };
 }
+
+// API verbs people do not say. `GMAIL_FETCH_EMAILS` reads as "Get emails".
+const PLAIN_VERBS = new Map([
+  ["fetch", "get"],
+  ["retrieve", "get"],
+]);
 
 /**
  * A tool's name as a short action, without the service's own name in front:

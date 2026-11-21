@@ -240,7 +240,7 @@ fn hook_launcher_code(import_roots: &[String]) -> String {
         "sys.stderr.flush() if _windows_job is not None else None;".to_owned(),
         "from pathlib import Path;".to_owned(),
         "import codex_plugin_scanner;".to_owned(),
-        "from codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge import main_from_argv;"
+        "from codex_plugin_scanner.guard.bounded_cli_hook_bridge import main_from_argv;"
             .to_owned(),
         format!("argv=json.loads(os.environ['{HOOK_ARGV_ENV}']);"),
         "guard_index=argv.index('--guard-home');".to_owned(),

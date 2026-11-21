@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.apple-docs-2.0-mcp",
+  "version": "1.0.0",
+  "name": "Apple Docs 2.0 MCP",
+  "description": "Search and read Apple's developer documentation, including API references, design guidelines, sample code, App Store Connect Help and WWDC transcripts. The documentation and WWDC tools offer views for related APIs, availability, topics, years and code examples. External and off until a local administrator enables it.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.mishafyi",
+    "displayName": "MishaFYI",
+    "url": "https://github.com/mishafyi"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/mishafyi/Apple-Docs-2.0-MCP",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "apple-docs-2.0-mcp@3.0.0"
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-content-ingestion",
+    "package-or-source-installation"
+  ],
+  "tools": [
+    {
+      "name": "search_apple_docs",
+      "state": "inherit"
+    },
+    {
+      "name": "get_apple_doc_content",
+      "state": "inherit"
+    },
+    {
+      "name": "list_technologies",
+      "state": "inherit"
+    },
+    {
+      "name": "search_docs_map",
+      "state": "inherit"
+    },
+    {
+      "name": "list_wwdc_videos",
+      "state": "inherit"
+    },
+    {
+      "name": "search_wwdc_content",
+      "state": "inherit"
+    },
+    {
+      "name": "get_wwdc_video",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/mishafyi/Apple-Docs-2.0-MCP",
+    "https://www.npmjs.com/package/apple-docs-2.0-mcp"
+  ],
+  "saferAlternatives": [
+    "Use the reviewed launcher npx -y apple-docs-2.0-mcp@3.0.0. Review a new version before changing the pin.",
+    "Use get_apple_doc_content with view for related APIs, similar APIs, references, or availability. The WWDC tools also support views for years, topics, code examples, and related sessions.",
+    "Use Apple's developer documentation directly when a tool call is unnecessary."
+  ]
+}

@@ -9,8 +9,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from ..config import resolve_guard_home
-from .report import PRIVACY_URL, PluginTelemetryError, dry_run, send_now
-from .state import read_state, turn_off, turn_on
+from .host import PRIVACY_URL, PluginTelemetryError, host_request, user_home
 
 _WHAT_IS_SENT = (
     "Once a week Guard sends HOL the public plugin listings installed on this machine:\n"
@@ -51,41 +50,46 @@ def main(argv: Sequence[str], *, program_name: str = "hol-guard telemetry") -> i
     args = build_parser(program_name=program_name).parse_args(list(argv))
     guard_home = resolve_guard_home(args.guard_home)
     as_json = bool(args.json)
-    if args.action == "on":
-        turn_on(guard_home)
-        _print({"enabled": True}, as_json=as_json, text=f"Plugin install counts are on.\n\n{_WHAT_IS_SENT}")
-        return 0
-    if args.action == "off":
-        turn_off(guard_home)
-        _print({"enabled": False}, as_json=as_json, text="Plugin install counts are off. The device key was deleted.")
-        return 0
-    if args.action == "status":
-        state = read_state(guard_home)
-        last = state.last_week or "never"
-        _print(
-            {"enabled": state.enabled, "lastWeek": state.last_week},
-            as_json=as_json,
-            text=f"Plugin install counts: {'on' if state.enabled else 'off'}. Last report: {last}.",
-        )
-        return 0
-    return _send(guard_home, dry=bool(args.dry_run), as_json=as_json)
-
-
-def _send(guard_home: Path, *, dry: bool, as_json: bool) -> int:
     try:
-        if dry:
-            built = dry_run(guard_home)
-            print(json.dumps(built["report"], indent=2, sort_keys=True))
-            if not as_json:
-                print(f"\n{built.get('installed', 0)} plugins installed; the report above lists the HOL listings.")
+        if args.action == "on":
+            host_request("on", guard_home)
+            _print({"enabled": True}, as_json=as_json, text=f"Plugin install counts are on.\n\n{_WHAT_IS_SENT}")
             return 0
-        result = send_now(guard_home)
+        if args.action == "off":
+            host_request("off", guard_home)
+            _print(
+                {"enabled": False}, as_json=as_json, text="Plugin install counts are off. The device key was deleted."
+            )
+            return 0
+        if args.action == "status":
+            state = host_request("status", guard_home)
+            enabled = state.get("enabled") is True
+            last_week = state.get("lastWeek") if isinstance(state.get("lastWeek"), str) else None
+            _print(
+                {"enabled": enabled, "lastWeek": last_week},
+                as_json=as_json,
+                text=f"Plugin install counts: {'on' if enabled else 'off'}. Last report: {last_week or 'never'}.",
+            )
+            return 0
+        return _send(guard_home, dry=bool(args.dry_run), as_json=as_json)
     except PluginTelemetryError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
+
+
+def _send(guard_home: Path, *, dry: bool, as_json: bool) -> int:
+    if dry:
+        built = host_request("dry-run", guard_home, home=user_home())
+        print(json.dumps(built.get("report"), indent=2, sort_keys=True))
+        if not as_json:
+            print(f"\n{built.get('installed', 0)} plugins installed; the report above lists the HOL listings.")
+        return 0
+    result = host_request("send", guard_home, home=user_home())
     _print(
         result,
         as_json=as_json,
-        text=f"Sent {result['listed']} listed plugins for {result['week']} ({result['accepted']} accepted).",
+        text=(
+            f"Sent {result.get('listed')} listed plugins for {result.get('week')} ({result.get('accepted')} accepted)."
+        ),
     )
     return 0

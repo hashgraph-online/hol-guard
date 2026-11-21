@@ -9,6 +9,7 @@ owner is answered from this process's account database when the resident asks.
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -57,7 +58,16 @@ def _exception(fault: object) -> BaseException:
     message, os_message = fault.get("message"), fault.get("os")
     runtime = fault.get("runtime")
     if isinstance(runtime, str):
-        return RuntimeError(runtime)
+        error = RuntimeError(runtime)
+        if fault.get("cause") is not None:
+            error.__cause__ = _exception(fault["cause"])
+        return error
+    rollback = fault.get("rollback")
+    if isinstance(rollback, Mapping):
+        return _rollback_exception(rollback)
+    adapter = fault.get("adapter")
+    if isinstance(adapter, Mapping):
+        return _adapter_exception(adapter)
     if isinstance(transition, str):
         detail = fault.get("detail")
         return TransitionError(transition, detail) if isinstance(detail, str) else TransitionError(transition)
@@ -68,6 +78,41 @@ def _exception(fault: object) -> BaseException:
         if isinstance(number, int) and not isinstance(number, bool):
             return OSError(number, os_message)
         return OSError(os_message)
+    return TransitionError(_INVALID)
+
+
+def _rollback_exception(failed: Mapping[str, object]) -> BaseException:
+    """The failure of a publication whose rollback failed too, chained to the failure it followed."""
+    failure, rollback = _exception(failed.get("failure")), _exception(failed.get("rollback"))
+    error = RuntimeError(
+        f"Codex hook transaction failed and rollback could not be completed: {type(rollback).__name__}: {rollback}"
+    )
+    add_note = getattr(error, "add_note", None)
+    if callable(add_note):
+        add_note(f"rollback error: {rollback!r}")
+    error.__cause__ = failure
+    return error
+
+
+def _adapter_exception(adapter: Mapping[str, object]) -> BaseException:
+    """The exception an adapter step raised, from the one-key answer the native install op carried it in."""
+    from .codex_hook_recovery import _error
+    from .runtime_transition import TransitionError
+
+    if len(adapter) != 1:
+        return TransitionError(_INVALID)
+    ((key, value),) = adapter.items()
+    message = str(value)
+    if key == "refusal":
+        return ValueError(message)
+    if key == "os_error":
+        return OSError(message)
+    if key == "not_found":
+        return FileNotFoundError(message)
+    if key == "runtime_error":
+        return RuntimeError(message)
+    if key == "integrity":
+        return _error(message)
     return TransitionError(_INVALID)
 
 
@@ -158,6 +203,47 @@ def require_deadline(deadline: float) -> None:
     """``deadline_exceeded`` unless ``deadline`` is a finite number still ahead of now."""
 
     _ask({"op": "publication_deadline", "deadline": deadline, "now": time.monotonic()}, context=False)
+    # The runtime approved the timestamp it was sent; the budget may have run out while it answered.
+    if time.monotonic() >= deadline:
+        from .runtime_transition import TransitionError
+
+        raise TransitionError("deadline_exceeded")
+
+
+def coordinate(
+    flow: str,
+    *,
+    deadline: float,
+    state: object,
+    outcome: Mapping[str, object] | None,
+    cause: str = "",
+) -> Mapping[str, object]:
+    """The next action of a coordinator loop: the runtime owns the order, this process runs each effect.
+
+    ``flow`` is ``activate`` or ``recover``. The answer holds the ``action`` to run and the ``state`` to send back
+    with its ``outcome``.
+    """
+
+    now = time.monotonic()
+    request: dict[str, object] = {
+        "op": "publication_coordinate",
+        "flow": flow,
+        "deadline": _finite(deadline),
+        "now": now,
+        "state": state,
+        "outcome": outcome,
+        "cause": cause,
+    }
+    # A live step waits no longer than the operation has left; a spent budget keeps the default wait so a
+    # failure can still be recorded.
+    remaining = deadline - now
+    timeout = min(_TIMEOUT_SECONDS, max(remaining, 1.0)) if 0 < remaining < _TIMEOUT_SECONDS else _TIMEOUT_SECONDS
+    value = _ask(request, timeout_seconds=timeout, context=False).get("value")
+    if not isinstance(value, Mapping) or not isinstance(value.get("action"), Mapping):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return value
 
 
 def request_policy(stage: str, **fields: object) -> Mapping[str, object]:
@@ -170,13 +256,90 @@ def request_policy(stage: str, **fields: object) -> Mapping[str, object]:
     return value if isinstance(value, Mapping) else {}
 
 
-def runtime_compare(stage: str, **fields: object) -> None:
-    """One comparison of a native-runtime inspection; the runtime raises on a mismatch.
+def _finite(value: object) -> object:
+    """``value``, or text a number-only field refuses when it is NaN or infinite."""
 
-    ``stage`` is ``probe``, ``capabilities``, ``version`` or ``generation``.
+    return "non-finite" if isinstance(value, float) and not math.isfinite(value) else value
+
+
+def prepare_request(stage: str, **fields: object) -> Mapping[str, object]:
+    """One check of a runtime-transition preparation request; the runtime raises on a bad one.
+
+    ``stage`` is ``deadline``, ``operation``, ``bindings`` or ``identity``. A
+    number that is not finite travels as null, which every stage refuses.
     """
 
-    _ask({"op": "publication_runtime_compare", "stage": stage, **fields}, context=False)
+    clean = {key: _finite(value) for key, value in fields.items()}
+    value = _ask({"op": "publication_prepare_request", "stage": stage, **clean}, context=False).get("value")
+    return value if isinstance(value, Mapping) else {}
+
+
+def pin_executable(
+    path: Path,
+    *,
+    deadline: float,
+    expected: Mapping[str, object] | None = None,
+    expected_sha256: str | None = None,
+) -> Mapping[str, object]:
+    """The artifact record of the executable at ``path``, hashed and pinned by the runtime.
+
+    ``expected`` is the runtime identity (``sha256``, ``size``, ``mtime_ns``) it
+    must still be and ``expected_sha256`` the digest a reviewed artifact bound.
+    ``deadline`` is this process's monotonic clock.
+    """
+
+    request: dict[str, object] = {
+        "op": "publication_pin_executable",
+        "path": str(path),
+        "deadline": _finite(deadline),
+        "now": time.monotonic(),
+        "expected": None if expected is None else dict(expected),
+        "expected_sha256": expected_sha256,
+    }
+    value = _ask(request).get("value")
+    if not isinstance(value, Mapping):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return value
+
+
+def inspect_runtime(
+    *,
+    deadline: float,
+    mode: str,
+    binary_override: str | None,
+    bundled: Path,
+    distribution: Sequence[Path],
+    package_version: str | None,
+    checker: str | None,
+    base_prefix: str | None,
+) -> Mapping[str, object]:
+    """The identity (``path``, ``size``, ``mtime_ns``, ``sha256``) of the runtime a repair compares with.
+
+    The runtime finds, admits, probes and pins the candidate; this process names
+    the install-layout facts only it knows.
+    """
+
+    request: dict[str, object] = {
+        "op": "publication_inspect_runtime",
+        "deadline": _finite(deadline),
+        "now": time.monotonic(),
+        "mode": mode,
+        "binary_override": binary_override,
+        "bundled": str(bundled),
+        "distribution": [str(item) for item in distribution],
+        "package_version": package_version,
+        "checker": checker,
+        "base_prefix": base_prefix,
+    }
+    value = _ask(request).get("value")
+    identity = value.get("identity") if isinstance(value, Mapping) else None
+    if not isinstance(identity, Mapping):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return identity
 
 
 def artifact_generation(kind: str, subject: str, *, bound: bool, restored: Sequence[int] | None = None) -> str:
@@ -287,10 +450,12 @@ __all__ = [
     "artifact_generation",
     "authorize_plan",
     "compare_files",
+    "inspect_runtime",
+    "pin_executable",
+    "prepare_request",
     "publish_files",
     "register_inverse",
     "request_policy",
     "require_deadline",
-    "runtime_compare",
     "write_file",
 ]

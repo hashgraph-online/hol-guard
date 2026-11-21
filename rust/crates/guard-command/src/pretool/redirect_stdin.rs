@@ -29,6 +29,9 @@
 use super::Quote;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 
+#[path = "redirect_stdin_python_text.rs"]
+mod python_text;
+
 /// Programs that read standard input as data. Each prints, counts, filters or
 /// reshapes what it reads; none runs, applies or installs it.
 const FILTERS: &[&str] = &[
@@ -305,9 +308,25 @@ pub(in crate::pretool) fn skip_bodies(
             };
             // Apply physical-line safety even to builtins-only programs:
             // the fast path otherwise skips python_program_fits entirely.
-            if !python_has_no_bare_cr(&format!("{}\n", body.join("\n"))) {
+            let source = format!("{}\n", body.join("\n"));
+            if !python_has_no_bare_cr(&source) {
                 return None;
             }
+            // Non-ASCII text in comments and plain strings is read masked;
+            // anywhere else it keeps the hold (`python_text`).
+            let view = if source.is_ascii() {
+                None
+            } else {
+                Some(python_text::ascii_view(&source)?)
+            };
+            let body: Vec<&str> = match &view {
+                Some(view) => view
+                    .strip_suffix('\n')
+                    .unwrap_or(view)
+                    .split('\n')
+                    .collect(),
+                None => body,
+            };
             if !crate::native_command_controls::python_is_builtin_only(&body) {
                 *wide = true;
                 if !python_program_fits(&body) {
@@ -328,9 +347,10 @@ pub(in crate::pretool) fn skip_bodies(
 /// review. It must also stay inside the workspace: a program that observes
 /// or signals other processes, runs code built at run time, or names a path
 /// outside the checkout or inside its `.git` directory keeps its review,
-/// since the sandbox still exposes those (`script_content::host_reach`). The source
-/// has to be plain ASCII with no coding declaration, so the text scanned is
-/// the text Python runs.
+/// since the sandbox still exposes those (`script_content::host_reach`). The text
+/// scanned has to be plain ASCII with no coding declaration, so it is the text
+/// Python runs; `skip_bodies` passes non-ASCII text in comments and plain
+/// strings masked (`python_text`).
 /// Such a program is only taken when it is the whole command
 /// (`script_content::fed::python_alone`).
 fn python_program_fits(body: &[&str]) -> bool {

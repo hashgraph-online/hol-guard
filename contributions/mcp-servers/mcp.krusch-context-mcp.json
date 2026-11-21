@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.krusch-context-mcp",
-  "version": "1.8.1",
+  "version": "2.0.2",
   "name": "Krusch Context MCP",
   "description": "Local-first working memory, span-grounded invariant steering, and decision lineage for coding agents (SQLite by default, optional PostgreSQL). Context retrieval and health checks follow your normal Guard policy (may refresh provenance/drift metadata); memory writes, revisions, and feedback updates require review. Off until you turn it on.",
   "trustClass": "external",
@@ -57,7 +57,8 @@
     "https://github.com/kruschdev/krusch-context-mcp",
     "https://github.com/kruschdev/krusch-context-mcp/blob/main/docs/TOOL_REFERENCE.md",
     "https://github.com/kruschdev/krusch-context-mcp/blob/main/src/index.js",
-    "https://krusch.dev/articles/what-makes-krusch-context-mcp-special.html"
+    "https://krusch.dev/articles/what-makes-krusch-context-mcp-special.html",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=dev.krusch/krusch-context-mcp"
   ],
   "saferAlternatives": [
     "Use krusch_context_retrieve and krusch_context_health to read active invariants, episodic memories, and project state briefings; they do not add or revise memories, but health and state retrieval may update memory provenance/drift flags in the local store.",

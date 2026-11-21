@@ -30,8 +30,10 @@ concurrency:
 env:
   REPEAT: ${{ inputs.repeat || '5' }}
   REPORT_ONLY: ${{ inputs.report_only && '--report-only' || '' }}
-  # The development profile the Gauntlet already builds with: no LTO, 16 codegen units. The lane
-  # tests install and hook behaviour, which the optimisation level does not change.
+  # No LTO and 16 codegen units keep the build short. The workspace keeps its shipped
+  # optimisation level: verdicts do not depend on it, but the cold-start timings this lane
+  # reports do. An unoptimised runtime made first starts on Linux and macOS look 1.5 s or
+  # more slower than a release build.
   CARGO_PROFILE_RELEASE_LTO: 'false'
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
 
@@ -39,7 +41,7 @@ jobs:
   installed-acceptance:
     name: Installed acceptance (wheel and frozen bundle)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     env:
       TARGET: x86_64-unknown-linux-musl
       PLATFORM_TAG: manylinux_2_17_x86_64
@@ -77,11 +79,8 @@ jobs:
           set -euo pipefail
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          uv run --no-sync python scripts/release/workspace_opt_profile.py --opt-level 0 \
-            --output "$RUNNER_TEMP/dev-workspace-profile.toml"
           cargo build --manifest-path rust/Cargo.toml --locked --release --target "$TARGET" \
-            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source \
-            --config "$RUNNER_TEMP/dev-workspace-profile.toml"
+            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
           "rust/target/$TARGET/release/hol-guard-runtime" self-test --json
           "rust/target/$TARGET/release/guard-command-source" export-trust \
             > contracts/extensions/build-trust-class-map.v1.json
@@ -102,7 +101,7 @@ jobs:
         env:
           HOL_GUARD_NATIVE_REGRESSION: '1'
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/${{ env.TARGET }}/release/hol-guard-runtime
-        run: uv run --no-sync python -m pytest tests/test_gauntlet_installed_lane.py tests/test_gauntlet_installed_replay_verdict.py tests/test_gauntlet_installed_auth_denial.py tests/test_gauntlet_installed_startup.py tests/test_gauntlet_installed_windows_argv.py -q
+        run: uv run --no-sync python -m pytest tests/test_gauntlet_installed_lane.py tests/test_gauntlet_installed_permission_and_prompt.py tests/test_gauntlet_installed_replay_verdict.py tests/test_gauntlet_installed_auth_denial.py tests/test_gauntlet_installed_startup.py tests/test_gauntlet_installed_windows_argv.py -q
 
       - name: Check out the matching historical client
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -178,7 +177,9 @@ jobs:
           python3 -m venv --copies "$RUNNER_TEMP/wheel-venv"
           # Harden lane-owned copies; the runner's shared interpreter may be group-writable.
           chmod go-w "$RUNNER_TEMP/wheel-venv"/bin/python*
-          PYTHONPATH= "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install --no-compile \
+          # Compile bytecode as `pipx install hol-guard` does. Without it the first
+          # harness in each venv pays a one-off compile inside its cold-start timing.
+          PYTHONPATH= "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install \
             --index-url https://pypi.org/simple "$WHEEL"
           python3 -m ci.gauntlet installed \
             --runtime "$RUNNER_TEMP/wheel-venv/bin/hol-guard" \
@@ -251,7 +252,7 @@ jobs:
   startup-readiness:
     name: Installed acceptance (wheel, ${{ matrix.os }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 100
     strategy:
       fail-fast: false
       matrix:
@@ -302,11 +303,8 @@ jobs:
           set -euo pipefail
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          uv run --no-sync python scripts/release/workspace_opt_profile.py --opt-level 0 \
-            --output "$RUNNER_TEMP/dev-workspace-profile.toml"
           cargo build --manifest-path rust/Cargo.toml --locked --release --target "$TARGET" \
-            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source \
-            --config "$RUNNER_TEMP/dev-workspace-profile.toml"
+            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
           "rust/target/$TARGET/release/hol-guard-runtime$EXE" self-test --json
           "rust/target/$TARGET/release/guard-command-source$EXE" export-trust \
             > contracts/extensions/build-trust-class-map.v1.json
@@ -348,7 +346,8 @@ jobs:
           set -euo pipefail
           python -m venv --copies "$RUNNER_TEMP/wheel-venv"
           if [[ -n "$EXE" ]]; then bin="$RUNNER_TEMP/wheel-venv/Scripts"; else bin="$RUNNER_TEMP/wheel-venv/bin"; fi
-          PYTHONPATH= "$bin/python$EXE" -m pip install --no-compile \
+          # Compile bytecode as `pipx install hol-guard` does; see the Linux step.
+          PYTHONPATH= "$bin/python$EXE" -m pip install \
             --index-url https://pypi.org/simple "$WHEEL"
           python -m ci.gauntlet installed \
             --runtime "$bin/hol-guard$EXE" \

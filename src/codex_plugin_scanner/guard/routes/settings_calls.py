@@ -8,7 +8,6 @@ the route, the caller check and the body read.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -51,21 +50,6 @@ def settings_response_payload(guard_home: Path, settings: dict[str, object]) -> 
         "settings": settings,
         "protection_capabilities": protection_capability_payloads(),
     }
-
-
-def _hand_settings_to_cigar(guard_home: Path) -> None:
-    """Give saved CIGAR settings to the native service right away.
-
-    Prompt hooks read the native copy, which otherwise refreshes only on the
-    next context call. Without this, turning project context back on leaves
-    every prompt without context until something asks for CIGAR's status.
-    """
-
-    from .. import native_context_assistance
-    from ..native_context_assistance import ContextAssistanceError
-
-    with suppress(ContextAssistanceError):
-        native_context_assistance.control("status", guard_home=guard_home)
 
 
 def _requeue_privacy_projection(store: GuardStore, level: str) -> None:
@@ -123,8 +107,6 @@ def _apply_settings(store: GuardStore, payload: dict[str, object], *, missing_er
         return _reply(error.to_payload(), error.status)
     except ValueError as error:
         return _reply({"error": "invalid_settings", "message": str(error)}, 400)
-    if "context_assistance" in config_settings:
-        _hand_settings_to_cigar(guard_home)
     return _reply(settings_response_payload(guard_home, editable_guard_settings(config)))
 
 

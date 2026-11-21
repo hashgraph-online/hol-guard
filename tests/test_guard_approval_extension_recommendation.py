@@ -5,11 +5,7 @@ import sqlite3
 import urllib.request
 from pathlib import Path
 
-import pytest
-
 from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard.hook_review import approval_extension_recommendation as recommendation_module
-from codex_plugin_scanner.guard.hook_review.approval_extension_recommendation import RECOMMENDATION_SCHEMA
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import EXTENSION_ALLOW_HINT_SCHEMA
@@ -124,64 +120,9 @@ def _get_json(port: int, path: str, *, token: str) -> dict[str, object]:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _resident_recommends(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
-    """Answer each recommendation ask as the resident would for an applicable hint.
-
-    Whether a hint applies is the resident's decision, pinned by its own tests
-    and by the client tests; here only the daemon's read path is under test.
-    """
-
-    asked: list[dict[str, object]] = []
-
-    def decide(query, guard_home, _fields, validate, **_kwargs):
-        asked.append({"query": query, "guard_home": guard_home})
-        if query["kind"] == "coverage":
-            validate({"kind": "coverage", "coverage": None})
-            return {}
-        permission_id = query["hint"]["permission_ids"][0]
-        validate(
-            {
-                "kind": query["kind"],
-                "recommendation": {
-                    "schema": RECOMMENDATION_SCHEMA,
-                    "status": "available",
-                    "permissions": [
-                        {
-                            "permission_id": permission_id,
-                            "label": "Git add",
-                            "description": None,
-                            "example_command": None,
-                            "extension_id": "command.git",
-                            "extension_name": None,
-                            "rule_id": query["hint"]["rule_ids"][0],
-                            "risk_tier": "low",
-                            "caution": False,
-                            "caution_reason": None,
-                            "caution_detail": None,
-                            "cli_command": f"hol-guard command controls set {permission_id} --state allow",
-                        }
-                    ],
-                    "caution": False,
-                    "revision": query["snapshot"]["revision"],
-                    "catalog_digest": query["snapshot"]["catalog_digest"],
-                },
-            }
-        )
-        return {}
-
-    monkeypatch.setattr(recommendation_module, "_decide", decide)
-    return asked
-
-
 def test_daemon_request_detail_without_a_resident_answer_lists_the_request_without_advice(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    tmp_path: Path,
 ) -> None:
-    def refused(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise recommendation_module.NativeApprovalExtensionRecommendationError(
-            "native_approval_extension_recommendation_unavailable"
-        )
-
-    monkeypatch.setattr(recommendation_module, "_decide", refused)
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-1", hint=_hint(GIT_ADD)), "2026-10-09T10:00:00+00:00")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

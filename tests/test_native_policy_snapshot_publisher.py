@@ -337,7 +337,7 @@ def test_prepare_workspace_policy_uses_bounded_first_workspace_handshake(
         def start(self) -> None:
             return
 
-        def register_workspace(self, workspace: Path | None) -> bool:
+        def register_workspace(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
             registered.append(workspace)
             return True
 
@@ -381,7 +381,7 @@ def test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline(
         def start(self) -> None:
             return
 
-        def register_workspace(self, workspace: Path | None) -> bool:
+        def register_workspace(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
             del workspace
             return False
 
@@ -432,7 +432,7 @@ def test_prepare_workspace_policy_skips_wait_after_publisher_error(
         def start(self) -> None:
             return
 
-        def register_workspace(self, workspace: Path | None) -> bool:
+        def register_workspace(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
             del workspace
             return False
 
@@ -472,7 +472,7 @@ def test_prepare_workspace_policy_waits_for_transient_resident_restart_lock(
         def start(self) -> None:
             return
 
-        def register_workspace(self, workspace: Path | None) -> bool:
+        def register_workspace(self, workspace: Path | None, *, deadline: float | None = None) -> bool:
             del workspace
             return False
 

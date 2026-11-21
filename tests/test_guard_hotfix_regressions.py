@@ -12,7 +12,7 @@ import pytest
 from codex_plugin_scanner.guard import approvals as approvals_module
 from codex_plugin_scanner.guard.cli import commands_preflight, commands_router
 from codex_plugin_scanner.guard.cli.commands_preflight import _unsafe_broad_preflight_target
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.managed_install_proof import bind_managed_install_proof
 from codex_plugin_scanner.guard.shims import package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore

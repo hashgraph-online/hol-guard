@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime import command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import (
     CommandCapabilityError,
@@ -19,10 +19,7 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     disable_exact_cloud_review,
 )
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_executor import execute_exact_cloud_review_operation
-from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import (
-    exact_result,
-    exact_transport_job,
-)
+from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import exact_transport_job
 from codex_plugin_scanner.guard.runtime.native_workspace_review import NativeWorkspaceReviewError
 from codex_plugin_scanner.guard.runtime.native_workspace_review_queue import (
     NativeWorkspaceReviewQueueError,
@@ -35,6 +32,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_exact_cloud_review_support import (
     add_review_request,
     connected_exact_review_store,
+    exact_result,
     exact_review_job,
     review_request,
 )
@@ -184,12 +182,13 @@ def test_nonnative_operation_with_native_fields_keeps_generic_consumption_mark(
         ),
     )
     monkeypatch.setattr(command_queue, "command_identity_digest", lambda *_args, **_kwargs: "identity-digest-1")
-    monkeypatch.setattr(command_queue, "consume_local_command_approval", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(
-        command_queue,
-        "mark_command_job_consumed",
-        lambda _store, authorized, **_kwargs: marked.append(authorized.operation),
-    )
+
+    def consume(_store: object, authorized: SimpleNamespace, **kwargs: object) -> bool:
+        if kwargs.get("record_replay"):
+            marked.append(authorized.operation)
+        return True
+
+    monkeypatch.setattr(command_queue, "consume_local_command_approval", consume)
     monkeypatch.setattr(command_queue, "audit_command_decision", lambda *_args, **_kwargs: None)
 
     command_queue.poll_command_queue_once(
@@ -326,6 +325,7 @@ def test_native_executor_applies_receipt_without_external_resume(
     assert data["localRequestId"] == "request-1"
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_native_exact_result_binds_server_request_and_receipt() -> None:
     job: dict[str, object] = {
         "id": "native-job-1",
@@ -392,8 +392,7 @@ def test_native_lost_ack_redelivery_skips_generic_mark_and_external_resume(
     )
     monkeypatch.setattr(command_queue, "_execute_job", lambda *_args: execution)
     monkeypatch.setattr(
-        command_queue,
-        "mark_command_job_consumed",
+        "codex_plugin_scanner.guard.runtime.command_capability.mark_command_job_consumed",
         lambda *_args, **_kwargs: pytest.fail("native jobs must rely on resident claims, not generic replay marks"),
     )
 

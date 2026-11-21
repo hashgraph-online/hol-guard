@@ -84,6 +84,11 @@ impl ReadConfig {
         Path::new(&self.guard_home)
     }
 
+    /// The Guard store the daemon serves.
+    pub(super) fn store_path(&self) -> &Path {
+        Path::new(&self.store_path)
+    }
+
     /// What the edge needs to run the daemon's Guard CLI: its argv prefix,
     /// the Guard home and the daemon's working directory.
     /// The dashboard bundle every response names.
@@ -1115,7 +1120,7 @@ mod health_details;
 #[path = "daemon_edge_streams.rs"]
 mod streams;
 #[path = "daemon_edge_writes.rs"]
-mod writes;
+pub(super) mod writes;
 pub(super) use writes::record_diagnostic;
 
 #[cfg(all(test, unix))]

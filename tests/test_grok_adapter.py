@@ -9,29 +9,28 @@ import re
 from contextlib import redirect_stderr
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
+from tests import harness_ops_support as harness_support
 
 from .grok_test_support import _ctx, _fixture
 
 
 class TestGrokAdapterIdentity:
     def test_harness_identifier_is_grok(self) -> None:
-        assert get_adapter("grok").harness == "grok"
+        assert harness_ops.canonical_harness("grok") == "grok"
 
     def test_aliases_resolve(self) -> None:
         for alias in ("grok-build", "grok-build-cli", "xai-grok"):
-            assert get_adapter(alias).harness == "grok"
+            assert harness_ops.canonical_harness(alias) == "grok"
 
     def test_get_adapter_returns_the_native_grok_adapter(self) -> None:
-        assert isinstance(get_adapter("grok"), NativeHarnessAdapter)
+        assert harness_ops.canonical_harness("grok") == "grok"
 
     def test_grok_is_registered_in_adapter_list(self) -> None:
-        from codex_plugin_scanner.guard.harness.registry import list_adapters
 
-        assert "grok" in {item.harness for item in list_adapters()}
+        assert "grok" in set(harness_ops.list_harnesses())
 
 
 class TestGrokDetect:
@@ -56,7 +55,7 @@ class TestGrokDetect:
             ),
             encoding="utf-8",
         )
-        result = get_adapter("grok").detect(ctx)
+        result = harness_ops.detect("grok", ctx)
         assert result.harness == "grok"
         assert any(".grok/managed_config.toml" in path for path in result.config_paths)
         hook_artifacts = [artifact for artifact in result.artifacts if artifact.artifact_type == "hook"]
@@ -66,7 +65,7 @@ class TestGrokDetect:
 class TestGrokInstallUninstall:
     def test_install_writes_managed_hooks_and_config(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        manifest = get_adapter("grok").install(ctx)
+        manifest = harness_support.install("grok", ctx)
         managed_config = ctx.home_dir / ".grok" / "config.toml"
         pretool_hook = ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json"
         prompt_hook = ctx.home_dir / ".grok" / "hooks" / "hol-guard-prompt.json"
@@ -99,10 +98,9 @@ class TestGrokInstallUninstall:
 
     def test_repeated_install_is_idempotent(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        adapter = get_adapter("grok")
-        adapter.install(ctx)
+        harness_support.install("grok", ctx)
         first_config = (ctx.home_dir / ".grok" / "config.toml").read_text(encoding="utf-8")
-        adapter.install(ctx)
+        harness_support.install("grok", ctx)
         second_config = (ctx.home_dir / ".grok" / "config.toml").read_text(encoding="utf-8")
         assert first_config == second_config
 
@@ -111,9 +109,8 @@ class TestGrokInstallUninstall:
         user_config = ctx.home_dir / ".grok" / "config.toml"
         user_config.parent.mkdir(parents=True, exist_ok=True)
         user_config.write_text("[ui]\nsimple_mode = true\n", encoding="utf-8")
-        adapter = get_adapter("grok")
-        adapter.install(ctx)
-        adapter.uninstall(ctx)
+        harness_support.install("grok", ctx)
+        harness_support.uninstall("grok", ctx)
         assert user_config.read_text(encoding="utf-8") == "[ui]\nsimple_mode = true\n"
         assert not (ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json").exists()
         assert not (ctx.home_dir / ".grok" / "managed_config.toml").exists()

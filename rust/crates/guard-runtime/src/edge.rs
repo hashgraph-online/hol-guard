@@ -5,7 +5,6 @@ use crate::native_hook_receipt::{
     receipt_from_post_tool, receipt_from_pre_tool, NativeReceiptIdentity,
 };
 use crate::policy_enforcement::AdmittedPolicySnapshot;
-use crate::{edge_exact_command_review as exact_review, runtime_known_vulnerable as runtime_risk};
 use guard_contracts::{
     GuardHookEdgeResultV2, GuardHookEnvelopeV2, GuardHookPayloadKindV2, HookOutputSummaryV1,
     HookSourceFileRefV1, NativeHookRequestV1, PreToolResultV1, GUARD_HOOK_EDGE_RESULT_V2_SCHEMA,
@@ -13,7 +12,7 @@ use guard_contracts::{
 };
 use guard_hook_core::review_post_tool;
 use serde_json::Value;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[path = "edge_identity.rs"]
 mod edge_identity;
@@ -29,6 +28,9 @@ pub(crate) use edge_identity::{
 mod edge_containment;
 #[path = "edge_local_cli.rs"]
 mod edge_local_cli;
+#[path = "edge_pre_tool_chain.rs"]
+mod pre_tool_chain;
+use pre_tool_chain::evaluate_pre_tool_chain;
 #[path = "edge_result_check.rs"]
 mod edge_result_check;
 pub(crate) use edge_result_check::standalone_receipt;
@@ -295,57 +297,11 @@ fn evaluate_validated_envelope<Lease>(
     }
     let (mut result, mut receipt) = match event_name.as_str() {
         "PreToolUse" | "UserPromptSubmit" => {
-            let unavailable_environment =
-                guard_contracts::GuardExecutionEnvironmentV1::unavailable();
-            crate::edge_git_push::install();
-            let native = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
-                &harness,
-                &event_name,
-                &envelope.raw_payload,
-                policy_snapshot.and_then(|snapshot| snapshot.command_extensions.as_ref()),
-                Some(
-                    Instant::now()
-                        + Duration::from_millis(
-                            envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000),
-                        ),
-                ),
-                // The envelope carries only the roots. Every proof a context
-                // holds is set by a caller with the command, so all stay false.
-                guard_command::pretool::PathContext {
-                    home_dir: Some(envelope.source.home_dir.as_str()),
-                    guard_home: Some(envelope.source.guard_home.as_str()),
-                    cwd: envelope.source.cwd.as_deref(),
-                    ..Default::default()
-                },
-                Some(
-                    envelope
-                        .source
-                        .execution_environment
-                        .as_ref()
-                        .unwrap_or(&unavailable_environment),
-                ),
-            );
-            let native = crate::omp_yield_input_scan::scan(
-                &envelope.raw_payload,
-                envelope.deadline_budget_ms,
-                native,
-            )?;
-            let evaluated = if let Some(snapshot) = policy_snapshot {
-                crate::policy_enforcement::apply_pre_tool_policy_for_hook(
-                    snapshot, &envelope, native,
-                )?
-            } else {
-                native
-            };
-            let evaluated = crate::native_exact_action_op::require_bash_owner(
-                &envelope,
-                policy_snapshot,
-                evaluated,
-            );
-            let evaluated = crate::network_protection::apply_to_envelope(&envelope, evaluated);
-            let evaluated = runtime_risk::apply_to_envelope(&envelope, policy_snapshot, evaluated);
-            let evaluated = exact_review::apply_to_envelope(&envelope, policy_snapshot, evaluated);
-            let evaluated = crate::policy_enforcement::deferred_prompt_review(evaluated);
+            let evaluated =
+                evaluate_pre_tool_chain(&envelope, &harness, &event_name, policy_snapshot)?;
+            let call = (event_name.as_str(), harness.as_str());
+            let evaluated =
+                crate::edge_session_cascade::apply(&envelope, policy_snapshot, call, evaluated);
             let value = serde_json::to_value(evaluated)
                 .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
             edge_result_check::validate_pre_tool_result(&value)?;
@@ -387,13 +343,14 @@ fn evaluate_validated_envelope<Lease>(
                     native,
                     origin_store,
                     envelope.recording_only,
+                    envelope.source.execution_environment.as_ref(),
                 )?
             } else {
                 native
             };
-            // The policy join may rewrite the verdict or output action, so
-            // "may the model read this" is settled once, after all of it ran.
+            // Settle "may the model read this" once, after the policy join ran.
             evaluated.seal_output_mask();
+            crate::edge_post_tool_delivery::settle(&harness, &mut evaluated);
             let receipt = receipt_from_post_tool(
                 &envelope,
                 policy_snapshot.map(AdmittedPolicySnapshot::snapshot),
@@ -423,7 +380,19 @@ fn evaluate_validated_envelope<Lease>(
         &result,
         &receipt,
         guard_home,
-        || edge_local_cli::settle(&envelope, &harness, &event_name, &result),
+        || {
+            let step = |payload: &Value, budget_ms: u64| {
+                pre_tool_chain::step(
+                    &envelope,
+                    &harness,
+                    &event_name,
+                    policy_snapshot,
+                    payload,
+                    budget_ms,
+                )
+            };
+            edge_local_cli::settle(&envelope, &harness, &event_name, &result, &step)
+        },
     );
     drop(lease);
     let harness_response = crate::context_assistance_prompt::harness_response(
@@ -457,7 +426,7 @@ fn evaluate_validated_envelope<Lease>(
     edge_result_check::check(&edge)?;
     // After the check, so a refused edge leaves no sink snapshot behind.
     edge_containment::attach(&envelope, &mut edge);
-    crate::edge_receipt::encode(&envelope, origin_store.is_some(), edge, started)
+    crate::edge_receipt::encode(&envelope, origin_store, edge, started)
 }
 
 /// Evaluate a resident hook envelope against the already-installed in-memory
@@ -474,6 +443,33 @@ pub(crate) fn evaluate_envelope_with_store(
     )?;
     let lease = policy_store.command_authority_lease(snapshot.snapshot())?;
     evaluate_validated_envelope(envelope, Some(snapshot.as_ref()), Some(policy_store), lease)
+}
+
+/// Review a Cursor routing probe on the same authenticated binding as the
+/// edge. Watch gives a plain probe allow and leaves the next hook to review
+/// the call that actually runs.
+pub(crate) fn evaluate_cursor_probe(
+    envelope: GuardHookEnvelopeV2,
+    policy_store: &crate::policy_store::PolicySnapshotStore,
+    harness_postures: Option<&Value>,
+) -> Result<Option<Vec<u8>>, String> {
+    validate_envelope_shape(&envelope)?;
+    let admitted = policy_store.validate_request_snapshot(
+        &envelope.policy_snapshot,
+        &envelope.source.guard_home,
+        envelope.policy_generation,
+    )?;
+    let snapshot = admitted.snapshot();
+    let binding = serde_json::json!({"mode": snapshot.mode, "harness_postures": harness_postures});
+    if crate::hook_render_posture::recording_only_for_binding(
+        Some(&binding),
+        &Value::from("cursor"),
+    ) {
+        return Ok(None);
+    }
+    let lease = policy_store.command_authority_lease(snapshot)?;
+    evaluate_validated_envelope(envelope, Some(admitted.as_ref()), Some(policy_store), lease)
+        .map(Some)
 }
 
 /// Evaluate against a snapshot while the policy store's request fence is

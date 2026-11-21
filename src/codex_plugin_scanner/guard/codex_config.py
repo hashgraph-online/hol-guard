@@ -9,7 +9,7 @@ from datetime import date, datetime, time
 from typing import Any
 from uuid import uuid4
 
-# The range ``native_codex_hook_identity`` sends as a JSON integer.
+# The range the native ``codex_hook_identity`` op takes as a JSON integer.
 _EXACT_INT_MIN = -(2**63)
 _EXACT_INT_MAX = 2**64 - 1
 
@@ -30,7 +30,7 @@ class _Wire:
     """Order-preserving JSON for payloads read from TOML.
 
     A scalar JSON cannot carry becomes a token naming its meaning, the form
-    ``native_codex_hook_identity`` sends. Equal meanings share a token, so the
+    the native ``codex_hook_identity`` op takes. Equal meanings share a token, so the
     runtime compares tokens as it would the values. ``decode`` maps each token
     back to the value it stood for. The prefix is drawn at random and checked
     against every string the payloads hold.

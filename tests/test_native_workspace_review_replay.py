@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.runtime import cloud_review_event_projection as 
 from codex_plugin_scanner.guard.runtime import native_workspace_review_replay as replay
 from codex_plugin_scanner.guard.runtime.cloud_review_event_projection import project_cloud_review_event
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.native_replay_store import ReplayStore, scan_key
 from tests.test_guard_review_event_outbox import _all_events, _connect, _request
 
 
@@ -53,77 +54,8 @@ def _accepted_event(request_id: str = "request-1") -> dict[str, object]:
     }
 
 
-class _ReplayStore:
-    guard_home: Path
-    guard_source = "default"
-
-    def __init__(self, tmp_path: Path, request_ids: list[str]) -> None:
-        self.guard_home = tmp_path
-        self.binding = _binding()
-        self.request_ids = request_ids
-        self.payloads: dict[str, object] = {}
-        self.context_calls: list[str] = []
-        self.requeue_calls: list[dict[str, object]] = []
-        self.list_calls = 0
-        self.requeue_result = 1
-        self.fail_marker_update = False
-
-    def get_review_event_oauth_binding(self) -> dict[str, str]:
-        return dict(self.binding)
-
-    def get_sync_payload(self, key: str) -> object | None:
-        return self.payloads.get(key)
-
-    def set_sync_payload(self, key: str, payload: object, now: str) -> None:
-        del now
-        if self.fail_marker_update and ":request:" in key:
-            raise OSError("marker update failed")
-        self.payloads[key] = payload
-
-    def list_pending_review_request_ids(
-        self,
-        *,
-        binding: dict[str, str],
-        limit: int,
-        after_request_id: str | None = None,
-        through_request_id: str | None = None,
-        descending: bool = False,
-    ) -> list[str]:
-        self.list_calls += 1
-        if binding != self.binding:
-            return []
-        candidates = sorted(
-            request_id
-            for request_id in self.request_ids
-            if (after_request_id is None or request_id > after_request_id)
-            and (through_request_id is None or request_id <= through_request_id)
-        )
-        return list(reversed(candidates))[:limit] if descending else candidates[:limit]
-
-    def requeue_pending_review_events_with_marker(
-        self,
-        *,
-        changed_at: str,
-        marker_key: str,
-        marker_payload: dict[str, object],
-        require_binding: bool = False,
-        request_ids: set[str] | None = None,
-    ) -> int:
-        self.requeue_calls.append(
-            {
-                "changed_at": changed_at,
-                "marker_key": marker_key,
-                "marker_payload": dict(marker_payload),
-                "require_binding": require_binding,
-                "request_ids": set(request_ids or ()),
-            }
-        )
-        self.payloads[marker_key] = {**marker_payload, "requeued": self.requeue_result}
-        return self.requeue_result
-
-
 def test_replay_rotates_past_failed_first_page(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _ReplayStore(tmp_path, [f"request-{index:02d}" for index in range(10)])
+    store = ReplayStore(tmp_path, [f"request-{index:02d}" for index in range(10)])
 
     def context(_store: object, _home: Path, request_id: str) -> dict[str, object] | None:
         store.context_calls.append(request_id)
@@ -150,7 +82,7 @@ def test_replay_rotates_past_failed_first_page(tmp_path: Path, monkeypatch: pyte
 def test_replay_revisits_lower_ids_despite_continuous_full_batches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = _ReplayStore(tmp_path, [f"request-{index:02d}" for index in range(4)])
+    store = ReplayStore(tmp_path, [f"request-{index:02d}" for index in range(4)])
 
     def context(_store: object, _home: Path, request_id: str) -> None:
         store.context_calls.append(request_id)
@@ -171,9 +103,8 @@ def test_replay_revisits_lower_ids_despite_continuous_full_batches(
 
 
 def test_legacy_unbounded_cursor_restarts_from_lower_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _ReplayStore(tmp_path, ["request-00", "request-99"])
-    replay_store = cast(replay._NativeWorkspaceReplayStore, cast(object, store))
-    store.payloads[replay._scan_key(replay_store)] = {"binding": store.binding, "cursor": "request-99"}
+    store = ReplayStore(tmp_path, ["request-00", "request-99"])
+    store.payloads[scan_key()] = {"binding": store.binding, "cursor": "request-99"}
 
     def context(_store: object, _home: Path, request_id: str) -> None:
         store.context_calls.append(request_id)
@@ -186,7 +117,7 @@ def test_legacy_unbounded_cursor_restarts_from_lower_ids(tmp_path: Path, monkeyp
 
 
 def test_failed_markers_are_revisited_after_finite_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _ReplayStore(tmp_path, [f"request-{index:02d}" for index in range(4)])
+    store = ReplayStore(tmp_path, [f"request-{index:02d}" for index in range(4)])
     store.fail_marker_update = True
 
     def context(_store: object, _home: Path, request_id: str) -> None:
@@ -203,17 +134,17 @@ def test_failed_markers_are_revisited_after_finite_scan(tmp_path: Path, monkeypa
 
 
 def test_interrupted_batch_does_not_advance_scan_progress(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _ReplayStore(tmp_path, ["request-00", "request-01"])
-    read_marker = replay._request_marker
+    store = ReplayStore(tmp_path, ["request-00", "request-01"])
+    read_marker = store.native_workspace_review_replay_marker
 
-    def interrupted_marker(*_args: object) -> tuple[str, dict[str, object] | None]:
+    def interrupted_marker(*_args: object, **_kwargs: object) -> dict[str, object]:
         raise OSError("interrupted batch")
 
-    monkeypatch.setattr(replay, "_request_marker", interrupted_marker)
+    monkeypatch.setattr(store, "native_workspace_review_replay_marker", interrupted_marker)
     with pytest.raises(OSError, match="interrupted batch"):
         replay.prepare_native_workspace_review_replay(cast(GuardStore, cast(object, store)), binding=store.binding)
     assert store.payloads == {}
-    monkeypatch.setattr(replay, "_request_marker", read_marker)
+    monkeypatch.setattr(store, "native_workspace_review_replay_marker", read_marker)
 
     def context(_store: object, _home: Path, request_id: str) -> None:
         store.context_calls.append(request_id)
@@ -359,7 +290,7 @@ def test_replay_context_uses_authenticated_frozen_snapshot_not_live_display_row(
 
 
 def test_missing_authority_is_retryable_without_requeue_flood(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _ReplayStore(tmp_path, ["request-1"])
+    store = ReplayStore(tmp_path, ["request-1"])
     monkeypatch.setattr(
         replay,
         "build_native_workspace_review_context",
@@ -381,7 +312,7 @@ def test_atomic_requeue_marker_retains_cooldown_when_followup_write_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = _ReplayStore(tmp_path, ["request-1"])
+    store = ReplayStore(tmp_path, ["request-1"])
     store.fail_marker_update = True
     monkeypatch.setattr(replay, "build_native_workspace_review_context", lambda *_args: _native_context())
 
@@ -402,7 +333,7 @@ def test_atomic_requeue_marker_retains_cooldown_when_followup_write_fails(
 def test_accepted_authority_is_completed_but_still_probed_for_rotation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = _ReplayStore(tmp_path, ["request-1"])
+    store = ReplayStore(tmp_path, ["request-1"])
     context = _native_context()
     monkeypatch.setattr(replay, "build_native_workspace_review_context", lambda *_args: context)
 
@@ -436,7 +367,7 @@ def test_accepted_authority_is_completed_but_still_probed_for_rotation(
 
 
 def test_invalid_claim_bindings_do_not_complete_replay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _ReplayStore(tmp_path, ["request-1"])
+    store = ReplayStore(tmp_path, ["request-1"])
     monkeypatch.setattr(replay, "build_native_workspace_review_context", lambda *_args: _native_context())
     assert (
         replay.prepare_native_workspace_review_replay(cast(GuardStore, cast(object, store)), binding=store.binding) == 1
@@ -453,7 +384,7 @@ def test_invalid_claim_bindings_do_not_complete_replay(tmp_path: Path, monkeypat
 
 
 def test_zero_append_probe_can_still_complete_prior_replay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _ReplayStore(tmp_path, ["request-1"])
+    store = ReplayStore(tmp_path, ["request-1"])
     monkeypatch.setattr(replay, "build_native_workspace_review_context", lambda *_args: _native_context())
     assert (
         replay.prepare_native_workspace_review_replay(cast(GuardStore, cast(object, store)), binding=store.binding) == 1

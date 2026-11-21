@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .harness.base import HarnessContext
+from .harness_context import HarnessContext
 from .native_daemon_manage import guard_daemon_start_lock
 from .native_daemon_peer import DaemonArtifactBinding
 from .native_owned import codex_install_transaction

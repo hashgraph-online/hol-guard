@@ -136,6 +136,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "hermes_install_plan" => crate::hermes_install_plan::dispatch(args),
         "harness_shim_refresh" => crate::harness_shim_refresh::dispatch(args),
         "cloud_actions_access" => crate::cloud_actions_access::dispatch(args),
+        "oauth_token_claims" => crate::oauth_token_claims::dispatch(args),
         "mcp_policy_input" => crate::mcp_policy_input::dispatch(args),
         "mcp_tool_inventory" => crate::mcp_tool_inventory::dispatch(args),
         "approval_copy" => crate::approval_copy::dispatch(args),
@@ -157,7 +158,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "local_cli_recognize" => crate::local_cli_identify::recognize_dispatch(args),
         "network_status_build" => crate::network_status_build::dispatch(args),
         "business_review_page" => crate::business_review_page::dispatch(args),
-        "mcp_registry_page" => crate::mcp_registry_page::dispatch(args),
+        "mcp_registry_search" => crate::mcp_registry_search::dispatch(args),
         "mcp_registry_setup" => crate::mcp_registry_setup::dispatch(args),
         "connector_setup_rows" => crate::connector_setup_rows::dispatch(args),
         "review_event_decode" => crate::review_event_decode::dispatch(args),
@@ -177,6 +178,8 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "authority_signature" => signature::authority_signature(args),
         "authority_gate" => signature::authority_gate(args),
         "policy_shadow_mismatch" => signature::policy_shadow_mismatch(args),
+        "policy_shadow_verdict" => crate::policy_shadow_verdict::dispatch(args),
+        "policy_shadow_source" => crate::policy_shadow_source::dispatch(args),
         "sync_url" => sync_url::sync_url(args),
         "insights_share_payload" => crate::insights_share_payload::dispatch(args),
         "cloud_http_error" => super::runner_cloud_http_error::cloud_http_error(args),
@@ -265,6 +268,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "user_command_lookup" => crate::user_command_lookup::dispatch(args),
         "local_cli_script_source" => crate::local_cli_script_source::dispatch(args),
         "local_mcp_probe" => crate::local_mcp_probe::dispatch(args),
+        "local_identity" => crate::local_identity::dispatch(args),
         "hook_approval_wait" => crate::hook_approval_wait::dispatch(args),
         "grok_detect" => grok_detect::detect(args),
         "grok_legacy_settings" => grok_legacy_settings::dispatch(args),
@@ -317,6 +321,10 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
         "cloud_actions_status" => {
             crate::cloud_actions_status::dispatch(&request.args, &request.guard_home)
         }
+        // The usage meter keeps how far it read each record in that home.
+        "context_usage" => crate::context_usage_meter::dispatch(&request.args, &request.guard_home),
+        // The Codex config switches take the Codex install lock as that home's owner.
+        "codex_config" => crate::codex_config_switch::dispatch(&request.args, &request.guard_home),
         _ => dispatch(&request.kind, &request.args),
     }
 }

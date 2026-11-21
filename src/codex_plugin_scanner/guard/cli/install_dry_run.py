@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..store import GuardStore
 from .install_commands import build_harness_setup_plan
 from .install_targets import _resolve_targets

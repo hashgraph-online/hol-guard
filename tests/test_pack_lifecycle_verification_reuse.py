@@ -64,7 +64,7 @@ def test_a_changed_copy_is_replaced_from_a_full_verification(package):
     os.chmod(first, 0o700)
     first.write_bytes(b"#!/bin/sh\r")
     replacement = run()
-    assert replacement != first
+    # A Guard home keeps one copy per runtime, so the replacement may take the same path.
     assert replacement.read_bytes() == b"#!/bin/sh\n"
     assert len(verifications) == 2
 

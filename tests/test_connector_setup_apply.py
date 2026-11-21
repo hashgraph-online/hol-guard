@@ -10,22 +10,16 @@ import pytest
 from codex_plugin_scanner.guard import approvals
 from codex_plugin_scanner.guard import continuation_runtime_local as local_approval_continuation
 from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
-from codex_plugin_scanner.guard.hook_review.approval_connector_recommendation import (
-    build_approval_connector_recommendation,
-)
 from codex_plugin_scanner.guard.local_clis import local_cli_api
 from codex_plugin_scanner.guard.local_clis import local_cli_connector_group as group
 from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.local_clis.local_cli_api_contract import LocalCliApiError
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import (
     CONNECTOR_SETUP_HINT_SCHEMA,
     connector_setup_deep_link,
     validated_connector_setup_hint,
 )
-from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
-from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from codex_plugin_scanner.guard.store import GuardStore
 
 _HASH = "a" * 64
@@ -187,7 +181,7 @@ def test_every_approved_row_continues_its_own_agent(store: GuardStore, monkeypat
 
 def test_the_origin_row_is_found_past_a_long_queue(store: GuardStore, monkeypatch: pytest.MonkeyPatch) -> None:
     # The queue scan stopped before reaching this connector's rows.
-    monkeypatch.setattr(group, "pending_connector_group_rows", lambda _store, _hash: ([], False))
+    monkeypatch.setattr(store, "pending_connector_group_rows", lambda _hash: ([], False))
 
     assert group.connector_group_request_ids(store, cli_id=_CLI_ID, identity_hash=_HASH, request_id="req-1") == [
         "req-1"
@@ -294,41 +288,19 @@ def test_group_resolves_only_after_the_proof_bound_write(store: GuardStore, monk
     assert result["connector_group"] == {"status": "resolved", "resolved_count": 2, "failed": []}
 
 
-def test_recommended_setup_is_a_body_for_the_same_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.hook_review import approval_connector_recommendation as recommendation
-
-    item = {
+def test_connector_recommendation_body_is_accepted_by_preview() -> None:
+    # Fields projected by the Rust connector recommendation.
+    body = {
         "cli_id": _CLI_ID,
         "identity_hash": _HASH,
-        "surface": "cli",
-        "state": "unset",
         "name": "lanectl",
         "kind": "executable",
+        "state": "allowed",
+        "connector_group_request_id": "req-1",
     }
-    monkeypatch.setattr(recommendation, "listed_public_items", lambda _store: [item])
-    snapshot = ExtensionControlRuntimeSnapshot(
-        health=AuthorityHealth.PROTECTED,
-        revision=3,
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        effective_digest="e" * 64,
-        layers=(),
-    )
-    approval = {"request_id": "req-1", "status": "pending", "queue_group_id": _GROUP, "extension_allow_hint": _hint()}
-
-    built = build_approval_connector_recommendation(
-        approval, store=object(), snapshot=snapshot, approval_gate_configured=True
-    )
-
-    assert built is not None
-    body = built["setup_request"]
-    assert isinstance(body, dict)
-    assert body["state"] == "allowed" and body["connector_group_request_id"] == "req-1"
-    assert built["setup_href"] == f"{built['deep_link']}?setup=req-1&identity={_HASH}"
-    # Exactly what Protect's preview/apply accepts; no proof, nonce or revision is pre-filled.
     service = LocalCliApiService.__new__(LocalCliApiService)
-    identity, state = service._mutation_from_payload(dict(body))
+    identity, state = service._mutation_from_payload(body)
     assert (identity.cli_id, identity.identity_hash, state) == (_CLI_ID, _HASH, "allowed")
-    assert not {"previous_revision", "session_nonce", "approval_password", "proof_id"} & set(body)
 
 
 def test_list_filters_to_one_bound_identity(store: GuardStore, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -361,6 +333,9 @@ _GRANT_WRITERS = {
 }
 _KNOWN_WRITE_SITES = {
     ("local_clis/local_cli_api.py", "apply", "record_local_custom_extension_mutation"),
+    # Always allow on a changed script's review moves an existing allow to the
+    # reviewed version only; it never allows a CLI that was not allowed before.
+    ("local_clis/local_cli_reallow.py", "reallow_changed_cli", "record_local_custom_extension_mutation"),
     (
         "runtime/custom_extension_continuity.py",
         "record_local_custom_extension_mutation",
@@ -400,7 +375,6 @@ def test_no_other_path_can_set_a_connector_allowed() -> None:
     assert {site for site in sites if site in _KNOWN_WRITE_SITES} == _KNOWN_WRITE_SITES
     assert sites <= _KNOWN_WRITE_SITES, sorted(sites - _KNOWN_WRITE_SITES)
     connector_modules = {
-        "hook_review/approval_connector_recommendation.py",
         "local_clis/local_cli_connector_group.py",
         "routes/service_calls.py",
         "runtime/connector_setup_items.py",

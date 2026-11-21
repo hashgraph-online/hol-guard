@@ -4,8 +4,11 @@ A package shim runs ``hol-guard protect --package-shim-ui`` with the terminal's
 stdin and a duplicate of its stderr (``HOL_GUARD_PACKAGE_SHIM_STATUS_FD``). When
 both are terminals and no AI harness marker is present, Guard asks there instead
 of sending the person to a separate inbox, then resolves the queued request
-through the same path as ``hol-guard approvals approve``. A decision made in the
-approval center or desktop app while the prompt is open ends the prompt too.
+through the same path as ``hol-guard approvals approve``. When an approval gate
+is configured, a typed "y" or "a" is never enough on its own: Guard asks for the
+password or authenticator code every time, even inside a cooldown window. A
+decision made in the approval center or desktop app while the prompt is open ends
+the prompt too.
 """
 
 from __future__ import annotations
@@ -166,6 +169,7 @@ def _approve(
         reason="Approved in the terminal that ran the install.",
         remember=remember,
         trust_local_tool=False,
+        fresh_approval_gate=True,
     )
     return run_approval_command(args, store=store, workspace=workspace)
 

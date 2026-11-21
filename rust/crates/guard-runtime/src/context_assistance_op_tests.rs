@@ -16,8 +16,6 @@ mod agents;
 mod config_snapshot;
 #[path = "context_assistance_history_installed_tests.rs"]
 mod history;
-#[path = "context_assistance_installed_tests.rs"]
-mod installed;
 #[cfg(unix)]
 #[path = "context_assistance_persistent_installed_tests.rs"]
 mod persistent;

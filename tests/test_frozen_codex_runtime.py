@@ -17,14 +17,14 @@ from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_hook_runtime_trust, frozen_codex_runtime, native_caller
 from codex_plugin_scanner.guard import native_daemon_manage as daemon_api
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.frozen_runtime_commands import (
     frozen_daemon_recovery_command,
     frozen_daemon_serve_command,
     frozen_windows_extension_control_commands,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
+from tests import harness_ops_support as harness_support
 from tests.codex_legacy_roles import without_package_roles
 from tests.codex_toml_support import read_toml_payload
 from tests.native_runtime_stamp import stamp_native_runtime
@@ -293,7 +293,7 @@ def test_frozen_codex_install_and_runtime_trust_validate_without_source_files(
     codex_config.parent.mkdir(parents=True)
     codex_config.write_text("[features]\ncodex_hooks = true\n", encoding="utf-8")
 
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     state = codex_adapter.codex_native_hook_state(context)
 
     assert state["managed_hook_installed"] is True
@@ -335,7 +335,7 @@ def test_frozen_codex_hook_runs_behind_the_durable_native_bridge(
     codex_config.parent.mkdir(parents=True)
     codex_config.write_text("[features]\ncodex_hooks = true\n", encoding="utf-8")
 
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
 
     assert codex_adapter.codex_native_hook_state(context)["integrity_status"] == "valid"
     handler = read_toml_payload(codex_config)["hooks"]["PreToolUse"][-1]["hooks"][0]
@@ -374,7 +374,7 @@ def test_retained_frozen_hook_can_be_validated_against_exact_transition_artifact
     candidate.chmod(0o700)
     monkeypatch.setattr(sys, "executable", str(previous))
     with without_package_roles(monkeypatch, {"hook_probe", "native_receipt"} if legacy_roles else set()):
-        CodexHarnessAdapter().install(context)
+        harness_support.install("codex", context)
     argv = codex_adapter._hook_command_parts(context)
     bridge = json.loads(argv[2])
     kwargs = dict(
@@ -428,7 +428,7 @@ def test_frozen_runtime_trust_rejects_bridge_command_tampering(
     codex_config = context.home_dir / ".codex" / "config.toml"
     codex_config.parent.mkdir(parents=True)
     codex_config.write_text("[features]\ncodex_hooks = true\n", encoding="utf-8")
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
 
     config_payload = read_toml_payload(codex_config)
     handler = config_payload["hooks"]["PreToolUse"][-1]["hooks"][0]

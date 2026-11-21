@@ -16,6 +16,7 @@ fn request(workspace: &str, payload: Value) -> PackageReviewPlanRequestV1 {
         payload,
         home_dir: None,
         review_reason: None,
+        include_registry_retry: None,
     }
 }
 
@@ -105,7 +106,7 @@ fn a_command_review_plans_only_npx_and_bunx_launches() {
     ] {
         assert_eq!(
             answer(command),
-            json!({"artifact": null, "may_allow": false}),
+            json!({"artifact": null, "may_allow": false, "workspace": null, "keyed": false}),
             "{command}"
         );
     }
@@ -136,7 +137,7 @@ fn commands_the_evaluator_does_not_read_plan_nothing() {
         let answer = plan(payload.clone());
         assert_eq!(
             answer,
-            json!({"artifact": null, "may_allow": false}),
+            json!({"artifact": null, "may_allow": false, "workspace": null, "keyed": false}),
             "{payload}"
         );
     }
@@ -208,31 +209,95 @@ fn a_proven_npm_install_may_continue() {
     symlink(package.join("bin").join("npm-cli.js"), bin.join("npm")).expect("npm link");
     let workspace = root.path().join("workspace");
     fs::create_dir_all(&workspace).expect("workspace");
-    let answer = |command: &str| {
+    let answer = |command: &str, include_registry_retry: Option<bool>| {
         let mut payload = shell(command);
         payload["guard_execution_environment"] = json!({
             "environment_names": ["PATH", "HOME"],
             "path": bin.to_string_lossy(),
             "home": root.path().to_string_lossy(),
         });
-        let input = request(&workspace.to_string_lossy(), payload);
+        let mut input = request(&workspace.to_string_lossy(), payload);
+        input.include_registry_retry = include_registry_retry;
         let bytes = evaluate_package_review_plan(&input).expect("request must encode a result");
         serde_json::from_slice::<Value>(&bytes).expect("result")["payload"].clone()
     };
-    let proven = answer("npm install zod --ignore-scripts --allow-git=none");
+    let command = "npm install zod --ignore-scripts --allow-git=none";
+    let proven = answer(command, None);
     assert_eq!(
         proven["artifact"]["metadata"]["verified_npm_version"],
         "11.9.0"
     );
     assert_eq!(proven["may_allow"], true);
+    assert!(proven.get("registry_retry").is_none());
+    let retry = &answer(command, Some(true))["registry_retry"];
+    assert_eq!(retry["prompted"], false);
+    assert_eq!(retry["hookSpecificOutput"]["permissionDecision"], "deny");
     // `tail` is not on the stamped `PATH`, so the filter cannot be placed
     // outside the workspace and only a block verdict applies.
-    let piped = answer("npm install zod --ignore-scripts --allow-git=none | tail -3");
+    let piped = answer(
+        "npm install zod --ignore-scripts --allow-git=none | tail -3",
+        Some(true),
+    );
     assert!(piped["artifact"].is_object());
     assert!(piped["artifact"]["metadata"]
         .get("verified_npm_version")
         .is_none());
     assert_eq!(piped["may_allow"], false);
+    assert!(piped.get("registry_retry").is_none());
+    // A saved package approval stands for the whole command only when every
+    // filter runs from outside the workspace.
+    assert_eq!(proven["keyed"], true);
+    assert_eq!(piped["keyed"], false);
+    executable(&bin.join("tail"));
+    assert_eq!(
+        answer("npm ci --ignore-scripts | tail -3", Some(true))["keyed"],
+        true
+    );
+    let owned = workspace.join("bin");
+    fs::create_dir_all(&owned).expect("workspace bin");
+    executable(&owned.join("tail"));
+    let mut payload = shell("npm ci --ignore-scripts | tail -3");
+    payload["guard_execution_environment"] = json!({
+        "environment_names": ["PATH", "HOME"],
+        "path": format!("{}:{}", owned.to_string_lossy(), bin.to_string_lossy()),
+        "home": root.path().to_string_lossy(),
+    });
+    let input = request(&workspace.to_string_lossy(), payload);
+    let bytes = evaluate_package_review_plan(&input).expect("request must encode a result");
+    let shadowed = serde_json::from_slice::<Value>(&bytes).expect("result")["payload"].clone();
+    assert!(shadowed["artifact"].is_object());
+    assert_eq!(shadowed["keyed"], false);
+    // The key is derived from the stamped PATH and HOME alone, so an exported
+    // npm setting, whose value the stamp withholds, leaves the install unkeyed.
+    let mut payload = shell("npm ci --ignore-scripts");
+    payload["guard_execution_environment"] = json!({
+        "environment_names": ["PATH", "HOME", "npm_config_registry"],
+        "path": bin.to_string_lossy(),
+        "home": root.path().to_string_lossy(),
+    });
+    let input = request(&workspace.to_string_lossy(), payload);
+    let bytes = evaluate_package_review_plan(&input).expect("request must encode a result");
+    let configured = serde_json::from_slice::<Value>(&bytes).expect("result")["payload"].clone();
+    assert!(configured["artifact"].is_object());
+    assert_eq!(configured["keyed"], false);
+    // An inert `NODE_OPTIONS`, such as an agent wrapper's heap size, and an
+    // inert npm setting keep the key; a `NODE_OPTIONS` the hook did not see
+    // as inert does not.
+    let keyed_with = |names: Value, inert: bool| {
+        let mut payload = shell("npm ci --ignore-scripts");
+        payload["guard_execution_environment"] = json!({
+            "environment_names": names,
+            "path": bin.to_string_lossy(),
+            "home": root.path().to_string_lossy(),
+            "node_options_inert": inert,
+        });
+        let input = request(&workspace.to_string_lossy(), payload);
+        let bytes = evaluate_package_review_plan(&input).expect("request must encode a result");
+        serde_json::from_slice::<Value>(&bytes).expect("result")["payload"]["keyed"].clone()
+    };
+    let wrapped = json!(["PATH", "HOME", "NODE_OPTIONS", "npm_config_cache"]);
+    assert_eq!(keyed_with(wrapped.clone(), true), true);
+    assert_eq!(keyed_with(wrapped, false), false);
 }
 
 const SAFE_FLAGS: &str = "--ignore-scripts --allow-git=none";
@@ -311,4 +376,113 @@ fn the_safety_guide_install_reaches_the_evaluator() {
     );
     let answer = plan(shell(command));
     assert_eq!(answer["artifact"]["metadata"]["intent_kind"], "install");
+}
+
+fn planned_in(workspace: &std::path::Path, command: &str, environment: Option<Value>) -> Value {
+    let mut payload = shell(command);
+    if let Some(environment) = environment {
+        payload["guard_execution_environment"] = environment;
+    }
+    let input = request(&workspace.to_string_lossy(), payload);
+    let bytes = evaluate_package_review_plan(&input).expect("request must encode a result");
+    serde_json::from_slice::<Value>(&bytes).expect("result")["payload"].clone()
+}
+
+/// Agents run an install from a nested checkout with `cd linked && npm ci`.
+/// The plan reads it in the directory the `cd` reaches and names that
+/// directory, so the evaluator keys the install by the checkout it runs in.
+#[test]
+fn a_leading_cd_into_the_workspace_moves_the_plan() {
+    let root = tempfile::tempdir().expect("workspace");
+    let workspace = root.path();
+    std::fs::create_dir_all(workspace.join("linked")).expect("linked");
+    std::fs::create_dir_all(workspace.join(".cache")).expect("hidden");
+    for checkout in [workspace.to_path_buf(), workspace.join("linked")] {
+        std::fs::write(
+            checkout.join("package.json"),
+            json!({"name": "app", "version": "1.0.0"}).to_string(),
+        )
+        .expect("manifest");
+        std::fs::write(
+            checkout.join("package-lock.json"),
+            json!({"name": "app", "version": "1.0.0", "lockfileVersion": 3, "packages": {"": {"name": "app", "version": "1.0.0"}}}).to_string(),
+        )
+        .expect("lockfile");
+    }
+    let linked = workspace
+        .join("linked")
+        .canonicalize()
+        .expect("canonical linked");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(workspace.join("linked"), workspace.join("alias")).expect("alias");
+    let declared = json!({"environment_names": ["PATH", "HOME"], "path": "/usr/bin"});
+    let with_cdpath = json!({"environment_names": ["PATH", "CDPATH"], "path": "/usr/bin"});
+
+    let plain = planned_in(workspace, "npm ci --ignore-scripts", None);
+    assert_eq!(plain["artifact"]["metadata"]["intent_kind"], "sync");
+    assert_eq!(plain["may_allow"], false);
+    assert_eq!(plain["workspace"], Value::Null);
+
+    for command in [
+        "cd ./linked && npm ci --ignore-scripts",
+        "cd linked/ && npm ci --ignore-scripts",
+    ] {
+        let moved = planned_in(workspace, command, Some(declared.clone()));
+        assert!(moved["artifact"].is_object(), "{command}");
+        assert_eq!(
+            moved["workspace"],
+            json!(linked.to_string_lossy()),
+            "{command}"
+        );
+        assert_eq!(
+            moved["artifact"]["metadata"]["redacted_command"], "npm ci --ignore-scripts",
+            "{command}"
+        );
+    }
+    let absolute = format!("cd {} && npm ci --ignore-scripts", linked.to_string_lossy());
+    assert_eq!(
+        planned_in(workspace, &absolute, None)["workspace"],
+        json!(linked.to_string_lossy())
+    );
+
+    // A searched name needs a declared environment without `CDPATH`, and
+    // `.cache` is a searched name.
+    for (command, environment) in [
+        ("cd linked && npm ci --ignore-scripts", None),
+        (
+            "cd linked && npm ci --ignore-scripts",
+            Some(with_cdpath.clone()),
+        ),
+        ("cd .cache && npm ci --ignore-scripts", Some(with_cdpath)),
+    ] {
+        let refused = planned_in(workspace, command, environment);
+        assert_eq!(refused["artifact"], Value::Null, "{command}");
+        assert_eq!(refused["workspace"], Value::Null, "{command}");
+    }
+    assert!(planned_in(
+        workspace,
+        "cd linked && npm ci --ignore-scripts",
+        Some(declared.clone())
+    )["artifact"]
+        .is_object());
+
+    // Outside the workspace, missing, or not a lone `cd`: nothing is planned.
+    for command in [
+        "cd .. && npm ci --ignore-scripts",
+        "cd /tmp && npm ci --ignore-scripts",
+        "cd ./missing && npm ci --ignore-scripts",
+        "cd -P ./linked && npm ci --ignore-scripts",
+        "cd ./linked; npm ci --ignore-scripts",
+        "cd ./linked && cd .. && npm ci --ignore-scripts",
+        // A shell's `cd` drops `..` as text; through a symlink that lands
+        // somewhere other than the resolved path, so `..` is never read.
+        "cd ./linked/../linked && npm ci --ignore-scripts",
+        "cd ./alias/.. && npm ci --ignore-scripts",
+    ] {
+        assert_eq!(
+            planned_in(workspace, command, Some(declared.clone()))["artifact"],
+            Value::Null,
+            "{command}"
+        );
+    }
 }

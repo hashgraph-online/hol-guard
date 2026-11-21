@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import ask
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
 
@@ -30,7 +30,7 @@ def plugin_source(context: HarnessContext, guard_cli: list[str], hook_argv: list
 
 
 def runtime_probe(context: HarnessContext) -> dict[str, Any]:
-    probe = get_adapter("cline").runtime_probe(context)
+    probe = harness_ops.runtime_probe("cline", context)
     assert probe is not None
     return probe
 

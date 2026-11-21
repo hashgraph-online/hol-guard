@@ -114,7 +114,7 @@ fn the_marker_is_refused_on_pack_facts_and_a_lenient_section() {
     );
 }
 
-fn simulate(preset: &str, unclassified: bool, class: ActionClassV2) -> String {
+fn simulate_result(preset: &str, unclassified: bool, class: ActionClassV2) -> Value {
     let mut call = json!({
         "provider": "remote_mcp",
         "actionId": "mcp.qualify.record_note",
@@ -126,11 +126,28 @@ fn simulate(preset: &str, unclassified: bool, class: ActionClassV2) -> String {
         call["unclassified"] = true.into();
     }
     let line = json!({"op": "simulate", "preset": preset, "calls": [call]}).to_string();
-    let result = answer(line.as_bytes());
-    result["results"][0]["action"]
+    answer(line.as_bytes())["results"][0].clone()
+}
+
+fn simulate(preset: &str, unclassified: bool, class: ActionClassV2) -> String {
+    simulate_result(preset, unclassified, class)["action"]
         .as_str()
         .unwrap_or("error")
         .to_owned()
+}
+
+/// Which rules the preset could not settle on these facts. A call can be
+/// held by more than one rule, so naming the rule keeps the assertion from
+/// passing on a neighbour's block.
+fn unknown_rule_ids(preset: &str, unclassified: bool, class: ActionClassV2) -> Vec<String> {
+    simulate_result(preset, unclassified, class)["unknownRuleIds"]
+        .as_array()
+        .map(|ids| {
+            ids.iter()
+                .filter_map(|id| id.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[test]
@@ -150,5 +167,32 @@ fn the_shipped_presets_decide_an_unclassified_update_as_r16_says() {
     assert_eq!(
         simulate("balanced", true, ActionClassV2::Pay),
         "require-reapproval"
+    );
+}
+
+#[test]
+fn the_shipped_presets_allow_a_plain_read_with_unknown_facts() {
+    // A read's environment and object are unknown. A rule with no class
+    // list would treat that as a possible match and hold every read.
+    let read = ActionClassV2::Read;
+    for preset in ["relaxed", "balanced", "strict"] {
+        assert_eq!(simulate(preset, false, read), "allow", "{preset}");
+    }
+    // Writes still meet the production-deploy rule's unknown facts. Other
+    // rules hold the same call, so name the rule rather than reading the
+    // decision alone.
+    assert_eq!(simulate("strict", false, ActionClassV2::Execute), "block");
+    let held = unknown_rule_ids("strict", false, ActionClassV2::Execute);
+    assert!(
+        held.iter().any(|id| id == "strict.r15.production_deploy"),
+        "{held:?}"
+    );
+    // A read never reaches it.
+    let read_held = unknown_rule_ids("strict", false, read);
+    assert!(
+        !read_held
+            .iter()
+            .any(|id| id == "strict.r15.production_deploy"),
+        "{read_held:?}"
     );
 }

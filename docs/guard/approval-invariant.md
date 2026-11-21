@@ -125,6 +125,10 @@ falls back to `native-command-hash-v1`. That hash covers:
 - for any other tool, its whole input as it was sent, including a `command`
   field and any other field, even when the input is not an object (empty only
   when the tool takes none)
+- for an Oh My Pi `eval` made only of `commit` prelude drafts, the
+  repositories the drafts commit to instead of the program text. A draft's
+  subject, body and file selection are literal text that runs nothing, so
+  Always allow holds for the next draft in that repository
 
 Changing any of these produces a new command, and Guard asks again.
 
@@ -139,7 +143,7 @@ Changing any of these produces a new command, and Guard asks again.
 | Cloud Allow once for a package install still waiting on the request it queued (read and spent once, only by that install; it outranks a broader row such as the package-request family rule, but not a block saved for the artifact) | `rust/crates/guard-runtime/src/package_policy_resolve_approvals.rs` (`is_waited_exact_cloud_package_approval`) and `rust/crates/guard-runtime/src/guard_store_exact_cloud_package.rs`, reached from the post-wait re-check in `src/codex_plugin_scanner/guard/cli/commands_dispatch_local.py` |
 | Saved allows on the direct hook path | `rust/crates/guard-runtime/src/hook_direct_saved_decision.rs` (`approvable`) |
 | Approval scopes offered to the user | `rust/crates/guard-runtime/src/approval_scope_contract.rs` (`allow_is_non_overridable` excludes only non-review verdicts) |
-| Saved allows on the Python daemon path | `src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py` (`_native_review_is_approvable`) |
+| Saved allows on the daemon path | `rust/crates/guard-runtime/src/hook_render_saved_approval.rs` (`answer`), with the same `saved_verdict` as the direct hook |
 | Final-action settle of an artifact verdict (a browser outcome other than allow, block or sandbox-required settles nothing; the settle never touches an approval choice) | `rust/crates/guard-runtime/src/hook_decision_artifact_finalize.rs` (`artifact_finalize`, `artifact_browser_outcome`). No Python caller runs this settle any more: the CLI hook answers through the daemon review path |
 | Reuse of a saved approval on the artifact hook (claim, revalidate, settled). A saved allow is claimed before it is used, a claim that wins is always revalidated against the request it was issued for, a claim that loses never allows, reuse reads no scope, so Always allow is honored whichever scope saved it and under `require-reapproval` (only a trusted browser request's override reads the source, and it claims a gate-written allow), and a changed hash is refused and never claimed | `rust/crates/guard-runtime/src/hook_decision_artifact_reuse_step.rs` (`artifact_reuse_step`). No Python caller runs this plan any more: the CLI hook answers through the daemon review path, as the bridges do |
 | Gathering of local tool-grant evidence on a native tool request, and the receipt `approval_source` label (a label of who approved; it never narrows the choices offered) | `rust/crates/guard-runtime/src/hook_artifact_compose_policy_tail.rs` (`local_eligibility_required`, `approval_source`) |

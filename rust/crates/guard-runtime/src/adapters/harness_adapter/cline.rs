@@ -233,14 +233,13 @@ fn detect(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         .as_array()
         .is_some_and(|paths| !paths.is_empty());
     let present = !hosts.names().is_empty() || has_paths || installed(&hooks) || installed(&plugin);
-    Ok(json!({
+    super::firewall::enrich(json!({
         "artifacts": artifacts,
         "config_paths": config_paths,
         "warnings": warnings,
         "installed": present,
         "command_available": hosts.cli.is_some(),
         "workspace_aibom": spec.workspace_aibom,
-        "firewall": true,
     }))
 }
 

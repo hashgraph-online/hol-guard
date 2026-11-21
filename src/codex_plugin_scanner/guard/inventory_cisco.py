@@ -10,7 +10,7 @@ from typing import Literal
 from ..integrations.cisco_mcp_scanner import run_cisco_mcp_scan
 from ..integrations.cisco_skill_scanner import run_cisco_skill_scan
 from ..models import Finding
-from .harness.base import HarnessContext
+from .harness_context import HarnessContext
 from .native_inventory_scan_targets import (
     CiscoMcpScanTarget,
     CiscoScanTargets,

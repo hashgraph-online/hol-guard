@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import install_commands as install_commands_module
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.opencode_test_support import (
     config_uses_guard_proxy,
     global_plugin_path,
@@ -542,7 +542,7 @@ def test_opencode_install_includes_pretool_plugin_paths(tmp_path: Path) -> None:
     config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text('{"mcp": {}}', encoding="utf-8")
-    result = get_adapter("opencode").install(ctx)
+    result = harness_support.install("opencode", ctx)
     assert Path(result["managed_plugin_path"]).is_file()
     assert Path(result["global_plugin_path"]).is_file()
 

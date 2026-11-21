@@ -136,3 +136,20 @@ async def call(client: ClientSession, name: str, arguments: dict | None = None) 
     result = await client.call_tool(name, arguments or {}, read_timeout_seconds=timedelta(seconds=12))
     assert not result.isError
     return json.loads(result.content[0].text)
+
+
+def context_status(guard_home) -> dict:
+    """The engine state as `hol-guard context --json status` reports it."""
+    import json
+    import subprocess
+
+    from codex_plugin_scanner.guard.cli.runtime_forward import FEATURE
+    from codex_plugin_scanner.guard.native_recovery_store import recovery_runtime_path
+
+    completed = subprocess.run(
+        [recovery_runtime_path(FEATURE), "context", "--guard-home", str(guard_home), "--json", "status"],
+        capture_output=True,
+        timeout=30,
+        check=True,
+    )
+    return json.loads(completed.stdout)

@@ -169,6 +169,65 @@ fn a_page_passes_over_plain_relay_records_and_the_ack_settles_them() {
 }
 
 #[test]
+fn a_bound_drain_records_an_observed_tool_forward_without_exporting_evidence() {
+    use crate::guard_store_cmd_vectors_tests::temp_home;
+    use crate::guard_store_tool_call_evidence_tests::{build_database, count, vectors};
+    use rusqlite::OptionalExtension;
+    use std::time::{Duration, Instant};
+
+    let home = temp_home("relay-observe-drain");
+    let store = home.join("guard.db");
+    let (receipts, inventory) = vectors();
+    build_database(&store, &receipts, &inventory);
+    let observe_item = json!({
+        "source": "observe_mode",
+        "observed_policy_action": "review",
+        "authoritative_action": "allow",
+    });
+    let mut forward = crate::mcp_relay_receipt::tests::record("forward", "policy-observe", "allow");
+    forward["decision"]["action"] = json!("review");
+    forward["decision"]["policy_action"] = json!("review");
+    forward["evidence_append"] = json!([observe_item]);
+    let queue = DirectEvidenceQueue::default();
+    assert!(queue.offer(forward));
+    let mut request = request(None, None, Some(&queue.epoch));
+    request.guard_home = home.to_str().unwrap().to_owned();
+    let page = |request: &HookDirectEvidenceDrainRequestV1| -> Value {
+        serde_json::from_slice(&drain(request, &queue, Some("oauth")).unwrap()).unwrap()
+    };
+    let first = page(&request);
+    assert_eq!(first["records"], json!([]));
+    request.ack_through = Some(first["through"].as_u64().unwrap());
+    assert_eq!(page(&request)["records"], json!([]));
+
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let scanner_evidence: String = loop {
+        let evidence = connection
+            .query_row(
+                "select scanner_evidence_json from runtime_receipts",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .unwrap();
+        if let Some(evidence) = evidence {
+            break evidence;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the observed receipt was not recorded"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    let evidence: Value = serde_json::from_str(&scanner_evidence).unwrap();
+    assert_eq!(evidence.as_array().unwrap().last(), Some(&observe_item));
+    assert_eq!(count(&home, "runtime_receipts"), 1);
+    drop(connection);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
 fn plain_relay_records_never_leave_an_empty_page_with_more_queued() {
     let plain = crate::mcp_relay_receipt::tests::record("forward", "policy", "allow");
     let queue = DirectEvidenceQueue::default();
@@ -360,6 +419,27 @@ fn only_a_hook_record_that_leaves_the_daemon_nothing_is_settled() {
     for record in &finished {
         assert!(settled(record, false), "{record}");
     }
+    let receiptless = json!({
+        "harness": "codex",
+        "event": "PreToolUse",
+        "receipt": null,
+    });
+    let receiptless_page = Paged {
+        seq: 1,
+        record: receiptless,
+        activity: true,
+    };
+    assert!(!super::record::settled(&receiptless_page, false));
+    let emergency = Paged {
+        seq: 1,
+        record: json!({
+            "harness": "codex",
+            "event": "PreToolUse",
+            "receipt": null,
+        }),
+        activity: false,
+    };
+    assert!(super::record::settled(&emergency, false));
     let codex = edited(&|record| {
         record.insert("harness".into(), json!("codex"));
     });

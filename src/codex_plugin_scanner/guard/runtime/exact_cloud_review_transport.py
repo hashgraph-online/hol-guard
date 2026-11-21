@@ -3,32 +3,22 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from datetime import datetime, timezone
-from typing import TypedDict, cast
+from typing import NoReturn, TypedDict, cast
 from urllib.error import HTTPError
 
-from ..contracts.guard_cloud_review import COMMAND_RESULT_CONTRACT_VERSION, validate_exact_command_result
-from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION, EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
-from .native_workspace_review_queue import native_workspace_review_payload
+from .cloud_bundle_sync import cloud_failure, sync_failure
+from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 
 EXACT_CLOUD_REVIEW_COMMAND_API_BASE = "/api/guard/review/v2/commands"
 EXACT_CLOUD_REVIEW_TRANSPORT = "cloud_review"
 _TRANSPORT_MARKER = "_guardCommandTransport"
 
 
-class LeaseOptions(TypedDict):
-    operations: tuple[str, ...]
-    wait_ms: int
-    max_jobs: int
-
-
-def advertised_lease_batch_limit(response: Mapping[str, object]) -> int | None:
-    """The most exact Review jobs Guard Cloud says one lease may return, if it says."""
-
-    value = response.get("maxJobs")
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        return None
-    return value
+class LeaseCall(TypedDict):
+    operations: list[str]
+    waitMs: int
+    maxJobs: int
+    collectExtras: bool
 
 
 def exact_transport_job(job: dict[str, object]) -> dict[str, object]:
@@ -39,68 +29,6 @@ def exact_transport_job(job: dict[str, object]) -> dict[str, object]:
 
 def uses_exact_transport(job: dict[str, object]) -> bool:
     return job.get(_TRANSPORT_MARKER) == EXACT_CLOUD_REVIEW_TRANSPORT
-
-
-def exact_result(job: dict[str, object], execution: dict[str, object]) -> dict[str, object]:
-    """Convert a successful exact executor response to the versioned result contract."""
-
-    correlation_id = _required_text(job.get("id"), "exact_result_correlation_missing")
-    payload = _mapping(job.get("payload"))
-    native_command = native_workspace_review_payload(payload)
-    signed_decision = _mapping(payload.get("remoteApproval")) if native_command is None else {}
-    bound_request_id = _required_text(
-        _mapping(job.get("serverResolvedBinding")).get("localRequestId"),
-        "exact_result_local_request_binding_missing",
-    )
-    decision_request_id = (
-        native_command.local_request_id
-        if native_command is not None
-        else _required_text(signed_decision.get("localRequestId"), "exact_result_local_request_missing")
-    )
-    receipt_id = (
-        native_command.receipt_id
-        if native_command is not None
-        else _required_text(signed_decision.get("receiptId"), "exact_result_receipt_missing")
-    )
-    if bound_request_id != decision_request_id:
-        raise ValueError("exact_result_local_request_binding_mismatch")
-    data = _mapping(execution.get("data"))
-    generated_at = _text(execution.get("generatedAt")) or datetime.now(timezone.utc).isoformat()
-    if not data:
-        return _result(
-            correlation_id=correlation_id,
-            local_request_id=bound_request_id,
-            receipt_id=receipt_id,
-            application_status="failed_terminal",
-            application_reason="exact_result_invalid",
-            continuation_status="failed",
-            continuation_reason="exact_result_invalid",
-            updated_at=generated_at,
-        )
-    application_status = _application_status(data)
-    application_reason = _text(data.get("applicationReason"))
-    continuation_status, continuation_reason = _continuation_result(data)
-    application_updated_at = _required_text(
-        data.get("applicationUpdatedAt"), "exact_result_application_timestamp_missing"
-    )
-    continuation_updated_at = _required_text(
-        data.get("continuationUpdatedAt"), "exact_result_continuation_timestamp_missing"
-    )
-    data_request_id = _required_text(data.get("localRequestId"), "exact_result_local_request_missing")
-    data_receipt_id = _required_text(data.get("receiptId"), "exact_result_receipt_missing")
-    if data_request_id != bound_request_id or data_receipt_id != receipt_id:
-        raise ValueError("exact_result_execution_binding_mismatch")
-    return _result(
-        correlation_id=correlation_id,
-        local_request_id=bound_request_id,
-        receipt_id=receipt_id,
-        application_status=application_status,
-        application_reason=application_reason,
-        continuation_status=continuation_status,
-        continuation_reason=continuation_reason,
-        application_updated_at=application_updated_at,
-        continuation_updated_at=continuation_updated_at,
-    )
 
 
 def exact_operation_only(operations: tuple[str, ...]) -> bool:
@@ -115,8 +43,8 @@ def lease_next_job(
     *,
     operations: tuple[str, ...],
     wait_ms: int,
-    exact_request: Callable[[LeaseOptions], dict[str, object]],
-    queue_request: Callable[[LeaseOptions], dict[str, object]],
+    lease: Callable[[LeaseCall], Mapping[str, object]],
+    lease_url: Callable[[str], str] = lambda route: f"{route}/lease",
     exact_route_failure: Callable[[HTTPError], None] | None = None,
     exact_route_success: Callable[[], None] | None = None,
     observe_response: Callable[[dict[str, object]], object] | None = None,
@@ -124,149 +52,62 @@ def lease_next_job(
     on_extra_jobs: Callable[[list[dict[str, object]]], object] | None = None,
     observe_lease_batch_limit: Callable[[int], object] | None = None,
 ) -> dict[str, object] | None:
-    """Lease the next job, exact Review jobs first.
+    """Lease the next job, exact Review jobs first, through the native ``lease``.
 
-    With ``max_jobs`` above one, Guard Cloud may lease further exact Review
-    jobs in the same response. The first job is returned; the others, already
-    leased to this device, go to ``on_extra_jobs``.
+    The native runtime sends the leases and reports what to record beside the
+    leased job: the exact route's health, the batch limit Guard Cloud
+    advertised and each response. With ``max_jobs`` above one, Guard Cloud may
+    lease further exact Review jobs in the same response; the first job is
+    returned and the others, already leased to this device, go to
+    ``on_extra_jobs``. A failure is raised after the state is recorded.
     """
 
-    generic = generic_operations(operations)
-    if EXACT_CLOUD_REVIEW_OPERATION in operations:
-        requested_jobs = max_jobs if on_extra_jobs is not None else 1
-        try:
-            exact_response = exact_request(
-                {
-                    "operations": (EXACT_CLOUD_REVIEW_OPERATION,),
-                    "wait_ms": wait_ms if exact_operation_only(operations) else 0,
-                    "max_jobs": requested_jobs,
-                }
-            )
-        except HTTPError as error:
-            if requested_jobs > 1 and error.code == 400 and observe_lease_batch_limit is not None:
-                # A Guard Cloud rolled back to one that leases a single job
-                # rejects the batch; ask it for one job from the next poll.
-                observe_lease_batch_limit(1)
-            if error.code == 401 or not generic:
-                raise
-            if exact_route_failure is not None:
-                exact_route_failure(error)
-        else:
-            if exact_response.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
-                raise ValueError("cloud_review_protocol_upgrade_required")
-            if exact_route_success is not None:
-                exact_route_success()
-            if observe_lease_batch_limit is not None:
-                observe_lease_batch_limit(advertised_lease_batch_limit(exact_response) or 1)
-            if observe_response is not None:
-                observe_response(exact_response)
-            item = _mapping(exact_response.get("item"))
-            if item:
-                if item.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
-                    raise ValueError("cloud_review_protocol_upgrade_required")
-                if on_extra_jobs is not None:
-                    extras = _extra_exact_jobs(exact_response, first=item)
-                    if extras:
-                        on_extra_jobs(extras)
-                return exact_transport_job(item)
-    if not generic:
+    if not operations:
         return None
-    queue_response = queue_request({"operations": generic, "wait_ms": wait_ms, "max_jobs": 1})
-    if observe_response is not None:
-        observe_response(queue_response)
-    item = _mapping(queue_response.get("item"))
-    return item or None
+    answer = lease(
+        {
+            "operations": list(operations),
+            "waitMs": wait_ms,
+            "maxJobs": max_jobs if on_extra_jobs is not None else 1,
+            "collectExtras": on_extra_jobs is not None,
+        }
+    )
+    leased = _mapping(answer.get("lease"))
+    route = leased.get("exactRoute")
+    if route == "failed" and exact_route_failure is not None:
+        refused = cloud_failure(lease_url(EXACT_CLOUD_REVIEW_COMMAND_API_BASE), {"refusal": leased.get("exactRefusal")})
+        if isinstance(refused, HTTPError):
+            exact_route_failure(refused)
+    elif route == "ok" and exact_route_success is not None:
+        exact_route_success()
+    limit = leased.get("batchLimit")
+    if observe_lease_batch_limit is not None and isinstance(limit, int) and not isinstance(limit, bool):
+        observe_lease_batch_limit(limit)
+    responses = leased.get("responses")
+    if observe_response is not None and isinstance(responses, list):
+        for response in responses:
+            observe_response(_mapping(response))
+    raw_extras = leased.get("extras")
+    extras = [job for job in map(_mapping, raw_extras if isinstance(raw_extras, list) else []) if job]
+    if on_extra_jobs is not None and extras:
+        on_extra_jobs([exact_transport_job(job) for job in extras])
+    failure = answer.get("failure")
+    if isinstance(failure, Mapping):
+        _raise_lease_failure(cast(Mapping[str, object], failure), lease_url)
+    item = _mapping(leased.get("item"))
+    if not item:
+        return None
+    return exact_transport_job(item) if leased.get("exact") is True else item
 
 
-def _extra_exact_jobs(response: dict[str, object], *, first: dict[str, object]) -> list[dict[str, object]]:
-    """The exact Review jobs leased beside ``first``, each with a distinct lease."""
-
-    items = response.get("items")
-    if not isinstance(items, list):
-        return []
-    seen = {first.get("leaseId")}
-    extras: list[dict[str, object]] = []
-    for value in items:
-        job = _mapping(value)
-        lease = job.get("leaseId")
-        if not isinstance(lease, str) or not lease or lease in seen:
-            continue
-        if job.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
-            # Left leased: it goes stale and is leased again, the same as a job
-            # whose worker stopped before its result.
-            continue
-        seen.add(lease)
-        extras.append(exact_transport_job(job))
-    return extras
-
-
-def _continuation_result(data: dict[str, object]) -> tuple[str, str | None]:
-    status = _text(data.get("continuationStatus"))
-    reason = _text(data.get("continuationReason"))
-    if status in {
-        "already_resumed",
-        "blocked_not_resumed",
-        "failed",
-        "manual_retry_required",
-        "not_applicable",
-        "resumed",
-        "unsupported",
-        "waiting",
-    }:
-        return status, reason
-    raise ValueError("exact_result_continuation_status_invalid")
-
-
-def _application_status(data: dict[str, object]) -> str:
-    status = _text(data.get("applicationStatus"))
-    if status in {
-        "applied",
-        "failed_retryable",
-        "failed_terminal",
-        "not_applicable",
-        "rejected_binding",
-        "rejected_stale",
-    }:
-        return status
-    raise ValueError("exact_result_application_status_invalid")
-
-
-def _result(
-    *,
-    correlation_id: str,
-    local_request_id: str,
-    receipt_id: str,
-    application_status: str,
-    application_reason: str | None,
-    continuation_status: str,
-    continuation_reason: str | None,
-    application_updated_at: str | None = None,
-    continuation_updated_at: str | None = None,
-    updated_at: str | None = None,
-) -> dict[str, object]:
-    application_observed_at = application_updated_at or updated_at
-    continuation_observed_at = continuation_updated_at or updated_at
-    if application_observed_at is None or continuation_observed_at is None:
-        raise ValueError("exact_result_timestamp_missing")
-    result: dict[str, object] = {
-        "applicationReason": application_reason,
-        "applicationStatus": application_status,
-        "applicationUpdatedAt": application_observed_at,
-        "continuationReason": continuation_reason,
-        "continuationStatus": continuation_status,
-        "continuationUpdatedAt": continuation_observed_at,
-        "contractVersion": COMMAND_RESULT_CONTRACT_VERSION,
-        "correlationId": correlation_id,
-        "localRequestId": local_request_id,
-        "protocolVersion": EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
-        "receiptId": receipt_id,
-    }
-    validate_exact_command_result(result)
-    return result
-
-
-def _text(value: object) -> str | None:
-    return value.strip() if isinstance(value, str) and value.strip() else None
+def _raise_lease_failure(failure: Mapping[str, object], lease_url: Callable[[str], str]) -> NoReturn:
+    if failure.get("protocol") == "cloud_review_protocol_upgrade_required":
+        raise ValueError("cloud_review_protocol_upgrade_required")
+    sync = failure.get("sync")
+    if isinstance(sync, Mapping):
+        raise sync_failure(cast(Mapping[str, object], sync), "Guard command lease")
+    route = failure.get("route")
+    raise cloud_failure(lease_url(route if isinstance(route, str) else "/api/guard/commands"), failure)
 
 
 def _mapping(value: object) -> dict[str, object]:
@@ -278,18 +119,9 @@ def _mapping(value: object) -> dict[str, object]:
     return {cast(str, key): nested for key, nested in raw.items()}
 
 
-def _required_text(value: object, error: str) -> str:
-    result = _text(value)
-    if result is None:
-        raise ValueError(error)
-    return result
-
-
 __all__ = [
     "EXACT_CLOUD_REVIEW_COMMAND_API_BASE",
-    "advertised_lease_batch_limit",
     "exact_operation_only",
-    "exact_result",
     "exact_transport_job",
     "generic_operations",
     "lease_next_job",

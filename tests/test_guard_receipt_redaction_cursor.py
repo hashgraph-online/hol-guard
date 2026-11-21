@@ -22,8 +22,6 @@ from codex_plugin_scanner.guard.runtime.runner import (
     _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
     _ensure_relaxed_receipt_redaction_resync,
     _persist_cloud_receipt_redaction_level,
-    _receipt_sync_cursor_rowids_from_batch,
-    _receipt_sync_rows_with_command_detail_backfill,
     _resolve_cloud_receipt_redaction_level,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -33,6 +31,8 @@ from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_verification_key,
     sign_policy_bundle,
 )
+from tests.support import cloud_sync_transport
+from tests.support import receipt_upload_transport as upload
 
 
 def _store_blocked_command_receipt(store: GuardStore, receipt_id: str = "guard-receipt-sync-auth") -> None:
@@ -192,7 +192,7 @@ def test_sync_migrates_legacy_anchor_and_restores_cloud_redaction_choice(
         lambda: (False, ()),
     )
     monkeypatch.setattr(
-        runner,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         lambda **_kwargs: {
             "syncedAt": "2026-07-01T00:00:01Z",
@@ -273,7 +273,7 @@ def test_signed_receipt_redaction_authority_can_clear_and_relax_again(
     )
 
     monkeypatch.setattr(
-        runner,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         lambda **_kwargs: next(responses),
     )
@@ -344,17 +344,11 @@ def test_signed_receipt_redaction_authority_can_clear_and_relax_again(
     assert store.get_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER) is None
 
 
-def test_cloud_receipt_redaction_relaxation_resets_receipt_cursor_before_storing_level(tmp_path) -> None:
+def test_cloud_receipt_redaction_relaxation_resets_receipt_cursor_with_the_level(tmp_path) -> None:
+    # The native store writes the cursor, the level and the resync marker in
+    # one transaction, so only the committed rows are observable.
     store = GuardStore(tmp_path)
-    writes: list[tuple[str, dict[str, object], str]] = []
-    original_set_sync_payload = store.set_sync_payload
-
-    def record_set_sync_payload(state_key: str, payload: dict[str, object], now: str) -> None:
-        writes.append((state_key, payload, now))
-        original_set_sync_payload(state_key, payload, now)
-
-    store.set_sync_payload = record_set_sync_payload  # type: ignore[method-assign]
-    original_set_sync_payload(
+    store.set_sync_payload(
         "receipt_sync_cursor",
         {"last_rowid": 17, "synced_at": "2026-04-15T00:00:00Z"},
         "2026-04-15T00:00:00Z",
@@ -366,11 +360,6 @@ def test_cloud_receipt_redaction_relaxation_resets_receipt_cursor_before_storing
         synced_at="2026-04-15T00:01:00Z",
     )
 
-    assert [write[0] for write in writes] == [
-        "receipt_sync_cursor",
-        "cloud_receipt_redaction_level",
-        _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
-    ]
     assert store.get_sync_payload("cloud_receipt_redaction_level") == {
         "level": "none",
         "updated_at": "2026-04-15T00:01:00Z",
@@ -417,7 +406,7 @@ def test_cloud_receipt_redaction_tightening_keeps_receipt_cursor(tmp_path) -> No
 
 
 def test_command_detail_backfill_rows_do_not_advance_receipt_cursor() -> None:
-    rowids = _receipt_sync_cursor_rowids_from_batch(
+    rowids = upload.receipt_sync_cursor_rowids_from_batch(
         [
             {"receipt_id": "cursor-1", "receipt_rowid": 101},
             {"receipt_id": "backfill-1", "receipt_rowid": 5000},
@@ -439,7 +428,7 @@ def test_receipt_sync_401_with_explicit_auth_context_keeps_cursor_and_backfill_m
     def reject_sync(**_kwargs: object) -> dict[str, object]:
         raise _sync_unauthorized_error()
 
-    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", reject_sync)
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", reject_sync)
 
     with pytest.raises(runner.GuardSyncAuthorizationExpiredError):
         runner.sync_receipts(
@@ -486,7 +475,7 @@ def test_receipt_sync_401_forces_oauth_refresh_before_retry(
         }
 
     monkeypatch.setattr(runner, "_resolve_guard_sync_auth_context", resolve_auth_context)
-    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", post_sync)
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", post_sync)
 
     runner.sync_receipts(store)
 
@@ -618,7 +607,7 @@ def test_relaxed_redaction_sync_adds_recent_blocked_command_detail_backfill(tmp_
         ),
     )
 
-    rows, marker = _receipt_sync_rows_with_command_detail_backfill(
+    rows, marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="partial",
@@ -648,7 +637,7 @@ def test_relaxed_redaction_command_detail_backfill_marker_prevents_repeat(tmp_pa
         "2026-04-15T00:01:00Z",
     )
 
-    rows, marker = _receipt_sync_rows_with_command_detail_backfill(
+    rows, marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="partial",
@@ -663,7 +652,7 @@ def test_capped_command_detail_backfill_pages_remaining_receipts(
     tmp_path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(runner, "_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 1)
+    monkeypatch.setattr(upload, "RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 1)
     store = GuardStore(tmp_path)
     for index in range(2):
         store.add_receipt(
@@ -712,7 +701,7 @@ def test_capped_command_detail_backfill_pages_remaining_receipts(
             ),
         )
 
-    first_rows, first_marker = _receipt_sync_rows_with_command_detail_backfill(
+    first_rows, first_marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="partial",
@@ -729,7 +718,7 @@ def test_capped_command_detail_backfill_pages_remaining_receipts(
         "2026-04-15T00:02:00Z",
     )
 
-    second_rows, second_marker = _receipt_sync_rows_with_command_detail_backfill(
+    second_rows, second_marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="partial",

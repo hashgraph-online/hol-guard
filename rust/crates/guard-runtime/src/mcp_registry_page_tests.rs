@@ -1,10 +1,9 @@
-use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::{json, Value};
 
-use super::dispatch;
+use super::listing;
 
 fn read(body: &[u8]) -> Value {
-    dispatch(&json!({ "body": STANDARD.encode(body) })).expect("well-formed request")
+    listing(body).map_or_else(invalid, |listing| json!({ "listing": listing }))
 }
 
 fn page(servers: Value) -> Vec<u8> {
@@ -92,13 +91,6 @@ fn malformed_pages_are_refused() {
     ] {
         assert_eq!(read(&body), invalid(), "{}", String::from_utf8_lossy(&body));
     }
-}
-
-#[test]
-fn an_undecodable_or_oversize_body_is_an_invalid_request() {
-    assert!(dispatch(&json!({ "body": "!!" })).is_err());
-    assert!(dispatch(&json!({})).is_err());
-    assert!(dispatch(&json!({ "body": STANDARD.encode(vec![b' '; 512_001]) })).is_err());
 }
 
 fn options(packages: Value) -> Value {

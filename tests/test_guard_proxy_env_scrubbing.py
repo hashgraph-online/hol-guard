@@ -65,7 +65,7 @@ class TestRuntimeMcpProxyScrubbing:
 
     def test_runtime_mcp_proxy_scrubs_hermes_guard_token(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Verify that _start_process strips HERMES_GUARD_TOKEN from the child env."""
-        from codex_plugin_scanner.guard.harness.base import HarnessContext
+        from codex_plugin_scanner.guard.harness_context import HarnessContext
         from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
 
         monkeypatch.setenv("HERMES_GUARD_TOKEN", "leak-me-please")

@@ -80,6 +80,10 @@ class Harness:
     # them. Keeping this on the adapter is what lets a structured read run
     # where the harness really makes it, rather than only as a shell spelling.
     native_tools: frozenset[str] = frozenset({"bash"})
+    # Catalog write tools a lane drives through one patch tool of its own. Codex
+    # creates and changes files with ``apply_patch``, so a pinned single-file write
+    # case runs there and the judge reads the target from the patch headers.
+    patch_tools: frozenset[str] = frozenset()
 
     def model(self, requested: str | None) -> str | None:
         """The model this lane runs: the operator's choice, else the lane default."""
@@ -255,6 +259,7 @@ ADAPTERS = {
         home_env={"CODEX_HOME": ".codex"},
         default_model="gpt-6-luna",
         reasoning_effort="medium",
+        patch_tools=frozenset({"write", "edit"}),
     ),
     "cursor": Harness(
         "cursor",

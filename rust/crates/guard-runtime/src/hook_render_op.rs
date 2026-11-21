@@ -31,12 +31,36 @@ use serde_json::{json, Value};
 
 use crate::package_authority_op::request_digest_with_limit;
 
-pub(crate) fn evaluate_hook_render_request(
+#[path = "hook_render_saved_approval.rs"]
+mod saved_approval;
+
+#[cfg(test)]
+fn evaluate_hook_render_request(request: &HookRenderRequestV1) -> Result<Vec<u8>, String> {
+    evaluate_with_store(request, None)
+}
+
+pub(crate) fn evaluate_with_store(
     request: &HookRenderRequestV1,
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest_with_limit(request, hook_render_max_bytes(&request.kind))
         .map_err(|_| "native_hook_render_too_large".to_owned())?;
-    let (status, code, payload) = match render(request) {
+    let params = object_of(request.cli.as_ref());
+    let result = match params {
+        Some(params)
+            if request.kind == "cursor_shell_route"
+                && params.get("op").and_then(Value::as_str) == Some("answer") =>
+        {
+            crate::hook_direct::cursor_route::answer(params, &request.request_id, store)
+                .map(|document| cli_payload(CliOutcome::Document(document)))
+        }
+        Some(params) if request.kind == "saved_approval" => {
+            saved_approval::answer(&request.harness, params, store)
+                .map(|document| cli_payload(CliOutcome::Document(document)))
+        }
+        _ => render(request),
+    };
+    let (status, code, payload) = match result {
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), Some(payload)),
         Err(code) => ("error".to_owned(), code.to_owned(), None),
     };
@@ -72,6 +96,77 @@ fn cli_payload(outcome: CliOutcome) -> Value {
 
 fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
     let harness = request.harness.as_str();
+    if request.kind == "review_reuse" {
+        use crate::hook_direct::saved_decision::{consume::reuse_response, render_approval};
+
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let verdict = object_of(params.get("verdict")).ok_or("native_hook_render_invalid")?;
+        let outcome = params
+            .get("outcome")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        return match reuse_response(harness, verdict, outcome, |harness, verdict, status| {
+            Some(render_approval(harness, verdict, status))
+        }) {
+            Some(Value::Object(document)) => Ok(cli_payload(CliOutcome::Document(document))),
+            _ => Err("native_hook_render_invalid"),
+        };
+    }
+    if request.kind == "package_review_settle" {
+        let inputs = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        return Ok(cli_payload(CliOutcome::Document(
+            crate::hook_package_review_settlement::answer(harness, inputs),
+        )));
+    }
+    if request.kind == "structured_outage" {
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let event = params
+            .get("event_name")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        return Ok(cli_payload(CliOutcome::Document(
+            crate::hook_direct::pi::outage_overlay(harness, event, params.get("view")),
+        )));
+    }
+    if request.kind == "availability" {
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let payload = object_of(params.get("payload")).ok_or("native_hook_render_invalid")?;
+        let event_name = availability_event_name(payload);
+        let compact = event_name
+            .to_lowercase()
+            .chars()
+            .filter(|character| *character != '_' && *character != '-')
+            .collect::<String>();
+        let pauses = if matches!(compact.as_str(), "userpromptsubmit" | "userpromptsubmitted") {
+            true
+        } else if matches!(
+            compact.as_str(),
+            "sessionstart"
+                | "sessionend"
+                | "subagentstart"
+                | "subagentstop"
+                | "subagentend"
+                | "stop"
+                | "notification"
+                | "taskstart"
+                | "taskerror"
+                | "sessionshutdown"
+                | "permissiondenied"
+        ) {
+            false
+        } else {
+            !matches!(compact.as_str(), "posttooluse" | "posttool") && !compact.starts_with("after")
+        };
+        let permission_request = matches!(
+            compact.as_str(),
+            "permissionrequest" | "permissionrequestv2" | "copilotpermissionrequest"
+        );
+        let mut response = Object::new();
+        response.insert("event_name".into(), Value::String(event_name));
+        response.insert("pauses".into(), Value::Bool(pauses));
+        response.insert("permission_request".into(), Value::Bool(permission_request));
+        return Ok(json!({ "response": Value::Object(response) }));
+    }
     if request.kind == "claude_approval_copy" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
         let which = params
@@ -317,6 +412,14 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
         });
     }
     render_edge(request).map(|response| json!({ "response": Value::Object(response) }))
+}
+
+fn availability_event_name(payload: &Object) -> String {
+    let mut event = crate::hook_payload_facts_op::runtime_event(payload);
+    if event == "copilotPermissionRequest" {
+        event = "PermissionRequest".to_owned();
+    }
+    event
 }
 
 fn render_edge(request: &HookRenderRequestV1) -> Result<Object, &'static str> {

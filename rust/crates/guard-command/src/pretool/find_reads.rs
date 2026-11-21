@@ -391,6 +391,22 @@ fn safe_expression(expression: &[String], reference: &dyn Fn(&str) -> bool) -> b
                 }
                 index += 1;
             }
+            // `-newerXY`: a reference file passes `reference` like `-newer`'s;
+            // `Y` = `t` compares with a date written in the command instead.
+            newer if newer_time_test(newer).is_some() => {
+                let Some(value) = expression.get(index) else {
+                    return false;
+                };
+                let allowed = if newer_time_test(newer) == Some(true) {
+                    written_date(value)
+                } else {
+                    reference(value)
+                };
+                if !allowed {
+                    return false;
+                }
+                index += 1;
+            }
             // `-printf` writes to standard output like `-print`, and a format
             // made only of name directives prints nothing `-print` would not:
             // `%f` the entry name, `%p` and `%P` its path, `%h` its parent.
@@ -450,6 +466,26 @@ fn safe_expression(expression: &[String], reference: &dyn Fn(&str) -> bool) -> b
         }
     }
     depth == 0
+}
+
+/// For a `-newerXY` test, whether `Y` names a written date (`t`) rather than
+/// a reference file. `None` when the token is not such a test.
+fn newer_time_test(token: &str) -> Option<bool> {
+    let times = token.strip_prefix("-newer")?.as_bytes();
+    match times {
+        [own, other] if b"aBcm".contains(own) && b"aBcmt".contains(other) => Some(*other == b't'),
+        _ => None,
+    }
+}
+
+/// A date `find` parses itself, such as `2026-11-18 17:11` or `1 hour ago`.
+fn written_date(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && !value.starts_with('-')
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || " -:/+.,T".contains(c))
 }
 
 /// A `find` age or size operand: an optional `+` or `-`, digits, and for

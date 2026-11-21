@@ -19,7 +19,7 @@ from codex_plugin_scanner.guard import approvals as approvals_module
 from codex_plugin_scanner.guard.approvals import approvals_queued_before, queue_blocked_approvals
 from codex_plugin_scanner.guard.cli import commands_support_hook_payload as payload_module
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
 

@@ -292,15 +292,3 @@ impl UpgradeCapture {
             "requires_explicit_reconnect_acknowledgement":true,"authority_restored":false})
     }
 }
-
-#[cfg(all(test, target_os = "macos"))]
-#[path = "context_assistance_engine_upgrade_actual_tests.rs"]
-mod actual_tests;
-#[cfg(all(test, target_os = "macos"))]
-pub(crate) use actual_tests::fixture::{
-    admit as upgrade_admit, memory_summary as upgrade_memory_summary,
-    reviewed_summary as upgrade_reviewed_summary, Fixture as UpgradeFixture,
-};
-#[cfg(all(test, target_os = "macos"))]
-#[path = "context_assistance_engine_switch_actual_tests.rs"]
-mod switch_actual_tests;

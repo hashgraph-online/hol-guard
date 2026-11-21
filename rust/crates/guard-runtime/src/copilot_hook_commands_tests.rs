@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use super::{is_managed, py_string_literal, run_command};
 
 const BRIDGE_CODE: &str =
-    "from codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge import main_from_argv";
+    "from codex_plugin_scanner.guard.bounded_cli_hook_bridge import main_from_argv";
 
 /// `shlex.join`.
 fn join(tokens: &[&str]) -> String {

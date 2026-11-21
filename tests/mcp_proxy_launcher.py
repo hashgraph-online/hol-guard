@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer, proxy_cli_args, proxy_process_env
 from codex_plugin_scanner.guard.stable_guard_cli import guard_cli_launcher

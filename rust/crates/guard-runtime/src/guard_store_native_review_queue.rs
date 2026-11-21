@@ -29,8 +29,9 @@
 //! resident call of its own: a connector this device never set up queues
 //! the row under the connector's group with its setup hint, keeps the
 //! review's context with the connector in the queue write's own transaction,
-//! and answers the agent with the setup text. The reply names it under
-//! `connector_setup` for the notice the daemon raises.
+//! and answers the agent with the setup text. The store hands off the desktop
+//! notice after committing the request, and the reply names the connector
+//! under `connector_setup` for callers rendering a hook response.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -82,13 +83,6 @@ const REPLY_BUDGET_BYTES: usize = MAX_NATIVE_RESPONSE_BYTES - 128 * 1024;
 const MIN_HINT_BUDGET_MS: u64 = 150;
 /// The `local_cli_hook` action the lookup refines.
 const REVIEW_ACTION: &str = "review";
-
-/// The hint a call asks for: how long the daemon can wait for it.
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct HintAsk {
-    budget_ms: u32,
-}
 
 /// The launch a non-recognition review paused, as the daemon's
 /// `local_cli_setup_connector` named it to the resident.
@@ -243,9 +237,7 @@ pub(crate) fn delegate(
     let connector_value = connector.as_ref().map(Connector::to_value);
     let hint = ask.and_then(|ask| {
         let spent = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-        let budget_ms = u64::from(ask.budget_ms)
-            .min(call_budget_ms.saturating_sub(WRITE_RESERVE_MS))
-            .saturating_sub(spent);
+        let budget_ms = ask.budget_ms(call_budget_ms, spent);
         let least = if connector.is_some() {
             1
         } else {
@@ -351,6 +343,15 @@ pub(crate) fn delegate(
 }
 
 impl Delegated {
+    /// Name the committed request even when the reply omits its row.
+    pub(crate) fn connector_notice<'a>(&'a self, reply: &'a Value) -> Option<(&'a str, &'a str)> {
+        let request_id = reply
+            .as_str()
+            .or_else(|| reply.get("request_id")?.as_str())?;
+        let name = self.connector_setup.as_ref()?.get("name")?.as_str()?;
+        (!request_id.is_empty() && !name.is_empty()).then_some((request_id, name))
+    }
+
     /// Keep the queued review's context with the connector it waits on, on the
     /// queue write's own connection. Best effort, as the daemon's separate
     /// call was: the review is queued whether or not this keeps anything. The
@@ -475,7 +476,7 @@ fn notice_review(
 
 #[path = "guard_store_native_review_queue_args.rs"]
 mod args;
-use args::{take_ask, take_flag, without_operands};
+use args::{take_ask, take_flag, without_operands, HintAsk};
 
 #[cfg(test)]
 #[path = "guard_store_native_review_queue_tests.rs"]

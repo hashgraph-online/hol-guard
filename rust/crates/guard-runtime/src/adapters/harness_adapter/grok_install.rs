@@ -29,8 +29,8 @@ const STATE_KEYS: [&str; 5] = [
     "hook_command",
     "prior_compat_hooks",
 ];
-const MISSING_OWNERSHIP_NOTE: &str = "Guard settings may remain in .grok/config.toml because \
-                                      ownership records are missing; review them manually.";
+const MISSING_OWNERSHIP_NOTE: &str =
+    "Guard settings remain in .grok/config.toml because ownership records are missing; review the file manually.";
 
 /// `parse_install_state`: the recorded state, `{}` when there is none.
 fn install_state(bytes: Option<&[u8]>) -> Step<Vec<(String, PyVal)>> {
@@ -322,10 +322,10 @@ pub(super) fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
     let config = config_path(ctx);
     let owned = owned_settings(&state);
     let config_present = ctx.absolute(&config).is_file();
-    let mut notes = Vec::new();
+    let cleanup_incomplete = owned.is_none() && config_present;
     let mut writes = Vec::new();
     match owned {
-        None if config_present => notes.push(MISSING_OWNERSHIP_NOTE),
+        None => {}
         Some(owned) if config_present => {
             files::within_root(ctx, &grok_home(ctx), &config, LABEL)?;
             let answer = user_config(json!({
@@ -371,11 +371,13 @@ pub(super) fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
         "Guard hook files and launcher removed.",
         "User .grok/config.toml, auth, skills, plugins, and sessions were preserved.",
     ];
-    finish.extend(notes);
+    if cleanup_incomplete {
+        finish.push(MISSING_OWNERSHIP_NOTE);
+    }
     Ok(json!({
         "writes": writes,
         "copies": copies,
         "deletes": deletes,
-        "finish": {"notes": finish},
+        "finish": {"notes": finish, "cleanup_incomplete": cleanup_incomplete},
     }))
 }

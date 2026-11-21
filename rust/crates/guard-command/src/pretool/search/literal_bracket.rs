@@ -22,6 +22,65 @@ pub(in crate::pretool) fn safe_literal_bracket_tree(
     !recursive || super::walk(root, &[], &[], false, false)
 }
 
+/// A plain `ls` operand whose bracket class matches nothing, as in
+/// `ls ~/work/app/api/groups/\[slug\]/`. The shell hands `ls` the word as
+/// typed, so it lists that one route directory, and the path is screened as
+/// a read of a route file is, with a directory admitted. The shell expands
+/// `~` from its own HOME, so a home spelling needs that HOME to be the
+/// declared one. A quoted `~` stays literal and names `./~`, so it also needs
+/// the working directory to hold no `~` entry.
+pub(in crate::pretool) fn safe_literal_bracket_listing_target(
+    value: &str,
+    context: ReadContext<'_>,
+) -> bool {
+    (!value.starts_with('~')
+        || context.shell_home_matches
+            && super::expanded_operand("./~", context).is_some_and(|path| {
+                std::fs::symlink_metadata(path)
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+            }))
+        && inert_bracket_class(value, context)
+        && crate::pretool::read_paths::bounded_literal_bracket_target(
+            value,
+            context.home_dir,
+            context.cwd,
+            true,
+        )
+}
+
+/// A listing operand whose pattern characters may have been escaped, as in
+/// `ls trap/\[k\]`. Without a quote map the screen cannot tell that word from
+/// `trap/[k]`, so it screened what the pattern matches, `trap/k`, while the
+/// shell lists the literal `trap/[k]`. A literal entry spelled that way must
+/// therefore clear the read screen on its own, and a walk of one is refused.
+/// A word whose quoting is known, or that names nothing literally, needs no
+/// second proof.
+pub(in crate::pretool) fn listable_spelling(
+    value: &str,
+    context: ReadContext<'_>,
+    recursive: bool,
+    quoting_known: bool,
+) -> bool {
+    if quoting_known || !value.contains(['*', '?', '[']) {
+        return true;
+    }
+    let Some(path) = super::expanded_operand(value, context) else {
+        return false;
+    };
+    match std::fs::symlink_metadata(path) {
+        Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+        Ok(_) => {
+            !recursive
+                && crate::pretool::read_paths::bounded_literal_bracket_target(
+                    value,
+                    context.home_dir,
+                    context.cwd,
+                    true,
+                )
+        }
+    }
+}
+
 /// A content search of a path whose bracket class matches nothing.
 ///
 /// Framework routes are spelled with brackets: `app/blog/[slug]/page.tsx` is
@@ -65,7 +124,7 @@ pub(in crate::pretool) fn safe_literal_bracket_read_target(
 /// directory named `S` rather than reach the literal route. A class holding a
 /// range is left to review, because the shell expands the range in the
 /// locale's collating sequence, which neither matcher models.
-pub(super) fn inert_bracket_class(value: &str, context: ReadContext<'_>) -> bool {
+pub(in crate::pretool) fn inert_bracket_class(value: &str, context: ReadContext<'_>) -> bool {
     value.contains('[')
         && !value.contains(['*', '?', '!'])
         && !super::super::glob_class::bracket_fallback_unsafe(value)
@@ -78,7 +137,7 @@ pub(super) fn inert_bracket_class(value: &str, context: ReadContext<'_>) -> bool
 
 /// Whether the shell hands `value` over exactly as typed because every
 /// bracket in it sat inside quotes. No shell globs a quoted word, so
-/// `"app/(marketing)/blog/[slug]/page.tsx"` names that route file even though
+/// `"app/(group)/blog/[slug]/page.tsx"` names that route file even though
 /// the expansion matchers refuse the parentheses, which zsh would read as a
 /// pattern group in an unquoted word. A word starting with `~` is left to
 /// the expansion proof: quoted, the tilde is not expanded, so the word names
@@ -102,4 +161,24 @@ fn literal_bracket_walk(value: &str, context: ReadContext<'_>) -> bool {
         return false;
     };
     !super::inside_agent_state(&root, context) && super::walk(root, &[], &[], false, false)
+}
+
+/// A search operand whose brackets may have been escaped, as in
+/// `grep -rn foo trap/\[k\]`. The shell removes the backslashes before the
+/// screen sees the word, so it reads like the pattern `trap/[k]`, and a proof
+/// of what that pattern matches (`trap/k`) says nothing about the entry the
+/// program searches, the literal `trap/[k]`. When an entry of that literal
+/// name exists it has to clear the search screen on its own, followed
+/// through any link to where it leads.
+pub(super) fn literal_spelling_searchable(value: &str, context: ReadContext<'_>) -> bool {
+    if !value.contains('[') {
+        return true;
+    }
+    let Some(path) = super::expanded_operand(value, context) else {
+        return false;
+    };
+    match std::fs::symlink_metadata(path) {
+        Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+        Ok(_) => literal_bracket_walk(value, context),
+    }
 }

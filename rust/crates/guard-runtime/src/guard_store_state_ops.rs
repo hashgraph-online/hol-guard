@@ -25,6 +25,7 @@ pub(crate) fn handles(method: &str) -> bool {
             | "oauth_sources_list"
             | "managed_keyring_reconcile"
             | "upsert_runtime_state"
+            | "hook_approval_center_origin"
     )
 }
 
@@ -34,6 +35,7 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
         "oauth_sources_list" => oauth_sources(connection),
         "managed_keyring_reconcile" => reconcile_keyring(connection, args),
         "upsert_runtime_state" => upsert_runtime_state(connection, args),
+        "hook_approval_center_origin" => hook_approval_center_origin(connection),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }
@@ -122,6 +124,31 @@ fn upsert_runtime_state(connection: &Connection, args: &Args) -> StoreResult<Val
         ],
     )?;
     Ok(Value::Null)
+}
+
+/// The daemon's recorded listening origin. Before it publishes a binding,
+/// the hook can show a default inbox address but the direct lane stays unbound.
+fn hook_approval_center_origin(connection: &Connection) -> StoreResult<Value> {
+    let row = query_one(
+        connection,
+        "select daemon_host, daemon_port from guard_runtime_state where state_key = 'runtime'",
+        &[],
+    )?;
+    let Some(row) = row else {
+        return Ok(Value::Null);
+    };
+    let Some(host) = row["daemon_host"].as_str() else {
+        return Ok(Value::Null);
+    };
+    let Some(port) = row["daemon_port"].as_u64().filter(|port| *port > 0) else {
+        return Ok(Value::Null);
+    };
+    let origin = if host.contains(':') && !host.starts_with('[') {
+        format!("http://[{host}]:{port}")
+    } else {
+        format!("http://{host}:{port}")
+    };
+    Ok(Value::String(origin))
 }
 
 /// Writes the diagnostic mirror, the emptied local anchor slot and the

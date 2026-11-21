@@ -37,10 +37,8 @@ def _run_empty_polls(monkeypatch: pytest.MonkeyPatch, *, poll_seconds: float, wa
         stop_event=StopAfterWaits(),
         enabled=lambda _store: True,
         poll_once=empty_poll,
-        load_state=lambda _store: {},
-        save_state=lambda _store, _state: None,
+        record_failure=lambda _store, _state, _error: None,
         format_error=str,
-        now=lambda: "now",
     )
     return waits
 

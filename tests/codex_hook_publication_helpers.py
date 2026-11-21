@@ -26,8 +26,9 @@ from codex_plugin_scanner.guard.codex_hook_self_binding import (
     install_fields,
     short_path_fields,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_owned import codex_install_transaction
+from tests import codex_install_flow_support as flow
 from tests.codex_hook_paths_support import canonical_manifest_bytes, hook_secret_path
 from tests.codex_toml_support import dump_toml
 
@@ -167,7 +168,7 @@ def install_config_hooks(
         "owned": wire.text(owned),
         "managed": adapter._hook_registration(context).groups,
         "config": str(config_path),
-        **adapter._legacy_fields(context),
+        **flow.legacy_fields(context),
         **install_fields(adapter._runtime_guard_home(context), None),
         **short_path_fields(),
     }
@@ -246,7 +247,7 @@ def write_authenticated_hook_config_owned(
             receipt_index=files.index(publication.receipt_change),
             after_manifest=base64.b64encode(canonical_manifest_bytes(publication.manifest) + b"\n").decode(),
         )
-        return adapter._publish_hooks(context, request, files)
+        return flow.publish_hooks(context, request, files)
 
     request: dict[str, Any] = {
         "spec": _spec_payload(spec),
@@ -255,7 +256,7 @@ def write_authenticated_hook_config_owned(
         **short_path_fields(),
     }
     answer = publish()
-    adapter._raise_publication_error(answer)
+    flow.raise_publication_error(answer)
     state = json.loads(adapter._reply_text(answer, "state"))
     if not isinstance(state, dict):
         raise TransitionError("native_transition_invalid")

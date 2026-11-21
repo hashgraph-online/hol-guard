@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import (
     PYTEST_INVALID_COMMAND_REASON_CODE,
     RestrictedPytestError,
 )
+from tests.restricted_native_clients import contained_expectation_reply
 
 # What native authority reads each run's prefixes down to; the peel itself is
 # tested in `guard-command` (`contained_run_prefix_tests.rs`). A command named
@@ -60,6 +61,8 @@ _KINDS = dict.fromkeys(sorted(KIND_NAMES), False)
 
 
 def _native(operation: str, fields: dict[str, object], expected: object) -> object:
+    if operation == "contained_expectation":
+        return contained_expectation_reply(fields)
     if operation == "run_prefix_peel":
         command: list[str] = fields["command"]  # type: ignore[assignment]
         return {"core": command, "seconds": None} | _PEEL.get(tuple(command), {})
@@ -155,6 +158,8 @@ def test_the_whole_reading_is_one_question_the_parser_answers(monkeypatch: pytes
     asked: list[object] = []
 
     def native(operation: str, fields: dict[str, object], expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         asked.append((operation, fields["command"]))
         return _native(operation, fields, expected)
 

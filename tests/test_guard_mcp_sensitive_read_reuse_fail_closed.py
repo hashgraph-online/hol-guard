@@ -12,7 +12,7 @@ from codex_plugin_scanner.guard.native_mcp_proxy_decision import NativeMcpProxyD
 def test_constructing_a_proxy_does_not_leave_a_digest_home_bound(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard import native_context
     from codex_plugin_scanner.guard.config import GuardConfig
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
     from codex_plugin_scanner.guard.store import GuardStore
 

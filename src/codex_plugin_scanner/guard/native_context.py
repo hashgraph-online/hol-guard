@@ -41,7 +41,6 @@ from .native_resident_prerequisite_reason import (
     prerequisite_unavailable_code,
     record_prerequisite_failure,
 )
-from .native_response_decoder import native_error as _native_error
 from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
 from .native_runtime_request_scope import _status_binary_unchanged
 from .native_runtime_resilience import (
@@ -49,6 +48,7 @@ from .native_runtime_resilience import (
     native_record_resident_failure,
     native_record_resident_success,
 )
+from .native_transport_error import native_error as _native_error
 
 _CONTEXT_DIGEST_FEATURE = "context-digest-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
@@ -629,7 +629,7 @@ def native_context_digest(
             reason="native_context_digest_result_invalid",
         )
         return _digest_failed(f"native_context_digest_result_invalid:response_not_json bytes={len(output)}")
-    error_code = _native_error(payload)
+    error_code = _native_error(payload, deadline_monotonic=deadline_monotonic)
     if error_code is not None:
         # A resident that answers with its own error envelope is not an invalid
         # result: it is a request the resident refused, and its code is both the

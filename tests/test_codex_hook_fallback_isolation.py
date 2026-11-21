@@ -16,7 +16,6 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_hook_launch_runtime as launch_runtime
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     isolated_daemon_start_command,
@@ -24,7 +23,8 @@ from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     run_isolated_hook_process,
 )
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 
 
 def _installed_launch(tmp_path: Path) -> tuple[HarnessContext, tuple[str, ...], dict[str, object]]:
@@ -36,7 +36,7 @@ def _installed_launch(tmp_path: Path) -> tuple[HarnessContext, tuple[str, ...], 
         guard_home=tmp_path / "Guard home with spaces",
         home_override_explicit=True,
     )
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     bridge_command = codex_adapter._hook_command_parts(context)
     config = json.loads(bridge_command[-1])
     assert isinstance(config, dict)
@@ -226,7 +226,7 @@ def test_signed_runtime_guard_home_is_canonical_across_directory_aliases(tmp_pat
         home_override_explicit=True,
     )
 
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     bridge_command = codex_adapter._hook_command_parts(context)
     config = json.loads(bridge_command[-1])
     trusted = _trusted_launch(bridge_command, config)

@@ -128,15 +128,21 @@ fn host_message(stream: &mut UnixStream, message: &Value) -> std::io::Result<()>
     stream.write_all(&frame)
 }
 
+/// Serves every connection until the host is dropped. A client that the
+/// reader rejects before its handshake closes its connection at once, and a
+/// test that reads again must still find the host listening.
 fn serve(
     listener: &UnixListener,
     stop: &AtomicBool,
     requests: &Mutex<Vec<Value>>,
     handler: &(dyn Fn(&Value) -> Value + Send + Sync),
 ) -> std::io::Result<()> {
-    let mut stream = loop {
+    loop {
         match listener.accept() {
-            Ok((stream, _)) => break stream,
+            // The client ending the connection is how every exchange finishes.
+            Ok((stream, _)) => {
+                let _ = exchange(stream, requests, handler);
+            }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 if stop.load(Ordering::SeqCst) {
                     return Ok(());
@@ -145,7 +151,14 @@ fn serve(
             }
             Err(error) => return Err(error),
         }
-    };
+    }
+}
+
+fn exchange(
+    mut stream: UnixStream,
+    requests: &Mutex<Vec<Value>>,
+    handler: &(dyn Fn(&Value) -> Value + Send + Sync),
+) -> std::io::Result<()> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
     let mut headers = Vec::new();
@@ -196,7 +209,6 @@ pub(super) fn host(handler: impl Fn(&Value) -> Value + Send + Sync + 'static) ->
     let thread = {
         let (requests, stop) = (requests.clone(), stop.clone());
         std::thread::spawn(move || {
-            // The client ending the connection is how every exchange finishes.
             let _ = serve(&listener, &stop, &requests, &handler);
         })
     };

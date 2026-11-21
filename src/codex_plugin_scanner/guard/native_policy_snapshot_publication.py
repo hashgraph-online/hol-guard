@@ -265,6 +265,9 @@ class NativePolicySnapshotPublicationMixin:
             else:
                 return
             identity, capabilities, master_key, config, command_extensions, client = context
+            evidence_owned = (
+                publisher.direct_evidence_bound() and "hook-direct-evidence-commit-v1" in capabilities.features
+            )
             bound_postures = valid_harness_postures(config.get(HARNESS_POSTURES_BINDING_KEY))
             bound_watch_ends = signed_watch_ends(bound_postures, publisher._compiled_watch_ends)
             # A posture-only change keeps the materialized generation. Move
@@ -280,11 +283,11 @@ class NativePolicySnapshotPublicationMixin:
                 home_dir=publisher._direct_lane_home_dir(),
                 harness_postures=bound_postures,
                 local_cli_block_rules=local_cli_block_rules,
-                evidence_drain=publisher.direct_evidence_bound(),
+                evidence_drain=evidence_owned,
                 contained_sink_command=contained_sink_command(),
                 integrity_key=direct_lane_integrity_key(publisher.store),
-                connector_setup_notice=publisher.direct_evidence_bound(),
-                resident_activity=publisher.direct_evidence_bound(),
+                connector_setup_notice=evidence_owned,
+                resident_activity=evidence_owned,
             )
             direct_lane = with_saved_decision_state(direct_lane, store=publisher.store)
             direct_lane = with_review_facts(

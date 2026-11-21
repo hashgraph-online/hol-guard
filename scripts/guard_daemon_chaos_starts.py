@@ -9,12 +9,19 @@
   half through ``ensure`` and half through hook recovery, as Desktop, hooks
   and the CLI do. Every starter must get the same daemon, and exactly one new
   daemon may publish itself.
+* ``mixed-runtime-starts``: the daemon is killed and starters from two
+  runtime identities arrive together, each in its own process, as a
+  long-lived caller that predates an in-place update does next to fresh
+  ones. The first is the older runtime. Its daemon may be retired once, by a
+  current starter; after that no starter may retire a daemon, so the two
+  identities never take turns replacing each other's daemons. One daemon,
+  carrying the current runtime's identity, must serve.
 
-Both scenarios hold the launch mid-handoff by stopping (``SIGSTOP``) the
+The first two scenarios hold the launch mid-handoff by stopping (``SIGSTOP``) the
 daemon it launched as soon as that daemon appears: the launcher then waits
 with its receipt in force, so the window does not depend on timing. Both then
-check that the starters' address is the one served, and send a hook, which
-must be reviewed.
+check that the starters' address is the one served. Every scenario sends a
+hook, which must be reviewed.
 """
 
 from __future__ import annotations
@@ -28,10 +35,13 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Protocol
 
+from codex_plugin_scanner.guard.native_daemon_manage import _lifecycle_events as lifecycle_snapshot
 from codex_plugin_scanner.guard.native_daemon_manage import (
+    current_guard_daemon_runtime_fingerprint,
     ensure_guard_daemon,
     load_authenticated_daemon_state,
     load_authenticated_guard_daemon_pending_launch,
@@ -44,6 +54,7 @@ from scripts import check_guard_daemon_chaos as chaos
 from scripts import stress_guard_daemon as stress
 
 STARTERS = 20
+MIXED_STARTERS = 10
 STARTER_SPACING_SECONDS = 0.1
 START_TIMEOUT_SECONDS = 60.0
 RECEIPT_WAIT_SECONDS = 30.0
@@ -53,8 +64,26 @@ MAX_ERROR_CHARS = 240
 _CHILD_START = """
 import sys
 from pathlib import Path
+from typing import Protocol
 from codex_plugin_scanner.guard.native_daemon_manage import ensure_guard_daemon
 ensure_guard_daemon(Path(sys.argv[1]), home_dir=Path(sys.argv[2]), background_maintenance=False)
+"""
+
+# A start under a given runtime identity. The fingerprint cache is the identity a start sends with its
+# request; an empty argument leaves it to be computed, as the current runtime's.
+_CHILD_RUNTIME_START = """
+import sys
+from pathlib import Path
+from typing import Protocol
+from codex_plugin_scanner.guard import native_daemon_manage
+if sys.argv[3]:
+    native_daemon_manage._runtime_fingerprint_cache = sys.argv[3]
+if sys.argv[5]:
+    Path(sys.argv[5]).touch()
+url = native_daemon_manage.ensure_guard_daemon(
+    Path(sys.argv[1]), home_dir=Path(sys.argv[2]), start_timeout=float(sys.argv[4]), background_maintenance=False
+)
+print(url)
 """
 
 
@@ -103,12 +132,7 @@ def _process_tree(root_pid: int) -> list[int]:
 def _publishers(guard_home: Path) -> list[int]:
     """Pids that recorded ``published``, oldest first."""
 
-    pids: list[int] = []
-    for event in load_daemon_lifecycle_events(guard_home, limit=chaos.LIFECYCLE_EVENT_LIMIT):
-        pid = event.get("pid")
-        if event.get("event") == "published" and isinstance(pid, int) and pid not in pids:
-            pids.append(pid)
-    return pids
+    return _published(load_daemon_lifecycle_events(guard_home, limit=chaos.LIFECYCLE_EVENT_LIMIT))
 
 
 def _start(guard_home: Path, home: Path) -> str:
@@ -306,8 +330,197 @@ def _parallel_starts(result: chaos.ScenarioResult, guard_home: Path, home: Path,
     check_serving(result, guard_home, query, stopped={initial_pid}, agreed=answers[0] if answers else None)
 
 
+def _journal(guard_home: Path) -> tuple[list[dict[str, object]], str]:
+    """One read of the lifecycle journal and its status: ``ok`` only when every record was read."""
+
+    return lifecycle_snapshot(guard_home, limit=chaos.LIFECYCLE_EVENT_LIMIT, incident=False)
+
+
+def _published(events: list[dict[str, object]]) -> list[int]:
+    """Pids that recorded ``published`` in ``events``, oldest first."""
+
+    pids: list[int] = []
+    for event in events:
+        pid = event.get("pid")
+        if event.get("event") == "published" and isinstance(pid, int) and pid not in pids:
+            pids.append(pid)
+    return pids
+
+
+class _Polled(Protocol):
+    def poll(self) -> int | None: ...
+
+
+def _waiting_in_ensure(starters: Sequence[tuple[_Polled, Path]]) -> bool:
+    """Whether a starter that got past start-up into ``ensure`` (its marker exists) is still running."""
+
+    return any(marker.exists() and start.poll() is None for start, marker in starters)
+
+
+def _retirements(events: list[dict[str, object]], pids: list[int]) -> list[int]:
+    """Each ``retirement_requested`` record in ``events`` for one of ``pids``, by pid."""
+
+    return [
+        pid
+        for event in events
+        if event.get("event") == "retirement_requested" and isinstance(pid := event.get("pid"), int) and pid in pids
+    ]
+
+
+def _runtime_start(
+    guard_home: Path, home: Path, fingerprint: str, entered: Path | None = None
+) -> subprocess.Popen[str]:
+    """Start ``ensure`` in a child; the child touches ``entered``, when given, just before it calls ``ensure``."""
+
+    return subprocess.Popen(
+        (
+            sys.executable,
+            "-c",
+            _CHILD_RUNTIME_START,
+            str(guard_home),
+            str(home),
+            fingerprint,
+            str(START_TIMEOUT_SECONDS),
+            str(entered) if entered is not None else "",
+        ),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+
+
+def _mixed_runtime_starts(
+    result: chaos.ScenarioResult, guard_home: Path, home: Path, query: str, initial_pid: int
+) -> None:
+    current = current_guard_daemon_runtime_fingerprint()
+    older = ("0" if current[0] != "0" else "1") + current[1:]
+    if not _kill_daemon(result, initial_pid):
+        return
+    before = set(_publishers(guard_home))
+    started = time.monotonic()
+    starts = [_runtime_start(guard_home, home, older)]
+    # The older runtime launches first. Its daemon is held mid-handoff, with its launch receipt in force, while the
+    # other starters arrive, so a current starter must meet the older launch rather than find it already published.
+    older_daemon = _launched_daemon(guard_home, {initial_pid})
+    overlapped = False
+    try:
+        if older_daemon is None:
+            result.failures.append(f"the older runtime's start launched no daemon within {RECEIPT_WAIT_SECONDS}s")
+        else:
+            os.kill(older_daemon, signal.SIGSTOP)
+            if not _wait_for(lambda: _receipt(guard_home) is not None, RECEIPT_WAIT_SECONDS):
+                result.failures.append(
+                    f"the older runtime's start wrote no launch receipt within {RECEIPT_WAIT_SECONDS}s"
+                )
+        markers = home / ".chaos-current-starters"
+        markers.mkdir(exist_ok=True)
+        current_starts: list[tuple[subprocess.Popen[str], Path]] = []
+        for index in range(1, MIXED_STARTERS):
+            if index % 2 == 1:
+                entered = markers / f"{index}.entered"
+                starts.append(_runtime_start(guard_home, home, "", entered))
+                current_starts.append((starts[-1], entered))
+            else:
+                starts.append(_runtime_start(guard_home, home, older))
+            time.sleep(STARTER_SPACING_SECONDS)
+        if older_daemon is not None:
+            # Keep the older daemon frozen until every current starter is past interpreter start-up and inside
+            # ensure, then a little longer. One still running after that is waiting on the held launch.
+            _wait_for(
+                lambda: all(marker.exists() or start.poll() is not None for start, marker in current_starts),
+                RECEIPT_WAIT_SECONDS,
+            )
+            time.sleep(chaos.SETTLE_SECONDS)
+            overlapped = _waiting_in_ensure(current_starts)
+    finally:
+        if older_daemon is not None:
+            with contextlib.suppress(OSError):
+                os.kill(older_daemon, signal.SIGCONT)
+
+    def current_serves() -> bool:
+        state = load_authenticated_daemon_state(guard_home)
+        return state is not None and state.get("runtime_fingerprint") == current
+
+    # The older starters above can all settle on the first daemon before a current one replaces it, so one more
+    # older start waits for the current daemon and must leave it serving.
+    if _wait_for(current_serves, START_TIMEOUT_SECONDS):
+        starts.append(_runtime_start(guard_home, home, older))
+    else:
+        result.failures.append(f"no current-runtime daemon published within {START_TIMEOUT_SECONDS}s")
+    answers: list[str] = []
+    errors: list[str] = []
+    for start in starts:
+        try:
+            stdout, stderr = start.communicate(timeout=START_TIMEOUT_SECONDS + chaos.EXIT_WAIT_SECONDS)
+        except subprocess.TimeoutExpired:
+            start.kill()
+            _ = start.communicate()
+            errors.append(f"a start did not finish within {START_TIMEOUT_SECONDS}s")
+            continue
+        if start.returncode == 0 and stdout.strip():
+            answers.append(stdout.strip())
+        else:
+            errors.append((stderr.strip().splitlines() or [f"exit {start.returncode}"])[-1][:MAX_ERROR_CHARS])
+    result.seconds_to_serve_again = round(time.monotonic() - started, 2)
+    result.recoveries = len(answers)
+    events, journal = _journal(guard_home)
+    new_publishers = [pid for pid in _published(events) if pid not in before]
+    state = load_authenticated_daemon_state(guard_home)
+    judge_mixed_starts(
+        result,
+        errors,
+        len(starts),
+        new_publishers,
+        _retirements(events, new_publishers),
+        current=state is not None and state.get("runtime_fingerprint") == current,
+        overlapped=overlapped,
+        journal=journal,
+    )
+    check_serving(result, guard_home, query, stopped={initial_pid}, agreed=None)
+
+
+def judge_mixed_starts(
+    result: chaos.ScenarioResult,
+    errors: list[str],
+    starters: int,
+    new_publishers: list[int],
+    retired: list[int],
+    *,
+    current: bool,
+    overlapped: bool = True,
+    journal: str = "ok",
+) -> None:
+    """Every start served; only the older runtime's first daemon may be retired, once; the current runtime serves.
+
+    The verdict also needs a current starter that met the older launch mid-handoff, and a journal read in full:
+    a journal that could not be read proves no retirement count.
+    """
+
+    if journal != "ok":
+        result.failures.append(
+            f"the lifecycle journal could not be read in full ({journal}), so retirements are unproven"
+        )
+    if not overlapped:
+        result.failures.append("no current-runtime start overlapped the older runtime's held launch")
+    if errors:
+        result.failures.append(f"{len(errors)} of {starters} starts failed: {errors[0]}")
+    if len(new_publishers) > 2:
+        result.failures.append(
+            f"{len(new_publishers)} new daemons published themselves, expected the older runtime's and at most one more"
+        )
+    if len(retired) > 1 or any(pid != new_publishers[0] for pid in retired):
+        result.failures.append(
+            f"the starters retired {len(retired)} daemons: the two runtimes replaced each other's daemons"
+        )
+    if not current:
+        result.failures.append("the daemon serving the home does not carry the current runtime's identity")
+
+
 def run_start_scenarios() -> list[chaos.ScenarioResult]:
     return [
         _scenario("stale-pending-receipt", _stale_pending_receipt),
         _scenario("parallel-starts", _parallel_starts),
+        _scenario("mixed-runtime-starts", _mixed_runtime_starts),
     ]

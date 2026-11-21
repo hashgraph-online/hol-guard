@@ -40,8 +40,18 @@ fn seeded_home(tag: &str) -> std::path::PathBuf {
 }
 
 fn call(home: &std::path::Path, method: &str, payload: &Map<String, Value>, now: &str) -> Value {
+    call_as(home, "omp", method, payload, now)
+}
+
+fn call_as(
+    home: &std::path::Path,
+    harness: &str,
+    method: &str,
+    payload: &Map<String, Value>,
+    now: &str,
+) -> Value {
     let mut args = Map::new();
-    args.insert("harness".to_owned(), json!("omp"));
+    args.insert("harness".to_owned(), json!(harness));
     args.insert("payload".to_owned(), Value::Object(payload.clone()));
     args.insert("now".to_owned(), json!(now));
     let request = GuardStoreRequestV1 {
@@ -86,6 +96,57 @@ fn key_needs_a_proven_call_id_and_tool_name() {
     assert_eq!(
         call_key("omp", &base),
         call_key("omp", &payload("call-1", "ls -la ."))
+    );
+}
+
+/// The call shape Codex CLI 0.169.0 sends on both hook events.
+fn codex_payload(event: &str, call_id: &str) -> Map<String, Value> {
+    json!({
+        "hook_event_name": event,
+        "session_id": "session-1",
+        "cwd": "/workspace",
+        "tool_use_id": call_id,
+        "tool_name": "Bash",
+        "tool_input": {"command": "ls -la"},
+    })
+    .as_object()
+    .unwrap()
+    .clone()
+}
+
+#[test]
+fn codex_call_id_is_tool_use_id() {
+    let pre = codex_payload("PreToolUse", "exec-1");
+    assert!(call_key("codex", &pre).is_some());
+    assert_eq!(
+        call_key("codex", &pre),
+        call_key("codex", &codex_payload("PostToolUse", "exec-1"))
+    );
+    assert_ne!(
+        call_key("codex", &pre),
+        call_key("codex", &codex_payload("PostToolUse", "exec-2"))
+    );
+    // Codex sends no `tool_call_id`; that field alone proves nothing.
+    assert!(call_key("codex", &payload("exec-1", "ls -la")).is_none());
+}
+
+#[test]
+fn codex_post_tool_use_finds_the_admitted_call() {
+    let home = seeded_home("admitted-call-codex");
+    let pre = codex_payload("PreToolUse", "exec-1");
+    assert_eq!(
+        call_as(&home, "codex", RECORD_METHOD, &pre, AT),
+        json!(true)
+    );
+    let post = codex_payload("PostToolUse", "exec-1");
+    assert_eq!(
+        call_as(&home, "codex", LOOKUP_METHOD, &post, AT),
+        json!(true)
+    );
+    let other = codex_payload("PostToolUse", "exec-2");
+    assert_eq!(
+        call_as(&home, "codex", LOOKUP_METHOD, &other, AT),
+        json!(false)
     );
 }
 

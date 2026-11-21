@@ -13,7 +13,7 @@ from rich.console import Console
 
 from codex_plugin_scanner.guard.cli import uninstall_commands
 from codex_plugin_scanner.guard.cli.render import _render_managed_install
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_resident_update_lock import (
     RESIDENT_UPDATE_LOCK_NAME,
     NativeResidentUpdateLockError,

@@ -1,3 +1,4 @@
+import { buildRetryAfterApprovalCopy } from "./approval-center-utils";
 import { retryCannotReuseApproval } from "./approval-retry-guidance";
 import { willPersistExactAction } from "./approval-scopes";
 import type { DecisionScope, GuardApprovalRequest } from "./guard-types";
@@ -29,4 +30,15 @@ export function decisionButtonLabels(input: {
   }
   const blockLabel = watchOnlyObservation || persistExactBlock ? "Stop this next time" : blockButtonLabel(blockScope);
   return { persistExactAllow, persistExactBlock, allowLabel, blockLabel };
+}
+
+/** The line shown after a decision is saved. */
+export function resolvedActionCopy(
+  item: GuardApprovalRequest | null,
+  action: "allow" | "block",
+  persistedExactAction: boolean,
+): string {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
+  if (action === "allow") return "Approved: action can proceed";
+  return "Blocked: action stopped";
 }

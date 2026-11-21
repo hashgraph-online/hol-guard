@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_harness_client as codex
-from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 from codex_plugin_scanner.guard.codex_hook_file_integrity import _native
 from codex_plugin_scanner.guard.codex_hook_integrity import load_authenticated_hook_manifest_path
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.codex_hook_paths_support import hook_manifest_path
 from tests.native_runtime_stamp import stamp_native_runtime
 
@@ -41,7 +41,7 @@ def test_installed_codex_manifest_verifies_after_adapter_reorganization(
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=home / ".hol-guard")
-    codex_lifecycle.CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     manifest = load_authenticated_hook_manifest_path(context.guard_home, hook_manifest_path(context.guard_home, config))
     _native("captured", manifest=manifest)
     files = manifest["packaged_files"]

@@ -13,11 +13,11 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     grok_hooks_protection_ready,
     uninstall_confirmation_token,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext, PreparedHarnessInstall
-from codex_plugin_scanner.guard.harness.contracts import setup_contract_for
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
+from codex_plugin_scanner.guard.setup_contracts import setup_contract_for
+from tests import harness_ops_support as harness_support
 from tests.native_approval_writes import (
     add_approval_request,
     native_approval_connection,
@@ -59,7 +59,7 @@ def test_grok_protection_checks_ready_after_install(tmp_path: Path, monkeypatch)
             (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
         ),
     )
-    get_adapter("grok").install(ctx)
+    harness_support.install("grok", ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
     (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
     checks = _grok_protection_checks(ctx)
@@ -79,7 +79,7 @@ def test_build_harness_verification_includes_grok_checks(tmp_path: Path, monkeyp
             (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
         ),
     )
-    get_adapter("grok").install(ctx)
+    harness_support.install("grok", ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
     (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
     payload = build_harness_verification("grok", ctx)
@@ -114,7 +114,7 @@ def test_grok_protection_checks_flag_stale_matchers(tmp_path: Path, monkeypatch)
             (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
         ),
     )
-    get_adapter("grok").install(ctx)
+    harness_support.install("grok", ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
     (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
     pretool = ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json"
@@ -148,7 +148,7 @@ def test_grok_protection_checks_reject_empty_catchall(tmp_path: Path, monkeypatc
             (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
         ),
     )
-    get_adapter("grok").install(ctx)
+    harness_support.install("grok", ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
     (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
     pretool = ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json"
@@ -255,7 +255,7 @@ def test_grok_protection_checks_flag_literal_home_prefix_deny_rules(tmp_path: Pa
             (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
         ),
     )
-    get_adapter("grok").install(ctx)
+    harness_support.install("grok", ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
     (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
     managed_config = ctx.home_dir / ".grok" / "config.toml"

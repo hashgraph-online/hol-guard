@@ -13,7 +13,7 @@ from packaging.version import InvalidVersion, Version
 
 from ..codex_hook_file_integrity import hook_validation_deadline
 from ..codex_hook_recovery import _snapshot
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..private_file_io import read_private_regular_bytes
 from ..runtime_transition import TransitionError, TransitionFile
 from ..runtime_transition_prepare import RuntimeTransitionPreparation

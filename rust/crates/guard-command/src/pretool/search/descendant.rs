@@ -2,7 +2,8 @@
 //!
 //! The walk judges each descendant by its name and metadata alone: it never
 //! opens a file to decide. A hidden entry must be on a short benign list,
-//! because recursion would otherwise reach `.env`, `.ssh` or `.git`. A
+//! because recursion would otherwise reach `.env`, `.ssh` or `.git`, or hold
+//! only documents the repository commits (see `committed_hidden`). A
 //! credential-named file is refused unless it is source code, test data
 //! below a test-data directory inside the walk, or a document or raster image
 //! the repository tracks and the tracked-file proof clears.
@@ -69,8 +70,11 @@ pub(in crate::pretool::search) fn descendant_allowed(
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
-    if (name.starts_with('.') && !hidden_allowed(name) && !package_store_bin(path, name))
-        || guard_secure_fs::sensitive_path_family(path).is_some()
+    if guard_secure_fs::sensitive_path_family(path).is_some()
+        || (name.starts_with('.')
+            && !hidden_allowed(name)
+            && !package_store_bin(path, name)
+            && !super::committed_hidden::committed_hidden(path, is_file))
     {
         return false;
     }

@@ -368,7 +368,7 @@ fn persist_result(
         .map_or_else(|| Value::Object(Map::new()), State::into_value))
 }
 
-fn record_sync_result(connection: &Connection, args: &Args) -> StoreResult<Value> {
+pub(crate) fn record_sync_result(connection: &Connection, args: &Args) -> StoreResult<Value> {
     let now = args.str("now")?;
     let supplied = args.opt_str("request_id")?;
     let explicit = supplied.map(py_strip).filter(|id| !id.is_empty());

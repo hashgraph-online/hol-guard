@@ -9,7 +9,7 @@ from pathlib import Path
 from packaging.version import InvalidVersion, Version
 
 from ...version import __version__
-from ..harness.cursor_client import rebind_stale_cursor_hooks
+from ..cursor_hook_ops import rebind_stale_cursor_hooks
 from ..native_daemon_manage import (
     GuardDaemonStartLockTimeoutError,
     _guard_daemon_state_matches_current_runtime,

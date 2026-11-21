@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import update_commands
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.pi_extension_support import managed_extension_source
 from tests.pi_managed_extension_client import enable_managed_extension

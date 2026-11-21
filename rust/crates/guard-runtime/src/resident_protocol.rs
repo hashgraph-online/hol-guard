@@ -75,6 +75,15 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::hook_direct::HOOK_DIRECT_STRUCTURED_OUTPUT_FEATURE.into(),
         crate::policy_store::policy_store_direct_lane::HOOK_DIRECT_REVIEW_FACTS_FEATURE.into(),
         crate::hook_direct_evidence::HOOK_DIRECT_EVIDENCE_FEATURE.into(),
+        crate::hook_direct_evidence::HOOK_DIRECT_EVIDENCE_COMMIT_FEATURE.into(),
+        crate::hook_payload_facts_op::HOOK_PAYLOAD_FACTS_FEATURE.into(),
+        crate::hook_review_binding_op::HOOK_REVIEW_BINDING_FEATURE.into(),
+        crate::hook_policy_admission_op::HOOK_POLICY_ADMISSION_FEATURE.into(),
+        crate::hook_connector_facts_op::HOOK_CONNECTOR_FACTS_FEATURE.into(),
+        crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_FEATURE.into(),
+        crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_WRITE_FEATURE.into(),
+        crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_WAIT_FEATURE.into(),
+        crate::policy_store::policy_store_direct_lane::subdirectory::WORKSPACE_OVERLAY_READINESS_FEATURE.into(),
         crate::directory_trust::DIRECTORY_TRUST_FEATURE.into(),
         crate::directory_trust::HOOK_PATH_RULES_FEATURE.into(),
         crate::mcp_relay_decide::MCP_RELAY_DECIDE_FEATURE.into(),
@@ -89,6 +98,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         // The edge mediates a Pi or Oh My Pi `PostToolUse` against the managed
         // structured-output policy the envelope carries.
         "edge-structured-output-v1".into(),
+        crate::edge_structured::DIRECT_LANE_FEATURE.into(),
         "git-execution-context-v1".into(),
         "native-resident-client-v1".into(),
         "shell-helpers-v1".into(),
@@ -102,6 +112,15 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::runtime_identity_launch::FEATURE.into(),
         guard_plugin_kit::FEATURE.into(),
         guard_plugin_telemetry::FEATURE.into(),
+        crate::cloud_bundle_command::FEATURE.into(),
+        crate::cloud_event_command::FEATURE.into(),
+        crate::cloud_event_command::RECEIPTS_FEATURE.into(),
+        crate::cloud_event_command::REQUEST_FEATURE.into(),
+        crate::cloud_event_command::COMMAND_LEASE_FEATURE.into(),
+        crate::cloud_event_command::COMMAND_REPORT_FEATURE.into(),
+        crate::cloud_event_command::OAUTH_REFRESH_FEATURE.into(),
+        crate::cloud_event_command::OAUTH_REFRESH_CIRCUIT_FEATURE.into(),
+        crate::plugin_telemetry_host::FEATURE.into(),
         crate::workspace_snapshot::FEATURE.into(),
         crate::workspace_snapshot::SECRETS_FEATURE.into(),
         crate::workspace_snapshot::SKILLS_FEATURE.into(),
@@ -114,6 +133,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::workspace_fix::FEATURE.into(),
         crate::workspace_mcp_config::FEATURE.into(),
         guard_plugin_telemetry::UPDATES_FEATURE.into(),
+        crate::local_cli_discover::FEATURE.into(),
     ];
     features.extend(
         crate::resident_op_features::RESIDENT_OP_FEATURES
@@ -145,6 +165,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push("native-desktop-core-onedir-v1".into());
     features.push(crate::mcp_relay::RELAY_FEATURE.into());
     features.push(crate::hook_evidence_writer_op::HOOK_EVIDENCE_WRITER_FEATURE.into());
+    features.push(crate::hook_evidence_writer_op::HOOK_EVIDENCE_POST_TOOL_FEATURE.into());
     features.push(crate::claude_session_start::SESSION_START_FEATURE.into());
     features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());
@@ -184,6 +205,7 @@ pub(crate) enum ResidentOperationV1 {
     PolicySnapshotPush(Value),
     HookDirect(crate::hook_direct::HookDirectRequestV1),
     HookDirectEvidenceDrain(crate::hook_direct_evidence::HookDirectEvidenceDrainRequestV1),
+    HookDirectEvidenceCommit(crate::hook_direct_evidence::HookDirectEvidenceCommitRequestV1),
     McpRelayDecide(crate::mcp_relay_decide::McpRelayDecideRequestV1),
     McpRelayCommit(crate::mcp_relay_pending::McpRelayCommitRequestV1),
     McpRelayReady(crate::mcp_relay_ready::McpRelayReadyRequestV1),
@@ -220,6 +242,7 @@ pub(crate) enum ResidentOperationV1 {
     ),
     ApprovalExtensionRecommendation(guard_contracts::ApprovalExtensionRecommendationRequestV1),
     GithubCliClassify(GithubCliClassifyRequestV1),
+    CommandJobPlan(guard_contracts::CommandJobPlanRequestV1),
     GithubWorkflowPrepare(guard_contracts::GithubWorkflowPrepareRequestV1),
     ProtectRequest(ProtectRequestRequestV1),
     ProtectAdvisoryMerge(guard_contracts::ProtectAdvisoryMergeRequestV1),
@@ -239,6 +262,14 @@ pub(crate) enum ResidentOperationV1 {
     ContainedWrapperPlan(guard_contracts::ContainedWrapperPlanRequestV1),
     ApprovalPersistSelect(guard_contracts::ApprovalPersistSelectRequestV1),
     HookRender(guard_contracts::HookRenderRequestV1),
+    HookPayloadFacts(crate::hook_payload_facts_op::HookPayloadFactsRequestV1),
+    HookReviewBinding(crate::hook_review_binding_op::HookReviewBindingRequestV1),
+    HookPolicyAdmission(crate::hook_policy_admission_op::HookPolicyAdmissionRequestV1),
+    HookConnectorFacts(crate::hook_connector_facts_op::HookConnectorFactsRequestV1),
+    HookPolicyFenceWindow(crate::hook_policy_fence_window_op::HookPolicyFenceWindowRequestV1),
+    HookWorkspaceOverlayReadiness(
+        crate::policy_store::policy_store_direct_lane::subdirectory::WorkspaceOverlayReadinessRequest,
+    ),
     GuardStore(GuardStoreRequestV1),
     HookEvidenceWriter(crate::hook_evidence_writer_op::HookEvidenceWriterRequestV1),
     ApprovalGate(ApprovalGateRequestV1),

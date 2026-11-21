@@ -4,8 +4,8 @@
 //! - `install_surface` is the surface an install or uninstall acts on:
 //!   `all` when none is named, else `editor` or `cli`.
 //! - `protected_surfaces` reads the surfaces a list of managed installs name.
-//! - `protected_surfaces_from_store` is that for the one managed install a
-//!   store holds: nothing when Cursor is not installed, both surfaces when no
+//! - `protected_surfaces_from_store` is that for the one managed install the
+//!   store at `store_home` holds, which the runtime reads itself: nothing when Cursor is not installed, both surfaces when no
 //!   install is recorded.
 //! - `local_action` is the payload `cursor_action` carries.
 
@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Map, Value};
 
 use super::cursor::{cli_available, get, read_object, shim_installed, Ask};
-use super::{Ctx, Failure, Step};
+use super::{managed_store, Ctx, Failure, Step};
 use crate::pyjson::PyVal;
 
 const SURFACES: [&str; 2] = ["editor", "cli"];
@@ -220,10 +220,21 @@ pub(super) fn dispatch(op: &str, ask: &Ask) -> Step<Value> {
                 .get("installed")
                 .and_then(Value::as_bool)
                 .ok_or(Failure::Invalid)?;
-            let surfaces = match fields.get("managed") {
+            // The caller names the Guard home of the store it holds and the
+            // runtime reads Cursor's record itself; a caller that already has
+            // the record sends it as `managed`.
+            let managed = match fields.get("store_home") {
+                Some(Value::String(home)) if installed => {
+                    managed_store::managed_install(Path::new(home), "cursor")?
+                }
+                Some(Value::String(_)) => None,
+                None | Some(Value::Null) => fields.get("managed").cloned(),
+                Some(_) => return Err(Failure::Invalid),
+            };
+            let surfaces = match managed {
                 _ if !installed => Vec::new(),
                 Some(managed) if managed.is_object() => {
-                    protected_surfaces(std::slice::from_ref(managed))
+                    protected_surfaces(std::slice::from_ref(&managed))
                 }
                 _ => SURFACES.map(str::to_owned).to_vec(),
             };

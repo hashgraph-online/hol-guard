@@ -124,3 +124,40 @@ fn a_secret_or_system_reference_keeps_review() {
         }
     }
 }
+
+/// `-newerXY` compares the entry's `X` time with the `Y` time of a reference
+/// file, or, when `Y` is `t`, with a date written in the command, as in
+/// `find src -type f -newermt "2026-11-18 17:11"` after a known edit.
+#[test]
+fn a_written_date_or_a_project_file_may_be_the_threshold() {
+    let fixture = fixture("newer-date");
+    for harness in ["claude-code", "codex", "omp"] {
+        for command in [
+            "find src -type f -newermt \"2026-11-18 17:11\" -not -path '*/node_modules/*' 2>/dev/null",
+            "find . -newermt 2026-11-18T17:11:00 -name '*.py'",
+            "find src docs -newerct '1 hour ago' -type f",
+            "find src -newermm docs/PRD.md",
+        ] {
+            assert_eq!(
+                action(&fixture, harness, command),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+        for command in [
+            // A reference file still has to pass the read screens.
+            "find src -newermm .env",
+            "find src -newercm /etc/shadow",
+            // Only the access, birth, change and modification times exist.
+            "find src -newerxt 2026-11-18",
+            "find src -newermt",
+            "find src -newermt '2026-11-18; touch x'",
+        ] {
+            assert_ne!(
+                action(&fixture, harness, command),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+    }
+}

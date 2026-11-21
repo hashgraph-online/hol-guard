@@ -129,7 +129,7 @@ function request(env: GuardActionEnvelope | null, toolName: string, extra: Parti
     "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
   );
   const manyMarkup = renderToStaticMarkup(PrimaryActionCard({ item: many }));
-  assert(manyMarkup.includes("Fetch emails") && manyMarkup.includes("Send email"), "T-UX-46: each of several actions is listed");
+  assert(manyMarkup.includes("Get emails") && manyMarkup.includes("Send email"), "T-UX-46: each of several actions is listed");
   assert(whyPaused(one) === "Guard asks before a tool it has not reviewed runs.", "T-UX-47: Why paused names the reason for a tool Guard has not reviewed");
 }
 

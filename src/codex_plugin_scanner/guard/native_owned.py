@@ -15,18 +15,19 @@ import os
 import threading
 import time
 import uuid
-from collections.abc import Callable, Generator, Iterable, Mapping
-from contextlib import ExitStack, contextmanager
+from collections.abc import Generator, Iterable, Mapping
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
+
+from .native_failure import INVALID_ANSWER, failure_from_answer
 
 if TYPE_CHECKING:
-    from .harness.base import HarnessAdapter, HarnessContext
+    from .harness_context import HarnessContext
 
-_INVALID = "native_transition_invalid"
+_INVALID = INVALID_ANSWER
 _OVERHEAD_SECONDS = 30.0
 _LOCK_INVALID = "codex_lifecycle_lock_invalid: lifecycle lock changed during ownership"
 _TargetKey = tuple[str, int, int]
@@ -64,30 +65,6 @@ def _remaining_ms(deadline: float) -> int:
     return max(0, int((deadline - time.monotonic()) * 1000))
 
 
-def _failure(answer: Mapping[str, object]) -> BaseException:
-    from .codex_hook_file_integrity import CodexHookIntegrityError
-    from .native_transition_files import _exception
-    from .runtime_transition import TransitionError
-
-    failure = answer.get("failure")
-    if not isinstance(failure, Mapping):
-        return TransitionError(_INVALID)
-    kind, message = failure.get("kind"), failure.get("message")
-    if kind == "timeout" and isinstance(message, str):
-        return TimeoutError(message)
-    if kind == "runtime" and isinstance(message, str):
-        return RuntimeError(message)
-    code = failure.get("code")
-    if kind == "integrity" and isinstance(code, str) and isinstance(message, str):
-        return CodexHookIntegrityError(code, message)
-    reason = failure.get("reason")
-    if kind == "transition" and isinstance(reason, str):
-        return TransitionError(reason)
-    if kind == "fault":
-        return _exception(failure.get("fault"))
-    return TransitionError(_INVALID)
-
-
 def _call(op: str, *, deadline: float | None = None, **fields: object) -> Mapping[str, object]:
     from .native_runner_authority import native_runner_authority
     from .native_transition_files import transition_context
@@ -101,7 +78,7 @@ def _call(op: str, *, deadline: float | None = None, **fields: object) -> Mappin
     if not isinstance(answer, Mapping):
         raise RuntimeError(_INVALID)
     if answer.get("ok") is not True:
-        raise _failure(answer)
+        raise failure_from_answer(answer)
     return answer
 
 
@@ -223,6 +200,31 @@ def require_codex_install_owner(guard_home: Path) -> CodexInstallOwner:
     return owner
 
 
+def owner_request(guard_home: Path, *, actor: str, deadline_seconds: float = 5.0) -> dict[str, object]:
+    """The fields a native install op needs to run as, or to become, the owner of ``guard_home``.
+
+    The owner this thread already holds is named by its token, so the op journals under it; otherwise the op
+    takes the locks itself and journals its own begin and commit. ``held_dirs`` names the configuration
+    directories this thread already holds, so the op shares those locks instead of waiting on them.
+    """
+    held = [
+        {"identity": identity, "lease": lease}
+        for (identity, pid, thread), lease in (_HELD_TARGETS.get() or {}).items()
+        if pid == os.getpid() and thread == threading.get_ident()
+    ]
+    owner = _OWNER.get()
+    if owner is not None and _bound(owner, guard_home):
+        return {"owner": owner.token, "client_pid": owner.pid, "thread": owner.thread_id, "held_dirs": held}
+    return {
+        "client_pid": os.getpid(),
+        "thread": threading.get_ident(),
+        "actor": actor,
+        "process_identity": _process_identity,
+        "deadline_ms": int(deadline_seconds * 1000),
+        "held_dirs": held,
+    }
+
+
 def record_codex_mutation(operation: str, path: Path, before: bytes | None, after: bytes | None) -> None:
     """Record identities only; never write command/config/key contents."""
     record_codex_mutation_identities(
@@ -342,30 +344,3 @@ def codex_install_transaction(
             _OWNER.reset(owner_token)
             if held_token is not None:
                 _HELD_TARGETS.reset(held_token)
-
-
-_MutationResult = TypeVar("_MutationResult")
-
-
-def owned_adapter_mutation(method: Callable[..., _MutationResult]) -> Callable[..., _MutationResult]:
-    """Run an adapter's install or uninstall as the sole owner of its Guard home."""
-
-    @wraps(method)
-    def owned(self: HarnessAdapter, context: HarnessContext, *args: object, **kwargs: object) -> _MutationResult:
-        from .runtime_transition import assert_transition_mutation_allowed
-
-        with ExitStack() as ownership:
-            if self.harness == "codex":
-                ownership.enter_context(codex_lifecycle_locks(context))
-            assert_transition_mutation_allowed(context.guard_home)
-            self.preflight_management(context, operation=method.__name__)
-            with codex_install_transaction(
-                context.guard_home,
-                context.guard_home / "managed",
-                actor=f"adapter.{self.harness}.{method.__name__}",
-                check_pending=True,
-            ):
-                return method(self, context, *args, **kwargs)
-
-    owned.__dict__["_guard_mutation_owned"] = True
-    return owned

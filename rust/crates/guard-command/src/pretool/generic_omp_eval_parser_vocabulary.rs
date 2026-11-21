@@ -4,6 +4,7 @@
 pub(super) const RESERVED: &[&str] = &[
     "read",
     "sh",
+    "commit",
     "tool",
     "display",
     "print",
@@ -11,6 +12,7 @@ pub(super) const RESERVED: &[&str] = &[
     "console",
     "Promise",
     "JSON",
+    "Object",
     "await",
     "async",
     "const",

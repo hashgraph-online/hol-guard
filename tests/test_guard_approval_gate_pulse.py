@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import approval_gate, approval_gate_pulse
+from codex_plugin_scanner.guard.approval_gate_fresh import require_fresh_approval_decision
 from codex_plugin_scanner.guard.approval_gate_state import ApprovalGatePublicConfig
 from codex_plugin_scanner.guard.approval_gate_types import (
     ApprovalGateError,
@@ -61,7 +62,7 @@ class FakeResident:
             if isinstance(answer, ApprovalGateError):
                 raise answer
             return {"status": answer}
-        if method == "require_approval_decision":
+        if method in {"require_approval_decision", "verify"}:
             pulse_id = getattr(gate_input, "pulse_request_id", None)
             if pulse_id == "azr_1" or (self.cooldown_covered and len(self.calls) > 2):
                 return {"grant": dict(_GRANT)}
@@ -86,6 +87,24 @@ def _decide(tmp_path: Path, gate_input: ApprovalGateInput | None):
     return approval_gate.require_approval_decision(
         tmp_path, action="allow", scope="workspace", approval_gate_input=gate_input
     )
+
+
+def test_a_fresh_approval_decision_waits_for_the_yid_app_too(tmp_path: Path, resident) -> None:
+    # The inline install prompt asks for a proof that never leans on an open
+    # cooldown. With Pulse on, that still means a phone approval rather than a
+    # refusal the caller cannot answer.
+    fake = resident(FakeResident(["approved"]))
+
+    grant = require_fresh_approval_decision(
+        tmp_path,
+        action="allow",
+        scope="workspace",
+        approval_gate_input=ApprovalGateInput(pulse_mode="wait"),
+        subject="approval-request:r1",
+    )
+
+    assert grant is not None and grant.factor_set == ("pulse",)
+    assert fake.methods() == ["verify", "pulse_request", "pulse_poll", "verify"]
 
 
 def test_cli_waits_for_the_yid_app_then_retries_the_same_action(tmp_path: Path, resident) -> None:

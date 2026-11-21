@@ -1,8 +1,7 @@
 //! The receipts of plain relayed package calls, written by the resident.
 //!
 //! A package call the native relay answered leaves an `mcp_package_call`
-//! record, and the daemon's `mcp_relay_package_evidence_drain` recorded it as
-//! `_record_package_forward` and the proxy's package blocks do: an
+//! record. The resident writes the same receipt as the proxy's package path: an
 //! `allow_tool_call` or `block_tool_call` receipt against the package
 //! request's own artifact, with the approval-context token that request hashed
 //! to, the evaluation's reason signals, and the package scanner evidence after
@@ -17,18 +16,15 @@
 //! Python drain drops it.
 //!
 //! A plain package record is a forward under its own action, an observed
-//! forward whose notices the resident already raised, a policy block, an ask
-//! block whose desktop notice the resident already raised, or a
-//! safe-alternative block
+//! forward, a policy block, an ask block, or a safe-alternative block
 //! whose record names the approval center its inbox row links to. The `ask`
 //! branch of `_queue_package_approval_response` and the unqueued routes
 //! project the call without the artifact, so their receipts record no risk
 //! categories. A safe-alternative block projects it with the artifact, as
 //! `_queue_approval_center_response` does, and its silent inbox row follows
-//! the receipt (`_record_unprompted_review`). An ask block still carrying its
-//! notice, an observed forward still carrying
-//! notices, and a safe-alternative block from a binding with no center are
-//! still the daemon's to write.
+//! the receipt (`_record_unprompted_review`). The drain also attempts any
+//! pending notices after the receipt. A safe-alternative block from a binding
+//! with no center still needs additional native handling.
 
 use std::path::Path;
 
@@ -89,15 +85,18 @@ pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
     {
         return None;
     }
-    // An observed forward whose notices the resident raised; one still
-    // carrying a notice is the daemon's to raise.
+    // A package observation may leave a notice for each of its two legs.
     let observed = match record.get(OBSERVED_KEY) {
         None => false,
-        Some(observed) if *observed == json!({"notices": []}) => true,
+        Some(observed)
+            if observed.as_object().is_some_and(|fields| fields.len() == 1)
+                && super::notice::valid(&observed["notices"], 2, None) =>
+        {
+            true
+        }
         Some(_) => return None,
     };
-    // An ask block whose desktop notice the resident raised; one still
-    // carrying a notice is the daemon's to raise.
+    // An ask block names the request and any notice left to the drain.
     let queued = match record.get(APPROVAL_KEY) {
         None => false,
         Some(approval) if approval_fits(approval) => true,

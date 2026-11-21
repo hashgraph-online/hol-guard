@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.codex_hook_state_support import fixed_hook_state
 from tests.cursor_test_support import cursor_agent_on_path
 
@@ -24,10 +24,6 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = _context(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.codex_harness_lifecycle._command_available",
-        lambda *_args: True,
-    )
     command = "python -I ./codex_daemon_hook_bridge.py '{}'"
     hook_entry = {
         "matcher": "*",
@@ -60,9 +56,9 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
         fixed_hook_state(verified=False, reason="codex_hook_interpreter_path_mismatch"),
     )
 
-    from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("codex").diagnostics(context)
+    payload = harness_ops.diagnostics("codex", context)
 
     assert payload["native_hook_state"]["managed_hook_installed"] is True
     assert payload["native_hook_state"]["protection_active"] is False
@@ -104,9 +100,9 @@ def test_doctor_treats_managed_cursor_hooks_as_guard_install(
     )
     cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = harness_ops.diagnostics("cursor", context)
 
     assert payload["setup_status"] == "active"
     assert any(artifact["artifact_type"] == "guard_hook" for artifact in payload["artifacts"])
@@ -135,9 +131,9 @@ def test_doctor_ignores_name_only_cursor_hook_marker(
     )
     cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = harness_ops.diagnostics("cursor", context)
 
     assert not any(artifact["artifact_type"] == "guard_hook" for artifact in payload["artifacts"])
     assert payload["setup_status"] != "active"
@@ -165,10 +161,9 @@ def test_doctor_ignores_disabled_or_missing_cursor_hook_script(
     )
     cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    adapter = get_adapter("cursor")
-    missing_payload = adapter.diagnostics(context)
+    missing_payload = harness_ops.diagnostics("cursor", context)
     assert not any(artifact["artifact_type"] == "guard_hook" for artifact in missing_payload["artifacts"])
     assert missing_payload["setup_status"] != "active"
 
@@ -191,7 +186,7 @@ def test_doctor_ignores_disabled_or_missing_cursor_hook_script(
         ),
         encoding="utf-8",
     )
-    disabled_payload = adapter.diagnostics(context)
+    disabled_payload = harness_ops.diagnostics("cursor", context)
     assert not any(artifact["artifact_type"] == "guard_hook" for artifact in disabled_payload["artifacts"])
     assert disabled_payload["setup_status"] != "active"
 
@@ -227,10 +222,6 @@ def test_codex_doctor_reports_leftover_hooks_for_an_uninstalled_codex(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = _context(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.codex_harness_lifecycle._command_available",
-        lambda *_args: False,
-    )
     command = "hol-guard guard hook codex"
     hook_entry = {
         "matcher": "*",
@@ -255,9 +246,9 @@ def test_codex_doctor_reports_leftover_hooks_for_an_uninstalled_codex(
         fixed_hook_state(verified=True),
     )
 
-    from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("codex").diagnostics(context)
+    payload = harness_ops.diagnostics("codex", context)
 
     # Codex is gone, so its managed hooks cannot run and cannot leave anything
     # unprotected either. That is leftover configuration, not a broken setup.

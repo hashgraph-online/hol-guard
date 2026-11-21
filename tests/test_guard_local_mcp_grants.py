@@ -172,7 +172,7 @@ def test_mcp_targeted_grant_reads_only_called_tool_and_other(tmp_path: Path) -> 
 
 def test_mcp_targeted_grant_keeps_observed_hashed_tool_choice(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
-    from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
+    from tests.python_oracles.observed_mcp_tools import observed_command_id, observed_mcp_tool
 
     tool = observed_mcp_tool("codex", "mcp__codex_apps__composio__COMPOSIO_SEARCH_TOOLS")
     assert tool is not None
@@ -194,14 +194,14 @@ def test_mcp_targeted_grant_keeps_observed_hashed_tool_choice(tmp_path: Path) ->
     )
     store.replace_local_cli_commands(
         identity.cli_id,
-        (LocalCliCommand(tool.command_id, tool.name, tool.qualified_name, "Observed tool"),),
+        (LocalCliCommand(observed_command_id(tool), tool.name, tool.qualified_name, "Observed tool"),),
     )
     store.upsert_local_cli_grant(
         identity=identity,
         state="allowed",
         expected_revision=0,
         updated_at=utc_now(),
-        command_states={tool.command_id: "block"},
+        command_states={observed_command_id(tool): "block"},
     )
     artifact = _artifact(tool.server_identity, tool.qualified_name)
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="allow") == "blocked"

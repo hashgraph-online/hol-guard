@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from tests import harness_ops_support as harness_support
 from tests.opencode_test_support import refresh_opencode_proxy_launchers
 
 LOCK = Path(".config") / "opencode" / ".hol-guard-config.lock"
@@ -47,11 +47,14 @@ def test_install_cleanup_and_refresh_wait_for_another_process_holding_the_lock(t
         stdout=subprocess.PIPE,
         text=True,
     )
-    adapter = get_adapter("opencode")
     try:
         assert child.stdout is not None
         assert child.stdout.readline().strip() == "locked"
-        for operation in (adapter.install, adapter.uninstall, refresh_opencode_proxy_launchers):
+        for operation in (
+            lambda ctx: harness_support.install("opencode", ctx),
+            lambda ctx: harness_support.uninstall("opencode", ctx),
+            refresh_opencode_proxy_launchers,
+        ):
             with pytest.raises(RuntimeError, match="Another Guard operation"):
                 operation(context)
     finally:
@@ -73,5 +76,5 @@ def test_install_refuses_a_symlinked_lock_without_touching_its_target(tmp_path: 
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path.symlink_to(target)
     with pytest.raises(ValueError):
-        get_adapter("opencode").install(context)
+        harness_support.install("opencode", context)
     assert target.read_text(encoding="utf-8") == "unchanged"

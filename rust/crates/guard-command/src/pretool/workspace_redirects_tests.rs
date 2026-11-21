@@ -22,6 +22,11 @@ fn literal_path_redirects_are_projected_away() {
         ("python3 app.py &>> log.txt", "python3 app.py"),
         ("python3 app.py &> /dev/null", "python3 app.py"),
         ("python3 app.py>out.txt", "python3 app.py"),
+        ("(true) && (cat b 2>&1)", "(true) && (cat b )"),
+        (
+            "(npm test 2>&1 || npm test 2>&1)",
+            "(npm test || npm test )",
+        ),
         ("echo a > a.txt  &&  echo b", "echo a &&  echo b"),
         ("echo a\\ > a.txt\nrm -rf x", "echo a\\ \nrm -rf x"),
     ] {
@@ -121,6 +126,11 @@ fn a_quoted_heredoc_feeds_python_a_program_that_fits_the_sandbox() {
             "python3 -I <<'EOF'\nimport glob\nprint(glob.glob('*'))\nEOF",
             "python3 -I",
         ),
+        // Accented text in a plain string is read masked (`python_text`).
+        (
+            "python3 - <<'EOF'\nprint('\u{e9}')\nimport os\nEOF",
+            "python3 -",
+        ),
     ] {
         assert_eq!(project(raw).as_deref(), Some(projected), "{raw:?}");
     }
@@ -133,7 +143,7 @@ fn a_quoted_heredoc_feeds_python_a_program_that_fits_the_sandbox() {
         "python3 - <<'EOF'\nfrom urllib.request import urlopen\nEOF",
         "python3 - <<'EOF'\nimport os\nprint(open(os.path.expanduser('~/.aws/credentials')).read())\nEOF",
         "python3 - <<'EOF'\n# coding: utf-7\nprint(1)\nEOF",
-        "python3 - <<'EOF'\nprint('\u{e9}')\nimport os\nEOF",
+        "python3 - <<'EOF'\nimport os\nprint(\u{ff45}\u{ff58}\u{ff45}\u{ff43})\nEOF",
         "python3 - <<'EOF'\nprint(1)\n  EOF\nimport socket\nEOF",
         "python3 - <<'EOF'\nprint(1)",
         "python3 - <<EOF\nprint(1)\nEOF",

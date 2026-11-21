@@ -690,3 +690,37 @@ fn a_home_variable_route_needs_a_home_that_reaches_git_as_one_word() {
     assert_eq!(route("guard home"), None);
     assert_eq!(route("guard*home"), None);
 }
+
+/// `git-stage(1)` is documented as a synonym of `git-add(1)`. The rule owner
+/// lookup read the subcommand word, so `stage` matched no porcelain owner and
+/// every Git rule was attributed as uncertain. A full Git Allow settled all of
+/// them and the shipped default permissions did not, so a user with the Git
+/// extension enabled had `git add -A` run and `git stage -A` ask.
+#[test]
+fn the_staging_synonym_owns_the_same_rules_as_adding() {
+    let owners = |command: &str| {
+        let mut ids: Vec<(&str, bool)> = observations(command)
+            .rule_matches
+            .iter()
+            .map(|item| (item.rule_id, item.uncertainty))
+            .collect();
+        ids.sort_unstable();
+        ids
+    };
+    for (adding, staging) in [
+        ("git add -A", "git stage -A"),
+        ("git add --all", "git stage --all"),
+        ("git add -u", "git stage -u"),
+        ("git add -- src/index.ts", "git stage -- src/index.ts"),
+    ] {
+        assert_eq!(owners(adding), owners(staging), "{staging} vs {adding}");
+    }
+    // `add` is a fixed built-in with a declarative owner, so it attributes
+    // nothing. The comparison above is only meaningful because a word this
+    // lookup does not recognise raises every Git rule instead, which is what
+    // `stage` used to do.
+    assert!(
+        owners("git frobnicate -A").len() > 1,
+        "an unrecognised subcommand must still raise the Git rules"
+    );
+}

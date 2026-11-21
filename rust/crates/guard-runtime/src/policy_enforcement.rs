@@ -133,7 +133,29 @@ pub(crate) fn apply_pre_tool_policy_for_hook(
         &envelope.source.guard_home,
         envelope.source.cwd.as_deref(),
     );
-    apply_pre_tool_policy_with_inspection(snapshot, &envelope.raw_payload, result, inspection)
+    // Guard's own safety guide passes the execution floors only where the
+    // native verdict already allows the read; it never turns a review into
+    // an allow.
+    let guide = result.minimum_action == "allow"
+        && guard_safety_guide_read(&envelope.raw_payload, &envelope.source.home_dir);
+    apply_pre_tool_policy_with_inspection(
+        snapshot,
+        &envelope.raw_payload,
+        result,
+        inspection || guide,
+    )
+}
+
+/// Whether `payload` is one plain read of Guard's own safety guide below the
+/// hook's user home, the read Guard's managed agent instructions ask for
+/// (`guard_command::pretool::guard_safety_guide_read_command`).
+fn guard_safety_guide_read(payload: &Value, home_dir: &str) -> bool {
+    guard_command::pretool::generic::extract_untrusted_command_context(payload)
+        .ok()
+        .and_then(|context| context.command)
+        .is_some_and(|command| {
+            guard_command::pretool::guard_safety_guide_read_command(&command, home_dir)
+        })
 }
 
 /// The native review of a `--home` Guard's launcher cannot place, lifted when
@@ -324,6 +346,7 @@ pub(crate) fn apply_pre_tool_policy_with_inspection(
             package_scripts_disabled: package_scripts_disabled(payload, &result),
             operator_allowed_mcp_tool,
         },
+        false,
         guard_inspection && !facts.sensitive_target,
     )?;
     let effective = join_action(&result.minimum_action, &policy_floor)?;

@@ -566,7 +566,11 @@ impl CompiledNativeCommandControls {
         // whose other steps the user allowed: each step is judged alone, and
         // the compound passes when every step does. The check below that a
         // Git step's output stays clear of `.git` still applies to it.
-        covered.extend(crate::pretool::segments_safe_alone(command, context));
+        covered.extend(crate::pretool::segments_safe_alone(
+            command,
+            context,
+            environment,
+        ));
         // A Git step that points its own output over `.git` or out of the
         // workspace writes whichever route covered it: a `git log` rule the
         // user enabled reads the verb, not the `--output=.git/config` that

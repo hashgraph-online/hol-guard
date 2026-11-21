@@ -3,13 +3,13 @@ use super::*;
 pub(super) fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
-        [command, flag] if command == "context-assistance-install-operator" && flag == "--stdin" => {
-            let response = policy_store::context_assistance_registry::run_operator_command(io::stdin().lock())?;
-            write_bytes_response(&response)
+        [command, flag] if command == cloud_bundle_command::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&cloud_bundle_command::run_command(&bytes))
         }
-        [command, flag] if command == "context-assistance-enroll-local" && flag == "--stdin" => {
-            let response = policy_store::context_assistance_registry::run_enroll_command(io::stdin().lock())?;
-            write_bytes_response(&response)
+        [command, flag] if command == cloud_event_command::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&cloud_event_command::run_command(&bytes))
         }
         [command, flag] if command == "pack-lifecycle" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
@@ -26,6 +26,12 @@ pub(super) fn run() -> Result<(), String> {
         #[cfg(unix)]
         [command, rest @ ..] if command == contained_workspace_sink::LAUNCH_COMMAND => {
             std::process::exit(contained_workspace_sink::launch(rest))
+        }
+        [command, rest @ ..] if command == context_cli::COMMAND => {
+            std::process::exit(context_cli::run(rest))
+        }
+        [command, rest @ ..] if command == context_mcp::COMMAND => {
+            std::process::exit(context_mcp::run(rest))
         }
         [command, rest @ ..] if command == codex_sandbox_check::CHECK_COMMAND => {
             std::process::exit(codex_sandbox_check::run(rest))
@@ -97,6 +103,10 @@ pub(super) fn run() -> Result<(), String> {
             let bytes = read_stdin_bounded()?;
             let response = oneshot::evaluate_hook_bytes(&bytes)?;
             write_bytes_response(&response)
+        }
+        [command, flag] if native_error_code::is_command(command) && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_bytes_response(&native_error_code::run(&bytes)?)
         }
         [command, flag] if command == "native-bash-host-context" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
@@ -193,6 +203,18 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if guard_config_load::is_command(command) && flag == "--stdin" => {
             let response = guard_config_load::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if command_state::is_command(command) && flag == "--stdin" => {
+            let response = command_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if command_result::is_command(command) && flag == "--stdin" => {
+            let response = command_result::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if auto_update_state::is_command(command) && flag == "--stdin" => {
+            let response = auto_update_state::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if guard_config_update::is_command(command) && flag == "--stdin" => {
@@ -671,6 +693,14 @@ pub(super) fn run() -> Result<(), String> {
         [command, flag] if command == guard_plugin_kit::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&guard_plugin_kit::run_request(&bytes))
+        }
+        [command, flag] if command == crate::local_cli_discover::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&crate::local_cli_discover::run_command(&bytes))
+        }
+        [command, flag] if command == plugin_telemetry_host::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&plugin_telemetry_host::run_command(&bytes))
         }
         [command, flag] if command == guard_plugin_telemetry::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;

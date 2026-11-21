@@ -8,7 +8,7 @@ from typing import Literal, cast
 
 from typing_extensions import TypedDict
 
-from ..harness.diagnostic_probes import command_probes_enabled
+from ..command_probes import command_probes_enabled
 from ..native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY
 
 # JSON has no integer bound; the runtime writes every count as a u32.

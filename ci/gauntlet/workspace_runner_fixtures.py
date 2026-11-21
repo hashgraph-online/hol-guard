@@ -101,6 +101,8 @@ WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
 # A filter is not a Vitest command, so the run is the same single pass the bare
 # `run` verb names.
 WORKSPACE_VITEST_FILTER_CASE = "omp-native-workspace-vitest-filter"
+# A counted output filter applied to the local Vitest summary must still exercise the runner.
+WORKSPACE_VITEST_SUMMARY_CASE = "omp-native-workspace-runner-summary-line"
 # The same installed Vitest launched by a file its install wrote: Node given the
 # link npm puts in `node_modules/.bin`, and Bun given the package's own launcher.
 # Both name the workspace's runner, so the run means something only when that
@@ -152,6 +154,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
         WORKSPACE_VITEST_FILTER_CASE,
+        WORKSPACE_VITEST_SUMMARY_CASE,
         WORKSPACE_VITEST_BIN_LINK_CASE,
         WORKSPACE_VITEST_BUN_ENTRY_CASE,
         WORKSPACE_RUN_ALL_CASE,
@@ -606,6 +609,19 @@ _VITEST_RUN_FILES = {
     ),
 }
 
+# This runner prints a summary only if the single-pass invocation and its
+# quiet reporter flags reach the workspace's installed executable.
+VITEST_SUMMARY_MARKER = "Tests 1 passed (1)"
+_VITEST_SUMMARY_FILES = {
+    **_VITEST_RUN_FILES,
+    "node_modules/vitest/vitest.mjs": (
+        "#!/usr/bin/env node\n"
+        "const argv = process.argv.slice(2);\n"
+        "const once = argv[0] === 'run' && argv.includes('--reporter=dot') && argv.includes('--silent');\n"
+        f"console.log(once ? '{VITEST_SUMMARY_MARKER}' : 'vitest: summary invocation was not forwarded');\n"
+    ),
+}
+
 
 _LINT_STAGED_VERSION = "16.1.2"
 # The one line the workspace's own commit hook prints.
@@ -781,6 +797,7 @@ _INSTALLS = {
         TSX_MARKER,
         entry="dist/cli.mjs",
     ),
+    WORKSPACE_VITEST_SUMMARY_CASE: _Install("vitest", _VITEST_SUMMARY_FILES, VITEST_SUMMARY_MARKER, entry="vitest.mjs"),
     WORKSPACE_VITEST_FILTER_CASE: _Install(
         "vitest",
         _VITEST_FILES,

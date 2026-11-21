@@ -255,7 +255,7 @@ Explicit non-support:
 
 ## Protection Contract Summary
 
-Generated from `src/codex_plugin_scanner/guard/harness/contracts.py`.
+Generated from `src/codex_plugin_scanner/guard/setup_contracts.py`.
 
 | Harness | Install Aliases | Native Approval | Browser Fallback | Resume | Event Surfaces |
 |---------|-----------------|-----------------|------------------|--------|----------------|

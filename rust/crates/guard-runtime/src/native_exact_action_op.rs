@@ -62,7 +62,7 @@ mod git_push;
 #[allow(dead_code)]
 mod git_windows;
 mod hook_review;
-pub(crate) use hook_review::policy_binding_holds;
+pub(crate) use hook_review::{policy_binding_holds, policy_binding_value};
 mod launch;
 mod launch_evidence;
 pub(crate) use launch::is_safe_single_invocation;
@@ -249,12 +249,7 @@ pub(crate) fn hook_review_evidence(
             token,
             once_only_reason,
         }) => {
-            // Exactly one of a token and a once-only reason.
-            let (token, once_only_reason) = match (token, once_only_reason) {
-                (Some(token), None) => (Some(token), None),
-                (None, Some(reason)) => (None, Some(reason)),
-                _ => (None, Some(reasons::UNPROVEN_LAUNCH.to_owned())),
-            };
+            let (token, once_only_reason) = reasons::review_identity(token, once_only_reason);
             GuardHookReviewEvidenceV1 {
                 policy_binding_valid,
                 binding,

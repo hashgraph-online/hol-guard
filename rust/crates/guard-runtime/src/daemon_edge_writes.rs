@@ -36,6 +36,8 @@ const MAX_HANDLER_LIST_ITEMS: usize = 4_096;
 
 #[path = "daemon_edge_cloud_connect.rs"]
 pub(super) mod cloud_connect;
+#[path = "daemon_edge_context_assistance.rs"]
+pub(super) mod context_assistance;
 #[path = "daemon_edge_gate.rs"]
 mod gate;
 #[path = "daemon_edge_gate_config.rs"]
@@ -43,7 +45,7 @@ mod gate_config;
 #[path = "daemon_edge_headless.rs"]
 pub(super) mod headless;
 #[path = "daemon_edge_policy_write.rs"]
-mod policy_write;
+pub(super) mod policy_write;
 #[path = "daemon_edge_protection_repair.rs"]
 mod protection_repair;
 pub(in crate::daemon_edge) use protection_repair::record_diagnostic;
@@ -117,6 +119,15 @@ pub(super) fn respond(
         let args = route_calls::extension_control_args("POST", request.path);
         let (status, body, no_store) =
             route_calls::respond(args, &payload, route_calls::extension_control(config))?;
+        return Some((status, body, caller.cors_origin, no_store));
+    }
+    if request.method == "POST" && context_assistance::writes(request.path) {
+        let caller = authorize_write(request, &config.token)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
+        reads.report_activity();
+        // The gate may have run, so the edge answers and never relays.
+        let (status, body, no_store) = context_assistance::post(request.path, &payload, config)
+            .unwrap_or((DROPPED, Value::Null, false));
         return Some((status, body, caller.cors_origin, no_store));
     }
     if let Some((name, args)) = (request.method == "POST")

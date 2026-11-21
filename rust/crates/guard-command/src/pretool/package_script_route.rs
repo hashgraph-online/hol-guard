@@ -70,6 +70,20 @@ pub(in crate::pretool) fn contained_test_reason(
     resolved(&core, reason, cwd, context)
 }
 
+/// The command and directory [`contained_test_reason`] read a pytest run
+/// from: the command itself in the session directory, or its verified wrapper
+/// core in the directory that core runs in.
+pub(in crate::pretool) fn pytest_core(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<(CanonicalCommandV1, Option<PathBuf>)> {
+    if super::readonly_test_reason(model, context.cwd.map(Path::new)).is_some() {
+        return Some((model.clone(), context.cwd.map(PathBuf::from)));
+    }
+    let core = contained_core(model, context)?;
+    Some((core, core_cwd(model, context)))
+}
+
 /// The package-test route's own reading of a `cd` target that no repository
 /// roots: a project with a manifest roots that sandbox, and the answer is
 /// kept only when the run is in fact the package `test` script. Every other

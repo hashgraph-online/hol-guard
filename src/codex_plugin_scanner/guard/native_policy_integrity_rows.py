@@ -364,7 +364,7 @@ def _request_chunk(
     other = payload.get("sign" if field == "verify" else "verify")
     if not isinstance(outcomes, list) or len(outcomes) != len(items) or other != []:
         raise NativePolicyIntegrityUnavailableError()
-    if "generation" in payload or "reconcile" in payload:
+    if set(payload) != {"verify", "sign"}:
         raise NativePolicyIntegrityUnavailableError()
     if not all(isinstance(outcome, dict) for outcome in outcomes):
         raise NativePolicyIntegrityUnavailableError()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from codex_plugin_scanner.guard import native_runner_authority
-from codex_plugin_scanner.guard.harness import contract_registry
+from codex_plugin_scanner.guard import setup_contract_registry as contract_registry
 
 
 def _event() -> dict[str, object]:
@@ -100,7 +100,7 @@ def test_a_name_or_alias_resolves_natively_and_an_unknown_name_has_no_contract(a
 
 
 def test_the_registry_stays_importable_by_name_and_is_read_only_on_first_use(answers: list[object]) -> None:
-    from codex_plugin_scanner.guard.harness import contracts
+    from codex_plugin_scanner.guard import setup_contracts as contracts
 
     assert answers == []
     assert contract_registry.harness_contracts() == contracts.HARNESS_CONTRACTS

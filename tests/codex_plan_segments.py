@@ -14,12 +14,13 @@ from pathlib import Path
 from typing import Any
 
 from codex_plugin_scanner.guard.codex_config import _Wire
-from codex_plugin_scanner.guard.codex_harness_client import _codex, _legacy_fields, _reply_text, _runtime_guard_home
+from codex_plugin_scanner.guard.codex_harness_client import _codex, _reply_text, _runtime_guard_home
 from codex_plugin_scanner.guard.codex_hook_self_binding import install_fields, short_path_fields
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import planned_files
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer
+from codex_plugin_scanner.guard.native_harness_steps import planned_files
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
+from tests.codex_install_flow_support import legacy_fields
 from tests.codex_toml_support import _restore_native
 from tests.mcp_proxy_launcher import python_proxy_launcher_entry
 
@@ -54,7 +55,7 @@ def prepare_codex_hook_migration(
         "hooks": str(hooks_path),
         "owned": json.dumps(list(owned_bindings), separators=(",", ":")),
         "require_owners": require_owners,
-        **_legacy_fields(context),
+        **legacy_fields(context),
         **install_fields(_runtime_guard_home(context), None),
         **short_path_fields(),
     }
@@ -110,7 +111,7 @@ def prepare_codex_alternate_cleanup(
         "config": str(config_path),
         "remove_hooks": remove_hooks,
         "managed_server_names": list(managed_server_names),
-        **_legacy_fields(context),
+        **legacy_fields(context),
         **install_fields(_runtime_guard_home(context), None),
         **short_path_fields(),
     }

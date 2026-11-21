@@ -12,7 +12,7 @@ from .aibom_content_upload import (
 from .aibom_models import (
     AibomCliOptions,
 )
-from .harness.base import HarnessContext
+from .harness_context import HarnessContext
 from .harness_tool_version import tool_version_from_detection
 from .inventory_contract import (
     GuardAgentInventorySnapshot,

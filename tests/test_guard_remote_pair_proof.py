@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.cli.remote_pair_flow import (
     claim_remote_pairing_intent,
     run_guard_remote_pair_command,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 
 

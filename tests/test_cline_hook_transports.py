@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import ask
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 from tests.cline_test_support import hook_state, install_plugin, uninstall
 from tests.cline_test_support import plugin_source as _plugin_source
 from tests.cline_worker_config import worker_config as _worker_config

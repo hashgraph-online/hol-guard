@@ -12,10 +12,9 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard import native_caller
-from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge, native_hook_bridge
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND
+from codex_plugin_scanner.guard import bounded_cli_hook_bridge, native_caller, native_hook_bridge
+from codex_plugin_scanner.guard.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 from .bounded_cli_hook_test_support import config as _config
 from .bounded_cli_hook_test_support import json_object as _json_object
@@ -182,7 +181,7 @@ def test_a_hook_the_runtime_cannot_answer_is_blocked_with_a_repair_message(
 
 def test_the_hook_failure_shim_returns_only_a_well_formed_native_answer(monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import native_runner_authority
-    from codex_plugin_scanner.guard.harness.hook_failure_bridge import native_hook_failure
+    from codex_plugin_scanner.guard.hook_failure_bridge import native_hook_failure
 
     seen: list[tuple[str, dict[str, object]]] = []
     answers: list[object] = [

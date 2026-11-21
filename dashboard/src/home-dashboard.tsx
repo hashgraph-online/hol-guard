@@ -34,8 +34,7 @@ import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
 import { HomeCommandActivityCard } from "./command-activity/command-activity-home-card";
 import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
 import { WatchProtectionBanner } from "./watch-protection-banner";
-import { turnProtectionOnUpdate, watchBannerModel } from "./harness-posture-ui";
-import { updateSettings } from "./guard-api";
+import { watchBannerModel } from "./harness-posture-ui";
 import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
 import { approvalLeftActionStopped } from "./evidence/approval-outcome";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
@@ -197,19 +196,10 @@ export function HomeWorkspace(props: {
     props.onClearPolicies(scope);
   }, [props.onClearPolicies]);
 
-  const handleTurnProtectionOn = useCallback(() => {
-    const current = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
-    void updateSettings(current === null ? { protection_posture: "protected" } : turnProtectionOnUpdate(current))
-      .then(async () => {
-        await props.onRefreshRuntime?.();
-        props.onOpenSettings();
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "Unable to turn protection on.";
-        showToast(message);
-        props.onOpenSettings();
-      });
-  }, [props.onOpenSettings, props.onRefreshRuntime, props.runtime, showToast]);
+  const handleProtectionTurnedOn = useCallback(async () => {
+    showToast("Protection is on.");
+    await props.onRefreshRuntime?.();
+  }, [props.onRefreshRuntime, showToast]);
 
   const handleClearPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setClearPassword(event.target.value);
@@ -354,7 +344,11 @@ export function HomeWorkspace(props: {
   return (
     <div className="space-y-6">
       {watchBanner !== null ? (
-        <WatchProtectionBanner model={watchBanner} onTurnProtectionOn={handleTurnProtectionOn} />
+        <WatchProtectionBanner
+          model={watchBanner}
+          onTurnedOn={handleProtectionTurnedOn}
+          onOpenSettings={props.onOpenSettings}
+        />
       ) : null}
       {shareOpen && analyticsState.kind === "ready" ? (
         <EvidenceInsightsShareModal

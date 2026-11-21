@@ -119,7 +119,8 @@ pub(super) fn routine_local_runner(intent: &PackageIntent) -> bool {
         return false;
     }
 
-    if execution.manifests.is_empty() || execution.lockfiles.is_empty() {
+    let local_only = install_refused(&intent.package_manager, &intent.command_tokens);
+    if execution.manifests.is_empty() || (execution.lockfiles.is_empty() && !local_only) {
         return false;
     }
     let (Some(manager), Some(executable)) = (
@@ -158,13 +159,41 @@ pub(super) fn routine_local_runner(intent: &PackageIntent) -> bool {
         return false;
     }
 
-    intent.execution_context_reason_codes.is_empty()
-        && versions_match(
+    if !intent.execution_context_reason_codes.is_empty() {
+        return false;
+    }
+    let Some(installed_version) =
+        declared_release_installed(&workspace, dependency_name, declared_version)
+    else {
+        return false;
+    };
+    // A run that cannot fetch starts the bin checked above or nothing, so a
+    // lockfile another manager left behind has nothing to say about it.
+    local_only
+        || lockfiles_pin(
             &workspace,
             dependency_name,
             declared_version,
+            &installed_version,
             &execution.lockfiles,
         )
+}
+
+/// Whether the runner's own options forbid a registry fetch. `npx` reads
+/// `--no-install` as `--no`, and the last of `--yes`, `-y` and `--no` wins;
+/// `bunx` has only `--no-install`. Words after the executable are the tool's.
+fn install_refused(manager: &str, tokens: &[String]) -> bool {
+    let mut refused = false;
+    for token in tokens.iter().skip(1) {
+        match (manager, token.as_str()) {
+            (_, "--") => break,
+            ("npx" | "bunx", "--no-install") | ("npx", "--no") => refused = true,
+            ("npx", "--yes" | "-y") => refused = false,
+            (_, option) if option.starts_with('-') => {}
+            _ => break,
+        }
+    }
+    refused
 }
 
 /// The largest manifest or lockfile the verdict reads. The parser runs in
@@ -213,14 +242,13 @@ fn registry_entry(entry: &Map<String, Value>) -> bool {
     }
 }
 
-/// The declared dependency pin, the installed manifest and every lockfile
-/// must name one version, and that version must satisfy the pin.
-fn versions_match(
+/// The installed release, when `package.json` declares the pin the evidence
+/// read and the package installed under that name satisfies it.
+fn declared_release_installed(
     workspace: &Path,
     dependency_name: &str,
     declared_version: &str,
-    lockfiles: &[PackageExecutionFileEvidence],
-) -> bool {
+) -> Option<String> {
     let (Some(manifest), Some(installed)) = (
         read_json_object(&workspace.join("package.json")),
         read_json_object(
@@ -230,7 +258,7 @@ fn versions_match(
                 .join("package.json"),
         ),
     ) else {
-        return false;
+        return None;
     };
 
     let declared = ["dependencies", "devDependencies"].iter().any(|group| {
@@ -242,12 +270,21 @@ fn versions_match(
             == Some(declared_version)
     });
     if !declared || installed.get("name").and_then(Value::as_str) != Some(dependency_name) {
-        return false;
+        return None;
     }
-    let Some(installed_version) = installed.get("version").and_then(Value::as_str) else {
-        return false;
-    };
+    let installed_version = installed.get("version").and_then(Value::as_str)?;
+    semver_spec_matches(declared_version, installed_version).then(|| installed_version.to_owned())
+}
 
+/// Every lockfile that still describes the declared dependency must name one
+/// version, the installed one.
+fn lockfiles_pin(
+    workspace: &Path,
+    dependency_name: &str,
+    declared_version: &str,
+    installed_version: &str,
+    lockfiles: &[PackageExecutionFileEvidence],
+) -> bool {
     let mut locked: BTreeSet<String> = BTreeSet::new();
     for evidence in lockfiles {
         let Some(resolved) = evidence.resolved_path.as_deref() else {
@@ -261,10 +298,21 @@ fn versions_match(
         else {
             return false;
         };
+        // A lockfile whose every entry for this dependency falls outside the
+        // range the manifest declares was written against an older manifest.
+        // Projects keep an abandoned manager's lockfile in the tree long after
+        // they stop running it, and a pin the manifest no longer admits cannot
+        // describe the installed tree: the installed release has to satisfy
+        // that range to get this far. Such a file neither pins the runner nor
+        // contradicts the lockfiles that do, so it is passed over rather than
+        // read as a conflict.
+        if versions
+            .iter()
+            .all(|version| !semver_spec_matches(declared_version, version))
+        {
+            continue;
+        }
         locked.extend(versions);
     }
-
-    locked.len() == 1
-        && locked.contains(installed_version)
-        && semver_spec_matches(declared_version, installed_version)
+    locked.len() == 1 && locked.contains(installed_version)
 }

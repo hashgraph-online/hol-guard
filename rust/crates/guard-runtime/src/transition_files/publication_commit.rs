@@ -262,6 +262,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_restore" => publication_files::restore(call),
         "publication_remove_manifest" => publication_files::remove_manifest(call),
         "publication_lean_sessions" => super::publication_lean::lean_sessions(call),
+        "publication_short_replies" => super::publication_short_replies::short_replies(call),
         "publication_baseline" => publication_baseline::load(call),
         "publication_receipt_load" => publication_receipt::load(call),
         "publication_receipt_build" => publication_receipt::build(call),
@@ -288,9 +289,13 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_inverse_restore" => super::publication_inverse_publish::restore_op(call),
         "publication_request_create" => super::publication_request::create_op(call),
         "publication_request_read" => super::publication_request::read_op(call),
+        "publication_prepare_request" => super::publication_prepare_request::prepare_op(call),
         "publication_request_policy" => super::publication_request_policy::policy_op(call),
+        "publication_inspect_runtime" => super::publication_inspect_runtime::inspect_op(call),
+        "publication_pin_executable" => super::publication_pin_executable::pin_op(call),
         "publication_runtime_compare" => super::publication_runtime_compare::compare_op(call),
         "publication_inverse_proof" => super::publication_proof::inverse(call),
+        "publication_coordinate" => super::publication_coordinate::coordinate(call),
         "publication_deadline" => super::publication_authorize::deadline(call),
         "publication_artifact_generation" => {
             super::publication_artifact_generation::generation_op(call)

@@ -12,10 +12,11 @@ import pytest
 
 from codex_plugin_scanner.guard import claude_hook_entry as claude_code
 from codex_plugin_scanner.guard import native_caller
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
-from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -75,7 +76,6 @@ def _handler_argv(handler: dict[str, object]) -> tuple[str, ...]:
 
 def test_claude_detect_marks_local_cli_install_as_available_when_not_on_path(monkeypatch, tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
     actual_home = tmp_path / "actual-home"
     local_claude = actual_home / ".claude" / "local" / "claude"
     local_claude.parent.mkdir(parents=True, exist_ok=True)
@@ -84,7 +84,7 @@ def test_claude_detect_marks_local_cli_install_as_available_when_not_on_path(mon
     monkeypatch.setenv("PATH", "")
     monkeypatch.setattr(Path, "home", lambda: actual_home)
 
-    detection = adapter.detect(context)
+    detection = harness_ops.detect("claude-code", context)
 
     assert detection.installed is True
     assert detection.command_available is True
@@ -92,7 +92,6 @@ def test_claude_detect_marks_local_cli_install_as_available_when_not_on_path(mon
 
 def test_claude_launch_command_uses_local_cli_install_when_not_on_path(monkeypatch, tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
     actual_home = tmp_path / "actual-home"
     local_claude = actual_home / ".claude" / "local" / "claude"
     local_claude.parent.mkdir(parents=True, exist_ok=True)
@@ -101,7 +100,7 @@ def test_claude_launch_command_uses_local_cli_install_when_not_on_path(monkeypat
     monkeypatch.setenv("PATH", "")
     monkeypatch.setattr(Path, "home", lambda: actual_home)
 
-    launch_command = adapter.launch_command(context, ["--print", "hello"])
+    launch_command = harness_ops.launch_command("claude-code", context, ["--print", "hello"])
 
     assert launch_command[0] == str(local_claude)
     assert launch_command[1] == str(context.workspace_dir)
@@ -110,7 +109,6 @@ def test_claude_launch_command_uses_local_cli_install_when_not_on_path(monkeypat
 
 def test_claude_detect_ignores_non_executable_local_cli_candidate_when_not_on_path(monkeypatch, tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
     local_binary = tmp_path / "actual-home" / ".claude" / "local" / "claude"
     local_binary.parent.mkdir(parents=True, exist_ok=True)
     local_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -119,7 +117,7 @@ def test_claude_detect_ignores_non_executable_local_cli_candidate_when_not_on_pa
     monkeypatch.setenv("PATH", "")
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "actual-home")
 
-    detection = adapter.detect(context)
+    detection = harness_ops.detect("claude-code", context)
 
     assert detection.installed is False
     assert detection.command_available is False
@@ -127,10 +125,9 @@ def test_claude_detect_ignores_non_executable_local_cli_candidate_when_not_on_pa
 
 def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idempotent(tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
 
-    adapter.install(context)
-    adapter.install(context)
+    harness_support.install("claude-code", context)
+    harness_support.install("claude-code", context)
 
     settings_path = context.home_dir / ".claude" / "settings.json"
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -177,15 +174,11 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
 
 
 def test_get_adapter_accepts_claude_alias():
-    adapter = get_adapter("claude")
-
-    assert isinstance(adapter, NativeHarnessAdapter)
-    assert adapter.harness == "claude-code"
+    assert harness_ops.canonical_harness("claude") == "claude-code"
 
 
 def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
     settings_path = context.home_dir / ".claude" / "settings.json"
     _write_json(
         settings_path,
@@ -242,7 +235,7 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
         },
     )
 
-    adapter.install(context)
+    harness_support.install("claude-code", context)
 
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     installed_handlers = _runtime_hook_handlers(payload)
@@ -343,14 +336,13 @@ def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
 
 def test_claude_install_rejects_symlinked_settings_file(tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
     outside_settings = tmp_path / "outside-settings.json"
     outside_settings.write_text("{}", encoding="utf-8")
     settings_path = context.home_dir / ".claude" / "settings.json"
     _symlink_or_skip(settings_path, outside_settings)
 
     with pytest.raises(ValueError, match="settings path"):
-        adapter.install(context)
+        harness_support.install("claude-code", context)
 
     assert outside_settings.read_text(encoding="utf-8") == "{}"
 
@@ -376,10 +368,9 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
         workspace_dir=initial_context.workspace_dir,
         guard_home=tmp_path / "different-guard-home",
     )
-    adapter = get_adapter("claude-code")
 
-    adapter.install(initial_context)
-    adapter.install(changed_context)
+    harness_support.install("claude-code", initial_context)
+    harness_support.install("claude-code", changed_context)
 
     settings_path = initial_context.home_dir / ".claude" / "settings.json"
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -400,7 +391,6 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
 
 def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
     settings_path = context.home_dir / ".claude" / "settings.json"
     _write_json(
         settings_path,
@@ -420,8 +410,8 @@ def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
         },
     )
 
-    adapter.install(context)
-    adapter.uninstall(context)
+    harness_support.install("claude-code", context)
+    harness_support.uninstall("claude-code", context)
 
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
 
@@ -437,7 +427,6 @@ def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
 
 def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
     settings_path = context.home_dir / ".claude" / "settings.json"
     legacy_command = claude_code.claude_hook_command(context)
     _write_json(
@@ -450,7 +439,7 @@ def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
         },
     )
 
-    adapter.install(context)
+    harness_support.install("claude-code", context)
 
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     pre_tool_use = payload["hooks"]["PreToolUse"]
@@ -466,7 +455,6 @@ def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
 
 def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
     _write_json(
         context.home_dir / ".claude" / "settings.json",
         {
@@ -526,7 +514,7 @@ def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path
     claude_md = context.workspace_dir / "CLAUDE.md"
     claude_md.write_text("# workspace instructions\n", encoding="utf-8")
 
-    detection = adapter.detect(context)
+    detection = harness_ops.detect("claude-code", context)
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
 
     assert "claude-code:global:mcp:global-tools" in artifacts
@@ -548,7 +536,6 @@ def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path
 
 def test_claude_detect_keeps_mcp_server_when_name_collides_with_claude_md_id(tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
     (context.workspace_dir / "CLAUDE.md").write_text("# workspace instructions\n", encoding="utf-8")
     _write_json(
         context.workspace_dir / ".mcp.json",
@@ -562,7 +549,7 @@ def test_claude_detect_keeps_mcp_server_when_name_collides_with_claude_md_id(tmp
         },
     )
 
-    detection = adapter.detect(context)
+    detection = harness_ops.detect("claude-code", context)
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
 
     mcp_artifact = artifacts.get("claude-code:project:mcp:instruction:claude-md")
@@ -576,14 +563,13 @@ def test_claude_detect_keeps_mcp_server_when_name_collides_with_claude_md_id(tmp
 
 def test_claude_detect_keeps_root_claude_md_when_rules_stem_collides(tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
     colliding_rule = context.workspace_dir / ".claude" / "rules" / "claude-md.md"
     colliding_rule.parent.mkdir(parents=True, exist_ok=True)
     colliding_rule.write_text("# benign rule\n", encoding="utf-8")
     root_claude_md = context.workspace_dir / "CLAUDE.md"
     root_claude_md.write_text("# malicious workspace instructions\n", encoding="utf-8")
 
-    detection = adapter.detect(context)
+    detection = harness_ops.detect("claude-code", context)
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
 
     assert "claude-code:project:instruction:rules-claude-md" in artifacts
@@ -599,13 +585,12 @@ def test_claude_detect_keeps_root_claude_md_when_rules_stem_collides(tmp_path):
 )
 def test_claude_detect_tolerates_unreadable_markdown_artifacts(tmp_path):
     context = _build_context(tmp_path)
-    adapter = get_adapter("claude-code")
     skill_path = context.workspace_dir / ".claude" / "skills" / "review" / "SKILL.md"
     skill_path.parent.mkdir(parents=True, exist_ok=True)
     skill_path.write_text("---\nname: review\ndescription: Review skill\n---\n", encoding="utf-8")
     skill_path.chmod(0o000)
     try:
-        detection = adapter.detect(context)
+        detection = harness_ops.detect("claude-code", context)
     finally:
         skill_path.chmod(0o644)
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
@@ -618,7 +603,7 @@ def test_claude_workspace_install_writes_global_settings_only(tmp_path: Path) ->
     # Deliberate design: Guard hooks live in ~/.claude/settings.json; a workspace
     # only scopes the hook URL. Pin it and ensure the manifest says so.
     context = _build_context(tmp_path)
-    manifest = get_adapter("claude-code").install(context)
+    manifest = harness_support.install("claude-code", context)
 
     assert (context.home_dir / ".claude" / "settings.json").is_file()
     assert not (context.workspace_dir / ".claude").exists()

@@ -54,6 +54,7 @@ from .fixtures import (
     stage_directory,
 )
 from .git_allow_fixtures import GIT_ALLOW_CASES, configure_git_allow_controls
+from .git_rules_cases import stage_git_rules_cases
 from .host_process import clean_environment, realistic_environment, run_process
 from .host_shims import omp_version
 from .input_evidence import (
@@ -68,6 +69,7 @@ from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .release_budgets import attempt_observations, release_budgets
+from .repeat_cases import REPEAT_ORACLE
 from .review_fixtures import GITHUB_ENABLED_CASES, GITHUB_STUB_CASES, WORKTREE_CASES, configure_github_review_controls
 from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
@@ -166,6 +168,7 @@ def run_case(
     stage_supply_chain(fixture.workspace, scenario.id)
     stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
     stage_runtime_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
+    stage_git_rules_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
     seed_session_folder(fixture.home, stage_directory(fixture.root), scenario.id)
     session = session_cwd(fixture.home, fixture.workspace, scenario.id)
     private = fixture.root / "private-evidence"
@@ -228,6 +231,7 @@ def run_case(
                 memory_bank="learn" in scenario.required_tools,
                 github_tool="github" in scenario.required_tools,
                 structured_tasks=scenario.id == TASK_SCHEMA_CASE,
+                tool_call_loop_guard=scenario.oracle != REPEAT_ORACLE,
             )
             if scenario.oracle == "watch-command":
                 if scenario.commands != (WATCH_COMMAND,) or scenario.prompt != WATCH_PROMPT:

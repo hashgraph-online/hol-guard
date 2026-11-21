@@ -20,6 +20,96 @@ fn shell(extra: Value) -> Value {
     payload
 }
 
+#[cfg(unix)]
+#[test]
+fn native_route_requests_the_binding_only_for_a_scoped_probe() {
+    use crate::policy_store::policy_store_direct_lane::tests::fixture;
+
+    let fixture = fixture("cursor-route-answer");
+    let mut params = json!({
+        "payload": shell(json!({"cursor_route_probe": true})),
+        "guard_home": fixture.root,
+        "home_dir": fixture.root,
+        "workspace": fixture.root,
+        "native_sink": true,
+    });
+    let review = |params: &Value| {
+        super::answer(
+            params.as_object().unwrap(),
+            "hook-render-cursor",
+            Some(&fixture.store),
+        )
+        .map(Value::Object)
+    };
+    assert_eq!(
+        review(&params).unwrap(),
+        json!({"value": ALLOW(), "needs": "probe_binding"})
+    );
+    params["snapshot"] = json!({"generation": 1});
+    params["probe_budget_ms"] = json!(500);
+    assert_eq!(
+        review(&params).unwrap(),
+        json!({"value": ALLOW(), "needs": null})
+    );
+    params["payload"] = shell(json!({}));
+    assert_eq!(
+        review(&params).unwrap(),
+        json!({"value": null, "needs": null})
+    );
+    params["payload"] = shell(json!({
+        "cursor_source_hook_event": "beforeShellExecution",
+        "tool_input": {"command": "guard execute-contained-test"},
+    }));
+    assert_eq!(
+        review(&params).unwrap(),
+        json!({"value": null, "needs": "sink_command"})
+    );
+    params["guard_home"] = json!(fixture.root.join("another-home"));
+    assert_eq!(review(&params), Err("native_hook_render_invalid"));
+}
+
+#[cfg(unix)]
+#[test]
+fn native_probe_reviews_the_admitted_policy_and_observes_watch() {
+    use crate::policy_store::policy_store_direct_lane::tests::{fixture, push};
+
+    let fixture = fixture("cursor-probe-binding");
+    push(&fixture, None).unwrap();
+    let envelope: guard_contracts::GuardHookEnvelopeV2 = crate::strict_json::from_value(json!({
+        "schema": guard_contracts::GUARD_HOOK_ENVELOPE_V2_SCHEMA,
+        "request_id": "cursor-probe",
+        "harness": "cursor",
+        "event": "PreToolUse",
+        "raw_payload": shell(json!({
+            "cursor_route_probe": true,
+            "cwd": fixture.root,
+            "tool_input": {"command": "pytest -q", "cwd": fixture.root},
+        })),
+        "policy_generation": fixture.snapshot.generation,
+        "policy_snapshot": {
+            "generation": fixture.snapshot.generation,
+            "policy_digest": fixture.snapshot.policy_digest,
+            "runtime_identity": fixture.snapshot.runtime_identity,
+        },
+        "deadline_budget_ms": 1000,
+        "source": {"cwd": fixture.root, "home_dir": fixture.root, "guard_home": fixture.root},
+        "containment_sink": {"sink_command": ["guard"], "native_sink": true},
+    }))
+    .unwrap();
+    let watched = json!({"cursor": "watch"});
+    assert!(
+        crate::edge::evaluate_cursor_probe(envelope.clone(), &fixture.store, Some(&watched))
+            .unwrap()
+            .is_none()
+    );
+    let bytes = crate::edge::evaluate_cursor_probe(envelope, &fixture.store, None)
+        .unwrap()
+        .expect("an enforcing probe goes to the native edge");
+    let edge: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(edge["schema"], "guard-hook-edge-result.v2");
+    assert_eq!(edge["harness"], "cursor");
+}
+
 #[cfg(not(windows))]
 #[test]
 fn only_cursors_own_shell_pretooluse_is_a_probe() {

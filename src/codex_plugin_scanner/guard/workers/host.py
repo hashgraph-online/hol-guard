@@ -13,7 +13,9 @@ Guard store instead, so the per-request handlers can read it.
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import os
 import sys
 import threading
 import time
@@ -122,6 +124,8 @@ class WorkerHost:
         self._lock = threading.Lock()
         self._threads: list[threading.Thread] = []
         self._hook_worker: Any = None
+        self._prepared_hook_worker: Any = None
+        self._policy_prepare_thread: threading.Thread | None = None
         self._attention: Any = None
         self._installed_authority_admitted = False
 
@@ -184,6 +188,39 @@ class WorkerHost:
         self._threads.append(thread)
 
     def start(self, on_phase: Callable[[str], None] | None = None) -> None:
+        """Admits the installed release and starts policy publication.
+
+        Only these steps stand between the daemon and its first hook. The
+        other workers start in ``start_background_workers``, after the host
+        reports ready.
+        """
+
+        # Admit the installed release before the first publication, as the
+        # Python daemon did at startup. A snapshot bound to packs an older
+        # engine compiled is refused by the resident, so publishing first
+        # would fail every hook closed until something else migrated it.
+        report = on_phase or (lambda _step: None)
+        self._start_private_state_resident()
+        # Building the hook worker publishes nothing, so it runs beside the
+        # admission; publishing starts only once the admission has run.
+        self._prepare_policy_publication()
+        self._admit_installed_release(on_phase=report)
+        report("admitted")
+        self._start_policy_publication()
+        report("publishing")
+        if not self._installed_authority_admitted:
+            self._loop("installed-authority", self._admit_installed_release, _INSTALLED_AUTHORITY_RETRY_SECONDS)
+
+    def start_background_workers(self) -> None:
+        """Starts the workers no hook waits on.
+
+        Approval attention, the cloud queues, the repair self-check, the
+        resident watchdog and workspace assessment each poll or wait on their
+        own schedule. Starting them before the host reported ready held every
+        cold start for their imports and threads, while the first policy
+        publication competed with them for the interpreter.
+        """
+
         from ..browser_opener import open_browser_url
         from ..cloud_control.command_queue_worker import start_command_queue_worker
         from ..native_resident_watchdog import start_native_resident_watchdog
@@ -193,17 +230,6 @@ class WorkerHost:
         from ..runtime_health import repair_self_check
         from ..workspace_assessment_worker import start_workspace_assessment_worker
 
-        # Admit the installed release before the first publication, as the
-        # Python daemon did at startup. A snapshot bound to packs an older
-        # engine compiled is refused by the resident, so publishing first
-        # would fail every hook closed until something else migrated it.
-        report = on_phase or (lambda _step: None)
-        self._admit_installed_release(on_phase=report)
-        report("admitted")
-        self._start_policy_publication()
-        report("publishing")
-        if not self._installed_authority_admitted:
-            self._loop("installed-authority", self._admit_installed_release, _INSTALLED_AUTHORITY_RETRY_SECONDS)
         attention = ApprovalAttentionCoordinator(
             store=self.store,
             runtime=GuardSurfaceRuntime(self.store),
@@ -249,6 +275,73 @@ class WorkerHost:
 
         self._installed_authority_admitted = migrate_installed_authority(self.store, on_phase=on_phase)
 
+    def _start_private_state_resident(self) -> None:
+        """Opens the Windows resident stream beside admission.
+
+        This host serves the resident from its first publication anyway. Opened
+        now, the private-state checks admission and publication make go over
+        the stream instead of each starting a runtime process.
+        """
+
+        if os.name != "nt":
+            return
+        from ..native_policy_snapshot_windows_resident import start_private_state_resident
+
+        def open_stream() -> None:
+            try:
+                start_private_state_resident(self.store.guard_home)
+            except Exception:
+                _LOGGER.warning("Guard worker host could not open the resident stream early", exc_info=True)
+
+        thread = threading.Thread(target=open_stream, daemon=True, name="guard-worker-resident-start")
+        try:
+            thread.start()
+        except RuntimeError:
+            _LOGGER.warning("Guard worker host could not start the resident stream opener", exc_info=True)
+            return
+        self._threads.append(thread)
+
+    def _prepare_policy_publication(self) -> None:
+        """Builds the hook worker on a thread of its own, without starting it."""
+
+        def build() -> None:
+            hook_worker = self._build_hook_worker()
+            # The first publication's policy compiles read only config files
+            # and the store, so they run here too; publishing still waits.
+            warm = getattr(getattr(hook_worker, "policy_snapshot_publisher", None), "warm_first_publication", None)
+            if callable(warm):
+                warm()
+            self._prepared_hook_worker = hook_worker
+
+        thread = threading.Thread(target=build, daemon=True, name="guard-worker-policy-prepare")
+        try:
+            thread.start()
+        except RuntimeError:
+            _LOGGER.exception("Guard worker host could not prepare native policy publication")
+            return
+        self._policy_prepare_thread = thread
+
+    def _build_hook_worker(self) -> Any:
+        from ..hook_review.hook_worker import HookWorker
+        from ..resident_evidence_client import ResidentEvidenceClient
+        from ..resident_evidence_dispatch import ResidentEvidenceDispatch
+
+        try:
+            # Direct answers are bound only while their evidence has a writer,
+            # so the drain gets the same writer the daemon's hooks use.
+            return HookWorker(
+                store=self.store,
+                home_dir=self.home_dir,
+                activity_writer=ResidentEvidenceClient(store=self.store),
+                evidence_dispatch=ResidentEvidenceDispatch(),
+                capture_writer=None,
+                wait_for_native_policy=False,
+                start_native_policy=False,
+            )
+        except Exception:
+            _LOGGER.exception("Guard worker host could not build the native policy publisher")
+            return None
+
     def _start_policy_publication(self) -> None:
         """Keeps the native policy snapshot, its direct-lane ACK and evidence drain live.
 
@@ -258,24 +351,26 @@ class WorkerHost:
         ends with its request, so this host owns it now.
         """
 
-        from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
-        from ..hook_review.hook_worker import HookWorker
-        from ..native_hook_evidence_writer import NativeHookEvidenceWriter
-
+        thread = self._policy_prepare_thread
+        if thread is not None:
+            thread.join()
+        hook_worker = self._prepared_hook_worker
+        self._prepared_hook_worker = None
+        if hook_worker is None:
+            # The thread could not build it; build it here, as before.
+            hook_worker = self._build_hook_worker()
+        if hook_worker is None:
+            self._hook_worker = None
+            return
         try:
-            # Direct answers are bound only while their evidence has a writer,
-            # so the drain gets the same writer the daemon's hooks use.
-            self._hook_worker = HookWorker(
-                store=self.store,
-                home_dir=self.home_dir,
-                activity_writer=NativeHookEvidenceWriter(store=self.store),
-                evidence_dispatch=HookEvidenceDispatch(),
-                capture_writer=None,
-                wait_for_native_policy=False,
-            )
+            hook_worker.start_native_policy_publication(home_dir=self.home_dir)
         except Exception:
             _LOGGER.exception("Guard worker host could not start native policy publication")
             self._hook_worker = None
+            with contextlib.suppress(Exception):
+                hook_worker.close(deadline_monotonic=time.monotonic() + 5.0)
+            return
+        self._hook_worker = hook_worker
 
     def wait_for_policy_publication(self) -> None:
         """Waits, bounded, for the first native policy publication."""
@@ -341,12 +436,25 @@ def _report_phase(step: str) -> None:
     sys.stdout.flush()
 
 
+def _wait_for_daemon_to_close() -> None:
+    try:
+        # The daemon holds the other end; end of file means it has gone.
+        while sys.stdin.buffer.read(4096):
+            pass
+    except (OSError, ValueError, KeyboardInterrupt):
+        pass
+
+
 def run_worker_host(guard_home: Path) -> int:
     """Runs the workers until standard input closes."""
 
+    from ..cli.desktop_daemon_workers import wait_for_early_runtime_status
     from ..runtime_health.background_diagnostics import install_sink, release_sink
     from ..runtime_health.diagnostics import BackgroundLogWriter
 
+    # Opening the store makes native calls that need the runtime status, which
+    # the launch started resolving beside the imports.
+    wait_for_early_runtime_status()
     store = GuardStore(guard_home)
     # Nothing else in this process opens daemon.log, so without these sinks a
     # failed migration or publication left no line for support to read.
@@ -364,11 +472,8 @@ def run_worker_host(guard_home: Path) -> int:
         _ = sys.stdout.write("ready\n")
         sys.stdout.flush()
         try:
-            # The daemon holds the other end; end of file means it has gone.
-            while sys.stdin.buffer.read(4096):
-                pass
-        except (OSError, ValueError, KeyboardInterrupt):
-            pass
+            host.start_background_workers()
+            _wait_for_daemon_to_close()
         finally:
             host.shutdown()
     finally:

@@ -78,7 +78,6 @@ def _queue(
     store = _ApprovalStore()
     monkeypatch.setattr(review, "native_review_policy_binding", lambda **_kwargs: None)
     monkeypatch.setattr(review, "native_review_query", _native_request)
-    monkeypatch.setattr(review, "native_review_hint_ask", lambda *_a, **_k: None)
     queued = review.queue_native_pre_tool_review(
         store,
         harness="codex",
@@ -103,6 +102,7 @@ def test_an_unrecognised_review_looks_up_its_connector_in_the_queue_call(
     # The resident groups the row under the connector it finds.
     assert queued is not None and queued["queue_group_id"] is None
     assert [call["connector_lookup"] for call in options] == [_LOOKUP]
+    assert [call["hint"] for call in options] == [{"deadline_left_ms": None}]
 
 
 def test_an_ordinary_review_sends_no_lookup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

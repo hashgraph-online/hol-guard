@@ -32,7 +32,7 @@ const RECORD_NAME: &str = "codex-lean-sessions.json";
 const PRIVATE_MODE: u32 = 0o600;
 
 /// A refusal reported to the user by its stable code.
-pub(super) struct Refusal(&'static str);
+pub(super) struct Refusal(pub(super) &'static str);
 
 pub(super) type Checked<T> = Result<T, Refusal>;
 
@@ -178,7 +178,7 @@ fn view(path: &Path, current: Option<&HookVal>, recorded: Option<i64>) -> Value 
 
 /// The config text and its parsed form. A file Guard cannot read stops the
 /// change: writing a fresh file over it would lose the user's settings.
-fn read_config(path: &Path) -> Checked<(Option<String>, HookVal)> {
+pub(super) fn read_config(path: &Path) -> Checked<(Option<String>, HookVal)> {
     // `Path.exists()` follows a link: a dangling one reads as no file.
     if fs::metadata(path).is_err() {
         return Ok((None, HookVal::Dict(Vec::new())));
@@ -199,7 +199,7 @@ fn read_config(path: &Path) -> Checked<(Option<String>, HookVal)> {
     Ok((Some(text), payload))
 }
 
-fn write_config(
+pub(super) fn write_config(
     call: &mut Call<'_>,
     path: &Path,
     payload: &HookVal,
@@ -263,7 +263,7 @@ fn record_path(guard_home: &Path) -> PathBuf {
 }
 
 /// `str(path.expanduser().absolute())`.
-fn record_key(path: &Path) -> String {
+pub(super) fn record_key(path: &Path) -> String {
     std::path::absolute(path)
         .unwrap_or_else(|_| path.to_path_buf())
         .to_string_lossy()
@@ -336,7 +336,7 @@ pub(super) fn record_text(records: &Map<String, Value>) -> String {
 }
 
 /// A JSON string with every non-ASCII character escaped, as `ensure_ascii`.
-fn ascii_string(text: &str) -> String {
+pub(super) fn ascii_string(text: &str) -> String {
     let quoted = Value::String(text.to_owned()).to_string();
     let mut out = String::with_capacity(quoted.len());
     for character in quoted.chars() {

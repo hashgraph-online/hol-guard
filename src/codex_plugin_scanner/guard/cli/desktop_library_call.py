@@ -25,6 +25,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from ..library_call_deadline import LIBRARY_CALL_DEADLINE
+
 # The native daemon sends at most this much: a request body plus its routing.
 _REQUEST_LIMIT_BYTES = 2_200_000
 # How many resident calls may run at once; the rest wait in order for a worker.
@@ -40,10 +42,14 @@ def run_library_call(guard_home: Path) -> int:
     """Answer the call on stdin; 2 when there is none to answer."""
 
     from ..library_calls import run_library_call as run
+    from .desktop_daemon_workers import wait_for_early_runtime_status
 
     request = sys.stdin.buffer.read(_REQUEST_LIMIT_BYTES + 1)
     if not request or len(request) > _REQUEST_LIMIT_BYTES:
         return 2
+    # The call opens a store, whose first native call needs the runtime status
+    # this process started resolving beside its imports.
+    wait_for_early_runtime_status()
     result = run(guard_home, request)
     out = sys.stdout.buffer
     out.write(json.dumps(result, separators=(",", ":"), default=str).encode("utf-8"))
@@ -63,7 +69,10 @@ def answer_line(guard_home: Path, request: bytes) -> bytes:
     """The answer line for one resident call line, with the call's ``id``."""
 
     from ..library_calls import run_library_call as run
+    from .desktop_daemon_workers import wait_for_early_runtime_status
 
+    # As in run_library_call: the store this call opens needs the runtime status.
+    wait_for_early_runtime_status()
     result = run(guard_home, request)
     try:
         call_id = json.loads(request.decode("utf-8")).get("id")
@@ -133,6 +142,7 @@ def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callabl
             _taken(len(request))
             if expires_at is not None and time.monotonic() >= expires_at:
                 continue
+            token = LIBRARY_CALL_DEADLINE.set(expires_at)
             try:
                 line = answer_line(guard_home, request)
                 with write_lock:
@@ -151,6 +161,8 @@ def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callabl
                         write(_worker_failure_line(request))
                 except BaseException:
                     pass
+            finally:
+                LIBRARY_CALL_DEADLINE.reset(token)
 
     def _taken(size: int) -> None:
         nonlocal queued_bytes

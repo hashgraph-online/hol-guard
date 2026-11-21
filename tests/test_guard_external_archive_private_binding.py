@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.local_supply_chain import (
     _bound_external_archive_launch_command,
     evaluate_package_request_artifact,

@@ -16,8 +16,8 @@ use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
 use super::{
-    observed_mcp_history, observed_mcp_tool, token, ObservedTool, FLATTENED_NAME_HARNESSES,
-    MAX_NAMESPACE_CHARS, MAX_NAME_CHARS, MAX_TOOL_NAME_CHARS,
+    observed_mcp_history, observed_mcp_tool, token, tool_command_id, ObservedTool,
+    FLATTENED_NAME_HARNESSES, MAX_NAMESPACE_CHARS, MAX_NAME_CHARS, MAX_TOOL_NAME_CHARS,
 };
 use crate::cloud_request_text::py_truthy;
 use crate::guard_store_args::Args;
@@ -321,7 +321,13 @@ pub(crate) fn observed_mcp_discovery(
                 "tools": connector
                     .tools
                     .into_iter()
-                    .map(|(name, qualified_name)| json!({"name": name, "qualified_name": qualified_name}))
+                    .map(|(name, qualified_name)| {
+                        json!({
+                            "command_id": tool_command_id(&qualified_name),
+                            "name": name,
+                            "qualified_name": qualified_name,
+                        })
+                    })
                     .collect::<Vec<_>>(),
             })
         })

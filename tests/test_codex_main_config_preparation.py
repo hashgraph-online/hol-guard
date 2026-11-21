@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from codex_plugin_scanner.guard import codex_harness_client as adapter
-from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer
 from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
 from tests import codex_plan_segments as segments
@@ -51,7 +51,7 @@ def test_backup_preparation_preserves_content_rule_without_writes(tmp_path, monk
 
 def test_existing_backup_retains_bytes_mode_and_inode(tmp_path, monkeypatch):
     context = _context(tmp_path, monkeypatch)
-    path = adapter_lifecycle.CodexHarnessAdapter._backup_path(context)
+    path = codex_paths(context).backup
     path.parent.mkdir(parents=True)
     path.write_bytes(b"prior backup generation")
     path.chmod(0o640)
@@ -124,7 +124,7 @@ def test_signed_backup_inverse_preserves_prior_generation(
 ):
     runtime, plan, _bindings, _pointer = transition
     context = _context(tmp_path, monkeypatch)
-    path = adapter_lifecycle.CodexHarnessAdapter._backup_path(context)
+    path = codex_paths(context).backup
     if existing:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"prior backup")

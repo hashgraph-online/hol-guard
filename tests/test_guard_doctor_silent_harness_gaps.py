@@ -7,11 +7,12 @@ from unittest import mock
 import pytest
 import tomlkit
 
+from codex_plugin_scanner.guard import diagnostics_bridge
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_registration import codex_doctor_result
-from codex_plugin_scanner.guard.codex_hook_trust import codex_command_hook_hash
-from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests.python_oracles.codex_hook_trust import codex_command_hook_hash
 
 GUARD_COMMAND = "/opt/guard/1.2.3/hol-guard-codex-hook --harness codex"
 
@@ -155,12 +156,12 @@ def omp_code_mode_warnings(home: Path, workspace: Path | None = None, *, environ
     cleared = {name: "" for name in _AGENT_ENV}
     with (
         mock.patch.dict(os.environ, {**cleared, **environ}),
-        mock.patch.object(HarnessAdapter, "diagnostics", lambda _self, _context: {"warnings": []}),
+        mock.patch.object(diagnostics_bridge, "native_diagnostics", lambda **_kwargs: {"warnings": []}),
     ):
         for name in _AGENT_ENV:
             if name not in environ:
                 del os.environ[name]
-        return list(get_adapter("omp").diagnostics(context)["warnings"])
+        return list(harness_ops.diagnostics("omp", context)["warnings"])
 
 
 _AUTO = "providers:\n  openai-codex:\n    codeMode: auto\n"
@@ -238,5 +239,5 @@ def test_omp_diagnostics_include_warning(tmp_path: Path) -> None:
     context = HarnessContext(
         home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard-home", home_override_explicit=True
     )
-    payload = get_adapter("omp").diagnostics(context)
+    payload = harness_ops.diagnostics("omp", context)
     assert OMP_CODE_MODE_WARNING.format(path=config) in payload["warnings"]

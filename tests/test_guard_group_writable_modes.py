@@ -16,7 +16,7 @@ from codex_plugin_scanner.guard.claude_hook_entry import (
     run_frozen_claude_hook,
 )
 from codex_plugin_scanner.guard.cli import uninstall_commands
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime_transition import TransitionError, TransitionFile
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_runtime_stamp import stamp_native_runtime

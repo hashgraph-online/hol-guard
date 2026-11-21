@@ -3,7 +3,7 @@
 The native profile owner now records exact SDK/data pairs, publishes selection
 with a write-ahead journal, and connects fresh Service activation to the recorded
 data generation. These P6 primitives now support the [live coordinator](CIGAR_SERVICE_SWITCHING.md),
-[explicit rollback](CIGAR_ROLLBACK_RECOVERY.md) and [known-failure source reconstruction](CIGAR_SOURCE_RESTORATION.md).
+explicit rollback and [known-failure source reconstruction](CIGAR_SOURCE_RESTORATION.md).
 Complete crash/privacy qualification and the public workflow remain unfinished.
 
 ## Identity and protected ownership

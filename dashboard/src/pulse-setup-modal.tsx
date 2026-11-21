@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { HiMiniXMark } from "react-icons/hi2";
 import { ActionButton, SectionLabel } from "./approval-center-primitives";
 import {
@@ -10,16 +10,20 @@ import {
 } from "./guard-api";
 import type { GuardSettingsPayload } from "./guard-types";
 import {
-  PULSE_FACE_SCAN_OPTIONS,
   waitForPulseApproval,
   type PulseApprovalStatus,
   type PulseMinTier,
 } from "./pulse-approval";
 import { GuardModalLayer } from "./guard-modal-layer";
+import { PulseConnectStep, type PulseCooldown } from "./pulse-connect-step";
+import {
+  ErrorNote,
+  Field,
+  PULSE_INPUT_CLASS as INPUT_CLASS,
+  PULSE_LABEL_CLASS as LABEL_CLASS,
+} from "./pulse-setup-parts";
 
-// Where a new user gets the YID app. `referrer_id` tells Yanez the visit came
-// from HOL Guard; it carries nothing about the user or machine.
-export const PULSE_SITE_URL = "https://pulse.yanez.ai/?referrer_id=holguard";
+export { PULSE_SITE_URL, pulseCooldownLabel } from "./pulse-setup-parts";
 
 const ENROLLMENT_OUTCOME_MESSAGES = {
   rejected: "The enrollment was rejected in the YID app.",
@@ -85,7 +89,7 @@ const STEP_TEXT: Record<SetupStep, { label: string; title: string; description: 
   connect: {
     label: "Step 2 of 3",
     title: "Connect the YID app",
-    description: "Create an agent key for HOL Guard in the YID app and paste it here.",
+    description: "Scan the code with your phone, create an agent key for HOL Guard in the YID app and paste it here.",
   },
   approve: {
     label: "Step 3 of 3",
@@ -104,35 +108,6 @@ const STEP_TEXT: Record<SetupStep, { label: string; title: string; description: 
   },
 };
 
-const LABEL_CLASS = "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500";
-const INPUT_CLASS =
-  "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20";
-
-export function pulseCooldownLabel(seconds: number): string {
-  if (seconds === 900) return "15 minutes, same kind of action";
-  if (seconds === 3600) return "1 hour, same kind of action";
-  return "Every action (recommended)";
-}
-
-function ErrorNote({ message }: { message: string | null }) {
-  if (message === null) return null;
-  return (
-    <p role="alert" className="rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark">
-      {message}
-    </p>
-  );
-}
-
-function Field(props: { label: string; children: ReactNode; hint?: string }) {
-  return (
-    <label className="block">
-      <span className={LABEL_CLASS}>{props.label}</span>
-      {props.children}
-      {props.hint ? <p className="mt-1 text-xs text-slate-500">{props.hint}</p> : null}
-    </label>
-  );
-}
-
 /** Pulse setup in the same three-step window as the authenticator setup. */
 export function PulseSetupModal(props: {
   totpEnabled: boolean;
@@ -143,7 +118,7 @@ export function PulseSetupModal(props: {
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
   const [agentKey, setAgentKey] = useState("");
-  const [cooldown, setCooldown] = useState<0 | 900 | 3600>(0);
+  const [cooldown, setCooldown] = useState<PulseCooldown>(0);
   const [minTier, setMinTier] = useState<PulseMinTier>("medium");
   const [enrollment, setEnrollment] = useState<GuardPulseEnrollment | null>(null);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
@@ -308,70 +283,19 @@ export function PulseSetupModal(props: {
         ) : null}
 
         {step === "connect" ? (
-          <div className="grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <ol className="list-decimal space-y-3 pl-5 text-sm leading-6 text-slate-600">
-              <li>
-                Scan the QR code on{" "}
-                <a className="text-brand-blue underline" href={PULSE_SITE_URL} target="_blank" rel="noreferrer noopener">pulse.yanez.ai</a>{" "}
-                with your phone camera. It installs the YanezYID app if needed, then registers your Yanez identity.
-              </li>
-              <li>
-                In the YID app, go to <span className="font-medium text-brand-dark">Settings → Agent Keys</span>, create a key
-                named HOL Guard, and paste it here. It starts with <code className="font-mono text-xs">yak_</code>.
-              </li>
-              <li>If a face scan isn't accepted, just scan again.</li>
-            </ol>
-            <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-              <Field label="YID agent key" hint="Hidden as you type. Guard stores it in its secret store.">
-                <input
-                  type="password"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={agentKey}
-                  onChange={(event) => setAgentKey(event.target.value)}
-                  onKeyDown={onEnter(connectReady, handleConnect)}
-                  className={INPUT_CLASS}
-                />
-              </Field>
-              <Field
-                label="Face scan"
-                hint="Strict needs a phone that supports the stronger face scan. To change this later, turn Pulse off and set it up again."
-              >
-                <select
-                  value={minTier}
-                  onChange={(event) => setMinTier(event.target.value === "high" ? "high" : "medium")}
-                  className={INPUT_CLASS}
-                >
-                  {PULSE_FACE_SCAN_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Cooldown" hint="A cooldown only covers the same kind of action and scope from the same session. Guard changes always ask again.">
-                <select
-                  value={String(cooldown)}
-                  onChange={(event) => {
-                    const seconds = Number(event.target.value);
-                    setCooldown(seconds === 900 ? 900 : seconds === 3600 ? 3600 : 0);
-                  }}
-                  className={INPUT_CLASS}
-                >
-                  {([0, 900, 3600] as const).map((seconds) => (
-                    <option key={seconds} value={seconds}>{pulseCooldownLabel(seconds)}</option>
-                  ))}
-                </select>
-              </Field>
-              <ErrorNote message={error} />
-              <div className="flex flex-wrap gap-2">
-                <ActionButton onClick={handleConnect} disabled={pending || !connectReady}>
-                  {pending ? "Contacting Pulse..." : "Continue"}
-                </ActionButton>
-                <ActionButton variant="outline" disabled={pending} onClick={() => { setError(null); setStep("confirm"); }}>
-                  Back
-                </ActionButton>
-              </div>
-            </div>
-          </div>
+          <PulseConnectStep
+            agentKey={agentKey}
+            onAgentKeyChange={setAgentKey}
+            minTier={minTier}
+            onMinTierChange={setMinTier}
+            cooldown={cooldown}
+            onCooldownChange={setCooldown}
+            error={error}
+            pending={pending}
+            ready={connectReady}
+            onSubmit={handleConnect}
+            onBack={() => { setError(null); setStep("confirm"); }}
+          />
         ) : null}
 
         {(step === "approve" || step === "verifying") && enrollment !== null ? (
@@ -389,7 +313,10 @@ export function PulseSetupModal(props: {
                 : "Waiting for your approval. Guard checks every 10 seconds, for up to 15 minutes."}
             </p>
             {step === "approve" ? (
-              <ActionButton variant="outline" onClick={() => cancelWait.current?.abort()}>Cancel</ActionButton>
+              <>
+                <p className="text-xs text-slate-500">If a face scan isn&apos;t accepted, just scan again.</p>
+                <ActionButton variant="outline" onClick={() => cancelWait.current?.abort()}>Cancel</ActionButton>
+              </>
             ) : null}
           </div>
         ) : null}

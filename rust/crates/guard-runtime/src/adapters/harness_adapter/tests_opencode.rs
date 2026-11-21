@@ -110,7 +110,12 @@ fn detect_reads_jsonc_comments_and_skips_empty_configs() {
     );
     write(&global(&home).join("opencode.json"), "{}");
     let answer = home.ask("opencode", "detect", json!({}));
-    assert_eq!(answer["firewall"], json!(true));
+    assert!(answer.get("firewall").is_none());
+    assert!(answer["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|artifact| artifact["artifact_type"] == json!("mcp_server")));
     let paths = answer["config_paths"].as_array().unwrap();
     assert!(paths.contains(&json!(global(&home).join("opencode.jsonc"))));
     assert!(!paths.contains(&json!(global(&home).join("opencode.json"))));
@@ -203,7 +208,7 @@ fn uninstall_removes_a_config_guard_created() {
 #[test]
 fn protection_reports_every_missing_piece() {
     let home = Home::new();
-    let answer = home.ask("opencode", "protection", json!({"managed_active": false}));
+    let answer = home.ask("opencode", "protection", json!({}));
     let checks: Value = serde_json::from_str(answer["checks"].as_str().unwrap()).unwrap();
     assert_eq!(checks["ready"], json!(false));
     assert_eq!(checks["warnings"].as_array().unwrap().len(), 4);

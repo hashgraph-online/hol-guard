@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
+from ..library_call_deadline import LIBRARY_CALL_DEADLINE
 from ..store import GuardStore
 
 _SERVERS: dict[str, Any] = {}
@@ -78,20 +79,29 @@ def hook_warm(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
 
 
 def hook_prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Applies the native-policy barrier before the daemon admits the hook."""
-
-    from ..hook_review.hook_policy_admission import _native_policy_not_ready_reason
+    """Wait for publication and return the facts the native daemon renders."""
 
     server = _server(store, args)
     workspace = _text(args.get("workspace"))
     worker = server.hook_worker
-    prepared = worker.prepare_workspace_policy(Path(workspace) if workspace else None, deadline=_deadline(args))
+    deadline = _deadline(args)
+    prepared = worker.prepare_workspace_policy(Path(workspace) if workspace else None, deadline=deadline)
     if prepared is None:
         worker.metrics.record_route("native_fail_safe")
+        publisher = getattr(worker, "policy_snapshot_publisher", None)
+        last_error = getattr(publisher, "last_error", None)
+        read_streak = getattr(publisher, "resident_failure_streak", None)
+        streak = read_streak() if callable(read_streak) else 0
         return {
             "fail_safe": {
-                "reason": _native_policy_not_ready_reason(server),
+                # Older native callers still need a complete refusal.
+                "reason": "HOL Guard could not prepare the native policy safely. "
+                "This is usually temporary. Retry this action.",
                 "reason_code": "native_policy_not_ready",
+                "policy_failure": {
+                    "last_error": last_error if isinstance(last_error, str) and len(last_error) <= 128 else None,
+                    "resident_failure_streak": min(max(0, streak), 1_000_000) if type(streak) is int else 0,
+                },
             }
         }
     return {}
@@ -164,49 +174,30 @@ def hook_integrity_key(store: GuardStore, args: Mapping[str, Any]) -> dict[str, 
     return key
 
 
-def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """The argv prefix of the contained sink, for the daemon's Cursor sink admission."""
+def hook_integrity_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Begin a policy-integrity generation before a Rust hook write."""
 
-    from ..contained_sink_command import contained_sink_command_prefix
+    from .policy_write_calls import integrity_begin
 
-    return {"sink_command": list(contained_sink_command_prefix())}
+    return integrity_begin(store, args)
 
 
-def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Saves the answer the daemon read from Claude's HOL Guard approval question.
+def hook_integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Finalize Rust's policy-integrity generation in the secret store."""
 
-    The daemon settles the question against the session's pending review and
-    hands over the plan the op returned; the policy write holds the integrity
-    lock, so it stays here. ``valid`` is false for a plan the library refuses.
-    """
-
-    from ..cli import commands_support  # noqa: F401
-    from ..cli._commands_shared import _now
-    from ..cli.commands_support_hook_state import _remove_claude_pending_permission
-    from ..cli.commands_support_permission_store import _write_claude_native_permission_plan
-    from ..native_hook_decision import NativeHookDecisionError, validated_permission_persist_plan
-
-    session_id = _text(args.get("session_id"))
-    artifact_id = _text(args.get("artifact_id"))
-    reason = _text(args.get("reason"))
-    source = _text(args.get("source"))
-    if not (session_id and artifact_id and reason and source):
-        return {"valid": False}
+    deadline = LIBRARY_CALL_DEADLINE.get()
+    if deadline is None or time.monotonic() >= deadline:
+        return {"finalized": False}
+    next_control_state = args.get("next_control_state")
+    if next_control_state is None:
+        return {"finalized": True}
+    if not isinstance(next_control_state, dict):
+        return {"finalized": False}
     try:
-        plan = validated_permission_persist_plan(args.get("plan"))
-    except NativeHookDecisionError:
-        return {"valid": False}
-    saved = _write_claude_native_permission_plan(
-        store=store,
-        plan=plan,
-        artifact_id=artifact_id,
-        reason=reason,
-        source=source,
-        now=_now(),
-    )
-    if saved:
-        _remove_claude_pending_permission(store, session_id=session_id, artifact_id=artifact_id)
-    return {"valid": True, "saved": bool(saved)}
+        stored = store._finalize_policy_integrity_control_state(next_control_state, deadline=deadline)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return {"finalized": False}
+    return {"finalized": stored is True}
 
 
 _LIVE_DECISION_REVIEW_SECONDS = 1.45
@@ -279,10 +270,10 @@ def codex_live_decision(store: GuardStore, args: Mapping[str, Any]) -> dict[str,
 
 
 HOOK_CALLS = {
-    "hook.claude_question_save": hook_claude_question_save,
     "hook.codex_live_decision": codex_live_decision,
     "hook.integrity_key": hook_integrity_key,
-    "hook.sink_command": hook_sink_command,
+    "hook.integrity_begin": hook_integrity_begin,
+    "hook.integrity_finalize": hook_integrity_finalize,
     "hook.prepare": hook_prepare,
     "hook.ready": hook_ready,
     "hook.warm": hook_warm,

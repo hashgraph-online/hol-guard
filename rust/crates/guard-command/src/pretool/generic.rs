@@ -15,6 +15,7 @@ pub(in crate::pretool) mod cursor_project_reads;
 #[path = "env_prefix_projection.rs"]
 mod env_prefix_projection;
 pub use env_prefix_projection::bindable_setting;
+pub use omp::omp_eval_commit_drafts;
 #[path = "generic_cline_view.rs"]
 mod cline_view;
 #[path = "generic_extract.rs"]
@@ -1040,6 +1041,43 @@ fn evaluate_envelope(
             result.reason = reason;
         }
     }
+    if result.reason_code == "native_pre_tool_unknown_review"
+        && matches!(harness, "omp" | "pi")
+        && signals.tool_name.as_deref() == Some("eval")
+    {
+        // Same review; the reason names the one-cell draft form Guard checks.
+        if let Some(reason) = omp::earlier_cell_draft_reason(payload) {
+            result.reason = reason.into();
+        }
+    }
+    // A header Oh My Pi reads as a tagged file that does not exist, or a
+    // first header it cannot read at all, cannot apply. Blocking it at once,
+    // with how to write the header, keeps the agent from waiting on an
+    // approval for an edit that would fail.
+    if harness == "omp"
+        && event == "PreToolUse"
+        && signals.tool_name.as_deref() == Some("edit")
+        && result.minimum_action == "review"
+    {
+        let blocked = omp::strict_tool_input(payload)
+            .and_then(|input| input.get("input")?.as_str())
+            .and_then(|input| super::omp_hashline_recovery::unappliable_edit(input, cwd));
+        if let Some((reason_code, reason)) = blocked {
+            result = generic_result(
+                generic_action(
+                    harness,
+                    event,
+                    PreToolActionTypeV1::FileWrite,
+                    PreToolOperationV1::Write,
+                    true,
+                    false,
+                ),
+                "block",
+                reason_code,
+                &reason,
+            );
+        }
+    }
     if result.reason_code == "native_file_read_review" {
         if let Some(note) = omp::grep_review_note(payload, &signals, &omp_context) {
             result.reason = format!("{} {note}", result.reason);
@@ -1185,8 +1223,7 @@ fn evaluate_envelope(
     // sink command names only the profile, so every profile routes the same
     // way. Only harnesses that rewrite into the contained sink get the
     // receipt; others would see a bare deny.
-    let windows_contained =
-        matches!(
+    let windows_contained = matches!(
             contained_test_reason,
             Some(
                 "native_python_eval_readonly_containment_required"
@@ -1195,7 +1232,20 @@ fn evaluate_envelope(
                     | "native_node_eval_readonly_containment_required"
                     | "native_pytest_readonly_containment_required"
             )
-        ) && matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi");
+        ) && matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi")
+            // The AppContainer runs only a Program Files Python; a virtual
+            // environment of a per-user one keeps its review.
+            && !(contained_test_reason == Some("native_pytest_readonly_containment_required")
+                && command_model.is_some_and(|model| {
+                    super::windows_pytest_base::base_outside_program_files(
+                        model,
+                        super::PathContext {
+                            home_dir,
+                            cwd,
+                            ..context
+                        },
+                    )
+                }));
     // Linux runs the same read-only profiles under a bubblewrap mount, from
     // the same POSIX sink command, so no harness is narrowed out here the way
     // Windows narrows the shells whose quoting the sink command is written

@@ -13,6 +13,10 @@ use serde_json::{Map, Value};
 
 use crate::context_digest::{is_python_space, python_strip};
 
+#[path = "claude_guard_question_payload.rs"]
+mod payload;
+pub(crate) use payload::project_hook_question;
+
 const HEADER: &str = "HOL Guard";
 const DEFAULT_QUESTION: &str =
     "HOL Guard intercepted this sensitive action. What should Claude do?";

@@ -25,7 +25,7 @@ from codex_plugin_scanner.guard.adapters.hook_python import HookPythonExecutable
 
 from codex_plugin_scanner.guard.adapters import guard_cli_attestation as attestation
 from codex_plugin_scanner.guard.adapters import opencode_pretool as old
-from codex_plugin_scanner.guard.harness.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND
+from codex_plugin_scanner.guard.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND
 
 if not hasattr(old, "_PLUGIN_TEMPLATE"):
     sys.exit("refusing to record: the original Python plugin renderer is gone")

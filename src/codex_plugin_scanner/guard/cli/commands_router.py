@@ -210,10 +210,10 @@ def _dispatch_guard_command(
 ) -> int:
     "Route one Guard subcommand to its handler."
 
-    if args.guard_command == "context":
-        from .context_assistance_commands import run_context_command
+    if getattr(args, "forward_command", None) is not None:
+        from .runtime_forward import run_forward
 
-        return _invoke_guard_handler(run_context_command, args, input_text=input_text, output_stream=output_stream)
+        return _invoke_guard_handler(run_forward, args, input_text=input_text, output_stream=output_stream)
 
     inventory_list = is_inventory_list_command(args)
     if args.guard_command == "extensions" and not inventory_list:

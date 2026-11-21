@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.cursor_client import cursor_native_hook_state, install_cursor_hooks
+from codex_plugin_scanner.guard.cursor_hook_ops import cursor_native_hook_state, install_cursor_hooks
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.cursor_test_support import managed_cursor_hook_script
 
 _MANAGED_HOOK_EVENTS = (

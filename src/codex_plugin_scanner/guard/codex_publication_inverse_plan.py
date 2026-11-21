@@ -215,8 +215,8 @@ def prepare_authenticated_hook_publication_inverse(spec: CodexHookManifestSpec) 
     pins its dependencies and checks the plan. This sends the facts of this
     process and keeps the answer.
     """
-    from .harness.base import HarnessContext
-    from .harness.native_harness import wire_context
+    from .harness_context import HarnessContext
+    from .native_harness_client import wire_context
 
     home = spec.guard_home.resolve(strict=False)
     require_codex_install_owner(home)

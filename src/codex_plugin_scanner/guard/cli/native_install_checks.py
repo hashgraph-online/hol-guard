@@ -6,16 +6,15 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..store import GuardStore
 
 
 def _opencode_protection_checks(context: HarnessContext, store: GuardStore | None) -> dict[str, object]:
     """Verify the managed OpenCode plugin, launcher, and MCP routing configuration."""
-    from ..harness.native_harness import ask
+    from ..native_harness_client import ask
 
-    managed = store.get_managed_install("opencode") if store is not None else None
-    answer = ask("protection", context, harness="opencode", managed_active=bool(managed and managed.get("active")))
+    answer = ask("protection", context, harness="opencode", store_home=None if store is None else str(store.guard_home))
     return json.loads(str(answer["checks"]))
 
 
@@ -26,7 +25,7 @@ _GROK_HOOK_CHECK_TIMEOUT_SECONDS = 60.0
 def _grok_hook_check(op: str, context: HarnessContext | None, **fields: Any) -> dict[str, Any]:
     """Ask the native runtime a Grok hook question, owned by ``context`` or by no one."""
     from ..config import resolve_guard_home
-    from ..harness.native_harness import ask
+    from ..native_harness_client import ask
 
     scope = context or HarnessContext(Path.home(), None, resolve_guard_home())
     return ask(op, scope, owner=context is not None, timeout_seconds=_GROK_HOOK_CHECK_TIMEOUT_SECONDS, **fields)
@@ -45,7 +44,7 @@ def _grok_hook_files(context: HarnessContext, pretool_hook: Path, prompt_hook: P
 
 def grok_protection(context: HarnessContext) -> dict[str, Any]:
     """Grok's protection paths, deny rules and hook timeouts, as the native adapter names them."""
-    from ..harness.native_harness import ask
+    from ..native_harness_client import ask
 
     return ask("protection", context, harness="grok")
 

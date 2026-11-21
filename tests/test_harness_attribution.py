@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness import native_harness
+from codex_plugin_scanner.guard import native_harness_client as harness_client
 from codex_plugin_scanner.guard.runtime import harness_attribution
 from tests.conftest import guard_commands_module
 
@@ -26,10 +26,10 @@ def asked(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[tuple[str, dict[str,
         return {"harness": "cursor", "env": {"HOL_GUARD_ORIGIN_HARNESS": "grok"}}
 
     # `describe` is cached per process; a description from another test must not leak in or out.
-    native_harness.describe.cache_clear()
+    harness_client.describe.cache_clear()
     monkeypatch.setattr("codex_plugin_scanner.guard.native_runner_authority.native_runner_authority", answer)
     yield calls
-    native_harness.describe.cache_clear()
+    harness_client.describe.cache_clear()
 
 
 # The markers, the precedence, the parent walk and the origin stamp are the native runtime's

@@ -12,9 +12,11 @@
 
 use std::path::Path;
 
-use guard_command::hook_responses::Object;
+use guard_command::hook_responses::{hermes, Object};
 use serde_json::{json, Value};
 
+use crate::bounded_hook_bridge::muse::render_muse_document;
+use crate::bounded_hook_bridge_hermes::render_hermes_decision;
 use crate::bounded_hook_bridge_render::{
     canonical_event_token, consistent_native_response, daemon_response_to_native,
     is_permission_event, member, policy_action_from_daemon, rendered, Rendered,
@@ -24,8 +26,8 @@ use crate::hook_cli_emit_redaction::redacted_hook_document;
 use crate::pyjson::{self, PyVal};
 
 /// `_BRIDGE_RENDERED_HARNESSES`.
-const BRIDGE_RENDERED_HARNESSES: [&str; 8] = [
-    "cline", "copilot", "devin", "grok", "hermes", "kimi", "openclaw", "zcode",
+const BRIDGE_RENDERED_HARNESSES: [&str; 9] = [
+    "cline", "copilot", "devin", "grok", "hermes", "kimi", "muse", "openclaw", "zcode",
 ];
 
 /// `native_hook_exit_code._BLOCKING_ACTIONS`.
@@ -73,6 +75,22 @@ fn bridge_output(
     guard_home: Option<&Path>,
     bridge: bool,
 ) -> Option<Rendered> {
+    if harness == "muse" || (!bridge && harness == "hermes") {
+        // The old CLI received a JSON object from the resident. It could not
+        // render an object with a lone surrogate in a key or value.
+        if !bridge && unmap {
+            return None;
+        }
+        let Value::Object(response) = PyVal::Dict(response.to_vec()).to_json()? else {
+            return None;
+        };
+        return Some(if harness == "muse" {
+            render_muse_document(&response, event_name, unmap)
+        } else {
+            let (action, reason) = hermes::policy_from_response(&response);
+            render_hermes_decision(&action, reason, unmap)
+        });
+    }
     if !bridge
         && harness == "copilot"
         && has_key(response, "behavior")

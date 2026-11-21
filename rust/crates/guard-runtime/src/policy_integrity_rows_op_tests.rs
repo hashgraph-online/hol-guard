@@ -72,6 +72,46 @@ fn reply_digest(value: Value) -> String {
 }
 
 #[test]
+fn finalization_refuses_stale_generations_and_binds_the_proposed_state() {
+    let state = |generation: i64, pending: Option<i64>| {
+        json!({
+            "version": 1,
+            "generation": generation,
+            "pending_generation": pending,
+            "cutover_complete": true,
+        })
+    };
+    let current = state(8, Some(11));
+    let wire = |proposed: &Value| {
+        json!({
+            "schema": POLICY_INTEGRITY_ROWS_REQUEST_SCHEMA,
+            "request_id": "finalization",
+            "verify": [],
+            "sign": [],
+            "finalize": {"current_state": current, "next_state": proposed},
+        })
+    };
+    for proposed in [state(7, None), state(8, None), state(9, Some(10))] {
+        let result = evaluate(&request(wire(&proposed))).unwrap();
+        assert_eq!(result.finalize.unwrap().next_state, None, "{proposed}");
+    }
+
+    let next = state(11, None);
+    assert_eq!(
+        evaluate(&request(wire(&next)))
+            .unwrap()
+            .finalize
+            .unwrap()
+            .next_state,
+        Some(next.clone())
+    );
+    assert_ne!(
+        reply_digest(wire(&next)),
+        reply_digest(wire(&state(7, None)))
+    );
+}
+
+#[test]
 fn request_digest_never_covers_the_key() {
     let verify = json!([{"row": plain_row(), "degraded_mode": false}]);
     let keyed = keyed_request(verify.clone(), json!([]));

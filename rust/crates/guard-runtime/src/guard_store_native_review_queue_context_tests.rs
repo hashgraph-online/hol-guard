@@ -63,6 +63,25 @@ fn connector_reply(summary: &str, why_now: &str) -> Value {
 }
 
 #[test]
+fn a_committed_connector_request_can_notify_without_a_returned_row() {
+    let reply = json!({"request_id": "req-1"});
+    let connector = connector_review(&connector_call());
+    assert_eq!(
+        connector.connector_notice(&reply),
+        Some(("req-1", "lanectl"))
+    );
+    assert_eq!(
+        connector.connector_notice(&json!("req-1")),
+        Some(("req-1", "lanectl"))
+    );
+    assert_eq!(connector.connector_notice(&json!({"request_id": ""})), None);
+    assert_eq!(
+        delegate(&args(json!({}))).unwrap().connector_notice(&reply),
+        None
+    );
+}
+
+#[test]
 fn a_connector_review_keeps_its_context_with_the_row_it_stored() {
     let connection = observed();
     let delegated = connector_review(&connector_call());

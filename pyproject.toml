@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.59.0"
+version = "3.60.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs. It covers the agent events listed in its support matrix and does not cover actions an agent runs outside its hooks."
 readme = "README.md"
 license = "Apache-2.0"
@@ -158,7 +158,6 @@ only-include = [
     "src",
     "scripts",
     "rust",
-    "integrations/cigar/bridge.py",
     "contracts",
     "contributions",
     "tests/fixtures",
@@ -234,6 +233,13 @@ markers = [
   "fault_injection: destructive store fault tests; only run with GUARD_FAULT_INJECTION=1",
   "installed: requires verification through an installed package artifact",
   "integration: verifies multiple Guard subsystems together",
+  "native_runtime_session: posts the runtime session with the native cloud-event-sync command instead of the urllib test double",
+  "native_guard_events: uploads Guard events and pain signals with the native cloud-event-sync command instead of answering an empty queue",
+  "native_receipt_upload: uploads receipts with the native cloud-event-sync command instead of the urllib test double",
+  "native_cloud_json_request: sends Guard Cloud requests with the native cloud-event-sync command instead of the urllib test double",
+  "native_command_lease: leases Guard command jobs with the native cloud-event-sync command instead of the command queue test double",
+  "native_command_report: sends Guard command acks and results with the native cloud-event-sync command instead of the command queue test double",
+  "native_oauth_refresh: sends Guard OAuth refresh exchanges with the native cloud-event-sync command instead of the urllib test double",
   "native_pi_hook_bridge: generates Pi and Oh My Pi extensions that use the native runtime hook bridge when it is available",
   "parser: verifies parsing or normalization security semantics",
   "policy: verifies policy composition or enforcement semantics",

@@ -43,8 +43,7 @@ from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
 )
-from .harness.base import HarnessContext
-from .harness.registry import get_adapter
+from .harness_context import HarnessContext
 from .harness_posture import harness_posture_summary
 from .local_dashboard_session import (
     build_approval_browser_url as build_approval_browser_url,
@@ -67,6 +66,7 @@ from .native_approval_resolution import (
 from .native_approval_scope import UNAVAILABLE as APPROVAL_SCOPE_UNAVAILABLE
 from .native_approval_scope import ApprovalScopeUnavailableError
 from .native_daemon_manage import load_guard_daemon_auth_token
+from .native_harness_ops import approval_flow
 from .native_package_workspace_scope import NativePackageWorkspaceScopeError
 from .native_protection_health import NativeProtectionHealthError
 from .package_execution_context import package_execution_context_from_scanner_evidence
@@ -148,7 +148,21 @@ def _serialize_approval_resolution(function: Callable[_P, _R]) -> Callable[_P, _
         digest = hashlib.sha256(request_id.encode("utf-8")).digest()
         lock = _APPROVAL_RESOLUTION_LOCKS[int.from_bytes(digest[:2], "big") % len(_APPROVAL_RESOLUTION_LOCKS)]
         with lock:
-            return function(*args, **kwargs)
+            result = function(*args, **kwargs)
+        # Release the origin stripe before resolving any sibling request, which
+        # can acquire a different stripe through bulk_allow_read_only_once.
+        changed_cli = result.get("changed_cli") if isinstance(result, dict) else None
+        if isinstance(changed_cli, dict) and changed_cli.get("status") == "allowed":
+            from .local_clis.local_cli_reallow import finalize_reallow_siblings
+
+            finalize_reallow_siblings(
+                store=cast(GuardStore, kwargs["store"]),
+                request_id=request_id,
+                changed_cli=changed_cli,
+                approval_gate_input=cast(ApprovalGateInput | None, kwargs.get("approval_gate_input")),
+                now=cast(str, kwargs.get("now") or _now()),
+            )
+        return result
 
     return serialized
 
@@ -574,6 +588,7 @@ def apply_approval_resolution(
             now=resolved_at,
         )
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
+        _save_package_decision(store, plan.get("package_decision"), reason, resolved_at, resolved_gate_grant)
     elif persistence == "once":
         once_decision = replace(decision, expires_at=_string_or_none(plan.get("once_expires_at")))
         store.ensure_policy_integrity_ready_for_write(
@@ -644,6 +659,16 @@ def apply_approval_resolution(
             approval_gate_grant=resolved_gate_grant,
         )
 
+    changed_cli: dict[str, object] | None = None
+    if action == "allow" and persisted_rule:
+        from .local_clis.local_cli_reallow import reallow_changed_cli
+
+        # Always allow on a review held only because an allowed script changed
+        # moves the script's allow to this version, keeping its command choices.
+        changed_cli = reallow_changed_cli(
+            store, request_id=request_id, approval_gate_input=approval_gate_input, now=resolved_at
+        )
+
     matching = plan.get("matching")
     if return_queue_result:
         result = (
@@ -693,6 +718,8 @@ def apply_approval_resolution(
         result["applied_scope"] = scope
         if selection.warning is not None:
             result["scope_warning"] = selection.warning
+        if changed_cli is not None:
+            result["changed_cli"] = changed_cli
         if temporary_mcp_selection is not None:
             result["temporary_mcp_grant"] = _temporary_mcp_grant_result(temporary_mcp_selection)
             if temporary_mcp_resolved_ids:
@@ -741,6 +768,8 @@ def apply_approval_resolution(
         updated["temporary_mcp_grant"] = _temporary_mcp_grant_result(temporary_mcp_selection)
     if local_tool_selection is not None:
         updated["local_tool_grant"] = _local_tool_grant_result(local_tool_selection)
+    if changed_cli is not None:
+        updated["changed_cli"] = changed_cli
     return updated
 
 
@@ -813,33 +842,6 @@ def _notify_pending_approval(*, store: GuardStore, request: _QueuedNotice) -> No
     )
 
 
-def notify_connector_setup(store: object, queued: Mapping[str, object], *, connector_name: str) -> None:
-    """Raise the setup notice for a native review row already queued under a connector group.
-
-    Best effort, as ``_notify_pending_approval`` is: the row is in the Inbox either way. Commands that wait on
-    one connector share a group, and the store answers with its first notified sibling's marker, so only the
-    first command raises a notice.
-    """
-
-    fields = {key: _string_or_none(queued.get(key)) for key in ("request_id", "harness", "approval_url")}
-    group = _string_or_none(queued.get("queue_group_id"))
-    request_id, harness, approval_url = fields["request_id"], fields["harness"], fields["approval_url"]
-    if request_id is None or harness is None or approval_url is None or group is None:
-        return
-    notice = _QueuedNotice(
-        request_id=request_id,
-        harness=harness,
-        workspace=_string_or_none(queued.get("workspace")),
-        approval_url=approval_url,
-        artifact_name=connector_name,
-        risk_headline=connector_name,
-        trigger_summary=None,
-        queue_group_id=group,
-    )
-    with contextlib.suppress(Exception):
-        _notify_pending_approval(store=cast(GuardStore, store), request=notice)
-
-
 def _mark_desktop_notified(store: GuardStore, request_id: str) -> None:
     # This process already remembers the notification; a lost marker only
     # lets another process notify once more.
@@ -866,6 +868,37 @@ def _approval_notification_message(request: _QueuedNotice) -> str:
     if len(message) <= 180:
         return message
     return f"{message[:177].rstrip()}..."
+
+
+def _save_package_decision(
+    store: GuardStore,
+    planned: object,
+    reason: str | None,
+    resolved_at: str,
+    approval_gate_grant: ApprovalGateGrant | None,
+) -> None:
+    """Save a package install review's Always allow under its package key too.
+
+    The resident names the key only for an allow persisted at artifact scope
+    whose review carried one, so the identical install run from another
+    checkout of the repository reuses it.
+    """
+
+    if not isinstance(planned, Mapping):
+        return
+    package = PolicyDecision(
+        harness=str(planned["harness"]),
+        scope="artifact",
+        action="allow",
+        artifact_id=_string_or_none(planned.get("artifact_id")),
+        artifact_hash=_string_or_none(planned.get("artifact_hash")),
+        reason=reason,
+        source="approval-gate",
+    )
+    store.ensure_policy_integrity_ready_for_write(
+        harness=package.harness, approval_gate_grant=approval_gate_grant, now=resolved_at
+    )
+    store.upsert_policy(package, resolved_at, approval_gate_grant=approval_gate_grant)
 
 
 def _string_or_none(value: object) -> str | None:
@@ -1060,7 +1093,7 @@ def _live_hook_verification(
     The runtime decides which proof settles each harness; this only names the
     installs, and the Codex launch facts when one is active."""
     from .codex_harness_client import live_hook_fields
-    from .harness.native_harness import ask
+    from .native_harness_client import ask
 
     context = HarnessContext(
         home_dir=Path.home().resolve(),
@@ -1088,25 +1121,27 @@ def _live_hook_verification(
 
 
 def _canonical_managed_installs_for_health(
-    managed_installs: Sequence[Mapping[str, object]],
+    store: GuardStore, *, deadline_monotonic: float | None = None
 ) -> list[dict[str, object]]:
-    canonical: dict[str, tuple[tuple[bool, bool], dict[str, object]]] = {}
-    for install in managed_installs:
-        harness = install.get("harness")
-        if not isinstance(harness, str):
-            continue
-        try:
-            canonical_harness = get_adapter(harness).harness
-        except (ImportError, RuntimeError, TypeError, ValueError):
-            canonical_harness = harness
-        candidate = dict(install)
-        candidate["harness"] = canonical_harness
-        exact = harness == canonical_harness
-        priority = (install.get("active") is True, exact)
-        existing = canonical.get(canonical_harness)
-        if existing is None or priority > existing[0]:
-            canonical[canonical_harness] = (priority, candidate)
-    return [canonical[harness][1] for harness in sorted(canonical)]
+    """The store's install rows, one per canonical harness; the runtime reads and decides."""
+    from .native_harness_client import ask
+
+    context = HarnessContext(
+        home_dir=Path.home().resolve(),
+        workspace_dir=None,
+        guard_home=store.guard_home,
+    )
+    try:
+        installs = ask(
+            "canonical_managed_installs",
+            context,
+            resident_home=store.guard_home,
+            deadline_monotonic=deadline_monotonic,
+            store_home=str(store.guard_home),
+        )["installs"]
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
+        raise NativeProtectionHealthError("native_canonical_installs_unavailable") from error
+    return [install for install in installs if isinstance(install, dict)]
 
 
 def build_runtime_snapshot(
@@ -1170,8 +1205,6 @@ def _build_runtime_snapshot(
     proof_status = cloud_context.pop("proof_status")
     trust_status = store.get_cached_policy_trust_status()
     managed_installs = store.list_managed_installs()
-    health_managed_installs = _canonical_managed_installs_for_health(managed_installs)
-    hook_verification = _live_hook_verification(health_managed_installs, store)
     runtime_state = store.get_runtime_state()
     health_runtime_state = dict(runtime_state) if runtime_state is not None else None
     if health_runtime_state is None and serving_runtime is not None:
@@ -1185,6 +1218,8 @@ def _build_runtime_snapshot(
     if health_runtime_state is not None and containment_health is not None:
         health_runtime_state["containment_health"] = containment_health
     try:
+        health_managed_installs = _canonical_managed_installs_for_health(store)
+        hook_verification = _live_hook_verification(health_managed_installs, store)
         protection_health: dict[str, object] | None = build_runtime_protection_health(
             store=store,
             guard_home=store.guard_home,
@@ -1248,7 +1283,7 @@ def approval_prompt_flow(
     managed_install: dict[str, object] | None = None,
 ) -> dict[str, object]:
     try:
-        flow = get_adapter(harness).approval_flow(managed_install=managed_install)
+        flow = approval_flow(harness, managed_install=managed_install)
     except ValueError:
         flow = {}
     return {

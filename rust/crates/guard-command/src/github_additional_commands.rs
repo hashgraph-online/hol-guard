@@ -120,6 +120,10 @@ pub(crate) fn classify(args: &[String]) -> Option<Cap> {
             return Some(Cap::SecretRemote);
         }
         ("config", "get") => return None,
+        // `variable list` already prints every value, so reading one by name
+        // shows no more. Exactly one name, and only the options that select
+        // where it is read from or how it is printed.
+        ("variable", "get") => return Some(variable_get(tail)),
         ("config", "set" | "clear-cache") | ("alias", "set" | "delete" | "import") => {
             return Some(Cap::WriteLocal)
         }
@@ -145,6 +149,44 @@ pub(crate) fn classify(args: &[String]) -> Option<Cap> {
     } else {
         Cap::Unknown
     })
+}
+
+fn variable_get(tail: &[String]) -> Cap {
+    const VALUES: &[&str] = &[
+        "--env",
+        "-e",
+        "--org",
+        "-o",
+        "--json",
+        "--jq",
+        "-q",
+        "--template",
+        "-t",
+    ];
+    let mut rest = tail.to_vec();
+    let mut index = 0;
+    let mut name = None;
+    while index < rest.len() {
+        let option = rest[index].split('=').next().unwrap_or_default();
+        if rest[index].starts_with('-') {
+            let takes_value = (VALUES.contains(&option) || matches!(option, "--repo" | "-R"))
+                && !rest[index].contains('=');
+            index += 1 + usize::from(takes_value);
+            continue;
+        }
+        if name.is_some() {
+            return Cap::Unknown;
+        }
+        name = Some(rest.remove(index));
+    }
+    let plain = name.is_some_and(|name| {
+        !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    });
+    if plain && metadata_options(&rest, &[], VALUES) {
+        Cap::ReadRemote
+    } else {
+        Cap::Unknown
+    }
 }
 
 fn metadata_options(args: &[String], flags: &[&str], values: &[&str]) -> bool {
@@ -190,6 +232,16 @@ mod tests {
             ("label list --json name", Cap::ReadRemote),
             ("secret list --env preview", Cap::ReadRemote),
             ("variable list", Cap::ReadRemote),
+            ("variable get MERGE_FREEZE", Cap::ReadRemote),
+            (
+                "variable get MERGE_FREEZE --repo example-org/app",
+                Cap::ReadRemote,
+            ),
+            ("variable get --env preview DEPLOY_REGION", Cap::ReadRemote),
+            (
+                "variable get REGION --json name,value --jq .value",
+                Cap::ReadRemote,
+            ),
             ("codespace list", Cap::ReadRemote),
             ("org list", Cap::ReadRemote),
             (
@@ -226,6 +278,12 @@ mod tests {
             "label list --json --web",
             "project list --closed=invalid",
             "extension exec list",
+            "variable get",
+            "variable get ONE TWO",
+            "variable get NAME --web",
+            "variable get NAME --repo",
+            "variable get ''",
+            "variable get ../NAME",
         ] {
             let args: Vec<String> = command.split_whitespace().map(str::to_owned).collect();
             assert_eq!(classify(&args), Some(Cap::Unknown), "{command}");

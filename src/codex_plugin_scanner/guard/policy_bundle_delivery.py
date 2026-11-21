@@ -8,7 +8,7 @@ the transport calls that return the validated records.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Literal
 
 from .native_policy_bundle import (
@@ -177,6 +177,41 @@ def policy_bundle_failure_acknowledgement(
         )
     except PolicyBundleNativeError:
         return {}
+
+
+def reportable_policy_bundle_acknowledgement(
+    acknowledgement: dict[str, object],
+    *,
+    device_id: str,
+    device_name: str,
+    validated_bundle: Callable[[], dict[str, object] | None],
+) -> dict[str, object] | None:
+    """Return the stored acknowledgement the cloud sync may report, or ``None``.
+
+    The native runtime keeps a valid v2 acknowledgement, and keeps a legacy one
+    only while it names ``validated_bundle()`` on this device with a ``synced``
+    status and a readable ``appliedAt``. ``validated_bundle`` runs only when a
+    legacy acknowledgement needs it. Nothing is reported when the native
+    runtime cannot decide.
+    """
+
+    request: dict[str, object] = {
+        "ack": acknowledgement,
+        "device_id": device_id,
+        "device_name": device_name,
+    }
+    try:
+        verdict = policy_bundle_verdict("sync_acknowledgement", request)
+        if verdict.get("needs_bundle") is True:
+            bundle = validated_bundle()
+            request["bundle"] = (
+                {key: bundle.get(key) for key in ("bundleHash", "bundleVersion")} if isinstance(bundle, dict) else None
+            )
+            verdict = policy_bundle_verdict("sync_acknowledgement", request)
+    except PolicyBundleNativeError:
+        return None
+    reported = verdict.get("ack")
+    return reported if isinstance(reported, dict) else None
 
 
 def is_failed_policy_bundle_acknowledgement(acknowledgement: object) -> bool:

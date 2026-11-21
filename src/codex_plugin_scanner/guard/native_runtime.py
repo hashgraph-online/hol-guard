@@ -19,7 +19,6 @@ from pathlib import Path
 from .codex_hook_launch_runtime import BoundedHookProcessResult, run_isolated_hook_process
 from .group_write_trust import trusted_owner_and_mode as _trusted_owner_and_mode
 from .native_binary_identity import validate_native_binary as _validate_binary
-from .native_response_decoder import native_error as _native_error  # noqa: F401
 from .native_runtime_process_cache import (
     forget_process_status,
     process_snapshot,
@@ -53,6 +52,8 @@ from .native_runtime_values import (
     warn_legacy_hook_fast_path_once,
 )
 from .native_runtime_values import _NATIVE_RUNTIME_EXPORTS as __all__  # noqa: F401, N811
+from .native_transport_error import native_error as _native_error  # noqa: F401
+from .native_transport_error import native_error_code  # noqa: F401
 
 _NATIVE_PROTOCOL_VERSION = 1
 _NATIVE_BINARY_ENV = "HOL_GUARD_NATIVE_BINARY"
@@ -86,24 +87,32 @@ def _runtime_candidates() -> tuple[Path, ...]:
     )
 
 
+def _distribution_candidates() -> tuple[Path, ...]:
+    """Runtimes a separately installed ``hol-guard-runtime`` distribution ships.
+
+    Developer compatibility: such a runtime is validation-only. Automatic
+    production selection must use the runtime bundled inside the
+    version-matched hol-guard wheel and its manifest.
+    """
+
+    try:
+        distribution = importlib.metadata.distribution("hol-guard-runtime")
+    except importlib.metadata.PackageNotFoundError:
+        return ()
+    executable_names = {"hol-guard-runtime", "hol-guard-runtime.exe"}
+    return tuple(
+        Path(str(distribution.locate_file(entry)))
+        for entry in distribution.files or ()
+        if Path(str(entry)).name in executable_names
+    )
+
+
 def _discover_runtime_candidates() -> tuple[Path, ...]:
     mode = native_mode()
     candidates = list(primary_candidates(mode, os.environ.get(_NATIVE_BINARY_ENV), _bundled_runtime_candidate()))
 
-    # Developer compatibility: a separately installed runtime distribution is
-    # validation-only. Automatic production selection must use the runtime
-    # bundled inside the version-matched hol-guard wheel and its manifest.
     if mode == "force":
-        try:
-            distribution = importlib.metadata.distribution("hol-guard-runtime")
-        except importlib.metadata.PackageNotFoundError:
-            distribution = None
-        if distribution is not None:
-            executable_names = {"hol-guard-runtime", "hol-guard-runtime.exe"}
-            for entry in distribution.files or ():
-                if Path(str(entry)).name not in executable_names:
-                    continue
-                candidates.append(Path(str(distribution.locate_file(entry))))
+        candidates.extend(_distribution_candidates())
 
     unique: list[Path] = []
     seen: set[str] = set()

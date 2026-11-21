@@ -9,8 +9,6 @@ publish = false
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
-ring.workspace = true
 pep440_rs.workspace = true
 
 [lints]

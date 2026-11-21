@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness import native_hook_bridge
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import raise_failure, wire_context
+from codex_plugin_scanner.guard import native_hook_bridge
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import raise_failure, wire_context
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
 from .native_runtime_stamp import stamp_native_runtime

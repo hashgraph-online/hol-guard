@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
+use super::claude_install_target_text as text;
 use super::{path_text, Ctx};
 
 const CONFIG_DIR_ENV: &str = "CLAUDE_CONFIG_DIR";
@@ -223,7 +224,7 @@ pub(super) fn target(ctx: &Ctx, settings: &Path) -> Value {
         .map(|word| shell_word(word, ctx.windows))
         .collect::<Vec<_>>()
         .join(" ");
-    json!({
+    let mut answer = json!({
         "scope": "user",
         "settings_path": path_text(settings),
         "workspace": ctx.workspace.as_deref().map(path_text),
@@ -234,7 +235,9 @@ pub(super) fn target(ctx: &Ctx, settings: &Path) -> Value {
         "hook_overrides": overrides,
         "background": "Headless `claude -p` runs and Remote Control sessions continue on this \
             machine and read the same user settings. Cloud sessions (Claude Code on the web) run \
-            elsewhere, do not read this file, and Guard does not cover them.",
+            elsewhere, do not read this file, and Guard does not cover them. Sessions started \
+            with `--bare`, or with setting sources that leave out `user`, skip Guard's hooks. \
+            Background sessions (`claude --bg`) run them but are not qualified with Guard.",
         "rollback": {
             "command": command,
             // The command for the shell that will run it, so the caller shows
@@ -246,7 +249,10 @@ pub(super) fn target(ctx: &Ctx, settings: &Path) -> Value {
                 setting. It makes no backup; `hol-guard hooks remove --all` backs the file up \
                 first.",
         },
-    })
+    });
+    answer["border"] = json!(text::border(&answer));
+    answer["text"] = json!(text::lines(&answer));
+    answer
 }
 
 /// Install notes for the manifest: the file written, the rollback, and one

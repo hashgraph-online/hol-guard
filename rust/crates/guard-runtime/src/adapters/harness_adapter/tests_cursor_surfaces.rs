@@ -243,3 +243,48 @@ fn malformed_surface_requests_are_invalid() {
         );
     }
 }
+
+#[test]
+fn the_runtime_reads_the_stored_cursor_install_itself() {
+    let home = Home::new();
+    let read = |installed: bool| {
+        surfaces(&ask(
+            &home,
+            None,
+            "protected_surfaces_from_store",
+            json!({"installed": installed, "store_home": home.guard()}),
+        ))
+    };
+    // No store file: an installed Cursor with no record protects both.
+    assert_eq!(read(true), ["editor", "cli"]);
+    let connection = rusqlite::Connection::open(home.guard().join("guard.db")).unwrap();
+    connection
+        .execute_batch(
+            "create table managed_installs (
+               harness text primary key, active integer not null, workspace text,
+               manifest_json text not null, updated_at text not null);",
+        )
+        .unwrap();
+    assert_eq!(read(true), ["editor", "cli"]);
+    connection
+        .execute(
+            "insert into managed_installs values ('cursor', 1, null, ?1, '2026-03-10T10:00:00+00:00')",
+            [json!({"surface": "cli"}).to_string()],
+        )
+        .unwrap();
+    assert_eq!(read(true), ["cli"]);
+    // An uninstalled Cursor protects nothing whatever the store says.
+    assert!(read(false).is_empty());
+    // A store that names no Cursor record is the same as no store at all.
+    connection
+        .execute("delete from managed_installs", [])
+        .unwrap();
+    assert_eq!(read(true), ["editor", "cli"]);
+    let bad = request(
+        &home,
+        None,
+        "protected_surfaces_from_store",
+        &json!({"installed": true, "store_home": 3}),
+    );
+    assert!(dispatch(&bad).is_err());
+}

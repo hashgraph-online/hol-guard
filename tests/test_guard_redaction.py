@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard import redaction
 from codex_plugin_scanner.guard.cli import product
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.redaction import redact_local_path, redact_sensitive_text, redact_text
 from codex_plugin_scanner.guard.store import GuardStore

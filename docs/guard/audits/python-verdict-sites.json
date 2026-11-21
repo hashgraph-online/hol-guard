@@ -19,6 +19,16 @@
   "sites": [
     {
       "file": "src/codex_plugin_scanner/guard/approvals.py",
+      "func": "_save_package_decision",
+      "root": "none",
+      "reading": "records-approval",
+      "actions": [
+        "allow"
+      ],
+      "note": "Files the package-key half of the user's Always allow; written only when the resident's resolution plan names a package decision."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/approvals.py",
       "func": "apply_approval_resolution",
       "root": "none",
       "reading": "records-approval",
@@ -111,16 +121,6 @@
       "note": "Blocks a continuation it cannot settle."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
-      "func": "cursor_shell_route_response",
-      "root": "hook",
-      "reading": "routes-guard-own-sink",
-      "actions": [
-        "allow"
-      ],
-      "note": "Same route: an argv shape that matches Guard's own sink is passed through to it, and the sink does the authorizing."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/hook_review/hook_fail_closed.py",
       "func": "render_silent_review_block",
       "root": "hook",
@@ -129,26 +129,6 @@
         "block"
       ],
       "note": "The fixed deny render_pre_tool falls back to when the resident cannot compose the silent block."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
-      "func": "_blocked",
-      "root": "hook",
-      "reading": "fails-closed",
-      "actions": [
-        "block"
-      ],
-      "note": "Renders the block response."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
-      "func": "native_package_review_response",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow"
-      ],
-      "note": "Renders the resident's review_settlement: an allow only where the resident settled the review as allow and the package review plan's may_allow still holds. Closed MAJ-AC-01 finding: the script-free watch widening now lives in the resident."
     },
     {
       "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
@@ -184,32 +164,11 @@
       "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
       "func": "pause_native_pre_tool_for_approval",
       "root": "hook",
-      "reading": "records-approval",
-      "actions": [
-        "allow",
-        "block"
-      ],
-      "note": "Blocks while the review is pending, and allows only on the two saved-approval matches native_review_settle finds in the store."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
-      "func": "_saved_block_response",
-      "root": "hook",
       "reading": "fails-closed",
       "actions": [
         "block"
       ],
-      "note": "Renders the saved block."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
-      "func": "native_saved_decision_response",
-      "root": "hook",
-      "reading": "records-approval",
-      "actions": [
-        "allow"
-      ],
-      "note": "Replays the user's saved exact-action decision, bound to the artifact hash and gated on the resident having marked the review approvable."
+      "note": "Uses the fixed deny envelope when the resident cannot render a settled retry."
     },
     {
       "file": "src/codex_plugin_scanner/guard/local_clis/local_cli_connector_group.py",

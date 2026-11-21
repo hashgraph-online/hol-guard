@@ -182,7 +182,7 @@ Rows that do not stop the action when Guard fails, and the blind spots each row 
 | codex | `PermissionRequest` | foreground | Stops the action | Native approval UX and Guard evidence still require a live host/version check. |
 | codex | `UserPromptSubmit` | foreground | Stops the action | Prompt screening does not prove downstream model or host request rewriting. |
 | codex | `PostToolUse` | foreground | Records only | Native post-tool observation does not prove model-visible output replacement. |
-| claude-code | `PreToolUse` | foreground | Stops the action | Background sessions without an active terminal may not surface hook events. |
+| claude-code | `PreToolUse` | foreground | Stops the action | Sessions started with --bare, or with a --setting-sources or Agent SDK settingSources list that leaves out user, never load Guard's hooks and are unprotected. Background sessions (claude --bg) load the same hooks but are not qualified with Guard. A review waits at Claude Code's confirmation prompt until someone attaches to the session. |
 | claude-code | `PermissionRequest` | foreground | Stops the action | Guard adds pending review context and defers to Claude's own permission dialog; the native PreToolUse verdict remains the decision boundary. |
 | claude-code | `PostToolUse` | foreground | Records only | Native PostToolUse is not a general model-visible result replacement boundary. |
 | claude-code | `UserPromptSubmit` | foreground | Lets the action continue | Prompt screening does not prove downstream model or host request rewriting. |

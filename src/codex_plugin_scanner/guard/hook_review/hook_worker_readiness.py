@@ -82,9 +82,12 @@ def prepare_workspace_policy(
     workspace_pending = getattr(worker.policy_snapshot_publisher, "workspace_policy_pending", None)
     admissible_without_overlay = getattr(worker.policy_snapshot_publisher, "workspace_admissible_without_overlay", None)
     if worker._publish_native_policy:
+        readiness_deadline = now + owner._NATIVE_POLICY_READY_TIMEOUT_SECONDS
+        if deadline is not None:
+            readiness_deadline = min(readiness_deadline, deadline)
         register_workspace = getattr(worker.policy_snapshot_publisher, "register_workspace", None)
         if callable(register_workspace):
-            _ = register_workspace(workspace)
+            _ = register_workspace(workspace, deadline=readiness_deadline)
         worker.policy_snapshot_publisher.start()
         wait_until_ready = getattr(worker.policy_snapshot_publisher, "wait_until_ready", None)
         last_error = getattr(worker.policy_snapshot_publisher, "last_error", None)
@@ -106,11 +109,10 @@ def prepare_workspace_policy(
         # A file-less directory adds no overlay, so the current ACK already
         # carries its policy unless an unsettled ancestor overlay is about to
         # join it. Hooks right after `cd` into it need not wait for a publish.
-        covered = callable(admissible_without_overlay) and admissible_without_overlay(workspace)
+        covered = callable(admissible_without_overlay) and admissible_without_overlay(
+            workspace, deadline=readiness_deadline
+        )
         if callable(wait_until_ready) and (transient_publication_error or no_publication_error):
-            readiness_deadline = now + owner._NATIVE_POLICY_READY_TIMEOUT_SECONDS
-            if deadline is not None:
-                readiness_deadline = min(readiness_deadline, deadline)
             pending = not covered and callable(workspace_pending) and bool(workspace_pending(workspace))
             if callable(getattr(worker.policy_snapshot_publisher, "nudge_retry", None)):
                 _wait_nudging_publisher(

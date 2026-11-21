@@ -360,7 +360,7 @@ def _run_guard_run_command(
     grok_executable = getattr(args, "grok_executable", None)
     if isinstance(grok_executable, str) and grok_executable.strip():
         try:
-            selected_harness = get_adapter(str(args.harness)).harness
+            selected_harness = resolve_harness(str(args.harness))
         except ValueError:
             selected_harness = str(args.harness)
         if selected_harness != "grok":

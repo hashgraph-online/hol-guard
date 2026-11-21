@@ -56,7 +56,7 @@ fn checkouts(label: &str) -> (PathBuf, FixtureCleanup) {
     init(
         &root,
         &root.join("other"),
-        "https://github.com/example-org/points-portal.git",
+        "https://github.com/example-org/storefront-portal.git",
     );
     let root = root.canonicalize().unwrap();
     (root.clone(), FixtureCleanup(root))
@@ -107,9 +107,9 @@ fn decide(
     )
 }
 
-const MERGE: &str = "gh pr merge 8232 --repo example-org/points-portal --squash";
+const MERGE: &str = "gh pr merge 8232 --repo example-org/storefront-portal --squash";
 const VIEW: &str =
-    "gh pr view 8232 --repo example-org/points-portal --json state,mergedAt,mergeCommit";
+    "gh pr view 8232 --repo example-org/storefront-portal --json state,mergedAt,mergeCommit";
 
 #[test]
 fn an_allowed_merge_followed_by_a_read_runs_without_review() {

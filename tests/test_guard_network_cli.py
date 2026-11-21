@@ -25,9 +25,34 @@ from codex_plugin_scanner.guard.runtime.network_status import (
     build_network_status,
     validate_network_status,
 )
-from codex_plugin_scanner.guard.runtime.network_supervisor import NetworkSupervisor, NetworkSupervisorHealth
-from codex_plugin_scanner.guard.runtime.provider_recovery import RecoveryPhase
 from codex_plugin_scanner.guard.store import GuardStore
+
+# What the daemon's supervisor reports: it never receives a backend advertisement.
+_UNAVAILABLE_SUPERVISOR: dict[str, object] = {
+    "phase": "unavailable",
+    "backend_id": None,
+    "backend_digest": None,
+    "effective_grade": "unavailable",
+    "healthy_until_epoch_ms": None,
+    "retry_attempt": 0,
+    "next_retry_seconds": 0.0,
+    "permits_enforcement": False,
+    "independently_observed": False,
+}
+
+
+def _healthy_supervisor(backend_id: str, grade: EnforcementGrade) -> dict[str, object]:
+    return {
+        "phase": "healthy",
+        "backend_id": backend_id,
+        "backend_digest": "a" * 64,
+        "effective_grade": grade.value,
+        "healthy_until_epoch_ms": 4_000_000_000_000,
+        "retry_attempt": 0,
+        "next_retry_seconds": 0.0,
+        "permits_enforcement": grade not in {EnforcementGrade.UNAVAILABLE, EnforcementGrade.OBSERVE},
+        "independently_observed": False,
+    }
 
 
 def _parse(arguments: list[str]) -> argparse.Namespace:
@@ -199,7 +224,7 @@ def test_network_status_validator_rejects_enum_nested_and_invariant_corruption(
 ) -> None:
     status = build_network_status(
         platform_name="darwin",
-        supervisor_health=NetworkSupervisor().health(now_epoch_ms=1),
+        supervisor=_UNAVAILABLE_SUPERVISOR,
     )
     mutate(status)
 
@@ -211,7 +236,7 @@ def test_network_status_validator_projects_only_privacy_safe_v1_fields() -> None
     status = build_network_status(
         platform_name="darwin",
         legacy_domain_action="warn",
-        supervisor_health=NetworkSupervisor().health(now_epoch_ms=1),
+        supervisor=_UNAVAILABLE_SUPERVISOR,
     )
     status["secret_token"] = "must-not-escape"
     cast(list[dict[str, object]], status["backends"])[0]["local_path"] = "/private/user"
@@ -323,18 +348,10 @@ def test_producer_and_validator_agree_on_backend_readiness(
     expected_active: bool,
 ) -> None:
     profile = replace(default_platform_profiles()[0], production_ready=production_ready)
-    health = NetworkSupervisorHealth(
-        phase=RecoveryPhase.HEALTHY,
-        backend_id=profile.backend_id,
-        backend_digest="a" * 64,
-        effective_grade=profile.maximum_grade,
-        healthy_until_epoch_ms=4_000_000_000_000,
-        retry_attempt=0,
-        next_retry_seconds=0.0,
-    )
+    health = _healthy_supervisor(profile.backend_id, profile.maximum_grade)
 
     projected = validate_network_status(
-        build_network_status(profiles=(profile,), supervisor_health=health, platform_name="linux")
+        build_network_status(profiles=(profile,), supervisor=health, platform_name="linux")
     )
 
     assert projected["protection_active"] is expected_active
@@ -343,18 +360,10 @@ def test_producer_and_validator_agree_on_backend_readiness(
 
 def test_backend_health_above_profile_maximum_fails_closed() -> None:
     profile = replace(default_platform_profiles()[0], production_ready=True)
-    health = NetworkSupervisorHealth(
-        phase=RecoveryPhase.HEALTHY,
-        backend_id=profile.backend_id,
-        backend_digest="a" * 64,
-        effective_grade=EnforcementGrade.DESTINATION_ENFORCED,
-        healthy_until_epoch_ms=4_000_000_000_000,
-        retry_attempt=0,
-        next_retry_seconds=0.0,
-    )
+    health = _healthy_supervisor(profile.backend_id, EnforcementGrade.DESTINATION_ENFORCED)
 
     projected = validate_network_status(
-        build_network_status(profiles=(profile,), supervisor_health=health, platform_name="linux")
+        build_network_status(profiles=(profile,), supervisor=health, platform_name="linux")
     )
 
     assert projected["protection_active"] is False

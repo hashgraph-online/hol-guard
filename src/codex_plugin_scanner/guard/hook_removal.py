@@ -20,8 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from .harness.base import HarnessContext
-from .harness.registry import list_adapters
+from .harness_context import HarnessContext
 from .hook_removal_sweep import (
     BackupError,
     SweepUnavailableError,
@@ -30,6 +29,7 @@ from .hook_removal_sweep import (
     harness_hook_files,
     sweep_harness,
 )
+from .native_harness_ops import list_harnesses
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -63,8 +63,7 @@ def plan_hook_removal(context: HarnessContext, store: GuardStore) -> list[Harnes
         if bool(item.get("active")) and isinstance(item.get("harness"), str)
     }
     plans: list[HarnessPlan] = []
-    for adapter in list_adapters():
-        harness = adapter.harness
+    for harness in list_harnesses():
         plan = HarnessPlan(harness=harness)
         if harness in active:
             plan.reasons.append("managed_install")

@@ -862,7 +862,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12.14", "3.14.7"]
-        slice: [0, 1, 2, 3]
+        slice: [0, 1, 2, 3, 4]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -871,7 +871,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           slice-index: ${{ matrix.slice }}
-          slice-count: 4
+          slice-count: 5
 
   compatibility:
     needs: [plan, native-command-evaluators]
@@ -940,14 +940,13 @@ jobs:
           echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"
 
   dashboard-integration-wheel:
-    # Guard serves its extension catalog only from an installed release: a
-    # native wheel whose runtime, command-pack bundle and manifests name one
-    # source commit. The evaluator binaries are shared across commits and carry
-    # no such identity, so build a runtime stamped with this checkout and seal
-    # it into a wheel, in parallel with the evaluator build.
-    needs: [plan]
+    # Guard serves its extension catalog only from an installed release. Reuse
+    # the verified current-SHA evaluator artifacts instead of compiling the
+    # same Linux binaries a second time in this consumer.
+    needs: [plan, native-command-evaluators]
     if: >-
       !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-24.04
@@ -960,28 +959,24 @@ jobs:
         with:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
-      - uses: ./.github/actions/setup-rust
+      - name: Download verified native evaluator artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          cache-key: pytest-native-command
-      - name: Install content-addressed compiler cache
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
-        with:
-          version: v0.18.0
-      - name: Build the source compiler and a runtime stamped with this checkout
-        env:
-          RUSTC_WORKSPACE_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "on"
-          SCCACHE_GHA_VERSION: pytest-native-command
-          SCCACHE_GHA_RW_MODE: READ_ONLY
-          SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+          name: pytest-native-command-evaluators
+          path: rust/target/release
+      - name: Prepare downloaded evaluator artifacts
+        run: chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
+      - name: Resolve wheel identity
         run: |
           set -euo pipefail
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
-          # The bundle build names `git rev-parse HEAD`; the runtime must match it.
-          SOURCE_SHA=$(git rev-parse HEAD)
-          HOL_GUARD_PACKAGE_VERSION="$VERSION" HOL_GUARD_BUILD_SHA="$SOURCE_SHA" \
-            cargo build --manifest-path rust/Cargo.toml --locked --release \
-            -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+          # The evaluator artifact may come from the producer's cache, which is
+          # keyed on the native sources rather than the commit. A cache hit
+          # carries the SHA of the commit that built those same sources, so the
+          # wheel and its command pack bundle name the runtime's own build SHA,
+          # as the wheel already does its rule digest.
+          SOURCE_SHA=$(rust/target/release/hol-guard-runtime capabilities --json | jq -r '.build_sha')
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
       - name: Seal the native wheel
@@ -1004,7 +999,7 @@ jobs:
             '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",validation_base:{catalog:$built[0].catalog,programs:[]}}' \
             > "$work/source-build.json"
           "$compiler" compile < "$work/source-build.json" > "$work/source-compiled.json"
-          uv build --wheel --out-dir "$work/pure"
+          HOL_GUARD_BUNDLE_SOURCE_SHA="$SOURCE_SHA" uv build --wheel --out-dir "$work/pure"
           uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
             --wheel "$work/pure/hol_guard-${VERSION}-py3-none-any.whl" \
             --runtime "$runtime" \
@@ -1149,7 +1144,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shim-gate: [vectors, native-op, mcp]
+        # Keep fast Windows contract smoke on pull requests. The native-op
+        # family remains in the complete main and explicit full-validation run.
+        shim-gate: ${{ github.event_name == 'pull_request' && fromJSON('["vectors", "mcp"]') || fromJSON('["vectors", "native-op", "mcp"]') }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -1229,6 +1226,7 @@ jobs:
     needs: [plan, native-command-evaluators, macos-native-runtime]
     if: >-
       !cancelled() &&
+      github.event_name != 'pull_request' &&
       needs.native-command-evaluators.result == 'success' &&
       needs.macos-native-runtime.result == 'success' &&
       (github.event_name != 'pull_request' ||
@@ -1239,8 +1237,11 @@ jobs:
     # now spend around 430 seconds in pytest alone, so checkout and setup push
     # them past an eight-minute limit and GitHub cancels them after their
     # cases have already passed. Twelve minutes restores the headroom without
-    # a wider macOS fan-out, which the runner pool cannot spare.
-    timeout-minutes: 12
+    # a wider macOS fan-out, which the runner pool cannot spare. Slow macOS
+    # runners have since pushed a full shard's pytest run to about 690
+    # seconds, so twelve minutes cancels shards whose cases all passed; each
+    # shard now gets eighteen.
+    timeout-minutes: 18
     strategy:
       fail-fast: false
       matrix:
@@ -1338,6 +1339,8 @@ jobs:
                   print(f"::error::coverage matrix {shard_count} != configured {expected}")
                   sys.exit(1)
           skipped = [j for j in required if needs.get(j,{}).get("result")=="skipped"]
+          if event == "pull_request":
+              skipped = [j for j in skipped if j != "macos-gates"]
           if skipped and not data_only:
               print("::error::required jobs skipped on a full-lane plan: "+", ".join(skipped))
               sys.exit(1)

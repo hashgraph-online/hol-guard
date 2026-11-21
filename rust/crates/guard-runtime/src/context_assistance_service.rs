@@ -167,7 +167,8 @@ pub(crate) struct Service {
     state: Arc<Mutex<State>>,
     /// The same flag as `State::chosen`, read when the lock is busy.
     chosen: Arc<AtomicBool>,
-    updates: crate::policy_store::context_assistance_registry::Jobs,
+    /// Hash of the saved `config.toml` the prompt lane last followed.
+    followed: Arc<Mutex<Option<u64>>>,
     switches: upgrade::Jobs,
     #[cfg(all(test, target_os = "macos"))]
     execution_test_hook: Mutex<Option<ExecutionTestHook>>,
@@ -179,7 +180,7 @@ impl Default for Service {
         Self {
             chosen: Arc::clone(&state.chosen),
             state: Arc::new(Mutex::new(state)),
-            updates: Default::default(),
+            followed: Default::default(),
             switches: Default::default(),
             #[cfg(all(test, target_os = "macos"))]
             execution_test_hook: Default::default(),

@@ -35,6 +35,10 @@ pub(crate) enum Failure {
     Runtime(String),
     /// `CodexHookIntegrityError(code, message)`.
     Integrity(String, String),
+    /// `CodexHookIntegrityError(reason, message)` for a baseline the runtime
+    /// refused to trust, chained to the `cause` reason the refusal named. The
+    /// value is the `{reason, message, cause?}` the baseline answered.
+    Untrusted(Value),
     /// `TransitionError(reason)`.
     Transition(&'static str),
     /// A publication fault, in the shape `Fault::to_json` answers.
@@ -42,12 +46,24 @@ pub(crate) enum Failure {
 }
 
 impl Failure {
-    pub(super) fn to_json(&self) -> Value {
+    pub(crate) fn to_json(&self) -> Value {
         let failure = match self {
             Self::Timeout(message) => json!({ "kind": "timeout", "message": message }),
             Self::Runtime(message) => json!({ "kind": "runtime", "message": message }),
             Self::Integrity(code, message) => {
                 json!({ "kind": "integrity", "code": code, "message": message })
+            }
+            Self::Untrusted(untrusted) => {
+                let field = |key: &str| untrusted.get(key).cloned().unwrap_or(Value::Null);
+                let mut failure = json!({
+                    "kind": "integrity",
+                    "code": field("reason"),
+                    "message": field("message"),
+                });
+                if let Some(cause) = untrusted.get("cause") {
+                    failure["cause"] = cause.clone();
+                }
+                failure
             }
             Self::Transition(reason) => json!({ "kind": "transition", "reason": reason }),
             Self::Fault(fault) => json!({ "kind": "fault", "fault": fault }),

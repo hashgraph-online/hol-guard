@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.bounded_cli_hook_native import (
+from codex_plugin_scanner.guard.bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_COMMAND,
     NATIVE_BOUNDED_HOOK_FEATURE,
     NATIVE_MUSE_HOOK_FEATURE,
 )
-from codex_plugin_scanner.guard.harness.native_harness import ask
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 from tests.cline_worker_config import worker_config
 from tests.native_bounded_runtime import hook_config_argv
 from tests.native_runtime_stamp import stamp_native_runtime

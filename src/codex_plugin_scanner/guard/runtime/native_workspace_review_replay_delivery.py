@@ -269,25 +269,22 @@ def mark_native_workspace_review_context_accepted(
         }
         if isinstance(state, Mapping) and isinstance(state.get("request_snapshot"), dict):
             previous["request_snapshot"] = state["request_snapshot"]
-    authority = replay._authority_marker(context, request_id=request_id, binding=binding)
-    if authority is None or not replay._authority_is_replayed(previous, authority):
-        return None
-    if replay._authority_is_accepted(previous, authority):
-        return True
-    now = replay._now()
-    accepted: dict[str, object] = {
-        **cast(dict[str, object], previous),
-        **authority,
-        "accepted": True,
-        "accepted_at": replay._timestamp(now),
-        "attempts": 0,
-        "next_probe_at": replay._timestamp(now + replay.timedelta(seconds=replay._PROBE_INTERVAL_SECONDS)),
-    }
+    now = replay._timestamp(replay._now())
     try:
-        replay_store.set_sync_payload(marker_key, accepted, replay._timestamp(now))
+        outcome = replay_store.transition_native_workspace_review_replay_marker(
+            request_id,
+            "accepted",
+            binding=binding,
+            now=now,
+            authority=replay._authority_fields(context),
+            fallback=previous if isinstance(previous, dict) else None,
+        )
     except (OSError, RuntimeError, TypeError, ValueError):
         return False
-    return True
+    result = outcome.get("result")
+    if result == "unmatched":
+        return None
+    return result in {"accepted", "already"}
 
 
 def _finalize_native_replay_delivery(

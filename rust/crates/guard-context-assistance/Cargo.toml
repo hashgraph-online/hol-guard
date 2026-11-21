@@ -13,6 +13,7 @@ serde_json.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 guard-scanner = { path = "../guard-scanner" }
 guard-cigar-release = { path = "../guard-cigar-release" }
+guard-cigar-native = { path = "../guard-cigar-native" }
 sha2.workspace = true
 ring.workspace = true
 

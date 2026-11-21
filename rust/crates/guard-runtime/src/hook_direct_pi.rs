@@ -98,6 +98,30 @@ pub(crate) fn resolution(harness: &str, view: Option<&Value>) -> Option<Value> {
         .map(|result| result["ok"].clone())
 }
 
+/// A missing edge decision can release a destination only if the managed
+/// view explicitly says it requires no mediation.
+pub(crate) fn outage_overlay(
+    harness: &str,
+    event: &str,
+    view: Option<&Value>,
+) -> serde_json::Map<String, Value> {
+    let mut overlay = serde_json::Map::new();
+    if structured_mediation(harness, event)
+        && resolution(harness, view)
+            .is_none_or(|resolved| resolved["required"].as_bool() != Some(false))
+    {
+        overlay.insert(
+            "structured_content_mediation".to_owned(),
+            json!({
+                "schema": MEDIATION_SCHEMA,
+                "action": "withhold",
+                "reason_code": "structured_native_edge_unavailable",
+            }),
+        );
+    }
+    overlay
+}
+
 /// The binding a resolution names, as the recheck reads it.
 pub(crate) fn resolved_binding(resolution: &Value) -> Value {
     resolution["binding"].clone()

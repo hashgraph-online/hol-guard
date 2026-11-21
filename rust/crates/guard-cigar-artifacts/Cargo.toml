@@ -6,14 +6,6 @@ license.workspace = true
 rust-version.workspace = true
 publish = false
 
-[dependencies]
-guard-cigar-release = { path = "../guard-cigar-release" }
-guard-secure-fs = { path = "../guard-secure-fs" }
-sha2.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["user"] }
-
 [target.'cfg(windows)'.dependencies]
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 

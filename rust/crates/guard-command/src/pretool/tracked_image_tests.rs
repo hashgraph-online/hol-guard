@@ -1,7 +1,7 @@
 //! Committed screenshots named for the screen they show, such as
 //! `auth-login.png`, pass a recursive search's walk only as plain PNGs whose
 //! bytes the secret detector clears.
-use super::super::{unescaped, MAX_TOTAL_BYTES};
+use super::super::{unescaped, MAX_IMAGE_BYTES, MAX_TOTAL_BYTES, MAX_TOTAL_IMAGE_BYTES};
 use super::tests::{fixture, write_index};
 use super::*;
 use std::path::PathBuf;
@@ -171,25 +171,58 @@ fn escapes_decode_as_yaml_json_and_toml_read_them() {
     }
 }
 
-/// The whole image counts against the walk's content budget before any of
-/// it is read, so an image larger than what is left keeps the review.
+/// The whole image counts against the walk's image budget before any of it is
+/// read, so an image larger than what is left keeps the review. That budget is
+/// the one a screenshot is measured against: a full-window retina capture is
+/// several megabytes, more than the whole document budget, and charging it
+/// there left an ordinary `docs/` tree with one `auth-*.png` in it unprovable.
 #[test]
-fn an_image_past_the_walk_budget_keeps_review() {
+fn an_image_is_measured_against_the_image_budget() {
+    // The size a screenshot actually is: past the document budget, well
+    // inside the image budget. This is the capture that used to keep the
+    // review, and with it every recursive search over the tree holding it.
     let (_, project) = fixture();
-    let filler = vec![0_u8; usize::try_from(MAX_TOTAL_BYTES).unwrap()];
-    let large = png(&[
+    let capture = png(&[
         (b"IHDR", &[0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]),
-        (b"IDAT", &filler),
+        (
+            b"IDAT",
+            &vec![0_u8; usize::try_from(MAX_TOTAL_BYTES).unwrap()],
+        ),
     ]);
-    let shot = tracked(&project, SHOT, &large);
+    assert!(capture.len() as u64 > MAX_TOTAL_BYTES);
+    let shot = tracked(&project, SHOT, &capture);
     write_index(&project.join(".git"), &[SHOT]);
-    assert!(!committed_image(&shot));
+    assert!(committed_image(&shot));
 
-    let mut walk = TrackedFiles::default();
+    // Past the per-image cap nothing is read and the review stands.
+    let (_, project) = fixture();
+    let oversized = png(&[
+        (b"IHDR", &[0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]),
+        (
+            b"IDAT",
+            &vec![0_u8; usize::try_from(MAX_IMAGE_BYTES).unwrap()],
+        ),
+    ]);
+    let huge = tracked(&project, SHOT, &oversized);
+    write_index(&project.join(".git"), &[SHOT]);
+    assert!(!committed_image(&huge));
+
+    // A walk that has already read its fill of images stops proving them,
+    // and a walk that has read its fill of documents still proves one: the
+    // two budgets are counted apart.
+    let (_, project) = fixture();
     let small = tracked(&project, "docs/auth-small.png", &screenshot());
     write_index(&project.join(".git"), &["docs/auth-small.png"]);
-    walk.spent = MAX_TOTAL_BYTES - 16;
-    assert!(!walk.tracked_image(&small));
+    let mut spent_on_images = TrackedFiles {
+        image_spent: MAX_TOTAL_IMAGE_BYTES - 16,
+        ..Default::default()
+    };
+    assert!(!spent_on_images.tracked_image(&small));
+    let mut spent_on_documents = TrackedFiles {
+        spent: MAX_TOTAL_BYTES - 16,
+        ..Default::default()
+    };
+    assert!(spent_on_documents.tracked_image(&small));
     assert!(TrackedFiles::default().tracked_image(&small));
 }
 

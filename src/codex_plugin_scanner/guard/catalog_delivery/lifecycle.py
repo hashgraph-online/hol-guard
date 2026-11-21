@@ -93,7 +93,8 @@ def verified_packaged_runtime():
     digest = manifest.get("compiler_sha256")
     if identity is not None and isinstance(digest, str) and identity == _packaged_identity():
         _verified = (identity, len(raw), digest, dict(manifest))
-    with transport._verified_executable(raw) as executable:
+    # Verification checked these bytes against this digest, which names the kept copy.
+    with transport._verified_executable(raw, digest if isinstance(digest, str) else None) as executable:
         yield manifest, executable
 
 
