@@ -81,6 +81,22 @@ pub(crate) fn exact_state(connection: &Connection, state_key: &str) -> StoreResu
         .unwrap_or(Value::Null))
 }
 
+/// The revocation row. A present row whose text is not JSON, or is JSON
+/// null, still revokes: it reads as `{"unreadable": true}`, never as no row.
+pub(crate) fn revocation_state(connection: &Connection) -> StoreResult<Value> {
+    let present = query_one(
+        connection,
+        "select 1 from sync_state where state_key = ?",
+        &[Value::from(REVOCATION_KEY)],
+    )?
+    .is_some();
+    let parsed = exact_state(connection, REVOCATION_KEY)?;
+    if present && parsed.is_null() {
+        return Ok(serde_json::json!({"unreadable": true}));
+    }
+    Ok(parsed)
+}
+
 /// `_record_exact_event`.
 pub(crate) fn record_event(
     connection: &Connection,
@@ -294,7 +310,7 @@ pub(crate) fn apply_signed_remote_exact_result(
         return exact_error("remote_exact_oauth_changed", &resolved_at);
     }
 
-    let revoked = !exact_state(connection, REVOCATION_KEY)?.is_null();
+    let revoked = !revocation_state(connection)?.is_null();
     let mut capability_expires_micros = None;
     if skip_exact_capability {
         if revoked {

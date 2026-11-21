@@ -120,6 +120,21 @@ fn the_state_reads_both_rows_as_stored() {
 }
 
 #[test]
+fn an_unreadable_revocation_row_still_revokes() {
+    let connection = store();
+    for text in ["not json", "null"] {
+        put(&connection, REVOCATION_KEY, text);
+        assert_eq!(
+            call(&connection, "exact_cloud_review_state", json!({}))
+                .unwrap()
+                .get("revocation"),
+            Some(&json!({"unreadable": true})),
+            "{text}"
+        );
+    }
+}
+
+#[test]
 fn replace_writes_both_rows_and_the_event() {
     let connection = store();
     put(&connection, REVOCATION_KEY, r#"{"revokedAt":"earlier"}"#);

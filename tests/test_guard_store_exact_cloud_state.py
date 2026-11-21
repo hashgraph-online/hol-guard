@@ -44,6 +44,12 @@ def test_a_non_object_revocation_still_reads_as_present(tmp_path: Path) -> None:
     assert store.exact_cloud_review_state() == {"capability": None, "revocation": "revoked"}
 
 
+def test_an_unreadable_revocation_row_still_revokes(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    _put_raw(store, _REVOCATION, "not json")
+    assert store.exact_cloud_review_state()["revocation"] == {"unreadable": True}
+
+
 def test_replace_writes_the_rows_and_the_event(tmp_path: Path) -> None:
     store = GuardStore(tmp_path)
     store.set_sync_payload(_REVOCATION, {"revokedAt": "earlier"}, _NOW)

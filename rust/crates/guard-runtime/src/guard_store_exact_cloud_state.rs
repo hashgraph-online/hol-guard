@@ -13,7 +13,7 @@ use serde_json::{json, Map, Value};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_one, value_error, StoreError, StoreResult};
 use crate::guard_store_exact_cloud_apply::{
-    exact_state, record_event, CAPABILITY_KEY, REVOCATION_KEY,
+    exact_state, record_event, revocation_state, CAPABILITY_KEY, REVOCATION_KEY,
 };
 use crate::guard_store_json::dumps_sorted;
 use crate::guard_store_sync_state::write_encoded;
@@ -36,7 +36,7 @@ pub(crate) fn dispatch(
     match method {
         "exact_cloud_review_state" => Ok(json!({
             "capability": exact_state(connection, CAPABILITY_KEY)?,
-            "revocation": exact_state(connection, REVOCATION_KEY)?,
+            "revocation": revocation_state(connection)?,
         })),
         "replace_exact_cloud_review_state" => replace_method(connection, args),
         "has_exact_cloud_review_receipt" => receipt_method(connection, args),
