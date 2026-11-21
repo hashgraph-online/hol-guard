@@ -1,9 +1,9 @@
 {
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.monomem",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Monomem",
-  "description": "Self-hosted shared memory for AI coding agents: one SQLite file on the user's machine, shared by every connected tool. Each note carries a server-stamped writer, version history and undo. Reads and ordinary saves keep Guard's usual handling; forgetting, replacing, merging, purging history, changing trust or quarantine, and queueing or approving tasks are gated on review. Off until you turn it on.",
+  "description": "Self-hosted shared memory for AI coding agents: one SQLite file on the user's machine, shared by every connected tool. Each note carries a server-stamped writer, version history and undo. Reads and ordinary saves keep Guard's usual handling; archiving, replacing, confirming, merging, history changes, rollback, trust, held writes and the task board are gated on review. Covers the 1.6 tool names and the 1.5 names. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -27,6 +27,20 @@
     "local-data-access"
   ],
   "tools": [
+    { "name": "memory_search", "state": "inherit" },
+    { "name": "memory_read", "state": "inherit" },
+    { "name": "memory_list", "state": "inherit" },
+    { "name": "memory_catch_up", "state": "inherit" },
+    { "name": "memory_usage", "state": "inherit" },
+    { "name": "memory_save", "state": "inherit" },
+    { "name": "memory_sessions", "state": "inherit" },
+    { "name": "memory_archive", "state": "review" },
+    { "name": "memory_replace", "state": "review" },
+    { "name": "memory_review", "state": "review" },
+    { "name": "memory_tidy", "state": "review" },
+    { "name": "memory_held", "state": "review" },
+    { "name": "memory_trust", "state": "review" },
+    { "name": "memory_tasks", "state": "review" },
     { "name": "state_read", "state": "inherit" },
     { "name": "state_search", "state": "inherit" },
     { "name": "state_relevant", "state": "inherit" },
@@ -36,7 +50,7 @@
     { "name": "memory_index", "state": "inherit" },
     { "name": "memory_since", "state": "inherit" },
     { "name": "memory_timeline", "state": "inherit" },
-    { "name": "memory_history", "state": "inherit" },
+    { "name": "memory_history", "state": "review" },
     { "name": "memory_receipt", "state": "inherit" },
     { "name": "memory_why", "state": "inherit" },
     { "name": "memory_stats", "state": "inherit" },
@@ -71,12 +85,12 @@
   ],
   "saferAlternatives": [
     "No model is called and data stays in the local SQLite file. Semantic search is off by default; if MONOMEM_EMBEDDINGS is turned on and MONOMEM_EMBED_URL points at a remote host, note and search text are sent there.",
-    "A default install registers nine tools (state_write, state_read, state_search, state_list, state_delete, catch_up and the supersede preview/confirm/undo trio). The rest appear only when MONOMEM_TOOLS opts them in.",
-    "This stdio launch runs as the local operator with no token: every write is stamped written_by \"stdio\" and clients sharing it are not told apart. Scoped per-agent tokens apply only to the HTTP server (monomem serve), not here.",
-    "Over stdio the operator tools (memory_quarantine, trust_policy, memory_history_purge, memory_consolidate, task_approve) are refused unless MONOMEM_STDIO_ADMIN_TOOLS=1.",
+    "Monomem 1.6 registers seven tools by default (memory_save, _search, _read, _list, _archive, _replace, _catch_up); the rest need MONOMEM_TOOLS. The 1.5 names still answer for one release and keep their defaults, except memory_history (now review).",
+    "This stdio launch runs as the local operator with no key. Writes are stamped written_by \"stdio\", or \"stdio:<app>\" when the config sets MONOMEM_CLIENT: a name from the config file, not proof. Per-app keys apply only to the HTTP server, not here.",
+    "Over stdio, memory_held, memory_trust and memory_rollback are not offered and approving a task is refused, unless MONOMEM_STDIO_ADMIN_TOOLS=1.",
     "Under the default MONOMEM_LINT policy, known secret formats are refused and injection-like text is held for review; bare high-entropy strings are stored with a warning. MONOMEM_LINT=warn stores all of these, so this holds only by default.",
-    "state_delete is a logical delete: the note is hidden from every agent read and can be restored. Its text can remain in the database file, the WAL and backups; permanent removal is the operator CLI (monomem delete). It stays on review.",
-    "Replacing a note is preview then confirm, and memory_supersede_undo reverses it. task_put can queue a command task for a separately run, unpublished runner and task_approve lets it run; both stay on review.",
-    "This entry matches the monomem-mcp command (npm i -g monomem, 1.3.1 or later), which starts only the stdio MCP server. Launches such as npx -y monomem mcp, node <path>/cli.js mcp or cmd /c npx keep Guard normal handling."
+    "memory_archive hides a note from every agent read; it can be restored. Its text can remain in the database file, the WAL and backups (up to 5 weeks); permanent removal is the operator CLI (monomem delete) or the dashboard. It stays on review.",
+    "Guard decides per tool name, so a 1.6 tool with actions takes its strictest one: memory_replace, memory_history, memory_tidy, memory_review and memory_tasks are on review even for read-only actions. The task runner is not in the npm package.",
+    "This entry matches the monomem-mcp command (npm i -g monomem; the 1.6 names need 1.6.0 or later), which starts only the stdio MCP server. Launches such as npx -y monomem mcp, node <path>/cli.js mcp or the standalone download keep Guard normal handling."
   ]
 }
