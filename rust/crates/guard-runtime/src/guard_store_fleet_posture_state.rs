@@ -11,7 +11,7 @@ use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{value_error, StoreResult};
+use crate::guard_store_db::{value_error, StoreError, StoreResult};
 use crate::guard_store_sync_state::{read_payload, write_encoded};
 
 /// `LAST_SENT_STATE_KEY`.
@@ -20,6 +20,31 @@ const LAST_SENT_KEY: &str = "fleet_posture_last";
 const SETTINGS_KEY: &str = "fleet_posture_settings";
 /// `FORCE_FULL_STATE_KEY`.
 const FORCE_FULL_KEY: &str = "fleet_posture_force_full";
+
+/// Whether `method` is one of the fleet posture state methods.
+pub(crate) fn handles(method: &str) -> bool {
+    matches!(
+        method,
+        "fleet_posture_state"
+            | "set_fleet_posture_reporting"
+            | "request_full_fleet_inventory"
+            | "commit_fleet_posture_sent"
+    )
+}
+
+pub(crate) fn dispatch(
+    connection: &Connection,
+    method: &str,
+    args: &Args<'_>,
+) -> StoreResult<Value> {
+    match method {
+        "fleet_posture_state" => state_method(connection, args),
+        "set_fleet_posture_reporting" => set_reporting_method(connection, args),
+        "request_full_fleet_inventory" => request_full_method(connection, args),
+        "commit_fleet_posture_sent" => commit_sent_method(connection, args),
+        _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
+    }
+}
 
 fn object_row(connection: &Connection, key: &str) -> StoreResult<Option<Map<String, Value>>> {
     Ok(match read_payload(connection, key)? {
@@ -88,17 +113,36 @@ pub(crate) fn request_full_method(connection: &Connection, args: &Args<'_>) -> S
 /// when that report advanced the inventory, clear a pending full-inventory
 /// request. Both rows change in the same store transaction.
 pub(crate) fn commit_sent_method(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
-    let Some(next_state @ Value::Object(_)) = args.raw("next_state") else {
+    let Some(Value::Object(next_state)) = args.raw("next_state") else {
         return value_error("invalid_next_state");
     };
+    let next_state = joined_items(next_state)?;
     let advanced = args.flag("advanced_inventory")?;
     let now = args.str("now")?;
-    write(connection, LAST_SENT_KEY, next_state, now)?;
+    write(connection, LAST_SENT_KEY, &next_state, now)?;
     let cleared = advanced && full_inventory_requested(connection)?;
     if cleared {
         write(connection, FORCE_FULL_KEY, &json!({}), now)?;
     }
     Ok(json!({"cleared_full_inventory_request": cleared}))
+}
+
+/// The snapshot with its tracked `items` joined back into one object. The
+/// request parser caps how many keys one object may hold, so Python sends a
+/// large item map as a list of smaller objects.
+fn joined_items(next_state: &Map<String, Value>) -> StoreResult<Value> {
+    let mut state = next_state.clone();
+    if let Some(Value::Array(chunks)) = next_state.get("items") {
+        let mut items = Map::new();
+        for chunk in chunks {
+            let Value::Object(chunk) = chunk else {
+                return value_error("invalid_next_state");
+            };
+            items.extend(chunk.clone());
+        }
+        state.insert("items".to_owned(), Value::Object(items));
+    }
+    Ok(Value::Object(state))
 }
 
 #[cfg(test)]

@@ -209,6 +209,49 @@ fn committing_without_a_pending_request_writes_no_request_row() {
 }
 
 #[test]
+fn chunked_items_are_joined_into_one_object() {
+    let connection = store();
+    call(
+        &connection,
+        commit_sent_method,
+        json!({
+            "next_state": {"items": [{"a": "1"}, {"b": "2"}], "sentAt": NOW},
+            "advanced_inventory": false,
+            "now": NOW,
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        row(&connection, LAST_SENT_KEY),
+        Some((
+            json!({"items": {"a": "1", "b": "2"}, "sentAt": NOW}),
+            NOW.to_owned()
+        ))
+    );
+}
+
+#[test]
+fn every_method_is_dispatched() {
+    let connection = store();
+    for method in [
+        "fleet_posture_state",
+        "set_fleet_posture_reporting",
+        "request_full_fleet_inventory",
+        "commit_fleet_posture_sent",
+    ] {
+        assert!(handles(method), "{method}");
+    }
+    assert!(!handles("get_sync_payload"));
+    let Value::Object(args) = json!({}) else {
+        unreachable!()
+    };
+    assert_eq!(
+        dispatch(&connection, "fleet_posture_state", &Args(&args)).unwrap()["opted_out"],
+        json!(false)
+    );
+}
+
+#[test]
 fn malformed_inputs_are_refused_without_a_write() {
     let connection = store();
     for (op, args, code) in [
@@ -232,6 +275,11 @@ fn malformed_inputs_are_refused_without_a_write() {
         (
             commit_sent_method,
             json!({"advanced_inventory": true, "now": NOW}),
+            "invalid_next_state",
+        ),
+        (
+            commit_sent_method,
+            json!({"next_state": {"items": [{"a": "1"}, 2]}, "now": NOW}),
             "invalid_next_state",
         ),
     ] {

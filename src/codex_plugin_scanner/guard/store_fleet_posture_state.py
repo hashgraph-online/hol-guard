@@ -5,6 +5,20 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Protocol
 
+# The native request parser caps how many keys one JSON object may hold.
+_NATIVE_JSON_WIDTH = 4096
+
+
+def _chunked_items(state: Mapping[str, object]) -> dict[str, object]:
+    """The snapshot with a large ``items`` map split into objects the parser accepts."""
+
+    items = state.get("items")
+    if not isinstance(items, Mapping):
+        return dict(state)
+    pairs = list(items.items())
+    chunks = [dict(pairs[start : start + _NATIVE_JSON_WIDTH]) for start in range(0, len(pairs), _NATIVE_JSON_WIDTH)]
+    return {**state, "items": chunks}
+
 
 class _NativeStore(Protocol):
     def _native_store_call(
@@ -59,6 +73,6 @@ class StoreFleetPostureStateMixin:
 
         answer = self._native_store_call(
             "commit_fleet_posture_sent",
-            {"next_state": dict(next_state), "advanced_inventory": bool(advanced_inventory), "now": now},
+            {"next_state": _chunked_items(next_state), "advanced_inventory": bool(advanced_inventory), "now": now},
         )
         return isinstance(answer, dict) and answer.get("cleared_full_inventory_request") is True

@@ -73,6 +73,7 @@ use crate::guard_store_sessions as sessions;
 use crate::guard_store_silent_review::add_silent_native_review_approval_request;
 use crate::guard_store_state_ops as state_ops;
 use crate::guard_store_storage_maintenance as storage_maintenance;
+use crate::guard_store_sync_state::fleet_posture_state as fleet_posture;
 use crate::guard_store_temporary_mcp::apply_temporary_mcp_grant;
 use crate::guard_store_tool_call_evidence as tool_call_evidence;
 use crate::guard_store_wfcap_wire as wfcap;
@@ -457,22 +458,6 @@ pub(crate) fn dispatch(
         "record_workspace_review_enrollment" => {
             crate::guard_store_sync_state::review_enrollment::record_method(connection, args)
         }
-        "fleet_posture_state" => {
-            crate::guard_store_sync_state::fleet_posture_state::state_method(connection, args)
-        }
-        "set_fleet_posture_reporting" => {
-            crate::guard_store_sync_state::fleet_posture_state::set_reporting_method(
-                connection, args,
-            )
-        }
-        "request_full_fleet_inventory" => {
-            crate::guard_store_sync_state::fleet_posture_state::request_full_method(
-                connection, args,
-            )
-        }
-        "commit_fleet_posture_sent" => {
-            crate::guard_store_sync_state::fleet_posture_state::commit_sent_method(connection, args)
-        }
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
         "set_managed_install" => crate::guard_store_managed_installs::set(connection, args),
@@ -500,6 +485,7 @@ pub(crate) fn dispatch(
         "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
         _ if connect::handles(method) => connect::dispatch(connection, method, args),
         _ if state_ops::handles(method) => state_ops::dispatch(connection, method, args),
+        _ if fleet_posture::handles(method) => fleet_posture::dispatch(connection, method, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }

@@ -55,6 +55,14 @@ def test_commit_clears_the_request_only_when_the_inventory_advanced(tmp_path: Pa
     assert store.fleet_posture_state()["last_sent"] == {"items": {"a": "1"}}
 
 
+def test_a_snapshot_wider_than_one_native_object_is_saved(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    items = {f"item-{index:05d}": f"digest-{index}" for index in range(9000)}
+    store.commit_fleet_posture_sent(next_state={"items": items, "mode": "full"}, advanced_inventory=True, now=_NOW)
+    assert store.get_sync_payload(fp.LAST_SENT_STATE_KEY) == {"items": items, "mode": "full"}
+    assert fp.last_sent_fleet_posture(store) == {"items": items, "mode": "full"}
+
+
 def test_an_empty_last_sent_snapshot_counts_as_none(tmp_path: Path) -> None:
     store = GuardStore(tmp_path)
     store.set_sync_payload(fp.LAST_SENT_STATE_KEY, {}, _NOW)
