@@ -167,6 +167,21 @@ class StoreReviewEventOutboxMixin:
             )
         )
 
+    def receipt_redaction_bookkeeping(
+        self,
+        action: str,
+        *,
+        now: str,
+        level: str | None = None,
+        local_level: str | None = None,
+    ) -> int | None:
+        """Run one receipt-redaction bookkeeping action in a native write transaction."""
+        result = self._native_store_call(
+            "receipt_redaction_bookkeeping",
+            {"action": action, "now": now, "level": level, "local_level": local_level},
+        )
+        return int(result) if isinstance(result, int) else None
+
     def list_pending_review_request_ids(
         self,
         *,

@@ -677,6 +677,7 @@ mod guard_store_receipt_decision;
 mod guard_store_receipt_envelope;
 mod guard_store_receipt_events;
 mod guard_store_receipt_reads;
+mod guard_store_receipt_redaction;
 mod guard_store_receipt_rollups;
 mod guard_store_receipt_writes;
 #[cfg(test)]

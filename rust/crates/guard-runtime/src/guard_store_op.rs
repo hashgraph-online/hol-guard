@@ -525,6 +525,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "quarantine_review_event"
         | "requeue_pending_review_events"
         | "requeue_pending_review_events_with_marker"
+        | "receipt_redaction_bookkeeping"
         | "repair_rejected_review_correlation"
         | "recover_review_snapshot_sequences"
         | "settle_rejected_review_events"
@@ -686,6 +687,9 @@ fn dispatch(
         "requeue_pending_review_events" => requeue_method(connection, source, args, false),
         "requeue_pending_review_events_with_marker" => {
             requeue_method(connection, source, args, true)
+        }
+        "receipt_redaction_bookkeeping" => {
+            crate::guard_store_receipt_redaction::method(connection, source, args)
         }
         "repair_rejected_review_correlation" => {
             repair_rejected_correlation(connection, source, args)
