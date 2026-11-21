@@ -77,6 +77,7 @@ use crate::guard_store_sync_state::cloud_review_settings as cloud_review;
 use crate::guard_store_sync_state::exact_cloud_state as exact_state;
 use crate::guard_store_sync_state::fleet_posture_state as fleet_posture;
 use crate::guard_store_sync_state::sync_delivery_rows as delivery_rows;
+use crate::guard_store_sync_state::worker_host;
 use crate::guard_store_temporary_mcp::apply_temporary_mcp_grant;
 use crate::guard_store_tool_call_evidence as tool_call_evidence;
 use crate::guard_store_wfcap_wire as wfcap;
@@ -492,6 +493,7 @@ pub(crate) fn dispatch(
         _ if cloud_review::handles(method) => cloud_review::dispatch(connection, method, args),
         _ if delivery_rows::handles(method) => delivery_rows::dispatch(connection, method, args),
         _ if exact_state::handles(method) => exact_state::dispatch(connection, method, args),
+        _ if worker_host::handles(method) => worker_host::dispatch(connection, method, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }

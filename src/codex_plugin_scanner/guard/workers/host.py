@@ -29,10 +29,6 @@ from ..store import GuardStore
 
 _LOGGER = logging.getLogger(__name__)
 
-REPAIR_SELF_CHECK_KEY = "daemon_repair_self_check_status"
-ATTENTION_PREFIX = "daemon_approval_attention:"
-REFRESH_REQUEST_KEY = "daemon_worker_refresh_request"
-REFRESH_STATUS_KEY = "daemon_worker_refresh_status"
 _REFRESH_SECONDS = 10.0
 _ATTENTION_POLL_SECONDS = 1.0
 _REFRESH_POLL_SECONDS = 0.2
@@ -48,11 +44,7 @@ def _now() -> str:
 def queue_approval_attention(store: GuardStore, *, operation_id: str, requests: list[dict[str, object]]) -> None:
     """Hands an operation waiting on approval to the worker host's attention loop."""
 
-    store.set_sync_payload(
-        f"{ATTENTION_PREFIX}{operation_id}",
-        {"operation_id": operation_id, "requests": requests},
-        _now(),
-    )
+    store.queue_approval_attention(operation_id=operation_id, requests=requests, now=_now())
 
 
 class DurableApprovalAttention:
@@ -82,34 +74,14 @@ class DurableWorkerRefresh:
 
     def refresh_command_queue_worker(self) -> dict[str, object]:
         nonce = uuid.uuid4().hex
-        self._store.set_sync_payload(REFRESH_REQUEST_KEY, {"nonce": nonce}, _now())
+        self._store.request_worker_refresh(nonce=nonce, now=_now())
         deadline = time.monotonic() + self._wait_seconds
         while time.monotonic() < deadline:
-            status = self._store.get_sync_payload(REFRESH_STATUS_KEY)
-            if isinstance(status, dict) and status.get("nonce") == nonce:
-                return {
-                    "operation": _REFRESH_OPERATION,
-                    "running": status.get("running") is True,
-                    "sync_running": status.get("sync_running") is True,
-                }
+            status = self._store.worker_refresh_status(nonce=nonce)
+            if status is not None:
+                return {"operation": _REFRESH_OPERATION, **status}
             time.sleep(_REFRESH_POLL_SECONDS)
         return {"operation": _REFRESH_OPERATION, "running": False, "sync_running": False}
-
-
-def _take_attention(store: GuardStore) -> list[dict[str, object]]:
-    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
-        rows = connection.execute(
-            "select state_key from sync_state where state_key like ? escape '\\'",
-            (ATTENTION_PREFIX.replace("_", "\\_") + "%",),
-        ).fetchall()
-    taken: list[dict[str, object]] = []
-    for row in rows:
-        key = str(row["state_key"])
-        payload = store.get_sync_payload(key)
-        store.delete_sync_payload(key)
-        if isinstance(payload, dict):
-            taken.append(payload)
-    return taken
 
 
 class WorkerHost:
@@ -162,16 +134,11 @@ class WorkerHost:
     def answer_refresh_request(self) -> None:
         """Answers a request handler's refresh request left in the store."""
 
-        request = self.store.get_sync_payload(REFRESH_REQUEST_KEY)
-        if not isinstance(request, dict) or not isinstance(request.get("nonce"), str):
+        nonce = self.store.take_worker_refresh_request()
+        if nonce is None:
             return
-        self.store.delete_sync_payload(REFRESH_REQUEST_KEY)
         running, sync_running = self.refresh_queues()
-        self.store.set_sync_payload(
-            REFRESH_STATUS_KEY,
-            {"nonce": request["nonce"], "running": running, "sync_running": sync_running},
-            _now(),
-        )
+        self.store.record_worker_refresh_status(nonce=nonce, running=running, sync_running=sync_running, now=_now())
 
     def _loop(self, name: str, body: Callable[[], object], interval: float) -> None:
         def run() -> None:
@@ -250,7 +217,7 @@ class WorkerHost:
         self._loop("refresh-request", self.answer_refresh_request, _REFRESH_POLL_SECONDS)
 
         def publish(status: dict[str, object]) -> None:
-            self.store.set_sync_payload(REPAIR_SELF_CHECK_KEY, status, _now())
+            self.store.record_repair_self_check(status=status, now=_now())
 
         self._threads.append(
             repair_self_check.start_self_check(self.store, publish=publish, stop=self.stop, on_error=self._record)
@@ -390,7 +357,7 @@ class WorkerHost:
         from ..local_dashboard_session import build_approval_browser_url
         from ..native_daemon_manage import ensure_guard_daemon_auth_token
 
-        pending = _take_attention(self.store)
+        pending = self.store.take_approval_attention()
         if not pending:
             return
         key = ensure_guard_daemon_auth_token(self.store.guard_home)
@@ -485,8 +452,6 @@ def run_worker_host(guard_home: Path) -> int:
 
 
 __all__ = [
-    "ATTENTION_PREFIX",
-    "REPAIR_SELF_CHECK_KEY",
     "DurableApprovalAttention",
     "WorkerHost",
     "queue_approval_attention",
