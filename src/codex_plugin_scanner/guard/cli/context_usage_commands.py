@@ -1,4 +1,8 @@
-"""`hol-guard context usage`: model usage per tool, from each tool's own records."""
+"""`hol-guard context usage`: model usage per tool, from each tool's own records.
+
+Guard's background service counts the records and writes the text; this
+command passes the folders it was run with and prints the answer.
+"""
 
 from __future__ import annotations
 
@@ -6,26 +10,14 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, TextIO
 
-NAMES = {
-    "codex": "Codex",
-    "claude-code": "Claude Code",
-    "copilot": "Copilot",
-    "cursor": "Cursor",
-    "gemini": "Gemini",
-    "opencode": "OpenCode",
-    "pi": "Pi",
-}
-ROWS = (
-    ("uncached_input_tokens", "Input at full price"),
-    ("cached_input_tokens", "Input read from cache"),
-    ("cache_write_tokens", "Input written to cache"),
-    ("output_tokens", "Output"),
-    ("requests", "Model requests"),
-    ("compactions", "Chat summaries"),
-)
+SCHEMA = "guard-context-usage-meter.v1"
+# The first count of a long history runs in the background; ask again until it ends.
+POLL_SECONDS = 0.5
+WAIT_SECONDS = 600.0
 
 
 def configure(actions: argparse._SubParsersAction[Any]) -> None:
@@ -43,84 +35,67 @@ def configure(actions: argparse._SubParsersAction[Any]) -> None:
     usage.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
 
 
+def folder_setting(name: str) -> str | None:
+    """A folder environment setting as the tools read it from this working folder.
+
+    The runtime runs elsewhere, so a relative folder is made absolute here. A
+    `~` folder is left for the runtime to expand against the home folder.
+    """
+
+    raw = os.environ.get(name)
+    if not raw or not raw.strip():
+        return None
+    if raw.strip().startswith("~"):
+        return raw
+    return os.path.abspath(raw.strip())
+
+
+def _read(guard_home: Path, *, text: bool) -> dict[str, Any] | None:
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    args = {
+        "op": "read",
+        "home_dir": str(Path.home()),
+        "codex_home": folder_setting("CODEX_HOME"),
+        "claude_config_dir": folder_setting("CLAUDE_CONFIG_DIR"),
+        "text": text,
+    }
+    deadline = time.monotonic() + WAIT_SECONDS
+    told = False
+    while True:
+        try:
+            answer = native_runner_authority("context_usage", args, guard_home)
+        except (NativeRunnerAuthorityError, OSError):
+            return None
+        state = answer.get("usage") if isinstance(answer, dict) else None
+        if not isinstance(state, dict):
+            return None
+        if state.get("state") != "counting" or time.monotonic() >= deadline:
+            return answer
+        if text and not told:
+            print("Counting. The first count of a long history can take a minute.", file=sys.stderr)
+            told = True
+        time.sleep(POLL_SECONDS)
+
+
 def run(args: argparse.Namespace, output: TextIO) -> int:
     from ..config import resolve_guard_home
-    from ..context_usage_meter import CACHE_NAME, scan, summarize
-    from ..native_context_assistance import ContextAssistanceError, savings
 
-    guard_home = resolve_guard_home(args.guard_home)
-    if not args.json and not (guard_home / CACHE_NAME).exists():
-        print("Counting. The first count of a long history can take a minute.", file=sys.stderr)
     try:
-        state = summarize(scan(Path.home(), guard_home, os.environ))
-    except (OSError, ValueError):
+        guard_home = resolve_guard_home(args.guard_home)
+    except (OSError, RuntimeError, ValueError):
+        answer = None
+    else:
+        answer = _read(guard_home, text=not args.json)
+    state = answer.get("usage") if answer is not None else None
+    if answer is None or not isinstance(state, dict) or state.get("state") != "ready":
         if args.json:
-            print(json.dumps({"schema": "guard-context-usage-meter.v1", "state": "unavailable"}), file=output)
+            print(json.dumps({"schema": SCHEMA, "state": "unavailable"}), file=output)
         else:
             print("Guard could not read the usage records on this computer.", file=output)
         return 1
-    try:
-        state["savings"] = savings(guard_home=guard_home)
-    except ContextAssistanceError:
-        state["savings"] = None
     if args.json:
-        print(json.dumps(state, sort_keys=True), file=output)
+        print(json.dumps({**state, "savings": answer.get("savings")}, sort_keys=True), file=output)
     else:
-        render(state, output)
-        render_savings(state["savings"], output)
+        output.write(str(answer.get("text") or ""))
     return 0
-
-
-def render(state: dict[str, Any], output: TextIO) -> None:
-    print(
-        f"Model usage from each tool's own records on this computer, today and over the last "
-        f"{state['window_days']} days.",
-        file=output,
-    )
-    today = {tool["harness"]: tool for tool in state["today"]}
-    for tool in state["week"]:
-        name = NAMES.get(tool["harness"], tool["harness"])
-        print(file=output)
-        if not tool["sessions"]:
-            print(f"{name}: no sessions in the last {state['window_days']} days.", file=output)
-            continue
-        print(f"{name}: {tool['sessions']:,} {'session' if tool['sessions'] == 1 else 'sessions'}", file=output)
-        print(f"  {'':24}{'Today':>18}{'Last ' + str(state['window_days']) + ' days':>20}", file=output)
-        for field, label in ROWS:
-            now = today.get(tool["harness"], {}).get("totals", {}).get(field, 0)
-            print(f"  {label:24}{now:>18,}{tool['totals'][field]:>20,}", file=output)
-    names = [NAMES.get(name) or str(name) for name in state["unread"]]
-    unread = ", ".join(names[:-1]) + " or " + names[-1] if len(names) > 1 else "".join(names)
-    print(file=output)
-    print(f"Guard does not read usage records from {unread}, so they are not counted here.", file=output)
-
-
-def render_savings(report: dict[str, Any] | None, output: TextIO) -> None:
-    def say(line: str) -> None:
-        print(line, file=output)
-
-    say("")
-    if report is None:
-        say("Guard's background service did not answer, so it cannot estimate what CIGAR saved.")
-        return
-    total, days = report["total"], report["window_days"]
-    if not total["sessions"]:
-        say(f"CIGAR has not handed code to a prompt in the last {days} days, so there is nothing to estimate.")
-        return
-    measured, sessions = total["measured_sessions"], total["sessions"]
-    if not measured:
-        say("CIGAR helped, but Guard could not read those sessions' records, so it cannot estimate yet.")
-    elif not total["used_tokens"]:
-        say("CIGAR helped, but those sessions' records show no tokens used, so Guard cannot estimate yet.")
-    else:
-        saved = total["estimated_saved_tokens"]
-        say(f"CIGAR saved about {saved:,} tokens in the last {days} days. This is an estimate.")
-        if measured < sessions:
-            say(f"  The estimate covers {measured:,} of {sessions:,} sessions. Guard could not read the rest.")
-    prompts = "prompt" if total["prompts"] == 1 else "prompts"
-    say(f"  It handed {total['prompts']:,} {prompts} about {total['context_tokens']:,} tokens of code.")
-    checked, opened = total.get("files_checked", 0), total["files_opened_anyway"]
-    if checked:
-        say(f"  Of {checked:,} files it showed, the agent opened {opened:,} again anyway.")
-    rates = ", ".join(f"{NAMES.get(app['app'], app['app'])} {app['rate_percent']}%" for app in report["apps"])
-    say(f"  How: the tokens those sessions used, and the share CIGAR saved on Guard's benchmark ({rates}).")

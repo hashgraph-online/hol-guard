@@ -137,46 +137,40 @@ def run_context_command(
     return 0
 
 
+_LEAN_ACTIONS = {"on": "enable", "off": "disable", "status": "status"}
+
+
 def _run_lean(args: argparse.Namespace, output: TextIO) -> int:
-    import os
     from pathlib import Path
 
-    from ..codex_lean_sessions import LeanSessionsError, disable, enable, render, status
     from ..config import resolve_guard_home
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+    from .context_usage_commands import folder_setting
 
+    request = {
+        "switch": "lean",
+        "action": _LEAN_ACTIONS[args.lean_action],
+        "home_dir": str(Path.home()),
+        "codex_home": folder_setting("CODEX_HOME"),
+        "limit": args.limit,
+        "text": not args.json,
+    }
     try:
-        home, guard_home = Path.home(), resolve_guard_home(args.guard_home)
-        if args.lean_action == "on":
-            state = enable(home, guard_home, os.environ, limit=args.limit)
+        answer = native_runner_authority("codex_config", request, resolve_guard_home(args.guard_home))
+    except (NativeRunnerAuthorityError, OSError, RuntimeError, ValueError):
+        answer = None
+    if not isinstance(answer, dict):
+        answer = {"ok": False, "code": "codex_config_unavailable", "text": None}
+    if answer.get("ok") is True:
+        if args.json:
+            print(json.dumps(answer.get("state"), sort_keys=True), file=output)
         else:
-            state = (disable if args.lean_action == "off" else status)(home, guard_home, os.environ)
-    except LeanSessionsError as error:
-        return _lean_failure(args, output, error.code)
-    except TimeoutError:
-        return _lean_failure(args, output, "codex_config_busy")
-    except (OSError, RuntimeError, ValueError):
-        return _lean_failure(args, output, "codex_config_unavailable")
-    if args.json:
-        print(json.dumps(state, sort_keys=True), file=output)
-    else:
-        render(state, output)
-    return 0
-
-
-_LEAN_FAILURES = {
-    "codex_lean_limit_required": (
-        "Pick a size: hol-guard context lean on --limit 100000. Guard sets no size of its own. Nothing was changed."
-    ),
-    "codex_lean_limit_invalid": "The limit must be a whole number from 10,000 to 10,000,000. Nothing was changed.",
-}
-
-
-def _lean_failure(args: argparse.Namespace, output: TextIO, code: str) -> int:
+            print(answer.get("text") or "", end="", file=output)
+        return 0
+    code = str(answer.get("code") or "codex_config_unavailable")
     if args.json:
         print(json.dumps({"schema": "guard-codex-lean-sessions.v1", "status": "error", "code": code}), file=output)
     else:
-        print(
-            _LEAN_FAILURES.get(code, f"Guard could not change the Codex config ({code}). Nothing was changed."),
-            file=output,
-        )
+        text = answer.get("text") or f"Guard could not change the Codex config ({code}). Nothing was changed."
+        print(text, file=output)
     return 1
