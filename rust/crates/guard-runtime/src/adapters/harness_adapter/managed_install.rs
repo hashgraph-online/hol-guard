@@ -35,7 +35,7 @@ use super::{
 };
 use crate::runner_authority_op::KindResult;
 use crate::transition_files::{
-    recover_publication, with_owned, with_registered, Budget, OwnedFailure, OwnedSpec, Owner,
+    with_owned, with_registered, Budget, OwnedFailure, OwnedSpec, Owner,
 };
 
 #[path = "detected_harnesses.rs"]
@@ -72,7 +72,8 @@ pub(super) fn within<T>(
     .map_err(|_| INVALID)?;
     let codex = codex_directories(ctx, fields);
     // A Codex install or uninstall recovers an interrupted hook publication
-    // first, as `CodexHarnessAdapter.install` did with `recover=True`.
+    // first, as `CodexHarnessAdapter.install` did with `recover=True`, under
+    // the Codex configuration locks it takes here.
     let recover = !codex.is_empty();
     if let Some(token) = fields.get("owner").and_then(Value::as_str) {
         return with_registered(token, pid, thread, |owner| {
@@ -83,9 +84,7 @@ pub(super) fn within<T>(
             if transition_pending(&ctx.guard_home) {
                 return Err(OwnedFailure::Transition("pending_transition"));
             }
-            if recover {
-                recover_publication(owner, &budget)?;
-            }
+            // Its Codex adapter recovers once it holds the configuration locks.
             work(owner)
         });
     }

@@ -26,6 +26,7 @@ from ..package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from . import protect_output as _protect_output
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .install_failure import report_install_failure
 from .network_status_command import load_network_status_payload
 
 _EPHEMERAL_SIGNED_APPROVAL_PLACEHOLDER = _protect_output._EPHEMERAL_SIGNED_APPROVAL_PLACEHOLDER
@@ -754,18 +755,6 @@ def _run_guard_apps_command(
     store = _require_guard_store(store)
     return _run_apps_command(args, context, store, str(workspace) if workspace else None)
 
-def _report_install_failure(error: Exception, as_json: bool) -> None:
-    """Name a failed install on stderr, and on stdout as JSON when asked for it."""
-    message = str(error)
-    print(message, file=sys.stderr)
-    if as_json:
-        reason = getattr(error, "reason", None)
-        failure: dict[str, object] = {"status": "failed", "message": message}
-        if isinstance(reason, str) and reason:
-            failure["error"] = reason
-        print(json.dumps(failure, indent=2))
-
-
 def _run_guard_install_command(
     args: argparse.Namespace,
     *,
@@ -813,13 +802,13 @@ def _run_guard_install_command(
                 _now(),
             )
     except ValueError as error:
-        _report_install_failure(error, bool(getattr(args, "json", False)))
+        report_install_failure(error, bool(getattr(args, "json", False)), output_stream)
         return 2
     except RuntimeError as error:
         if not getattr(args, "json", False):
             raise
         # A JSON caller (Desktop's harness rebind) reads stdout only.
-        _report_install_failure(error, True)
+        report_install_failure(error, True, output_stream)
         return 1
     if native_repair is not None:
         payload["native_runtime_repair"] = native_repair

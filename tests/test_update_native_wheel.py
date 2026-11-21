@@ -331,6 +331,24 @@ class UpdateHarness:
         )
 
 
+def test_unmanaged_runtime_repair_downloads_without_a_strict_proxy_policy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A strict policy asks the native runtime for the OS proxy, which a runtime-less install cannot answer.
+    release = FakeRelease(_release_files())
+    harness = UpdateHarness(
+        monkeypatch, tmp_path, current=VERSION, latest_alpha=VERSION, runtime_missing=True, release=release
+    )
+    policies: list[object] = []
+    monkeypatch.setattr(native, "default_opener", lambda policy: policies.append(policy) or release)
+
+    payload, exit_code = harness.run()
+
+    assert exit_code == 0, payload
+    assert payload["native_wheel_reason"] == "repair"
+    assert policies and all(policy is None for policy in policies)
+
+
 @pytest.mark.parametrize(("current", "latest"), [("3.43.0a1", "3.43.0a2"), ("3.43.0a2", "3.43.0a2")])
 def test_forced_alpha_reinstall_keeps_the_native_wheel(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, current: str, latest: str

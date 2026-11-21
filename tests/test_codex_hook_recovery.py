@@ -268,6 +268,34 @@ def test_conflict_record_with_competing_authority_generation_is_retained(install
     assert (config.read_bytes(), manifest.read_bytes(), pending.read_bytes()) == before
 
 
+def test_retired_first_install_conflict_removes_the_unused_key(installed):
+    context, config, manifest = installed
+    key = context.guard_home / "managed/codex/hook-manifest.key"
+    after_manifest = manifest.read_bytes()
+    manifest.unlink()
+    assert key.is_file()
+    with codex_install_transaction(context.guard_home, config, actor="first-install-owner"):
+        codex_hook_recovery.prepare_hook_publication(
+            context.guard_home,
+            config,
+            before_config=config.read_bytes(),
+            before_manifest=None,
+            after_config=config.read_bytes() + b"\n",
+            after_manifest=after_manifest,
+            key_created=True,
+        )
+        config.write_bytes(b"# foreign configuration\n")
+        codex_hook_recovery.mark_owned_hook_publication_conflict(context.guard_home, config)
+    pending = context.guard_home / "managed/codex/pending-hook-publication.json"
+    with codex_install_transaction(context.guard_home, config, actor="recover-first-install-owner"):
+        assert recover_hook_publication(context.guard_home) is False
+    assert not pending.exists()
+    assert not manifest.exists()
+    # A key without its manifest would make the next install refuse the baseline.
+    assert not key.exists()
+    assert config.read_bytes() == b"# foreign configuration\n"
+
+
 def test_new_owner_cannot_mark_config_conflict_for_old_preparation(installed):
     context, config, manifest = installed
     crash(context, "manifest")

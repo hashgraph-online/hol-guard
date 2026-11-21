@@ -27,7 +27,8 @@ use crate::harness_adapter::managed_install_target::{stopped, Owned, INVALID};
 use crate::harness_adapter::paseo_paths::abspath;
 use crate::harness_adapter::{path_text, Ctx, Spec};
 use crate::transition_files::{
-    resolve_lenient, within_config_scope, Budget, HeldDirectory, OwnedFailure, Owner,
+    recover_publication, resolve_lenient, within_config_scope, Budget, HeldDirectory, OwnedFailure,
+    Owner,
 };
 
 use super::{config_path, dispatch, paths, HOOK_UNAVAILABLE};
@@ -408,7 +409,12 @@ pub(in crate::harness_adapter) fn install(
         &[config.as_path(), key_dir.as_path()],
         &facts.held,
         SCOPE_WAIT,
-        |owner| install_owned(spec, ctx, request, &facts, owner),
+        |owner| {
+            // Recovery runs under the configuration locks, so no other
+            // lifecycle call can edit the config it inspects.
+            recover_publication(owner, &facts.budget)?;
+            install_owned(spec, ctx, request, &facts, owner)
+        },
     )
 }
 
@@ -480,6 +486,9 @@ pub(in crate::harness_adapter) fn uninstall(
         &[config.as_path()],
         &facts.held,
         SCOPE_WAIT,
-        |owner| uninstall_owned(spec, ctx, &facts, owner),
+        |owner| {
+            recover_publication(owner, &facts.budget)?;
+            uninstall_owned(spec, ctx, &facts, owner)
+        },
     )
 }

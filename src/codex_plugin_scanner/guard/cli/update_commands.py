@@ -529,6 +529,10 @@ def _run_guard_update_unlocked(
         return payload, 0
     managed_policy = managed_policy_state.policy
     network_policy = managed_policy.network if managed_policy is not None else ManagedNetworkPolicy()
+    # Without an organization policy the downloads below use the unmanaged transport, which goes direct
+    # when the OS proxy lookup cannot answer. That lookup needs the native runtime, so a strict one would
+    # stop an install without a runtime from ever downloading it.
+    transport_policy = managed_policy.network if managed_policy is not None else None
     configured_index_url = managed_policy.update.index_url if managed_policy is not None else None
     if not network_policy.allow_public_registries and configured_index_url is None:
         payload.update(
@@ -672,7 +676,7 @@ def _run_guard_update_unlocked(
     version_check = _version_check_payload(
         current_version,
         source_kind=update_context.source.public_name,
-        network_policy=network_policy,
+        network_policy=transport_policy,
         include_alpha=include_alpha,
     )
     # A same-version runtime repair installs nothing newer, so the latest release's Python floor does not apply.
@@ -724,7 +728,7 @@ def _run_guard_update_unlocked(
             and not (
                 target_version is not None
                 and not is_alpha_version(target_version)
-                and pypi_serves_native_wheel(target_version, network_policy=network_policy)
+                and pypi_serves_native_wheel(target_version, network_policy=transport_policy)
             ),
             reinstall=force_pypi_reinstall,
         )
@@ -752,7 +756,7 @@ def _run_guard_update_unlocked(
         try:
             native_wheel_download, native_wheel_note = prepare_native_wheel(
                 native_wheel_plan,
-                network_policy=network_policy,
+                network_policy=transport_policy,
             )
         except NativeWheelError as error:
             native_wheel_failure_payload(payload, error, version=native_wheel_plan.version, installer=installer)
