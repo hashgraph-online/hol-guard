@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 
 from ..approval_gate import input_from_mapping, public_config, require_high_risk
 from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
@@ -55,6 +56,7 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
         outbox_unavailable = error.reason
         held_events = 0
     profile = store.get_cloud_sync_profile()
+    rows: dict[str, Any]
     try:
         rows = store.cloud_review_settings_state(binding=binding)
     except NativeGuardStoreUnavailable as error:
