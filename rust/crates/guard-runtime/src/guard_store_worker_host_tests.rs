@@ -53,7 +53,8 @@ fn is_value_error(result: StoreResult<Value>, code: &str) -> bool {
 fn queued_attention_is_taken_once_in_key_order() {
     let connection = store();
     for operation in ["op-b", "op-a"] {
-        let args = json!({"operation_id": operation, "requests": [{"id": operation}], "now": NOW});
+        let args =
+            json!({"operation_id": operation, "requests": [{"request_id": operation}], "now": NOW});
         assert_eq!(
             call(&connection, "queue_approval_attention", args).unwrap(),
             Value::Null
@@ -69,8 +70,8 @@ fn queued_attention_is_taken_once_in_key_order() {
     assert_eq!(
         taken,
         json!([
-            {"operation_id": "op-a", "requests": [{"id": "op-a"}]},
-            {"operation_id": "op-b", "requests": [{"id": "op-b"}]},
+            {"operation_id": "op-a", "requests": [{"request_id": "op-a"}]},
+            {"operation_id": "op-b", "requests": [{"request_id": "op-b"}]},
         ])
     );
     assert_eq!(
@@ -253,16 +254,31 @@ fn an_oversized_stored_row_is_still_delivered_alone() {
 }
 
 #[test]
-fn an_oversized_attention_row_is_refused_before_writing() {
+fn queued_requests_keep_only_what_attention_reads() {
     let connection = store();
-    let args = json!({
-        "operation_id": "op",
-        "requests": [{"pad": "z".repeat(ATTENTION_BATCH_BYTES)}],
-        "now": NOW,
+    let request = json!({
+        "request_id": "req-1",
+        "approval_url": "http://127.0.0.1:1/approve/req-1",
+        "workspace": "/work/app",
+        "command": "x".repeat(4096),
+        "decision_v2_json": {
+            "signals": [{"severity": "high", "detail": "y".repeat(4096)}, {"detail": "z"}],
+            "summary": "w".repeat(4096),
+        },
     });
-    assert!(is_value_error(
-        call(&connection, "queue_approval_attention", args),
-        "attention_too_large"
-    ));
-    assert!(keys(&connection).is_empty());
+    let args = json!({"operation_id": "op", "requests": [request, 7], "now": NOW});
+    call(&connection, "queue_approval_attention", args).unwrap();
+    let taken = call(&connection, "take_approval_attention", json!({})).unwrap();
+    assert_eq!(
+        taken,
+        json!([{
+            "operation_id": "op",
+            "requests": [{
+                "request_id": "req-1",
+                "approval_url": "http://127.0.0.1:1/approve/req-1",
+                "workspace": "/work/app",
+                "decision_v2_json": {"signals": [{"severity": "high"}]},
+            }],
+        }])
+    );
 }

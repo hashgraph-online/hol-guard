@@ -9,7 +9,7 @@
 //! transaction, so two takers never both schedule the same operation.
 
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{
@@ -107,16 +107,23 @@ fn write(
 }
 
 /// `queue_approval_attention`: an operation waiting on approval, for the
-/// worker host's attention loop.
+/// worker host's attention loop. Each request keeps only what the attention
+/// coordinator reads, so the row stays small however large the approval
+/// records are: the request id, approval address and workspace, and the
+/// severity of each decision signal. Entries that are not objects are dropped.
 fn queue_attention(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
     let operation_id = text_arg(args, "operation_id", "invalid_operation_id")?;
     let Some(requests) = args.raw("requests").filter(|value| value.is_array()) else {
         return value_error("invalid_requests");
     };
+    let requests: Vec<Value> = requests
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object)
+        .map(attention_request)
+        .collect();
     let row = json!({ "operation_id": operation_id, "requests": requests });
-    if row.to_string().len() > ATTENTION_BATCH_BYTES {
-        return value_error("attention_too_large");
-    }
     write(
         connection,
         &format!("{ATTENTION_PREFIX}{operation_id}"),
@@ -125,12 +132,38 @@ fn queue_attention(connection: &Connection, args: &Args<'_>) -> StoreResult<Valu
     )
 }
 
+/// The parts of one approval request the attention coordinator reads.
+fn attention_request(request: &Map<String, Value>) -> Value {
+    let mut kept = Map::new();
+    for key in ["request_id", "approval_url", "workspace"] {
+        if let Some(value) = request.get(key).filter(|value| value.is_string()) {
+            kept.insert(key.to_owned(), value.clone());
+        }
+    }
+    let signals = request
+        .get("decision_v2_json")
+        .and_then(|decision| decision.get("signals"))
+        .and_then(Value::as_array);
+    if let Some(signals) = signals {
+        let severities: Vec<Value> = signals
+            .iter()
+            .filter_map(|signal| signal.get("severity").filter(|value| value.is_string()))
+            .map(|severity| json!({ "severity": severity }))
+            .collect();
+        kept.insert(
+            "decision_v2_json".to_owned(),
+            json!({ "signals": severities }),
+        );
+    }
+    Value::Object(kept)
+}
+
 /// `_take_attention`: queued attention rows in operation-id order, removed in
 /// the same write that reads them. One take returns at most
 /// [`ATTENTION_BATCH_BYTES`] of row text so the answer always fits the store
-/// client's response limit; the rest stays queued for the next take. Queueing
-/// refuses a row over the budget, but a take always returns its first row
-/// whatever its size, so no queued row is ever dropped undelivered. A row whose
+/// client's response limit; the rest stays queued for the next take. A take
+/// always returns its first row whatever its size, so no queued row is ever
+/// dropped undelivered. A row whose
 /// text is not a JSON object is removed without being returned.
 fn take_attention(connection: &Connection) -> StoreResult<Value> {
     let pattern = [Value::from(format!(
