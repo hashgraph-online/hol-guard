@@ -66,19 +66,13 @@ def _snapshot(health: AuthorityHealth = AuthorityHealth.PROTECTED) -> ExtensionC
 class _Store:
     """Read-only fake: any write raises, so a recommendation can never set a connector up."""
 
-    def __init__(self, siblings: dict[str, dict[str, object]] | None = None, *, other_rows: int = 0) -> None:
+    def __init__(self, siblings: dict[str, dict[str, object]] | None = None, *, complete: bool = True) -> None:
         self.siblings = siblings or {}
-        # Newer pending rows from other groups, listed before this connector's rows.
-        self.rows = [{"request_id": f"other-{n}", "queue_group_id": f"other:{n}"} for n in range(other_rows)]
-        self.rows += [{"request_id": key, "queue_group_id": _GROUP} for key in self.siblings]
+        self.complete = complete
 
-    def list_approval_request_page(
-        self, *, status: str, limit: int, cursor: str | None, include_totals: bool
-    ) -> dict[str, object]:
-        assert status == "pending" and not include_totals
-        start = int(cursor or 0)
-        end = start + limit
-        return {"items": self.rows[start:end], "next_cursor": str(end) if end < len(self.rows) else None}
+    def pending_connector_group_rows(self, identity_hash: str) -> tuple[list[dict[str, str]], bool]:
+        assert identity_hash == _HASH
+        return [{"request_id": key, "queue_group_id": _GROUP} for key in self.siblings], self.complete
 
     def get_approval_extension_allow_hint(self, request_id: str) -> object:
         return self.siblings.get(request_id)
@@ -334,19 +328,9 @@ def test_no_resident_answer_means_no_recommendation_never_no_caution(monkeypatch
     )
 
 
-def test_caution_reads_grouped_rows_past_the_first_page(monkeypatch: pytest.MonkeyPatch) -> None:
-    _items(monkeypatch)
-    store = _Store({"req-2": _hint(risk_classes=["destructive"])}, other_rows=450)
-
-    result = _build(_approval(_hint()), store)
-
-    assert result is not None and result["caution_risk_classes"] == ["destructive"]
-
-
 def test_caution_when_the_group_scan_stops_early(monkeypatch: pytest.MonkeyPatch) -> None:
     _items(monkeypatch)
-    monkeypatch.setattr(recommendation, "_MAX_GROUP_SCAN_ROWS", 200)
-    store = _Store({"req-2": _hint()}, other_rows=450)
+    store = _Store({"req-2": _hint()}, complete=False)
 
     result = _build(_approval(_hint()), store)
 

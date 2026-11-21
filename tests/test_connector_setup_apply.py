@@ -187,7 +187,7 @@ def test_every_approved_row_continues_its_own_agent(store: GuardStore, monkeypat
 
 def test_the_origin_row_is_found_past_a_long_queue(store: GuardStore, monkeypatch: pytest.MonkeyPatch) -> None:
     # The queue scan stopped before reaching this connector's rows.
-    monkeypatch.setattr(group, "pending_connector_group_rows", lambda _store, _hash: ([], False))
+    monkeypatch.setattr(store, "pending_connector_group_rows", lambda _hash: ([], False))
 
     assert group.connector_group_request_ids(store, cli_id=_CLI_ID, identity_hash=_HASH, request_id="req-1") == [
         "req-1"

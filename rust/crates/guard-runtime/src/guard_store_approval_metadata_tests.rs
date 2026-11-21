@@ -31,6 +31,54 @@ fn notified(path: &std::path::Path) -> BTreeMap<String, Value> {
 }
 
 #[test]
+fn connector_scan_counts_other_pending_groups_toward_its_limit() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "create table approval_requests (
+                 request_id text, status text, queue_group_id text, last_seen_at integer
+             );
+             insert into approval_requests values
+                 ('first', 'pending', 'connector:example:one', 5),
+                 ('second', 'pending', 'connector:example:two', 5),
+                 ('neighbor', 'pending', 'connector:example-other:one', 4),
+                 ('oldest', 'pending', 'connector:example:three', 1),
+                 ('resolved', 'resolved', 'connector:example:one', 6);
+             with recursive numbers(n) as (
+                 select 1 union all select n + 1 from numbers where n < 1996
+             )
+             insert into approval_requests
+                 select 'other-' || n, 'pending', 'unrelated', 3 from numbers;",
+        )
+        .unwrap();
+    let request = json!({"identity_hash": "example"});
+    let args = super::Args(request.as_object().unwrap());
+    let scan = || super::pending_connector_group_rows(&connection, &args).unwrap();
+    let ids = |result: &Value| {
+        result["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["request_id"].clone())
+            .collect::<Vec<_>>()
+    };
+
+    let complete = scan();
+    assert_eq!(complete["complete"], true);
+    assert_eq!(ids(&complete), vec!["second", "first", "oldest"]);
+
+    connection
+        .execute(
+            "insert into approval_requests values ('unrelated-new', 'pending', 'unrelated', 2)",
+            [],
+        )
+        .unwrap();
+    let capped = scan();
+    assert_eq!(capped["complete"], false);
+    assert_eq!(ids(&capped), vec!["second", "first"]);
+}
+
+#[test]
 fn replays_every_recorded_approval_metadata_call() {
     let vectors: Value = serde_json::from_str(VECTORS).unwrap();
     assert_eq!(
