@@ -94,3 +94,31 @@ class StoreFleetPostureStateMixin:
         """Stamp new per-tool diagnostics summaries with ``now`` and merge them into the cache."""
 
         self._native_store_call("record_fleet_posture_diagnostics", {"entries": dict(entries), "now": now})
+
+    def fleet_posture_cached_runtimes(
+        self: _NativeStore, *, scope: str, now: str, ttl_seconds: int
+    ) -> dict[str, object] | None:
+        """The cached ``runtimes`` section while it still answers for ``scope`` at ``now``."""
+
+        answer = self._native_store_call(
+            "fleet_posture_cached_runtimes", {"scope": scope, "now": now, "ttl_seconds": int(ttl_seconds)}
+        )
+        if not isinstance(answer, dict):
+            raise RuntimeError("native fleet posture runtimes cache returned no answer")
+        section = answer.get("section")
+        return dict(section) if isinstance(section, dict) else None
+
+    def record_fleet_posture_runtimes(
+        self: _NativeStore,
+        *,
+        scope: str,
+        section: Mapping[str, object],
+        valid_until: float | None,
+        now: str,
+    ) -> None:
+        """Store a freshly built ``runtimes`` section for ``scope`` with its bundle's expiry."""
+
+        self._native_store_call(
+            "record_fleet_posture_runtimes",
+            {"scope": scope, "section": dict(section), "valid_until": valid_until, "now": now},
+        )
