@@ -24,10 +24,11 @@ use super::context_digest_json::write_canonical_json_with_limit;
 use crate::guard_store_approval_backfill;
 use crate::guard_store_args::Args;
 use crate::guard_store_connect as connect;
-use crate::guard_store_db::{query_all, query_one, StoreError, StoreResult};
+use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_native_review_queue as native_review_queue;
 use crate::guard_store_op_dispatch::dispatch;
 use crate::guard_store_op_kind::{method_kind, Kind};
+use crate::guard_store_outbox_identity::payload_digest;
 use crate::guard_store_receipt_rollups as receipt_rollups;
 
 pub(crate) const MAX_BUSY_TIMEOUT_MS: u64 = 600_000;
