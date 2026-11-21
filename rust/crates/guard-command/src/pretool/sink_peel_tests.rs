@@ -154,6 +154,32 @@ fn a_trailing_report_leaves_the_core_alone_and_names_the_arm_it_prints() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+
+/// A newline after `;`, `&&` or `||` is ordinary shell whitespace before
+/// the report's echo, and must be read the same way as a horizontal blank.
+#[test]
+fn a_line_break_after_a_report_separator_is_preserved() {
+    let root = fixture("report-newline");
+    for (command, status, success, failure) in [
+        ("bun run build;\n echo done", None, Some("done"), Some("done")),
+        ("bun run build &&\n echo PASS", None, Some("PASS"), None),
+        ("bun run build ||\n echo FAIL", None, None, Some("FAIL")),
+        (
+            "bun run build && echo PASS ||\n echo FAIL",
+            None,
+            Some("PASS"),
+            Some("FAIL"),
+        ),
+    ] {
+        let (core, read_status, read_success, read_failure) = reported(command, &root);
+        assert_eq!(core, "bun run build", "{command}");
+        assert_eq!(read_status.as_deref(), status, "{command}");
+        assert_eq!(read_success.as_deref(), success, "{command}");
+        assert_eq!(read_failure.as_deref(), failure, "{command}");
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 /// A report rides on whatever shaping the command already carries, so the
 /// filter chain and the merge it describes are read beside its labels.
 #[test]
