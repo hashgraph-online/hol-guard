@@ -232,12 +232,16 @@ def test_a_failed_answer_write_is_raised_after_the_answer_is_handled(tmp_path, m
     from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
 
     store = GuardStore(tmp_path / "home")
+    # A malformed bundle rides on the same answer; its rejection must be recorded before the raise.
     answer = {
         "now": "2026-11-19T00:00:00+00:00",
         "receipts_stored": 0,
         "answers_error": "native_advisory_cache_invalid",
+        "policy_bundle": {"provided": True, "malformed": True},
     }
     monkeypatch.setattr(cloud_bundle_sync, "cloud_receipt_upload", lambda *_args, **_kwargs: answer)
 
     with pytest.raises(RuntimeError, match="native_advisory_cache_invalid"):
         _sync(store, "https://hol.org/api/guard/receipts/sync")
+
+    assert store.list_events(event_name="policy_bundle/rejected")
