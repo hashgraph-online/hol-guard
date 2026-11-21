@@ -80,6 +80,8 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::hook_policy_admission_op::HOOK_POLICY_ADMISSION_FEATURE.into(),
         crate::hook_connector_facts_op::HOOK_CONNECTOR_FACTS_FEATURE.into(),
         crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_FEATURE.into(),
+        crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_WRITE_FEATURE.into(),
+        crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_WAIT_FEATURE.into(),
         crate::directory_trust::DIRECTORY_TRUST_FEATURE.into(),
         crate::directory_trust::HOOK_PATH_RULES_FEATURE.into(),
         crate::mcp_relay_decide::MCP_RELAY_DECIDE_FEATURE.into(),
@@ -113,6 +115,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::cloud_event_command::RECEIPTS_FEATURE.into(),
         crate::cloud_event_command::REQUEST_FEATURE.into(),
         crate::cloud_event_command::COMMAND_LEASE_FEATURE.into(),
+        crate::cloud_event_command::COMMAND_REPORT_FEATURE.into(),
         crate::cloud_event_command::OAUTH_REFRESH_FEATURE.into(),
         crate::cloud_event_command::OAUTH_REFRESH_CIRCUIT_FEATURE.into(),
         crate::plugin_telemetry_host::FEATURE.into(),
@@ -160,6 +163,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push("native-desktop-core-onedir-v1".into());
     features.push(crate::mcp_relay::RELAY_FEATURE.into());
     features.push(crate::hook_evidence_writer_op::HOOK_EVIDENCE_WRITER_FEATURE.into());
+    features.push(crate::hook_evidence_writer_op::HOOK_EVIDENCE_POST_TOOL_FEATURE.into());
     features.push(crate::claude_session_start::SESSION_START_FEATURE.into());
     features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());

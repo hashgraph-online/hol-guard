@@ -14,10 +14,9 @@ import pytest
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.hook_review.hook_worker_unavailable import (
     read_structured_view,
-    structured_destination_required,
+    structured_outage_overlay,
 )
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicyState
-from codex_plugin_scanner.guard.native_content_sensitivity import NativeContentSensitivityError
 from tests.structured_output_mediation_support import (
     WITHHOLD,
     _config,
@@ -64,7 +63,13 @@ def test_load_config_fail_closed_floor_keeps_structured_authority_required(
     assert config.managed_policy is not None
     view = read_structured_view(lambda: config)
     assert set(view) == _VIEW_KEYS
-    assert structured_destination_required(view, harness="pi") is True
+    assert structured_outage_overlay(
+        harness="pi", event_name="PostToolUse", guard_home=tmp_path, deadline=None, load_config=lambda: config
+    )["structured_content_mediation"] == {
+        "schema": "guard-structured-content-mediation.v1",
+        "action": "withhold",
+        "reason_code": "structured_native_edge_unavailable",
+    }
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
@@ -173,24 +178,21 @@ def test_the_unavailable_overlay_withholds_only_what_native_resolution_requires(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    answers = iter([{"binding": None, "required": False, "reason_code": None}, NativeContentSensitivityError("down")])
-    queries: list[tuple[str, object]] = []
+    answers = iter([("document", {}), None])
+    queries: list[tuple[str, str]] = []
 
-    def resolve(query: str, body: dict[str, object]) -> object:
-        queries.append((query, body["harness"]))
-        answer = next(answers)
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
+    def render(kind: str, harness: str, _params: object, **_transport: object) -> object:
+        queries.append((kind, harness))
+        return next(answers)
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker_unavailable.content_query", resolve)
+    monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker_unavailable.native_render_cli", render)
     fixture = _UnavailableNativeRouteFixture(_config())
     overlay = fixture._apply_structured_unavailable_overlay
     kwargs = {"harness": "omp", "event_name": "PostToolUse", "guard_home": tmp_path, "workspace": None}
     assert overlay({"decision": "allow"}, **kwargs) == {"decision": "allow"}
     withheld = overlay({"decision": "allow"}, **kwargs)
     assert withheld["structured_content_mediation"]["reason_code"] == "structured_native_edge_unavailable"  # type: ignore[index]
-    assert queries == [("resolution", "omp"), ("resolution", "omp")]
+    assert queries == [("structured_outage", "omp"), ("structured_outage", "omp")]
     # No managed destination, no query.
     assert overlay({"decision": "allow"}, **{**kwargs, "event_name": "PreToolUse"}) == {"decision": "allow"}
     assert len(queries) == 2

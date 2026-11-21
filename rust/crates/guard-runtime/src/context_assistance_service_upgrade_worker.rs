@@ -81,11 +81,6 @@ fn prepare(
     }
     let from_install = registry::load(home, &source.settings.effective.runtime_id)?;
     let to_install = registry::load(home, &job.request.target_runtime_id)?;
-    crate::guard_config_load::cigar_updates::check_installation(
-        home,
-        settings.update_preferences(),
-        &to_install,
-    )?;
     let source_home = home.to_path_buf();
     let (from, producer) = source
         .actor

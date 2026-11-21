@@ -401,6 +401,7 @@ fn answer(
     // decisions the user saved once no custom grant applies to its command,
     // which the saved-decision read checks against the store it reads.
     let saved_payload = (pre_tool && !recording_only).then(|| payload.clone());
+    let saved_decision_payload = payload.clone();
     let deadline_budget_ms = request
         .deadline_budget_ms
         .unwrap_or(DEFAULT_DEADLINE_BUDGET_MS)
@@ -435,11 +436,6 @@ fn answer(
         containment_sink: None,
     };
     let (edge, fence_wait) = fence::evaluate(envelope, policy_store)?;
-    // Only a shell action runs the blocked command; another tool that carries
-    // the same text keeps the direct answer, as the daemon would give it.
-    if exact_command_block && shell_action(&edge) {
-        return Err(HookDirectDefer::SavedDecision);
-    }
     if let Some(scope) = cursor_probe {
         return Ok(cursor::probe_answer(&edge, &evidence_payload, &scope));
     }
@@ -453,6 +449,26 @@ fn answer(
             return Err(defer);
         }
     }
+    let exact_command_response = if exact_command_block && shell_action(&edge) {
+        let edge_answer = reviewed_edge(&edge, PRE_TOOL_USE)?;
+        let result = edge_answer
+            .get("result")
+            .and_then(Value::as_object)
+            .ok_or(HookDirectDefer::SavedDecision)?;
+        let context = saved_decision::Context {
+            harness: &request.harness,
+            payload: &saved_decision_payload,
+            recorded_payload: &evidence_payload,
+            workspace: &workspace,
+            home_dir: &request_home,
+            guard_home: &guard_home,
+            binding: &binding,
+            hint: None,
+        };
+        saved_decision::exact_command_block_response(&context, result)?
+    } else {
+        None
+    };
     // Removed again unless the answer that runs it is returned.
     let mut snapshot = None;
     let mut answered = match event {
@@ -467,6 +483,11 @@ fn answer(
             },
             saved_payload.as_ref(),
         ) {
+            (Err(HookDirectDefer::NotAllow), Some(_)) if exact_command_response.is_some() => {
+                let mut answer = reviewed_edge(&edge, PRE_TOOL_USE)?;
+                answer["harness_response"] = exact_command_response.clone().unwrap();
+                answer
+            }
             // The daemon returns a saved decision's response as is.
             (Err(HookDirectDefer::NotAllow), Some(payload)) => {
                 let hint = saved_decision::HintScope {
@@ -487,7 +508,9 @@ fn answer(
             }
             (passed, _) => {
                 let mut answered = passed?;
-                if let Some(command) = sink_command.as_deref() {
+                if let Some(response) = exact_command_response.clone() {
+                    answered["harness_response"] = response;
+                } else if let Some(command) = sink_command.as_deref() {
                     let target = contained::SinkTarget {
                         command,
                         harness: &request.harness,

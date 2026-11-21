@@ -16,6 +16,7 @@ from .native_policy_bundle import (
     native_policy_bundle,
     policy_bundle_chunks,
 )
+from .policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
 
 CANONICAL_COMPILE_REJECTION_PREFIX = "canonical_compile_"
 
@@ -51,9 +52,140 @@ def _flag(kind: str, request: dict[str, object], *, otherwise: bool) -> bool:
     return result.get("value") is True
 
 
-def policy_bundle_daemon_version_supported(policy_bundle: dict[str, object]) -> bool:
-    slim = {key: policy_bundle[key] for key in ("minDaemonVersion",) if key in policy_bundle}
-    return _flag("daemon_version_supported", {"bundle": slim, "daemon_version": __version__}, otherwise=False)
+# What the admission and downgrade gates read from a candidate and from the
+# accepted reference. Only these fields cross the transport.
+_CANDIDATE_KEYS = (
+    "contractVersion",
+    "rolloutState",
+    "minDaemonVersion",
+    "bundleVersion",
+    "bundleHash",
+    "payloadHash",
+    "issuedAt",
+    "workspaceId",
+    "rollback",
+    "cloudExceptions",
+    "cloudExceptionsIssuedAt",
+)
+_REFERENCE_KEYS = (
+    "bundleVersion",
+    "bundleHash",
+    "payloadHash",
+    "issuedAt",
+    "workspaceId",
+    "cloudExceptionsIssuedAt",
+    "cloudExceptionsHash",
+)
+_EXPECTED_KEYS = ("bundleVersion", "bundleHash")
+
+
+def _view_chunks(bundle: object, keys: tuple[str, ...]) -> list[str] | None:
+    if not isinstance(bundle, dict):
+        return None
+    return policy_bundle_chunks({key: bundle[key] for key in keys if key in bundle})
+
+
+def _reference_chunks(reference: object, candidate: dict[str, object]) -> list[str] | None:
+    """The reference fields the gates compare, with its exception set as a hash.
+
+    Only the hash of the accepted Cloud exception set is compared, so the set
+    itself never shares a request with the candidate. Two bundles near the size
+    limit would otherwise exceed the transport cap together.
+    """
+
+    if not isinstance(reference, dict):
+        return None
+    view = {key: reference[key] for key in _REFERENCE_KEYS if key in reference}
+    if (
+        candidate.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
+        and not isinstance(view.get("cloudExceptionsHash"), str)
+        and "cloudExceptions" in reference
+    ):
+        view["cloudExceptionsHash"] = _required_exceptions_hash(reference)
+    return policy_bundle_chunks(view)
+
+
+def _required_exceptions_hash(reference: dict[str, object]) -> str:
+    """Hash the accepted exception set in its own request, or report an outage.
+
+    Without this hash the same-time replay check cannot run, so an answer
+    without a string hash fails closed instead of crossing as ``null``.
+    """
+
+    result = native_policy_bundle(
+        "v2_cloud_exceptions_hash",
+        {"bundle_chunks": policy_bundle_chunks({"cloudExceptions": reference["cloudExceptions"]})},
+    )
+    value = result.get("value")
+    if isinstance(value, str) and value and "error" not in result:
+        return value
+    raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION, result)
+
+
+def policy_bundle_admission_rejection(
+    candidate: dict[str, object],
+    reference: dict[str, object] | None,
+) -> str | None:
+    """The first reason a validated candidate may not become live authority.
+
+    Rust runs the daemon-version, rollout-state and downgrade gates in that
+    order and answers ``None`` when the candidate passes all three. A native
+    failure raises ``PolicyBundleNativeError`` (``PolicyBundleNativeUnavailableError``
+    for an outage); it is never read as a pass.
+    """
+
+    result = native_policy_bundle(
+        "candidate_admission",
+        {
+            "bundle_chunks": _view_chunks(candidate, _CANDIDATE_KEYS),
+            "reference_chunks": _reference_chunks(reference, candidate),
+            "daemon_version": __version__,
+        },
+    )
+    error = result.get("error")
+    if isinstance(error, str):
+        raise PolicyBundleNativeError(error, result)
+    # An answer without an explicit verdict is an outage, never a pass.
+    if "rejection" not in result or "error" in result:
+        raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION, result)
+    rejection = result["rejection"]
+    if rejection is None or (isinstance(rejection, str) and rejection):
+        return rejection
+    raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION, result)
+
+
+def policy_bundle_downgrade_verdict(
+    reference: dict[str, object] | None,
+    candidate: dict[str, object],
+    *,
+    expected_last_good: dict[str, object] | None = None,
+) -> bool:
+    """Whether ``candidate`` replays or rolls back the accepted ``reference``.
+
+    Rust applies the v2 transition rules to a v2 candidate and the v1 ordering
+    rules otherwise. A malformed request fails closed as a downgrade; an outage
+    raises ``PolicyBundleNativeUnavailableError``.
+    """
+
+    try:
+        request: dict[str, object] = {
+            "bundle_chunks": _view_chunks(candidate, _CANDIDATE_KEYS),
+            "reference_chunks": _reference_chunks(reference, candidate),
+            "expected_chunks": _view_chunks(expected_last_good, _EXPECTED_KEYS),
+        }
+        result = native_policy_bundle("downgrade_verdict", request)
+    except PolicyBundleNativeUnavailableError:
+        raise
+    except ValueError:
+        return True
+    error = result.get("error")
+    if isinstance(error, str):
+        return True
+    value = result.get("value")
+    if "error" not in result and isinstance(value, bool):
+        return value
+    # A reply without a boolean verdict is an outage, never "no downgrade".
+    raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION, result)
 
 
 def policy_bundle_is_enforceable(policy_bundle: dict[str, object]) -> bool:

@@ -83,9 +83,6 @@ impl DisabledTarget {
     pub(crate) fn settings(&self) -> &AssistanceSettings {
         &self.settings
     }
-    pub(crate) fn rules(&self) -> &guard_cigar_release::UpdatePreferences {
-        &self.rules
-    }
     pub(crate) fn pointer(&self) -> &SelectionPointer {
         &self.pointer
     }

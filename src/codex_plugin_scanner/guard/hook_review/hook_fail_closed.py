@@ -313,9 +313,3 @@ def fail_closed_response(
     if kind == "prompt":
         reason = prompt_reason or PROMPT_UNAVAILABLE_REASON
     return _envelope(kind, harness, reason=reason, reason_code=reason_code, event_name=event_name)
-
-
-def unmanaged_passthrough(harness: str) -> dict[str, object]:
-    """Constant reply for a hook that belongs to an app Guard does not manage."""
-
-    return _envelope("unmanaged", harness)

@@ -18658,6 +18658,54 @@
       "expect": "allow"
     },
     {
+      "id": "cd-home-variable-sibling-then-worktree-add-and-enter",
+      "fix_area": "worktree-add",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git worktree add ../other-project-entry -b entry-lane HEAD && cd ../other-project-entry && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sequenced-entry-then-worktree-add-and-enter",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project; git worktree add ../other-project-entry-sequenced -b entry-lane-sequenced HEAD && cd ../other-project-entry-sequenced && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-or-fallback-entry-then-worktree-add-and-enter",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git fetch origin main || git worktree add ../other-project-entry-fallback -b entry-lane-fallback HEAD && cd ../other-project-entry-fallback && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "git-worktree-add-home-variable-destination",
       "fix_area": "worktree-add",
       "harnesses": [

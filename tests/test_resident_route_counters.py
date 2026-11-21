@@ -44,8 +44,8 @@ class _Host:
     activity_writer: object = field(default_factory=object)
     policy_snapshot_publisher: object = field(default_factory=object)
 
-    def _record_post_tool_activity(self, *, harness: str, payload: Mapping[str, object], succeeded: bool) -> None:
-        raise AssertionError((harness, payload, succeeded))
+    def _record_post_tool_activity(self, *, harness: str, event: str, payload: Mapping[str, object]) -> None:
+        raise AssertionError((harness, event, payload))
 
 
 def _page(*, counters: object | None = None) -> bytes:

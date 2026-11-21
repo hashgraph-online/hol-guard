@@ -212,7 +212,7 @@ export function useCigarOneClick(options: Options) {
       else forgetTurnOn();
       if (cause instanceof CigarSetupStopped || abort.signal.aborted) setRun({ phase: "idle" });
       else if (cause instanceof CigarSetupError && cause.needsProof) {
-        // The next attempt re-plans from fresh metadata, so finished steps (Python, the download) are reused.
+        // The next attempt re-plans from fresh metadata, so finished steps are reused.
         const error = progressed ? "Your approval expired while Guard was working. The finished steps are kept. Approve once more to finish."
           : proof ? "That approval did not work. Try again." : null;
         setRun(planned ? { phase: "proof", plan: planned, error } : { phase: "failed", stages, stage, message: cause.message });

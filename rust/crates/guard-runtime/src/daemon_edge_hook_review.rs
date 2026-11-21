@@ -39,7 +39,7 @@ mod lifecycle;
 mod managed;
 #[path = "daemon_edge_hook_readiness.rs"]
 mod readiness;
-use envelopes::{capacity_reason, envelope, fail_safe, refusal};
+use envelopes::{capacity_reason, envelope, fail_safe, prepare_refusal, refusal};
 #[cfg(test)]
 use envelopes::{event_kind, fill, ENVELOPES};
 
@@ -439,7 +439,8 @@ impl Hook<'_> {
             return unavailable();
         };
         if let Some(refused) = prepared.get("fail_safe") {
-            return refusal(refused).map_or_else(unavailable, |(reason, code)| fail(reason, code));
+            return prepare_refusal(&reply_harness, &reply_event, refused)
+                .unwrap_or_else(unavailable);
         }
         if let Some(answer) = self.lifecycle(&reply_harness, &event, &payload, expires) {
             permit.release();
@@ -489,3 +490,7 @@ impl Hook<'_> {
 #[cfg(test)]
 #[path = "daemon_edge_hook_review_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "daemon_edge_hook_policy_tests.rs"]
+mod policy_tests;

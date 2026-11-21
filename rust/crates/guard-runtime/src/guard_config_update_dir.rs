@@ -54,10 +54,6 @@ impl Entry {
     pub(super) fn private_file(&self) -> bool {
         self.kind == Kind::File && self.links == 1 && self.private
     }
-    /// A private directory.
-    pub(super) fn private_directory(&self) -> bool {
-        self.kind == Kind::Directory && self.private
-    }
 }
 
 pub(super) enum Names {
@@ -71,7 +67,7 @@ pub(super) use imp::{lock, Dir, Locked};
 mod imp {
     use super::*;
     use nix::fcntl::{open, openat, renameat, AtFlags, Flock, FlockArg, OFlag};
-    use nix::sys::stat::{fstatat, mkdirat, FileStat, Mode, SFlag};
+    use nix::sys::stat::{fstatat, FileStat, Mode, SFlag};
     use nix::unistd::{geteuid, unlinkat, UnlinkatFlags};
     use std::fs::Metadata;
     use std::os::unix::fs::MetadataExt;
@@ -156,11 +152,6 @@ mod imp {
         pub(in super::super) fn file_entry(&self, _name: &str, file: &File) -> io::Result<Entry> {
             Ok(metadata_entry(&file.metadata()?))
         }
-        pub(in super::super) fn open_dir(&self, name: &str) -> io::Result<Self> {
-            Ok(Self(
-                openat(&self.0, name, DIRECTORY, Mode::empty())?.into(),
-            ))
-        }
         pub(in super::super) fn open_file(&self, name: &str, how: How) -> io::Result<File> {
             let flags = match how {
                 How::Read => OFlag::O_RDONLY | OFlag::O_NONBLOCK,
@@ -176,35 +167,11 @@ mod imp {
             )?;
             Ok(fd.into())
         }
-        pub(in super::super) fn create_dir(&self, name: &str) -> io::Result<()> {
-            Ok(mkdirat(&self.0, name, Mode::from_bits_truncate(0o700))?)
-        }
         pub(in super::super) fn rename(&self, from: &str, to: &str) -> io::Result<()> {
             Ok(renameat(&self.0, from, &self.0, to)?)
         }
-        /// Rename only when `to` does not exist.
-        pub(in super::super) fn rename_new(&self, from: &str, to: &str) -> io::Result<()> {
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            {
-                Ok(rustix::fs::renameat_with(
-                    &self.0,
-                    from,
-                    &self.0,
-                    to,
-                    rustix::fs::RenameFlags::NOREPLACE,
-                )?)
-            }
-            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-            {
-                let _ = (from, to);
-                Err(io::ErrorKind::Unsupported.into())
-            }
-        }
         pub(in super::super) fn remove_file(&self, name: &str) -> io::Result<()> {
             Ok(unlinkat(&self.0, name, UnlinkatFlags::NoRemoveDir)?)
-        }
-        pub(in super::super) fn remove_dir(&self, name: &str) -> io::Result<()> {
-            Ok(unlinkat(&self.0, name, UnlinkatFlags::RemoveDir)?)
         }
         pub(in super::super) fn sync(&self) -> io::Result<()> {
             self.0.sync_all()
@@ -334,10 +301,6 @@ mod imp {
             self.entry()?;
             entry(&self.join(name)?, file, &file.metadata()?)
         }
-        pub(in super::super) fn open_dir(&self, name: &str) -> io::Result<Self> {
-            self.entry()?;
-            Self::at(self.join(name)?)
-        }
         pub(in super::super) fn open_file(&self, name: &str, how: How) -> io::Result<File> {
             let path = self.join(name)?;
             self.entry()?;
@@ -354,26 +317,13 @@ mod imp {
                 .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
                 .open(path)
         }
-        pub(in super::super) fn create_dir(&self, name: &str) -> io::Result<()> {
-            self.entry()?;
-            std::fs::create_dir(self.join(name)?)
-        }
         pub(in super::super) fn rename(&self, from: &str, to: &str) -> io::Result<()> {
             self.entry()?;
             std::fs::rename(self.join(from)?, self.join(to)?)
         }
-        /// Rename only when `to` does not exist.
-        pub(in super::super) fn rename_new(&self, from: &str, to: &str) -> io::Result<()> {
-            self.entry()?;
-            guard_runtime_windows_process::rename_no_replace(&self.join(from)?, &self.join(to)?)
-        }
         pub(in super::super) fn remove_file(&self, name: &str) -> io::Result<()> {
             self.entry()?;
             std::fs::remove_file(self.join(name)?)
-        }
-        pub(in super::super) fn remove_dir(&self, name: &str) -> io::Result<()> {
-            self.entry()?;
-            std::fs::remove_dir(self.join(name)?)
         }
         /// NTFS journals directory entries; there is no directory flush.
         pub(in super::super) fn sync(&self) -> io::Result<()> {

@@ -788,29 +788,7 @@ dependencies = [
 name = "guard-cigar-artifacts"
 version = "0.1.0"
 dependencies = [
- "guard-cigar-release",
  "guard-runtime-windows-process",
- "guard-secure-fs",
- "nix",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "guard-cigar-install"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "guard-cigar-artifacts",
- "guard-cigar-release",
- "guard-context-assistance",
- "guard-secure-fs",
- "nix",
- "ring",
- "serde_json",
- "sha2 0.10.9",
- "tar",
- "tempfile",
- "zip",
 ]
 
 [[package]]
@@ -826,10 +804,8 @@ name = "guard-cigar-release"
 version = "0.1.0"
 dependencies = [
  "pep440_rs",
- "ring",
  "serde",
  "serde_json",
- "sha2 0.10.9",
 ]
 
 [[package]]
@@ -1292,7 +1268,6 @@ dependencies = [
  "guard-adapter-detection",
  "guard-archive",
  "guard-cigar-artifacts",
- "guard-cigar-install",
  "guard-cigar-native",
  "guard-cigar-release",
  "guard-command",

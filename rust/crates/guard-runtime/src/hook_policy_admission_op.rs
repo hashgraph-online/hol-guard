@@ -6,7 +6,7 @@
 //! failure state and returns the fixed user-facing reason.
 
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Map, Value};
 
 use crate::resident_protocol::encode_response;
 
@@ -17,6 +17,7 @@ const RESIDENT_FAIL_FAST_STREAK: u64 = 4;
 
 const POLICY_SOURCE_FENCE_ERROR: &str = "native_business_source_mutation_in_progress";
 const PERSISTENT_ERROR: &str = "native_command_program_binding_mismatch";
+const PREFIX: &str = "HOL Guard could not prepare the native policy safely.";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -38,7 +39,6 @@ fn resident_class_error(code: &str) -> bool {
 }
 
 fn reason(last_error: Option<&str>, resident_failure_streak: u64) -> String {
-    const PREFIX: &str = "HOL Guard could not prepare the native policy safely.";
     const RETRY: &str = "This is usually temporary. Retry this action.";
     const REPAIR: &str = "Guard's installed files disagree, so retrying will not clear it. Ask the user to run `hol-guard doctor`.";
     const RESIDENT_DOWN: &str = "Guard's native runtime is not answering. Retry once more; if it still fails, ask the user to run `hol-guard repair` in a terminal.";
@@ -58,6 +58,36 @@ fn reason(last_error: Option<&str>, resident_failure_streak: u64) -> String {
             RETRY
         };
     format!("{PREFIX} {code}. {advice}")
+}
+
+/// Render the publisher's failure directly in the daemon. Calling the
+/// evaluator resident to report that it is unreachable can spend the
+/// remainder of this hook's budget.
+pub(crate) fn daemon_reason(state: &Map<String, Value>) -> String {
+    let last_error = state
+        .get("last_error")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|code| {
+            !code.is_empty()
+                && code.len() <= 128
+                && code.bytes().all(|byte| {
+                    byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_-=,:?".contains(&byte)
+                })
+        });
+    let streak = state
+        .get("resident_failure_streak")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if streak >= RESIDENT_FAIL_FAST_STREAK
+        && last_error.is_some_and(|code| {
+            resident_class_error(code)
+                || guard_contracts::NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES.contains(&code)
+        })
+    {
+        return format!("{PREFIX} The native runtime is not answering. Retry once more; if it still fails, ask the user to run `hol-guard repair` in a terminal.");
+    }
+    reason(last_error, streak)
 }
 
 pub(crate) fn evaluate(request: &HookPolicyAdmissionRequestV1) -> Result<Vec<u8>, String> {

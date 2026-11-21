@@ -1,63 +1,8 @@
 //! Native inventory/preflight fixtures use no SDK or project read authority.
 use super::*;
 use crate::{DataCompatibility, EvidenceUpgradeStrategy, StorageMode};
-use guard_cigar_release::{
-    CatalogDocument, CatalogTrust, Feature, Qualification, ResolvedRelease, TrustedCatalog,
-    TrustedKey,
-};
-use ring::signature::{Ed25519KeyPair, KeyPair};
+use guard_cigar_release::Feature;
 
-fn release(changed: bool) -> ResolvedRelease {
-    let mut doc: CatalogDocument = TrustedCatalog::bundled().unwrap().document().clone();
-    doc.builds[0].identity.build_id = if changed {
-        "synthetic-storage-b"
-    } else {
-        "synthetic-storage-a"
-    }
-    .into();
-    doc.builds[0].identity.source_revision = if changed { "b" } else { "a" }.repeat(40);
-    doc.builds[0].platforms[0].qualification = Qualification::GuardQualified;
-    doc.builds[0].platforms[0].qualification_receipt_sha256 = Some("d".repeat(64));
-    doc.builds[0].platforms[0].features = vec![Feature::Graph, Feature::Persistence];
-    let pair = Ed25519KeyPair::from_seed_unchecked(&[111; 32]).unwrap();
-    let key = TrustedKey {
-        key_id: "evidence-plan-test-only".into(),
-        public_key: pair.public_key().as_ref().try_into().unwrap(),
-        not_before: 1,
-        not_after: u64::MAX,
-        revoked: false,
-    };
-    let payload = serde_json::to_string(&doc).unwrap();
-    let mut message = b"hol-guard-cigar-release-catalog.v1\0".to_vec();
-    message.extend_from_slice(payload.as_bytes());
-    let signature: String = pair
-        .sign(&message)
-        .as_ref()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    let envelope = serde_json::to_vec(
-        &serde_json::json!({"schema":"guard-cigar-signed-catalog.v1","key_id":key.key_id,
-        "payload":payload,"signature_hex":signature}),
-    )
-    .unwrap();
-    TrustedCatalog::verify(
-        &envelope,
-        &CatalogTrust {
-            keys: &[key],
-            checkpoint: None,
-            now: doc.issued_at,
-        },
-    )
-    .unwrap()
-    .for_activation(
-        &doc.builds[0].identity.build_id,
-        "darwin-arm64",
-        false,
-        &[Feature::Graph, Feature::Persistence],
-    )
-    .unwrap()
-}
 fn plan(cache: &EvidenceCache, changed: bool) -> crate::EvidenceUpgradePlan {
     cache
         .upgrade_inventory(NOW)
@@ -252,92 +197,6 @@ fn empty_cache_has_no_copy_or_authority_and_future_feature_reduction_is_explicit
     assert!(denied.transition_after_preparation.is_none());
 }
 
-fn approval(release: &ResolvedRelease) -> crate::BundleApproval {
-    crate::BundleApproval {
-        schema: "guard-cigar-bundle-approval.v2".into(),
-        platform: "darwin-arm64".into(),
-        python_sha256: "a".repeat(64),
-        package_tree_sha256: release.platform().package_tree_sha256.clone().unwrap(),
-        worker_sha256: release.platform().worker_sha256.clone(),
-        files: 124,
-        bytes: 11454530,
-        release: Some(release.binding().unwrap()),
-        python_bundle: None,
-    }
-}
 pub(super) fn producer(changed: bool) -> crate::EvidenceUpgradeProducer {
-    let release = release(changed);
-    crate::EvidenceUpgradeProducer::new(&release, &approval(&release)).unwrap()
-}
-#[test]
-fn same_sdk_with_changed_python_or_private_standard_library_requires_fresh_data() {
-    let fixture = Fixture::new();
-    let cache = EvidenceCache::open(&fixture.0).unwrap();
-    drop(cache.open_slot(&fixture.key("dashboard"), 1, NOW).unwrap());
-    let inventory = cache.upgrade_inventory(NOW).unwrap();
-    let release = release(false);
-    let mut approval = approval(&release);
-    let from = crate::EvidenceUpgradeProducer::new(&release, &approval).unwrap();
-    approval.python_sha256 = "b".repeat(64);
-    let changed = crate::EvidenceUpgradeProducer::new(&release, &approval).unwrap();
-    let plan = inventory
-        .preflight(
-            &from,
-            &changed,
-            StorageMode::Sqlite,
-            &[Feature::Graph, Feature::Persistence],
-        )
-        .unwrap();
-    assert_eq!(
-        plan.strategy,
-        EvidenceUpgradeStrategy::FreshBrokerReadmission
-    );
-    let mut python = TrustedCatalog::bundled().unwrap().document().interpreters[0]
-        .binding()
-        .unwrap();
-    approval.schema = "guard-cigar-bundle-approval.v3".into();
-    approval.python_sha256 = python.executable_sha256.clone();
-    approval.python_bundle = Some(python.clone());
-    let from = crate::EvidenceUpgradeProducer::new(&release, &approval).unwrap();
-    python.tree_sha256 = "e".repeat(64);
-    approval.python_bundle = Some(python);
-    let changed = crate::EvidenceUpgradeProducer::new(&release, &approval).unwrap();
-    let plan = inventory
-        .preflight(
-            &from,
-            &changed,
-            StorageMode::Sqlite,
-            &[Feature::Graph, Feature::Persistence],
-        )
-        .unwrap();
-    assert_eq!(
-        plan.strategy,
-        EvidenceUpgradeStrategy::FreshBrokerReadmission
-    );
-    assert!(plan.requires_prepared_copy);
-    assert!(!plan.raw_sdk_checkpoint_copied);
-}
-#[test]
-fn catalog_producer_binding_keeps_the_existing_durable_wire_shape() {
-    let producer = producer(false);
-    assert_eq!(
-        serde_json::to_value(producer.release_binding().unwrap()).unwrap(),
-        serde_json::to_value(release(false).binding().unwrap()).unwrap()
-    );
-}
-#[test]
-fn a_mismatched_approval_cannot_describe_a_compatible_data_producer() {
-    let release = release(false);
-    let mut approval = approval(&release);
-    approval.package_tree_sha256 = "e".repeat(64);
-    assert!(matches!(
-        crate::EvidenceUpgradeProducer::new(&release, &approval),
-        Err(RuntimeError::PackageMismatch)
-    ));
-    approval = self::approval(&release);
-    approval.python_sha256 = "path-to-unverified-python".into();
-    assert!(matches!(
-        crate::EvidenceUpgradeProducer::new(&release, &approval),
-        Err(RuntimeError::PackageMismatch)
-    ));
+    crate::EvidenceUpgradeProducer::for_test(&if changed { "b" } else { "a" }.repeat(64))
 }

@@ -12,10 +12,6 @@ pub(crate) const BUILTIN_ID: &str = "builtin";
 pub(super) const BUILTIN_SCHEMA: &str = "guard-cigar-installation.builtin.v1";
 const NO_SOURCE_REVISION: &str = "0000000000000000000000000000000000000000";
 
-pub(super) fn storable_id(id: &str) -> bool {
-    valid_id(id) && id != BUILTIN_ID
-}
-
 fn work_dir(home: &Path) -> Result<PathBuf, String> {
     let home = fs::canonicalize(home).map_err(|_| error("home_invalid"))?;
     Ok(home.join("context-assistance/work").join(BUILTIN_ID))
@@ -50,7 +46,6 @@ pub(super) fn installation(home: &Path) -> Result<Installation, String> {
         selection: guard_context_assistance::builtin_selection(program, work_dir(home)?),
         approval: guard_context_assistance::builtin_approval(),
         interpreter: guard_context_assistance::builtin_interpreter(),
-        receipt: None,
         managed_slot: None,
         verification_job_id: None,
     })
@@ -73,13 +68,6 @@ pub(super) fn choice() -> Value {
         "python_version": null, "platform": guard_context_assistance::builtin_platform(),
         "worker_fingerprint": guard_context_assistance::builtin_approval().worker_sha256,
         "sdk_version": guard_cigar_native::CORE_VERSION,
-        "core_version": guard_cigar_native::CORE_VERSION, "build_id": null,
-        "adapter_id": "guard-cigar-builtin-v1", "adapter_revision": 1,
-        "managed": false, "builtin": true})
-}
-
-pub(super) fn version_metadata() -> Value {
-    json!({"sdk_version": guard_cigar_native::CORE_VERSION,
         "core_version": guard_cigar_native::CORE_VERSION, "build_id": null,
         "adapter_id": "guard-cigar-builtin-v1", "adapter_revision": 1,
         "managed": false, "builtin": true})
@@ -130,8 +118,6 @@ mod tests {
 
     #[test]
     fn builtin_id_is_reserved_and_record_is_derived() {
-        assert!(!storable_id(BUILTIN_ID));
-        assert!(storable_id("catalog-runtime"));
         let home = std::env::temp_dir();
         let record = installation(&home).unwrap();
         assert_eq!(record.schema, BUILTIN_SCHEMA);
@@ -143,7 +129,6 @@ mod tests {
             .selection
             .work_dir
             .ends_with("context-assistance/work/builtin"));
-        assert!(record.selection.python_bundle.is_none());
         assert!(installation(Path::new("relative")).is_err());
         assert_eq!(choice()["builtin"], true);
         assert!(matches!(origin(), SelectionOrigin::Builtin { .. }));

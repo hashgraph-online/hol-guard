@@ -270,11 +270,10 @@ def test_native_pre_and_post_keep_authoritative_decision(
             succeeded=True,
             policy_action="warn",
         )
-        assert writer.submit_command_activity(
+        assert writer.submit_post_tool_activity(
             harness=harness,
             event="PostToolUse",
             payload=payload,
-            succeeded=True,
         )
         assert writer.submit_command_activity(
             harness=harness,

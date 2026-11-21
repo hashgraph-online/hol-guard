@@ -9,6 +9,7 @@ the CLI already reports.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import http.client
 import io
@@ -16,7 +17,7 @@ import json
 import os
 import tempfile
 import urllib.error
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from email.message import Message
 from pathlib import Path
 from typing import NoReturn
@@ -229,15 +230,7 @@ def _native_cloud_request(
         request["answer"] = "raw"
     if max_response_bytes is not None:
         request["maxResponseBytes"] = int(max_response_bytes)
-    body_file: str | None = None
-    try:
-        if body is not None and len(body) > _INLINE_BODY_LIMIT_BYTES:
-            descriptor, body_file = tempfile.mkstemp(prefix="hol-guard-cloud-", suffix=".json")
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(body)
-            request["bodyFile"] = body_file
-        elif body is not None:
-            request["body"] = body.decode("utf-8")
+    with request_body_fields(body) as fields:
         return run_native_cloud_sync(
             CLOUD_EVENT_SYNC_COMMAND,
             CLOUD_JSON_REQUEST_FEATURE,
@@ -245,11 +238,31 @@ def _native_cloud_request(
             "request",
             auth_context=auth_context,
             subject="Cloud request",
-            extra={"request": request},
+            extra={"request": {**request, **fields}},
         )
+
+
+@contextlib.contextmanager
+def request_body_fields(body: bytes | None) -> Iterator[dict[str, object]]:
+    """The ``body`` or ``bodyFile`` field a native request carries ``body`` in.
+
+    A body too large for the native command's stdin goes in a private file,
+    removed once the command has answered.
+    """
+
+    if body is None:
+        yield {}
+        return
+    if len(body) <= _INLINE_BODY_LIMIT_BYTES:
+        yield {"body": body.decode("utf-8")}
+        return
+    descriptor, body_file = tempfile.mkstemp(prefix="hol-guard-cloud-", suffix=".json")
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(body)
+        yield {"bodyFile": body_file}
     finally:
-        if body_file is not None:
-            Path(body_file).unlink(missing_ok=True)
+        Path(body_file).unlink(missing_ok=True)
 
 
 class CloudResponseOversizedError(RuntimeError):
@@ -323,18 +336,19 @@ class ReceiptUploadAnswer:
     synced_at: object
     receipts: int
     receipts_stored: int
-    advisories: list[dict[str, object]]
+    advisories_stored: int
     policy_bundle_provided: bool
     policy_bundle_malformed: bool
     policy_bundle: dict[str, object] | None
     policy_bundle_sync_payload: dict[str, object] | None
     policy_bundle_delivery_provided: bool
     policy_bundle_delivery: object
-    alert_preferences: dict[str, object] | None
     review_verification_keys: object
     receipt_cursor_rowid: int | None
     receipt_cursor_backfill: bool
     receipts_skipped: int = 0
+    # Why caching the advisories or storing the alert preferences failed.
+    answers_error: str | None = None
 
     @classmethod
     def from_native(cls, answer: Mapping[str, object]) -> ReceiptUploadAnswer:
@@ -343,8 +357,6 @@ class ReceiptUploadAnswer:
         sync_payload = bundle.get("sync_payload")
         sync_payload = sync_payload if isinstance(sync_payload, dict) else None
         policy_bundle = None if sync_payload is None else sync_payload.get("policyBundle")
-        advisories = answer.get("advisories")
-        preferences = answer.get("alert_preferences")
         cursor = answer.get("receipt_cursor_rowid")
         now = answer.get("now")
         if not isinstance(now, str) or not now:
@@ -354,18 +366,18 @@ class ReceiptUploadAnswer:
             synced_at=answer.get("synced_at"),
             receipts=_count(answer.get("receipts")),
             receipts_stored=_count(answer.get("receipts_stored")),
-            advisories=[item for item in advisories if isinstance(item, dict)] if isinstance(advisories, list) else [],
+            advisories_stored=_count(answer.get("advisories_stored")),
             policy_bundle_provided=bundle.get("provided") is True,
             policy_bundle_malformed=bundle.get("malformed") is True,
             policy_bundle=policy_bundle if isinstance(policy_bundle, dict) else None,
             policy_bundle_sync_payload=sync_payload,
             policy_bundle_delivery_provided=bundle.get("delivery_provided") is True,
             policy_bundle_delivery=bundle.get("delivery"),
-            alert_preferences=preferences if isinstance(preferences, dict) else None,
             review_verification_keys=answer.get("review_verification_keys"),
             receipt_cursor_rowid=cursor if isinstance(cursor, int) and not isinstance(cursor, bool) else None,
             receipt_cursor_backfill=answer.get("receipt_cursor_backfill") is True,
             receipts_skipped=_count(answer.get("receipts_skipped")),
+            answers_error=answers_error if isinstance(answers_error := answer.get("answers_error"), str) else None,
         )
 
 

@@ -6,27 +6,24 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
-from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
 from ..native_hook_direct_route import native_or_daemon_edge
 from ..native_hook_render import native_recording_only_for_binding
 from ..native_payload_facts import native_hook_facts
+from ..native_policy_fence_window import POLICY_SOURCE_FENCE_ERROR, PolicySourceFenceBusyError
 from ..native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
 )
-from ..native_resident_revival import native_unavailable_reason
 from ..native_runtime import NativeRuntimeStatus
 from ..resident_evidence_dispatch import run_resident_evidence
-from .hook_availability_policy import availability_harness_response
-from .hook_fail_closed import render_recording_only_pre_tool
 from .hook_native_review_approval import (
     pause_native_pre_tool_for_approval,
 )
 from .hook_native_saved_approval import native_exact_command_block_response
-from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, PolicySourceFenceBusyError
+from .hook_worker_native_evidence import _record_native_pre_activity, _record_unavailable_native
 from .hook_worker_native_review import (
     CONTROL_BINDING_REFRESH_ERRORS,
     SNAPSHOT_NOT_CURRENT_ERROR,
@@ -34,12 +31,7 @@ from .hook_worker_native_review import (
     review_native_edge,
     superseded_post_tool_snapshot,
 )
-from .hook_worker_unavailable import (
-    read_structured_view,
-    structured_destination_required,
-    withhold_structured_destination,
-    withholds_structured_destination,
-)
+from .hook_worker_unavailable import structured_outage_overlay
 
 
 def _edge_harness_response(edge: Mapping[str, object]) -> dict[str, object]:
@@ -96,45 +88,6 @@ class _HookWorkerNativeHost(Protocol):
     def _load_config(self, guard_home: Path, workspace: Path | None) -> GuardConfig: ...
 
 
-def _record_native_pre_activity(
-    host: _HookWorkerNativeHost,
-    harness: str,
-    payload: Mapping[str, object],
-    response: dict[str, object],
-    receipt: Mapping[str, object] | None = None,
-    *,
-    recorded: bool = False,
-) -> dict[str, object]:
-    from ..runtime_transition_hook_probe import OBSERVATION_FIELD, transition_hook_observation
-
-    # Bind diagnostics to this call's accepted receipt, never the worker's
-    # shared last-receipt slot (other HTTP requests may run concurrently).
-    observation = transition_hook_observation(payload, receipt)
-    if observation is not None:
-        response = {**response, OBSERVATION_FIELD: observation}
-    submit = getattr(host.activity_writer, "submit_command_activity", None)
-    # An edge that queued this activity behind its receipt says so.
-    if callable(submit) and not recorded:
-        receipt_id = receipt.get("decision_id") if receipt is not None else None
-        # The hook has its verdict; the activity row records it. The writer
-        # lives in the resident, so submitting here would spend a round trip
-        # in front of the response rather than behind it.
-        run_resident_evidence(
-            host,
-            lambda: submit(
-                harness=harness,
-                event="PreToolUse",
-                payload=payload,
-                succeeded=True,
-                policy_action=response.get("policy_action"),
-                receipt_id=receipt_id,
-                prompted=response.get("prompted") is True,
-                approval_reuse_status=response.get("approval_reuse_status", "not-applicable"),
-            ),
-        )
-    return response
-
-
 def _containment_outage(
     host: _HookWorkerNativeHost,
     payload: dict[str, object],
@@ -156,60 +109,6 @@ def _containment_outage(
     return (response, False)
 
 
-def _record_unavailable_native(
-    host: _HookWorkerNativeHost,
-    payload: dict[str, object],
-    *,
-    harness: str,
-    event_name: str,
-    reason_code: str,
-    guard_home: Path,
-    watch_continue: bool = False,
-    deadline: float | None = None,
-    reason: str | None = None,
-) -> dict[str, object]:
-    failure_code = native_resident_client_failure_code()
-    response = availability_harness_response(
-        harness=harness,
-        event_name=event_name,
-        reason_code=reason_code,
-        reason=reason
-        or native_unavailable_reason(
-            failure_code,
-            "HOL Guard could not complete the native hook decision safely.",
-        ),
-        prompt_reason=reason or native_unavailable_reason(failure_code, "") or None,
-    )
-    if watch_continue and event_name == "PreToolUse":
-        # Only a superseded Watch snapshot (resident reachable) keeps recording,
-        # through the resident-rendered continue; any render failure keeps the
-        # fixed deny above. Real outages never take this path.
-        response = render_recording_only_pre_tool(
-            harness,
-            reason_code=reason_code,
-            reason="Watch recorded this action without stopping it.",
-            guard_home=guard_home,
-            deadline=deadline,
-            fallback=response,
-        )
-    host.metrics.record_route("native_fail_safe")
-    if event_name == "PreToolUse":
-        writer = host.activity_writer
-        submit = getattr(writer, "submit_command_activity", None)
-        if callable(submit):
-            run_resident_evidence(
-                host,
-                lambda: submit(
-                    harness=harness,
-                    event=event_name,
-                    payload=payload,
-                    succeeded=str(response.get("policy_action") or "") != "block",
-                    policy_action=response.get("policy_action"),
-                ),
-            )
-    return response
-
-
 class HookWorkerNativeMixin:
     """Native edge paths kept out of the worker facade."""
 
@@ -223,6 +122,7 @@ class HookWorkerNativeMixin:
         event_name: str,
         guard_home: Path,
         workspace: Path | None,
+        deadline: float | None = None,
     ) -> dict[str, object]:
         """Withhold a managed structured destination when native proof is absent.
 
@@ -231,15 +131,14 @@ class HookWorkerNativeMixin:
         structured destination keeps the existing availability response.
         """
 
-        if not withholds_structured_destination(harness=harness, event_name=event_name):
-            return response
-        # The edge never answered, so nothing resolved the policy. Read the
-        # managed view for the outage-only overlay: an active destination
-        # still must not receive unreviewed content.
-        resolved = read_structured_view(lambda: self._load_config(guard_home, workspace))
-        if not structured_destination_required(resolved, harness=harness):
-            return response
-        return withhold_structured_destination(response)
+        overlay = structured_outage_overlay(
+            harness=harness,
+            event_name=event_name,
+            guard_home=guard_home,
+            deadline=deadline,
+            load_config=lambda: self._load_config(guard_home, workspace),
+        )
+        return {**response, **overlay} if overlay else response
 
     def _review_native_edge(
         self: _HookWorkerNativeHost,
@@ -343,8 +242,8 @@ class HookWorkerNativeMixin:
             record_native_resident_client_failure_code(None)
         if edge is None:
             failure = native_resident_client_failure_code()
-            if failure in POLICY_SOURCE_FENCE_ERRORS and event_name in {"PreToolUse", "UserPromptSubmit"}:
-                raise PolicySourceFenceBusyError(failure, recording_only=recording_only)
+            if failure == POLICY_SOURCE_FENCE_ERROR and event_name in {"PreToolUse", "UserPromptSubmit"}:
+                raise PolicySourceFenceBusyError(failure)
             if (
                 isinstance(failure, str)
                 and event_name in {"PreToolUse", "UserPromptSubmit"}
@@ -361,7 +260,7 @@ class HookWorkerNativeMixin:
                 self._record_post_tool_activity(
                     harness=harness,
                     payload=payload,
-                    succeeded=hook_post_succeeded(event_name, payload),
+                    event=event_name,
                 )
             reason_code = {
                 "PostToolUse": "native_post_tool_unavailable",
@@ -381,6 +280,7 @@ class HookWorkerNativeMixin:
                     event_name=event_name,
                     guard_home=guard_home,
                     workspace=workspace,
+                    deadline=deadline,
                 ),
                 False,
             )
@@ -557,7 +457,7 @@ class HookWorkerNativeMixin:
             self._record_post_tool_activity(
                 harness=native_harness,
                 payload=payload,
-                succeeded=hook_post_succeeded(native_event, payload),
+                event=native_event,
             )
         return (_edge_harness_response(edge), True)
 

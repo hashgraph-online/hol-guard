@@ -27,7 +27,7 @@ fn answer_in(tag: &str, saved_in: &str, asked_in: &str) -> Result<Value, HookDir
         &connection,
         "claude-code",
         &saved_artifact,
-        &saved_token,
+        Some(&saved_token),
         "allow",
         "approval-gate",
     );

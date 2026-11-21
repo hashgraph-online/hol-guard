@@ -228,7 +228,7 @@ pub(crate) fn now() -> Result<u64, String> {
         .ok_or_else(|| error("clock_invalid"))
 }
 fn directory(home: &Path, create: bool) -> Result<PathBuf, String> {
-    preparation::lifecycle_directory(home, "switch-jobs", create)
+    lifecycle::directory(home, "switch-jobs", create)
 }
 pub(crate) fn get(home: &Path, id: &str) -> Result<Option<SwitchJob>, String> {
     if !valid_id(id) {
@@ -238,7 +238,8 @@ pub(crate) fn get(home: &Path, id: &str) -> Result<Option<SwitchJob>, String> {
         return Ok(None);
     }
     let path = directory(home, false)?.join(record_name(id));
-    let job: Option<SwitchJob> = preparation::lifecycle_read(home, &path, MAX_BYTES)?;
+    let job: Option<SwitchJob> =
+        lifecycle::private_read(home, &path, MAX_BYTES, "cigar_switch_job")?;
     if let Some(job) = &job {
         job.validate()?;
         if job.request.job_id != id {
@@ -270,7 +271,7 @@ pub(crate) fn list(home: &Path) -> Result<Vec<SwitchJob>, String> {
         let entry = entry.map_err(|_| error("switch_storage_unavailable"))?;
         let name = entry.file_name();
         let name = name.to_str().ok_or_else(|| error("switch_job_invalid"))?;
-        if preparation::lifecycle_temporary_name(name) {
+        if lifecycle::temporary_name(name) {
             continue;
         }
         if name
@@ -283,8 +284,9 @@ pub(crate) fn list(home: &Path) -> Result<Vec<SwitchJob>, String> {
             .strip_suffix(".json")
             .filter(|s| is_lower_hex(s, 64))
             .ok_or_else(|| error("switch_job_invalid"))?;
-        let job: SwitchJob = preparation::lifecycle_read(home, &entry.path(), MAX_BYTES)?
-            .ok_or_else(|| error("switch_job_invalid"))?;
+        let job: SwitchJob =
+            lifecycle::private_read(home, &entry.path(), MAX_BYTES, "cigar_switch_job")?
+                .ok_or_else(|| error("switch_job_invalid"))?;
         job.validate()?;
         if record_name(&job.request.job_id) != format!("{stem}.json") {
             return Err(error("switch_job_invalid"));
@@ -328,13 +330,8 @@ pub(crate) fn save(
         {
             return Err(error("switch_idempotency_conflict"));
         }
-    } else {
-        if preparation::native_job_id_exists(home, &job.request.job_id)? {
-            return Err(error("switch_idempotency_conflict"));
-        }
-        if preparation::total_job_count(home)? >= MAX_JOBS {
-            return Err(error("switch_job_limit"));
-        }
+    } else if list(home)?.len() >= MAX_JOBS {
+        return Err(error("switch_job_limit"));
     }
     write(home, job, phase, code)
 }

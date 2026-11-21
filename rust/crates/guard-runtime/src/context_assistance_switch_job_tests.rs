@@ -27,7 +27,7 @@ fn durable_metadata_is_idempotent_bounded_and_never_creates_an_installation() {
         let mut record = job(&format!("switch-{index}"));
         save(home, &mut record, JobPhase::Queued, "queued").unwrap();
     }
-    assert_eq!(preparation::total_job_count(home).unwrap(), MAX_JOBS);
+    assert_eq!(list(home).unwrap().len(), MAX_JOBS);
     assert!(!home.join("context-assistance/installations").exists());
     let mut existing = get(home, "switch-0").unwrap().unwrap();
     save(home, &mut existing, JobPhase::Ready, "ready").unwrap();

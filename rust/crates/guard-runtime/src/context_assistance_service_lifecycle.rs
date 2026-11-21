@@ -173,7 +173,6 @@ impl Service {
             state.last_check = None;
             revoke_runtime(&mut state)
         };
-        self.updates.cancel_active();
         await_cleanup(old);
         Ok(())
     }
@@ -194,7 +193,6 @@ impl Service {
             state.last_check = None;
             revoke_runtime(&mut state)
         };
-        self.updates.shutdown();
         self.switches.shutdown();
         await_cleanup(old);
     }

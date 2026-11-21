@@ -1,8 +1,6 @@
 use super::*;
 use crate::graph::brief::{validate, BriefScope};
 
-const CLIENT_BRIDGE: &str = include_str!("../../../../integrations/cigar/broker_client.py");
-
 // Intentionally private, without Debug, Clone or a public export. This value
 // travels only from the host SDK pipe to the native-owned client SDK pipe.
 #[derive(Deserialize, Serialize)]
@@ -75,7 +73,7 @@ impl VerifiedRuntime {
         if deadline.is_some_and(|end| end <= Instant::now()) {
             return Err(RuntimeError::ContextStale);
         }
-        let mut process = self.spawn_private_client(CLIENT_BRIDGE)?;
+        let mut process = self.spawn_private_client()?;
         if process.rpc(json!({"op":"prepare"}), TIMEOUT)? != json!({"ready":true}) {
             return Err(RuntimeError::HandshakeFailed);
         }

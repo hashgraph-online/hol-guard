@@ -1,8 +1,7 @@
 import type { CigarTab } from "./workspace-model";
-import { CIGAR_UPDATE_TUTORIAL } from "./versions-tutorial";
 
 export const CIGAR_FULL_NAME = "Context Intelligence Graph Agentic Runtime";
-export type CigarTutorialId = "first-brief" | "ai-apps" | "execution" | "cigar-updates";
+export type CigarTutorialId = "first-brief" | "ai-apps" | "execution";
 export type CigarTutorialStep = {
   title: string;
   description: string;
@@ -30,7 +29,7 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
     steps: [
       {
         title: "Turn on CIGAR", description: "One click. Guard gets everything ready, checks it and starts it.",
-        instructions: ["Click Turn on CIGAR at the top of this page. If Guard asks for your approval password, enter it once; it covers every step.", "Watch the steps tick off. You can stop at any point and nothing stays turned on.", "Later, if you want to switch versions yourself, use Updates."],
+        instructions: ["Click Turn on CIGAR at the top of this page. If Guard asks for your approval password, enter it once; it covers every step.", "Watch the steps tick off. You can stop at any point and nothing stays turned on."],
         expect: "The status at the top says Ready.", target: "overview", action: "Go to Home",
         tip: "CIGAR is built into Guard and needs no Python. The Python you already use is left alone.",
       },
@@ -127,7 +126,6 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
       },
     ],
   },
-  CIGAR_UPDATE_TUTORIAL,
 ];
 
 export function cigarTutorial(id: CigarTutorialId): CigarTutorial {

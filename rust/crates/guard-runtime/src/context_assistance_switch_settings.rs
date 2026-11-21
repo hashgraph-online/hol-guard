@@ -98,9 +98,6 @@ impl SwitchSettings {
             target_settings,
         })
     }
-    pub(crate) fn update_preferences(&self) -> &guard_cigar_release::UpdatePreferences {
-        &self.update_preferences
-    }
     pub(crate) fn home(&self) -> &Path {
         &self.home
     }
