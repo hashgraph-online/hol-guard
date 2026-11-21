@@ -24,6 +24,7 @@ RECORDING_METHODS = (
     "add_approval_request",
     "queue_native_review",
     "add_event",
+    "record_policy_bundle_rejection",
     "add_guard_event_v1",
 )
 

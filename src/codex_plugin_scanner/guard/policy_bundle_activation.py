@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable, Hashable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass
-from typing import Protocol
 
 from .managed_controls_policy_bundle import signed_cloud_extension_projection_digest
 from .managed_controls_policy_fields import ParsedManagedControlsPolicy
@@ -23,17 +22,6 @@ class PolicyBundleActivationRejectionError(RuntimeError):
         self.reason = reason
 
 
-class PolicyBundleRejectionStore(Protocol):
-    def set_sync_payload(
-        self,
-        state_key: str,
-        payload: Mapping[str, object] | Sequence[object],
-        now: str,
-    ) -> None: ...
-
-    def add_event(self, event_name: str, payload: dict[str, object], now: str) -> None: ...
-
-
 def activate_with_reason(
     activate: Callable[..., dict[str, object] | None],
     *args: object,
@@ -47,15 +35,6 @@ def activate_with_reason(
         return result, "" if result is not None else "policy_bundle_activation_rejected"
     except PolicyBundleActivationRejectionError as error:
         return None, error.reason
-
-
-def persist_activation_rejection(
-    store: PolicyBundleRejectionStore,
-    payload: dict[str, object],
-    now: str,
-) -> None:
-    store.set_sync_payload("policy_bundle_last_error", payload, now)
-    store.add_event("policy_bundle/rejected", payload, now)
 
 
 def managed_delivery_matches_base(
