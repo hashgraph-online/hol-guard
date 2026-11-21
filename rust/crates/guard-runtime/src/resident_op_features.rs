@@ -305,6 +305,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-hook-removal-sweep-v1",
     crate::hook_removal_sweep::DISCOVERY_FEATURE,
     crate::hook_removal_sweep::PLAN_FEATURE,
+    crate::hook_removal_sweep::REPORT_FEATURE,
     "native-harness-version-compatibility-v1",
     "native-hook-removal-backup-v1",
     "native-harness-version-discovery-v1",

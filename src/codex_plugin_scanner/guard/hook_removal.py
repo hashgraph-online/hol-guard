@@ -28,6 +28,7 @@ from .hook_removal_sweep import (
     finalize_backups,
     harness_hook_files,
     removal_plans,
+    removal_report,
     sweep_harness,
 )
 from .native_harness_ops import list_harnesses
@@ -179,31 +180,25 @@ def remove_all_guard_hooks(
         results.append(entry)
 
     final_backup_dir, backups = finalize_backups(backup_dir, list(backed_up.values()), stamp=stamp)
-    remaining: list[dict[str, object]] = []
-    remaining_count = 0
-    for plan in plans:
-        try:
-            rescanned = sweep_harness(plan.harness, context, dry_run=True).files
-        except SweepUnavailableError:
-            remaining.append({"harness": plan.harness, "path": "", "hook_count": plan.hook_count})
-            remaining_count += plan.hook_count
-            continue
-        for item in rescanned:
-            if item.removed:
-                remaining.append({"harness": plan.harness, "path": str(item.path), "hook_count": item.removed})
-                remaining_count += item.removed
-    removed_total = max(0, sum(plan.hook_count for plan in plans) - remaining_count)
-    failed = [item for item in results if item.get("adapter_uninstall") in {"error", "skipped"}]
-    status = "removed" if not remaining and not failed else "partial"
+    outcomes = [
+        {"harness": plan.harness, "hook_count": plan.hook_count, "adapter_uninstall": result["adapter_uninstall"]}
+        for plan, result in zip(plans, results, strict=True)
+    ]
+    try:
+        verification = removal_report(context, outcomes)
+    except SweepUnavailableError:
+        verification = {
+            "status": "partial",
+            "remaining": [{"harness": plan.harness, "path": "", "hook_count": plan.hook_count} for plan in plans],
+            "removed_hook_count": 0,
+            "affected_harness_count": sum(result["adapter_uninstall"] == "ok" for result in results),
+        }
     return {
         **base,
+        **verification,
         "harnesses": results,
-        "status": status,
-        "removed_hook_count": removed_total,
         "backup_dir": str(final_backup_dir) if final_backup_dir is not None else None,
         "backups": backups,
-        "remaining": remaining,
-        "affected_harness_count": len(results) - len(failed),
     }
 
 
