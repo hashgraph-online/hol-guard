@@ -271,6 +271,23 @@ fn an_observed_forward_writes_the_allowed_receipt_under_the_mode() {
 }
 
 #[test]
+fn a_package_observation_keeps_its_receipt_when_both_notices_are_pending() {
+    let workspace = temp_home("relay-package-pending-notices");
+    let pending = |id| {
+        json!({
+            "request_id": id, "harness": "codex", "workspace": null,
+            "approval_url": null, "artifact_name": "example package",
+            "risk_headline": null, "trigger_summary": null,
+        })
+    };
+    let mut record = observed(&workspace);
+    record["observed"]["notices"] = json!([pending("req-1"), pending("req-2")]);
+    assert!(is_plain(&record));
+    assert_eq!(composed(&record)["event_name"], "runtime_tool_call_allowed");
+    let _ = std::fs::remove_dir_all(&workspace);
+}
+
+#[test]
 fn observed_forwards_the_daemon_still_surfaces_are_not_plain() {
     let workspace = temp_home("relay-package-observed-owned");
     let forward = observed(&workspace);
