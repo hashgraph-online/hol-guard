@@ -7,10 +7,31 @@ import sys
 
 _SCRIPT = """
 import sys
+import tempfile
+from pathlib import Path
+
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
+from codex_plugin_scanner.guard.store import GuardStore
 
 assert "codex_plugin_scanner.guard.cli.commands_support" not in sys.modules
-assert HookWorker.__name__ == "HookWorker"
+with tempfile.TemporaryDirectory() as directory:
+    worker = HookWorker(store=GuardStore(Path(directory) / "guard-home"), wait_for_native_policy=False)
+    try:
+        response = worker.review_http_payload(
+            payload={
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Read",
+                "tool_response": {"answers": {}},
+            },
+            params={},
+            default_harness="claude-code",
+            home_dir=Path(directory),
+            guard_home=worker.store.guard_home,
+            workspace=None,
+        )
+    finally:
+        worker.close()
+assert isinstance(response, dict)
 print("ok")
 """
 
