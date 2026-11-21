@@ -557,6 +557,14 @@ def toml_hook_cases() -> list[dict]:
                 )
             ],
         ),
+        # The original Python `detect` refused this table. Its expectation (no
+        # warning) is set on purpose: Codex accepts an entry without a hash,
+        # and Guard writes one when it carries `enabled = false` to a new
+        # handler. A re-record against that checkout must keep this result.
+        case(
+            "toml_state_enabled_without_trust_skipped",
+            [file(HC, f'[hooks.state."a:b:c"]\nenabled = false\n[hooks.state."d"]\ntrusted_hash = "{TRUSTED}"\n')],
+        ),
         case("toml_state_bad_hash", [file(HC, '[hooks.state."a"]\ntrusted_hash = "sha256:xyz"\n')]),
         case("toml_state_extra_field", [file(HC, f'[hooks.state."a"]\ntrusted_hash = "{TRUSTED}"\nnote = "x"\n')]),
         case("toml_state_bad_enabled", [file(HC, f'[hooks.state."a"]\ntrusted_hash = "{TRUSTED}"\nenabled = "x"\n')]),

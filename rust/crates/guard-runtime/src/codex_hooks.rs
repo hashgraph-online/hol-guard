@@ -383,6 +383,12 @@ fn handler_record(
 }
 
 /// `_is_codex_hook_state_metadata`: Codex's reserved TOML `hooks.state` table.
+///
+/// Both fields are optional, as in Codex's own `HookStateToml`. An entry that
+/// only switches a hook off has no `trusted_hash`; Guard writes one when it
+/// hands a replaced handler's `enabled = false` to its replacement. Requiring
+/// a hash read that table as a malformed event and refused every later install
+/// and repair.
 fn is_state_metadata(event_name: &str, value: &HookVal, format: &str) -> bool {
     let HookVal::Dict(states) = value else {
         return false;
@@ -396,7 +402,7 @@ fn is_state_metadata(event_name: &str, value: &HookVal, format: &str) -> bool {
             fields
                 .iter()
                 .all(|(key, _)| key == "trusted_hash" || key == "enabled")
-                && entry.get("trusted_hash").is_some_and(is_trusted_hash)
+                && entry.get("trusted_hash").is_none_or(is_trusted_hash)
                 && entry
                     .get("enabled")
                     .is_none_or(|flag| matches!(flag, HookVal::Bool(_)))
