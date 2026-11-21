@@ -935,18 +935,14 @@ def _run_guard_update_unlocked(
             return payload, 0
         # Skip force-reinstall/upgrade noise when PyPI already reports current.
         release_before_post_update_repair(resident_update_lock, _bundled_runtime_candidate())
-        if (
-            context is not None
-            and daemon_refresh_required
-            and not restart_stale_live_daemon(
-                payload,
-                guard_home=context.guard_home,
-                current_version=current_version,
-                refresh=lambda: refresh_guard_daemon_after_update(
-                    context, update_context=update_context, minimum_version=current_version
-                ),
-                note=_append_payload_note,
-            )
+        if context is not None and not restart_stale_live_daemon(
+            payload,
+            guard_home=context.guard_home,
+            current_version=current_version,
+            refresh=lambda: refresh_guard_daemon_after_update(
+                context, update_context=update_context, minimum_version=current_version
+            ),
+            note=_append_payload_note,
         ):
             return payload, 1
         package_shims, package_shim_note = _refresh_package_shims_after_update(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -58,8 +59,14 @@ def _already_current(
         refreshed.append(minimum_version)
         return refresh_result, "daemon refresh note"
 
-    def identity(_guard_home: Path, **_kwargs: object) -> dict[str, object] | None:
-        return None if daemon_version is None else {"package_version": daemon_version}
+    def manage(op: str, _guard_home: Path, **kwargs: object) -> dict[str, object] | None:
+        assert op == "live_identity"
+        deadline = kwargs.get("deadline")
+        assert isinstance(deadline, float)
+        assert deadline - time.monotonic() <= 5.0
+        if daemon_version is None:
+            return {"reason": "service_unresponsive"}
+        return {"reason": "healthy", "identity": {"package_version": daemon_version}}
 
     runtime = tmp_path / "runtime"
     _ = runtime.write_bytes(b"test-runtime")
@@ -78,7 +85,7 @@ def _already_current(
     monkeypatch.setattr(update_commands, "_refresh_package_shims_after_update", _no_shim_refresh)
     monkeypatch.setattr(update_commands, "_repair_supported_harnesses", _no_harness_repair)
     monkeypatch.setattr(update_commands, "refresh_guard_daemon_after_update", refresh)
-    monkeypatch.setattr(update_stale_daemon, "verified_live_guard_daemon_identity", identity)
+    monkeypatch.setattr(update_stale_daemon, "_daemon_manage", manage)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     guard_home = tmp_path / "guard-home"
@@ -147,3 +154,36 @@ def test_already_current_update_leaves_a_current_or_unknown_daemon_alone(
     assert refreshed == []
     assert payload["status"] == "current"
     assert "daemon_refresh" not in payload
+
+
+def test_an_explicit_guard_home_still_restarts_the_context_daemon(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    restarted: dict[str, object] = {"status": "restarted", "runtime_verified": True}
+    context, refreshed = _already_current(tmp_path, monkeypatch, daemon_version="2.0.829", refresh_result=restarted)
+    override = tmp_path / "override-home"
+    override.mkdir()
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False, context=context, guard_home=override)
+
+    assert exit_code == 0, payload
+    assert refreshed == [CURRENT]
+
+
+def test_no_daemon_state_skips_the_live_daemon_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context, refreshed = _already_current(tmp_path, monkeypatch, daemon_version="2.0.829", refresh_result=None)
+    (context.guard_home / "daemon-state.json").unlink()
+
+    def no_probe(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("probed a daemon without daemon state")
+
+    monkeypatch.setattr(update_stale_daemon, "_daemon_manage", no_probe)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False, context=context)
+
+    assert exit_code == 0, payload
+    assert refreshed == []

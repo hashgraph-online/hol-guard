@@ -7,14 +7,19 @@ path uses this module to find that daemon and load the installed package.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 from packaging.version import InvalidVersion, Version
 
-from ..native_daemon_peer import daemon_refresh_outcome_succeeded, verified_live_guard_daemon_identity
+from ..native_daemon_manage import _daemon_manage
+from ..native_daemon_peer import daemon_refresh_outcome_succeeded
 
 _STALE_DAEMON_PROBE_TIMEOUT_SECONDS = 3.0
+# The whole native request, discovery included, so a hung runtime cannot hold an already-current update.
+_STALE_DAEMON_REQUEST_SECONDS = 5.0
 
 _RESTART_FAILED_MESSAGE = (
     "HOL Guard is current, but its daemon still runs an older version and could not be restarted safely."
@@ -23,12 +28,24 @@ _RESTART_FAILED_MESSAGE = (
 RefreshResult = tuple[dict[str, object] | None, str | None]
 
 
+def _live_daemon_identity(guard_home: Path) -> dict[str, object] | None:
+    answer = _daemon_manage(
+        "live_identity",
+        guard_home,
+        deadline=time.monotonic() + _STALE_DAEMON_REQUEST_SECONDS,
+        args={"timeout": _STALE_DAEMON_PROBE_TIMEOUT_SECONDS, "verify_dashboard": False},
+    )
+    if answer is None or "error" in answer or answer.get("reason") != "healthy":
+        return None
+    identity = answer.get("identity")
+    return cast(dict[str, object], identity) if isinstance(identity, dict) else None
+
+
 def stale_live_daemon_version(guard_home: Path, current_version: str) -> str | None:
     """The live daemon's package version when it is older than ``current_version``."""
-    identity = verified_live_guard_daemon_identity(
-        guard_home,
-        session_timeout=_STALE_DAEMON_PROBE_TIMEOUT_SECONDS,
-    )
+    if not (guard_home / "daemon-state.json").is_file():
+        return None
+    identity = _live_daemon_identity(guard_home)
     if identity is None:
         return None
     daemon_version = identity.get("package_version")
