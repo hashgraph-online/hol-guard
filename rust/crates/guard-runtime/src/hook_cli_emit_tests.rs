@@ -59,6 +59,43 @@ fn a_lone_surrogate_reason_prints_as_its_escape() {
 }
 
 #[test]
+fn muse_cli_prints_a_deny_and_stays_silent_on_allow() {
+    for bridge in [false, true] {
+        let allowed = cli_hook_emit_document(
+            "muse",
+            "PreToolUse",
+            r#"{"policy_action":"allow"}"#,
+            None,
+            bridge,
+        )
+        .expect("Muse allow output");
+        assert_eq!(
+            Value::Object(allowed),
+            serde_json::json!({"stdout": "", "stderr": "", "exit_code": 0})
+        );
+
+        let denied = cli_hook_emit_document(
+            "muse",
+            "PreToolUse",
+            r#"{"policy_action":"block","reason":"caf\u00e9"}"#,
+            None,
+            bridge,
+        )
+        .expect("Muse deny output");
+        let stdout = denied["stdout"].as_str().expect("Muse stdout");
+        let wire: Value = serde_json::from_str(stdout).expect("Muse JSON");
+        assert!(stdout.is_ascii());
+        assert_eq!(wire["hookSpecificOutput"]["permissionDecision"], "deny");
+        assert_eq!(
+            wire["hookSpecificOutput"]["permissionDecisionReason"],
+            "café"
+        );
+        assert_eq!(denied["stderr"], "");
+        assert_eq!(denied["exit_code"], 0);
+    }
+}
+
+#[test]
 fn an_unreadable_answer_has_no_document() {
     for (harness, text) in [
         ("kimi", "[]"),

@@ -14,7 +14,7 @@ from typing import Any, TextIO
 from ..harness_context import HarnessContext
 from ..hook_deadline import RuntimeHookDeadline
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
-from ..hook_failure_bridge import RUNTIME_MISSING, native_hook_failure
+from ..hook_failure_bridge import RUNTIME_MISSING, native_hook_failure, native_stderr_hook_failure
 from ..hook_review.hook_availability_policy import (
     availability_harness_response,
     canonical_hook_event_name,
@@ -40,7 +40,7 @@ _BRIDGE_RENDERED_HARNESSES = frozenset(
     {"cline", "copilot", "devin", "grok", "hermes", "kimi", "muse", "openclaw", "zcode"}
 )
 _RENDER_FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
-_HERMES_UNAVAILABLE_REASON = "HOL Guard blocked this action."
+_BRIDGE_BLOCK_REASON = "HOL Guard blocked this action."
 # What writing a finished answer is allowed to take when the review itself has
 # already used the hook's whole budget.
 _DELIVERY_BUDGET_SECONDS = 1.0
@@ -85,16 +85,12 @@ def _bridge_hook_output(
     writes for an outage; nothing reads the answer in Python.
     """
 
-    if canonical == "muse":
-        from ..muse_hook_render import muse_bridge_response
-
-        return muse_bridge_response(response, event_name=event_name, guard_home=guard_home, deadline=deadline)
     if canonical == "hermes":
         # The Hermes bridge renders its daemon reply natively; so does the CLI.
         # When the resident cannot answer, Hermes reads the fixed block document.
         rendered_hermes = native_hermes_bridge(response, guard_home=guard_home, deadline=deadline)
         if rendered_hermes is None:
-            return _failure_output("hermes", event_name, _HERMES_UNAVAILABLE_REASON)
+            return _failure_output("hermes", event_name, _BRIDGE_BLOCK_REASON)
         payload, exit_code = rendered_hermes
         return json.dumps(payload, ensure_ascii=True, separators=(",", ":")), "", exit_code
     rendered = native_cli_hook_emit(
@@ -109,6 +105,8 @@ def _bridge_hook_output(
             and not isinstance(exit_code, bool)
         ):
             return stdout, stderr, exit_code
+    if canonical == "muse":
+        return native_stderr_hook_failure(canonical, event_name, _BRIDGE_BLOCK_REASON)
     return _failure_output(canonical, event_name, _RENDER_FAILURE_REASON)
 
 
