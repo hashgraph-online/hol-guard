@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.kinetaios",
+  "version": "1.0.0",
+  "name": "KinetAios",
+  "description": "Local-first multi-engine AI agent desktop (Claude Code, Codex, built-in ReAct) exposing its built-in MCP server over HTTP+SSE with one bearer token for the whole server today. run_agent starts a full local agent — shell, files, computer use — scoped per call by cwd, engine and model; operators grant cwd roots via KINET_MCP_CWD and calls outside those roots are refused before any tool runs. Session handoff (export/import) and memory sync require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.phinn",
+    "displayName": "Phinn Shen (Kinet)",
+    "url": "https://github.com/phinn"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/phinn/KinetAios",
+  "license": "GPL-3.0",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://your-kinetaios-host.example/mcp",
+    "serverNames": [
+      "KinetAios MCP Server",
+      "KinetAios"
+    ]
+  },
+  "riskClasses": [
+    "external-command-execution",
+    "external-desktop-control",
+    "local-file-write",
+    "local-data-access"
+  ],
+  "tools": [
+    {
+      "name": "run_agent",
+      "state": "review"
+    },
+    {
+      "name": "export_session",
+      "state": "review"
+    },
+    {
+      "name": "import_session",
+      "state": "review"
+    },
+    {
+      "name": "sync_memories",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/phinn/KinetAios",
+    "https://github.com/phinn/KinetAios/wiki/MCP-Server",
+    "https://github.com/phinn/KinetAios/wiki/MCP-Server#security"
+  ],
+  "saferAlternatives": [
+    "Keep run_agent on Review; declare KINET_MCP_CWD roots so any requested cwd outside them errors before TaskManager dispatch and nothing runs.",
+    "Use export_session read-only handoff drafts when the remote side needs context, not execution.",
+    "Treat import_session and sync_memories payloads as untrusted input; review merges that would overwrite local sessions or memory."
+  ]
+}
