@@ -17,7 +17,7 @@
     "background": "#EAB300"
   },
   "homepage": "https://github.com/BSVanon/petasats-mcp",
-  "license": "Open BSV License v4",
+  "license": "MIT",
   "launch": {
     "kind": "package-launcher",
     "command": "npx",
