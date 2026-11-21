@@ -1,7 +1,13 @@
 use super::*;
 
+#[path = "claude_question_save_command.rs"]
+pub(crate) mod claude_question_save_command;
+
 pub(super) fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
+    if let Some(result) = claude_question_save_command::route(&args) {
+        return result;
+    }
     match args.as_slice() {
         [command, flag] if command == cloud_bundle_command::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
@@ -54,18 +60,6 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if command == "self-test" && flag == "--json" => {
             write_json(&serde_json::json!({"ok": true, "capabilities": capabilities()}))
-        }
-        [command, mode, marker, config]
-            if command == "claude-hook-bridge"
-                && mode == claude_session_start::SESSION_START_MODE
-                && marker == claude_session_start::SESSION_START_MARKER =>
-        {
-            std::process::exit(claude_session_start::run(config))
-        }
-        [command, marker, config]
-            if command == "claude-hook-bridge" && marker == claude_hook_bridge::BRIDGE_MARKER =>
-        {
-            claude_hook_bridge::run(config)
         }
         // The hook carries its config as the last argument. Installs made
         // before the Python bridge became a launcher pass the whole Python

@@ -122,6 +122,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
     guard_contracts::HOOK_AUTHORITY_STATE_QUESTION_SETTLE_FEATURE,
     guard_contracts::HOOK_AUTHORITY_STATE_QUESTION_PAYLOAD_FEATURE,
+    crate::runtime_cli::claude_question_save_command::FEATURE,
     guard_contracts::HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
     guard_contracts::POLICY_INTEGRITY_ROWS_FEATURE,
     guard_contracts::POLICY_INTEGRITY_GENERATION_FEATURE,

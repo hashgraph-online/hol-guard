@@ -24,20 +24,8 @@ _BARE_OUTCOMES = frozenset({"none", "unseen", "unanswered"})
 _SAVE_FIELDS = frozenset({"outcome", "artifact_id", "pending_artifact_hash", "pending_id", "reason", "source", "plan"})
 
 
-def settle_claude_guard_question(
-    store: GuardStore,
-    *,
-    session_id: str,
-    payload: Mapping[str, object],
-    event: str | None,
-    now: str,
-) -> dict[str, Any] | None:
-    """The resident's settlement of the hook against the session's pending approval.
-
-    ``None`` when the hook is not the question or the resident cannot say;
-    otherwise ``{"outcome": "unseen" | "unanswered"}`` or the ``save`` reply
-    with its validated plan.
-    """
+def question_json(payload: Mapping[str, object], event: str | None) -> str | None:
+    """Encode the candidate fields while preserving the order Claude sent."""
 
     tool_name = payload.get("tool_name")
     # Bound forwarding to the Claude question route so unrelated tool output
@@ -47,7 +35,7 @@ def settle_claude_guard_question(
     try:
         # A JSON object in the outer wire frame would sort the answer keys
         # before the resident had a chance to read their hook order.
-        question = json.dumps(
+        return json.dumps(
             {
                 "event": event,
                 "tool_name": tool_name,
@@ -59,6 +47,21 @@ def settle_claude_guard_question(
             separators=(",", ":"),
         )
     except (TypeError, ValueError):
+        return None
+
+
+def settle_claude_guard_question(
+    store: GuardStore,
+    *,
+    session_id: str,
+    payload: Mapping[str, object],
+    event: str | None,
+    now: str,
+) -> dict[str, Any] | None:
+    """Read the resident's settlement for the session's pending approval."""
+
+    question = question_json(payload, event)
+    if question is None:
         return None
     reply = hook_authority_state(
         store,

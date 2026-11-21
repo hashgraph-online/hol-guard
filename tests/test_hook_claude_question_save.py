@@ -9,9 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import library_calls
+from codex_plugin_scanner.guard import library_calls, store_policy_integrity_handoff
 from codex_plugin_scanner.guard.cli import desktop_library_call
 from codex_plugin_scanner.guard.library_call_deadline import LIBRARY_CALL_DEADLINE
+from codex_plugin_scanner.guard.native_claude_question_save import _FEATURE, _write_question
+from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -58,6 +60,39 @@ def test_hook_finalization_uses_the_framed_deadline_after_opening_the_store(
     assert desktop_library_call.serve_lines(tmp_path, lambda: next(requests), replies.append) == 0
     assert opened == [tmp_path]
     assert [json.loads(reply) for reply in replies] == [{"id": 1, "ok": {"finalized": False}}]
+
+
+def test_local_writer_holds_the_generation_lock_during_preparation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runtime = native_runtime_status()
+    assert runtime.capabilities is not None and _FEATURE in runtime.capabilities.features
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    calls = 0
+
+    def prepare(owner: GuardStore, *, now: str, sign: bool) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        assert now == "2026-11-21T12:00:00Z" and sign
+        with (
+            pytest.raises(TimeoutError, match="generation lock still held"),
+            owner._hold_advisory_file_lock(
+                path=owner.guard_home / "policy-integrity-generation.lock",
+                timeout_seconds=0.1,
+                poll_seconds=0.01,
+                timeout_message="generation lock still held",
+            ),
+        ):
+            pytest.fail("the writer released the lock before preparation")
+        return {}
+
+    monkeypatch.setattr(store_policy_integrity_handoff, "prepare_policy_integrity_write", prepare)
+    args = {"now": "2026-11-21T12:00:00Z"}
+    with store.hold_policy_integrity_generation_lock():
+        assert not _write_question(store, args, time.monotonic() + 0.25)
+    assert calls == 0
+    assert not _write_question(store, args, time.monotonic() + 3.0)
+    assert calls == 1
 
 
 def test_hook_finalize_rejects_a_stale_generation_and_commits_the_prepared_one(
