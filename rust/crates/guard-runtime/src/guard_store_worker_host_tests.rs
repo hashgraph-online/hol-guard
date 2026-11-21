@@ -219,13 +219,6 @@ fn a_large_backlog_is_taken_in_bounded_batches() {
             &row.to_string(),
         );
     }
-    let oversized =
-        json!({"operation_id": "op-0", "requests": [{"pad": "y".repeat(ATTENTION_BATCH_BYTES)}]});
-    put(
-        &connection,
-        "daemon_approval_attention:op-0",
-        &oversized.to_string(),
-    );
     let first = call(&connection, "take_approval_attention", json!({})).unwrap();
     assert_eq!(first.as_array().unwrap().len(), 1);
     assert_eq!(first[0]["operation_id"], "op-a");
@@ -235,5 +228,41 @@ fn a_large_backlog_is_taken_in_bounded_batches() {
     );
     let second = call(&connection, "take_approval_attention", json!({})).unwrap();
     assert_eq!(second[0]["operation_id"], "op-b");
+    assert!(keys(&connection).is_empty());
+}
+
+#[test]
+fn an_oversized_stored_row_is_still_delivered_alone() {
+    let connection = store();
+    let big =
+        json!({"operation_id": "op-a", "requests": [{"pad": "y".repeat(ATTENTION_BATCH_BYTES)}]});
+    put(
+        &connection,
+        "daemon_approval_attention:op-a",
+        &big.to_string(),
+    );
+    put(
+        &connection,
+        "daemon_approval_attention:op-b",
+        "{\"operation_id\":\"op-b\"}",
+    );
+    let first = call(&connection, "take_approval_attention", json!({})).unwrap();
+    assert_eq!(first, json!([big]));
+    let second = call(&connection, "take_approval_attention", json!({})).unwrap();
+    assert_eq!(second, json!([{"operation_id": "op-b"}]));
+}
+
+#[test]
+fn an_oversized_attention_row_is_refused_before_writing() {
+    let connection = store();
+    let args = json!({
+        "operation_id": "op",
+        "requests": [{"pad": "z".repeat(ATTENTION_BATCH_BYTES)}],
+        "now": NOW,
+    });
+    assert!(is_value_error(
+        call(&connection, "queue_approval_attention", args),
+        "attention_too_large"
+    ));
     assert!(keys(&connection).is_empty());
 }

@@ -114,6 +114,9 @@ fn queue_attention(connection: &Connection, args: &Args<'_>) -> StoreResult<Valu
         return value_error("invalid_requests");
     };
     let row = json!({ "operation_id": operation_id, "requests": requests });
+    if row.to_string().len() > ATTENTION_BATCH_BYTES {
+        return value_error("attention_too_large");
+    }
     write(
         connection,
         &format!("{ATTENTION_PREFIX}{operation_id}"),
@@ -125,9 +128,10 @@ fn queue_attention(connection: &Connection, args: &Args<'_>) -> StoreResult<Valu
 /// `_take_attention`: queued attention rows in operation-id order, removed in
 /// the same write that reads them. One take returns at most
 /// [`ATTENTION_BATCH_BYTES`] of row text so the answer always fits the store
-/// client's response limit; the rest stays queued for the next take. A row
-/// larger than the whole budget could never be delivered, so it is removed
-/// without being returned, as is a row whose text is not a JSON object.
+/// client's response limit; the rest stays queued for the next take. Queueing
+/// refuses a row over the budget, but a take always returns its first row
+/// whatever its size, so no queued row is ever dropped undelivered. A row whose
+/// text is not a JSON object is removed without being returned.
 fn take_attention(connection: &Connection) -> StoreResult<Value> {
     let pattern = [Value::from(format!(
         "{}%",
@@ -143,15 +147,13 @@ fn take_attention(connection: &Connection) -> StoreResult<Value> {
         &pattern,
         |row| {
             let payload = text(&row, "payload_json");
-            if payload.len() <= ATTENTION_BATCH_BYTES {
-                if used + payload.len() > ATTENTION_BATCH_BYTES {
-                    return Ok(false);
-                }
-                used += payload.len();
-                if let Ok(value) = serde_json::from_str::<Value>(payload) {
-                    if value.is_object() {
-                        taken.push(value);
-                    }
+            if used > 0 && used + payload.len() > ATTENTION_BATCH_BYTES {
+                return Ok(false);
+            }
+            used += payload.len();
+            if let Ok(value) = serde_json::from_str::<Value>(payload) {
+                if value.is_object() {
+                    taken.push(value);
                 }
             }
             removed.push(Value::from(text(&row, "state_key")));
