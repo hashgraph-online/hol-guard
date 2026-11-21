@@ -1323,7 +1323,7 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
     request: &PolicyDecisionLookupRequestV1,
 ) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request)?;
-    let (status, code, payload) = match with_bundle_identities(request).and_then(|r| evaluate(&r)) {
+    let (status, code, payload) = match evaluate_with_bundle(request) {
         Ok(p) => ("ok".to_owned(), "ok".to_owned(), Some(p)),
         Err(c) => ("error".to_owned(), c, None),
     };
@@ -1335,6 +1335,12 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
         code,
         payload,
     })
+}
+
+pub(crate) fn evaluate_with_bundle(
+    request: &PolicyDecisionLookupRequestV1,
+) -> Result<Value, String> {
+    with_bundle_identities(request).and_then(|request| evaluate(&request))
 }
 
 /// Python ships no bundle identities: the resident derives them from the store

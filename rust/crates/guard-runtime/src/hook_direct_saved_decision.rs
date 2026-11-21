@@ -272,7 +272,7 @@ pub(super) fn exact_command_block_response(
 /// `native_saved_decision_response` after its lookup: the verdict to render
 /// and its reuse status for a qualifying decision, `None` for every other
 /// outcome.
-fn saved_verdict(
+pub(crate) fn saved_verdict(
     result: &Object,
     lookup: &Value,
     artifact_id: &str,

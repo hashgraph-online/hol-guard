@@ -557,7 +557,6 @@
     "src/codex_plugin_scanner/guard/native_package_review_plan.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_native_review_binding.py",
-    "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_native_exact_action.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_native_review_fence.py",
     "src/codex_plugin_scanner/guard/**/continuation*.py"

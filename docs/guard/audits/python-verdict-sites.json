@@ -192,26 +192,6 @@
       "note": "Blocks while the review is pending, and allows only on the two saved-approval matches native_review_settle finds in the store."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
-      "func": "_saved_block_response",
-      "root": "hook",
-      "reading": "fails-closed",
-      "actions": [
-        "block"
-      ],
-      "note": "Renders the saved block."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
-      "func": "native_saved_decision_response",
-      "root": "hook",
-      "reading": "records-approval",
-      "actions": [
-        "allow"
-      ],
-      "note": "Replays the user's saved exact-action decision, bound to the artifact hash and gated on the resident having marked the review approvable."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/local_clis/local_cli_connector_group.py",
       "func": "_continuation",
       "root": "hook",

@@ -12,15 +12,20 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 from .native_context import _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_store_policy import _payload
+
+if TYPE_CHECKING:
+    from .store_policy import PolicyLookupEvidence
 
 HOOK_RENDER_FEATURE = "hook-render-v2"
 _REQUEST_SCHEMA = "guard-hook-render-request.v1"
@@ -186,6 +191,103 @@ def native_cursor_shell_route(
                 value = answered["value"]
     except Exception:
         _LOGGER.warning("Cursor shell route inputs unavailable", exc_info=True)
+    return dict(value) if isinstance(value, dict) else None
+
+
+def native_saved_decision_response(
+    store: object,
+    *,
+    harness: str,
+    token: str | None,
+    artifact_id: str,
+    native_result: Mapping[str, object],
+    workspace: Path | None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    if token is None:
+        return None
+    return _saved_approval_response(
+        store,
+        harness,
+        native_result,
+        workspace,
+        deadline,
+        {"check": "action", "artifact_id": artifact_id, "token": token},
+    )
+
+
+def native_exact_command_block_response(
+    store: object,
+    *,
+    harness: str,
+    command: str | None,
+    native_result: Mapping[str, object],
+    workspace: Path | None,
+    edge_hint: object = None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    if command is None or edge_hint is False:
+        return None
+    return _saved_approval_response(
+        store,
+        harness,
+        native_result,
+        workspace,
+        deadline,
+        {"check": "command", "command": command, "edge_hint": edge_hint},
+    )
+
+
+def _saved_approval_response(
+    store: object,
+    harness: str,
+    native_result: Mapping[str, object],
+    workspace: Path | None,
+    deadline: float | None,
+    selector: dict[str, object],
+) -> dict[str, object] | None:
+    from .hook_review.hook_fail_closed import fail_closed_pre_tool
+
+    home = getattr(store, "guard_home", None)
+    procure = getattr(store, "policy_lookup_evidence", None)
+    if not isinstance(home, Path) or not callable(procure):
+        return None
+    action = native_result.get("action")
+    inputs: dict[str, object] = {
+        **selector,
+        "guard_home": str(home),
+        "workspace": str(workspace) if workspace is not None else None,
+        # The preflight only reads the action type. Carry the full verdict
+        # when Rust has a saved decision to evaluate or render.
+        "verdict": {"action": {"action_type": action.get("action_type")}} if isinstance(action, Mapping) else {},
+    }
+
+    def request() -> dict[str, object] | None:
+        rendered = native_render_cli("saved_approval", harness, inputs, guard_home=home, deadline=deadline)
+        return rendered[1] if rendered is not None else None
+
+    answer = request()
+    if answer is not None and answer.get("needs_lookup") is True:
+        inputs["verdict"] = dict(native_result)
+        try:
+            evidence = cast("PolicyLookupEvidence", procure())
+        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+            _LOGGER.warning("Native saved decision evidence unavailable (%s)", type(error).__name__)
+            inputs["evidence"] = None
+        else:
+            inputs["evidence"] = {
+                "degraded": evidence.degraded_trust_status is not None,
+                "now": evidence.now,
+                "integrity_state": evidence.integrity_state,
+                "integrity_key_b64": evidence.integrity_key_b64,
+                "integrity_key_id": evidence.integrity_key_id,
+                "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
+                "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
+            }
+        answer = request()
+    if answer is None:
+        return fail_closed_pre_tool(harness)
+    value = answer.get("value")
     return dict(value) if isinstance(value, dict) else None
 
 

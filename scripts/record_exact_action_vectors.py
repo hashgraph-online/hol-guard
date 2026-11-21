@@ -138,8 +138,12 @@ def _replace_digests(value, preimages: dict):
 
 
 def _run_exact(case: dict, root: Path) -> dict:
-    from codex_plugin_scanner.guard.hook_review import hook_native_saved_approval
-    from codex_plugin_scanner.guard.native_daemon_manage import hook_native_exact_identity, hook_native_launch_identity
+    # These modules come from BASE_COMMIT, before the daemon package split.
+    from codex_plugin_scanner.guard.daemon import (
+        hook_native_exact_identity,
+        hook_native_launch_identity,
+        hook_native_saved_approval,
+    )
     from codex_plugin_scanner.guard.runtime import package_intent_parser
 
     query = case["request"]["query"]
@@ -230,7 +234,7 @@ def _run_exact(case: dict, root: Path) -> dict:
 
 
 def _run_binding(case: dict) -> dict:
-    from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
+    from codex_plugin_scanner.guard.daemon import hook_native_review_approval
 
     query = case["request"]["query"]
     payload = {"tool_input": {"command": query["command"]}} if query["command"] is not None else {}
