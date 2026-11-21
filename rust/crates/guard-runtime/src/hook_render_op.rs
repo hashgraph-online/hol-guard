@@ -96,6 +96,12 @@ fn cli_payload(outcome: CliOutcome) -> Value {
 
 fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
     let harness = request.harness.as_str();
+    if request.kind == "package_review_settle" {
+        let inputs = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        return Ok(cli_payload(CliOutcome::Document(
+            crate::hook_package_review_settlement::answer(harness, inputs),
+        )));
+    }
     if request.kind == "structured_outage" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
         let event = params

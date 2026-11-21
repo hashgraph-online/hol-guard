@@ -15,9 +15,9 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import config as guard_config
+from codex_plugin_scanner.guard import native_package_review_plan as package_review
 from codex_plugin_scanner.guard import native_payload_facts
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE, connector_setup_reason
-from codex_plugin_scanner.guard.hook_review import hook_native_package_review as package_review
 from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
 
 _URL = "http://127.0.0.1:4781/requests/abc"

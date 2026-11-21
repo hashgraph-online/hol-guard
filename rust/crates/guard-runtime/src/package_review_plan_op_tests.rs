@@ -16,6 +16,7 @@ fn request(workspace: &str, payload: Value) -> PackageReviewPlanRequestV1 {
         payload,
         home_dir: None,
         review_reason: None,
+        include_registry_retry: None,
     }
 }
 
@@ -208,37 +209,50 @@ fn a_proven_npm_install_may_continue() {
     symlink(package.join("bin").join("npm-cli.js"), bin.join("npm")).expect("npm link");
     let workspace = root.path().join("workspace");
     fs::create_dir_all(&workspace).expect("workspace");
-    let answer = |command: &str| {
+    let answer = |command: &str, include_registry_retry: Option<bool>| {
         let mut payload = shell(command);
         payload["guard_execution_environment"] = json!({
             "environment_names": ["PATH", "HOME"],
             "path": bin.to_string_lossy(),
             "home": root.path().to_string_lossy(),
         });
-        let input = request(&workspace.to_string_lossy(), payload);
+        let mut input = request(&workspace.to_string_lossy(), payload);
+        input.include_registry_retry = include_registry_retry;
         let bytes = evaluate_package_review_plan(&input).expect("request must encode a result");
         serde_json::from_slice::<Value>(&bytes).expect("result")["payload"].clone()
     };
-    let proven = answer("npm install zod --ignore-scripts --allow-git=none");
+    let command = "npm install zod --ignore-scripts --allow-git=none";
+    let proven = answer(command, None);
     assert_eq!(
         proven["artifact"]["metadata"]["verified_npm_version"],
         "11.9.0"
     );
     assert_eq!(proven["may_allow"], true);
+    assert!(proven.get("registry_retry").is_none());
+    let retry = &answer(command, Some(true))["registry_retry"];
+    assert_eq!(retry["prompted"], false);
+    assert_eq!(retry["hookSpecificOutput"]["permissionDecision"], "deny");
     // `tail` is not on the stamped `PATH`, so the filter cannot be placed
     // outside the workspace and only a block verdict applies.
-    let piped = answer("npm install zod --ignore-scripts --allow-git=none | tail -3");
+    let piped = answer(
+        "npm install zod --ignore-scripts --allow-git=none | tail -3",
+        Some(true),
+    );
     assert!(piped["artifact"].is_object());
     assert!(piped["artifact"]["metadata"]
         .get("verified_npm_version")
         .is_none());
     assert_eq!(piped["may_allow"], false);
+    assert!(piped.get("registry_retry").is_none());
     // A saved package approval stands for the whole command only when every
     // filter runs from outside the workspace.
     assert_eq!(proven["keyed"], true);
     assert_eq!(piped["keyed"], false);
     executable(&bin.join("tail"));
-    assert_eq!(answer("npm ci --ignore-scripts | tail -3")["keyed"], true);
+    assert_eq!(
+        answer("npm ci --ignore-scripts | tail -3", Some(true))["keyed"],
+        true
+    );
     let owned = workspace.join("bin");
     fs::create_dir_all(&owned).expect("workspace bin");
     executable(&owned.join("tail"));
