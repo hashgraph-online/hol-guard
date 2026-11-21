@@ -82,8 +82,12 @@ def restart_stale_live_daemon(
             }
         )
         return False
-    if isinstance(daemon_refresh, dict) and daemon_refresh.get("status") == "restarted":
+    status = daemon_refresh.get("status") if isinstance(daemon_refresh, dict) else None
+    if status == "restarted":
         payload["changed"] = True
+    elif status == "retained_newer_runtime":
+        # A newer runtime came up meanwhile; it owns package shims and harness hooks.
+        payload["runtime_artifact_owner"] = "newer_runtime"
     return True
 
 

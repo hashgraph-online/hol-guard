@@ -187,3 +187,30 @@ def test_no_daemon_state_skips_the_live_daemon_probe(
 
     assert exit_code == 0, payload
     assert refreshed == []
+
+
+def test_a_newer_runtime_found_by_the_restart_keeps_its_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retained: dict[str, object] = {"status": "retained_newer_runtime", "runtime_verified": True}
+    context, refreshed = _already_current(tmp_path, monkeypatch, daemon_version="2.0.829", refresh_result=retained)
+    repaired: list[str] = []
+
+    def shims(**_kwargs: object) -> tuple[None, None]:
+        repaired.append("shims")
+        return None, None
+
+    def harnesses(**_kwargs: object) -> tuple[list[object], list[str]]:
+        repaired.append("harnesses")
+        return [], []
+
+    monkeypatch.setattr(update_commands, "_refresh_package_shims_after_update", shims)
+    monkeypatch.setattr(update_commands, "_repair_supported_harnesses", harnesses)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False, context=context)
+
+    assert exit_code == 0, payload
+    assert refreshed == [CURRENT]
+    assert payload["runtime_artifact_owner"] == "newer_runtime"
+    assert repaired == []

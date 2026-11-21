@@ -945,6 +945,8 @@ def _run_guard_update_unlocked(
             note=_append_payload_note,
         ):
             return payload, 1
+        if payload.get("runtime_artifact_owner") == "newer_runtime":
+            return payload, 0
         package_shims, package_shim_note = _refresh_package_shims_after_update(
             context=context,
             dry_run=dry_run,
