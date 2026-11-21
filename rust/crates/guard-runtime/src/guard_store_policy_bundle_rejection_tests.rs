@@ -107,19 +107,67 @@ fn a_payload_that_is_not_an_object_is_rejected_before_any_write() {
 }
 
 #[test]
-fn a_failed_event_rolls_back_the_last_error() {
-    // Without the events table the event insert fails after the last-error
-    // row is written; the store transaction must undo the row.
-    let connection = Connection::open_in_memory().unwrap();
-    connection
-        .execute_batch(
-            "create table sync_state (state_key text primary key,
-               payload_json text not null, updated_at text not null);",
-        )
-        .unwrap();
-    connection.execute_batch("BEGIN IMMEDIATE").unwrap();
-    let args = json!({"payload_json": PAYLOAD, "now": T1, "persist_last_error": true});
-    assert!(run(&connection, args).is_err());
-    connection.execute_batch("ROLLBACK").unwrap();
-    assert_eq!(last_error(&connection), None);
+fn a_failed_event_rolls_back_the_last_error_through_the_store_op() {
+    // A trigger makes the event insert fail after the last-error row is
+    // written. Only the store op's write transaction can undo the row, so this
+    // fails if the method stops being dispatched as a write.
+    let nonce = crate::unique_nanos::unique_nanos();
+    let home = std::env::temp_dir().join(format!(
+        "hol-guard-store-rejection-{}-{nonce}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&home).unwrap();
+    let home = std::fs::canonicalize(home).unwrap();
+    let path = home.join("guard.db");
+    let previous = "{\"error\": \"older\"}";
+    {
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "create table sync_state (state_key text primary key,
+                   payload_json text not null, updated_at text not null);
+                 create table guard_events (id integer primary key,
+                   event_name text not null, payload_json text not null,
+                   occurred_at text not null);
+                 create trigger refuse_events before insert on guard_events
+                   begin select raise(abort, 'refused'); end;",
+            )
+            .unwrap();
+        connection
+            .execute(
+                "insert into sync_state values (?, ?, 't0')",
+                [LAST_ERROR, previous],
+            )
+            .unwrap();
+    }
+    let Value::Object(args) =
+        json!({"payload_json": PAYLOAD, "now": T1, "persist_last_error": true})
+    else {
+        unreachable!()
+    };
+    let request = guard_contracts::GuardStoreRequestV1 {
+        schema: guard_contracts::GUARD_STORE_REQUEST_SCHEMA.to_owned(),
+        request_id: "rejection".to_owned(),
+        store_path: path.to_string_lossy().into_owned(),
+        guard_home: home.to_string_lossy().into_owned(),
+        method: "record_policy_bundle_rejection".to_owned(),
+        source: "default".to_owned(),
+        busy_timeout_ms: 5000,
+        args,
+    };
+    // The trigger's own failure, not an earlier request check.
+    match crate::guard_store_op::evaluate(&request) {
+        Err(crate::guard_store_db::StoreError::Sqlite(error)) => {
+            assert!(error.to_string().contains("refused"), "{error}");
+        }
+        other => panic!("expected the refused event insert, got {other:?}"),
+    }
+    let connection = Connection::open(&path).unwrap();
+    assert_eq!(
+        last_error(&connection),
+        Some((previous.to_owned(), "t0".to_owned()))
+    );
+    assert!(events(&connection).is_empty());
+    drop(connection);
+    let _ = std::fs::remove_dir_all(&home);
 }
