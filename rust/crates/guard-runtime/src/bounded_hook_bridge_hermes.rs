@@ -5,6 +5,8 @@
 //! for a block. The daemon's answer is reshaped, never re-decided: an answer
 //! that names no recognised decision renders a block.
 
+use guard_command::hook_responses::hermes::should_exit_block;
+
 use crate::bounded_hook_bridge_render::{member, rendered, Rendered};
 use crate::claude_hook_bridge_render::py_strip;
 use crate::pyjson::PyVal;
@@ -75,16 +77,16 @@ fn policy_from_response(response: &[(String, PyVal)]) -> String {
 pub(crate) fn hermes_bridge_response(daemon_response: &[(String, PyVal)], unmap: bool) -> Rendered {
     let policy_action = policy_from_response(daemon_response);
     let reason = reason_from_response(daemon_response);
-    let decision = if matches!(policy_action.as_str(), "allow" | "warn") {
-        "allow"
-    } else {
-        "block"
-    };
+    render_hermes_decision(&policy_action, reason, unmap)
+}
+
+pub(crate) fn render_hermes_decision(policy_action: &str, reason: String, unmap: bool) -> Rendered {
+    let blocks = should_exit_block(policy_action);
+    let decision = if blocks { "block" } else { "allow" };
     let payload = vec![
         ("decision".to_owned(), PyVal::Str(decision.to_owned())),
         ("reason".to_owned(), PyVal::Str(reason)),
     ];
     // The exit status follows the document: only a cleared action exits 0.
-    let blocks = decision == "block";
     rendered(&payload, String::new(), if blocks { 2 } else { 0 }, unmap)
 }
