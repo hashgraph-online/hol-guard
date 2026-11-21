@@ -455,7 +455,6 @@ impl Hook<'_> {
                 home_dir.as_deref(),
                 guard_home.as_deref(),
             ),
-            expires,
         ) {
             permit.release();
             return answer;
