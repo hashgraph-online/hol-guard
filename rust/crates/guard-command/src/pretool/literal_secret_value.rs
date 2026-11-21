@@ -171,13 +171,26 @@ fn has_word_chunk(value: &str) -> bool {
 /// generated key runs longer than that.
 const MAX_COUNT_DIGITS: usize = 4;
 
-/// A letter run that does not read as random on its own is a word. This uses
-/// the same bar `random_letters` applies, so a chunk only fails it when the
-/// value would have been called random on its letters alone.
-fn has_readable_chunk(value: &str) -> bool {
-    case_chunks(value, false)
-        .iter()
-        .any(|chunk| chunk.len() >= 4 && pair_score(&chunk.to_ascii_lowercase()) >= -3.9)
+/// Whether every letter run in `value` reads as a word, and at least one is
+/// long enough to say so. This uses the same bar `random_letters` applies, so
+/// a run only fails it when the value would have been called random on those
+/// letters alone.
+///
+/// Every run has to pass: a generated key can open with a word
+/// (`sessionkey...`), and only the rest of it is the credential, so one
+/// readable run says nothing about the value as a whole.
+fn reads_as_words(value: &str) -> bool {
+    let chunks = case_chunks(value, false);
+    let long = chunks.iter().filter(|chunk| chunk.len() >= 4);
+    let mut named = false;
+    for chunk in long {
+        if pair_score(&chunk.to_ascii_lowercase()) < -3.9 {
+            return false;
+        }
+        named = true;
+    }
+    let letters = lower_letters(value);
+    named && !random_letters(&letters, 4)
 }
 
 /// The longest run of consecutive digits in a value.
@@ -206,7 +219,7 @@ fn longest_digit_run(value: &str) -> usize {
 fn reads_as_counted_word(value: &str) -> bool {
     let digits = value.bytes().filter(u8::is_ascii_digit).count();
     let letters = value.bytes().filter(u8::is_ascii_alphabetic).count();
-    longest_digit_run(value) <= MAX_COUNT_DIGITS && digits < letters && has_readable_chunk(value)
+    longest_digit_run(value) <= MAX_COUNT_DIGITS && digits < letters && reads_as_words(value)
 }
 
 /// A GitHub token whose last six characters are not the CRC32 of its body is
