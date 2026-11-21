@@ -166,15 +166,15 @@ def test_large_output_wire_encoding_is_lossless_and_keeps_the_callers_deadline(m
     assert json.loads(decoded) == body
 
 
-def test_harness_presentation_is_available_without_native_runtime(monkeypatch):
+def test_harness_presentation_is_available_without_native_runtime(monkeypatch, tmp_path):
     from codex_plugin_scanner.guard.hook_review import hook_worker_unavailable as structured
 
-    def unavailable(*args, **kwargs):
-        raise client.NativeContentSensitivityError("offline")
-
-    monkeypatch.setattr(structured, "content_query", unavailable)
-    assert structured.withholds_structured_destination(harness=" Pi_Coding_Agent ", event_name="PostToolUse")
-    assert structured.withholds_structured_destination(harness="oh-my-pi", event_name="PostToolUse")
+    monkeypatch.setattr(structured, "native_render_cli", lambda *_args, **_kwargs: None)
+    for harness in (" Pi_Coding_Agent ", "oh-my-pi"):
+        overlay = structured.structured_outage_overlay(
+            harness=harness, event_name="PostToolUse", guard_home=tmp_path, deadline=None, load_config=lambda: None
+        )
+        assert overlay == structured.withhold_structured_destination({})
 
 
 def test_status_probe_has_request_deadline_and_memo_expires_on_binary_or_manifest_change(monkeypatch, tmp_path):

@@ -107,8 +107,8 @@ pub(crate) fn outage_overlay(
 ) -> serde_json::Map<String, Value> {
     let mut overlay = serde_json::Map::new();
     if structured_mediation(harness, event)
-        && !resolution(harness, view)
-            .is_some_and(|resolved| resolved["required"].as_bool() == Some(false))
+        && resolution(harness, view)
+            .is_none_or(|resolved| resolved["required"].as_bool() != Some(false))
     {
         overlay.insert(
             "structured_content_mediation".to_owned(),
