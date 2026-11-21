@@ -157,13 +157,13 @@ def refresh_native_workspace_review_authority(
         detail = {"http_status": error.code}
         _LOGGER.info("Cloud Review workspace enrollment unavailable: HTTP %d", error.code)
     except (OSError, RuntimeError, TypeError, ValueError) as error:
+        # Logged before the schedule write, so a failed write cannot hide it.
+        _LOGGER.warning("Cloud Review workspace enrollment failed: %s", type(error).__name__)
         detail = {
             "error_type": type(error).__name__,
             "error_code": str(error) if isinstance(error, ValueError) else None,
         }
-    state = store.record_workspace_review_enrollment(binding, outcome=outcome, now=current, **detail)
-    if "error_type" in detail:
-        _LOGGER.warning("Cloud Review workspace enrollment failed: %s", state.get("error_code"))
+    store.record_workspace_review_enrollment(binding, outcome=outcome, now=current, **detail)
     return changed
 
 
