@@ -207,8 +207,8 @@ fn base64url_decode(text: &str) -> Option<Vec<u8>> {
 /// business request. The `bool` is whether the answer is `no-store`.
 ///
 /// A local caller's stored row gets the read-time extension recommendation
-/// and coverage; one that needs a connector-setup recommendation goes to the
-/// daemon. A wait asks the daemon to hold the read, so it goes there too, as
+/// and coverage, or connector-setup advice when this edge is the daemon.
+/// A wait asks the daemon to hold the read, so it goes there, as
 /// does a row that may carry a temporary MCP or local tool grant offer, which
 /// only the daemon attaches.
 ///
@@ -216,8 +216,7 @@ fn base64url_decode(text: &str) -> Option<Vec<u8>> {
 /// left unanswered here ends on the replay `404`, and a waiting hook would
 /// never see its decision. A standalone edge therefore answers a wait at
 /// once, which the hook bridge treats as a daemon that ignores `wait_ms`,
-/// and answers a row with a grant offer or a connector-setup hint without
-/// the affordance it cannot attach.
+/// and answers a row with a grant offer even if it cannot attach the offer.
 pub(super) fn detail(
     request_id: &str,
     query: &str,

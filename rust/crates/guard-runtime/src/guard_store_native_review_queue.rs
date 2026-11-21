@@ -29,8 +29,9 @@
 //! resident call of its own: a connector this device never set up queues
 //! the row under the connector's group with its setup hint, keeps the
 //! review's context with the connector in the queue write's own transaction,
-//! and answers the agent with the setup text. The reply names it under
-//! `connector_setup` for the notice the daemon raises.
+//! and answers the agent with the setup text. The store hands off the desktop
+//! notice after committing the request, and the reply names the connector
+//! under `connector_setup` for callers rendering a hook response.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -342,6 +343,15 @@ pub(crate) fn delegate(
 }
 
 impl Delegated {
+    /// Name the committed request even when the reply omits its row.
+    pub(crate) fn connector_notice<'a>(&'a self, reply: &'a Value) -> Option<(&'a str, &'a str)> {
+        let request_id = reply
+            .as_str()
+            .or_else(|| reply.get("request_id")?.as_str())?;
+        let name = self.connector_setup.as_ref()?.get("name")?.as_str()?;
+        (!request_id.is_empty() && !name.is_empty()).then_some((request_id, name))
+    }
+
     /// Keep the queued review's context with the connector it waits on, on the
     /// queue write's own connection. Best effort, as the daemon's separate
     /// call was: the review is queued whether or not this keeps anything. The

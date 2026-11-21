@@ -35,6 +35,20 @@ pub(super) fn exact_safe_command(
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
+    proven_command(model, context, deadline, execution_environment, false)
+}
+
+/// The proof above, told whether a step the model does not carry may already
+/// have moved the reference the add names. A `git fetch` earlier in the same
+/// command does exactly that, so an add proved on its own out of a longer
+/// command is proved as if the reference had moved.
+fn proven_command(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    reference_may_move: bool,
+) -> bool {
     if model.confidence != "exact"
         || model.path_overridden
         || model.segments.is_empty()
@@ -73,7 +87,7 @@ pub(super) fn exact_safe_command(
         creates_nothing: false,
     };
     let mut worktree_seen = false;
-    let mut fetch_before = false;
+    let mut fetch_before = reference_may_move;
     for (index, segment) in model.segments.iter().enumerate() {
         let is_cd = segment.executable.as_deref() == Some("cd");
         if is_cd {
@@ -164,22 +178,37 @@ pub(super) fn proven_alone(
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    reference_may_move: bool,
 ) -> bool {
     let Some(segment) = model.segments.get(index) else {
         return false;
     };
-    if segment.pipeline_index != 0
-        || model
-            .segments
-            .get(index + 1)
-            .is_some_and(|next| next.pipeline_index != 0)
-        || parse(segment).is_none()
-    {
+    if segment.pipeline_index != 0 || parse(segment).is_none() {
         return false;
     }
+    // `git worktree add ... 2>&1 | tail -3` reports what the add printed.
+    // The stages that read its output are judged with it, so the proof
+    // answers for the pipeline the shell actually runs rather than refusing
+    // every add whose output an agent trimmed.
     let mut alone = model.clone();
-    alone.segments = vec![segment.clone()];
-    exact_safe_command(&alone, context, deadline, execution_environment)
+    let mut stages = vec![segment.clone()];
+    let mut next = index + 1;
+    while let Some(stage) = model
+        .segments
+        .get(next)
+        .filter(|stage| stage.pipeline_index != 0)
+    {
+        stages.push(stage.clone());
+        next += 1;
+    }
+    alone.segments = stages;
+    proven_command(
+        &alone,
+        context,
+        deadline,
+        execution_environment,
+        reference_may_move,
+    )
 }
 
 /// A review reason for a lone `git worktree add` whose new checkout would sit

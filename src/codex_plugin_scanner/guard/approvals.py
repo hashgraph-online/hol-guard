@@ -842,33 +842,6 @@ def _notify_pending_approval(*, store: GuardStore, request: _QueuedNotice) -> No
     )
 
 
-def notify_connector_setup(store: object, queued: Mapping[str, object], *, connector_name: str) -> None:
-    """Raise the setup notice for a native review row already queued under a connector group.
-
-    Best effort, as ``_notify_pending_approval`` is: the row is in the Inbox either way. Commands that wait on
-    one connector share a group, and the store answers with its first notified sibling's marker, so only the
-    first command raises a notice.
-    """
-
-    fields = {key: _string_or_none(queued.get(key)) for key in ("request_id", "harness", "approval_url")}
-    group = _string_or_none(queued.get("queue_group_id"))
-    request_id, harness, approval_url = fields["request_id"], fields["harness"], fields["approval_url"]
-    if request_id is None or harness is None or approval_url is None or group is None:
-        return
-    notice = _QueuedNotice(
-        request_id=request_id,
-        harness=harness,
-        workspace=_string_or_none(queued.get("workspace")),
-        approval_url=approval_url,
-        artifact_name=connector_name,
-        risk_headline=connector_name,
-        trigger_summary=None,
-        queue_group_id=group,
-    )
-    with contextlib.suppress(Exception):
-        _notify_pending_approval(store=cast(GuardStore, store), request=notice)
-
-
 def _mark_desktop_notified(store: GuardStore, request_id: str) -> None:
     # This process already remembers the notification; a lost marker only
     # lets another process notify once more.

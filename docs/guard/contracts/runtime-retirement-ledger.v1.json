@@ -3,6 +3,7 @@
  "baseline_sha": "b22841ac004b9d8a6deccdeee1a1be3600fddfb9",
  "scope": "RMN-009 resident retirement complete; offline archive inspection retired to guard-archive via hol-guard-runtime archive-inspect; RMN-008 and RMN-010 through RMN-014 hook-oracle cutover incomplete pending live prompt, permission, and package caller closure",
  "retired_source_paths": [
+  "src/codex_plugin_scanner/guard/hook_review/approval_connector_recommendation.py",
   "src/codex_plugin_scanner/guard/hook_review/native_review_allow_hint.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_native_exact_action.py",
   "src/codex_plugin_scanner/guard/resident_evidence_fallback.py",
@@ -14,8 +15,11 @@
   "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
+  "src/codex_plugin_scanner/guard/hook_review/native_review_records.py",
+  "src/codex_plugin_scanner/guard/hook_review/native_review_connector.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
+  "src/codex_plugin_scanner/guard/hook_review/approval_extension_recommendation.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_deadline.py",
   "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
@@ -149,6 +153,151 @@
   "src/codex_plugin_scanner/guard/store_command_shadow.py"
  ],
  "retired_tests": [
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_the_client_sends_the_hint_and_the_control_view_and_returns_the_recommendation",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op_tests.rs::available_recommendation_for_git_add",
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_resident_answer_binds_to_its_request"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_a_null_recommendation_is_no_recommendation",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op_tests.rs::no_recommendation_when_not_applicable"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_nothing_is_asked_without_a_pending_valid_hint",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_resolved_or_non_shell_row_is_not_reviewed_again",
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_non_object_hint_has_no_shape"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_every_authority_health_is_sent_as_its_value",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op_tests.rs::unhealthy_authority_reports_unavailable"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Health now comes from the resident's admitted control view instead of Python serializing its own snapshot."
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_a_resident_unavailable_status_is_kept",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op_tests.rs::unhealthy_authority_reports_unavailable"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_a_malformed_recommendation_is_refused",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op_tests.rs::resident_transport_binds_replies_and_rejects_unknown_fields",
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_resident_answer_binds_to_its_request"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_an_unbound_or_refused_reply_is_an_error_and_never_a_recommendation",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_resident_answer_binds_to_its_request"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_the_resident_names_why_it_refused",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op_tests.rs::malformed_inputs_are_refused_with_their_own_code"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_a_refused_read_leaves_a_log_trail_with_the_code_and_no_detail",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_requests_tests.rs::a_local_detail_without_a_resident_view_drops_the_hint_and_waits_go_to_the_daemon"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Python logger is retired. An unavailable native recommendation leaves the approval detail readable."
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_an_unavailable_resident_is_an_error_and_never_recomputed",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op_tests.rs::a_control_view_without_an_admitted_snapshot_answers_no_view",
+    "rust/crates/guard-runtime/src/daemon_edge_requests_tests.rs::a_local_detail_without_a_resident_view_drops_the_hint_and_waits_go_to_the_daemon"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_enrichment_strips_the_hint_and_respects_include",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_requests_tests.rs::hosted_details_drop_the_private_queue_hint"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_caution_classes_are_asked_once_sorted_and_without_repeats",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op_tests.rs::caution_risk_classes_are_the_sensitive_set"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_no_risk_classes_asks_nothing",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op_tests.rs::no_snapshot_falls_back_to_the_packaged_catalog_and_a_caution_query_reads_none"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The native caution check uses a fixed registry and performs no snapshot or catalog read."
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_a_caution_answer_outside_the_question_is_refused",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op_tests.rs::caution_risk_classes_are_the_sensitive_set"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The removed Python client checked the returned subset. Rust selects the subset from the supplied classes."
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_an_unbound_caution_reply_is_an_error_never_no_caution",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_resident_answer_binds_to_its_request"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Python wire adapter is retired. Rust binds the resident reply before using any recommendation."
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_coverage_sends_the_stored_hint_and_returns_the_labelled_steps",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_coverage_tests.rs::the_resident_op_answers_a_coverage_query_from_its_catalog",
+    "rust/crates/guard-runtime/src/approval_extension_coverage_tests.rs::every_step_is_labelled_from_the_catalog"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_coverage_is_not_asked_for_a_resolved_unhinted_or_excluded_request",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_resolved_or_non_shell_row_is_not_reviewed_again",
+    "rust/crates/guard-runtime/src/daemon_edge_requests_tests.rs::hosted_details_drop_the_private_queue_hint"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_a_malformed_coverage_answer_is_refused",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_malformed_coverage_reply_is_refused"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_extension_recommendation.py::test_no_coverage_and_an_unavailable_resident_both_leave_the_approval_as_it_was",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_extension_coverage_tests.rs::a_malformed_or_absent_hint_has_no_coverage",
+    "rust/crates/guard-runtime/src/daemon_edge_requests_tests.rs::a_local_detail_without_a_resident_view_drops_the_hint_and_waits_go_to_the_daemon"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
   {
    "old_node": "tests/test_native_review_allow_hint.py::test_live_recovery_asks_about_the_command_alone_in_its_launch_directory",
    "replacement_nodes": [
@@ -307,6 +456,22 @@
    "old_node": "tests/test_mcp_relay_package_evidence_modes.py::test_an_observed_forward_is_recorded_under_the_mode_it_forwarded_in",
    "replacement_nodes": [
     "rust/crates/guard-runtime/src/mcp_relay_receipt_package_tests.rs::an_observed_forward_writes_the_allowed_receipt_under_the_mode"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_approval_connector_setup_notice.py::test_a_queued_native_connector_review_raises_one_setup_notice",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_evidence_notice_tests.rs::a_connector_review_notifies_only_once_per_pending_group",
+    "rust/crates/guard-runtime/src/guard_store_native_review_queue_context_tests.rs::a_committed_connector_request_can_notify_without_a_returned_row"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_approval_connector_setup_notice.py::test_a_native_review_without_a_connector_raises_no_setup_notice",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/guard_store_native_review_queue_context_tests.rs::a_committed_connector_request_can_notify_without_a_returned_row",
+    "rust/crates/guard-runtime/src/hook_direct_evidence_notice_tests.rs::a_connector_notice_requires_the_matching_pending_grouped_row"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
