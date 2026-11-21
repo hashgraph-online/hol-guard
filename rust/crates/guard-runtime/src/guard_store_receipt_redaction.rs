@@ -272,6 +272,10 @@ pub(crate) fn method(connection: &Connection, source: &str, args: &Args<'_>) -> 
 #[path = "guard_store_policy_bundle_activated.rs"]
 pub(crate) mod policy_bundle_activated;
 
+/// Rejection bookkeeping writes the same `sync_state` table and event log.
+#[path = "guard_store_policy_bundle_rejection.rs"]
+pub(crate) mod policy_bundle_rejection;
+
 #[cfg(test)]
 #[path = "guard_store_receipt_redaction_tests.rs"]
 pub(crate) mod tests;

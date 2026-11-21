@@ -201,6 +201,25 @@ class StoreReviewEventOutboxMixin:
             },
         )
 
+    def record_policy_bundle_rejection(
+        self,
+        payload: Mapping[str, object],
+        *,
+        now: str,
+        persist_last_error: bool = False,
+        gate_blocked: Mapping[str, object] | None = None,
+    ) -> None:
+        """Record a rejected policy bundle, and optionally its last error and approval-gate block, in one write."""
+        self._native_store_call(
+            "record_policy_bundle_rejection",
+            {
+                "payload_json": json.dumps(dict(payload)),
+                "now": now,
+                "persist_last_error": persist_last_error,
+                "gate_blocked_payload_json": None if gate_blocked is None else json.dumps(dict(gate_blocked)),
+            },
+        )
+
     def list_pending_review_request_ids(
         self,
         *,

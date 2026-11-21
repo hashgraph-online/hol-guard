@@ -143,6 +143,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "requeue_pending_review_events_with_marker"
         | "receipt_redaction_bookkeeping"
         | "record_policy_bundle_activation"
+        | "record_policy_bundle_rejection"
         | "repair_rejected_review_correlation"
         | "recover_review_snapshot_sequences"
         | "settle_rejected_review_events"
