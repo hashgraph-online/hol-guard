@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
+from ..library_call_deadline import LIBRARY_CALL_DEADLINE
 from ..store import GuardStore
 
 _SERVERS: dict[str, Any] = {}
@@ -184,16 +185,16 @@ def hook_integrity_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str
 def hook_integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Finalize Rust's policy-integrity generation in the secret store."""
 
+    deadline = LIBRARY_CALL_DEADLINE.get()
+    if deadline is None or time.monotonic() >= deadline:
+        return {"finalized": False}
     next_control_state = args.get("next_control_state")
     if next_control_state is None:
         return {"finalized": True}
     if not isinstance(next_control_state, dict):
         return {"finalized": False}
     try:
-        if "remaining_seconds" in args:
-            stored = store._finalize_policy_integrity_control_state(next_control_state, deadline=_deadline(args))
-        else:
-            stored = store._finalize_policy_integrity_control_state(next_control_state)
+        stored = store._finalize_policy_integrity_control_state(next_control_state, deadline=deadline)
     except (OSError, RuntimeError, TypeError, ValueError):
         return {"finalized": False}
     return {"finalized": stored is True}

@@ -297,7 +297,6 @@ impl Hook<'_> {
                     "hook.integrity_finalize",
                     json!({
                         "next_control_state": saved.get("next_control_state").cloned().unwrap_or(Value::Null),
-                        "remaining_seconds": super::budget_left(expires).as_secs_f64(),
                     }),
                     expires,
                 )?;
