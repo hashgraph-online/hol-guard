@@ -85,6 +85,9 @@ pub(crate) mod queue_transition;
 #[path = "guard_store_review_sync_transition.rs"]
 pub(crate) mod review_sync_transition;
 
+#[path = "guard_store_review_enrollment.rs"]
+pub(crate) mod review_enrollment;
+
 #[cfg(test)]
 #[path = "guard_store_sync_state_tests.rs"]
 mod tests;

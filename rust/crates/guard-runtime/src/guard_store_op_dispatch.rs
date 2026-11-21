@@ -436,6 +436,12 @@ pub(crate) fn dispatch(
         "transition_cloud_review_sync_state" => {
             crate::guard_store_sync_state::review_sync_transition::method(connection, args)
         }
+        "workspace_review_enrollment_due" => {
+            crate::guard_store_sync_state::review_enrollment::due_method(connection, args)
+        }
+        "record_workspace_review_enrollment" => {
+            crate::guard_store_sync_state::review_enrollment::record_method(connection, args)
+        }
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
         "set_managed_install" => crate::guard_store_managed_installs::set(connection, args),
