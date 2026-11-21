@@ -36,60 +36,32 @@ def test_bounded_host_task_metadata_decodes_at_the_transport_edge(operation: str
     assert _decode_pre_tool(result, command="ignored") == result
 
 
-def test_generic_result_decoder_rejects_raw_or_conflicting_content() -> None:
-    edge = _edge("codex", "PreToolUse", "file_read")
-    result = edge["result"]
-    assert isinstance(result, dict)
-    result["command"] = "must-not-cross-result-boundary"
-    assert _decode_edge(edge) is None
-
-    conflicting = _edge("codex", "PreToolUse", "file_read")
-    conflicting_result = conflicting["result"]
-    assert isinstance(conflicting_result, dict)
-    conflicting_result["decision"] = "allow"
-    assert _decode_edge(conflicting) is None
-
-    operation_conflict = _edge("codex", "PreToolUse", "file_read")
-    operation_result = operation_conflict["result"]
-    assert isinstance(operation_result, dict)
-    operation_action = operation_result["action"]
-    assert isinstance(operation_action, dict)
-    operation_action["operation"] = "write"
-    assert _decode_edge(operation_conflict) is None
-
-    malformed_type = _edge("codex", "PreToolUse", "unknown")
-    malformed_result = malformed_type["result"]
-    assert isinstance(malformed_result, dict)
-    malformed_result["decision"] = []
-    assert _decode_edge(malformed_type) is None
+def _legacy_reply(**overrides: object) -> dict[str, object]:
+    reply: dict[str, object] = {
+        "decision": "deny",
+        "minimum_action": "require-reapproval",
+        "reason_code": "native_git_execution_context_review",
+        "reason": "Synthetic git execution context needs review.",
+        "explicitly_benign": False,
+        "command_model": {"normalized_text": "git status"},
+    }
+    reply.update(overrides)
+    return reply
 
 
-@pytest.mark.parametrize(
-    ("action", "decision"),
-    (
-        ("allow", "allow"),
-        ("warn", "allow"),
-        ("review", "deny"),
-        ("require-reapproval", "deny"),
-        ("sandbox-required", "deny"),
-        ("block", "deny"),
-    ),
-)
-def test_generic_result_decoder_accepts_complete_policy_action_lattice(
-    action: str,
-    decision: str,
-) -> None:
-    edge = _edge("codex", "PreToolUse")
-    result = edge["result"]
-    assert isinstance(result, dict)
-    result.update(
-        {
-            "decision": decision,
-            "policy_action": action,
-            "minimum_action": action,
-            "reason_code": f"native_policy_{action.replace('-', '_')}",
-            "reason": "HOL Guard returned a typed native policy result.",
-            "explicitly_benign": action == "allow",
-        }
-    )
-    assert _decode_pre_tool(result, command="ignored") == result
+@pytest.mark.parametrize("native_action", ["require-reapproval", "sandbox-required"])
+def test_review_tier_native_actions_keep_their_floor(native_action: str) -> None:
+    decoded = _decode_pre_tool(_legacy_reply(minimum_action=native_action), command="git status")
+    assert decoded is not None
+    assert decoded["minimum_action"] == native_action
+    assert decoded["decision"] == "deny"
+
+
+@pytest.mark.parametrize("native_action", ["require-reapproval", "sandbox-required"])
+def test_review_tier_native_actions_never_decode_as_allow(native_action: str) -> None:
+    reply = _legacy_reply(decision="allow", minimum_action=native_action)
+    assert _decode_pre_tool(reply, command="git status") is None
+
+
+def test_unknown_native_actions_still_fail_safe() -> None:
+    assert _decode_pre_tool(_legacy_reply(minimum_action="escalate"), command="git status") is None

@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -57,7 +57,6 @@ def _native_receipt_decisions(guard_home: Path) -> list[str]:
         ("git push --force origin feature", "command.git.permission.force-push", True),
     ),
 )
-@pytest.mark.usefixtures("native_command_artifact_reviews")
 @pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_honors_explicit_extension_permission(
     tmp_path: Path,

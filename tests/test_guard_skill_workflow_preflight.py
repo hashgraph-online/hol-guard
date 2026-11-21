@@ -12,6 +12,7 @@ import json
 
 import pytest
 
+from codex_plugin_scanner.guard import native_resident_decision as resident
 from codex_plugin_scanner.guard import native_skill_workflow_preflight as module
 from codex_plugin_scanner.guard.native_skill_workflow_preflight import (
     NativeSkillWorkflowPreflightError,
@@ -35,7 +36,7 @@ def _manifest(tools):
 
 def _force_available(monkeypatch: pytest.MonkeyPatch) -> None:
     class Features:
-        features = frozenset({module._FEATURE, module._RESIDENT_PROTOCOL_FEATURE})
+        features = frozenset({module._FEATURE, resident._RESIDENT_PROTOCOL_FEATURE})
 
     class Identity:
         path = "/bin/true"
@@ -49,8 +50,8 @@ def _force_available(monkeypatch: pytest.MonkeyPatch) -> None:
         capabilities = Features()
 
     monkeypatch.setattr(module, "_native_runtime_status_memo", lambda: Status())
-    monkeypatch.setattr(module, "ensure_resident_prerequisite", lambda _home: True)
-    monkeypatch.setattr(module, "native_record_resident_failure", lambda *a, **k: None)
+    monkeypatch.setattr(resident, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(resident, "native_record_resident_failure", lambda *a, **k: None)
 
 
 @pytest.mark.parametrize(
@@ -155,7 +156,7 @@ def test_client_exceptions_become_typed_errors(monkeypatch: pytest.MonkeyPatch) 
         def client(error: Exception = error, **_kwargs: object) -> bytes:
             raise error
 
-        monkeypatch.setattr(module, "native_resident_client_request", client)
+        monkeypatch.setattr(resident, "native_resident_client_request", client)
         with pytest.raises(NativeSkillWorkflowPreflightError, match="resident_unavailable"):
             native_skill_dependencies(_manifest([]))
 
@@ -163,7 +164,7 @@ def test_client_exceptions_become_typed_errors(monkeypatch: pytest.MonkeyPatch) 
 def test_mismatched_binding_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     _force_available(monkeypatch)
     monkeypatch.setattr(
-        module,
+        resident,
         "native_resident_client_request",
         lambda **_: (
             b'{"schema":"guard-skill-workflow-preflight-result.v1","request_id":"x","request_sha256":"y",'
@@ -177,7 +178,7 @@ def test_mismatched_binding_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_a_bound_answer_is_returned_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     _force_available(monkeypatch)
     successes: list[object] = []
-    monkeypatch.setattr(module, "native_record_resident_success", lambda *a, **k: successes.append(a))
+    monkeypatch.setattr(resident, "native_record_resident_success", lambda *a, **k: successes.append(a))
 
     def client(*, payload: bytes, **_kwargs: object) -> bytes:
         envelope = json.loads(payload)
@@ -190,13 +191,13 @@ def test_a_bound_answer_is_returned_unchanged(monkeypatch: pytest.MonkeyPatch) -
             {
                 "schema": module._RESULT_SCHEMA,
                 "request_id": request["request_id"],
-                "request_sha256": "sha256:" + module._canonical_request_sha256(request),
+                "request_sha256": "sha256:" + resident._canonical_request_sha256(request),
                 "status": "ok",
                 "code": "ok",
                 "payload": {"requirements": []},
             }
         ).encode()
 
-    monkeypatch.setattr(module, "native_resident_client_request", client)
+    monkeypatch.setattr(resident, "native_resident_client_request", client)
     assert native_skill_preflight({}, [], revision=3) == {"requirements": []}
     assert successes

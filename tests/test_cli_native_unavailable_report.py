@@ -92,3 +92,26 @@ def test_existing_unhealthy_runtime_does_not_report_missing_platform_support(
     parser = argparse.ArgumentParser(prog="hol-guard")
     assert cli.guard_value_error_exit(parser, ValueError("native_guard_config_unavailable")) == 1
     assert capsys.readouterr().err == "hol-guard: error: native_guard_config_unavailable\n"
+
+
+def test_refused_cloud_signing_key_is_a_runtime_error(capsys: pytest.CaptureFixture[str]) -> None:
+    from codex_plugin_scanner.guard.review_oauth_binding import GuardReviewContractError
+
+    parser = argparse.ArgumentParser(prog="hol-guard")
+    assert cli.guard_value_error_exit(parser, GuardReviewContractError("unknown_signing_key")) == 1
+    err = capsys.readouterr().err
+    assert "hol-guard: error: unknown_signing_key" in err
+    assert "usage:" not in err
+    assert "does not trust" in err
+
+
+@pytest.mark.parametrize("code", ["invalid_signature", "missing_signature", "oauth_binding_mismatch"])
+def test_other_contract_rejections_get_no_update_hint(code: str, capsys: pytest.CaptureFixture[str]) -> None:
+    from codex_plugin_scanner.guard.review_oauth_binding import GuardReviewContractError
+
+    parser = argparse.ArgumentParser(prog="hol-guard")
+    assert cli.guard_value_error_exit(parser, GuardReviewContractError(code)) == 1
+    err = capsys.readouterr().err
+    assert f"hol-guard: error: {code}" in err
+    assert "usage:" not in err
+    assert "hint:" not in err

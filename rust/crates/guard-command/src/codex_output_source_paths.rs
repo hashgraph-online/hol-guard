@@ -243,18 +243,8 @@ fn std_path(path: Option<&PyPath>) -> Option<PathBuf> {
     path.map(|value| PathBuf::from(value.to_string()))
 }
 
-/// `source_path_is_allowed` with the strict shell-read secret table.
-pub(crate) fn source_path_is_allowed(
-    target: &str,
-    cwd: Option<&PyPath>,
-    home_dir: Option<&PyPath>,
-    ctx: &Ctx,
-    allow_external_source: bool,
-) -> SourceDecision {
-    source_path_decision(target, cwd, home_dir, ctx, allow_external_source, false)
-}
-
-/// `source_path_is_allowed` with the request-classification secret table.
+/// Whether `target` is an allowed source path, using the request-classification
+/// secret table.
 pub(crate) fn source_path_is_allowed_for_request(
     target: &str,
     cwd: Option<&PyPath>,

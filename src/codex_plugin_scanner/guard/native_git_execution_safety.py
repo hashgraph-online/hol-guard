@@ -9,25 +9,12 @@ missing capability returns ``None`` and callers fail closed.
 
 from __future__ import annotations
 
-import json
 import os
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
-from .native_resident_client import native_resident_client_request
-from .native_runtime import _isolated_environment, _native_error, native_runtime_status
-from .native_runtime_resilience import (
-    native_record_overload,
-    native_record_resident_failure,
-    native_record_resident_success,
-    native_runtime_health_snapshot,
-)
+from .native_resident_decision import BoundCall, ResidentCallError, bound_resident_call
 
-_MAX_REQUEST_BYTES = 128 * 1024
-_RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
-_FEATURE = "git-execution-safety-v1"
 _REQUEST_SCHEMA = "guard-git-execution-safety-request.v1"
 _RESULT_SCHEMA = "guard-git-execution-safety-result.v1"
 _SNAPSHOT_NAMES = frozenset(
@@ -43,6 +30,16 @@ _SNAPSHOT_NAMES = frozenset(
     }
 )
 _DEFAULT_TIMEOUT_SECONDS = 8.0
+_CALL = BoundCall(
+    operation="git_execution_safety",
+    feature="git-execution-safety-v1",
+    prefix="native_git_execution_safety",
+    result_schema=_RESULT_SCHEMA,
+    max_request_bytes=128 * 1024,
+    timeout_seconds=_DEFAULT_TIMEOUT_SECONDS,
+    check_circuit=True,
+    transport_failure="unavailable",
+)
 
 _request_counter = 0
 
@@ -95,22 +92,6 @@ def git_execution_safety_native(
     """
 
     global _request_counter
-    effective_deadline = time.monotonic() + timeout_seconds
-    status = native_runtime_status(deadline_monotonic=effective_deadline)
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or _RESIDENT_PROTOCOL_FEATURE not in status.capabilities.features
-        or _FEATURE not in status.capabilities.features
-    ):
-        return None
-    guard_home = _resolve_digest_home(None)
-    if native_runtime_health_snapshot(status.identity.sha256, guard_home).circuit_open:
-        return None
-    if not ensure_resident_prerequisite(guard_home):
-        return None
     try:
         home = str(Path.home())
         # The resident resolves relative paths against its own directory, so
@@ -141,59 +122,15 @@ def git_execution_safety_native(
     ):
         if value is not None:
             request[name] = str(value)
-    remaining_seconds = effective_deadline - time.monotonic()
-    if remaining_seconds <= 0:
-        return None
     try:
-        request_sha256 = "sha256:" + _canonical_request_sha256(request)
-        resident = json.dumps(
-            {
-                "operation": "git_execution_safety",
-                "deadline_budget_ms": max(1, min(9_000, int(remaining_seconds * 1_000))),
-                "request": request,
-            },
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ).encode("utf-8")
-    except (TypeError, ValueError):
+        reply = bound_resident_call(_CALL, request, timeout_seconds=timeout_seconds)
+    except ResidentCallError:
         return None
-    if len(resident) > _MAX_REQUEST_BYTES or time.monotonic() >= effective_deadline:
+    envelope = reply.envelope
+    if not isinstance(envelope.get("allowed"), bool):
+        reply.fail()
         return None
-    output = native_resident_client_request(
-        executable=status.identity.path,
-        guard_home=guard_home,
-        environment=_isolated_environment(),
-        payload=resident,
-        deadline_monotonic=effective_deadline,
-    )
-    if output is None:
-        native_record_resident_failure(
-            status.identity.sha256, guard_home, reason="native_git_execution_safety_unavailable"
-        )
-        return None
-    try:
-        envelope = json.loads(output)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        native_record_resident_failure(
-            status.identity.sha256, guard_home, reason="native_git_execution_safety_decode_failed"
-        )
-        return None
-    if _native_error(envelope) == "native_overloaded":
-        native_record_overload(status.identity.sha256, guard_home)
-        return None
-    if (
-        not isinstance(envelope, dict)
-        or envelope.get("schema") != _RESULT_SCHEMA
-        or envelope.get("request_id") != request["request_id"]
-        or envelope.get("request_sha256") != request_sha256
-        or not isinstance(envelope.get("allowed"), bool)
-    ):
-        native_record_resident_failure(
-            status.identity.sha256, guard_home, reason="native_git_execution_safety_schema_mismatch"
-        )
-        return None
-    native_record_resident_success(status.identity.sha256, guard_home)
+    reply.healthy()
     if envelope.get("status") != "ok" or envelope.get("code") != "ok":
         return GitSafetyAnswer(False, None)
     resolved = envelope.get("resolved_path")

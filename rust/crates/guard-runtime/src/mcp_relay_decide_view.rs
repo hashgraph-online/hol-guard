@@ -3,8 +3,11 @@
 //! The proxy evaluates a call under `config_for_harness` of the config it
 //! loaded, and binds the approval hash to that config plus the managed-policy
 //! and sandbox fields. The publisher binds a harness only when every config
-//! the lane settles agrees on those fields, and binds the extension-control
-//! layers the store verified. Without either the call defers. The receipt
+//! the lane settles agrees on those fields; without one the call defers. It
+//! also binds the extension-control layers the store verified. A view without
+//! them marks the layers unavailable, as the proxy does when it cannot read
+//! them; the admitted snapshot's compiled controls still decide contributed
+//! tools, since activation and lockdown were bound there. The receipt
 //! redaction level a queued call's inbox row is written with is bound with
 //! the harness when every config agrees on it; without it a queued call
 //! defers.
@@ -23,7 +26,6 @@ const VIEW_SCHEMA: &str = "guard-mcp-relay-view.v2";
 const VIEW_MISSING: &str = "mcp_relay_view_missing";
 const VIEW_INVALID: &str = "mcp_relay_view_invalid";
 const HARNESS_UNBOUND: &str = "mcp_relay_harness_unbound";
-const LAYERS_UNAVAILABLE: &str = "mcp_relay_layers_unavailable";
 /// `VALID_RECEIPT_REDACTION_LEVELS`.
 const REDACTION_LEVELS: [&str; 3] = ["full", "partial", "none"];
 
@@ -55,6 +57,8 @@ pub(super) struct HarnessView {
     pub(super) hash_config: Map<String, Value>,
     pub(super) mode: String,
     pub(super) layers: Vec<ContributedMcpLayerV1>,
+    /// The publisher could not read the layers (`extension_layers` absent).
+    pub(super) layers_unavailable: bool,
     /// One of `full`, `partial` or `none`; any other value reads as unbound.
     pub(super) receipt_redaction_level: Option<String>,
 }
@@ -122,7 +126,8 @@ fn select(parsed: &RelayViewV2, harness: &str) -> Result<HarnessView, &'static s
         config: entry.config.clone(),
         hash_config: entry.hash_config.clone(),
         mode,
-        layers: parsed.extension_layers.clone().ok_or(LAYERS_UNAVAILABLE)?,
+        layers: parsed.extension_layers.clone().unwrap_or_default(),
+        layers_unavailable: parsed.extension_layers.is_none(),
         receipt_redaction_level: entry
             .receipt_redaction_level
             .clone()

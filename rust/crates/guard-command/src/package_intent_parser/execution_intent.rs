@@ -312,3 +312,33 @@ pub fn runner_packages(tokens: &[String]) -> Vec<String> {
     }
     packages
 }
+
+/// Whether `npx` was given `--package` or `-p` before the executable.
+///
+/// npm's command-line layer replaces the `package` setting from the
+/// environment and from `.npmrc`, so those specs are what the launch installs.
+pub(super) fn command_sets_package_option(tokens: &[String]) -> bool {
+    let Some(first) = tokens.first() else {
+        return false;
+    };
+    if command_name(first) != "npx" {
+        return false;
+    }
+    let value_options = runner_value_options("npx");
+    let mut rest = tokens.iter().skip(1);
+    while let Some(token) = rest.next() {
+        if matches!(token.as_str(), "--package" | "-p") || token.starts_with("--package=") {
+            return true;
+        }
+        if value_options.contains(&token.as_str()) {
+            if rest.next().is_none() {
+                return false;
+            }
+            continue;
+        }
+        if !token.starts_with('-') {
+            break;
+        }
+    }
+    false
+}

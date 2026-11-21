@@ -36,8 +36,11 @@ import { selectNextAfterResolution, type QueueGroup } from "./queue-state";
 import { BulkBlockError, blockRequestsOnce, bulkBlockFailureMessage, bulkBlockSummary } from "./bulk-block-requests";
 import { useRouteFocus } from "./use-route-focus";
 import { commitDashboardLocation, useDashboardPathname } from "./dashboard-location";
+import { openRecoveryView } from "./service-recovery";
+import { RuntimeGate } from "./runtime-error-state";
 
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => import("./swarm/swarm-workspace").then((m) => ({ default: m.SwarmWorkspace })));
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
 const SettingsWorkspace = lazyWorkspace("settings-workspace", () => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
@@ -80,6 +83,7 @@ import type {
   GuardInventoryItem,
   DecisionScope,
 } from "./guard-types";
+import { PulseApprovalOverlay } from "./pulse-approval-overlay";
 
 type RequestState =
   | { kind: "loading" }
@@ -150,11 +154,13 @@ export const PROTECT_ROUTE = "/protect";
 export const TODAY_EVIDENCE_ROUTE = "/evidence?time=today";
 
 export function viewTitle(view: AppView): string {
+  if (view === "swarm") return "Swarm";
   if (view === "home") return "Home";
   if (view === "inbox") return "Inbox";
   if (view === "fleet") return "Protect";
   if (view === "evidence") return "Evidence";
   if (view === "settings") return "Settings";
+  if (view === "cigar") return "CIGAR";
   if (view === "supply-chain") return "Supply Chain";
   if (view === "audit") return "Audit";
   if (view === "policy") return "Rules & exceptions";
@@ -180,6 +186,8 @@ export function parseAppDetail(pathname: string): string | null {
 }
 
 export function resolveView(pathname: string): AppView {
+  if (pathname === "/swarm") return "swarm";
+  if (pathname === "/cigar") return "cigar";
   if (parseAppDetail(pathname) !== null) {
     return "app-detail";
   }
@@ -365,8 +373,8 @@ export function App() {
     let pollId: number | undefined;
     let refreshInFlight = false;
     let clearedQueue = false;
-    const needsFullQueue = view === "inbox" && requestId === null;
-    const needsQueuePage = view === "inbox" || requestId !== null;
+    const needsFullQueue = (view === "inbox" || view === "swarm") && requestId === null;
+    const needsQueuePage = view === "inbox" || view === "swarm" || requestId !== null;
     const needsHomePreview = view === "home" && requestId === null;
     const needsRuntimeReceipts =
       view === "home" ||
@@ -377,6 +385,9 @@ export function App() {
       view === "feed-health";
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
+        return;
+      }
+      if (needsFullQueue && view === "swarm" && document.hidden) {
         return;
       }
       refreshInFlight = true;
@@ -587,6 +598,7 @@ export function App() {
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
+  const handleOpenRecovery = useCallback(() => openRecoveryView(), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
   const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
@@ -852,6 +864,7 @@ export function App() {
         approval_password: gateCredentials.approval_password,
         approval_totp_code: gateCredentials.approval_totp_code,
         approval_gate_use_cooldown: gateCredentials.approval_gate_use_cooldown,
+        approval_gate_pulse: gateCredentials.approval_gate_pulse,
       });
       await refreshStateAfterAction();
       if (result.failed.length > 0) {
@@ -911,6 +924,18 @@ export function App() {
         setRuntime({ kind: "error", message });
         setRequests({ kind: "error", message });
       });
+  }, []);
+
+  // The supply-chain pages read only the runtime snapshot, with receipts for
+  // Feed health. Their Retry must not wait on the approval queue, or a queue
+  // failure would keep them behind the error state after Guard is back.
+  const refreshHubRuntime = useCallback(async () => {
+    try {
+      const snapshot = await fetchRuntimeSnapshot({ includeItems: false, includeReceipts: true });
+      setRuntime({ kind: "ready", snapshot });
+    } catch (error: unknown) {
+      setRuntime({ kind: "error", message: error instanceof Error ? error.message : "Unable to reach Guard." });
+    }
   }, []);
 
   const handleRepair = useCallback(async () => {
@@ -1019,6 +1044,7 @@ export function App() {
 
   return (
     <>
+      <PulseApprovalOverlay />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-brand-blue focus:px-4 focus:py-2 focus:text-white focus:outline-none"
@@ -1040,9 +1066,11 @@ export function App() {
       codexResume={codexResume}
       approvalGate={approvalGate}
       onRetryResume={handleRetryResume}
+      swarmContent={<Suspense fallback={<LazyFallback />}><SwarmWorkspace onNavigate={navigate} onOpenRequest={handleOpenRequest} reviews={requests.kind === "ready" ? requests.items : null} /></Suspense>}
       homeContent={
         <Suspense fallback={<LazyFallback />}>
           <HomeWorkspace
+            onOpenCigar={() => navigate("/cigar")}
             requests={requests}
             runtime={runtime}
             receipts={receipts.kind === "ready" ? receipts.items : undefined}
@@ -1056,6 +1084,7 @@ export function App() {
             onOpenSettings={handleOpenSettings}
             onRefreshRuntime={async () => { await refreshStateAfterAction(); }}
             onReconnectSession={handleReconnectSession}
+            onOpenRecovery={handleOpenRecovery}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}
             onOpenAppDetail={handleOpenAppDetail}
@@ -1120,26 +1149,36 @@ export function App() {
       }
       settingsContent={
         <Suspense fallback={<LazyFallback />}>
-          <SettingsWorkspace onApprovalGateChange={setApprovalGate} />
+          <SettingsWorkspace key={view === "cigar" ? "cigar" : "settings"}
+            contextOnly={view === "cigar"} onNavigate={navigate} onApprovalGateChange={setApprovalGate} />
         </Suspense>
       }
       supplyChainHubContent={
-        runtime.kind === "ready" ? (
-          <Suspense fallback={<LazyFallback />}>
-	            <SupplyChainHubWorkspace
-	              activeView={view}
-	              snapshot={runtime.snapshot}
-	              receipts={receipts.kind === "ready" ? receipts.items : []}
-	              policies={policies.kind === "ready" ? policies.items : []}
-	              approvalGate={approvalGate}
-	              onClearPolicy={handleClearPolicy}
-	              onOpenSettings={handleOpenSettings}
-	              onGoHome={handleGoHome}
-              onNavigate={navigate}
-              onRuntimeRefresh={refreshStateWithoutResult}
-            />
-          </Suspense>
-        ) : null
+        <RuntimeGate
+          runtime={runtime}
+          loading={<LazyFallback />}
+          onReconnectSession={handleReconnectSession}
+          onRefreshRuntime={refreshHubRuntime}
+          onOpenInbox={handleOpenInbox}
+          onOpenSettings={handleOpenSettings}
+        >
+          {(snapshot) => (
+            <Suspense fallback={<LazyFallback />}>
+              <SupplyChainHubWorkspace
+                activeView={view}
+                snapshot={snapshot}
+                receipts={receipts.kind === "ready" ? receipts.items : []}
+                policies={policies.kind === "ready" ? policies.items : []}
+                approvalGate={approvalGate}
+                onClearPolicy={handleClearPolicy}
+                onOpenSettings={handleOpenSettings}
+                onGoHome={handleGoHome}
+                onNavigate={navigate}
+                onRuntimeRefresh={refreshStateWithoutResult}
+              />
+            </Suspense>
+          )}
+        </RuntimeGate>
       }
       policyContent={policyContent}
       releasesContent={

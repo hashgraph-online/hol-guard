@@ -6,13 +6,13 @@ import time
 import uuid
 from datetime import timedelta
 
-from .adapters.base import HarnessContext
 from .aibom_content_upload import (
     GuardAibomPrimaryContentSource,
 )
 from .aibom_models import (
     AibomCliOptions,
 )
+from .harness_context import HarnessContext
 from .harness_tool_version import tool_version_from_detection
 from .inventory_contract import (
     GuardAgentInventorySnapshot,

@@ -121,7 +121,7 @@ fn scratch(label: &str) -> std::path::PathBuf {
 
 /// A guard home with the daemon auth token file the client may sign a
 /// loopback review link with, or without it.
-fn guard_home(label: &str, tokened: bool) -> std::path::PathBuf {
+pub(super) fn guard_home(label: &str, tokened: bool) -> std::path::PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let root = scratch(label);
     if tokened {
@@ -135,7 +135,7 @@ fn guard_home(label: &str, tokened: bool) -> std::path::PathBuf {
     root
 }
 
-fn map(value: Value) -> OMap {
+pub(super) fn map(value: Value) -> OMap {
     let OValue::Map(map) = parse_python_json(&value.to_string()).unwrap() else {
         panic!("not a map");
     };
@@ -198,10 +198,12 @@ fn only_tool_hooks_and_observers_are_sent() {
         query,
         event,
         kind,
+        probe,
     } = prepared_request(&client, shell).unwrap();
     assert_eq!(query, "guard-home=%2Fg&home=%2Fh");
     assert_eq!(event, "beforeShellExecution");
     assert_eq!(kind, Kind::PreToolUse);
+    assert!(!probe);
     let sent: Value = serde_json::from_str(&data).unwrap();
     assert_eq!(sent["hook_event_name"], "PreToolUse");
     assert_eq!(sent["cursor_source_hook_event"], "beforeShellExecution");

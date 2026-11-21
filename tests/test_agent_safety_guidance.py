@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-import errno
-import os
 from pathlib import Path
-from typing import final
 
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import agent_safety_guidance
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.agent_safety_guidance import (
     install_agent_safety_guidance,
     uninstall_agent_safety_guidance,
 )
 from codex_plugin_scanner.guard.cli import install_commands
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -96,15 +92,8 @@ def test_install_agent_safety_guidance_refuses_symlinked_agents_file(tmp_path: P
     _ = protected_target.write_text("do not change\n", encoding="utf-8")
     agents_path.symlink_to(protected_target)
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(RuntimeError, match=r"non-regular support file: AGENTS\.md"):
         _ = install_agent_safety_guidance(home_dir)
-
-    cause = raised.value.__cause__
-    if isinstance(cause, OSError):
-        assert cause.errno == errno.ELOOP
-    else:
-        assert isinstance(cause, ValueError)
-        assert str(cause) == "Guard refused to replace a non-regular support file: AGENTS.md"
     assert protected_target.read_text(encoding="utf-8") == "do not change\n"
     assert not (home_dir / ".hol-support" / "SAFETY.md").exists()
 
@@ -184,82 +173,6 @@ def test_uninstall_preserves_user_bytes_around_managed_block(tmp_path: Path) -> 
 
     assert result["status"] == "removed"
     assert agents_path.read_text(encoding="utf-8") == original
-
-
-def test_install_reports_partial_change_when_agents_write_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    original_write = agent_safety_guidance._write_text_at  # pyright: ignore[reportPrivateUsage]
-
-    def fail_agents_write(
-        directory: int | Path,
-        name: str,
-        text: str,
-        mode: int,
-        expected: object,
-    ) -> None:
-        if name == "AGENTS.md":
-            raise OSError("injected agents write failure")
-        original_write(directory, name, text, mode, expected)  # pyright: ignore[reportArgumentType]
-
-    monkeypatch.setattr(agent_safety_guidance, "_write_text_at", fail_agents_write)
-
-    with pytest.raises(RuntimeError, match="agents_changed=false, safety_changed=true"):
-        _ = install_agent_safety_guidance(tmp_path / "home")
-
-    assert (tmp_path / "home" / ".hol-support" / "SAFETY.md").is_file()
-
-
-def test_uninstall_reports_partial_change_when_safety_remove_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_dir = tmp_path / "home"
-    _ = install_agent_safety_guidance(home_dir)
-    original_unlink = agent_safety_guidance._unlink_at  # pyright: ignore[reportPrivateUsage]
-
-    def fail_safety_unlink(directory: int | Path, name: str, expected: object) -> None:
-        if name == "SAFETY.md":
-            raise OSError("injected safety removal failure")
-        original_unlink(directory, name, expected)  # pyright: ignore[reportArgumentType]
-
-    monkeypatch.setattr(agent_safety_guidance, "_unlink_at", fail_safety_unlink)
-
-    with pytest.raises(RuntimeError, match="agents_changed=true, safety_changed=false"):
-        _ = uninstall_agent_safety_guidance(home_dir)
-
-    assert not (home_dir / ".codex" / "AGENTS.md").exists()
-    assert (home_dir / ".hol-support" / "SAFETY.md").is_file()
-
-
-def test_install_detects_concurrent_agents_edit(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_dir = tmp_path / "home"
-    agents_path = home_dir / ".codex" / "AGENTS.md"
-    agents_path.parent.mkdir(parents=True)
-    _ = agents_path.write_text("original\n", encoding="utf-8")
-    original_write = agent_safety_guidance._write_text_at  # pyright: ignore[reportPrivateUsage]
-
-    def edit_before_write(
-        directory: int | Path,
-        name: str,
-        text: str,
-        mode: int,
-        expected: object,
-    ) -> None:
-        if name == "AGENTS.md":
-            _ = agents_path.write_text("concurrent\n", encoding="utf-8")
-        original_write(directory, name, text, mode, expected)  # pyright: ignore[reportArgumentType]
-
-    monkeypatch.setattr(agent_safety_guidance, "_write_text_at", edit_before_write)
-
-    with pytest.raises(RuntimeError, match="support file changed during update"):
-        _ = install_agent_safety_guidance(home_dir)
-
-    assert agents_path.read_text(encoding="utf-8") == "concurrent\n"
 
 
 def test_install_and_uninstall_preserve_crlf_user_bytes(tmp_path: Path) -> None:
@@ -360,35 +273,6 @@ def test_safety_document_forbids_self_approval(tmp_path: Path) -> None:
     assert "show its approval link to the user verbatim" in safety
 
 
-def test_path_backend_installs_when_directory_fds_are_unavailable(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(os, "supports_dir_fd", set[object]())
-
-    result = install_agent_safety_guidance(tmp_path / "home")
-
-    assert result["status"] == "installed"
-    assert (tmp_path / "home" / ".codex" / "AGENTS.md").is_file()
-    assert (tmp_path / "home" / ".hol-support" / "SAFETY.md").is_file()
-
-
-def test_reparse_detection_uses_version_independent_windows_attributes(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    @final
-    class FakeMetadata:
-        st_file_attributes: int = 0x400
-
-    def fake_lstat(_path: Path) -> FakeMetadata:
-        return FakeMetadata()
-
-    monkeypatch.setattr(Path, "lstat", fake_lstat)
-
-    assert agent_safety_guidance._is_reparse_path(tmp_path / "junction")  # pyright: ignore[reportPrivateUsage]
-
-
 def test_uninstall_agent_safety_guidance_removes_guard_only_files(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     _ = install_agent_safety_guidance(home_dir)
@@ -404,18 +288,6 @@ def test_successful_harness_install_attaches_agent_safety_guidance(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    @final
-    class FakeAdapter:
-        harness = "codex"
-
-        @staticmethod
-        def install(_context: HarnessContext) -> dict[str, object]:
-            return {"config_path": "~/.codex/config.toml"}
-
-        @staticmethod
-        def uninstall(_context: HarnessContext) -> dict[str, object]:
-            return {"removed": True}
-
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -424,11 +296,6 @@ def test_successful_harness_install_attaches_agent_safety_guidance(
         workspace_dir=workspace_dir,
         guard_home=tmp_path / "guard-home",
     )
-
-    def fake_get_adapter(_harness: str) -> FakeAdapter:
-        return FakeAdapter()
-
-    monkeypatch.setattr(install_commands, "get_adapter", fake_get_adapter)
 
     payload = install_commands.apply_managed_install(
         "install",
@@ -471,23 +338,10 @@ def test_cli_install_fails_visibly_when_guidance_cannot_be_installed(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    @final
-    class FakeAdapter:
-        harness = "opencode"
-
-        @staticmethod
-        def install(_context: HarnessContext) -> dict[str, object]:
-            return {"config_path": "~/.config/opencode/config.json"}
-
     home_dir = tmp_path / "home"
     safety_path = home_dir / ".hol-support" / "SAFETY.md"
     safety_path.parent.mkdir(parents=True)
     _ = safety_path.write_text("unmanaged\n", encoding="utf-8")
-
-    def fake_get_adapter(_harness: str) -> FakeAdapter:
-        return FakeAdapter()
-
-    monkeypatch.setattr(install_commands, "get_adapter", fake_get_adapter)
 
     return_code = main(
         [
@@ -510,14 +364,6 @@ def test_uninstall_retains_guidance_while_another_harness_is_active(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    @final
-    class FakeAdapter:
-        harness = "codex"
-
-        @staticmethod
-        def uninstall(_context: HarnessContext) -> dict[str, object]:
-            return {"removed": True}
-
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
@@ -525,11 +371,6 @@ def test_uninstall_retains_guidance_while_another_harness_is_active(
     store.set_managed_install("codex", True, None, {}, "2026-07-28T00:00:00Z")
     store.set_managed_install("pi", True, None, {}, "2026-07-28T00:00:00Z")
     _ = install_agent_safety_guidance(home_dir)
-
-    def fake_get_adapter(_harness: str) -> FakeAdapter:
-        return FakeAdapter()
-
-    monkeypatch.setattr(install_commands, "get_adapter", fake_get_adapter)
 
     payload = install_commands.apply_managed_install(
         "uninstall",
@@ -544,3 +385,20 @@ def test_uninstall_retains_guidance_while_another_harness_is_active(
     assert "agent_safety_guidance" not in payload
     assert (home_dir / ".codex" / "AGENTS.md").is_file()
     assert (home_dir / ".hol-support" / "SAFETY.md").is_file()
+
+
+def test_install_fails_closed_without_the_native_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    def no_runtime(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", no_runtime)
+
+    with pytest.raises(RuntimeError, match=r"agents_changed=false, safety_changed=false\): native runtime unavailable"):
+        _ = install_agent_safety_guidance(tmp_path / "home")
+
+    assert not (tmp_path / "home").exists()

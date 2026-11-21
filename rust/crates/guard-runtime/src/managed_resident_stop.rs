@@ -218,7 +218,7 @@ pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
     }
     let _startup_lock =
         startup_lock.ok_or_else(|| "native_resident_stop_unavailable".to_owned())?;
-    let request = br#"{"operation":"shutdown","request":{}}"#;
+    let request = super::handoff::STOP_SHUTDOWN_REQUEST;
     let stop_deadline = Instant::now() + super::MANAGED_STOP_TIMEOUT;
     let shutdown_response = match try_states_with_state(
         &scope,

@@ -41,7 +41,7 @@ pub(super) fn validate(
     Ok(Value::Null)
 }
 
-fn valid_calendar_prefix(value: &str) -> bool {
+pub(super) fn valid_calendar_prefix(value: &str) -> bool {
     let prefix = value.chars().take(19).collect::<Vec<_>>();
     if !matches!(prefix.len(), 10 | 19) || prefix[4] != '-' || prefix[7] != '-' {
         return false;

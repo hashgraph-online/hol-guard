@@ -33,6 +33,50 @@ pub(crate) fn consume(
     key: &[u8],
     key_id: &str,
 ) -> StoreResult<bool> {
+    if crate::claim_reuse::approval_reuse_claim_disposition(decision) != Some("consumed") {
+        return Ok(false);
+    }
+    spend(
+        connection,
+        request_id,
+        decision,
+        now,
+        (key, key_id),
+        &["legacy", "exact-cloud"],
+    )
+}
+
+/// Spend the exact Cloud allow issued for a package install's own request.
+///
+/// A package once-approval saved locally is retained for reuse until it
+/// expires, so `consume` would refuse it. An exact Cloud allow answers one
+/// queue item only, so the install that waited on that item spends it.
+pub(crate) fn consume_exact_cloud_package(
+    connection: &Connection,
+    request_id: &str,
+    decision: &Value,
+    now: &str,
+    key: &[u8],
+    key_id: &str,
+) -> StoreResult<bool> {
+    spend(
+        connection,
+        request_id,
+        decision,
+        now,
+        (key, key_id),
+        &["exact-cloud"],
+    )
+}
+
+fn spend(
+    connection: &Connection,
+    request_id: &str,
+    decision: &Value,
+    now: &str,
+    (key, key_id): (&[u8], &str),
+    kinds: &[&str],
+) -> StoreResult<bool> {
     let Some(id) = decision["approval_id"].as_str().filter(|s| !s.is_empty()) else {
         return Ok(false);
     };
@@ -43,58 +87,19 @@ pub(crate) fn consume(
         return Ok(false);
     };
     if decision["action"] != "allow"
-        || crate::claim_reuse::approval_reuse_claim_disposition(decision) != Some("consumed")
         || crate::claim_reuse::approval_authority_revision(connection)? != revision
     {
         return Ok(false);
     }
     let kind = decision["authority_kind"].as_str().unwrap_or("");
-    if !matches!(kind, "legacy" | "exact-cloud") {
+    if !kinds.contains(&kind) {
         return Ok(false);
     }
     let now = guard_contracts::canonical_utc_timestamp(now).ok_or(
         crate::guard_store_db::StoreError::Invalid("continuation_time_invalid"),
     )?;
     let row = if kind == "exact-cloud" {
-        let Some(request) = query_one(
-            connection,
-            "select * from approval_requests where request_id = ?",
-            &[json!(request_id)],
-        )?
-        else {
-            return Ok(false);
-        };
-        if request.get("status") != Some(&json!("resolved"))
-            || request.get("resolution_action") != Some(&json!("allow"))
-            || request.get("resolution_scope") != Some(&json!("artifact"))
-            || !matches!(
-                request.get("policy_action").and_then(Value::as_str),
-                Some("review" | "require-reapproval")
-            )
-        {
-            return Ok(false);
-        }
-        if ["request_id", "harness", "artifact_id", "artifact_hash"]
-            .iter()
-            .any(|k| {
-                request
-                    .get(*k)
-                    .and_then(Value::as_str)
-                    .filter(|s| !s.is_empty())
-                    .is_none()
-            })
-        {
-            return Ok(false);
-        }
-        let workspace = crate::policy_decision_lookup_op::computed_workspace_policy_key(
-            request.get("workspace").and_then(Value::as_str),
-        );
-        let publisher = request
-            .get("publisher")
-            .and_then(Value::as_str)
-            .filter(|s| !s.is_empty());
-        query_one(connection,"select * from guard_local_once_approvals where authority_kind = ? and request_id = ? and harness = ? and artifact_id = ? and artifact_hash = ? and claimed_at is null and julianday(expires_at) > julianday(?) and workspace is ? and publisher is ? order by created_at desc, approval_id desc limit 1",
-            &[json!(kind),json!(request_id),request["harness"].clone(),request["artifact_id"].clone(),request["artifact_hash"].clone(),json!(now),json!(workspace),json!(publisher)])?
+        crate::guard_store_exact_cloud_peek::exact_cloud_row(connection, request_id, &now)?
     } else {
         query_one(connection,"select * from guard_local_once_approvals where approval_id = ? and claimed_at is null and julianday(expires_at) > julianday(?)", &[json!(id),json!(now)])?
     };
@@ -164,3 +169,7 @@ pub(crate) fn consume(
         params![now,signature.integrity_version,signature.payload_hash,signature.payload_mac,signature.integrity_key_id,signature.signed_at,id])?;
     Ok(changed == 1)
 }
+
+#[cfg(test)]
+#[path = "continuation_grants_tests.rs"]
+mod tests;

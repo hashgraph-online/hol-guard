@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
     cursor_fallback_permission,
 )

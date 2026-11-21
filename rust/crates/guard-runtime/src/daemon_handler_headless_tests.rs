@@ -76,3 +76,16 @@ fn vectors_cover_every_kind_and_status() {
             .collect()
     );
 }
+
+#[test]
+fn reports_an_app_whose_guard_install_needs_repair_as_observed() {
+    let reply = answer(&json!({
+        "kind": "detection_statuses",
+        "values": ["needs_repair", "protected"],
+    }));
+    assert_eq!(reply["outcome"], "proceed");
+    assert_eq!(
+        reply["fields"]["app_statuses"],
+        json!(["observed", "protected"])
+    );
+}

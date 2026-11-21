@@ -99,10 +99,10 @@ def test_ask_once_shown_records_on_enqueue(tmp_path: Path) -> None:
 
 
 def test_known_bad_auto_stop_records_timeline_event(tmp_path: Path, native_approval_reuse_runtime: Path) -> None:
-    from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
+    from codex_plugin_scanner.guard.models import GuardArtifact
+    from tests.runtime_artifact_policy_support import (
         _runtime_artifact_policy_action,
     )
-    from codex_plugin_scanner.guard.models import GuardArtifact
 
     guard_home = tmp_path / ".hol-guard"
     config = update_guard_settings(guard_home, {"protection_posture": "protected"})

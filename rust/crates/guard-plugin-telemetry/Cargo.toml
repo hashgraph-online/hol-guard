@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 # `hol-guard telemetry plugins`: matches installed agent plugins to public HOL
 # listings on the device and builds the opt-in weekly install report. It reads

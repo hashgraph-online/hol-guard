@@ -6,7 +6,7 @@
 //! reason.
 
 use super::*;
-use guard_contracts::CODEX_HOOK_FILE_IDENTITY_REQUEST_SCHEMA;
+use guard_contracts::{CodexHookFileIdentityQuestionV1, CODEX_HOOK_FILE_IDENTITY_REQUEST_SCHEMA};
 use serde_json::json;
 use std::fs;
 use std::io::Write;

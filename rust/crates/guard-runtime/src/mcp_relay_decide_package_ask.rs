@@ -120,28 +120,41 @@ pub(super) fn queue(
         ask::write(request, oauth_source, args).map_err(|_| PACKAGE_ASK_FAILED)?;
     let row = ask::read_back(request, &request_id).map_err(|_| PACKAGE_ASK_FAILED)?;
     let review_url = ask::review_url(&row, center, &request_id);
-    let message = format!(
-        "HOL Guard stopped package install request {} from {}. Approve request {request_id} at \
-         {review_url}, then retry the same action.",
+    let stopped = format!(
+        "HOL Guard stopped package install request {} from {}",
         request.build.tool_name, request.build.server_name
     );
+    let agent =
+        super::review_link::agent_review(&request.guard_home, &stopped, &request_id, &review_url);
+    let message = agent.message;
     let data = json!({
         "approvalCenterUrl": center,
         "approvalRequests": [Value::Object(row)],
         "guardPolicyAction": answer.policy_action,
-        "reviewUrl": review_url,
+        "reviewUrl": agent.review_url,
         "supplyChainEvaluation": evaluation,
     });
+    // `_notify_pending_approval` once the row is written. A notice the
+    // resident cannot read stays on the record for the daemon to raise.
+    let notices = if crate::hook_direct_evidence::notice::raise_approval(
+        &request.guard_home,
+        oauth_source,
+        &notice,
+    ) {
+        json!([])
+    } else {
+        json!([notice])
+    };
     Ok(PackageAnswer {
         block: Some((message, data)),
-        // What `_notify_pending_approval` and `_maybe_open_approval_center`
-        // raise once the row is written, which the drain owns.
+        // What `_maybe_open_approval_center` reads once the row is written,
+        // and the notices left to the daemon.
         approval: Some(json!({
             "approval_center_url": center,
             "review_url": review_url,
             "request_id": request_id,
             "workspace": admitted.workspace,
-            "notices": [notice],
+            "notices": notices,
         })),
         ..answer.clone()
     })

@@ -21,6 +21,9 @@ pub const APPROVAL_SCOPE_SELECT_REQUEST_SCHEMA: &str = "guard-approval-scope-sel
 pub const APPROVAL_SCOPE_SELECT_RESULT_SCHEMA: &str = "guard-approval-scope-select-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const APPROVAL_SCOPE_SELECT_FEATURE: &str = "approval-scope-select-v1";
+/// Capability advertised when the op also answers the persistence question,
+/// so one ask settles a whole resolution.
+pub const APPROVAL_SCOPE_SELECT_PERSIST_FEATURE: &str = "approval-scope-select-v2";
 /// Largest canonical request serialization the op will accept.
 pub const APPROVAL_SCOPE_SELECT_MAX_BYTES: usize = 4 * 1024 * 1024;
 
@@ -44,6 +47,22 @@ pub struct ApprovalScopeSelectRequestV1 {
     /// `contract_version` is.
     #[serde(default)]
     pub contract_digest: Option<String>,
+    /// Asks the same answer to settle whether the decision is remembered.
+    /// Absent for a client that asks the persistence question separately, and
+    /// left out of the canonical form then, so that client's request digest
+    /// is unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persist: Option<ApprovalScopeSelectPersistV1>,
+}
+
+/// The persistence question, answered against the scope the op applies.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalScopeSelectPersistV1 {
+    /// Whether the user asked to remember the decision; absent when the
+    /// client offered no choice.
+    #[serde(default)]
+    pub persist_policy: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

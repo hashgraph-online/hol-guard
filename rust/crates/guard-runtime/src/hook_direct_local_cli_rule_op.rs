@@ -1,13 +1,13 @@
 //! `hook_local_cli_rule`: the daemon's custom extension rule for a native
 //! `PreToolUse`, decided by the same launch identity and grant read the
-//! direct lane uses.
+//! direct lane uses. The hook edge settles it in its answer
+//! (`edge_local_cli.rs`); the resident op stays for callers that ask alone.
 //!
-//! `allowed` is `native_local_cli_block_response`: while any custom block
-//! rule exists, a command the edge allowed is blocked when its grant blocks
-//! it, and blocked as unverified when its identity or grant cannot be
-//! checked. `review` is `native_local_cli_grant_response`: a block applies to
-//! any review, and an allow lifts only an overridable review due to
-//! non-recognition alone. The daemon renders the verdict.
+//! `allowed`: while any custom block rule exists, a command the edge allowed
+//! is blocked when its grant blocks it, and blocked as unverified when its
+//! identity or grant cannot be checked. `review`: a block applies to any
+//! review, and an allow lifts only an overridable review due to
+//! non-recognition alone.
 
 use guard_contracts::{
     HookLocalCliRuleRequestV1, HookLocalCliRuleResultV1, HOOK_LOCAL_CLI_RULE_REQUEST_SCHEMA,
@@ -18,8 +18,6 @@ use serde_json::Value;
 use super::block::{ReviewVerdict, Verdict};
 use super::{LaunchEnv, RuleCheck};
 
-/// The one review a custom allow lifts: Rust did not recognise the program.
-const GRANT_LIFTABLE_REASON: &str = "native_command_review_required";
 const REVIEW_ACTIONS: [&str; 2] = ["review", "require-reapproval"];
 
 /// The daemon's answer for one rule check.
@@ -94,6 +92,11 @@ pub(crate) fn allowed_verdict(request: &HookLocalCliRuleRequestV1) -> RuleVerdic
     {
         return RuleVerdict::None;
     }
+    allowed_verdict_with_block_rules(request)
+}
+
+/// `allowed_verdict` once the caller found a custom block rule.
+pub(crate) fn allowed_verdict_with_block_rules(request: &HookLocalCliRuleRequestV1) -> RuleVerdict {
     let check = check(request);
     let launched = match super::launch_for(
         &request.payload,
@@ -126,8 +129,9 @@ pub(crate) fn review_verdict(request: &HookLocalCliRuleRequestV1) -> RuleVerdict
     match super::review_grant(&check(request)) {
         Some(ReviewVerdict::Blocked(name)) => RuleVerdict::Blocked(name),
         Some(ReviewVerdict::Allowed)
-            if result.get("reason_code").and_then(Value::as_str) == Some(GRANT_LIFTABLE_REASON)
-                && crate::hook_direct::saved_decision::overridable(result) =>
+            if crate::connector_setup::is_non_recognition(
+                result.get("reason_code").and_then(Value::as_str),
+            ) && crate::hook_direct::saved_decision::overridable(result) =>
         {
             RuleVerdict::Allowed
         }

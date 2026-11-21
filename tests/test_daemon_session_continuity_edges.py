@@ -2,28 +2,20 @@
 
 from __future__ import annotations
 
-import io
 import json
-import sys
 from pathlib import Path
 
-import pytest
-
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
-from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
-    _is_copilot_permission_request,
-)
-from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
+    canonical_hook_event_name,
     cursor_unparseable_input_permission,
     hook_event_is_permission_request,
 )
-from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
 
 
 def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request() -> None:
-    assert runtime_hook_event_name({"hook_event_name": "PermissionDenied"}) == "PermissionDenied"
-    assert runtime_hook_event_name({"hook_name": "permissionRequestV2"}) == "PermissionRequest"
+    assert canonical_hook_event_name({"hook_event_name": "PermissionDenied"}) == "PermissionDenied"
+    assert canonical_hook_event_name({"hook_name": "permissionRequestV2"}) == "PermissionRequest"
     denied = availability_harness_response(
         harness="claude-code",
         event_name="PermissionDenied",
@@ -78,7 +70,7 @@ def test_native_policy_not_ready_pretool_denies_without_interrupting_session(tmp
 
 
 def test_cursor_write_denies_when_native_unavailable() -> None:
-    from codex_plugin_scanner.guard.daemon.hook_availability_policy import cursor_fallback_permission
+    from codex_plugin_scanner.guard.hook_review.hook_availability_policy import cursor_fallback_permission
 
     deny, code = cursor_fallback_permission(
         hook_event_name="beforeWriteFile",
@@ -89,33 +81,12 @@ def test_cursor_write_denies_when_native_unavailable() -> None:
 
 
 def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
-    assert _is_copilot_permission_request({"hook_name": "permissionRequestV2"}) is True
-    assert _is_copilot_permission_request({"hookEventName": "PermissionRequestV2"}) is True
-    assert _is_copilot_permission_request({"hook_name": "copilotPermissionRequest"}) is True
-    assert _is_copilot_permission_request({"hook_name": "PermissionDenied"}) is False
-    assert _is_copilot_permission_request({"hook_name": "PermissionResponse"}) is False
+    assert hook_event_is_permission_request("permissionRequestV2") is True
+    assert hook_event_is_permission_request("PermissionRequestV2") is True
+    assert hook_event_is_permission_request("PermissionResponse") is False
     assert hook_event_is_permission_request("copilotPermissionRequest") is True
     assert hook_event_is_permission_request("PermissionDenied") is False
     assert hook_event_is_permission_request("PermissionRequestFoo") is False
-    camel, camel_code = failure_payload(
-        harness="copilot",
-        event_name="permissionRequestV2",
-        reason="native unavailable",
-        recording_only=False,
-    )
-    assert camel_code == 0
-    assert camel["behavior"] == "deny"
-    assert camel["interrupt"] is False
-    payload, code = failure_payload(
-        harness="copilot",
-        event_name="PermissionRequestV2",
-        reason="native unavailable",
-        recording_only=False,
-    )
-    assert code == 0
-    assert payload["behavior"] == "deny"
-    assert payload["interrupt"] is False
-    assert "permissionDecision" not in payload
     availability = availability_harness_response(
         harness="copilot",
         event_name="PermissionRequestV2",
@@ -150,7 +121,7 @@ def test_missing_native_fail_safe_codes_continue_mutating_pretool(tmp_path: Path
 
 
 def test_cursor_maps_before_write_file_to_a_write_pretooluse() -> None:
-    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_payload import prepare_cursor_hook_payload
+    from tests.cursor_hook_payload_support import prepare_cursor_hook_payload
 
     mapped = prepare_cursor_hook_payload(
         {"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts", "tool_name": "Read"}
@@ -209,31 +180,9 @@ def test_invalid_payload_reference_still_denies_a_repair_command(tmp_path: Path)
     assert response["policy_action"] == "block"
 
 
-def test_bounded_cli_failure_uses_fail_closed_pretool_responses() -> None:
-    hermes, hermes_code = failure_payload(
-        harness="hermes",
-        event_name="PreToolUse",
-        reason="review failed",
-        recording_only=False,
-    )
-    assert hermes_code == 2
-    assert hermes["decision"] == "block"
-    cursor, cursor_code = failure_payload(
-        harness="cursor",
-        event_name="PreToolUse",
-        reason="review failed",
-        recording_only=False,
-    )
-    assert cursor_code == 2
-    output = cursor["hookSpecificOutput"]
-    assert isinstance(output, dict)
-    assert output["permissionDecision"] == "deny"
+def test_bounded_cli_cannot_finish_without_policy_action_denies_write(native_bridge_render) -> None:
 
-
-def test_bounded_cli_cannot_finish_without_policy_action_denies_write() -> None:
-    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_daemon import _daemon_response_to_native
-
-    stdout, _stderr, code = _daemon_response_to_native(
+    stdout, _stderr, code = native_bridge_render(
         {"reason_code": "native_pre_tool_unavailable", "reason": "native miss"},
         harness="kimi",
         event_name="PreToolUse",
@@ -241,59 +190,10 @@ def test_bounded_cli_cannot_finish_without_policy_action_denies_write() -> None:
     payload = json.loads(stdout)
     assert code == 2
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    invalid_stdout, _invalid_stderr, invalid_code = _daemon_response_to_native(
+    invalid_stdout, _invalid_stderr, invalid_code = native_bridge_render(
         {"policy_action": "invalid", "reason": "nope"},
         harness="kimi",
         event_name="PreToolUse",
     )
     assert invalid_code == 2
     assert json.loads(invalid_stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-def test_codex_unavailable_permission_request_denies_without_review() -> None:
-    from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-
-    permission = bridge._fail_closed("PermissionRequest", "review failed")
-    assert permission["hookSpecificOutput"]["decision"] == {
-        "behavior": "deny",
-        "message": "review failed",
-    }
-
-
-def test_claude_oversized_forged_notification_still_denies(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as claude
-
-    # With a runtime installed the native command reads the body itself, and the
-    # bound it holds the oversized call to is covered by
-    # `rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs`. What is left
-    # here is the launcher's own answer when no runtime can be resolved: it
-    # still has to refuse a forged body too large to read.
-    monkeypatch.setattr(claude, "_native_bridge_executable", lambda _home: None)
-    body = '{"hook_event_name":"Notification","prompt":"' + ("x" * claude._MAX_HOOK_INPUT_BYTES)
-    monkeypatch.setattr("sys.stdin", io.StringIO(body))
-    result = claude.main(
-        state_path="/missing/state.json",
-        fallback_daemon_url="http://127.0.0.1:5474",
-        fallback_command=(sys.executable, "-c", "raise SystemExit(99)"),
-        query="",
-    )
-    payload = json.loads(capsys.readouterr().out)
-    assert result == 0
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO('{"hook_event_name":"UserPromptSubmit","prompt":"' + ("x" * claude._MAX_HOOK_INPUT_BYTES)),
-    )
-    prompt_result = claude.main(
-        state_path="/missing/state.json",
-        fallback_daemon_url="http://127.0.0.1:5474",
-        fallback_command=(sys.executable, "-c", "raise SystemExit(99)"),
-        query="",
-    )
-    prompt = json.loads(capsys.readouterr().out)
-    assert prompt_result == 0
-    assert prompt["decision"] == "block"

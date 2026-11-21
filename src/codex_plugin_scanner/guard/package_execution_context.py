@@ -47,7 +47,8 @@ class PackageExecutionContext:
             "context_digest": self.digest,
             "components": [{"name": component.name, "digest": component.digest} for component in self.components],
             "portable_summary": (
-                "Reusable only across linked Git worktrees when every package execution input matches."
+                "Reusable in any checkout of the same repository origin when the lockfile "
+                "and every other package execution input match."
                 if self.portable
                 else "Bound to this retry because Guard could not prove a complete portable package context."
             ),

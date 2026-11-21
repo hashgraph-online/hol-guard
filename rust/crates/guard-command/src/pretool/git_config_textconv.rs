@@ -27,8 +27,12 @@ pub(super) fn may_run(operation: &str, options: &[&str]) -> bool {
         // A bisect log replays the session's own lines, and a note listing prints
         // names and object ids. `git notes show` runs `git show`, so the proof
         // asks about `show` for it and never reaches here with `notes`.
+        // A replacement listing prints the names under `refs/replace/`, and
+        // its three formats add the object ids and the object types those
+        // names stand for. None of the three prints an object's content, so
+        // no blob is converted.
         // A submodule status line is an object id, a path and a ref name.
-        "bisect" | "notes" | "submodule" => false,
+        "bisect" | "notes" | "replace" | "submodule" => false,
         _ => true,
     }
 }

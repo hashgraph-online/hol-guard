@@ -104,16 +104,17 @@ impl Evaluation<'_> {
 
     /// Matches a launcher executable, a package token, and a fixed
     /// subcommand suffix, tolerating an npm-style `@<version-or-tag>` suffix
-    /// on the package token. Consume launcher options only while matching the
-    /// prefix, then inspect the untouched suffix so a command-level `--` keeps
-    /// subsequent operands from being interpreted as safety flags.
+    /// on the package token, and a pip-style `==<version>` pin when the
+    /// launcher is `uvx`, `uv tool run`, or `pipx run`. Consume launcher
+    /// options only while matching the prefix, then inspect the untouched
+    /// suffix so a command-level `--` keeps subsequent operands from being
+    /// interpreted as safety flags.
     fn versioned_package_subcommand(&self, node: &VersionedPackageSubcommandNode) -> MatchResult {
         let mut prefix: Vec<String> =
             Vec::with_capacity(node.leading_subcommands.len() + 1 + node.subcommands.len());
         prefix.extend(node.leading_subcommands.iter().cloned());
         prefix.push(node.package.clone());
         prefix.extend(node.subcommands.iter().cloned());
-        let package_prefix = format!("{}@", node.package);
         let mut evidence = Vec::new();
         for (index, segment) in self.command.segments.iter().enumerate() {
             self.check_deadline()?;
@@ -146,7 +147,11 @@ impl Evaluation<'_> {
                     }
                 }
                 let is_package = prefix_index == node.leading_subcommands.len()
-                    && argument.starts_with(&package_prefix);
+                    && is_versioned_package_token(
+                        argument,
+                        &node.package,
+                        allows_python_equality_pin(node),
+                    );
                 if !is_package && argument != &prefix[prefix_index] {
                     break;
                 }
@@ -170,10 +175,42 @@ impl Evaluation<'_> {
     }
 }
 
+/// `is_versioned_package_token` - whether `argument` names `package` with a
+/// version suffix: npm-style `package@<version-or-tag>`, or a pip-style
+/// `package==<version>` pin when `allow_equality_pin` is set. The bare
+/// package name is matched separately.
+pub(super) fn is_versioned_package_token(
+    argument: &str,
+    package: &str,
+    allow_equality_pin: bool,
+) -> bool {
+    argument
+        .strip_prefix(package)
+        .is_some_and(|rest| rest.starts_with('@') || (allow_equality_pin && rest.starts_with("==")))
+}
+
+/// `allows_python_equality_pin` - whether this matcher is a Python package
+/// launcher that accepts `package==version` pins: `uvx`, `uv tool run`, or
+/// `pipx run`. Other launchers keep the npm `@` form only.
+fn allows_python_equality_pin(node: &VersionedPackageSubcommandNode) -> bool {
+    let stems: BTreeSet<&str> = node
+        .executables
+        .iter()
+        .map(|name| {
+            name.strip_suffix(".exe")
+                .or_else(|| name.strip_suffix(".cmd"))
+                .unwrap_or(name.as_str())
+        })
+        .collect();
+    stems.contains("uvx")
+        || (stems.contains("uv") && node.leading_subcommands == ["tool", "run"])
+        || (stems.contains("pipx") && node.leading_subcommands == ["run"])
+}
+
 /// `deadline_ok` - the shared budget check, usable without an `Evaluation`.
 pub(super) fn deadline_ok(deadline: Option<Instant>) -> Result<(), &'static str> {
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-        Err("native_command_deadline_exceeded")
+        Err(super::NATIVE_COMMAND_DEADLINE_EXCEEDED)
     } else {
         Ok(())
     }
@@ -207,21 +244,17 @@ pub(super) fn executable_evidence(
             &contract.interspersed_options_with_values,
             &contract.interspersed_flags,
         );
-        let remaining = if contract.allow_leading_options {
-            after_leading_options(
-                &filtered,
-                &contract.leading_options_with_values,
-                &contract.interspersed_flags,
-            )
-        } else {
-            filtered.as_slice()
-        };
-        let matched = node.paths.iter().find(|path| remaining.starts_with(path));
+        let matched = node.paths.iter().find_map(|path| {
+            let remaining = remaining_for_executable_path(contract, &arguments, &filtered, path);
+            remaining
+                .starts_with(path.as_slice())
+                .then_some((path, remaining))
+        });
         let matched = matched.or_else(|| {
             contract
                 .fail_secure_unknown_options
                 .then(|| {
-                    node.paths.iter().find(|path| {
+                    node.paths.iter().find_map(|path| {
                         matches_subcommands_conservatively_with_deadline(
                             &arguments,
                             path,
@@ -229,11 +262,15 @@ pub(super) fn executable_evidence(
                             &contract.interspersed_flags,
                             deadline,
                         )
+                        .then_some((
+                            path,
+                            remaining_for_executable_path(contract, &arguments, &filtered, path),
+                        ))
                     })
                 })
                 .flatten()
         });
-        let Some(path) = matched else {
+        let Some((path, remaining)) = matched else {
             continue;
         };
         let flag_arguments = if contract.required_flags_in_all_arguments {
@@ -284,27 +321,89 @@ pub(super) fn executable_evidence(
                 deadline,
             );
         }
-        if required_present
-            && contract
-                .forbidden_flags
-                .is_disjoint(&semantics.present_flags)
-        {
+        if required_present && !forbidden_flag_reached(node, &semantics) {
             evidence.push(index);
         }
     }
     Ok(Arc::from(evidence))
 }
 
+/// Whether a forbidden flag reached the program under any spelling its own
+/// parser accepts.
+///
+/// `present_flags` alone does not answer this. An option written `--home=/x`
+/// is recorded as an effective option, and its name joins `present_flags` only
+/// when the assigned value reads as true, because the same set answers "was
+/// this flag asked for?" for `required_flags`. A forbidden flag has the
+/// opposite polarity: `--home=/x` names a different store whatever the value
+/// looks like, so the effective options are read too.
+///
+/// Under `fail_secure_unknown_options`, an unrecognised long option that is a
+/// prefix of a forbidden flag counts as that flag. Python's `argparse` accepts
+/// an unambiguous abbreviation by default, so `--hom /x` reaches the program as
+/// `--home /x`; matching the full spelling alone would read a command whose
+/// store was redirected as one that left it alone. A prefix that the contract
+/// names itself is a flag of its own, not an abbreviation, so it is left out.
+fn forbidden_flag_reached(node: &ExecutableNode, semantics: &ArgumentSemantics) -> bool {
+    let contract = &node.contract;
+    let named = |flag: &str| {
+        semantics
+            .effective_options
+            .iter()
+            .any(|(name, _, _)| name == flag)
+    };
+    let abbreviated = |flag: &str| {
+        contract.fail_secure_unknown_options
+            && semantics.effective_options.iter().any(|(name, _, _)| {
+                name.starts_with("--")
+                    && name.len() > 2
+                    && name.len() < flag.len()
+                    && flag.starts_with(name.as_str())
+                    && !node.proof_known_flags.contains(name)
+                    && !node.all_value_options.contains(name)
+            })
+    };
+    contract.forbidden_flags.iter().any(|flag| {
+        let flag = flag.as_str();
+        semantics.present_flags.contains(flag) || named(flag) || abbreviated(flag)
+    })
+}
+
+fn remaining_for_executable_path<'a>(
+    contract: &crate::executable_flag_contract::ExecutableFlagContract,
+    arguments: &'a [String],
+    filtered: &'a [String],
+    path: &[String],
+) -> &'a [String] {
+    let keep_terminator = path.first().map(String::as_str) == Some("--");
+    let base = if keep_terminator { arguments } else { filtered };
+    if contract.allow_leading_options {
+        after_leading_options(
+            base,
+            &contract.leading_options_with_values,
+            &contract.interspersed_flags,
+            keep_terminator,
+        )
+    } else {
+        base
+    }
+}
+
 fn after_leading_options<'a>(
     arguments: &'a [String],
     options: &BTreeSet<String>,
     flags: &BTreeSet<String>,
+    keep_option_terminator: bool,
 ) -> &'a [String] {
     let mut index = 0;
     while index < arguments.len() {
         let argument = &arguments[index];
         if argument == "--" {
-            return &arguments[index + 1..];
+            return if keep_option_terminator {
+                &arguments[index..]
+            } else {
+                &arguments[index + 1..]
+            };
         }
         if !argument.starts_with('-') {
             return &arguments[index..];
@@ -348,3 +447,7 @@ fn without_options(
     }
     retained
 }
+
+#[cfg(test)]
+#[path = "native_command_program_evaluation_tests.rs"]
+mod tests;

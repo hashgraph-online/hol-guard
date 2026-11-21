@@ -152,13 +152,19 @@ fn a_reviewed_group_carries_its_command_list_model() {
 
 #[test]
 fn a_group_no_recognizer_unwraps_keeps_its_unmodeled_review() {
-    // Nothing is taken from a list the recognizer rejects, so a leading group
-    // and a redirected one keep the review their own text earns.
-    for command in ["(cd src) && cargo fmt", "(npm run build) > out.txt"] {
-        let decision = decision(command);
-        assert_eq!(decision.minimum_action, "review", "{command}");
-        assert_eq!(decision.command_model.confidence, "uncertain", "{command}");
-    }
+    // A redirected group is still outside the shapes the splitter reads, so
+    // it keeps the review its own unmodeled text earns.
+    let redirected = decision("(npm run build) > out.txt");
+    assert_eq!(redirected.minimum_action, "review");
+    assert_eq!(redirected.command_model.confidence, "uncertain");
+
+    // A list of groups is read as the list it is, so the model is exact. The
+    // group brackets are still the shell's: `cd src` runs in a child shell
+    // and the commands after it keep the directory they started in, so a
+    // command the recognizer takes nothing from keeps its review.
+    let grouped = decision("(cd src) && cargo fmt");
+    assert_eq!(grouped.minimum_action, "review");
+    assert_eq!(grouped.command_model.confidence, "exact");
 }
 
 #[test]

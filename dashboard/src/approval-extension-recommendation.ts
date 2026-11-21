@@ -77,8 +77,9 @@ export function normalizeApprovalExtensionRecommendation(raw: unknown): GuardApp
   };
 }
 
+/** The permission's catalog name. Its example command is a sample from the catalog, never the paused command. */
 export function recommendationCommandLabel(permission: GuardApprovalExtensionRecommendationPermission): string {
-  return permission.example_command ?? permission.label;
+  return permission.label;
 }
 
 function joinLabels(labels: readonly string[]): string {
@@ -92,11 +93,19 @@ function extensionNames(recommendation: GuardApprovalExtensionRecommendation): s
 
 export type ApprovalExtensionRecommendationCopy = {
   commands: string[];
-  /** The commands joined for a sentence, such as "git add and git commit". */
+  /** The permission names joined for a sentence, such as "Git add and Git commit". */
   commandText: string;
+  /**
+   * False when any permission is destructive, critical or sensitive. Allowing one of those
+   * reaches every matching command, so the card links to the extension instead of offering it.
+   */
+  oneTap: boolean;
+  eyebrow: string;
   title: string;
   body: string;
   primaryLabel: string;
+  /** "Configure" or "Review", for the link to each extension. */
+  configureVerb: string;
   configureLabel: string;
   confirmTitle: string;
   confirmDetail: string;
@@ -110,27 +119,36 @@ const CAUTION_REASON_COPY: Record<NonNullable<GuardApprovalExtensionRecommendati
   sensitive: "touches sensitive data or access",
 };
 
+function cautionLine(permission: GuardApprovalExtensionRecommendationPermission): string {
+  const reason = CAUTION_REASON_COPY[permission.caution_reason ?? "sensitive"];
+  if (permission.caution_detail) return `${permission.label} ${reason}. ${permission.caution_detail}`;
+  const example = permission.example_command;
+  return example ? `${permission.label} ${reason}, such as ${example}.` : `${permission.label} ${reason}.`;
+}
+
 export function approvalExtensionRecommendationCopy(
   recommendation: GuardApprovalExtensionRecommendation,
 ): ApprovalExtensionRecommendationCopy {
   const commands = recommendation.permissions.map(recommendationCommandLabel);
   const commandText = joinLabels(commands);
   const owner = extensionNames(recommendation);
-  const cautionLines = recommendation.permissions
-    .filter((permission) => permission.caution)
-    .map((permission) => {
-      const command = recommendationCommandLabel(permission);
-      const reason = CAUTION_REASON_COPY[permission.caution_reason ?? "sensitive"];
-      return permission.caution_detail ? `${command} ${reason}. ${permission.caution_detail}` : `${command} ${reason}.`;
-    });
+  const oneTap = !recommendation.caution;
+  const cautionLines = recommendation.permissions.filter((permission) => permission.caution).map(cautionLine);
   const firstExtension = recommendation.permissions[0]?.extension_name ?? owner;
+  const configureVerb = oneTap ? "Configure" : "Review";
   return {
     commands,
     commandText,
-    title: `${owner} covers ${commandText}`,
-    body: `${owner} asks before agents run ${commandText}. Allow it in ${owner} and future ${commandText} commands run without asking. Other protections still apply.`,
+    oneTap,
+    eyebrow: oneTap ? "Recommended setting" : "Extension rule",
+    title: `${owner} asks before ${commandText}`,
+    body: oneTap
+      ? `Allow ${commandText} in ${owner} and agents run matching commands without asking. Other protections still apply.`
+      : `Allowing ${commandText} would let agents run every matching command without asking, not only this one. ` +
+        `Decide on this request below, or review the rule in ${owner}.`,
     primaryLabel: `Approve & always allow ${commandText}`,
-    configureLabel: `Configure in ${firstExtension}`,
+    configureVerb,
+    configureLabel: `${configureVerb} in ${firstExtension}`,
     confirmTitle: `Always allow ${commandText}?`,
     confirmDetail:
       `This approves this request and changes ${owner} so agents can run ${commandText} without asking. ` +

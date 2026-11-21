@@ -2,7 +2,9 @@ use super::{
     allowed_payload, allowing_lane, deferred, drain, lane, post_tool_payload, prompt_payload,
     run_as, Lane, HOME,
 };
-use crate::hook_direct::pi::{resolution, source_ref_external_allowed, structured_mediation};
+use crate::hook_direct::pi::{
+    outage_overlay, resolution, source_ref_external_allowed, structured_mediation,
+};
 use serde_json::{json, Value};
 
 const VECTORS: &str = include_str!("../testdata/hook_direct_pi/pi_vectors.json");
@@ -113,6 +115,35 @@ fn structured_output_view(policy: &str) -> Value {
         .find(|vector| vector["policy"] == policy)
         .map(|vector| vector["view"].clone())
         .unwrap()
+}
+
+#[test]
+fn outage_mediation_keeps_only_an_explicitly_unrequired_destination_open() {
+    let withheld = json!({
+        "structured_content_mediation": {
+            "schema": "guard-structured-content-mediation.v1",
+            "action": "withhold",
+            "reason_code": "structured_native_edge_unavailable",
+        },
+    });
+    for vector in vectors("structured_output") {
+        let harness = vector["harness"].as_str().unwrap();
+        let view = &vector["view"];
+        // An unbound view defers on the direct lane, and must withhold when
+        // the daemon's edge cannot produce a decision.
+        let expected = if !view.is_null() && vector["unchanged"].as_bool() == Some(true) {
+            json!({})
+        } else {
+            withheld.clone()
+        };
+        assert_eq!(
+            Value::Object(outage_overlay(harness, "PostToolUse", Some(view))),
+            expected,
+            "{vector}"
+        );
+    }
+    assert!(outage_overlay("codex", "PostToolUse", None).is_empty());
+    assert!(outage_overlay("omp", "PreToolUse", None).is_empty());
 }
 
 #[test]

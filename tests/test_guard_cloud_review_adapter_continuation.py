@@ -1,21 +1,26 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
 from codex_plugin_scanner.guard.continuation_runtime import (
     continuation_offer_payload,
     continue_request_after_application,
-    record_live_hook_completion,
 )
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
 _NOW = "2026-08-24T12:00:00+00:00"
+# Read from the bundled contracts file: parametrization happens at collection, before any runtime is reachable.
+_CONTRACTS = (
+    Path(__file__).resolve().parents[1]
+    / "src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json"
+)
+_HARNESSES = [row["harness"] for row in json.loads(_CONTRACTS.read_text(encoding="utf-8"))["contracts"]]
 
 
 def _seed_adapter_request(store: GuardStore, harness: str) -> dict[str, object]:
@@ -77,7 +82,7 @@ def _seed_adapter_request(store: GuardStore, harness: str) -> dict[str, object]:
     return request
 
 
-@pytest.mark.parametrize("harness", [contract.harness for contract in HARNESS_CONTRACTS])
+@pytest.mark.parametrize("harness", _HARNESSES)
 def test_every_adapter_proves_or_refuses_automatic_continuation(tmp_path: Path, harness: str) -> None:
     store = GuardStore(tmp_path / harness)
     request = _seed_adapter_request(store, harness)
@@ -90,11 +95,9 @@ def test_every_adapter_proves_or_refuses_automatic_continuation(tmp_path: Path, 
     assert harness == "codex"
     waiting = continue_request_after_application(store, request_row=request, action="allow_once", now=_NOW)
     assert waiting["continuationStatus"] == "waiting"
-    completed = record_live_hook_completion(
-        store,
-        request_id=str(request["request_id"]),
-        action="allow",
-        now="2026-08-24T12:00:01+00:00",
+    completed = store._native_store_call(
+        "record_codex_live_completion",
+        {"request_id": str(request["request_id"]), "action": "allow", "now": "2026-08-24T12:00:01+00:00"},
     )
     assert isinstance(completed, Mapping)
     assert completed["continuationStatus"] == "resumed"

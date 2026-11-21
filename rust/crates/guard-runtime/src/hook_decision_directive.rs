@@ -17,7 +17,7 @@ const NATIVE_RESPONSE_HARNESSES: [&str; 8] = [
 const EXIT_BLOCK_HARNESSES: [&str; 7] = ["kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"];
 const EXIT_TWO_HARNESSES: [&str; 4] = ["cursor", "devin", "kimi", "hermes"];
 const EXIT_ONE_HARNESSES: [&str; 2] = ["opencode", "superagent"];
-const ENVELOPE_HARNESSES: [&str; 5] = ["codex", "claude-code", "copilot", "pi", "omp"];
+const ENVELOPE_HARNESSES: [&str; 6] = ["codex", "claude-code", "copilot", "pi", "omp", "muse"];
 const PREEMPTIVE_EVENTS: [&str; 3] = ["PreToolUse", "UserPromptSubmit", "PermissionRequest"];
 
 pub(crate) struct DirectiveFacts<'a> {

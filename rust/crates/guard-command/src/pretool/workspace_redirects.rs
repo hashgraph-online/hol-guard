@@ -17,11 +17,10 @@ use guard_contracts::{GuardExecutionEnvironmentV1, PreToolResultV1};
 use serde_json::Value;
 
 use super::redirect_projection::{
-    boundary, remove_quoted_heredoc, skip_heredoc_bodies, trailing_word,
+    boundary, heredoc_records_commit_message, heredoc_segment, remove_quoted_heredoc, skip_bodies,
+    trailing_word,
 };
-use crate::native_command_controls::{
-    python_is_builtin_only, python_stdin, CompiledNativeCommandControls,
-};
+use crate::native_command_controls::{python_stdin, CompiledNativeCommandControls};
 use crate::pretool::workspace_contained::Shape;
 use crate::CommandModelRequestV1;
 
@@ -33,36 +32,42 @@ enum Quote {
 }
 
 /// The command with every literal-path redirect, descriptor copy and quoted
-/// `cat` heredoc removed. A quoted heredoc may also feed `python3 -` a program
-/// that reads only builtins, which cannot start a program or load a module;
-/// the projection keeps `python3 -`, so every control still sees it. `None`
+/// `cat` heredoc removed. A quoted heredoc may also carry the message of a
+/// `git commit -F -`, or feed `python3` or `python3 -` a program that meets
+/// the bar a script file in the workspace meets (`redirect_stdin`); the
+/// projection keeps the interpreter, so every control still sees it. `None`
 /// when nothing was removed or any redirect has another form: process
 /// substitution, a computed or home-relative target, a descriptor above 2, a
 /// herestring, or a heredoc fed to anything else.
 pub(crate) fn project(raw: &str) -> Option<String> {
-    project_scan(raw).map(|(projected, _, _)| projected)
+    project_scan(raw).and_then(|(projected, _, _, entered)| (!entered).then_some(projected))
 }
 
 /// [`project`], and whether any removed redirect names a file other than
 /// `/dev/null`, which no link in the workspace can retarget.
 pub(crate) fn project_naming_files(raw: &str) -> Option<(String, bool)> {
-    project_scan(raw).map(|(projected, _, names_files)| (projected, names_files))
+    project_scan(raw).and_then(|(projected, _, names_files, entered)| {
+        (!entered).then_some((projected, names_files))
+    })
 }
 
 /// [`project`] with, for each byte of the projection, the index of the raw
 /// character it came from. Bytes the projection inserts take the index of the
 /// redirect they replace.
 fn project_mapped(raw: &str) -> Option<(String, Vec<usize>)> {
-    project_scan(raw).map(|(projected, map, _)| (projected, map))
+    project_scan(raw).map(|(projected, map, _, _)| (projected, map))
 }
 
-fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
+/// The last field: Python after a leading `cd`, which only `contained` takes.
+fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool, bool)> {
     let chars: Vec<char> = raw.chars().collect();
     let mut out = String::with_capacity(raw.len());
     let mut map: Vec<usize> = Vec::with_capacity(raw.len());
     let mut heredocs: Vec<(String, bool)> = Vec::new();
     // Whether each pending heredoc feeds Python its program.
     let mut programs: Vec<bool> = Vec::new();
+    // Whether a program fed to Python needs the script-file bar.
+    let mut wide = false;
     let (mut quote, mut escaped, mut removed) = (Quote::None, false, false);
     let mut names_files = false;
     let mut index = 0usize;
@@ -105,15 +110,18 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
             '\\' => escaped = true,
             '\n' if !heredocs.is_empty() => {
                 out.push('\n');
-                index = skip_bodies(&chars, index + 1, &mut heredocs, &mut programs)?;
+                index = skip_bodies(&chars, index + 1, &mut heredocs, &mut programs, &mut wide)?;
                 continue;
             }
             '<' if chars.get(index + 1) == Some(&'<') => {
-                // A heredoc is stdin. Only `cat` is known to treat it as data;
-                // Python runs it, so its body is checked once it is read.
-                let segment = current_segment(&out).trim();
+                // A heredoc is stdin. `cat` treats it as data and `git commit
+                // -F -` records it as the message, exactly as the decision's
+                // own projection reads both; Python runs it, so its body is
+                // checked once it is read.
+                let segment = heredoc_segment(&out)?.trim();
                 let program = python_stdin(segment);
-                if segment != "cat" && !program {
+                wide |= program && !segment.ends_with(" -");
+                if segment != "cat" && !program && !heredoc_records_commit_message(segment) {
                     return None;
                 }
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
@@ -140,8 +148,19 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
     }
     let lead = out.len() - out.trim_start().len();
     let projected = out.trim();
+    // The `&` that backgrounds the whole command is read off here too.
+    // Backgrounding starts exactly the programs the foreground text names, and
+    // the sandbox runs the raw bytes either way, so the text this projection
+    // hands the classifier is the foreground one. Keeping the `&` left the
+    // projection unmodelled, which cost a redirect beside it the workspace
+    // route the same command keeps without the redirect.
+    let projected = crate::pretool::script_content::foreground_job(projected).unwrap_or(projected);
+    let entered = wide && !crate::pretool::script_content::fed::python_alone(projected);
+    if entered && !cd::python_after_cd(projected) {
+        return None;
+    }
     let map = map[lead..lead + projected.len()].to_vec();
-    Some((projected.to_owned(), map, names_files))
+    Some((projected.to_owned(), map, names_files, entered))
 }
 
 /// The shape the projected command earns, with a bootstrapped `git init`
@@ -217,17 +236,28 @@ pub(super) fn contained(
     context: crate::pretool::PathContext<'_>,
     execution_environment: Option<&GuardExecutionEnvironmentV1>,
 ) -> Option<PreToolResultV1> {
-    if !crate::pretool::workspace_contained::host_eligible(harness, event) {
+    if !crate::pretool::workspace_contained::host_eligible(harness, event, payload) {
         return None;
     }
     // A command the bounded-write projection takes runs directly instead: a
     // single command, or a chain whose only write is its first step's,
     // followed by plain readers. One it declines, such as a write to
     // `.tool-versions`, or a chain beside local Git writes, runs here.
-    let stripped = project(command)?;
+    let (stripped, _, names_files, entered) = project_scan(command)?;
+    if entered && !cd::enters_cwd(&stripped, context) {
+        return None;
+    }
     // Removing an input redirect drops the program it feeds, so a program
-    // that needs the network keeps the review of the text as sent.
-    if crate::pretool::script_content::text_uses_network(command, context) {
+    // that needs the network or a credential store, itself or through a
+    // local module it imports, or opens a system file the sandbox still lets
+    // it read, or reaches past the workspace in a way the sandbox does not
+    // take away, keeps the review of the text as sent.
+    if crate::pretool::script_content::fed::text_needs_withheld(command, context)
+        || crate::pretool::script_content::text_names_system_file(command, context)
+        || crate::pretool::script_content::text_spells_destructive_git(command, context)
+        || crate::pretool::literal_secrets::holds_literal_secret(command)
+        || crate::pretool::hook_neutering::neuters_git_hooks(command)
+    {
         return None;
     }
     let direct = super::redirect_projection::project(command, context);
@@ -261,16 +291,14 @@ pub(super) fn contained(
     let single = direct.is_none();
     let runs_directly = direct
         .is_some_and(|projection| projection.bounded_writes && projection.git_chain.is_none());
+    // File-free redirects need no sandbox, so keep the extension Allow.
     let allowed = projected.minimum_action == "allow"
         && !projected.action.sensitive_target
         && !runs_directly
+        && names_files
         && stays_offline(&projected_text, single);
-    // macOS claims package, Node tool and pytest commands with narrower
-    // profiles before the workspace route runs. The redirect disqualifies
-    // those, so the workspace sandbox takes the command once it passes that
-    // route's gate.
-    // A trailing `2>&1` before bounded output filters is not such a redirect:
-    // the narrower sink peels it itself, so that command keeps its profile.
+    // The workspace route handles redirects that disqualify narrower profiles.
+    // Bounded output filters peel `2>&1` themselves and retain their profile.
     let home = context.home_dir.map(Path::new);
     let narrower = super::redirect_projection::redirected_profile(&projected.reason_code)
         && projected.minimum_action == "sandbox-required"
@@ -295,7 +323,7 @@ pub(super) fn contained(
     let raw = super::evaluate_envelope(
         harness,
         event,
-        payload,
+        &cd::reviewed_payload(payload, command, entered),
         None,
         deadline,
         context,
@@ -374,45 +402,6 @@ fn narrower_sink_runs(raw: &str, context: crate::pretool::PathContext<'_>) -> bo
     })
 }
 
-/// Skips the bodies of the pending heredocs in order, as
-/// `skip_heredoc_bodies` does. A body that feeds Python must use only its
-/// builtins, the same check the extension controls apply to such a program.
-fn skip_bodies(
-    chars: &[char],
-    mut index: usize,
-    heredocs: &mut Vec<(String, bool)>,
-    programs: &mut Vec<bool>,
-) -> Option<usize> {
-    if heredocs.len() != programs.len() {
-        return None;
-    }
-    for (heredoc, program) in heredocs.drain(..).zip(programs.drain(..)) {
-        let start = index;
-        index = skip_heredoc_bodies(chars, index, &mut vec![heredoc])?;
-        if program {
-            let text: String = chars[start..index].iter().collect();
-            let text = text.strip_suffix('\n').unwrap_or(&text);
-            // The last line is the delimiter.
-            let body: Vec<&str> = match text.rsplit_once('\n') {
-                Some((body, _)) => body.split('\n').collect(),
-                None => Vec::new(),
-            };
-            if !python_is_builtin_only(&body) {
-                return None;
-            }
-        }
-    }
-    Some(index)
-}
-
-/// The text of the simple command being written, after the last separator.
-fn current_segment(out: &str) -> &str {
-    let start = out
-        .rfind([';', '|', '&', '\n', '(', ')', '{', '}'])
-        .map_or(0, |position| position + 1);
-    &out[start..]
-}
-
 fn remove_redirect(
     chars: &[char],
     start: usize,
@@ -422,20 +411,28 @@ fn remove_redirect(
     let input = chars[start] == '<';
     let mut index = start + 1;
     let descriptor = trailing_word(out).to_owned();
+    let merged_streams = !input && descriptor == "&";
     match descriptor.as_str() {
         "" => {}
         "1" | "2" if !input => out.truncate(out.len() - 1),
         "0" if input => out.truncate(out.len() - 1),
         _ if descriptor.chars().all(|value| value.is_ascii_digit()) => return None,
-        // `&>` means background-then-redirect under POSIX `sh`.
+        // `&>` sends both streams to the file. POSIX `sh` reads it as the
+        // job separator followed by a redirect, which writes the same file
+        // after starting the same program, so both readings name the same
+        // write and the spelling decides with `> f 2>&1`.
+        "&" if !input => out.truncate(out.len() - 1),
         _ if descriptor.ends_with('&') => return None,
         _ => {}
     }
     if chars.get(index) == Some(&'&') {
         // A descriptor copy between stdout and stderr moves no file data.
+        // The `)` that closes a subshell ends the copy as a blank does:
+        // `(npm test 2>&1 || true)` copies the descriptor inside the group.
+        let after = chars.get(index + 2);
         if input
             || !matches!(chars.get(index + 1), Some('1' | '2'))
-            || !boundary(chars.get(index + 2))
+            || !(boundary(after) || after == Some(&')'))
         {
             return None;
         }
@@ -461,6 +458,22 @@ fn remove_redirect(
     if !literal_target(&target) {
         return None;
     }
+    if merged_streams {
+        // The two readings of `&>` only name the same work while the
+        // redirect ends its segment. A word after the target is an argument
+        // to the same program in `bash` and the start of a second command in
+        // POSIX `sh`, which runs it after backgrounding the first. The
+        // sandbox runs the raw bytes, so a projection that modelled only the
+        // `bash` reading would hand the classifier a command the other shell
+        // never runs and hide the one it does.
+        let mut after = index;
+        while matches!(chars.get(after), Some(' ' | '\t')) {
+            after += 1;
+        }
+        if !matches!(chars.get(after), None | Some(';' | '|' | '&' | '\n' | ')')) {
+            return None;
+        }
+    }
     *names_files |= target != "/dev/null";
     out.push(' ');
     Some(index)
@@ -477,6 +490,8 @@ fn literal_target(target: &str) -> bool {
             .all(|value| value.is_ascii_alphanumeric() || "._-/+@%,=:".contains(value))
 }
 
+#[path = "workspace_redirects_cd.rs"]
+mod cd;
 #[cfg(test)]
 #[path = "workspace_redirects_tests.rs"]
 mod tests;

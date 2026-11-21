@@ -8,7 +8,6 @@ from pathlib import Path
 from codex_plugin_scanner.guard.extension_builder.listing import category_for_extension
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    risk_classes_for_command_action,
 )
 from tests.command_extension_contracts import assert_safe_command_cases
 from tests.native_command_test_support import real_native_command_evaluation
@@ -225,10 +224,6 @@ def test_tui_runner_evidence_omits_raw_arguments_and_expansion_content(tmp_path:
     catalog = json.dumps(extension.to_dict())
     assert "acme-internal-secret" not in catalog
     assert "RECONFIG_FLAG" not in catalog
-
-
-def test_tui_runner_action_publishes_risk_classes() -> None:
-    assert risk_classes_for_command_action("tui-runner forced reconfiguration command") == ("destructive_shell",)
 
 
 def test_tui_runner_extension_documents_interactive_coverage_limit() -> None:

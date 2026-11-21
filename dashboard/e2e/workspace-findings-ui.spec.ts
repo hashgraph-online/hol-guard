@@ -35,7 +35,7 @@ const assessments = [
       detectors: { supply_chain: "incomplete", secrets: "not_run" },
     },
     findings: [
-      { finding_id: "f-1", severity: "critical", decision: "block", ecosystem: "npm", package_name: "minimist", package_version: "1.2.5", fix_version: "1.2.8", advisory_ids: ["GHSA-xvch-5gv4-984h", "CVE-2021-44906"] },
+      { finding_id: "f-1", severity: "critical", decision: "block", ecosystem: "npm", package_name: "minimist", package_version: "1.2.5", fix_version: "1.2.8", advisory_ids: ["GHSA-xvch-5gv4-984h", "CVE-2021-44906"], validation_state: "confirmed" },
       { finding_id: "f-2", severity: "moderate", decision: "ask", ecosystem: "pypi", package_name: "requests", package_version: "2.25.0", fix_version: null, advisory_ids: [] },
     ],
   },
@@ -51,7 +51,7 @@ async function mountWorkspaceFindings(page: Page, actions: unknown[]): Promise<v
       return;
     }
     let body: unknown = {};
-    if (path.endsWith("/supply-chain/workspace-assessments")) body = { worktrees, runs };
+    if (path.endsWith("/supply-chain/workspace-assessments")) body = { worktrees, runs, latest_runs: runs };
     else if (path.endsWith("/supply-chain/workspace-findings")) body = { worktrees, assessments };
     else if (path.endsWith("/initialize")) body = { auth_token: "e2e-workspace-findings-token" };
     else if (path.endsWith("/runtime")) body = paidStateSnapshot;
@@ -82,7 +82,10 @@ for (const width of [390, 1280]) {
     await expect(storefront).toContainText("Secret scanning is not part of this check yet.");
     await expect(storefront).toContainText("minimist");
     await expect(storefront).toContainText("1.2.8");
-    await expect(storefront).toContainText("Blocked");
+    await expect(storefront.getByText("Block", { exact: true })).toBeVisible();
+    await expect(storefront).toContainText("Advisory match, confirmed");
+    await expect(storefront.getByText("Ask", { exact: true })).toBeVisible();
+    await expect(storefront).toContainText("Package policy");
     await expect(storefront).toContainText("No fix yet");
 
     const billing = page.getByRole("listitem", { name: "billing-api" });
@@ -101,6 +104,33 @@ for (const width of [390, 1280]) {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     await page.screenshot({ path: testInfo.outputPath(`workspace-findings-${width}.png`), fullPage: true });
+    expect(pageErrors).toEqual([]);
+  });
+}
+
+for (const width of [390, 1280]) {
+  test(`audit tab summarizes background workspace checks at ${width}px`, async ({ page }, testInfo) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.setViewportSize({ width, height: 900 });
+    await mountWorkspaceFindings(page, []);
+
+    await page.goto(`/audit?${DAEMON}`);
+    const checks = page.getByRole("region", { name: "Background workspace checks" });
+    await expect(checks).toBeVisible();
+    await expect(checks).toContainText("not in the audit list below");
+    await expect(checks.locator("dt", { hasText: "Workspaces" }).locator("+ dd")).toHaveText("3");
+    await expect(checks.locator("dt", { hasText: "Need attention" }).locator("+ dd")).toHaveText("2");
+    await expect(checks.locator("dt", { hasText: "Open findings" }).locator("+ dd")).toHaveText("2");
+    await expect(checks).toContainText("2 workspaces have no finished check yet.");
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    await checks.screenshot({ path: testInfo.outputPath(`audit-codebase-checks-${width}.png`) });
+
+    await checks.getByRole("button", { name: "Open Workspaces" }).click();
+    await expect(page).toHaveURL(/\/workspaces/);
+    await expect(page.getByRole("listitem", { name: "storefront" })).toBeVisible();
     expect(pageErrors).toEqual([]);
   });
 }

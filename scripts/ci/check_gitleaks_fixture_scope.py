@@ -62,6 +62,15 @@ def verify_fixture_scope(root: Path, executable: str) -> None:
         ("credential beside authoring digest", record, digest_line + " " + credential_line, True),
         ("credential after authoring digest", record, digest_line + "\n" + credential_line, True),
     )
+    cigar_evidence = Path("docs/guard/cigar-integration/evidence/upgrades-versions-client-20261028.json")
+    source_digest = hashlib.sha256(b"cigar-source-digest-scope-control").hexdigest()
+    source_line = f'  "rust/crates/guard-runtime/src/context_assistance_installation_key.rs": "{source_digest}",'
+    cases += (
+        ("CIGAR source-file digest", cigar_evidence, source_line, False),
+        ("CIGAR digest outside evidence", Path("src/production.json"), source_line, True),
+        ("credential-shaped CIGAR field", cigar_evidence, f'  "client_secret": "{source_digest}"', True),
+        ("credential beside CIGAR digest", cigar_evidence, source_line + " " + unexpected, True),
+    )
     vectors = Path("rust/crates/guard-runtime/testdata/guard_store/mcp_provider_read_vectors.json")
     fingerprint = "8d638ce7441755dda07242b347ddc6c5c13b0d7e107c61a7ae41223d466402cd"
     token_line = f'      "catalog_token": "{fingerprint}",'

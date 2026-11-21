@@ -64,13 +64,17 @@ def _reconcile(publisher: NativePolicySnapshotPublisher) -> None:
             publisher._republish_preserving_watch()
     if publisher._monotonic_clock() >= publisher._reconcile_due_monotonic:
         publisher._reconcile_due_monotonic = publisher._monotonic_clock() + 1.0
-        if publisher._policy_input_changed():
-            publisher._republish_preserving_watch()
-        publisher._recheck_direct_lane_local_cli(_local_cli_revision_or_none(publisher))
-        publisher._recheck_direct_lane_review_facts()
-        publisher._recheck_direct_lane_structured_output()
-        publisher._recheck_direct_lane_mcp_relay()
-        publisher._recheck_direct_lane_saved_state()
+        # These checks make about ten store reads per pass. A read outside a
+        # scope opens its own connection and parses the whole schema, so the
+        # pass shares one connection.
+        with publisher.store.connection_scope():
+            if publisher._policy_input_changed():
+                publisher._republish_preserving_watch()
+            publisher._recheck_direct_lane_local_cli(_local_cli_revision_or_none(publisher))
+            publisher._recheck_direct_lane_review_facts()
+            publisher._recheck_direct_lane_structured_output()
+            publisher._recheck_direct_lane_mcp_relay()
+            publisher._recheck_direct_lane_saved_state()
 
 
 def _treat_inputs_as_changed(publisher: NativePolicySnapshotPublisher) -> None:

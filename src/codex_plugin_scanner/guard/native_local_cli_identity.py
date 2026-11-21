@@ -43,11 +43,10 @@ _UNLISTED_OPTIONAL_KEYS = ("interpreter_name", "source_path", "path_class", "run
 # The resident gets one budget for parsing, launch derivation and hashing.
 _IDENTIFY_BUDGET_MS = 2000
 _IDENTIFY_TIMEOUT_SECONDS = 2.5
+# Recognition may identify the paste and then the file it names.
+_RECOGNIZE_BUDGET_MS = 4000
+_RECOGNIZE_TIMEOUT_SECONDS = 4.5
 _FAILURES: ContextVar[list[str] | None] = ContextVar("local_cli_identity_failures", default=None)
-
-
-class LocalCliIdentityUnavailableError(RuntimeError):
-    """The resident could not derive an identity the command may need."""
 
 
 @contextmanager
@@ -81,29 +80,6 @@ def valid_local_cli_identity(identity: object) -> TypeGuard[dict[str, str]]:
         and _is_sha256_digest(identity["identity_hash"])
         and _CLI_ID_PATTERN.fullmatch(identity["cli_id"]) is not None
     )
-
-
-def native_local_cli_identity(source: dict[str, Any], *, guard_home: Path | None = None) -> dict[str, str] | None:
-    """Return ``{cli_id, name, kind, identity_hash}`` or ``None``.
-
-    ``source`` is one ``LocalCliIdentitySourceV1`` variant, tagged by
-    ``source``. ``None`` covers both "not a grantable identity" and native
-    failure; a failure is also recorded for ``track_local_cli_identity_failures``.
-    """
-
-    result = native_context_digest(
-        "local_cli_identity",
-        {"source": source},
-        guard_home=_resolve_digest_home(guard_home),
-    )
-    if not isinstance(result, dict) or result.get("status") != "ok":
-        return record_local_cli_identity_failure("native_local_cli_identity_unavailable")
-    if "local_cli_identity" not in result:
-        return None
-    identity = result.get("local_cli_identity")
-    if not valid_local_cli_identity(identity):
-        return record_local_cli_identity_failure("native_local_cli_identity_malformed")
-    return identity
 
 
 def _valid_unlisted_cli(record: object) -> TypeGuard[dict[str, Any]]:
@@ -159,9 +135,64 @@ def native_unlisted_cli_identities(
     return records
 
 
+def _valid_recognition(result: dict[str, Any], answer: str) -> bool:
+    if answer == "candidates":
+        found = result.get("candidates")
+        return isinstance(found, list) and all(isinstance(item, str) for item in found)
+    if "identity" not in result:
+        return False
+    identity = result["identity"]
+    return (
+        (identity is None or _valid_unlisted_cli(identity))
+        and isinstance(result.get("error_code"), str)
+        and isinstance(result.get("message"), str)
+    )
+
+
+def native_local_cli_recognition(
+    command_text: str,
+    *,
+    cwd: Path,
+    home_dir: Path,
+    answer: str = "recognition",
+    guard_home: Path | None = None,
+) -> dict[str, Any] | None:
+    """Return the resident's ``local_cli_recognize`` answer for a pasted command.
+
+    ``answer="recognition"`` names the one unlisted CLI, or the reason there
+    is none; ``answer="candidates"`` returns only the spellings it would try.
+    A failed or malformed answer records a failure and yields ``None``.
+    """
+
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    request = {
+        "command_text": command_text,
+        "cwd": str(cwd),
+        "home_dir": str(home_dir),
+        "user_home": str(Path.home()),
+        "env": dict(os.environ),
+        "budget_ms": _RECOGNIZE_BUDGET_MS,
+        "answer": answer,
+    }
+    try:
+        result = native_runner_authority(
+            "local_cli_recognize",
+            request,
+            guard_home=_resolve_digest_home(guard_home),
+            timeout_seconds=_RECOGNIZE_TIMEOUT_SECONDS,
+        )
+    except NativeRunnerAuthorityError:
+        record_local_cli_identity_failure("native_local_cli_identity_unavailable")
+        return None
+    if not _valid_recognition(result, answer):
+        record_local_cli_identity_failure("native_local_cli_identity_malformed")
+        return None
+    return result
+
+
 __all__ = [
-    "LocalCliIdentityUnavailableError",
-    "native_local_cli_identity",
+    "native_local_cli_recognition",
     "native_unlisted_cli_identities",
     "record_local_cli_identity_failure",
     "track_local_cli_identity_failures",

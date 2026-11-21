@@ -40,13 +40,30 @@ function normalizeExtension(raw: unknown): GuardCoveredExtension | null {
   return { extension_id: extensionId, name, focus_rule_id: focus };
 }
 
+const MAX_RULE_TEXT = 240;
+const MAX_SAFER_ALTERNATIVES = 2;
+
 function normalizeRule(raw: unknown): GuardCoveredRule | null {
   if (!isRecord(raw)) return null;
   const ruleId = catalogId(raw.rule_id);
-  const title = boundedText(raw.title, 120);
+  const title = raw.title === null || raw.title === undefined ? null : boundedText(raw.title, 120);
   const severity = boundedText(raw.severity, 32);
-  if (ruleId === null || title === null || severity === null) return null;
-  return { rule_id: ruleId, title, severity };
+  if (ruleId === null || severity === null) return null;
+  if (raw.title !== null && raw.title !== undefined && title === null) return null;
+  const rule: { -readonly [K in keyof GuardCoveredRule]: GuardCoveredRule[K] } = { rule_id: ruleId, title, severity };
+  // Fields a newer daemon adds. Absent is an older daemon; present with the
+  // wrong type is not the payload the daemon builds.
+  if (raw.description !== undefined) {
+    if (raw.description !== null && typeof raw.description !== "string") return null;
+    rule.description = boundedText(raw.description, MAX_RULE_TEXT);
+  }
+  if (raw.safer_alternatives !== undefined) {
+    if (!Array.isArray(raw.safer_alternatives)) return null;
+    const safer = raw.safer_alternatives.map((item) => boundedText(item, MAX_RULE_TEXT));
+    if (safer.some((item) => item === null)) return null;
+    rule.safer_alternatives = (safer as string[]).slice(0, MAX_SAFER_ALTERNATIVES);
+  }
+  return rule;
 }
 
 function normalizePermission(raw: unknown): GuardCoveredPermission | null {
@@ -110,4 +127,51 @@ export function coverageScopeLine(coverage: GuardApprovalExtensionCoverage): str
 export function coverageStepLabel(segment: GuardCoveredSegment): string {
   const step = `Step ${segment.index + 1}`;
   return segment.executable === null ? step : `${step} · ${segment.executable}`;
+}
+
+/** What a step is covered by, named once. */
+export function segmentDetail(segment: GuardCoveredSegment): string | null {
+  const titles = segment.rules.flatMap((rule) => (rule.title === null ? [] : [rule.title]));
+  const labels = segment.permissions.filter((permission) => permission.configurable).map((item) => item.label);
+  // A permission is often named after its extension, and the link beside it
+  // already shows that name.
+  const linked = new Set(segment.extensions.map((extension) => extension.name));
+  const parts = (titles.length > 0 ? titles : labels).filter((part) => !linked.has(part));
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** An extension-page link the recommendation card above already shows. */
+export type CoverageLink = { extension_id: string; rule_id: string | null };
+
+/** Whether the recommendation card already links where this step would send you. */
+function alreadyLinked(extension: GuardCoveredExtension, links: readonly CoverageLink[]): boolean {
+  return links.some(
+    (link) =>
+      link.extension_id === extension.extension_id &&
+      // A step that names no rule of its own lands on the extension page, so any
+      // link to that extension repeats it. A step that points at one rule is a
+      // repeat only when the recommendation links that same rule: an extension
+      // can govern several steps of a compound command through different rules.
+      (extension.focus_rule_id === null || link.rule_id === extension.focus_rule_id),
+  );
+}
+
+/**
+ * The steps still worth listing once the recommendation card names some patterns,
+ * each carrying only the extensions that card does not already link. A step whose
+ * every extension is linked above would only repeat those links, so it is dropped.
+ */
+export function coverageSegmentsBeyond(
+  coverage: GuardApprovalExtensionCoverage,
+  links: readonly CoverageLink[],
+): GuardCoveredSegment[] {
+  const linkedRuleIds = new Set(links.map((link) => link.rule_id).filter((ruleId) => ruleId !== null));
+  return coverage.segments
+    .map((segment) => ({
+      ...segment,
+      extensions: segment.extensions.filter((extension) => !alreadyLinked(extension, links)),
+      // The step's detail names its rules; a rule already linked above is not named again.
+      rules: segment.rules.filter((rule) => !linkedRuleIds.has(rule.rule_id)),
+    }))
+    .filter((segment) => segment.extensions.length > 0);
 }

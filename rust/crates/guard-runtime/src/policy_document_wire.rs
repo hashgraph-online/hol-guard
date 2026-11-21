@@ -215,7 +215,7 @@ pub(super) fn operation(
             let Transfer::Download { bytes, digest } = &entry.transfer else {
                 return Err(INVALID);
             };
-            if offset >= bytes.len() || offset % CHUNK != 0 {
+            if offset >= bytes.len() || !offset.is_multiple_of(CHUNK) {
                 return Err(INVALID);
             }
             let end = offset.saturating_add(CHUNK).min(bytes.len());

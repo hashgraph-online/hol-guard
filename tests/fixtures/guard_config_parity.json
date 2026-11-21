@@ -15,6 +15,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -43,8 +44,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {},
@@ -67,6 +74,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -95,8 +103,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -141,6 +155,7 @@
     "evidence_retain_days": 3650,
     "guard_event_limit": 5,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -172,8 +187,14 @@
     "telemetry": true,
     "unknown_publisher_action": "allow",
     "update_channel": "alpha",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 168,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -198,6 +219,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -226,8 +248,14 @@
     "telemetry": true,
     "unknown_publisher_action": "require-reapproval",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -252,6 +280,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -280,8 +309,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -306,6 +341,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -334,8 +370,14 @@
     "telemetry": true,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -360,6 +402,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -388,8 +431,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -414,6 +463,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -442,8 +492,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -468,6 +524,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -496,8 +553,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -522,6 +585,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -550,8 +614,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -576,6 +646,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -604,8 +675,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -630,6 +707,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -658,8 +736,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -684,6 +768,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -712,8 +797,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -738,6 +829,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -766,8 +858,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -792,6 +890,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -820,8 +919,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -846,6 +951,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -874,8 +980,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -900,6 +1012,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -928,8 +1041,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -954,6 +1073,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -982,8 +1102,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1008,6 +1134,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1036,8 +1163,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1062,6 +1195,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1090,8 +1224,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1116,6 +1256,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1144,8 +1285,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1170,6 +1317,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1198,8 +1346,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1224,6 +1378,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1252,8 +1407,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1278,6 +1439,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1306,8 +1468,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1332,6 +1500,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1360,8 +1529,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1386,6 +1561,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1414,8 +1590,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1440,6 +1622,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1468,8 +1651,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1494,6 +1683,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1522,8 +1712,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1548,6 +1744,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1576,8 +1773,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1602,6 +1805,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1630,8 +1834,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1656,6 +1866,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1684,8 +1895,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1710,6 +1927,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1738,8 +1956,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1764,6 +1988,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1792,8 +2017,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1818,6 +2049,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1846,8 +2078,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1872,6 +2110,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1900,8 +2139,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1926,6 +2171,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "claude-code": "watch",
      "cursor": "extra_careful",
@@ -1962,8 +2208,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -1988,6 +2240,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "claude-code": "watch",
      "codex": "watch",
@@ -2020,8 +2273,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2046,6 +2305,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2078,8 +2338,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": "2026-01-02T03:04:05+00:00"
+    "watch_entered_at": "2026-01-02T03:04:05+00:00",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2104,6 +2370,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2136,8 +2403,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": "2026-01-02T03:04:05Z"
+    "watch_entered_at": "2026-01-02T03:04:05Z",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2162,6 +2435,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2194,8 +2468,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": "2026-01-02"
+    "watch_entered_at": "2026-01-02",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2220,6 +2500,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2252,8 +2533,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": "2026-01-02T03:04"
+    "watch_entered_at": "2026-01-02T03:04",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2278,6 +2565,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2310,8 +2598,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": "2026-01-02T03:04:05.123456"
+    "watch_entered_at": "2026-01-02T03:04:05.123456",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2336,6 +2630,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2366,8 +2661,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2392,6 +2693,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2422,8 +2724,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2448,6 +2756,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2478,8 +2787,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2504,6 +2819,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2534,8 +2850,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2560,6 +2882,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2592,8 +2915,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": "2024-02-29"
+    "watch_entered_at": "2024-02-29",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2618,6 +2947,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2648,8 +2978,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2674,6 +3010,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2704,8 +3041,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2730,6 +3073,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2760,8 +3104,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2786,6 +3136,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2816,8 +3167,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2842,6 +3199,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2872,8 +3230,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2898,6 +3262,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2930,8 +3295,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": "2026-01-02T23:59:59+23:59"
+    "watch_entered_at": "2026-01-02T23:59:59+23:59",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -2956,6 +3327,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2986,8 +3358,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3012,6 +3390,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3044,8 +3423,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": "2026-01-02T03:04:05+05:30:15"
+    "watch_entered_at": "2026-01-02T03:04:05+05:30:15",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3070,6 +3455,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3102,8 +3488,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": "2026-01-02x03:04:05"
+    "watch_entered_at": "2026-01-02x03:04:05",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3128,6 +3520,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3158,8 +3551,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3184,6 +3583,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3214,8 +3614,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3240,6 +3646,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3270,8 +3677,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3296,6 +3709,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3326,8 +3740,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3352,6 +3772,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3382,8 +3803,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3408,6 +3835,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3438,8 +3866,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3464,6 +3898,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3494,8 +3929,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3520,6 +3961,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -3548,8 +3990,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3583,6 +4031,7 @@
      "junk": "require-reapproval",
      "odd": "require-reapproval"
     },
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {
      "codex": {
@@ -3621,8 +4070,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3649,6 +4104,7 @@
     "harness_actions": {
      "codex": "block"
     },
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -3677,8 +4133,14 @@
     "telemetry": true,
     "unknown_publisher_action": "review",
     "update_channel": "alpha",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3705,6 +4167,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -3733,8 +4196,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": "2026-01-02"
+    "watch_entered_at": "2026-01-02",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3761,6 +4230,7 @@
     "harness_actions": {
      "codex": "block"
     },
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -3789,8 +4259,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3827,6 +4303,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -3855,8 +4332,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3883,6 +4366,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch",
      "cursor": "extra_careful"
@@ -3914,8 +4398,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -3948,6 +4438,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "cursor": "extra_careful"
     },
@@ -3978,8 +4469,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4013,6 +4510,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "cursor": "extra_careful"
     },
@@ -4043,8 +4541,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4078,6 +4582,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "cursor": "extra_careful"
     },
@@ -4108,8 +4613,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4143,6 +4654,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "claude-code": "protected"
     },
@@ -4173,8 +4685,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4211,6 +4729,7 @@
     "harness_actions": {
      "codex": "block"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch",
      "cursor": "extra_careful"
@@ -4242,8 +4761,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4281,6 +4806,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch",
      "cursor": "extra_careful"
@@ -4318,8 +4844,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4360,6 +4892,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch",
      "cursor": "extra_careful"
@@ -4391,8 +4924,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "alpha",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4426,6 +4965,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4454,8 +4994,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4487,6 +5033,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4515,8 +5062,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4548,6 +5101,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4576,8 +5130,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4609,6 +5169,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4637,8 +5198,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4670,6 +5237,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch",
      "cursor": "extra_careful"
@@ -4701,8 +5269,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4737,6 +5311,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4765,8 +5340,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4799,6 +5380,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4827,8 +5409,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4864,6 +5452,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {
      "codex": {
@@ -4896,8 +5485,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4931,6 +5526,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4959,8 +5555,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -4996,6 +5598,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -5024,8 +5627,14 @@
     "telemetry": false,
     "unknown_publisher_action": "block",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {
@@ -5071,6 +5680,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "cursor": "extra_careful"
     },
@@ -5101,8 +5711,14 @@
     "telemetry": false,
     "unknown_publisher_action": "review",
     "update_channel": "stable",
+    "update_mode": "automatic",
     "watch_auto_revert_hours": 24,
-    "watch_entered_at": null
+    "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
+    "workspace_assessment_enabled": true
    }
   },
   "files": {

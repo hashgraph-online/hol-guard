@@ -52,7 +52,7 @@ pub(super) fn normalized_command_segments(
         .map(|segment| control_context_label(segment.control_operator().map(|s| s.as_str())))
         .collect();
     let mut segments: Vec<CommandSegment> = Vec::new();
-    for context_segment in &execution_context.segments {
+    for (index, context_segment) in execution_context.segments.iter().enumerate() {
         let raw_segment: Vec<String> = context_segment.tokens.clone();
         let normalized_tokens = normalize_segment(&raw_segment);
         if normalized_tokens.is_empty() {
@@ -61,6 +61,7 @@ pub(super) fn normalized_command_segments(
         let redacted_tokens = redacted_segment(&raw_segment);
         let (modeled_cwd, validation_reason) =
             validate_shell_execution_segment(&execution_context, context_segment);
+        let npm_cwd = npm_config_directory(&execution_context, context_segment, &modeled_cwd);
         let (effective_path, path_source, effective_cwd, cwd_source) = match modeled_cwd {
             None => (
                 None,
@@ -91,6 +92,14 @@ pub(super) fn normalized_command_segments(
             &path_source,
             opaque_binding.as_deref(),
         );
+        let npm_configured_packages = configured_packages_for_segment(
+            &raw_segment,
+            &normalized_tokens,
+            inherited_environment,
+            npm_cwd.as_deref(),
+            home_dir,
+            project_npmrc_applies(&execution_context.segments, index),
+        );
         segments.push(CommandSegment {
             tokens: normalized_tokens,
             redacted_tokens,
@@ -101,9 +110,70 @@ pub(super) fn normalized_command_segments(
             context_hash,
             context_complete,
             context_reason_code: validation_reason.or_else(|| context_segment.reason_code.clone()),
+            npm_configured_packages,
         });
     }
     segments
+}
+
+/// Directory whose project `.npmrc` this segment's `npx` reads.
+///
+/// A trailing `}` marks the last segment incomplete so the commands after
+/// the group have no directory. The launch inside the group already ran in
+/// `effective_cwd`, and that is the directory npm reads.
+fn npm_config_directory(
+    context: &ShellExecutionContext,
+    segment: &ShellExecutionSegment,
+    modeled_cwd: &Option<PathBuf>,
+) -> Option<PathBuf> {
+    if modeled_cwd.is_some() {
+        return modeled_cwd.clone();
+    }
+    if segment.reason_code.as_deref() != Some(SHELL_CWD_UNRESOLVED_CONTROL_FLOW) {
+        return None;
+    }
+    if segment.effective_cwd.is_none() || segment.cwd_identity.is_none() {
+        return None;
+    }
+    let mut launched = segment.clone();
+    launched.complete = true;
+    launched.reason_code = None;
+    validate_shell_execution_segment(context, &launched).0
+}
+
+/// Whether npm still reads a project `.npmrc` for this segment.
+///
+/// A `cd` that failed because its own operand was missing, and the commands
+/// `&&` joins after it, do not run. The model also copies that reason onto a
+/// later `cd` once the directory is already unknown. That later `cd` can
+/// succeed, so its failure counts only when the directory before it was known.
+/// Every other unplaced launch can still reach a directory the model could
+/// not name.
+fn project_npmrc_applies(segments: &[ShellExecutionSegment], index: usize) -> bool {
+    let mut cursor = index;
+    while cursor > 0 {
+        let joined_by_and =
+            last_flow_operator(same_shell_controls(&segments[cursor].control_before, true))
+                .is_some_and(|operator| operator == "&&");
+        if !joined_by_and {
+            return true;
+        }
+        let previous = &segments[cursor - 1];
+        if previous.directory_operation.is_some()
+            && previous.effective_cwd.is_some()
+            && matches!(
+                previous.reason_code.as_deref(),
+                Some(SHELL_CWD_MISSING_DIRECTORY) | Some(SHELL_CWD_NOT_DIRECTORY)
+            )
+        {
+            return false;
+        }
+        if previous.complete || previous.directory_operation.is_some() {
+            return true;
+        }
+        cursor -= 1;
+    }
+    true
 }
 
 // package_intent_parser.py `_effective_execution_context`

@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from ci.native_runtime.post_tool_review import HookReviewResponse
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewResponse
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -64,7 +64,7 @@ def test_hook_worker_auto_is_native_first(
         }
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         fake_native,
     )
     result = worker.review_http_payload(
@@ -87,7 +87,7 @@ def test_hook_worker_auto_fails_closed_when_native_unavailable(
 ) -> None:
     worker = hook_worker
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.native_runtime_status",
         lambda: NativeRuntimeStatus(
             mode="auto",
             available=False,
@@ -96,7 +96,7 @@ def test_hook_worker_auto_fails_closed_when_native_unavailable(
         ),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *args, **kwargs: None,
     )
     result = worker.review_http_payload(

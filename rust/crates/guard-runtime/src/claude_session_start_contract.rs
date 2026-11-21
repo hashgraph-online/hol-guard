@@ -2,10 +2,9 @@
 //! native SessionStart lane.
 //!
 //! `guard/contracts/claude-hook-groups.v1.json` is the one declaration both
-//! sides read: Python builds `~/.claude/settings.json` from it, and this
-//! module shape-checks the same bytes (a port of
-//! `parse_claude_hook_groups_contract` in `adapters/claude_hook_config.py`)
-//! and decides whether the installed Guard hook entries already equal what
+//! sides read: `harness_adapter::claude_settings` builds
+//! `~/.claude/settings.json` from it, and this module shape-checks the same
+//! bytes and decides whether the installed Guard hook entries already equal what
 //! `refresh_runtime_hook_urls` would write. Entries without a Guard marker
 //! are ignored, as the Python merge keeps them. Any doubt is a mismatch, and
 //! a mismatch hands the session start to the Python transaction.
@@ -34,6 +33,8 @@ pub(crate) struct HookGroupsContract {
     pub(crate) runtime_groups: Vec<RuntimeGroup>,
     pub(crate) pruned_events: Vec<String>,
     pub(crate) session_start_event: String,
+    pub(crate) session_start_matchers: Vec<String>,
+    pub(crate) session_start_timeout_seconds: u64,
     pub(crate) session_start_context: String,
     pub(crate) daemon_hook_marker: String,
     pub(crate) session_start_hook_marker: String,
@@ -123,10 +124,9 @@ pub(crate) fn parse_contract(document: &Value) -> Result<HookGroupsContract, Str
     {
         return Err(invalid("runtime_groups.event"));
     }
-    // Shape-checked like Python; this lane leaves the SessionStart group to
-    // the installer, so the values are not kept.
-    texts(field(session_start, "matchers")?, "session_start.matchers")?;
-    seconds(
+    let session_start_matchers =
+        texts(field(session_start, "matchers")?, "session_start.matchers")?;
+    let session_start_timeout_seconds = seconds(
         field(session_start, "timeout_seconds")?,
         "session_start.timeout_seconds",
     )?;
@@ -135,6 +135,8 @@ pub(crate) fn parse_contract(document: &Value) -> Result<HookGroupsContract, Str
         runtime_groups,
         pruned_events: texts(field(contract, "pruned_events")?, "pruned_events")?,
         session_start_event: text(field(session_start, "event")?, "session_start.event")?,
+        session_start_matchers,
+        session_start_timeout_seconds,
         session_start_context: text(
             field(session_start, "additional_context")?,
             "session_start.additional_context",
@@ -162,7 +164,7 @@ pub(crate) fn contract() -> Result<HookGroupsContract, String> {
 }
 
 /// `is_guard_hook_command`.
-fn is_guard_command(contract: &HookGroupsContract, command: &str) -> bool {
+pub(crate) fn is_guard_command(contract: &HookGroupsContract, command: &str) -> bool {
     if command.contains(&contract.daemon_hook_marker)
         || command.contains(&contract.session_start_hook_marker)
     {
@@ -177,7 +179,7 @@ fn is_guard_command(contract: &HookGroupsContract, command: &str) -> bool {
 }
 
 /// `command_handler_argv`: the exec form when every part is a string.
-fn handler_argv(handler: &Map<String, Value>) -> Option<Vec<&str>> {
+pub(crate) fn handler_argv(handler: &Map<String, Value>) -> Option<Vec<&str>> {
     let command = handler.get("command")?.as_str()?;
     let args = handler.get("args")?.as_array()?;
     let mut argv = vec![command];
@@ -187,9 +189,14 @@ fn handler_argv(handler: &Map<String, Value>) -> Option<Vec<&str>> {
     Some(argv)
 }
 
-/// `is_guard_hook_handler`. `Err` is a handler type Python cannot hash,
-/// where the Python refresh itself would fail.
-fn is_guard_handler(contract: &HookGroupsContract, handler: &Value) -> Result<bool, ()> {
+/// `is_guard_hook_url`: the loopback daemon's Claude hook route.
+pub(crate) fn is_guard_url(url: &str) -> bool {
+    url.starts_with("http://127.0.0.1:") && url.contains("/v1/hooks/claude-code")
+}
+
+/// `is_guard_hook_handler`. `Err` is an unhashable handler type (a list or
+/// an object), which the Python helpers rejected with a `TypeError`.
+pub(crate) fn is_guard_handler(contract: &HookGroupsContract, handler: &Value) -> Result<bool, ()> {
     let Some(handler) = handler.as_object() else {
         return Ok(false);
     };
@@ -201,9 +208,7 @@ fn is_guard_handler(contract: &HookGroupsContract, handler: &Value) -> Result<bo
         Some(Value::String(kind)) if kind == "http" => Ok(handler
             .get("url")
             .and_then(Value::as_str)
-            .is_some_and(|url| {
-                url.starts_with("http://127.0.0.1:") && url.contains("/v1/hooks/claude-code")
-            })),
+            .is_some_and(is_guard_url)),
         Some(Value::Array(_) | Value::Object(_)) => Err(()),
         Some(_) => Ok(false),
     }

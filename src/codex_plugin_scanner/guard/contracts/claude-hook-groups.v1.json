@@ -14,19 +14,19 @@
   "runtime_groups": [
     {
       "event": "PreToolUse",
-      "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+      "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
       "timeout_seconds": 30,
       "status_message": "HOL Guard is checking this tool use"
     },
     {
       "event": "PermissionRequest",
-      "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+      "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*",
       "timeout_seconds": 10,
       "status_message": "HOL Guard is reviewing this approval prompt"
     },
     {
       "event": "PostToolUse",
-      "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion",
+      "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion",
       "timeout_seconds": 30,
       "status_message": null
     },
@@ -41,9 +41,15 @@
       "matcher": null,
       "timeout_seconds": 10,
       "status_message": null
+    },
+    {
+      "event": "UserPromptSubmit",
+      "matcher": null,
+      "timeout_seconds": 10,
+      "status_message": null
     }
   ],
-  "pruned_events": ["PermissionDenied", "UserPromptSubmit"],
+  "pruned_events": ["PermissionDenied"],
   "bridge_config": {
     "required_keys": ["state_path", "fallback_daemon_url", "fallback_command", "query"],
     "optional_keys": ["recovery_command"]

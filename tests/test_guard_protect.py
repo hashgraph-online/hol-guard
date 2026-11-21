@@ -997,6 +997,43 @@ class TestGuardProtect:
         assert len(events) == 1
         assert events[0]["payload"]["cached_advisory_override"] is True
 
+    def test_cached_advisory_merge_leaves_an_executed_install_without_the_runtime(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def unreachable(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("an executed install never reaches the native merge")
+
+        monkeypatch.setattr(protect, "native_protect_advisory_merge", unreachable)
+        store = GuardStore(tmp_path / "home")
+        cached_verdict = protect.ProtectVerdict(
+            action="block",
+            reason="Cached advisory blocks execution.",
+            risk_signals=("Cached advisory blocks execution.",),
+            matched_advisories=({"id": "adv-executed", "action": "block"},),
+        )
+        output = "x" * (3 * 1024 * 1024)
+        for executed in (True, None):
+            payload: dict[str, object] = {
+                "verdict": {"action": "allow", "reason": "ok", "risk_signals": [], "matched_advisories": []},
+                "stdout": output,
+            }
+            if executed is not None:
+                payload["executed"] = executed
+            result = (payload, 0)
+
+            merged = protect._merge_cached_advisory_into_package_payload(
+                result,
+                cached_verdict=cached_verdict,
+                requested_dry_run=False,
+                store=store,
+                now=_now(),
+            )
+
+            assert merged is result
+        assert store.list_events(event_name="install_time_block") == []
+
     def test_guard_protect_matches_review_advisory_by_remote_endpoint_indicator(
         self,
         tmp_path,

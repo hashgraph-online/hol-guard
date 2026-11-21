@@ -12,6 +12,7 @@ import argparse
 from ...argparse_utils import FriendlyArgumentParser
 from .commands_parser_constants import _GUARD_HELP_GROUPS
 from .commands_parser_cloud import _configure_guard_cloud_parsers
+from .commands_parser_cloud_actions import configure_guard_cloud_actions_parser
 from .commands_parser_cloud_review import configure_guard_cloud_review_parser
 from .commands_parser_desktop import _configure_guard_desktop_parser
 from .commands_parser_hooks import configure_guard_hooks_parser
@@ -27,6 +28,7 @@ from .commands_parser_local import _configure_guard_local_parsers
 from .commands_parser_mdm import _configure_guard_mdm_parsers
 from .commands_parser_policy import _configure_guard_policy_parsers
 from .commands_parser_risk_report import configure_guard_risk_report_parser
+from .context_assistance_commands import configure_context_parser
 from .extension_builder_commands import configure_extension_builder_parser
 
 
@@ -61,7 +63,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
             "test-eval,command,extensions,verified-read,contained-write,mdm,"
             "receipts,inventory,abom,aibom,approvals,explain,allow,deny,policies,trust,exceptions,advisories,events,doctor,connect,"
             "remote-pair,disconnect,"
-            "login,sync,device,commands,cloud-review,bridge,mcp}"
+            "login,sync,device,commands,cloud-review,context,bridge,mcp}"
         ),
     )
     _configure_guard_local_parsers(guard_subparsers)
@@ -74,6 +76,8 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     _configure_guard_policy_parsers(guard_subparsers)
     _configure_guard_cloud_parsers(guard_subparsers)
     configure_guard_cloud_review_parser(guard_subparsers)
+    configure_guard_cloud_actions_parser(guard_subparsers)
+    configure_context_parser(guard_subparsers)
 
 __all__ = [
     "_add_aibom_cli_args",

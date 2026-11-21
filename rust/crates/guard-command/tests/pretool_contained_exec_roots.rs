@@ -33,7 +33,7 @@ fn decide(root: &Path, search_path: &str, command: &str) -> guard_contracts::Pre
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     // Containment only converts a review when the device's controls are present.
     let controls = git_github_controls("default", "default");

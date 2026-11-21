@@ -209,34 +209,15 @@ impl EncryptedFileSecretStore {
     }
 
     /// `_atomic_write_bytes` — write `.name.<rand>.tmp`, fsync, chmod, rename.
-    fn atomic_write_bytes(&self, path: &Path, payload: &[u8], _mode: u32) -> std::io::Result<()> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let tmp = path.with_file_name(format!(
-            ".{}.{}.tmp",
-            path.file_name().and_then(|n| n.to_str()).unwrap_or("f"),
-            hex::encode(random_bytes(16))
-        ));
-        {
-            use std::io::Write;
-            let mut f = fs::File::create(&tmp)?;
-            f.write_all(payload)?;
-            f.flush()?;
-            f.sync_all()?;
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(_mode));
-        }
-        fs::rename(&tmp, path)?;
-        Ok(())
+    fn atomic_write_bytes(&self, path: &Path, payload: &[u8], mode: u32) -> std::io::Result<()> {
+        atomic_write_bytes(path, payload, mode)
     }
 }
 
 /// Free `_atomic_write_bytes` for non-store callers (e.g. `TotpSecretStore`).
-/// `.name.<rand>.tmp`, fsync, chmod, rename.
+/// `.name.<rand>.tmp` created new with `_mode` on Unix, fsync, chmod, rename.
+/// The temporary file never exists with wider permissions than `_mode`, and a
+/// failed write removes it.
 pub(crate) fn atomic_write_bytes(path: &Path, payload: &[u8], _mode: u32) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -246,20 +227,30 @@ pub(crate) fn atomic_write_bytes(path: &Path, payload: &[u8], _mode: u32) -> std
         path.file_name().and_then(|n| n.to_str()).unwrap_or("f"),
         hex::encode(random_bytes(16))
     ));
-    {
-        use std::io::Write;
-        let mut f = fs::File::create(&tmp)?;
-        f.write_all(payload)?;
-        f.flush()?;
-        f.sync_all()?;
-    }
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
     #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(_mode));
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, _mode);
+    let written = options
+        .open(&tmp)
+        .and_then(|mut f| {
+            use std::io::Write;
+            f.write_all(payload)?;
+            f.flush()?;
+            f.sync_all()
+        })
+        .and_then(|()| {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&tmp, fs::Permissions::from_mode(_mode))?;
+            }
+            fs::rename(&tmp, path)
+        });
+    if written.is_err() {
+        let _ = fs::remove_file(&tmp);
     }
-    fs::rename(&tmp, path)?;
-    Ok(())
+    written
 }
 
 /// Free `_load_fernet_key` — read `key.bin`; if absent generate + persist a new

@@ -48,6 +48,43 @@ export function describe(request: ReportRequest): string {
 }
 """
 
+# Express middleware an agent read in a real session and Guard withheld as a
+# leaked secret: an `x-` header read into `token`, a `typeof` guard choosing
+# `apiKey`, an arrow function with one parameter per line, and a fetch with
+# `credentials: 'omit'`. None holds a credential.
+MAINTENANCE_AUTH_SOURCE = """import type { NextFunction, Request, Response } from 'express';
+
+export function readCapability(req: Request): string | undefined {
+  const token = req.header('x-service-maintenance-token');
+  return token;
+}
+
+export function readApiKey(req: Request): string | undefined {
+  const rawApiKeyHeader = req.headers['x-api-key'];
+  const apiKey = typeof rawApiKeyHeader === 'string' ? rawApiKeyHeader : undefined;
+  return apiKey;
+}
+
+export const requireMaintenanceToken = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  if (!readCapability(req)) {
+    res.status(401).end();
+    return;
+  }
+  next();
+};
+
+export async function loadPublicPlugins(url: string): Promise<unknown> {
+  const response = await fetch(url, {
+    credentials: 'omit',
+  });
+  return response.json();
+}
+"""
+
 
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,8 +102,28 @@ _NODE_TOOLS = {
     "jest": ("30.0.5", ("jest",)),
     "tsx": ("4.20.3", ("tsx",)),
     "turbo": ("2.5.5", ("turbo",)),
+    "lint-staged": ("16.1.2", ("lint-staged",)),
+    # Runs the project's own scripts and installs nothing. Its launcher has to
+    # be here for a case that spells it from `.bin` to measure the route rather
+    # than a missing program, which contains on its own.
+    "npm-run-all": ("4.1.5", ("npm-run-all", "run-s", "run-p")),
 }
 _TOOL_SCRIPTS = {"lint": "eslint .", "typecheck": "tsc --noEmit", "format": "prettier --check ."}
+# The suite split into named parts, which is how a project with more than one
+# kind of test spells them. The route reads the body rather than the name, so
+# the fixture holds a runner body and a read-only tool body under the same
+# `test:` family. The third spells the same finishing Vitest run with the
+# option rather than the verb, which is how a project that passes reporting
+# options writes it, and the fourth names Bun's own runner, which is what a
+# Bun project's test entry holds. The fifth names the test files tsx runs,
+# which is how a project without a runner package spells its suite.
+_TEST_FAMILY_SCRIPTS = {
+    "test:unit": "vitest run tests/",
+    "test:types": "tsc --noEmit",
+    "test:ci": "vitest --run --reporter dot",
+    "test:bun": "bun test",
+    "test:tsx": "tsx --test tests/sample.test.ts",
+}
 _INSTALLED_PACKAGES = _NODE_PACKAGES | {name: version for name, (version, _) in _NODE_TOOLS.items()}
 
 
@@ -79,7 +136,8 @@ def _node_toolchain(workspace: Path, *, tools: bool = False) -> None:
         f"node_modules/{name}": {"version": version, "integrity": "sha512-fixture"}
         for name, version in packages.items()
     }
-    scripts = {"build": "vite build", "test": "vitest run"} | (_TOOL_SCRIPTS if tools else {})
+    extra = (_TOOL_SCRIPTS | _TEST_FAMILY_SCRIPTS) if tools else {}
+    scripts = {"build": "vite build", "test": "vitest run"} | extra
     manifest = {"private": True, "scripts": scripts, "devDependencies": dependencies}
     _write(workspace / "package.json", json.dumps(manifest) + "\n")
     _write(workspace / "package-lock.json", json.dumps({"lockfileVersion": 3, "packages": locked}) + "\n")
@@ -93,6 +151,9 @@ def _node_toolchain(workspace: Path, *, tools: bool = False) -> None:
     for name, (version, binaries) in _NODE_TOOLS.items():
         _node_package(workspace, name, version, binaries)
     _write(workspace / "tsconfig.json", json.dumps({"compilerOptions": {"strict": True, "noEmit": True}}) + "\n")
+    # A generated type-check project, the way a repository script writes one: it
+    # keeps the no-emit mode in the file and is run as `tsc -p` with no option.
+    _write(workspace / "tsconfig.check.json", json.dumps({"extends": "./tsconfig.json"}) + "\n")
     _write(workspace / "eslint.config.js", "export default [];\n")
     _write(workspace / ".prettierrc", "{}\n")
 
@@ -120,19 +181,40 @@ def _yarn_lockfile(packages: dict[str, str]) -> str:
     return "# yarn lockfile v1\n\n" + "\n".join(entries)
 
 
+# The launcher each package really publishes, where it is not ``bin/<binary>.js``.
+# Guard resolves a ``.bin`` launcher by looking for the installed entry the
+# package names, so a fixture that writes every launcher under ``bin/`` leaves
+# those runners unrecognised and scores every spelling of them a plain allow.
+_PACKAGE_LAUNCHERS = {
+    ("vitest", "vitest"): "vitest.mjs",
+    ("typescript", "tsc"): "bin/tsc",
+    ("prettier", "prettier"): "bin/prettier.cjs",
+    ("npm-run-all", "npm-run-all"): "bin/npm-run-all/index.js",
+    ("npm-run-all", "run-s"): "bin/run-s/index.js",
+    ("npm-run-all", "run-p"): "bin/run-p/index.js",
+}
+
+
 def _node_package(workspace: Path, name: str, version: str, binaries: tuple[str, ...] = ()) -> None:
     """One installed package with its ``node_modules/.bin`` shims, as npm links them."""
     binaries = binaries or (name,)
+    launchers = {
+        binary: _PACKAGE_LAUNCHERS.get((name, binary), f"bin/{binary}.js") for binary in binaries
+    }
     package = workspace / "node_modules" / name
-    manifest = {"name": name, "version": version, "bin": {binary: f"./bin/{binary}.js" for binary in binaries}}
+    manifest = {
+        "name": name,
+        "version": version,
+        "bin": {binary: f"./{launcher}" for binary, launcher in launchers.items()},
+    }
     _write(package / "package.json", json.dumps(manifest) + "\n")
-    for binary in binaries:
-        script = package / "bin" / f"{binary}.js"
+    for binary, launcher in launchers.items():
+        script = package / launcher
         _write(script, f"#!/usr/bin/env node\nconsole.log('{binary} {version}');\n")
         script.chmod(0o755)
         shim = workspace / "node_modules" / ".bin" / binary
         shim.parent.mkdir(parents=True, exist_ok=True)
-        shim.symlink_to(Path("..") / name / "bin" / f"{binary}.js")
+        shim.symlink_to(Path("..") / name / launcher)
 
 
 def _python_toolchain(workspace: Path) -> None:
@@ -232,7 +314,8 @@ def _vendored_toolchain(workspace: Path) -> None:
     _write(
         workspace / "composer.json",
         '{\n  "name": "fixture/app",\n  "require": {},\n'
-        '  "scripts": {\n    "test": "phpunit",\n    "lint": "php-cs-fixer fix --dry-run"\n  }\n}\n',
+        '  "scripts": {\n    "test": "phpunit",\n    "lint": "php-cs-fixer fix --dry-run",\n'
+        '    "deps": "composer install --no-scripts",\n    "uninstall": "phpunit"\n  }\n}\n',
     )
     _write(workspace / "composer.lock", '{\n  "packages": [],\n  "packages-dev": []\n}\n')
     _write(workspace / "vendor" / "autoload.php", "<?php\n")
@@ -268,7 +351,10 @@ def host_tool_path(home: Path, search_path: str) -> str:
     contained. Stand-ins in a version-manager directory the sandbox accepts go first, as a
     developer's own Node does, and the sandbox finds the same file by the same name. Yarn sits beside
     them because a project that runs ``yarn build`` is as ordinary as one that runs ``npm run build``,
-    and a runner without Yarn would measure a missing binary rather than Guard. SQLite sits there
+    and a runner without Yarn would measure a missing binary rather than Guard. pnpm is there for
+    the same reason, and for one of its own: a pnpm case that resolved no pnpm would be contained
+    for the absence of the program instead of for the run the case is about, which reads as a pass
+    and proves nothing. SQLite sits there
     for the same reason from the other direction: every macOS developer has a ``sqlite3``, but where
     a host keeps it differs, and a hosted runner's copy resolves outside the roots the sandbox
     executes from, so the gate would be measuring that host's package layout rather than the command
@@ -277,7 +363,11 @@ def host_tool_path(home: Path, search_path: str) -> str:
     recorded for. ``uv`` is there for the same reason as SQLite: a runner installs it wherever its
     own setup put it, often a directory the sandbox executes nothing from, so a stand-in sits in
     the Cargo bin directory a developer's own ``uv`` resolves from and the gate measures the
-    command rather than the runner's layout.
+    command rather than the runner's layout. ``fd`` sits beside it because a case that names a
+    root ``fd`` never reaches would measure the missing program, which Guard contains for a
+    reason the case is not about. Go is the same case once more: a hosted runner keeps
+    its toolchain in ``/usr/local/go/bin``, which the sandbox executes nothing from, so ``go test``
+    would record that image's layout instead of the setting the case is about.
     """
     stand_in = "#!/bin/sh\nexit 0\n"
     bun = home / ".bun" / "bin"
@@ -287,11 +377,14 @@ def host_tool_path(home: Path, search_path: str) -> str:
     local_bin = home / ".local" / "bin"
     php = home / ".asdf" / "installs" / "php" / "8.3.6" / "bin"
     ruby = home / ".asdf" / "installs" / "ruby" / "3.3.0" / "bin"
+    golang = home / ".asdf" / "installs" / "golang" / "1.23.2" / "bin"
+    redis = home / ".asdf" / "installs" / "redis" / "7.4.1" / "bin"
+    cloud_sdk = home / "google-cloud-sdk" / "bin"
     tools = (
         (bun, ("bun",)),
-        (node, ("node", "npm", "npx", "yarn")),
+        (node, ("node", "npm", "npx", "yarn", "pnpm")),
         (sqlite, ("sqlite3",)),
-        (cargo, ("uv",)),
+        (cargo, ("uv", "fd")),
         # Composer and Bundler install themselves wherever the host's PHP or
         # Ruby setup put them, often a directory the sandbox executes nothing
         # from. The stand-ins sit in version-manager installs, which the sandbox
@@ -299,6 +392,20 @@ def host_tool_path(home: Path, search_path: str) -> str:
         # command rather than this host's package layout.
         (php, ("composer",)),
         (ruby, ("bundle", "bundler")),
+        (golang, ("go",)),
+        # A developer waiting on a fixture server runs `redis-cli ping`, and
+        # whether Guard reads that as a liveness check is the whole question
+        # the case asks. A runner with no Redis would answer it with an
+        # absent program instead, which Guard contains for a different
+        # reason, so a stand-in sits in a version-manager install the way
+        # the other clients do.
+        (redis, ("redis-cli",)),
+        # An unpacked cloud SDK, which is how a developer gets `kubectl` when
+        # no package manager owns it. It stays off the returned PATH on
+        # purpose: the cases that use it spell the installer's own path, and
+        # the gate would not be measuring that spelling if the same name also
+        # resolved on PATH.
+        (cloud_sdk, ("kubectl",)),
     )
     for directory, names in tools:
         for name in names:
@@ -312,6 +419,8 @@ def host_tool_path(home: Path, search_path: str) -> str:
             str(cargo),
             str(php),
             str(ruby),
+            str(golang),
+            str(redis),
             search_path,
             str(bun),
         ]
@@ -328,3 +437,73 @@ def _application_database(path: Path) -> None:
         connection.commit()
     finally:
         connection.close()
+
+
+# The second release of the type checker a monorepo's other workspace is held
+# back on. One `pnpm-lock.yaml` serves the whole tree, so its `packages` block
+# names both, and only the `importers` block says which one each workspace runs.
+_PNPM_LEGACY_TYPESCRIPT = "5.4.5"
+
+
+def pnpm_monorepo(root: Path) -> None:
+    """A pnpm workspace root whose lockfile carries a second workspace's own release.
+
+    This is the ordinary shape of any monorepo that has not finished a version
+    bump: the root runs the current type checker, a package somewhere under it
+    is still on the previous one, and the single lockfile lists both. Reading
+    `packages` alone leaves two candidates and no answer about what `npx tsc`
+    would run here, which is what turned a type check into an approval prompt.
+    """
+
+    version = _NODE_TOOLS["typescript"][0]
+    manifest = {
+        "private": True,
+        "scripts": {"typecheck": "tsc --noEmit"},
+        "devDependencies": {"typescript": f"^{version}"},
+    }
+    _write(root / "package.json", json.dumps(manifest) + "\n")
+    _write(root / "pnpm-workspace.yaml", "packages:\n  - packages/*\n")
+    _write(root / "tsconfig.json", json.dumps({"compilerOptions": {"strict": True}}) + "\n")
+    _write(root / "src" / "index.ts", "export const ready = true;\n")
+    legacy = {"name": "@acme/legacy", "devDependencies": {"typescript": f"~{_PNPM_LEGACY_TYPESCRIPT}"}}
+    _write(root / "packages" / "legacy" / "package.json", json.dumps(legacy) + "\n")
+    _write(root / "pnpm-lock.yaml", _pnpm_monorepo_lockfile(version))
+    _node_package(root, "typescript", version, ("tsc",))
+
+
+def _pnpm_monorepo_lockfile(version: str) -> str:
+    """The lockfile pnpm writes for that tree: an importer each, both releases listed once."""
+    legacy = _PNPM_LEGACY_TYPESCRIPT
+    return (
+        "lockfileVersion: '9.0'\n"
+        "\n"
+        "settings:\n"
+        "  autoInstallPeers: true\n"
+        "  excludeLinksFromLockfile: false\n"
+        "\n"
+        "importers:\n"
+        "\n"
+        "  .:\n"
+        "    devDependencies:\n"
+        "      typescript:\n"
+        f"        specifier: ^{version}\n"
+        f"        version: {version}\n"
+        "\n"
+        "  packages/legacy:\n"
+        "    devDependencies:\n"
+        "      typescript:\n"
+        f"        specifier: ~{legacy}\n"
+        f"        version: {legacy}\n"
+        "\n"
+        "packages:\n"
+        "\n"
+        f"  typescript@{legacy}:\n"
+        "    resolution: {integrity: sha512-fixture}\n"
+        "    engines: {node: '>=14.17'}\n"
+        "    hasBin: true\n"
+        "\n"
+        f"  typescript@{version}:\n"
+        "    resolution: {integrity: sha512-fixture}\n"
+        "    engines: {node: '>=14.17'}\n"
+        "    hasBin: true\n"
+    )

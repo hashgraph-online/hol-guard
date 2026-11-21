@@ -19,8 +19,6 @@ answer, and it keeps that reason.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import re
 import time
@@ -52,7 +50,6 @@ _REQUEST_SCHEMA = "guard-skill-directory-identity-request.v1"
 _RESULT_SCHEMA = "guard-skill-directory-identity-result.v1"
 _INSPECT_TIMEOUT_SECONDS = 60.0
 _DISCOVER_TIMEOUT_SECONDS = 30.0
-_INCOMPLETE_TIMEOUT_SECONDS = 2.0
 _DOCUMENT_EVIDENCE_TIMEOUT_SECONDS = 15.0
 SKILL_DOCUMENT_EVIDENCE_SCHEMA = "guard.skill.content-evidence.v1"
 _SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -191,46 +188,6 @@ def _limits(limits: SkillDirectoryIdentityLimits) -> dict[str, object]:
         "max_file_bytes": limits.max_file_bytes,
         "max_total_bytes": limits.max_total_bytes,
     }
-
-
-def native_incomplete_skill_directory_identity(reason: SkillDirectoryIdentityFailure) -> SkillDirectoryIdentity:
-    payload = _exchange(
-        {"kind": "incomplete", "reason": reason},
-        timeout_seconds=_INCOMPLETE_TIMEOUT_SECONDS,
-    )
-    identity = _decode_identity(payload)
-    if identity is not None and identity.failure_reason == reason:
-        return identity
-    return _caller_incomplete_identity(reason)
-
-
-def _caller_incomplete_identity(reason: SkillDirectoryIdentityFailure) -> SkillDirectoryIdentity:
-    """Zero-progress identity for a reason the caller already decided.
-
-    The digest matches ``incomplete_state_hash_for_label`` (CPython canonical
-    JSON). A missing runtime must not relabel that reason as
-    ``native_unavailable``.
-    """
-
-    material = {
-        "schema": SKILL_DIRECTORY_IDENTITY_SCHEMA,
-        "status": "incomplete",
-        "reason": reason,
-        "primaryContentHash": None,
-        "entryCount": 0,
-        "totalBytes": 0,
-    }
-    encoded = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
-    return SkillDirectoryIdentity(
-        schema_version=SKILL_DIRECTORY_IDENTITY_SCHEMA,
-        status="incomplete",
-        directory_hash=None,
-        primary_content_hash=None,
-        entry_count=0,
-        total_bytes=0,
-        failure_reason=reason,
-        incomplete_state_hash="sha256:" + hashlib.sha256(encoded).hexdigest(),
-    )
 
 
 def _exchange(

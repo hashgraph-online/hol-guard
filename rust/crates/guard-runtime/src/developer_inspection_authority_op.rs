@@ -1,8 +1,8 @@
 //! One resident admission composes developer Git and direct-tool services.
-use crate::codex_tool_output_op::ResidentInspectionHost;
 use crate::developer_inspection_host::DeveloperInspectionHost;
 use crate::direct_tool_context_op::{admit, Authority};
 use crate::request_context_op::Budget;
+use crate::resident_inspection_host::ResidentInspectionHost;
 use crate::runner_authority_op::KindResult;
 use guard_command::Ctx;
 use guard_contracts::{CodexToolOutputFactsV1, RequestContextDirectFactsV1};

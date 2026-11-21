@@ -24,6 +24,7 @@ try:
     from extension_claim_authority import ClaimProvenanceError as ClaimProvenanceError
     from extension_claim_authority import accepted_claimant_ids as verified_claimant_ids
     from extension_claim_authority import external_contribution
+    from extension_claim_notice_trial import trial_lines
 finally:
     sys.path.remove(_helper_dir)
 
@@ -594,6 +595,11 @@ def build_comment(items: list[NoticeItem], studio_url: str) -> str:
                 "and blog content, and use the verified publisher badge toolkit. "
                 "Submit launch content for review when ready; claiming alone does not publish it."
             ),
+        ]
+    )
+    lines.extend(trial_lines(item.extension_id for item in items))
+    lines.extend(
+        [
             "",
             (
                 "Claim verification re-reads canonical `main` and checks the accepted numeric GitHub ID "

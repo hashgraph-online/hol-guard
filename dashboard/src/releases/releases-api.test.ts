@@ -126,6 +126,23 @@ const indexBody = {
   assert.equal(missing.status === "failed" ? missing.failure : null, "unsupported");
 }
 
+// hol.org answered with a release Guard will not display. Retrying reads the
+// same document again, so it is its own answer rather than "did not answer".
+{
+  for (const code of ["release_feed_payload_invalid", "release_feed_response_too_large"]) {
+    installFetch({ status: 502, body: { error: code } });
+    const result = await fetchReleaseDetail("v3.59.0");
+    assert.equal(result.status === "failed" ? result.failure : null, "unreadable", code);
+  }
+}
+
+// A window whose signed session is gone is not an archive outage.
+{
+  installFetch({ status: 401, body: { error: "unauthorized" } });
+  const result = await fetchReleaseIndex();
+  assert.equal(result.status === "failed" ? result.failure : null, "session");
+}
+
 // No answer at all is the daemon being unreachable, not an upstream problem.
 {
   installFetch({ throws: true });

@@ -73,6 +73,48 @@ fn printing_note_and_bisect_forms_are_proven_reads() {
     }
 }
 
+/// The replacement refs a checkout carries are a listing an agent reads
+/// before it decides anything. Every other spelling adds, moves or drops a
+/// replacement ref, which the sandbox writes inside the same worktree and
+/// cannot put back, so each keeps its review.
+#[test]
+fn printing_the_replacement_refs_is_a_proven_read() {
+    let session = session("replacement-refs");
+    for cwd in [&session.primary, &session.worktree] {
+        for command in [
+            "git replace",
+            "git replace -l",
+            "git replace --list",
+            "git replace --list refs/replace/*",
+            "git replace --format=long -l",
+            "git replace --list | head -3",
+        ] {
+            let result = session.evaluate_at(command, cwd);
+            assert_eq!(
+                result.minimum_action, "allow",
+                "{command}: {}",
+                result.reason_code
+            );
+        }
+        for command in [
+            "git replace HEAD HEAD~0",
+            "git replace -f HEAD HEAD~0",
+            "git replace -d HEAD",
+            "git replace --delete HEAD",
+            "git replace --edit HEAD",
+            "git replace --graft HEAD",
+            "git replace --convert-graft-file",
+        ] {
+            let result = session.evaluate_at(command, cwd);
+            assert_ne!(
+                result.minimum_action, "allow",
+                "{command}: {}",
+                result.reason_code
+            );
+        }
+    }
+}
+
 #[test]
 fn a_configured_notes_pager_keeps_every_printing_form_reviewed() {
     let session = session("notes-pager");

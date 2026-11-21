@@ -123,3 +123,48 @@ fn a_relative_dependency_link_leaves_a_branch_read_quiet() {
         assert_eq!(action(&session, &command, cwd), "allow", "{command}");
     }
 }
+
+/// Agents share a dependency directory into a package folder of the new
+/// worktree, then check the link with `test` or a listing whose errors are
+/// discarded. The peers read metadata or print, and a redirect into
+/// `/dev/null` writes nothing the link could reach.
+#[test]
+fn a_link_into_a_worktree_folder_with_checking_peers_is_quiet() {
+    let session = session("link-chain-peers");
+    std::fs::create_dir(session.worktree.join("web")).unwrap();
+    let primary = session.primary.display();
+    let worktree = session.worktree.display();
+    let link = format!("ln -s {primary}/node_modules {worktree}/node_modules");
+    for cwd in [&session.org, &session.primary, &session.worktree] {
+        for command in [
+            format!("ln -s {primary}/node_modules {worktree}/web/node_modules && echo linked"),
+            format!("{link} && test -e {worktree}/node_modules/pkg && echo linked"),
+            format!("{link} && [ -d {worktree}/node_modules/pkg ] && echo linked"),
+            format!("{link} && ls {worktree}/node_modules/pkg 2>/dev/null && echo ok"),
+            format!("{link} && ls {worktree}/node_modules >/dev/null && echo ok"),
+        ] {
+            assert_eq!(action(&session, &command, cwd), "allow", "{command}");
+        }
+    }
+}
+
+#[test]
+fn a_checked_link_still_keeps_redirects_and_hidden_folders_out() {
+    let session = session("link-chain-peers-deny");
+    std::fs::create_dir(session.worktree.join(".cache")).unwrap();
+    std::fs::create_dir_all(session.worktree.join("web/.bin")).unwrap();
+    let primary = session.primary.display();
+    let worktree = session.worktree.display();
+    let link = format!("ln -s {primary}/node_modules {worktree}/node_modules");
+    for command in [
+        format!("{link} && ls {worktree} 2>{worktree}/node_modules/err.log"),
+        format!("{link} && ls {worktree} >{worktree}/node_modules/pkg/out"),
+        format!("{link} && test -e {worktree}/node_modules/pkg > {worktree}/x"),
+        format!("ln -s {primary}/node_modules {worktree}/.cache/node_modules && echo linked"),
+        format!("ln -s {primary}/node_modules {worktree}/web/.bin/node_modules && echo linked"),
+    ] {
+        for cwd in [&session.org, &session.primary] {
+            assert_ne!(action(&session, &command, cwd), "allow", "{command}");
+        }
+    }
+}

@@ -2,6 +2,9 @@
 
 use super::*;
 
+#[path = "hook_evidence_journal_batch_tests.rs"]
+mod batch_tests;
+
 use std::sync::Arc;
 
 use crate::hook_evidence_writer::{

@@ -26,6 +26,8 @@ use sha2::{Digest, Sha256};
 
 use crate::package_authority_op::request_digest_with_limit;
 
+mod inventory;
+
 /// The schema every identity payload names, as the Python source spells it.
 const IDENTITY_SCHEMA: &str = "codex-hook-identity-v1";
 /// The characters whose presence means a command's tokenization is not
@@ -65,7 +67,7 @@ fn refusal(request: &CodexHookIdentityRequestV1) -> Option<&'static str> {
     if request
         .entries
         .iter()
-        .any(|entry| !entry_is_well_formed(entry))
+        .any(|entry| !entry_is_well_formed(entry, &request.scalar_tokens))
     {
         return Some("native_codex_hook_identity_entry_invalid");
     }
@@ -77,7 +79,10 @@ fn refusal(request: &CodexHookIdentityRequestV1) -> Option<&'static str> {
 /// A malformed entry is refused for the whole batch rather than answered with
 /// a placeholder: the Python source would have raised on it, and an identity
 /// nobody can derive must not come back looking like one that was.
-fn entry_is_well_formed(entry: &CodexHookIdentityEntryV1) -> bool {
+fn entry_is_well_formed(
+    entry: &CodexHookIdentityEntryV1,
+    tokens: &BTreeMap<String, Value>,
+) -> bool {
     match entry.kind.as_str() {
         "handler" => {
             entry.group.as_ref().is_some_and(Value::is_object)
@@ -85,6 +90,7 @@ fn entry_is_well_formed(entry: &CodexHookIdentityEntryV1) -> bool {
         }
         "group" | "conflict" => entry.group.as_ref().is_some_and(Value::is_object),
         "argv" => true,
+        "inventory" => inventory::well_formed(entry, tokens),
         _ => false,
     }
 }
@@ -100,6 +106,7 @@ pub(crate) fn evaluate_request(request: &CodexHookIdentityRequestV1) -> Value {
             "handler" => json!({ "digest": handler_identity(entry, &empty, tokens) }),
             "group" => json!({ "digest": group_identity(entry, &empty, tokens) }),
             "conflict" => json!({ "digests": conflict_keys(entry, &empty, tokens) }),
+            "inventory" => inventory::answer(entry, tokens),
             _ => json!({ "argv": canonical_command_argv(entry.command.as_deref()) }),
         })
         .collect();
@@ -132,6 +139,36 @@ fn handler_identity(
         ),
         ("handler".to_owned(), canonical_handler(handler, tokens)),
     ]))
+}
+
+/// One matcher group's identity and its handlers' conflict keys, as the
+/// `group` and `conflict` questions answer them, for a caller in this process.
+pub(crate) fn group_digests(
+    source_scope: &str,
+    source_hooks_enabled: bool,
+    event_name: &str,
+    group: &Map<String, Value>,
+    tokens: &BTreeMap<String, Value>,
+) -> (String, Vec<String>) {
+    let entry = CodexHookIdentityEntryV1 {
+        kind: "group".to_owned(),
+        source_scope: source_scope.to_owned(),
+        source_hooks_enabled,
+        event_name: event_name.to_owned(),
+        group: Some(Value::Object(group.clone())),
+        handler: None,
+        command: None,
+        source_format: None,
+        events: None,
+        authenticated_bindings: Vec::new(),
+        legacy_bindings: Vec::new(),
+        self_bindings: Vec::new(),
+    };
+    let empty = Map::new();
+    (
+        group_identity(&entry, &empty, tokens),
+        conflict_keys(&entry, &empty, tokens),
+    )
 }
 
 /// A canonical identity for one complete matcher group.

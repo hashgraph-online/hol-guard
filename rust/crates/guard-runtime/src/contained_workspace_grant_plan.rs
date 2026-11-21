@@ -1,6 +1,6 @@
-//! The grant half of workspace plan validation, mirrored byte for byte by
-//! `restricted_workspace_grants.grant_script_roots` in Python and pinned by
-//! shared vectors.
+//! The grant half of workspace plan validation, and the only reading of it.
+//! The workspace sink asks for it through the `workspace_grant_script_roots`
+//! operation and carries the answer; it does not check these fields again.
 //!
 //! A base plan (`workspace-contained-v1`) carries no grant: a null identity
 //! hash and no capabilities. A grant plan (`workspace-contained-grant-v1`) is
@@ -70,6 +70,54 @@ pub(crate) fn grant_script_roots(
     let (last, scripts) = roots.split_last()?;
     let state = expected.state_dir.as_deref()?;
     (last.as_str() == Some(state)).then(|| Value::Array(scripts.to_vec()))
+}
+
+fn refusal() -> Value {
+    serde_json::json!({
+        "reason_code": "pytest_restricted_invalid_command",
+        "message": "Invalid restricted execution request.",
+    })
+}
+
+fn read_expected(value: &Value) -> Option<ExpectedGrant> {
+    let object = value.as_object()?;
+    let capabilities = object
+        .get("capabilities")?
+        .as_array()?
+        .iter()
+        .map(|item| item.as_str().map(str::to_owned))
+        .collect::<Option<Vec<String>>>()?;
+    let state_dir = match object.get("state_dir") {
+        None | Some(Value::Null) => None,
+        Some(item) => Some(item.as_str()?.to_owned()),
+    };
+    Some(ExpectedGrant {
+        identity_hash: object.get("identity_hash")?.as_str()?.to_owned(),
+        capabilities,
+        state_dir,
+    })
+}
+
+/// The reply the workspace sink reads: the script read roots the plan keeps
+/// once its grant fields check out, or a refusal.
+///
+/// A decided grant the caller cannot spell is refused rather than read as no
+/// grant, so a malformed `expected` can never admit a plan as a base one.
+pub(crate) fn evaluate(input: &Value) -> Value {
+    let Some(plan) = input.get("plan").and_then(Value::as_object) else {
+        return refusal();
+    };
+    let expected = match input.get("expected") {
+        None | Some(Value::Null) => None,
+        Some(value) => match read_expected(value) {
+            Some(grant) => Some(grant),
+            None => return refusal(),
+        },
+    };
+    match grant_script_roots(plan, expected.as_ref()) {
+        Some(roots) => serde_json::json!({ "value": roots }),
+        None => refusal(),
+    }
 }
 
 #[cfg(test)]

@@ -27,9 +27,9 @@ from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_
 from codex_plugin_scanner.guard import native_supply_chain_eval as native_supply_chain_eval_module
 from codex_plugin_scanner.guard import shims as guard_shims_module
 from codex_plugin_scanner.guard import store as guard_store_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_dispatch_local as guard_dispatch_local
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.package_shim_gate import (
     package_shim_command_requires_external_archive_binding,
@@ -44,6 +44,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.package_review_settings import review_package_signals
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.policy_store_support import replace_remote_policies
 from tests.shim_execution_helpers import build_shim_content_hash, write_fake_manager_script
 from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
 from tests.test_guard_supply_chain_evaluator import _cloud_response, _EvaluateHandler, _force_unpaid_entitlement
@@ -855,6 +856,13 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
     ("manager", "argv", "expected"),
     [
         ("bun", ("add", "minimist@1.2.9"), True),
+        ("bun", ("add", "--help"), False),
+        ("bun", ("add", "-h"), False),
+        ("bun", ("install", "--help"), False),
+        ("bun", ("install", "-h"), False),
+        ("bun", ("i", "--help"), False),
+        ("bun", ("i", "-h"), False),
+        ("bun", ("add", "minimist@1.2.9", "--help"), True),
         ("bun", ("run", "build"), True),
         ("bun", ("run", "build", "--watch"), True),
         ("bun", ("run", "dev"), True),
@@ -1909,7 +1917,8 @@ def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
     )
     try:
         store = GuardStore(home_dir)
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [
                 PolicyDecision(
                     harness="*",
@@ -1983,7 +1992,8 @@ def test_guard_protect_ignores_package_family_row_when_signed_matcher_omits_pack
     )
     try:
         store = GuardStore(home_dir)
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [
                 PolicyDecision(
                     harness="*",
@@ -2054,7 +2064,8 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_on_cloud_allow
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
     try:
         store = GuardStore(home_dir)
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [
                 PolicyDecision(
                     harness="*",

@@ -19,6 +19,7 @@ export const SETTINGS_SECTIONS = [
   { key: "notifications", nav: /^Notifications Desktop alerts/ },
   { key: "rules", nav: /^Protection rules Tune risky/ },
   { key: "maintenance", nav: /^Data & repair Export/ },
+  { key: "cloud-actions", nav: /^Cloud actions Which workspaces/ },
 ] as const;
 
 export type SettingsSectionKey = (typeof SETTINGS_SECTIONS)[number]["key"];

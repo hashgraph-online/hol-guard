@@ -50,15 +50,16 @@ def prove_npm_install(monkeypatch: pytest.MonkeyPatch, version: str = "11.9.0") 
     of the resident's plan runs as shipped.
     """
 
-    from codex_plugin_scanner.guard.daemon import hook_native_package_review
+    from codex_plugin_scanner.guard.hook_review import hook_native_package_review
 
     planned = hook_native_package_review.package_review_plan
 
-    def proven(*args: object, **kwargs: object) -> tuple[object, bool]:
-        artifact, _may_allow = planned(*args, **kwargs)
+    def proven(*args: object, **kwargs: object) -> tuple[object, bool, object, bool]:
+        artifact, _may_allow, workspace, keyed = planned(*args, **kwargs)
         metadata = {} if artifact is None else artifact.metadata
         if (metadata.get("package_manager"), metadata.get("intent_kind")) != ("npm", "install"):
-            return artifact, False
-        return replace(artifact, metadata={**artifact.metadata, "verified_npm_version": version}), True
+            return artifact, False, workspace, keyed
+        proven_artifact = replace(artifact, metadata={**artifact.metadata, "verified_npm_version": version})
+        return proven_artifact, True, workspace, keyed
 
     monkeypatch.setattr(hook_native_package_review, "package_review_plan", proven)

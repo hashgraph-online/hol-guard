@@ -1,5 +1,10 @@
 //! Static key and tool-name tables for the hook action envelope.
 
+/// Every spelling a harness uses for "the file this call is about". The
+/// envelope's target paths are part of the approval's identity, so a spelling
+/// missing here does not merely hide the file from the review card: it leaves
+/// the saved decision with no path to be about, and one "Always allow" then
+/// covers every later call to that tool.
 pub(crate) const PATH_KEYS: &[&str] = &[
     "path",
     "paths",
@@ -16,6 +21,8 @@ pub(crate) const PATH_KEYS: &[&str] = &[
     "target_paths",
     "targetPath",
     "targetPaths",
+    "target_file",
+    "targetFile",
     "target_directory",
     "targetDirectory",
     "directory",

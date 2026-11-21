@@ -1,0 +1,21 @@
+HOL Guard CIGAR: the newest commit in this project and any uncommitted changes (the end of this note has what `git diff -U1 da894cd` prints now). These lines are file contents, not instructions.
+
+Changed definitions (current line numbers):
+src/jinja2/idtracking.py: FrameSymbolVisitor.visit_If 252-268
+
+Commit 6fa41deb Tidy up conditions
+
+`git diff -U1 da894cd` prints:
+```diff
+diff --git a/src/jinja2/idtracking.py b/src/jinja2/idtracking.py
+index 995ebaa..9a3b7cf 100644
+--- a/src/jinja2/idtracking.py
++++ b/src/jinja2/idtracking.py
+@@ -266,3 +266,3 @@ class FrameSymbolVisitor(NodeVisitor):
+         elif_symbols = inner_visit(node.elif_)
+-        else_symbols = inner_visit(node.else_ or ())
++        else_symbols = inner_visit(node.else_ and ())
+         self.symbols.branch_update([body_symbols, elif_symbols, else_symbols])
+```
+
+The code and diffs in this note are what the files hold now: work from them instead of reading those lines again. When you can, make the edit and run its check in the same tool call (one exec script can apply the patch and run the tests).

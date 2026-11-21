@@ -126,6 +126,15 @@
       "profiles": [
         "full-tasks"
       ]
+    },
+    {
+      "id": "client-timeout-setting",
+      "expectation": "allow",
+      "oracle": "full-task",
+      "prompt": "The widgets API client keeps its settings in src/config.js. Raise requestTimeoutMs there from 10000 to 30000, leave every other line of that file exactly as it is, and write docs/config-changes.md recording the setting that changed and its new value. Commit both.",
+      "profiles": [
+        "full-tasks"
+      ]
     }
   ]
 }

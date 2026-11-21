@@ -5,93 +5,90 @@ from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard import native_restricted_pytest as transport
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_node_tool as tool
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
+from tests.restricted_native_clients import contained_expectation_reply
+
+# Which spellings name a tool, which modes only report and which arguments
+# write are all one reading in native authority, tested there
+# (`contained_node_tool_tests.rs`), and so is the whole plan outside Windows
+# (`node_tool_plan_tests.rs`). These tests stand the Windows sink on that
+# answer and cover what stays here: the route it asks and what it refuses.
+_REPORT = {"kind": "tool", "runtime_arguments": [], "expected_entry": None, "mode": "report"}
+_TSC = _REPORT | {"name": "tsc", "entries": ["typescript/bin/tsc"]}
+
+
+def _routes(monkeypatch, answer, *, build_output=None):
+    """Answer the sink's routing question the way native authority would.
+
+    A build asks a second question: the one directory it may write, read from
+    its own words and the project's Vite config. That reading is pinned in
+    `node_build_output_tests.rs`, so `build_output` names the answer for the
+    build under test and this stand-in never reads those words itself.
+    """
+
+    def _native(operation, fields, expected):
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
+        if operation == "node_build_output_root":
+            assert build_output is not None
+            return str(build_output)
+        assert operation == "node_tool_route"
+        value = answer(fields) if callable(answer) else answer
+        if isinstance(value, RestrictedPytestError):
+            raise value
+        return value
+
+    monkeypatch.setattr(tool, "restricted_native", _native)
+
+
+def test_a_refused_route_is_not_a_protected_plan(monkeypatch, tmp_path):
+    _routes(monkeypatch, RestrictedPytestError("node_tool_invalid_command", "The input has write or shell effects."))
+    with pytest.raises(RestrictedPytestError, match="write or shell"):
+        tool._prepare_windows_route(["eslint", "--fix", "src"], workspace=tmp_path, cwd=tmp_path)
 
 
 @pytest.mark.parametrize(
-    "command",
+    "reply",
     [
-        ["bunx", "eslint@evil", "src"],
-        ["bun", "run", "other"],
-        ["bunx", "tsc"],
-        ["bun", "x", "tsc"],
-        ["bun", "x", "eslint@evil", "src"],
-        ["pnpm", "exec", "tsc"],
-        ["pnpm", "exec", "-c", "tsc", "--noEmit"],
-        ["pnpm", "exec", "eslint", "--fix", "src"],
-        ["pnpm", "exec"],
-        ["npm", "exec", "-c", "tsc --noEmit"],
-        ["npm", "x", "--", "-c", "tsc"],
-        ["yarn", "exec", "--", "eslint", "--fix", "src"],
-        ["npm", "exec", "--"],
-        ["eslint", "--fix", "src"],
-        ["prettier", "--check", "--write=true", "src"],
-        ["eslint", "--output-file=.env", "src"],
-        ["node", "--max-old-space-size=999999", "typescript/bin/tsc", "--noEmit"],
-        ["node", "--require=evil", "typescript/bin/tsc", "--noEmit"],
-        ["node", "--max-old-space-size=12288", "--require=evil", "typescript/bin/tsc", "--noEmit"],
+        {"kind": "tool"},
+        _TSC | {"entries": []},
+        _TSC | {"mode": "rewrite"},
+        _TSC | {"arguments": ["--noEmit", 7]},
+        _TSC | {"runtime_arguments": "--max-old-space-size=12288"},
+        _TSC | {"expected_entry": 7},
+        {"kind": "script", "task": ""},
+        {"kind": "verdict"},
     ],
 )
-def test_unsupported_or_writing_command_is_not_a_protected_plan(command, tmp_path):
-    with pytest.raises(RestrictedPytestError):
-        tool.prepare_restricted_node_tool(command, workspace=tmp_path)
+def test_a_reply_that_is_not_a_route_stops_the_run(monkeypatch, tmp_path, reply):
+    """An answer the sink cannot read is unavailability, not a weaker plan."""
+    _routes(monkeypatch, {"arguments": ["--noEmit"]} | reply)
+    with pytest.raises(RestrictedPytestError, match="unavailable"):
+        tool._prepare_windows_route(["tsc", "--noEmit"], workspace=tmp_path, cwd=tmp_path)
 
 
-def test_bounded_heap_option_is_preserved_before_verified_entry(monkeypatch, tmp_path):
-    entry = tmp_path / "node_modules/typescript/bin/tsc"
-    entry.parent.mkdir(parents=True)
-    entry.write_text("// fixture compiler")
-    base = SimpleNamespace(workspace=tmp_path, cwd=tmp_path, executable="/usr/bin/node", denied_capabilities=())
-    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
-    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
-    plan = tool.prepare_restricted_node_tool(
-        ["node", "--max-old-space-size=12288", str(entry), "--noEmit", "--incremental", "false"],
-        workspace=tmp_path,
-    )
-    assert plan.profile_version == "node-tool-readonly-v1"
-    assert plan.command == (
-        "/usr/bin/node",
-        "--max-old-space-size=12288",
-        str(entry),
-        "--noEmit",
-        "--incremental",
-        "false",
-    )
+@pytest.mark.parametrize("command", [["bun", "run", "lint"], ["npm", "run", "lint"]])
+def test_a_package_script_is_not_a_contained_tool_run(monkeypatch, tmp_path, command):
+    """Windows admission keeps a package script on the review prompt.
 
+    The sink never reads the manifest for it: a script route is refused as a
+    run this platform does not contain, whatever the script says.
+    """
+    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"lint": "eslint src"}}))
+    asked = []
 
-def test_bun_x_is_read_as_bunx(monkeypatch, tmp_path):
-    entry = tmp_path / "node_modules/typescript/bin/tsc"
-    entry.parent.mkdir(parents=True)
-    entry.write_text("// fixture compiler")
-    base = SimpleNamespace(workspace=tmp_path, cwd=tmp_path, executable="/usr/bin/node", denied_capabilities=())
-    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
-    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
-    plan = tool.prepare_restricted_node_tool(["bun", "x", "tsc", "--noEmit"], workspace=tmp_path)
-    assert plan.profile_version == "node-tool-readonly-v1"
-    assert plan.command[-1] == "--noEmit"
+    def answer(fields):
+        asked.append(fields)
+        return {"kind": "script", "task": "lint"}
 
-
-def test_pnpm_exec_is_read_as_a_local_bin_run(monkeypatch, tmp_path):
-    entry = tmp_path / "node_modules/typescript/bin/tsc"
-    entry.parent.mkdir(parents=True)
-    entry.write_text("// fixture compiler")
-    base = SimpleNamespace(workspace=tmp_path, cwd=tmp_path, executable="/usr/bin/node", denied_capabilities=())
-    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
-    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
-    plan = tool.prepare_restricted_node_tool(
-        ["pnpm", "exec", "tsc", "--noEmit", "--pretty", "false"], workspace=tmp_path
-    )
-    assert plan.profile_version == "node-tool-readonly-v1"
-    assert plan.command == ("/usr/bin/node", str(entry), "--noEmit", "--pretty", "false")
-
-
-@pytest.mark.parametrize("script", ["curl https://example.invalid", "", "eslint src && curl https://example.invalid"])
-def test_manifest_script_is_not_shell_consent(script, tmp_path):
-    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"lint": script}}))
-    with pytest.raises(RestrictedPytestError):
-        tool.prepare_restricted_node_tool(["bun", "run", "lint"], workspace=tmp_path)
+    _routes(monkeypatch, answer)
+    with pytest.raises(RestrictedPytestError, match="package script") as refused:
+        tool._prepare_windows_route(command, workspace=tmp_path, cwd=tmp_path)
+    assert refused.value.reason_code == "node_tool_invalid_command"
+    assert [fields["script_body"] for fields in asked] == [None]
 
 
 @pytest.mark.parametrize("denied", [False, True])
@@ -179,13 +176,6 @@ def test_native_capability_gate_does_not_override_extension_denial(monkeypatch, 
     assert calls == ["npm run lint", "/usr/bin/node eslint.js", "/usr/bin/node --help"]
 
 
-@pytest.mark.parametrize("phase", ["prelint", "postlint"])
-def test_lifecycle_actions_are_not_silently_skipped(tmp_path, phase):
-    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"lint": "eslint src", phase: "node lifecycle.mjs"}}))
-    with pytest.raises(RestrictedPytestError, match="lifecycle actions"):
-        tool.prepare_restricted_node_tool(["npm", "run", "lint"], workspace=tmp_path)
-
-
 @pytest.mark.parametrize("name", ["src", ".git", ".env", "../outside", "."])
 def test_build_outputs_cannot_grant_source_or_host_writes(tmp_path, name):
     with pytest.raises(RestrictedPytestError):
@@ -227,51 +217,11 @@ def test_existing_output_links_and_protected_files_are_rejected(tmp_path, kind):
     assert source.read_text() == "source"
 
 
-@pytest.mark.parametrize("spelling", ["node_modules/vite/bin/vite.js", "./node_modules/vite/bin/vite.js"])
-def test_relative_vite_entry_resolves_from_the_command_directory(monkeypatch, tmp_path, spelling):
-    project = tmp_path / "project"
-    entry = project / "node_modules/vite/bin/vite.js"
-    entry.parent.mkdir(parents=True)
-    entry.write_text("// fixture bundler")
-    elsewhere = tmp_path / "elsewhere"
-    (elsewhere / "node_modules/vite/bin").mkdir(parents=True)
-    (elsewhere / "node_modules/vite/bin/vite.js").write_text("// other bundler")
-    monkeypatch.chdir(elsewhere)
-    base = SimpleNamespace(workspace=project, cwd=project, executable="/usr/bin/node", denied_capabilities=())
-    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
-    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
-    plan = tool.prepare_restricted_node_tool(["node", spelling, "build"], workspace=project)
-    assert plan.command == ("/usr/bin/node", str(entry.resolve()), "build")
-    assert plan.output_roots == (project / "dist", project / "node_modules/.vite-temp")
-
-
-@pytest.mark.parametrize(
-    ("argument", "expected"),
-    [
-        ("node_modules/vite/bin/vite.js", True),
-        ("./node_modules/vite/bin/vite.js", True),
-        ("/work/app/node_modules/vite/bin/vite.js", True),
-        ("xnode_modules/vite/bin/vite.js", False),
-        ("node_modules_evil/vite/bin/vite.js", False),
-        ("vite/bin/vite.js", False),
-    ],
-)
-def test_local_package_entry_spellings(argument, expected):
-    assert tool.is_local_package_entry(argument, "vite/bin/vite.js") is expected
-
-
-def test_the_nearest_installed_prettier_wins_over_a_hoisted_one(tmp_path):
-    """A package that pins its own major runs its own copy, not the root's."""
-    hoisted = tmp_path / "node_modules/prettier/bin/prettier.cjs"
-    hoisted.parent.mkdir(parents=True)
-    hoisted.write_text("// formatter 3")
-    app = tmp_path / "packages/app"
-    local = app / "node_modules/prettier/bin-prettier.js"
-    local.parent.mkdir(parents=True)
-    local.write_text("// formatter 2")
-    modules, relative = tool._tool_entry("prettier", app, tmp_path)
-    assert (modules, relative) == (app / "node_modules", "prettier/bin-prettier.js")
-    assert tool._tool_entry("prettier", tmp_path, tmp_path) == (
-        tmp_path / "node_modules",
-        "prettier/bin/prettier.cjs",
-    )
+def test_a_missing_local_tool_keeps_its_own_refusal(monkeypatch):
+    message = "The local lint/typecheck tool is unavailable; no replacement was downloaded."
+    reply = {"reason_code": "node_tool_dependency_unavailable", "message": message}
+    monkeypatch.setattr(transport, "_call", lambda *args, **kwargs: reply)
+    with pytest.raises(RestrictedPytestError) as refused:
+        transport._request("prepare_node_tool", {}, dict)
+    assert refused.value.reason_code == "node_tool_dependency_unavailable"
+    assert str(refused.value) == message

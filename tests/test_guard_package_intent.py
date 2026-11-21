@@ -162,6 +162,39 @@ def test_package_sync_does_not_treat_fd_merge_as_a_package_target(tmp_path: Path
     assert pnpm.targets == ()
 
 
+def test_a_missing_environment_puts_the_caller_home_on_the_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The home binding runs while the parse request is built."""
+
+    from codex_plugin_scanner.guard import native_package_authority
+
+    sent: list[dict[str, object]] = []
+
+    def request(**kwargs: object) -> None:
+        payload = kwargs["request"]
+        assert isinstance(payload, dict)
+        sent.append(payload)
+        return None
+
+    monkeypatch.setattr(native_package_authority, "_resident_request", request)
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    assert native_package_authority.package_intent_parse_native("npx create-vite@latest", guard_home=tmp_path) is None
+    assert (
+        native_package_authority.package_intent_parse_native(
+            "npx create-vite@latest",
+            environment={"PATH": "/bin"},
+            guard_home=tmp_path,
+        )
+        is None
+    )
+    assert sent[0]["environment"] == {"PATH": "/usr/bin", "HOME": str(home)}
+    assert sent[1]["environment"] == {"PATH": "/bin"}
+
+
 def test_parse_package_intent_exec_commands_are_classified_as_execute_requests() -> None:
     commands = {
         "npx create-vite@latest": ("npx", "create-vite", "latest"),

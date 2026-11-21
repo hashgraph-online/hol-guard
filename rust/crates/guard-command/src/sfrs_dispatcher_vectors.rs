@@ -12,7 +12,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, InspectionHost};
 use crate::command_evaluation::CommandDecisionFloor;
 use crate::command_model::parse_shell_command;
 use crate::hook_adapter_value::OValue;
@@ -68,9 +68,6 @@ impl InspectionHost for CaseHost {
     }
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         false
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("vector host does not run git")
     }
 }
 

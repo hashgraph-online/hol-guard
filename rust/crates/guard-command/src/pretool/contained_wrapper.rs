@@ -40,12 +40,23 @@ fn filter_chain(model: &CanonicalCommandV1, segments: &[CommandSegmentV1]) -> Op
     Some(filters.len())
 }
 
+/// The text one segment occupies in the command, as the sink lexes it.
+pub(super) fn segment_source(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+) -> Option<String> {
+    text(model, segment.span.start, segment.span.end)
+}
+
 /// A final `; echo "exit=$?"`: the sink prints the label and status itself.
 ///
 /// The shell prints a single-quoted or backslash-escaped `$?` literally, and
 /// the Python sink cannot peel those forms. Accept only the source syntax the
 /// sink peels, so those commands stay on the normal review path.
-fn status_echo(model: &CanonicalCommandV1, segment: &CommandSegmentV1) -> bool {
+pub(in crate::pretool) fn status_echo(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+) -> bool {
     segment.environment_names.is_empty()
         && segment.wrapper_chain.is_empty()
         && !segment.path_overridden
@@ -120,9 +131,45 @@ fn resolved_spelling(target: &std::path::Path) -> Option<std::path::PathBuf> {
     }
 }
 
-/// The repository holding a `cd` target outside the hook workspace: the
-/// nearest ancestor with a `.git` entry, strictly below home or the system
-/// temporary directory, and owned by the agent's user. Agents step into a
+/// Which neighbours count as a project root.
+///
+/// A checkout is the usual neighbour, and the only one a run outside the
+/// workspace is contained to in general: a plain directory holding a manifest
+/// is not a repository, and rebasing an arbitrary run into it would widen
+/// every contained route at once.
+///
+/// [`ProjectRoots::RepositoryOrPackage`] is the read-only package-test route's
+/// reading alone. A reproduction unpacked under a temporary root carries a
+/// manifest and no repository, and an agent asked to run its tests steps into
+/// it the same way: such a target resolved to no root at all, so that route
+/// declined it and `npm test` fell through to the generic package prompt while
+/// the identical command in the session's own directory ran contained. A
+/// manifest is read only when no `.git` ancestor is in reach, so every
+/// repository keeps the root it had: a package below a checkout still resolves
+/// to the checkout, and a monorepo keeps the root that holds its hoisted
+/// install.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ProjectRoots {
+    /// A repository only.
+    Repository,
+    /// A repository, or the nearest package manifest when no repository is in
+    /// reach.
+    RepositoryOrPackage,
+}
+
+/// The repository holding a `cd` target outside the hook workspace, as every
+/// caller but the package-test route asks for it: see [`project_root`].
+pub(super) fn sibling_project_root(
+    target: &std::path::Path,
+    home: &str,
+) -> Option<std::path::PathBuf> {
+    project_root(target, home, ProjectRoots::Repository)
+}
+
+/// The project holding a `cd` target outside the hook workspace: the
+/// nearest ancestor with a `.git` entry, strictly below home, the system
+/// temporary directory or the user's private macOS one, and owned by the
+/// agent's user. Agents step into a
 /// sibling checkout or worktree this way; the execution sink rebases its
 /// approved root to the same directory, so the run is contained to that
 /// repository exactly as it would be from a session started there.
@@ -137,9 +184,10 @@ fn resolved_spelling(target: &std::path::Path) -> Option<std::path::PathBuf> {
 /// soon as an ancestor is no longer strictly inside the base, so a link under
 /// home cannot carry the walk out to a `.git` root outside it.
 #[cfg(unix)]
-pub(super) fn sibling_project_root(
+pub(super) fn project_root(
     target: &std::path::Path,
     home: &str,
+    roots: ProjectRoots,
 ) -> Option<std::path::PathBuf> {
     use std::os::unix::fs::MetadataExt;
     let uid = nix::unistd::getuid().as_raw();
@@ -147,15 +195,17 @@ pub(super) fn sibling_project_root(
     [std::path::Path::new(home), std::path::Path::new("/tmp")]
         .iter()
         .filter_map(|base| std::fs::canonicalize(base).ok())
+        .chain(super::git_routes::private_temporary_base(&resolved, uid))
         .find(|base| resolved.starts_with(base) && resolved != *base)
         .and_then(|base| {
-            target
+            let reachable: Vec<&std::path::Path> = target
                 .ancestors()
                 .take_while(|directory| {
                     resolved_spelling(directory)
                         .is_some_and(|directory| directory.starts_with(&base) && directory != base)
                 })
-                .find(|directory| directory.join(".git").symlink_metadata().is_ok())
+                .collect();
+            pick(&reachable, roots)
                 .filter(|root| std::fs::metadata(root).is_ok_and(|meta| meta.uid() == uid))
                 .map(std::path::Path::to_path_buf)
         })
@@ -193,9 +243,10 @@ fn relative_inside_peeled(model: &CanonicalCommandV1, segments: &[CommandSegment
 /// answers in the `\\?\` form, so containment is decided on canonical paths
 /// and the root comes back in the spelling the caller passed in.
 #[cfg(windows)]
-pub(super) fn sibling_project_root(
+pub(super) fn project_root(
     target: &std::path::Path,
     home: &str,
+    roots: ProjectRoots,
 ) -> Option<std::path::PathBuf> {
     use guard_runtime_windows_process::owned_by_current_user;
     let resolved = resolved_spelling(target)?;
@@ -203,7 +254,7 @@ pub(super) fn sibling_project_root(
     if !resolved.starts_with(&base) || resolved == base {
         return None;
     }
-    target
+    let reachable: Vec<&std::path::Path> = target
         .ancestors()
         .take_while(|directory| {
             // Containment is decided on canonical paths while the walk climbs
@@ -217,17 +268,58 @@ pub(super) fn sibling_project_root(
             resolved_spelling(directory)
                 .is_some_and(|directory| directory.starts_with(&base) && directory != base)
         })
-        .find(|directory| directory.join(".git").symlink_metadata().is_ok())
+        .collect();
+    pick(&reachable, roots)
         .filter(|root| owned_by_current_user(root))
         .map(std::path::Path::to_path_buf)
 }
 
 #[cfg(not(any(unix, windows)))]
-pub(super) fn sibling_project_root(
+pub(super) fn project_root(
     _target: &std::path::Path,
     _home: &str,
+    _roots: ProjectRoots,
 ) -> Option<std::path::PathBuf> {
     None
+}
+
+/// Whether `directory` is a checkout: a repository directory, or the `.git`
+/// file a linked worktree carries.
+#[cfg(any(unix, windows))]
+fn checkout_marker(directory: &std::path::Path) -> bool {
+    directory.join(".git").symlink_metadata().is_ok()
+}
+
+/// Whether `directory` is a package root. The manifest must be a regular file
+/// the walk reached without following a link into it, so a link planted beside
+/// a target cannot name a directory the walk never climbed.
+#[cfg(any(unix, windows))]
+fn manifest_marker(directory: &std::path::Path) -> bool {
+    directory
+        .join("package.json")
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.is_file())
+}
+
+/// The nearest root among the ancestors the walk reached, nearest first: a
+/// repository wherever one is in reach, and a manifest only for the route that
+/// asked for one.
+#[cfg(any(unix, windows))]
+fn pick<'a>(reachable: &[&'a std::path::Path], roots: ProjectRoots) -> Option<&'a std::path::Path> {
+    reachable
+        .iter()
+        .copied()
+        .find(|directory| checkout_marker(directory))
+        .or_else(|| {
+            (roots == ProjectRoots::RepositoryOrPackage)
+                .then(|| {
+                    reachable
+                        .iter()
+                        .copied()
+                        .find(|directory| manifest_marker(directory))
+                })
+                .flatten()
+        })
 }
 
 /// Whether the execution sink can peel the leading `cd` of a command that
@@ -277,9 +369,18 @@ pub(super) fn contained_core(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
 ) -> Option<CanonicalCommandV1> {
+    contained_core_in(model, context, ProjectRoots::Repository)
+}
+
+/// [`contained_core`] for a route that names which neighbours root a run.
+pub(super) fn contained_core_in(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+    roots: ProjectRoots,
+) -> Option<CanonicalCommandV1> {
     // `bun --cwd <dir> run build` is checked as `cd <dir> && bun run build`.
     if let Some(projected) = package_dir::as_cd_list(model, context) {
-        return contained_core(&projected.model, context);
+        return contained_core_in(&projected.model, context, roots);
     }
     if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
         return None;
@@ -291,7 +392,7 @@ pub(super) fn contained_core(
         let workspace = std::fs::canonicalize(context.cwd?).ok()?;
         let target = std::path::Path::new(&target);
         let inside = within(target, &workspace);
-        let sibling = sibling_project_root(target, context.home_dir?);
+        let sibling = project_root(target, context.home_dir?, roots);
         if !inside && sibling.is_none() {
             return None;
         }

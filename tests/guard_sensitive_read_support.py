@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.native_mcp_sensitive_read import sensitive_read_context
+from tests.native_mcp_sensitive_read_client import sensitive_read_context
 
 
 def sensitive_read_current_action(config: object, *, artifact: GuardArtifact, harness: str) -> str:

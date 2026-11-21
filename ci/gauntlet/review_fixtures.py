@@ -7,9 +7,12 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from .extension_catalog_fixtures import CATALOG_CASE, catalog_checks
 from .realism_fixtures import write_windows_launcher
 
 GITHUB_REVIEW_CASE = "github-review-work-enabled-permissions"
+# A repository named after Guard reaches `gh api` as `repos/{owner}/hol-guard/...`.
+GITHUB_GUARD_NAMED_REPOSITORY_CASE = "github-api-guard-named-repository-enabled-permissions"
 GITHUB_DELETE_CASE = "explicit-disabled-github-delete-permission"
 # The Oh My Pi `github` tool runs `gh api` underneath, so its lookups reach the same stand-in.
 GITHUB_LOOKUP_CASE = "omp-native-github-search-prs"
@@ -17,8 +20,30 @@ GITHUB_LOOKUP_REPO = "example-org/example-repo"
 GITHUB_LOOKUP_QUERY = "is:pr metrics OR analytics"
 GITHUB_METADATA_CASE = "github-metadata-command-reads"
 GITHUB_METADATA_CONTROL = "github-metadata-mutation-control"
+# A directory change carrying an allowed mutation and a read split by `;`, the shape a user
+# who allowed the GitHub extension runs when they merge a pull request and then read it back.
+GITHUB_DIRECTORY_CHANGE_CASE = "github-allow-directory-change-then-merge-with-read-tail"
+GITHUB_SIBLING_CLIMB_CASE = "github-allow-sibling-climb-then-merge-with-read-tail"
 GITHUB_STUB_CASES = frozenset(
-    {GITHUB_REVIEW_CASE, GITHUB_DELETE_CASE, GITHUB_LOOKUP_CASE, GITHUB_METADATA_CASE, GITHUB_METADATA_CONTROL}
+    {
+        GITHUB_REVIEW_CASE,
+        GITHUB_GUARD_NAMED_REPOSITORY_CASE,
+        GITHUB_DELETE_CASE,
+        GITHUB_LOOKUP_CASE,
+        GITHUB_METADATA_CASE,
+        GITHUB_METADATA_CONTROL,
+        GITHUB_DIRECTORY_CHANGE_CASE,
+        GITHUB_SIBLING_CLIMB_CASE,
+    }
+)
+# Cases that run with the GitHub extension and every one of its permissions enabled.
+GITHUB_ENABLED_CASES = frozenset(
+    {
+        GITHUB_REVIEW_CASE,
+        GITHUB_GUARD_NAMED_REPOSITORY_CASE,
+        GITHUB_DIRECTORY_CHANGE_CASE,
+        GITHUB_SIBLING_CLIMB_CASE,
+    }
 )
 METADATA_CALLS = (
     ("cache", "list", "--limit", "5"),
@@ -32,8 +57,14 @@ METADATA_CALLS = (
     ("extension", "list"),
     ("config", "list"),
     ("config", "get", "editor"),
+    ("api", "search/issues?q=repo:example-org/example-repo+created:>=2026-10-29"),
+    ("api", "search/issues?q=repo:example-org/example-repo+created:<2026-10-29"),
+    ("api", "search/issues?q=repo:example-org/example-repo+comments:>10"),
 )
 WORKTREE_CASE = "linked-worktree-edit-from-main-checkout"
+# A shell edit of the same worktree whose quoted perl pattern uses `|` delimiters.
+WORKTREE_DELIMITER_CASE = "linked-worktree-quoted-delimiter-edit"
+WORKTREE_CASES = frozenset({WORKTREE_CASE, WORKTREE_DELIMITER_CASE})
 # Writes into a harness plan folder pass; the hooks file beside it stays reviewed.
 PLAN_NOTE_PROTECTION_CASE = "plan-note-protection-codex-hooks"
 CODEX_HOOKS = "{}\n"
@@ -80,6 +111,30 @@ EXPECTED_GH_CALLS = (
     ("api", "graphql", "-f", f"query={_RESOLVE_COMPOUND}"),
 )
 DELETE_COMMAND = "gh repo delete example-org/example-repo --yes"
+_GUARD_NAMED_RUN = "repos/example-org/hol-guard/actions/runs/123/approve"
+_GUARD_NAMED_NEXT_RUN = "repos/example-org/hol-guard/actions/runs/124/approve"
+GUARD_NAMED_REPOSITORY_COMMANDS = (
+    f"gh api --method POST {_GUARD_NAMED_RUN}",
+    f"gh --hostname github.com api --method POST {_GUARD_NAMED_NEXT_RUN}",
+)
+GUARD_NAMED_REPOSITORY_CALLS = (
+    ("api", "--method", "POST", _GUARD_NAMED_RUN),
+    ("--hostname", "github.com", "api", "--method", "POST", _GUARD_NAMED_NEXT_RUN),
+)
+# One recorded argv per gh invocation the directory-change command makes, in order. The read
+# after the `;` runs whatever the merge returned, so both argvs prove the whole line reached the
+# stand-in rather than stopping at the merge.
+DIRECTORY_CHANGE_CALLS = (
+    ("pr", "merge", "12", "--repo", "example-org/example-repo", "--squash"),
+    ("pr", "view", "12", "--repo", "example-org/example-repo", "--json", "state,mergedAt"),
+)
+# The same line spelled as a climb into the checkout beside this one. An absolute
+# `cd` and a `~` `cd` already reach the stand-in; a relative `../` climb names the
+# same directory, so the rules the user allowed must cover it too.
+SIBLING_CLIMB_CALLS = (
+    ("pr", "merge", "13", "--repo", "example-org/example-repo", "--squash"),
+    ("pr", "view", "13", "--repo", "example-org/example-repo", "--json", "state,mergedAt"),
+)
 
 
 def gh_stub_script(log: Path) -> str:
@@ -154,6 +209,15 @@ def github_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
         return {"github-metadata-control-not-executed": recorded_gh_calls(workspace) is None}
     if scenario_id == GITHUB_REVIEW_CASE:
         return {"github-stub-calls-exact": recorded_gh_calls(workspace) == list(EXPECTED_GH_CALLS)}
+    if scenario_id == GITHUB_GUARD_NAMED_REPOSITORY_CASE:
+        calls = recorded_gh_calls(workspace)
+        return {"github-guard-named-repository-call-exact": calls == list(GUARD_NAMED_REPOSITORY_CALLS)}
+    if scenario_id == GITHUB_DIRECTORY_CHANGE_CASE:
+        calls = recorded_gh_calls(workspace)
+        return {"github-directory-change-calls-exact": calls == list(DIRECTORY_CHANGE_CALLS)}
+    if scenario_id == GITHUB_SIBLING_CLIMB_CASE:
+        calls = recorded_gh_calls(workspace)
+        return {"github-sibling-climb-calls-exact": calls == list(SIBLING_CLIMB_CALLS)}
     if scenario_id == GITHUB_LOOKUP_CASE:
         calls = recorded_gh_calls(workspace)
         return {"github-lookup-ran-once": calls is not None and len(calls) == 1 and _is_lookup_call(calls[0])}
@@ -174,8 +238,10 @@ def add_linked_worktree(main: Path, home: Path, environment: dict[str, str]) -> 
 
 
 def worktree_checks(fixture_home: Path, workspace: Path, scenario_id: str, before: str, after: str) -> dict[str, bool]:
-    """Bind the edit to the linked worktree and prove the main checkout stayed unchanged."""
-    if scenario_id != WORKTREE_CASE:
+    """Bind each edit to the linked worktree and prove the main checkout stayed unchanged."""
+    if scenario_id == CATALOG_CASE:
+        return catalog_checks(workspace)
+    if scenario_id not in WORKTREE_CASES:
         return {}
 
     def text(path: Path) -> str | None:
@@ -185,11 +251,14 @@ def worktree_checks(fixture_home: Path, workspace: Path, scenario_id: str, befor
             return None
 
     linked = fixture_home / WORKTREE_NAME
-    return {
+    checks = {
         "linked-worktree-settings-exact": text(linked / "src/settings.ts") == after,
-        "linked-worktree-note-exact": text(linked / "docs/change.md") == "Retry limit increased from 3 to 5.\n",
         "main-checkout-settings-unchanged": text(workspace / "src/settings.ts") == before,
     }
+    # Only the main case asks for a note; the delimiter case edits settings alone.
+    if scenario_id == WORKTREE_CASE:
+        checks["linked-worktree-note-exact"] = text(linked / "docs/change.md") == "Retry limit increased from 3 to 5.\n"
+    return checks
 
 
 def configure_github_review_controls(daemon: Any, guard_home: Path) -> dict[str, Any]:

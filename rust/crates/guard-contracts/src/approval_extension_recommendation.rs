@@ -65,6 +65,23 @@ pub enum ApprovalExtensionRecommendationQueryV1 {
     },
     /// The subset of `risk_classes` that calls for a caution.
     CautionRiskClasses { risk_classes: Vec<String> },
+    /// Label a stored coverage hint, which extension matched which step,
+    /// from the active catalog. `hint` is the stored value as read; the op
+    /// shape-checks it.
+    Coverage { hint: serde_json::Value },
+    /// The control authority view the resident admitted, for a caller that
+    /// holds none of its own.
+    ControlView {},
+}
+
+/// The admitted control authority view, with the digest of the catalog it
+/// was admitted with.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalExtensionControlViewV1 {
+    pub snapshot: ApprovalExtensionRecommendationSnapshotV1,
+    pub managed_revision: u64,
+    pub registry_catalog_digest: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -119,6 +136,13 @@ pub enum ApprovalExtensionRecommendationPayloadV1 {
     },
     /// The asked risk classes that call for a caution, sorted without repeats.
     CautionRiskClasses { risk_classes: Vec<String> },
+    /// The labelled steps, or null when no stored step names an extension
+    /// this catalog carries.
+    Coverage { coverage: Option<serde_json::Value> },
+    /// The admitted view, or null when the resident admitted no controls.
+    ControlView {
+        view: Option<ApprovalExtensionControlViewV1>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

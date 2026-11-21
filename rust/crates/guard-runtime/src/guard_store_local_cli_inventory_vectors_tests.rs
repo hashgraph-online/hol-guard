@@ -104,9 +104,16 @@ fn replays_every_recorded_local_cli_inventory_read() {
             }
             let reply = run_step(&home, source, step);
             assert_eq!(reply["status"], "ok", "{label}: {reply}");
-            assert_ranked(&reply["payload"], &label);
+            // Every recorded scenario is small enough for one page, so the
+            // replay compares a whole list against the recorded one.
+            assert!(
+                reply["payload"]["next_offset"].is_null(),
+                "{label}: {reply}"
+            );
+            let listed = &reply["payload"]["items"];
+            assert_ranked(listed, &label);
             assert_eq!(
-                without_native_fields(&reply["payload"]),
+                without_native_fields(listed),
                 without_native_fields(&step["native_payload"]),
                 "{label}"
             );

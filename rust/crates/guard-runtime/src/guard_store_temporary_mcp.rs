@@ -21,7 +21,7 @@ use crate::guard_store_approval_reads::{payloads, COLUMNS};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_all, value_error, StoreResult};
 use crate::guard_store_policy_upsert::upsert_policy;
-use crate::mcp_tool_policy_grants::{category_for, INFORMATIONAL_CATEGORY};
+use crate::mcp_tool_policy_grants::{category_for, risks_allow_grant};
 use crate::policy_store::PolicySnapshotStore;
 
 /// A temporary grant resolves its request the way the dashboard resolves an
@@ -216,11 +216,7 @@ fn eligibility(intent: &Value) -> Option<(&str, &'static str)> {
         .and_then(Value::as_array)
         .map(|items| items.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
-    if !risks.contains(&category)
-        || risks
-            .iter()
-            .any(|risk| *risk != category && *risk != INFORMATIONAL_CATEGORY)
-    {
+    if !risks_allow_grant(category, &risks) {
         return None;
     }
     Some((server, category))

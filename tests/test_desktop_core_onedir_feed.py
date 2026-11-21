@@ -15,8 +15,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codex_plugin_scanner.guard.cli import update_desktop_core
-
 ROOT = Path(__file__).resolve().parents[1]
 FEED = ROOT / "scripts" / "release" / "desktop_core_alpha_feed.py"
 SEALER = ROOT / "scripts" / "release" / "seal_pyinstaller_native_manifest.py"
@@ -348,7 +346,7 @@ class TestOnedirZipMembers:
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="ditto only exists on macOS")
 def test_framework_symlink_round_trip(tmp_path: Path) -> None:
-    """Real ditto archive → feed validation + count → installer extraction + R6 walk."""
+    """Real ditto archive → feed validation + count."""
     namespace = _feed()
     tree = tmp_path / "src" / "hol-guard"
     framework = tree / "_internal" / "Python.framework" / "Versions" / "3.12"
@@ -375,14 +373,8 @@ def test_framework_symlink_round_trip(tmp_path: Path) -> None:
         check=True,
     )
     namespace.validate_onedir_zip_members(archive)
-    update_desktop_core._validate_onedir_zip_members(archive)
     # hol-guard, Info.plist, CodeResources, Python file, + 2 links.
     assert namespace._onedir_file_count(tmp_path / "src") == 6
-    extracted = tmp_path / "out"
-    extracted.mkdir()
-    update_desktop_core._extract_onedir_zip(archive, extracted)
-    assert (extracted / "hol-guard" / "_internal" / "Python").is_symlink()
-    assert update_desktop_core._onedir_file_count(extracted) == 6
 
 
 class TestOnedirMarker:

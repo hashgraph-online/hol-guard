@@ -173,6 +173,13 @@ fn store_and_envelope_with_runtime(
             execution_environment: None,
         },
         recording_only: false,
+        local_cli_rules: None,
+        observe_local_cli: false,
+        record_receipt: false,
+        record_activity: false,
+        record_pre_tool_activity: false,
+        structured_output_config: None,
+        containment_sink: None,
     };
     (root, store, envelope)
 }
@@ -395,3 +402,6 @@ fn binding_mutations_are_rejected_even_when_resigned() {
 
 #[path = "approval_v3_lifecycle_tests.rs"]
 mod lifecycle_tests;
+
+#[path = "approval_v3_tuple_tests.rs"]
+mod tuple_tests;

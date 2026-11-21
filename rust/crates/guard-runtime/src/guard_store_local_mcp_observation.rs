@@ -219,7 +219,7 @@ fn insert(
 }
 
 /// `later_timestamp`: the stored value unless the replayed one is later.
-fn later_timestamp(current: Option<&Value>, candidate: &str) -> Value {
+pub(crate) fn later_timestamp(current: Option<&Value>, candidate: &str) -> Value {
     let stored = current.and_then(parse_utc);
     let replayed = parse_utc(&Value::from(candidate));
     match (current, stored) {

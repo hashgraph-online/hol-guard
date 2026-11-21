@@ -168,6 +168,9 @@ def native_guard_store_call(
     remaining_seconds = deadline_monotonic - time.monotonic()
     if remaining_seconds <= 0:
         raise TimeoutError("Guard storage operation deadline expired.")
+    # One status serves the request and the health record: resolving it walks
+    # and stats the runtime path, and every store call pays for it.
+    runtime_status = native_runtime_status()
     response = _resident_request(
         operation="guard_store",
         request=request,
@@ -177,8 +180,9 @@ def native_guard_store_call(
         response_schema=_RESULT_SCHEMA,
         max_request_bytes=GUARD_STORE_MAX_REQUEST_BYTES + _ENVELOPE_SLACK_BYTES,
         record_success=False,
+        status=runtime_status,
     )
-    identity = native_runtime_status().identity
+    identity = runtime_status.identity
     if (
         response is None
         or response.get("request_id") != request["request_id"]

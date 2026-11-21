@@ -97,3 +97,17 @@ fn hook_reason_keeps_the_tokenized_link() {
         "HOL Guard stopped it. fs.write Approve it in HOL Guard, then retry."
     );
 }
+
+#[test]
+fn join_keeps_the_short_signed_link_over_its_plain_copy() {
+    let page = "http://127.0.0.1:5474/requests/20fce09561634ecab2055b539113c618";
+    let link = format!(
+        "Open HOL Guard to approve or keep this blocked: {page}/1800043200-7c3d07b3dee665161df59cb58f93bcdf"
+    );
+    let plain = format!("Open HOL Guard to approve or keep this blocked: {page}");
+    assert_eq!(join_hook_reason(&[&plain, &link]), link);
+    assert_eq!(join_hook_reason(&[&link, &plain]), link);
+    // A sentence-ending period stays with the reason when the code is removed.
+    let (link, plain) = (format!("{link}."), format!("{plain}."));
+    assert_eq!(join_hook_reason(&[&plain, &link]), link);
+}

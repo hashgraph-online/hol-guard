@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.cloud_exceptions import (
-    cloud_exception_from_mapping,
-    list_active_cloud_exceptions,
-)
+import pytest
+
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+from codex_plugin_scanner.guard.runtime import runner_native_sync
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import (
     build_cloud_exception_bundle_entry,
@@ -72,10 +72,9 @@ def _sample_sync_exception(*, exception_id: str = "artifact:codex:demo") -> dict
     }
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_cloud_exception_dto_includes_required_fields() -> None:
-    parsed = cloud_exception_from_mapping(_sample_sync_exception())
-    assert parsed is not None
-    payload = parsed.to_dict()
+    [payload] = runner_native_sync.cloud_exceptions({"cloudExceptions": [_sample_sync_exception()]}, device_id=None)
     for key in (
         "id",
         "effect",
@@ -92,16 +91,18 @@ def test_cloud_exception_dto_includes_required_fields() -> None:
         assert key in payload
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_expired_cloud_exceptions_are_not_active() -> None:
-    expired = cloud_exception_from_mapping(
-        {
-            **_sample_sync_exception(exception_id="expired:1"),
-            "expiresAt": "2020-01-01T00:00:00Z",
-        }
-    )
-    assert expired is not None
-    active = list_active_cloud_exceptions([expired], now="2026-01-01T00:00:00+00:00")
-    assert active == []
+    bundle: dict[str, object] = {
+        "cloudExceptions": [
+            {
+                **_sample_sync_exception(exception_id="expired:1"),
+                "expiresAt": "2020-01-01T00:00:00Z",
+            }
+        ]
+    }
+    assert [item["id"] for item in runner_native_sync.cloud_exceptions(bundle, device_id=None)] == ["expired:1"]
+    assert runner_native_sync.cloud_exceptions(bundle, device_id=None, active_at="2026-01-01T00:00:00+00:00") == []
 
 
 def test_signed_bundle_exception_is_hidden_after_bundle_expiry(tmp_path: Path) -> None:
@@ -133,3 +134,22 @@ def test_signed_bundle_exception_is_hidden_after_key_revocation(tmp_path: Path) 
     )
 
     assert store.list_cloud_exceptions() == []
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_signed_bundle_exception_the_runtime_cannot_read_is_not_listed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "home")
+    _cache_signed_cloud_exception_bundle(
+        store,
+        cloud_exceptions=[build_cloud_exception_bundle_entry(exception_id="bundle:listed")],
+    )
+    listed = store.list_cloud_exceptions(harness="codex")
+    assert [(item["id"], item["ack_status"]) for item in listed] == [("bundle:listed", "synced")]
+
+    def refuse(kind: str, args: object) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(runner_native_sync, "native_runner_authority", refuse)
+    assert store.list_cloud_exceptions(harness="codex") == []

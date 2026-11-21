@@ -7,11 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_hook_containment_route as containment_route
 from codex_plugin_scanner.guard import native_restricted_pytest as native
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_workspace as workspace_sink
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
+from tests import containment_resident as containment_probe
+from tests import containment_rewrite_client as containment_route
+from tests.restricted_native_clients import contained_expectation_reply
 
 COMMAND = "./todo.py add x"
 
@@ -83,11 +85,37 @@ def test_a_workspace_receipt_runs_what_the_read_only_parsers_reject(
     def reject(*args: object, **kwargs: object) -> None:
         raise RestrictedPytestError("pytest_restricted_invalid_command", "read-only parser")
 
-    kinds = dict.fromkeys(("inline_eval", "node_test", "vitest", "git", "node_tool"), False)
+    kinds = dict.fromkeys(("inline_eval", "node_test", "vitest", "git", "node_tool", "package_test"), False)
     if kind is not None:
         kinds[kind] = True
     ran: list[object] = []
-    monkeypatch.setattr(native, "restricted_native", lambda *args, **kwargs: kinds)
+
+    def answer(operation: str, fields: dict[str, object], expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
+        # Each reading this run makes is answered as itself. A catch-all that
+        # handed the kinds back to every question would quietly pass a screen
+        # the test never thought about, so an unexpected one fails here instead.
+        if operation == "contained_target":
+            return None
+        if operation == "command_words":
+            return str(fields["command_text"]).split()
+        if operation == "command_prefix_split":
+            # The command carries no prefix, so its own program stands first
+            # and nothing is peeled off it.
+            return {"core_index": 0, "assignments": [], "dropped_data": False}
+        if operation == "run_prefix_peel":
+            # No launcher stands ahead of the program either, so the whole
+            # command is its own core and it carries no timeout.
+            return {"core": list(fields["command"]), "seconds": None}
+        if operation == "pytest_command":
+            # The command names a script of its own, so no pytest run stands
+            # behind it.
+            return False
+        assert operation == "contained_kind", operation
+        return kinds
+
+    monkeypatch.setattr(native, "restricted_native", answer)
     for parser in ("prepare_restricted_pytest", "prepare_restricted_inline_eval"):
         monkeypatch.setattr(sink, parser, reject)
     monkeypatch.setattr(sink.restricted_git, "prepare_restricted_git", reject)
@@ -220,6 +248,8 @@ def test_matching_plan_launches_in_the_sandbox_backend(monkeypatch: pytest.Monke
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "g"))
 
     def fake_native(operation: str, fields: object, expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         calls.append(operation)
         if isinstance(fields, dict) and operation == "prepare_workspace_contained":
             sent.append(fields["git_environment"])
@@ -310,7 +340,7 @@ def test_adapters_map_the_workspace_reason_to_its_profile(
 ) -> None:
     # Linux runs only this profile, so the resident naming it there pins the mapping.
     monkeypatch.setattr(containment_route, "host_platform", lambda: "linux")
-    sink = containment_route.native_containment_sink(
+    sink = containment_probe.native_containment_sink(
         receipt(), harness="claude-code", bridge=False, payload=payload(), guard_home=native_approval_reuse_runtime
     )
     assert sink == ("workspace-contained-v1", None)
@@ -323,6 +353,8 @@ def test_linux_runs_in_an_overlay_and_applies_only_after_exit(monkeypatch: pytes
     order: list[str] = []
 
     def fake_native(operation: str, fields: dict[str, object], expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         calls.append((operation, dict(fields)))
         order.append(operation)
         if operation == "workspace_bubblewrap_argv":
@@ -358,6 +390,8 @@ def test_a_denied_overlay_change_fails_the_run(monkeypatch: pytest.MonkeyPatch, 
     roots: list[Path] = []
 
     def fake_native(operation: str, fields: dict[str, object], expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         if operation == "workspace_bubblewrap_argv":
             roots.append(Path(str(fields["upper"])).parent)
             return ["/usr/bin/bwrap"]
@@ -386,6 +420,8 @@ def test_a_linked_worktree_overlays_the_shared_git_directory(monkeypatch: pytest
     calls: dict[str, dict[str, object]] = {}
 
     def fake_native(operation: str, fields: dict[str, object], expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         calls[operation] = dict(fields)
         if operation == "workspace_bubblewrap_argv":
             assert Path(str(fields["shared_upper"])).is_dir() and Path(str(fields["shared_work"])).is_dir()
@@ -413,6 +449,8 @@ def test_macos_profile_receives_the_linked_worktree(monkeypatch: pytest.MonkeyPa
     profiles: list[dict[str, object]] = []
 
     def fake_native(operation: str, fields: dict[str, object], expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         if operation == "macos_profile":
             profiles.append(dict(fields))
             return "(version 1)"
@@ -490,6 +528,12 @@ def test_a_cd_below_a_sibling_root_without_a_workspace_receipt_never_runs_there(
 
 
 def test_read_grants_need_a_launched_single_canonical_script(tmp_path: Path) -> None:
+    """The words the grant is read against come from native authority.
+
+    `;`, `>` and `|` end the word that names the script even with no space in
+    front of them, and `#` spells a directory rather than starting a comment.
+    """
+
     from codex_plugin_scanner.guard.runtime.restricted_workspace_grants import read_grants_valid
 
     root = tmp_path.resolve()
@@ -508,3 +552,44 @@ def test_read_grants_need_a_launched_single_canonical_script(tmp_path: Path) -> 
     (hashed / "good.py").write_text("x")
     assert read_grants_valid([str(hashed / "good.py")], f"python3 {hashed}/good.py")
     assert not read_grants_valid([str(good)], f"python3 {good}#x")
+
+
+def test_a_grant_is_read_against_the_words_that_admitted_the_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Python once lexed the command a second time to find the script it names.
+
+    Native authority read that same text when it drew the plan this grant
+    belongs to. Two readings of one command can part on where a word ends, and
+    a grant admitted against the reading that did not draw the plan is a read
+    root nothing authorized.
+    """
+
+    from codex_plugin_scanner.guard.runtime.restricted_workspace_grants import read_grants_valid
+
+    good = tmp_path.resolve() / "good.py"
+    good.write_text("x")
+    asked: list[str] = []
+
+    def answer(operation: str, fields: dict[str, object], expected: object) -> list[str]:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
+        assert operation == "command_absolute_words", operation
+        asked.append(str(fields["command_text"]))
+        return [str(good)]
+
+    monkeypatch.setattr(native, "restricted_native", answer)
+    assert read_grants_valid([str(good)], f"python3 {good};echo ok")
+    assert asked == [f"python3 {good};echo ok"]
+
+
+def test_an_answer_that_is_not_words_admits_no_grant(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A reply that is not a list of words is no reading, so it refuses loudly."""
+
+    from codex_plugin_scanner.guard.runtime.restricted_workspace_grants import read_grants_valid
+
+    good = tmp_path.resolve() / "good.py"
+    good.write_text("x")
+    monkeypatch.setattr(native, "restricted_native", lambda *args, **kwargs: [str(good), 7])
+    with pytest.raises(RestrictedPytestError, match=r"Invalid restricted execution request\."):
+        read_grants_valid([str(good)], f"python3 {good}")

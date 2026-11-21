@@ -8,10 +8,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
-from codex_plugin_scanner.guard.daemon.hook_availability_policy import availability_harness_response
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.store import GuardStore
+
+from .native_exit_code_support import native_exit_code_is
 
 
 @pytest.mark.parametrize("failure", ("worker_none", "worker_response", "worker_raise"))
@@ -43,9 +45,9 @@ def test_native_failure_preserves_codex_wire_response(
         return None
 
     monkeypatch.setattr(cli, "try_native_hook_authority", unavailable)
+    native_exit_code_is(monkeypatch, 0)
     result = cli.route_native_hook(
         Mock(harness="codex", json=json_requested),
-        config=None,
         context=context,
         payload=payload,
         runtime_workspace=None,
@@ -85,7 +87,6 @@ def test_native_failure_keeps_copilot_permission_wire_response(
     monkeypatch.setattr(cli, "try_native_hook_authority", unavailable)
     result = cli.route_native_hook(
         Mock(harness="copilot", json=False),
-        config=None,
         context=context,
         payload=payload,
         runtime_workspace=None,

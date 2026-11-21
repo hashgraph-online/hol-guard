@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, InspectionHost};
 use crate::sfrs_gh_body_safety as gbs;
 use crate::sfrs_interpreter_heredoc::shell_heredoc_payloads;
 use crate::sfrs_node_heredoc as heredoc;
@@ -38,6 +38,27 @@ fn fixture() -> Value {
         .read_to_string(&mut text)
         .expect("gzip");
     serde_json::from_str(&text).expect("json")
+}
+
+/// Cases the `.ssh` directory label turned from `false` into `true`.
+///
+/// Python read key material inside `.ssh` by basename, so walking the
+/// directory itself read nothing it recognised. Guard now treats the
+/// directory as the material it holds, which is what these recorded answers
+/// predate. Nothing else may move: the recorded answer has to be `false`, the
+/// new one `true`, and a word of the command has to name `.ssh`.
+const EXPANDED_DIRECTORY_CASES: usize = 6;
+
+fn is_directory_expansion(args: &[Value], recorded: &Value, actual: &Value) -> bool {
+    if *recorded != json!(false) || *actual != json!(true) {
+        return false;
+    }
+    args.first().and_then(Value::as_array).is_some_and(|words| {
+        words
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|word| word.split('/').any(|part| part == ".ssh"))
+    })
 }
 
 fn build_tree(document: &Value) -> Scratch {
@@ -130,9 +151,6 @@ impl InspectionHost for Host {
     }
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         false
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("replay host does not run git")
     }
     fn path_exists(&self, path: &str) -> bool {
         fs::symlink_metadata(path).is_ok() || Path::new(path).exists()
@@ -429,6 +447,7 @@ fn node_leaves_match_recorded_python() {
     let proj = format!("{root_text}/home/proj");
     let ctx = Ctx::new(&host, &proj, &format!("{root_text}/home"));
     let mut failures = Vec::new();
+    let mut expanded = 0usize;
     let cases = document["cases"].as_array().expect("cases");
     for case in cases {
         let function = text(&case["fn"]);
@@ -440,6 +459,10 @@ fn node_leaves_match_recorded_python() {
             .collect();
         let actual = unbind(root, replay(function, &args, &ctx));
         if actual != case["result"] {
+            if is_directory_expansion(&args, &case["result"], &actual) {
+                expanded += 1;
+                continue;
+            }
             failures.push(format!(
                 "{function} {} => {actual}, expected {}",
                 case["args"], case["result"]
@@ -457,5 +480,9 @@ fn node_leaves_match_recorded_python() {
             .cloned()
             .collect::<Vec<_>>()
             .join("\n")
+    );
+    assert_eq!(
+        expanded, EXPANDED_DIRECTORY_CASES,
+        "{expanded} recorded answers changed with the directory corpus, against {EXPANDED_DIRECTORY_CASES} recorded"
     );
 }

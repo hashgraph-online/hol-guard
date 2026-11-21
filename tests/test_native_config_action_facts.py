@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 import codex_plugin_scanner.guard.cli.commands  # noqa: F401  (wires the shared command namespace)
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifact_policy import (
+from tests.runtime_artifact_policy_support import (
     _runtime_artifact_policy_action,
     runtime_policy_artifact_facts,
     runtime_policy_config_facts,

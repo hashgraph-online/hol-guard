@@ -45,10 +45,8 @@ ApprovalReuseValidationFailure = Literal[
 
 APPROVAL_REUSE_ACCEPTED = "approval_reuse_accepted"
 APPROVAL_REUSE_NO_SAVED_DECISION = "approval_reuse_no_saved_decision"
-APPROVAL_REUSE_REAPPROVAL_REQUIRED = "approval_reuse_reapproval_required"
 APPROVAL_REUSE_CLAIM_FAILED = "approval_reuse_claim_failed"
 APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED = "approval_reuse_launch_identity_unverified"
-APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM = "approval_reuse_context_changed_after_claim"
 APPROVAL_REUSE_AUTHORITY_UNAVAILABLE = "approval_reuse_authority_unavailable"
 
 _APPROVAL_REUSE_STATUSES: frozenset[str] = frozenset({"accepted", "rejected", "not-applicable"})

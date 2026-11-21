@@ -1,0 +1,1 @@
+{"command":["python","-X","utf8","-m","pytest","tests/"]}

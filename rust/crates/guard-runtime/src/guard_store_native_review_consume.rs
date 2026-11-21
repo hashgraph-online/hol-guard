@@ -1,5 +1,6 @@
 //! `consume_native_review_approval` — spends the chronologically latest
-//! matching five-minute allow of a verified harness-native Accept.
+//! matching allow of a verified harness-native Accept, for up to one hour
+//! after it was given.
 //!
 //! A resolved inbox row is not a permanent capability: it is bound to the
 //! newly computed request identity and consumed at most once, in the same
@@ -8,6 +9,9 @@
 //! with an unusable timestamp, or any binding outside the native-review
 //! grammar refuses. Timestamp spellings outside `YYYY-MM-DD[T ]HH:MM[:SS[.f]]`
 //! plus `Z` or a numeric offset are refused too (fail closed).
+//!
+//! `settle_native_review_reuse` runs the block check and the spend together,
+//! so a retry pays for one store transaction instead of two.
 //!
 //! Parity vectors recorded from the original Python implementation live in
 //! `testdata/guard_store/native_review_consume_vectors.json`.
@@ -23,7 +27,14 @@ use sha2::{Digest, Sha256};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_all, StoreResult};
 
-const WINDOW_MICROS: i64 = 5 * 60 * 1_000_000;
+/// How long an Allow once covers the next identical try. An hour, so an
+/// answer given after the agent stopped waiting still lets the user say "try
+/// again"; it is still spent once, on this machine, for this exact request.
+const ALLOW_WINDOW_MICROS: i64 = 60 * 60 * 1_000_000;
+/// How long a Block once keeps answering identical retries. It stays five
+/// minutes: a refusal only stops a retry loop, and a later try is a new
+/// question the user should see again.
+const BLOCK_WINDOW_MICROS: i64 = 5 * 60 * 1_000_000;
 const EVENT_NAME: &str = "native-review.once-consumed";
 
 pub(crate) fn binding_pattern() -> &'static Regex {
@@ -46,7 +57,9 @@ fn digits(bytes: &[u8], at: &mut usize, count: usize) -> Option<u32> {
 
 fn days_in_month(year: u32, month: u32) -> u32 {
     match month {
-        2 if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
+        2 if year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400)) => {
+            29
+        }
         2 => 28,
         4 | 6 | 9 | 11 => 30,
         _ => 31,
@@ -101,7 +114,7 @@ fn parse_aware(text: &str) -> Option<()> {
 }
 
 /// Instant in microseconds plus CPython's `isoformat()` spelling of its UTC form.
-fn instant(value: Option<&str>) -> Option<(i64, String)> {
+pub(crate) fn instant(value: Option<&str>) -> Option<(i64, String)> {
     let text = value?;
     parse_aware(text)?;
     let micros = utc_timestamp_micros(text)?;
@@ -120,6 +133,104 @@ pub(crate) fn matching_block(connection: &Connection, args: &Args) -> StoreResul
     // A refusal cannot grant execution. Keep it for the retry window so repeated
     // attempts do not re-open the question the user has already answered.
     matching_decision(connection, args, "block", false)
+}
+
+/// `settle_native_review_reuse` — a retry's block check and, when the caller
+/// may spend one, its approve-once spend, in the one write transaction the
+/// `guard_store` op holds: `"blocked"`, `"allowed"` or `null`.
+///
+/// A matching block always wins, so a refusal keeps answering the retry
+/// window before any allow is considered. Without `spend` it only reads, and
+/// the op runs it without the write lock.
+pub(crate) fn settle(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    settled(connection, args, args.flag("spend")?)
+}
+
+/// `settle` with `spend` given by the caller rather than read from `args`.
+pub(crate) fn settled(connection: &Connection, args: &Args, spend: bool) -> StoreResult<Value> {
+    if matching_block(connection, args)? == Value::Bool(true) {
+        return Ok(json!("blocked"));
+    }
+    if spend && consume(connection, args)? == Value::Bool(true) {
+        return Ok(json!("allowed"));
+    }
+    Ok(Value::Null)
+}
+
+/// Spends the retry authority of `request_id`'s Allow once on behalf of a
+/// live hook that resumed on it, under the write transaction the caller
+/// holds. The live hook and an identical retry are two ways of using the same
+/// approval: whichever comes first spends it, and the other is refused.
+///
+/// `false` when an earlier retry already spent the approval; `true` when this
+/// call spent it, or when the request carries no retry authority (no
+/// resolved allow, or a binding outside the native-review grammar).
+pub(crate) fn spend_for_live_resume(
+    connection: &Connection,
+    request_id: &str,
+    now: &str,
+) -> StoreResult<bool> {
+    let rows = query_all(
+        connection,
+        "select artifact_hash, resolved_at from approval_requests \
+         where request_id = ? and status = 'resolved' and resolution_action = 'allow' \
+           and resolution_scope in ('once', 'artifact')",
+        &[Value::from(request_id)],
+    )?;
+    let Some(row) = rows.first() else {
+        return Ok(true);
+    };
+    let artifact_hash = row
+        .get("artifact_hash")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !binding_pattern().is_match(artifact_hash) {
+        return Ok(true);
+    }
+    let (Some((_, approved_iso)), Some((_, current_iso))) = (
+        instant(row.get("resolved_at").and_then(Value::as_str)),
+        instant(Some(now)),
+    ) else {
+        // An approval Guard cannot place in time cannot be told apart from a
+        // spent one, so the resume is refused rather than reused.
+        return Ok(false);
+    };
+    insert_effect(
+        connection,
+        artifact_hash,
+        &approved_iso,
+        request_id,
+        &current_iso,
+    )
+}
+
+fn effect_key(artifact_hash: &str, approved_iso: &str) -> String {
+    hex::encode(Sha256::digest(
+        format!("native-review-once-v3\0{artifact_hash}\0{approved_iso}").as_bytes(),
+    ))
+}
+
+fn insert_effect(
+    connection: &Connection,
+    artifact_hash: &str,
+    approved_iso: &str,
+    request_id: &str,
+    current_iso: &str,
+) -> StoreResult<bool> {
+    let inserted = exec(
+        connection,
+        "insert or ignore into guard_continuation_effects \
+         (effect_key, request_id, evidence_id, event_name, created_at) \
+         values (?, ?, ?, ?, ?)",
+        &[
+            Value::from(effect_key(artifact_hash, approved_iso)),
+            Value::from(request_id),
+            Value::from(artifact_hash),
+            Value::from(EVENT_NAME),
+            Value::from(current_iso),
+        ],
+    )?;
+    Ok(inserted == 1)
 }
 
 fn matching_decision(
@@ -187,7 +298,12 @@ fn matching_decision(
             )
     });
     let elapsed = current - approved_at;
-    if !allowed || !(0..=WINDOW_MICROS).contains(&elapsed) {
+    let window = if action == "allow" {
+        ALLOW_WINDOW_MICROS
+    } else {
+        BLOCK_WINDOW_MICROS
+    };
+    if !allowed || !(0..=window).contains(&elapsed) {
         return Ok(json!(false));
     }
     if !spend {
@@ -200,21 +316,11 @@ fn matching_decision(
         .unwrap_or_default();
     // All equivalent decisions at this instant are spent as one capability.
     let approved_iso = &latest[0].1;
-    let effect_key = hex::encode(Sha256::digest(
-        format!("native-review-once-v3\0{artifact_hash}\0{approved_iso}").as_bytes(),
-    ));
-    let inserted = exec(
+    Ok(json!(insert_effect(
         connection,
-        "insert or ignore into guard_continuation_effects \
-         (effect_key, request_id, evidence_id, event_name, created_at) \
-         values (?, ?, ?, ?, ?)",
-        &[
-            Value::from(effect_key),
-            Value::from(request_id),
-            Value::from(artifact_hash),
-            Value::from(EVENT_NAME),
-            Value::from(current_iso),
-        ],
-    )?;
-    Ok(json!(inserted == 1))
+        artifact_hash,
+        approved_iso,
+        request_id,
+        &current_iso
+    )?))
 }

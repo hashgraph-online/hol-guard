@@ -133,7 +133,8 @@ pub(super) fn approval_token(
 
 /// The hash of the command a review paused: harness, tool, a shell's command
 /// text (or any other tool's input as sent, empty only when the tool took
-/// none), working
+/// none; for an Oh My Pi eval of `commit` drafts alone, the repositories they
+/// commit to), working
 /// directory and workspace. Nothing else enters it, so an
 /// approval saved under it holds until the command changes or the user
 /// revokes it. Only a review the user can answer has one.
@@ -167,7 +168,21 @@ pub(super) fn command_hash(query: &NativeExactActionQueryV1) -> Proof<String> {
         // Only a tool called with no input at all hashes as an empty one.
         (None, None) => json!({"tool_input": {}}),
     };
+    // An Oh My Pi eval made only of `commit` drafts runs Git in the
+    // repositories it names and nothing else: its subject, body and file
+    // selection are literal text. The approval is bound to those
+    // repositories, so Always allow holds for the next draft there, as the
+    // git extension's review of that commit asks it to.
+    let drafts = tool_input.as_ref().and_then(|pairs| {
+        let fields: serde_json::Map<String, Value> = pairs.iter().cloned().collect();
+        guard_command::pretool::generic::omp_eval_commit_drafts(
+            harness,
+            tool_name,
+            &Value::Object(fields),
+        )
+    });
     let content = match command.as_deref().filter(|text| !text.trim().is_empty()) {
+        _ if drafts.is_some() => json!({"omp_commit_drafts": drafts}),
         // A shell runs only its command text; its other fields (a description,
         // a timeout) do not change what runs.
         Some(text) if is_shell_tool(Some(tool_name.as_str())) => json!({"command": text}),
@@ -278,9 +293,12 @@ pub(super) fn exact_action_components(
             "policy_action": facts.policy_action.as_deref().unwrap_or(""),
             "reason_code": facts.reason_code.as_deref().unwrap_or(""),
         }),
+        // The compiled `rule_digest` is not part of the token: a Guard upgrade
+        // that changes rule sources must not re-ask for every saved Always.
+        // The verdict facts above still bind it, and a saved approval never
+        // lowers a block or a sandbox requirement the new rules raise.
         policy: json!({
             "version": POLICY_VERSION,
-            "rule_digest": binding.get("rule_digest").cloned().unwrap_or(Value::Null),
             "command_extensions": binding.get("command_extensions").cloned().unwrap_or(Value::Null),
         }),
         sandbox: json!({"required": facts.minimum_action.as_deref() == Some("sandbox-required")}),

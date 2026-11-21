@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.project-m",
+  "version": "1.0.0",
+  "name": "project-m",
+  "description": "Local-first shared memory layer and Model Context Protocol (MCP) server for Claude, Antigravity, and Codex. This binding covers direct project-m executable launches (e.g., via uv tool install or pip); repository setups running through uv wrapper commands are outside this direct-command binding. Off until you turn it on",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.adityadebnath009",
+    "displayName": "Aditya Debnath",
+    "url": "https://github.com/adityadebnath009"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0D1117"
+  },
+  "homepage": "https://github.com/adityadebnath009/Project-M",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "project-m"
+  },
+  "riskClasses": [
+    "workspace-file-write"
+  ],
+  "tools": [
+    {
+      "name": "get_project_board",
+      "state": "review"
+    },
+    {
+      "name": "get_recent_context",
+      "state": "inherit"
+    },
+    {
+      "name": "get_turn",
+      "state": "inherit"
+    },
+    {
+      "name": "get_project_summary",
+      "state": "inherit"
+    },
+    {
+      "name": "search_historical_context",
+      "state": "inherit"
+    },
+    {
+      "name": "update_task",
+      "state": "review"
+    },
+    {
+      "name": "record_decision",
+      "state": "review"
+    },
+    {
+      "name": "publish_context",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/adityadebnath009/Project-M",
+    "https://github.com/adityadebnath009/Project-M/blob/main/README.md"
+  ],
+  "saferAlternatives": [
+    "Keep update_task and record_decision on Review: these modify the shared SQLite blackboard and decision ledger.",
+    "Read-only tools like get_recent_context, get_turn, get_project_summary, and search_historical_context inherit standard execution; get_project_board is on Review because it synchronizes other agents' transcripts into the shared board."
+  ]
+}

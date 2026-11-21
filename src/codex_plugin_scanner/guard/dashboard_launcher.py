@@ -30,13 +30,17 @@ if TYPE_CHECKING:
     from codex_plugin_scanner.guard.config import GuardConfig
     from codex_plugin_scanner.guard.store import GuardStore
 
+from ..version import __version__
 from .browser_opener import open_browser_url
-from .daemon.manager import (
+from .cli.update_desktop_core_start import wait_for_started_core
+from .local_dashboard_session import build_local_dashboard_session_token
+from .native_daemon_failure import daemon_failure_code
+from .native_daemon_manage import (
+    GuardDaemonStillStartingError,
     desktop_preflight_requested,
     ensure_guard_daemon,
     load_guard_daemon_auth_token,
 )
-from .local_dashboard_session import build_local_dashboard_session_token
 from .runtime.surface_server import GuardSurfaceRuntime
 from .secret_redaction import sanitize_secret
 
@@ -72,7 +76,64 @@ class DashboardLaunchResult:
             "browser_url": self.browser_url,
             "reason": self.reason,
             "error": self.error,
+            **dashboard_diagnostics(self),
         }
+
+
+# Surface-runtime reasons renamed to the dashboard's diagnostic codes.
+_SURFACE_REASONS = {"open-failed": "browser_unavailable"}
+# How the browser step ended for each reason.
+_BROWSER_RESULTS = {
+    "opened": "opened",
+    "browser_unavailable": "unavailable",
+    "dashboard_open_failed": "unavailable",
+    "already-opened": "already_open",
+    "live-client": "already_open",
+    "policy-disabled": "skipped_by_policy",
+    "attention-deferred": "deferred",
+    "already_in_flight": "launch_in_progress",
+}
+_FALLBACKS = {
+    "browser_unavailable": "No browser could be opened. Run `hol-guard dashboard` from a desktop session, "
+    "or open the dashboard address in a browser on this machine and sign in from the Guard prompt.",
+    "port_conflict": "Another program holds every port Guard can use. Close it, or set a free port "
+    "in Guard's settings, then run `hol-guard dashboard` again.",
+    "native_runtime_unavailable": "Guard's native runtime is missing or damaged. Reinstall HOL Guard, "
+    "then run `hol-guard dashboard` again.",
+    "daemon_still_starting": "Guard is still starting. Wait a few seconds and run `hol-guard dashboard` again.",
+    "already_in_flight": "Another dashboard launch is in progress. Wait for it to finish.",
+    "policy-disabled": "Your approval surface policy keeps the browser closed. "
+    "Open the dashboard address in a browser on this machine.",
+    "attention-deferred": "Guard deferred opening the browser. "
+    "Open the dashboard address in a browser on this machine.",
+    "auth_token_missing": "Guard's local credentials are missing. Run `hol-guard doctor` to repair them.",
+}
+_FALLBACKS["dashboard_open_failed"] = _FALLBACKS["browser_unavailable"]
+_DAEMON_FALLBACK = "Guard's approval center did not start. Run `hol-guard doctor` for details."
+
+
+def dashboard_diagnostics(result: DashboardLaunchResult) -> dict[str, object]:
+    """Port, browser result and terminal fallback for a dashboard launch.
+
+    The signed browser URL carries a dashboard session token, so it is only
+    handed to the browser and never printed: an agent reading this output
+    must not be able to open the approval center on the user's behalf.
+    """
+
+    port: int | None = None
+    if result.approval_center_url:
+        try:
+            port = urllib.parse.urlparse(result.approval_center_url).port
+        except ValueError:
+            port = None
+    browser = _BROWSER_RESULTS.get(result.reason, "not_attempted")
+    fallback = None if result.opened else _FALLBACKS.get(result.reason, _DAEMON_FALLBACK)
+    return {
+        "port": port,
+        "browser": browser,
+        "signed_url": "delivered_to_browser" if result.opened else "withheld",
+        "fallback": fallback,
+    }
 
 
 _launch_lock = threading.Lock()
@@ -121,11 +182,21 @@ def build_desktop_dashboard_session_url(
 
     if desktop_bootstrap_is_preflight():
         raise RuntimeError("Desktop preflight does not start a local daemon")
-    approval_center_url = ensure_guard_daemon(
-        guard_home,
-        home_dir=home_dir,
-        executable=_desktop_owned_core_executable(),
-    )
+    try:
+        approval_center_url = ensure_guard_daemon(
+            guard_home,
+            home_dir=home_dir,
+            executable=_desktop_owned_core_executable(),
+        )
+    except GuardDaemonStillStartingError:
+        # A loaded machine can need longer than the start window to load Core.
+        # The launch keeps running, so wait for it inside Desktop's activation
+        # budget instead of failing bootstrap. Only a daemon serving this Core
+        # (or newer) counts; an older one is not the Core Desktop activated.
+        started_url = wait_for_started_core(guard_home, minimum_version=__version__)
+        if started_url is None:
+            raise
+        approval_center_url = started_url
     auth_token = load_guard_daemon_auth_token(guard_home)
     if auth_token is None:
         raise RuntimeError("Guard daemon auth token is not available")
@@ -201,12 +272,13 @@ def open_dashboard(
     try:
         try:
             approval_center_url = ensure_guard_daemon(guard_home)
-        except RuntimeError as error:
+        except (RuntimeError, OSError, ValueError) as error:
+            # TimeoutError is an OSError. Every failure names its native cause.
             result = DashboardLaunchResult(
                 opened=False,
                 approval_center_url="",
                 browser_url=None,
-                reason="daemon_unavailable",
+                reason=daemon_failure_code(error),
                 error=sanitize_secret(str(error)),
             )
             _last_result = result
@@ -255,7 +327,7 @@ def open_dashboard(
             opened=bool(open_result.get("opened")),
             approval_center_url=approval_center_url,
             browser_url=public_url,
-            reason=str(open_result.get("reason") or "unknown"),
+            reason=_surface_reason(open_result),
         )
         _last_result = result
         return result
@@ -263,6 +335,15 @@ def open_dashboard(
     finally:
         with _launch_lock:
             _in_flight = False
+
+
+def _surface_reason(open_result: dict[str, object]) -> str:
+    """The surface runtime's reason as a dashboard code; never unknown."""
+
+    raw = open_result.get("reason")
+    if isinstance(raw, str) and raw:
+        return _SURFACE_REASONS.get(raw, raw)
+    return "opened" if open_result.get("opened") else "browser_unavailable"
 
 
 def _build_authenticated_browser_url(

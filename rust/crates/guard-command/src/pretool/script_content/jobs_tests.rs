@@ -1,4 +1,4 @@
-use super::{background_moves_shell, sequential_jobs};
+use super::{background_moves_shell, foreground_job, sequential_jobs};
 
 #[test]
 fn a_job_followed_by_a_command_reads_as_a_list() {
@@ -18,6 +18,23 @@ fn a_trailing_job_drops_its_ampersand() {
         sequential_jobs("node server.js &").as_deref(),
         Some("node server.js")
     );
+}
+
+#[test]
+fn an_escaped_ampersand_is_an_argument_and_not_a_background_job() {
+    // `echo foo\&` prints `foo&` in the foreground. Reading the `&` off would
+    // hand the classifier `echo foo\`, which is neither the text the shell
+    // runs nor a command at all.
+    assert_eq!(foreground_job(r"echo foo\&"), None);
+    assert_eq!(foreground_job(r"npm run build \&"), None);
+    // The backslashes pair off, so this `&` is the operator after all.
+    assert_eq!(
+        foreground_job(r"npm run build \\&"),
+        Some(r"npm run build \\")
+    );
+    // An escaped space in front of the operator is still a space.
+    assert_eq!(foreground_job(r"echo foo\ &"), Some(r"echo foo\"));
+    assert_eq!(foreground_job("node server.js &"), Some("node server.js"));
 }
 
 #[test]

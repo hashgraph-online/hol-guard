@@ -38,6 +38,40 @@ fn entries(request: &RuntimeDetectorRunRequestV1) -> Vec<Value> {
         .clone()
 }
 
+/// Secret families the corpus gained after these vectors were recorded.
+///
+/// Python read only the key names it knew inside `.ssh`, so a public key
+/// beside a private one read as nothing, and it did not know `gh/hosts.yml`
+/// carries a GitHub token at all. Both vectors therefore recorded an empty
+/// signal list. A recorded-silent `secret.path` entry may gain signals from
+/// these families and from nothing else, the rest of the entry has to be
+/// unchanged, and only [`EXPANDED_SECRET_VECTORS`] vectors may move.
+const EXPANDED_SECRET_TITLES: &[&str] = &[
+    "Direct access to SSH key material",
+    "Direct access to GitHub CLI credentials",
+];
+
+const EXPANDED_SECRET_VECTORS: usize = 2;
+
+fn is_corpus_expansion(got: &Value, want: &Value) -> bool {
+    if want["detector_id"] != json!("secret.path") || want["signals"] != json!([]) {
+        return false;
+    }
+    let Some(signals) = got["signals"].as_array() else {
+        return false;
+    };
+    if signals.is_empty()
+        || !signals
+            .iter()
+            .all(|signal| EXPANDED_SECRET_TITLES.contains(&signal["title"].as_str().unwrap_or("")))
+    {
+        return false;
+    }
+    let mut silent = got.clone();
+    silent["signals"] = json!([]);
+    silent == *want
+}
+
 fn without_elapsed(mut entry: Value) -> Value {
     let elapsed = entry
         .as_object_mut()
@@ -173,6 +207,7 @@ fn parity_vectors_match_the_recorded_python_outputs() {
     let vectors = fixture.as_array().unwrap();
     assert!(vectors.len() > 700);
     let mut mismatches = Vec::new();
+    let mut expanded = 0usize;
     for vector in vectors {
         let wire = &vector["request"];
         let request = RuntimeDetectorRunRequestV1 {
@@ -218,6 +253,10 @@ fn parity_vectors_match_the_recorded_python_outputs() {
             Some(actual) if actual.len() == expected.len() => {
                 for (got, want) in actual.iter().zip(expected) {
                     if got != want {
+                        if is_corpus_expansion(got, want) {
+                            expanded += 1;
+                            continue;
+                        }
                         mismatches.push(format!(
                             "{} {}:\n  expected {want}\n  got      {got}",
                             vector["name"], want["detector_id"]
@@ -239,5 +278,9 @@ fn parity_vectors_match_the_recorded_python_outputs() {
         "{} mismatches:\n{}",
         mismatches.len(),
         mismatches.join("\n")
+    );
+    assert_eq!(
+        expanded, EXPANDED_SECRET_VECTORS,
+        "{expanded} recorded-silent vectors now name an expanded secret family, against {EXPANDED_SECRET_VECTORS} recorded"
     );
 }

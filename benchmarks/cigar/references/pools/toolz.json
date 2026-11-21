@@ -1,0 +1,456 @@
+{
+ "deselect": [
+  "toolz/tests/test_curried.py::test_curried_operator",
+  "toolz/tests/test_inspect_args.py::test_has_keywords"
+ ],
+ "mutations": [
+  {
+   "path": "toolz/itertoolz.py",
+   "qual": "isdistinct",
+   "line": 315,
+   "orig": "        return len(seq) == len(set(seq))\n",
+   "new": "        return len(seq) != len(set(seq))\n",
+   "failing": [
+    "toolz/tests/test_itertoolz.py::test_isdistinct"
+   ]
+  },
+  {
+   "path": "toolz/functoolz.py",
+   "qual": "memoize",
+   "line": 429,
+   "orig": "    if cache is None:\n",
+   "new": "    if cache is not None:\n",
+   "failing": [
+    "toolz/tests/test_functoolz.py::test_memoize",
+    "toolz/tests/test_functoolz.py::test_memoize_curried",
+    "toolz/tests/test_functoolz.py::test_memoize_curry_cache",
+    "toolz/tests/test_functoolz.py::test_memoize_key",
+    "toolz/tests/test_functoolz.py::test_memoize_key_signature",
+    "toolz/tests/test_functoolz.py::test_memoize_kwargs",
+    "toolz/tests/test_functoolz.py::test_memoize_on_classmethods",
+    "toolz/tests/test_functoolz.py::test_memoize_partial",
+    "toolz/tests/test_itertoolz.py::test_isdistinct"
+   ]
+  },
+  {
+   "path": "toolz/_signatures.py",
+   "qual": "num_pos_args",
+   "line": 601,
+   "orig": "               if x.kind == x.POSITIONAL_OR_KEYWORD\n",
+   "new": "               if x.kind != x.POSITIONAL_OR_KEYWORD\n",
+   "failing": [
+    "toolz/tests/test_itertoolz.py::test_isdistinct",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/utils.py",
+   "qual": "raises",
+   "line": 4,
+   "orig": "        return False\n",
+   "new": "        return True\n",
+   "failing": [
+    "toolz/tests/test_itertoolz.py::test_isdistinct",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid",
+    "toolz/tests/test_utils.py::test_raises"
+   ]
+  },
+  {
+   "path": "toolz/utils.py",
+   "qual": "raises",
+   "line": 4,
+   "orig": "        return False\n",
+   "new": "        return True\n",
+   "failing": [
+    "toolz/tests/test_itertoolz.py::test_isdistinct",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid",
+    "toolz/tests/test_utils.py::test_raises"
+   ]
+  },
+  {
+   "path": "toolz/functoolz.py",
+   "qual": "thread_last.<locals>.evalform_back",
+   "line": 114,
+   "orig": "            args = args + (val,)\n",
+   "new": "            args = args - (val,)\n",
+   "failing": [
+    "toolz/tests/test_functoolz.py::test_thread_last",
+    "toolz/tests/test_itertoolz.py::test_isdistinct",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/itertoolz.py",
+   "qual": "join",
+   "line": 880,
+   "orig": "    if left_default == no_default and right_default == no_default:\n",
+   "new": "    if left_default != no_default and right_default == no_default:\n",
+   "failing": [
+    "toolz/tests/test_functoolz.py::test_thread_last",
+    "toolz/tests/test_itertoolz.py::test_join",
+    "toolz/tests/test_itertoolz.py::test_join_double_repeats",
+    "toolz/tests/test_itertoolz.py::test_join_missing_element",
+    "toolz/tests/test_itertoolz.py::test_left_outer_join",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/functoolz.py",
+   "qual": "memoize",
+   "line": 438,
+   "orig": "        is_unary = False\n",
+   "new": "        is_unary = True\n",
+   "failing": [
+    "toolz/tests/test_itertoolz.py::test_join",
+    "toolz/tests/test_itertoolz.py::test_join_double_repeats",
+    "toolz/tests/test_itertoolz.py::test_join_missing_element",
+    "toolz/tests/test_itertoolz.py::test_left_outer_join",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/itertoolz.py",
+   "qual": "get",
+   "line": 458,
+   "orig": "                if len(ind) > 1:\n",
+   "new": "                if len(ind) >= 1:\n",
+   "failing": [
+    "toolz/tests/test_itertoolz.py::test_get",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/sandbox/parallel.py",
+   "qual": "fold",
+   "line": 80,
+   "orig": "    if len(results) == 1:    # Return completed result\n",
+   "new": "    if len(results) != 1:    # Return completed result\n",
+   "failing": [
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/sandbox/parallel.py",
+   "qual": "fold",
+   "line": 80,
+   "orig": "    if len(results) == 1:    # Return completed result\n",
+   "new": "    if len(results) != 1:    # Return completed result\n",
+   "failing": [
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/itertoolz.py",
+   "qual": "partition_all",
+   "line": 731,
+   "orig": "    if prev[-1] is no_pad:\n",
+   "new": "    if prev[-1] is not no_pad:\n",
+   "failing": [
+    "toolz/tests/test_itertoolz.py::test_partition_all",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  }
+ ],
+ "stubs": [
+  {
+   "path": "toolz/functoolz.py",
+   "qual": "thread_last",
+   "body_start": 109,
+   "end": 116,
+   "body": "    def evalform_back(val, form):\n        if callable(form):\n            return form(val)\n        if isinstance(form, tuple):\n            func, args = form[0], form[1:]\n            args = args + (val,)\n            return func(*args)\n    return reduce(evalform_back, forms, val)\n",
+   "indent": 4,
+   "failing": [
+    "toolz/tests/test_functoolz.py::test_thread_last",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/itertoolz.py",
+   "qual": "random_sample",
+   "body_start": 1054,
+   "end": 1058,
+   "body": "    if not hasattr(random_state, 'random'):\n        from random import Random\n\n        random_state = Random(random_state)\n    return filter(lambda _: random_state.random() < prob, seq)\n",
+   "indent": 4,
+   "failing": [
+    "toolz/tests/test_itertoolz.py::test_random_sample",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/dicttoolz.py",
+   "qual": "valfilter",
+   "body_start": 134,
+   "end": 138,
+   "body": "    rv = factory()\n    for k, v in d.items():\n        if predicate(v):\n            rv[k] = v\n    return rv\n",
+   "indent": 4,
+   "failing": [
+    "toolz/tests/test_curried.py::test_curried_namespace",
+    "toolz/tests/test_dicttoolz.py::TestCustomMapping::test_valfilter",
+    "toolz/tests/test_dicttoolz.py::TestDefaultDict::test_valfilter",
+    "toolz/tests/test_dicttoolz.py::TestDict::test_valfilter",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/itertoolz.py",
+   "qual": "diff",
+   "body_start": 942,
+   "end": 962,
+   "body": "    N = len(seqs)\n    if N == 1 and isinstance(seqs[0], list):\n        seqs = seqs[0]\n        N = len(seqs)\n    if N < 2:\n        raise TypeError('Too few sequences given (min 2 required)')\n    default = kwargs.get('default', no_default)\n    if default == no_default:\n        iters = zip(*seqs)\n    else:\n        iters = zip_longest(*seqs, fillvalue=default)\n    key = kwargs.get('key', None)\n    if key is None:\n        for items in iters:\n            if items.count(items[0]) != N:\n                yield items\n    else:\n        for items in iters:\n            vals = tuple(map(key, items))\n            if vals.count(vals[0]) != N:\n                yield items\n",
+   "indent": 4,
+   "failing": [
+    "toolz/tests/test_itertoolz.py::test_diff",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/functoolz.py",
+   "qual": "apply",
+   "body_start": 40,
+   "end": 43,
+   "body": "    if not func_and_args:\n        raise TypeError('func argument is required')\n    func, args = func_and_args[0], func_and_args[1:]\n    return func(*args, **kwargs)\n",
+   "indent": 4,
+   "failing": [
+    "toolz/tests/test_functoolz.py::test_apply",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/functoolz.py",
+   "qual": "compose",
+   "body_start": 578,
+   "end": 583,
+   "body": "    if not funcs:\n        return identity\n    if len(funcs) == 1:\n        return funcs[0]\n    else:\n        return Compose(funcs)\n",
+   "indent": 4,
+   "failing": [
+    "toolz/tests/test_functoolz.py::test_complement",
+    "toolz/tests/test_functoolz.py::test_compose",
+    "toolz/tests/test_functoolz.py::test_compose_left",
+    "toolz/tests/test_functoolz.py::test_compose_metadata",
+    "toolz/tests/test_serialization.py::test_complement",
+    "toolz/tests/test_serialization.py::test_compose",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/itertoolz.py",
+   "qual": "partition",
+   "body_start": 701,
+   "end": 705,
+   "body": "    args = [iter(seq)] * n\n    if pad is no_pad:\n        return zip(*args)\n    else:\n        return zip_longest(*args, fillvalue=pad)\n",
+   "indent": 4,
+   "failing": [
+    "toolz/tests/test_itertoolz.py::test_partition",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  },
+  {
+   "path": "toolz/itertoolz.py",
+   "qual": "isiterable",
+   "body_start": 286,
+   "end": 290,
+   "body": "    try:\n        iter(x)\n        return True\n    except TypeError:\n        return False\n",
+   "indent": 4,
+   "failing": [
+    "toolz/tests/test_itertoolz.py::test_isiterable",
+    "toolz/tests/test_signatures.py::test_is_partial",
+    "toolz/tests/test_signatures.py::test_is_valid"
+   ]
+  }
+ ],
+ "renames": [
+  {
+   "old": "_reduce",
+   "new": "_reduce_impl",
+   "count": 3,
+   "files": [
+    "toolz/sandbox/parallel.py"
+   ],
+   "path": "toolz/sandbox/parallel.py"
+  },
+  {
+   "old": "_num_required_args",
+   "new": "_num_required_args_impl",
+   "count": 3,
+   "files": [
+    "toolz/functoolz.py",
+    "toolz/_signatures.py",
+    "toolz/tests/test_signatures.py"
+   ],
+   "path": "toolz/_signatures.py"
+  },
+  {
+   "old": "_has_varargs",
+   "new": "_has_varargs_impl",
+   "count": 3,
+   "files": [
+    "toolz/functoolz.py",
+    "toolz/_signatures.py",
+    "toolz/tests/test_signatures.py"
+   ],
+   "path": "toolz/_signatures.py"
+  },
+  {
+   "old": "_merge_sorted_binary_key",
+   "new": "_merge_sorted_binary_key_impl",
+   "count": 4,
+   "files": [
+    "toolz/itertoolz.py"
+   ],
+   "path": "toolz/itertoolz.py"
+  },
+  {
+   "old": "_should_curry",
+   "new": "_should_curry_impl",
+   "count": 4,
+   "files": [
+    "toolz/functoolz.py",
+    "toolz/tests/test_functoolz.py"
+   ],
+   "path": "toolz/functoolz.py"
+  },
+  {
+   "old": "_is_arity",
+   "new": "_is_arity_impl",
+   "count": 4,
+   "files": [
+    "toolz/functoolz.py",
+    "toolz/_signatures.py",
+    "toolz/tests/test_signatures.py"
+   ],
+   "path": "toolz/_signatures.py"
+  },
+  {
+   "old": "_check_sigspec",
+   "new": "_check_sigspec_impl",
+   "count": 10,
+   "files": [
+    "toolz/functoolz.py"
+   ],
+   "path": "toolz/functoolz.py"
+  },
+  {
+   "old": "_is_valid_args",
+   "new": "_is_valid_args_impl",
+   "count": 4,
+   "files": [
+    "toolz/functoolz.py",
+    "toolz/_signatures.py",
+    "toolz/tests/test_signatures.py"
+   ],
+   "path": "toolz/_signatures.py"
+  }
+ ],
+ "docs": [
+  {
+   "path": "toolz/_signatures.py",
+   "module": "toolz._signatures",
+   "qual": "check_partial"
+  },
+  {
+   "path": "toolz/_signatures.py",
+   "module": "toolz._signatures",
+   "qual": "num_pos_args"
+  },
+  {
+   "path": "toolz/_signatures.py",
+   "module": "toolz._signatures",
+   "qual": "check_arity"
+  },
+  {
+   "path": "toolz/itertoolz.py",
+   "module": "toolz.itertoolz",
+   "qual": "getter"
+  },
+  {
+   "path": "toolz/_signatures.py",
+   "module": "toolz._signatures",
+   "qual": "create_signature_registry"
+  },
+  {
+   "path": "toolz/utils.py",
+   "module": "toolz.utils",
+   "qual": "raises"
+  },
+  {
+   "path": "toolz/itertoolz.py",
+   "module": "toolz.itertoolz",
+   "qual": "count"
+  },
+  {
+   "path": "toolz/_signatures.py",
+   "module": "toolz._signatures",
+   "qual": "check_required_args"
+  }
+ ],
+ "questions": [
+  {
+   "sentence": "Update value in a (potentially) nested dictionary",
+   "path": "toolz/dicttoolz.py",
+   "qual": "update_in",
+   "name": "update_in"
+  },
+  {
+   "sentence": "Repeatedly apply a function func onto an original input",
+   "path": "toolz/itertoolz.py",
+   "qual": "iterate",
+   "name": "iterate"
+  },
+  {
+   "sentence": "Retrieve the next n elements of a sequence",
+   "path": "toolz/itertoolz.py",
+   "qual": "peekn",
+   "name": "peekn"
+  },
+  {
+   "sentence": "Filter items in dictionary by item",
+   "path": "toolz/dicttoolz.py",
+   "qual": "itemfilter",
+   "name": "itemfilter"
+  },
+  {
+   "sentence": "Return a new dict with new, potentially nested, key value pair",
+   "path": "toolz/dicttoolz.py",
+   "qual": "assoc_in",
+   "name": "assoc_in"
+  },
+  {
+   "sentence": "Like ``is_valid_args`` for builtins in our ``signatures`` registry",
+   "path": "toolz/_signatures.py",
+   "qual": "_is_valid_args",
+   "name": "_is_valid_args"
+  },
+  {
+   "sentence": "Does a function have only n positional arguments?",
+   "path": "toolz/functoolz.py",
+   "qual": "is_arity",
+   "name": "is_arity"
+  },
+  {
+   "sentence": "The sequence following the first n elements",
+   "path": "toolz/itertoolz.py",
+   "qual": "drop",
+   "name": "drop"
+  }
+ ],
+ "ignore": [
+  "bench/test_wordcount.py"
+ ]
+}

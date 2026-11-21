@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
-from codex_plugin_scanner.guard.runtime.contained_command_prefix import _split_command_prefix
 from codex_plugin_scanner.guard.runtime.contained_wrapper import anchored_sibling_root, peel_contained_wrapper
 
 
@@ -139,22 +138,3 @@ def test_sink_runs_an_anchored_script_from_the_sibling_root(monkeypatch: pytest.
         == 0
     )
     assert runs == [(sibling.resolve(), sibling.resolve())]
-
-
-def test_plain_data_settings_are_dropped_and_others_stay(monkeypatch: pytest.MonkeyPatch) -> None:
-    # No command here stands behind a transparent prefix, and the parser owns
-    # that answer; the settings themselves are this module's subject.
-    from codex_plugin_scanner.guard import native_restricted_pytest
-
-    monkeypatch.setattr(native_restricted_pytest, "restricted_native", lambda *_args: None)
-    assert _split_command_prefix(["REPORT_DIR=/tmp/report", "CI=1", "vitest", "run"], drop_data=True) == (
-        ["vitest", "run"],
-        {"CI": "1"},
-    )
-    for command in (
-        ["PYTHONPATH=.", "pytest"],
-        ["REPORT_DIR=$HOME/x", "pytest"],
-        ["REPORT_DIR=-r", "pytest"],
-        ["TMPDIR=/tmp/x", "pytest"],
-    ):
-        assert _split_command_prefix(command, drop_data=True) == (command, {})

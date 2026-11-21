@@ -2,7 +2,7 @@
 
 Status: wave-zero baseline inventory. Audience: execution-assurance implementers and gate reviewers. Source evidence snapshot: `origin/release/3.1` at `10348fd40fa53ef60d9363bb6c37591b8bb60a61`; release identity migrated to 3.0 and revalidated in PR #1901.
 
-Superseded: contained execution now runs in the Rust runtime (`rust/crates/guard-command/src/contained_execution.rs` and `contained_runner/`), reached through the resident's `contained_execute` operation. `runtime/containment_executor.py` and `runtime/containment_backend_status.py` have been deleted; the Python paths below describe the snapshot named above, not current code.
+Superseded: contained execution now runs in the Rust runtime (`rust/crates/guard-command/src/contained_execution.rs` and `contained_runner/`), reached through the resident's `contained_execute` operation. `runtime/containment_executor.py`, `runtime/containment_backend_status.py` and the `contained_node_execution.py`, `contained_package_script_execution.py` and `contained_typescript_execution.py` runners have been deleted; the Python paths below describe the snapshot named above, not current code.
 
 This document is the versioned execution-path matrix for HOL Guard: every distinct path by which Guard intercepts, evaluates, or executes an action, with its entry point, execution owner, failure mode, and actual guarantee.
 
@@ -10,7 +10,7 @@ This document is the versioned execution-path matrix for HOL Guard: every distin
 
 | # | Path | Entry point | Execution owner | Failure mode | Actual guarantee |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Daemon HTTP API | `daemon/server.py` route table (`/v1/*`), e.g. `initialize` `:2231`, `sessions/list` `:2232` | Local daemon process (Guard-owned) | Daemon down → callers fall back per-surface (CLI one-shot, hook direct eval) | Authenticated local decisions when daemon reachable; routes map 1:1 to `runtime/surface_server.py:SERVER_METHODS` |
+| 1 | Daemon HTTP API | `routes/request_handler.py` route table (`/v1/*`), e.g. `initialize` `:2231`, `sessions/list` `:2232` | Local daemon process (Guard-owned) | Daemon down → callers fall back per-surface (CLI one-shot, hook direct eval) | Authenticated local decisions when daemon reachable; routes map 1:1 to `runtime/surface_server.py:SERVER_METHODS` |
 | 2 | Hook bridge dispatch | `cli/commands_hook_router.py` → per-harness handlers (`commands_hook_codex.py`, `commands_hook_claude.py`, `commands_hook_copilot.py`, `commands_hook_generic.py`) | Hook subprocess (Guard-owned, harness-invoked) | Hook error/timeout → per-adapter behavior; harnesses without enforceable hooks are observe-only | Pre/post-tool interception where the harness protocol supports it |
 | 3 | Runtime evaluation pipeline | `runtime/command_evaluation.py:evaluate_command` (`:114`); effect decisions via `runtime/effect_decision.py:evaluate_effect_decision` | Guard evaluation core | Parse uncertainty → fail-closed minimum floor (`review`/`block`); unknown actions normalize to `review` (`action_lattice.py:11-12`) | Deterministic action lattice: `allow < warn < review < require-reapproval < sandbox-required < block` (`action_lattice.py:5`) |
 | 4 | CLI wrappers | `hol-guard run <harness>`, `hol-guard protect -- <cmd>` (cli/commands_*.py) | Guard CLI process | Wrapper failure → command not launched (no silent pass-through) | Launch-gate: harness only starts when effective action is not `block` (docs/guard/architecture.md) |

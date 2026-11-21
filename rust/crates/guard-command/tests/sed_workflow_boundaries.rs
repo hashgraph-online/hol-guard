@@ -49,6 +49,14 @@ fn sed_risky_programs_never_inherit_read_allowance() {
 #[test]
 fn line_range_reads_of_a_copy_are_allowed_in_every_spelling() {
     for command in [
+        // A region named by a pattern reads like one named by line numbers.
+        "sed -n '/Example/,37p' src/example.py",
+        "sed -n '/Example/p' src/example.py",
+        // Printing every line but the matching ones reads the same file.
+        "sed -n '/Example/!p' src/example.py",
+        "sed -n '0,/Example/p' src/example.py",
+        "sed -n '/Example/,/^}/p' src/example.py",
+        "sed -n '/Example/,/^};/p' src/example.py",
         "sed -n '36,37' src/example.py",
         "sed -n '39' src/example.py",
         "sed -n 36 src/example.py",
@@ -86,7 +94,14 @@ fn line_range_read_spellings_do_not_admit_writes_or_other_files() {
         "sed -n -e 36p -e 'w out.txt' src/example.py",
         "sed -n -e 36p -e '1e id' src/example.py",
         "sed -n -e 36p -e src/example.py",
-        "sed -n '/Example/,37p' src/example.py",
+        // A pattern address carries no write, no second command and no
+        // delimiter the reading never resolved.
+        "sed -n '/Example/w out.txt' src/example.py",
+        "sed -n '/Example/,/^}/w outp' src/example.py",
+        "sed -n '//p' src/example.py",
+        r"sed -n '\%Example%p' src/example.py",
+        "sed -n '/Example;p' src/example.py",
+        "sed -n '/Example/p' .env",
         "sed -n '36,37,38p' src/example.py",
         "sed -n '36 37p' src/example.py",
         "sed -n '36,37' -i src/example.py",

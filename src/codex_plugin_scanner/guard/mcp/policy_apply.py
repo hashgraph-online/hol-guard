@@ -92,19 +92,11 @@ def apply_pending_policy_request(
             gen = state.get("generation") if isinstance(state, dict) else None
             if gen is not None and _safe_int(gen) != expected_generation:
                 raise PolicyToolError("stale_policy_generation", "Policy integrity generation has changed.")
-        if mutation is not None:
-            return apply_business_document_on_connection(
-                store,
-                document,
-                mutation,
-                mode=request.mode,
-                now=_now_iso(),
-                approval_gate_grant=approval_gate_grant,
-                connection=conn,
-            )
-        return store.apply_policy_creation_request(
+        assert mutation is not None
+        return apply_business_document_on_connection(
+            store,
             document,
-            compiled,
+            mutation,
             mode=request.mode,
             now=_now_iso(),
             approval_gate_grant=approval_gate_grant,
@@ -132,8 +124,38 @@ def apply_pending_policy_request(
                 raise PolicyToolError("current_digest_mismatch", "Current policy digest has changed.") from None
             raise
     else:
-        with hold_command_control_authority_lock(store.guard_home):
-            result = repo.apply_request(request_id, apply_fn=_do_import)
+        # The resident re-checks the request, the candidate, the imported rows
+        # behind the current digest and the generation, then writes the rows
+        # and resolves the request in one transaction. The generation lock
+        # spans that write and the finalize after it, as it does for a
+        # document import, so no other advance lands between them.
+        with store.hold_policy_integrity_generation_lock(), hold_command_control_authority_lock(store.guard_home):
+            fingerprint = store._native_store_call("policy_rows_fingerprint", {})
+            rows_fingerprint = fingerprint.get("fingerprint") if isinstance(fingerprint, dict) else None
+            if not isinstance(rows_fingerprint, str):
+                raise RuntimeError("Guard could not read the imported policy rows.")
+            previous_document = _build_current_document(store)
+            checked_digest = policy_document_digest(previous_document) if previous_document is not None else None
+            if checked_digest != request.expected_current_digest:
+                raise PolicyToolError("current_digest_mismatch", "Current policy digest has changed.")
+            now = _now_iso()
+            try:
+                import_args = store.policy_creation_import_args(
+                    document, compiled, mode=request.mode, now=now, approval_gate_grant=approval_gate_grant
+                )
+            except PolicyToolError:
+                raise
+            except Exception:
+                # A refused approval or an unwritable document ends the
+                # request, as it did inside the request transaction.
+                repo.mark_failed(request_id)
+                raise
+            result, next_control_state = repo.apply_request_native(
+                request_id,
+                candidate=request,
+                import_args={**import_args, "rows_fingerprint": rows_fingerprint},
+            )
+            store.finalize_policy_import(next_control_state)
     return {
         "requestId": result.request_id,
         "status": result.status,

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, InspectionHost};
 use crate::sfrs_developer_graph::GraphInputs;
 use crate::sfrs_git_cached_diff::{
     cached_diff_kind, cached_diff_operands_are_safe, command_has_execution_routed_git_cached_diff,
@@ -35,9 +35,6 @@ impl InspectionHost for Host {
     }
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         false
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("unavailable")
     }
     fn cached_diff_pathspecs(&self, values: &[String]) -> bool {
         !values.is_empty()
@@ -114,7 +111,12 @@ pub(crate) fn run(function: &str, args: &[Value]) -> Option<Value> {
                 command_has_execution_routed_git_cached_diff(&chain).into()
             }
         }
-        "git_index_operands_safe" => cached_diff_operands_are_safe(&strings(&args[0]), &ctx).into(),
+        "git_index_operands_safe" => cached_diff_operands_are_safe(
+            &strings(&args[0]),
+            args.get(1).and_then(|value| value.as_str()).map(Path::new),
+            &ctx,
+        )
+        .into(),
         "git_index_rg_args" => {
             let host = Host {
                 ripgrep_config: args[1].as_bool().expect("flag"),

@@ -17,6 +17,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_consumer_artifact_compose as compose
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.consumer import low_trust as consumer_low_trust
 from codex_plugin_scanner.guard.consumer import service as consumer_service
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
@@ -217,7 +218,17 @@ def test_request_key_set_is_exact(monkeypatch: pytest.MonkeyPatch, kind: str, fi
 
 
 @pytest.mark.usefixtures("native_prompt_runtime")
-@pytest.mark.parametrize("failing", [("current_action", "runtime_authoritative"), ("runtime_authoritative",)])
+@pytest.mark.parametrize(
+    "failing",
+    [
+        ("current_action", "runtime_authoritative"),
+        ("runtime_authoritative",),
+        # The floor only strengthens an action, so a floor query that goes
+        # unanswered must block the artifact rather than compose it unfloored.
+        ("low_trust_floor", "runtime_authoritative"),
+    ],
+    ids=["current-action", "runtime", "low-trust-floor"],
+)
 def test_resident_failure_blocks_each_artifact_without_aborting(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -237,6 +248,7 @@ def test_resident_failure_blocks_each_artifact_without_aborting(
         return answer(kind, fields, guard_home=guard_home)
 
     monkeypatch.setattr(consumer_service, "native_consumer_compose", unavailable)
+    monkeypatch.setattr(consumer_low_trust, "native_consumer_compose", unavailable)
     artifact = GuardArtifact(
         artifact_id="codex:project:compose-unavailable",
         name="compose-unavailable",

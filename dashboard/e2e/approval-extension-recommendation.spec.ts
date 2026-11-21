@@ -201,13 +201,13 @@ test("one tap allows the extension permission, then approves the request", async
   await page.goto(`/requests/ext-rec-e2e?${DAEMON}`);
 
   const card = page.getByTestId("approval-extension-recommendation");
-  await expect(card.getByRole("heading", { name: "Git protection covers git add" })).toBeVisible();
-  await card.getByRole("button", { name: "Approve & always allow git add" }).click();
+  await expect(card.getByRole("heading", { name: "Git protection asks before Git add" })).toBeVisible();
+  await card.getByRole("button", { name: "Approve & always allow Git add" }).click();
 
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("Always allow git add?")).toBeVisible();
   await dialog.getByLabel("Approval password", { exact: true }).fill("test-password");
-  await dialog.getByRole("button", { name: "Approve & always allow git add" }).click();
+  await dialog.getByRole("button", { name: "Approve & always allow Git add" }).click();
 
   await expect(page.getByText("Approved. Git protection now allows git add automatically.")).toBeVisible();
   const order = calls.map((call) => call.path.replace(/^.*\/v1\//, ""));
@@ -263,10 +263,10 @@ for (const eligible of [false, true]) {
     expect(calls).toHaveLength(0);
     if (!eligible) return;
     await page.getByText("Always allow exact action", { exact: true }).click();
-    await card.getByRole("button", { name: "Approve & always allow git add" }).click();
+    await card.getByRole("button", { name: "Approve & always allow Git add" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Approval password", { exact: true }).fill("test-password");
-    await dialog.getByRole("button", { name: "Approve & always allow git add" }).click();
+    await dialog.getByRole("button", { name: "Approve & always allow Git add" }).click();
     await expect.poll(() => calls.length).toBe(4);
     expect(calls[3]!.body).toMatchObject({ scope: "artifact", persist_policy: true });
     await expect(page.getByText("Approved. Git protection now allows git add automatically.")).toBeVisible();
@@ -282,7 +282,7 @@ test("missing approval password offers setup instead of one tap", async ({ page 
   await expect(card.getByRole("button", { name: /Approve & always allow/ })).toHaveCount(0);
 });
 
-test("destructive permissions show a caution before allowing", async ({ page }) => {
+test("destructive permissions name the rule without offering a one-tap allow", async ({ page }) => {
   const forcePush = {
     ...gitAddPermission,
     permission_id: "command.git.permission.force-push",
@@ -298,7 +298,11 @@ test("destructive permissions show a caution before allowing", async ({ page }) 
   await page.goto(`/requests/ext-rec-e2e?${DAEMON}`);
 
   const card = page.getByTestId("approval-extension-recommendation");
-  await expect(card.getByText("git push --force can destroy work or history. Rewrites remote history.")).toBeVisible();
+  await expect(card.getByRole("heading", { name: "Git protection asks before Forced Git push" })).toBeVisible();
+  await expect(card.getByText("Forced Git push can destroy work or history. Rewrites remote history.")).toBeVisible();
+  await expect(card.getByRole("button", { name: /Approve & always allow/ })).toHaveCount(0);
+  await expect(card.getByRole("link", { name: "Set up approval password" })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Review in Git protection" })).toBeVisible();
   await card.screenshot({ path: test.info().outputPath("caution.png") });
 });
 
@@ -312,7 +316,7 @@ test("a device that never enrolled walks through setup, then offers always allow
   await page.goto(`/requests/ext-rec-e2e?${DAEMON}`);
 
   const card = page.getByTestId("approval-extension-recommendation");
-  await expect(card.getByRole("heading", { name: "Git protection covers git add" })).toBeVisible();
+  await expect(card.getByRole("heading", { name: "Git protection asks before Git add" })).toBeVisible();
   const steps = card.getByRole("list", { name: "One-time setup" });
   await expect(steps.getByText("Local approval is on.")).toBeVisible();
   await expect(steps.getByText("hol-guard command controls enroll", { exact: true })).toBeVisible();
@@ -328,7 +332,7 @@ test("a device that never enrolled walks through setup, then offers always allow
 
   health = "protected";
   await card.getByRole("button", { name: "Check again" }).click();
-  await expect(card.getByRole("button", { name: "Approve & always allow git add" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Approve & always allow Git add" })).toBeVisible();
   await expect(card.getByText("This device is set up. You can now approve and always allow from here.")).toBeVisible();
   await expect(card.getByRole("list", { name: "One-time setup" })).toHaveCount(0);
   await card.screenshot({ path: test.info().outputPath("enrolled.png") });
@@ -344,7 +348,7 @@ test("enrollment finished in the terminal shows up without a click", async ({ pa
   const card = page.getByTestId("approval-extension-recommendation");
   await expect(card.getByRole("list", { name: "One-time setup" })).toBeVisible();
   health = "protected";
-  await expect(card.getByRole("button", { name: "Approve & always allow git add" })).toBeVisible({ timeout: 12_000 });
+  await expect(card.getByRole("button", { name: "Approve & always allow Git add" })).toBeVisible({ timeout: 12_000 });
 });
 
 test("a request with no option left after enrollment says so and stops checking", async ({ page }) => {
@@ -499,7 +503,7 @@ test("always allow waits for a fresh approval settings read after enrollment", a
 
   settingsUnreachable = false;
   await card.getByRole("button", { name: "Check again" }).click();
-  await expect(card.getByRole("button", { name: "Approve & always allow git add" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Approve & always allow Git add" })).toBeVisible();
 });
 
 test("malformed recommendation is not rendered", async ({ page }) => {

@@ -12,8 +12,15 @@ request.
 
 from __future__ import annotations
 
+import os
+
 from . import native_runtime as _runtime
-from .native_runtime_request_scope import _resolved_candidate_path, remember_scoped_status, scoped_status
+from .native_runtime_request_scope import (
+    _resolved_candidate_path,
+    primary_candidates,
+    remember_scoped_status,
+    scoped_status,
+)
 from .native_runtime_values import NativeRuntimeStatus
 
 
@@ -21,12 +28,19 @@ def share_verified_runtime_status(status: NativeRuntimeStatus) -> None:
     """Seed the active request scope with ``status`` when it is still the runtime to use."""
 
     identity = status.identity
-    if identity is None or not status.available or not status.compatible or status.mode != _runtime.native_mode():
+    mode = _runtime.native_mode()
+    if identity is None or not status.available or not status.compatible or status.mode != mode:
         return
-    candidates = _runtime._runtime_candidates()
+    candidates = primary_candidates(
+        mode,
+        os.environ.get(_runtime._NATIVE_BINARY_ENV),
+        _runtime._bundled_runtime_candidate(),
+    )
     # Validation takes the first usable candidate, so only the first candidate's
     # status may stand in for it. When the publisher fell back to a later one, the
     # request validates again in case the preferred runtime is usable by now.
+    # Later distribution candidates cannot displace a verified first choice;
+    # leave their discovery to a real validation miss instead of this handoff.
     if not candidates or identity.path != _resolved_candidate_path(candidates[0]):
         return
     key = _runtime._status_request_key(candidates)

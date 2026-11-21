@@ -14,13 +14,13 @@ from codex_plugin_scanner.guard import native_execution, native_runner_authority
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.native_approval_queue_identity import (
     APPROVAL_QUEUE_IDENTITY_FEATURE,
-    bind_connection_guard_home,
 )
 from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
 from codex_plugin_scanner.guard.store_approvals import (
     approval_schema_statement,
     backfill_approval_queue_columns,
 )
+from tests.approval_queue_identity_support import bind_connection_guard_home
 
 _FEATURES = ("resident-protocol-v2", APPROVAL_QUEUE_IDENTITY_FEATURE)
 _RESULT_SCHEMA = "guard-approval-queue-identity-result.v1"

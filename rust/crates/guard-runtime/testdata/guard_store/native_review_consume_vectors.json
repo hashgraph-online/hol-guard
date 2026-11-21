@@ -537,14 +537,14 @@
       "artifact_name": "Bash",
       "harness": "claude-code",
       "launch_target": "cat .env",
-      "now": "2026-03-01T12:05:01+00:00",
+      "now": "2026-03-01T13:00:01+00:00",
       "workspace": "/work/space"
      },
      "effects": [],
      "result": false
     }
    ],
-   "name": "expired_after_five_minutes",
+   "name": "expired_after_one_hour",
    "native_may_deny": false,
    "rows": [
     {
@@ -581,12 +581,12 @@
       "artifact_name": "Bash",
       "harness": "claude-code",
       "launch_target": "cat .env",
-      "now": "2026-03-01T12:05:00+00:00",
+      "now": "2026-03-01T13:00:00+00:00",
       "workspace": "/work/space"
      },
      "effects": [
       {
-       "created_at": "2026-03-01T12:05:00+00:00",
+       "created_at": "2026-03-01T13:00:00+00:00",
        "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
@@ -596,7 +596,7 @@
      "result": true
     }
    ],
-   "name": "exactly_five_minutes",
+   "name": "exactly_one_hour",
    "native_may_deny": false,
    "rows": [
     {
@@ -633,14 +633,14 @@
       "artifact_name": "Bash",
       "harness": "claude-code",
       "launch_target": "cat .env",
-      "now": "2026-03-01T12:05:00.000001+00:00",
+      "now": "2026-03-01T13:00:00.000001+00:00",
       "workspace": "/work/space"
      },
      "effects": [],
      "result": false
     }
    ],
-   "name": "five_minutes_plus_one_microsecond",
+   "name": "one_hour_plus_one_microsecond",
    "native_may_deny": false,
    "rows": [
     {

@@ -181,6 +181,7 @@ def test_retire_native_resident_for_update_stops_untracked_state(
             "environment": {"HOME": str(tmp_path)},
             "timeout_seconds": 3.0,
             "retire_clients": True,
+            "install_lock_home": None,
         }
     ]
 
@@ -213,8 +214,73 @@ def test_retire_native_resident_for_update_checks_untracked_leases(
             "environment": {},
             "timeout_seconds": 3.0,
             "retire_clients": True,
+            "install_lock_home": None,
         }
     ]
+
+
+def test_uninstall_retirement_holds_the_install_lock_across_the_stop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    executable = tmp_path / "runtime"
+    commands: list[tuple[str, ...]] = []
+    monkeypatch.setattr(client_module, "close_native_resident_clients", lambda *_args: None)
+    monkeypatch.setattr(client_module, "_state_files", lambda _state_dir, *, strict=False: ())
+    monkeypatch.setattr(
+        client_module,
+        "run_isolated_hook_process",
+        lambda command, **_kwargs: (
+            commands.append(command)
+            or SimpleNamespace(returncode=0, timed_out=False, containment_failed=False, stderr="")
+        ),
+    )
+
+    assert client_module.retire_native_resident_for_update(
+        executable=executable,
+        guard_home=guard_home,
+        environment={},
+        hold_install_lock=True,
+    )
+    resolved = guard_home.resolve()
+    assert commands == [
+        (
+            str(executable),
+            "resident-stop",
+            "--state-dir",
+            str(resolved / "native-runtime"),
+            "--retire-clients",
+            "--hold-install-lock",
+            str(resolved),
+        )
+    ]
+
+
+def test_an_install_holding_its_lease_keeps_the_resident_running(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_dir = tmp_path / "guard-home" / "native-runtime"
+    monkeypatch.setattr(client_module, "_state_files", lambda _state_dir, *, strict=False: ())
+    monkeypatch.setattr(
+        client_module,
+        "run_isolated_hook_process",
+        lambda _command, **_kwargs: SimpleNamespace(
+            returncode=2,
+            timed_out=False,
+            containment_failed=False,
+            stderr="native_resident_install_in_progress\n",
+        ),
+    )
+
+    assert not client_module.stop_native_resident(
+        executable=tmp_path / "runtime",
+        state_dir=state_dir,
+        environment={},
+        retire_clients=True,
+        install_lock_home=state_dir.parent,
+    )
 
 
 def test_update_retirement_accepts_authenticated_no_resident_result(

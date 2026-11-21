@@ -1,13 +1,14 @@
-import { useMemo } from "react";
-import type { ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import {
   HiMiniArrowPath,
   HiMiniBugAnt,
+  HiMiniChevronDown,
   HiMiniExclamationTriangle,
   HiMiniMagnifyingGlass,
 } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
-import type { PackageFirewallActionType, PackageFirewallStatusResponse } from "./guard-types";
+import type { PackageFirewallActionType, PackageFirewallStatusResponse, PackageShimEntry } from "./guard-types";
 import {
   ActionResultPanel,
   ActivationSummary,
@@ -28,7 +29,18 @@ export type FirewallFailedOp = {
   message: string;
 };
 
-export type FirewallStatusFilter = "all" | "protected" | "actionable" | "unprotected";
+/** Where a manager sits in the roster: something to fix, done, or not set up yet. */
+export type RosterGroup = "fix" | "protected" | "unprotected";
+
+export function rosterGroupFor(shim: PackageShimEntry | undefined): RosterGroup {
+  if (!shim?.installed) return "unprotected";
+  return resolveShimStatus(shim).tone === "green" ? "protected" : "fix";
+}
+
+// Past this many tools the roster gets a search box, and a longer
+// not-yet-protected group folds into one line until asked for.
+const SEARCH_THRESHOLD = 8;
+const COLLAPSE_THRESHOLD = 3;
 
 type GlobalActionsBarProps = {
   anyPending: boolean;
@@ -37,12 +49,13 @@ type GlobalActionsBarProps = {
   onSync: () => void;
 };
 
-function GlobalActionsBar({ anyPending, pendingOp, onAudit, onSync }: GlobalActionsBarProps) {
+/** Audit and Sync act on the whole roster, so they sit in its header. */
+export function GlobalActionsBar({ anyPending, pendingOp, onAudit, onSync }: GlobalActionsBarProps) {
   const auditRunning = pendingOp?.op === "audit";
   const syncRunning = pendingOp?.op === "sync";
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <ActionButton variant="outline" onClick={onAudit} disabled={anyPending} aria-busy={auditRunning}>
+      <ActionButton variant="ghost" onClick={onAudit} disabled={anyPending} aria-busy={auditRunning}>
         {auditRunning ? (
           <HiMiniArrowPath className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
         ) : (
@@ -50,7 +63,7 @@ function GlobalActionsBar({ anyPending, pendingOp, onAudit, onSync }: GlobalActi
         )}
         Audit
       </ActionButton>
-      <ActionButton variant="outline" onClick={onSync} disabled={anyPending} aria-busy={syncRunning}>
+      <ActionButton variant="ghost" onClick={onSync} disabled={anyPending} aria-busy={syncRunning}>
         <HiMiniArrowPath
           className={`mr-1.5 h-3.5 w-3.5 ${syncRunning ? "animate-spin" : ""}`}
           aria-hidden="true"
@@ -103,10 +116,10 @@ export type FirewallControlsViewProps = {
   lastCompleted: CompletedOp | null;
   lastFailed: FirewallFailedOp | null;
   confirmRemoveManager: string | null;
-  showGlobalActions: boolean;
-  statusFilter: FirewallStatusFilter;
   managerFilter: string;
-  onStatusFilterChange: (filter: FirewallStatusFilter) => void;
+  /** Open the not-yet-protected group, for links that point at it. */
+  /** Bumped each time a link asks to show every unprotected tool. */
+  expandUnprotectedRequest?: number;
   onManagerFilterChange: (e: ChangeEvent<HTMLInputElement>) => void;
   onInstall: (manager: string) => void;
   onRepair: (manager: string) => void;
@@ -131,10 +144,8 @@ export function FirewallControlsView({
   lastCompleted,
   lastFailed,
   confirmRemoveManager,
-  showGlobalActions,
-  statusFilter,
   managerFilter,
-  onStatusFilterChange,
+  expandUnprotectedRequest = 0,
   onManagerFilterChange,
   onInstall,
   onRepair,
@@ -152,38 +163,55 @@ export function FirewallControlsView({
   const anyPending = pendingOp !== null;
 
   const noDetectedManagers = data.detected_managers.length === 0;
-  const filteredManagers = useMemo(() => {
-    const shimsByManager = new Map(data.package_shims.map((s) => [s.manager, s]));
+  const shimsByManager = useMemo(() => new Map(data.package_shims.map((s) => [s.manager, s])), [data.package_shims]);
+  const allManagers = useMemo(() => {
     const visibleManagers = data.package_shims
       .filter((shim) => shim.detected || shim.installed || shim.tested)
       .map((shim) => shim.manager);
-    let managers: string[];
-    if (visibleManagers.length > 0) {
-      managers = Array.from(new Set(visibleManagers)).sort();
-    } else if (noDetectedManagers) {
-      managers = [];
-    } else {
-      managers = data.supported_managers;
+    if (visibleManagers.length > 0) return Array.from(new Set(visibleManagers)).sort();
+    if (noDetectedManagers) return [];
+    return data.supported_managers;
+  }, [data, noDetectedManagers]);
+  const searchable = allManagers.length > SEARCH_THRESHOLD;
+  // A query only applies while its box is on screen, so a shrinking roster cannot hide rows behind it.
+  const query = searchable ? managerFilter.trim().toLowerCase() : "";
+  const groups = useMemo(() => {
+    const byGroup: Record<RosterGroup, string[]> = { fix: [], protected: [], unprotected: [] };
+    for (const manager of allManagers) {
+      if (query && !manager.toLowerCase().includes(query)) continue;
+      byGroup[rosterGroupFor(shimsByManager.get(manager))].push(manager);
     }
+    return byGroup;
+  }, [allManagers, query, shimsByManager]);
+  const [unprotectedOpen, setUnprotectedOpen] = useState(false);
+  const toggleUnprotected = useCallback(() => setUnprotectedOpen((open) => !open), []);
+  useEffect(() => {
+    if (expandUnprotectedRequest > 0) setUnprotectedOpen(true);
+  }, [expandUnprotectedRequest]);
+  const shownCount = groups.fix.length + groups.protected.length + groups.unprotected.length;
+  const foldUnprotected =
+    !unprotectedOpen && query.length === 0 && groups.unprotected.length > COLLAPSE_THRESHOLD;
 
-    if (managerFilter) {
-      const q = managerFilter.toLowerCase();
-      managers = managers.filter((m) => m.toLowerCase().includes(q));
-    }
-
-    if (statusFilter !== "all") {
-      managers = managers.filter((m) => {
-        const shim = shimsByManager.get(m);
-        const status = resolveShimStatus(shim);
-        if (statusFilter === "protected") return status.tone === "green";
-        if (statusFilter === "actionable") return status.tone === "attention";
-        if (statusFilter === "unprotected") return status.tone !== "green";
-        return true;
-      });
-    }
-
-    return managers;
-  }, [data, managerFilter, noDetectedManagers, statusFilter]);
+  const renderRow = (manager: string, showStatus: boolean) => (
+    <ManagerRow
+      key={manager}
+      manager={manager}
+      shim={shimsByManager.get(manager)}
+      actions={data.actions}
+      anyPending={anyPending}
+      repairAwaitingRefresh={repairAwaitingRefresh === manager}
+      isMine={pendingOp?.manager === manager}
+      isConfirmingRemove={confirmRemoveManager === manager}
+      onInstall={onInstall}
+      onRepair={onRepair}
+      onTest={onTest}
+      onRemoveRequest={onRemoveRequest}
+      onRemoveConfirm={onRemoveConfirm}
+      onRemoveCancel={onRemoveCancel}
+      onOpenDetails={onOpenManagerDetails}
+      showStatus={showStatus}
+    />
+  );
 
   return (
     <div className="space-y-4">
@@ -202,100 +230,111 @@ export function FirewallControlsView({
         <ActionResultPanel completed={lastCompleted} onDismiss={onDismissResult} />
       )}
 
-      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="flex min-h-11 w-full min-w-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 sm:min-h-9 sm:w-48 sm:shrink-0">
+      {searchable && (
+        <div className="flex min-h-11 w-full min-w-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 sm:min-h-9 sm:w-56">
           <HiMiniMagnifyingGlass className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
           <input
             type="search"
-            placeholder="Search tools…"
+            placeholder="Find a tool…"
             value={managerFilter}
             onChange={onManagerFilterChange}
             aria-label="Filter package managers"
             className="min-w-0 flex-1 bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
           />
         </div>
-        {/* One row on phones that scrolls sideways, so the filters never
-            push the first manager below the fold. */}
-        <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 py-0.5">
-        {(["all", "protected", "actionable", "unprotected"] as const).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onStatusFilterChange(s)}
-            aria-pressed={statusFilter === s}
-            className={`inline-flex min-h-11 shrink-0 items-center rounded-full px-3.5 text-xs font-medium transition-colors sm:min-h-8 focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
-              statusFilter === s
-                ? "bg-brand-blue text-white"
-                : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            {s === "all"
-              ? "All"
-              : s === "protected"
-              ? "Protected"
-              : s === "actionable"
-              ? "Needs action"
-              : "Unprotected"}
-          </button>
-        ))}
-        </div>
-      </div>
+      )}
 
-      {filteredManagers.length === 0 ? (
+      {shownCount === 0 ? (
         <div className="border-y border-slate-200 py-6">
           <h3 className="text-sm font-semibold text-brand-dark">
-            {noDetectedManagers && managerFilter.length === 0 && statusFilter === "all"
-              ? "No package managers detected"
-              : "No package managers found"}
+            {noDetectedManagers && query.length === 0 ? "No package managers detected" : "No package managers found"}
           </h3>
           <p className="mt-1 max-w-[68ch] text-sm leading-6 text-slate-600">
-            {noDetectedManagers && managerFilter.length === 0 && statusFilter === "all"
+            {noDetectedManagers && query.length === 0
               ? "Guard did not find npm, pip, pnpm, or other supported managers on this PATH. Install a package manager, open a new shell, then refresh status."
-              : "No package managers match the current filter, or Guard has not detected any on this machine."}
+              : "No package manager matches that name."}
           </p>
         </div>
       ) : (
-        // One ruled row per manager, read as a ledger rather than a card grid.
-        <ul
-          className="min-w-0 divide-y divide-slate-200 border-y border-slate-200"
-          aria-label="Package manager controls"
-        >
-          {filteredManagers.map((manager) => {
-            const shim = data.package_shims.find((s) => s.manager === manager);
-            return (
-              <ManagerRow
-                key={manager}
-                manager={manager}
-                shim={shim}
-                actions={data.actions}
-                anyPending={anyPending}
-                repairAwaitingRefresh={repairAwaitingRefresh === manager}
-                isMine={pendingOp?.manager === manager}
-                isConfirmingRemove={confirmRemoveManager === manager}
-                onInstall={onInstall}
-                onRepair={onRepair}
-                onTest={onTest}
-                onRemoveRequest={onRemoveRequest}
-                onRemoveConfirm={onRemoveConfirm}
-                onRemoveCancel={onRemoveCancel}
-                onOpenDetails={onOpenManagerDetails}
-              />
-            );
-          })}
-        </ul>
-      )}
-
-      {/* Audit and Sync act on the whole roster, so they close it. */}
-      {showGlobalActions && (
-        <div className="flex justify-end">
-          <GlobalActionsBar
-            anyPending={anyPending}
-            pendingOp={pendingOp}
-            onAudit={onAudit}
-            onSync={onSync}
-          />
+        // Ruled groups, worst first: what to fix, what is done, what is not set up.
+        <div className="space-y-6" role="group" aria-label="Package manager controls">
+          {groups.fix.length > 0 && (
+            <RosterSection title="Needs a fix" count={groups.fix.length}>
+              {groups.fix.map((manager) => renderRow(manager, true))}
+            </RosterSection>
+          )}
+          {groups.protected.length > 0 && (
+            <RosterSection title="Protected" count={groups.protected.length}>
+              {groups.protected.map((manager) => renderRow(manager, false))}
+            </RosterSection>
+          )}
+          {groups.unprotected.length > 0 && (
+            <RosterSection
+              title="Not protected yet"
+              count={groups.unprotected.length}
+              toggle={
+                groups.unprotected.length > COLLAPSE_THRESHOLD && query.length === 0
+                  ? { open: !foldUnprotected, onToggle: toggleUnprotected }
+                  : undefined
+              }
+            >
+              {foldUnprotected ? (
+                <li className="py-3.5 text-sm leading-6 text-slate-600">
+                  {previewNames(groups.unprotected)}. Installs from these tools are not checked yet.
+                </li>
+              ) : (
+                groups.unprotected.map((manager) => renderRow(manager, false))
+              )}
+            </RosterSection>
+          )}
         </div>
       )}
+
     </div>
+  );
+}
+
+function previewNames(managers: string[]): string {
+  const shown = managers.slice(0, 3).join(", ");
+  const rest = managers.length - 3;
+  return rest > 0 ? `${shown} and ${rest} more` : shown;
+}
+
+function RosterSection({
+  title,
+  count,
+  toggle,
+  children,
+}: {
+  title: string;
+  count: number;
+  toggle?: { open: boolean; onToggle: () => void };
+  children: ReactNode;
+}) {
+  return (
+    <section aria-label={title} className="min-w-0">
+      <div className="flex min-h-9 items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-brand-dark">
+          {title} <span className="font-normal text-slate-500">{count}</span>
+        </h3>
+        {toggle && (
+          <button
+            type="button"
+            onClick={toggle.onToggle}
+            aria-expanded={toggle.open}
+            className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm font-medium text-slate-600 hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand-blue/30 sm:min-h-9"
+          >
+            {toggle.open ? "Show less" : `Show all ${count}`}
+            <HiMiniChevronDown
+              className={`h-4 w-4 transition-transform ${toggle.open ? "rotate-180" : ""}`}
+              aria-hidden="true"
+            />
+          </button>
+        )}
+      </div>
+      <ul className="mt-1 min-w-0 divide-y divide-slate-200 border-y border-slate-200" aria-label={title}>
+        {children}
+      </ul>
+    </section>
   );
 }

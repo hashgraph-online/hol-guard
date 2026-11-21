@@ -185,7 +185,9 @@ fn programs_that_only_use_the_network_or_only_name_a_credential_are_not_blocked(
         "kubectl exec -i web-0 -- node --input-type=module - < status.mjs",
         "python3 < keys.py",
         "cat keys.py | python3 -",
-        "python3 -c 'import json; print(json.dumps([1]))'",
+        // A program that only computes is allowed outright, so `os` keeps
+        // this one on the inline-content route the test is about.
+        "python3 -c 'import os, json; print(json.dumps([os.getpid()]))'",
         "node -e 1",
     ] {
         let result = fixture.classify("omp", command);
@@ -214,7 +216,7 @@ fn local_inline_source_keeps_its_sandbox() {
     for command in [
         "node -e 1",
         "python3 -c 'import json; print(len(json.load(open(\"rows.json\"))))'",
-        "python3 -c 'print(\"; import socket\")'",
+        "python3 -c 'import os; print(os.getpid(), \"; import socket\")'",
     ] {
         let result = fixture.classify("omp", command);
         assert_ne!(result.decision, "allow", "{command}");

@@ -6,6 +6,7 @@ integration server must pass its authenticated discovery preflight separately.
 
 from __future__ import annotations
 
+import http.client
 import io
 import json
 import unittest
@@ -24,29 +25,44 @@ class _RouteResponse(io.BytesIO):
     status = 200
 
 
-def _request(url: str = fixture.PLACEMENTS_URL, **kwargs: object) -> urllib.request.Request:
-    return urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "Accept-Encoding": "identity",
-            "Cache-Control": "no-store",
-            "User-Agent": _USER_AGENT,
-        },
-        **kwargs,
-    )
+_HEADERS = {
+    "Accept": "application/json",
+    "Accept-Encoding": "identity",
+    "Cache-Control": "no-store",
+    "User-Agent": _USER_AGENT,
+}
 
 
 class DiscoveryFixtureTests(unittest.TestCase):
     """The external fixture accepts only the current credential-free contract."""
+
+    def setUp(self) -> None:
+        self.server = fixture.DiscoveryFixtureServer(user_agent=_USER_AGENT)
+        self.server.start()
+        self.addCleanup(self.server.stop)
+
+    def _fetch(
+        self, path: str = fixture.PLACEMENTS_PATH, *, method: str = "GET", headers: dict[str, str] | None = None
+    ) -> tuple[int, dict[str, str], bytes]:
+        connection = http.client.HTTPConnection("127.0.0.1", int(self.server.origin.rsplit(":", 1)[1]), timeout=5)
+        try:
+            connection.putrequest(method, path, skip_accept_encoding=True)
+            for name, value in (headers if headers is not None else _HEADERS).items():
+                connection.putheader(name, value)
+            connection.endheaders(b"{}" if method == "POST" else None)
+            response = connection.getresponse()
+            return response.status, dict(response.getheaders()), response.read()
+        finally:
+            connection.close()
 
     def test_empty_snapshot_has_current_dates_and_native_input_fields(self) -> None:
         """Generate native input shape without stubbing native acceptance."""
         now = datetime(2026, 10, 23, 12, 0, 0, 123000, tzinfo=UTC)
         with patch.object(fixture, "datetime") as clock:
             clock.now.return_value = now
-            response = fixture.DiscoveryFixtureOpener(user_agent=_USER_AGENT).open(_request(), timeout=2)
-        body = json.loads(response.read())
+            status, headers, raw = self._fetch()
+        self.assertEqual(status, 200)
+        body = json.loads(raw)
         self.assertEqual(
             set(body),
             {
@@ -68,8 +84,8 @@ class DiscoveryFixtureTests(unittest.TestCase):
         self.assertEqual(body["placements"], [])
         self.assertEqual(datetime.fromisoformat(body["generatedAt"]), now)
         self.assertEqual(datetime.fromisoformat(body["leaseExpiresAt"]), now + timedelta(seconds=25))
-        self.assertEqual(parsedate_to_datetime(response.headers["Date"]), now.replace(microsecond=0))
-        self.assertNotIn("ETag", response.headers)
+        self.assertEqual(parsedate_to_datetime(headers["Date"]), now.replace(microsecond=0))
+        self.assertNotIn("ETag", headers)
         self.assertEqual([offer["product"] for offer in body["offers"]], ["always", "time_slot", "sponsored"])
         for offer in body["offers"]:
             self.assertEqual(
@@ -84,57 +100,42 @@ class DiscoveryFixtureTests(unittest.TestCase):
                 },
             )
 
-    def test_each_fetch_has_a_fresh_independent_stream_and_lease(self) -> None:
+    def test_each_fetch_has_a_fresh_lease(self) -> None:
         """Long browser suites never reuse expired fixture inventory."""
         now = datetime.now(UTC)
-        opener = fixture.DiscoveryFixtureOpener(user_agent=_USER_AGENT)
         with patch.object(fixture, "datetime") as clock:
             clock.now.side_effect = [now, now + timedelta(minutes=2)]
-            first = opener.open(_request(), timeout=1)
-            second = opener.open(_request(), timeout=1)
-        self.assertNotEqual(json.loads(first.read())["generatedAt"], json.loads(second.read())["generatedAt"])
-        self.assertEqual(opener.request_count, 2)
-        first.close()
-        self.assertFalse(second.closed)
+            first = json.loads(self._fetch()[2])
+            second = json.loads(self._fetch()[2])
+        self.assertNotEqual(first["generatedAt"], second["generatedAt"])
+        self.assertEqual(self.server.request_count, 2)
 
-    def test_unexpected_requests_never_fall_back_to_network(self) -> None:
-        """Wrong destinations, measurements, payloads and budgets fail closed."""
-        requests = [
-            _request("http://hol.org/api/guard/extensions/discovery/v1/placements"),
-            _request(fixture.PLACEMENTS_URL + "?token=private"),
-            _request("https://example.invalid/placements"),
-            _request(fixture.PLACEMENTS_URL.replace("placements", "renders")),
-            _request(method="POST"),
-            _request(data=b"{}", method="GET"),
-        ]
-        opener = fixture.DiscoveryFixtureOpener(user_agent=_USER_AGENT)
-        with patch.object(urllib.request, "urlopen", side_effect=AssertionError("network called")):
-            for request in requests:
-                with self.subTest(url=request.full_url, method=request.get_method()), self.assertRaises(ValueError):
-                    opener.open(request, timeout=1)
-            for timeout in (0, -1, 3, float("inf"), float("nan")):
-                with self.subTest(timeout=timeout), self.assertRaises(ValueError):
-                    opener.open(_request(), timeout=timeout)
-        self.assertEqual(opener.request_count, 0)
+    def test_unexpected_requests_are_refused(self) -> None:
+        """Wrong paths, measurements and payloads fail closed."""
+        for path, method in (
+            (fixture.PLACEMENTS_PATH + "?token=private", "GET"),
+            ("/placements", "GET"),
+            (fixture.PLACEMENTS_PATH.replace("placements", "renders"), "GET"),
+            (fixture.PLACEMENTS_PATH, "POST"),
+        ):
+            with self.subTest(path=path, method=method):
+                self.assertEqual(self._fetch(path, method=method)[0], 400)
+        self.assertEqual(self.server.request_count, 0)
+        self.assertEqual(self.server.refusals, 4)
 
-    def test_credentials_unknown_headers_and_large_values_are_rejected(self) -> None:
+    def test_credentials_and_unknown_headers_are_refused(self) -> None:
         """The fixture does not silently accept leaked local identity."""
-        opener = fixture.DiscoveryFixtureOpener(user_agent=_USER_AGENT)
         for header, value in (
             ("Authorization", "Bearer private"),
             ("Cookie", "session=private"),
             ("X-Guard-Token", "private"),
             ("X-Device-Id", "private"),
             ("User-Agent", "other-client"),
-            ("User-Agent", "x" * 257),
             ("Accept", "text/plain"),
-            ("Accept", "application/json\r\nprivate"),
         ):
-            request = _request()
-            request.add_header(header, value)
-            with self.subTest(header=header), self.assertRaises(ValueError):
-                opener.open(request, timeout=1)
-        self.assertEqual(opener.request_count, 0)
+            with self.subTest(header=header):
+                self.assertEqual(self._fetch(headers=_HEADERS | {header: value})[0], 400)
+        self.assertEqual(self.server.request_count, 0)
 
 
 class ProjectionPreflightTests(unittest.TestCase):
@@ -142,7 +143,7 @@ class ProjectionPreflightTests(unittest.TestCase):
 
     def test_preflight_uses_authenticated_local_route(self) -> None:
         """Only the setup request carries the local daemon token."""
-        snapshot = json.loads(fixture.DiscoveryFixtureResponse(datetime.now(UTC)).read())
+        snapshot = json.loads(fixture.placements_body(datetime.now(UTC)))
         response = _RouteResponse(
             json.dumps({"snapshot": snapshot, "remainingLeaseMs": 24000, "policyAllowed": True}).encode()
         )
@@ -172,7 +173,7 @@ class ProjectionPreflightTests(unittest.TestCase):
 
     def test_raw_or_oversized_body_cannot_masquerade_as_native_projection(self) -> None:
         """A successful HTTP status alone does not satisfy the preflight."""
-        raw_snapshot = fixture.DiscoveryFixtureResponse(datetime.now(UTC)).read()
+        raw_snapshot = fixture.placements_body(datetime.now(UTC))
         for body in (b"{}", b"not-json", raw_snapshot, b"x" * 65537):
             response = _RouteResponse(body)
             with (

@@ -13,10 +13,10 @@ from typing import Any
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_policy_bundle as bridge
 from codex_plugin_scanner.guard import policy_bundle_parser as parser
 from codex_plugin_scanner.guard import policy_bundle_trusted_keys as trusted_keys
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
     PolicyBundleNativeError,
@@ -26,7 +26,7 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.synced_policy import cached_policy_bundle_validation
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
-from tests.daemon_control_patching import patch_daemon_global
+from tests.policy_bundle_parser_support import computed_policy_bundle_hash, policy_bundle_paged_text
 from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
@@ -41,7 +41,6 @@ from tests.test_guard_headless_daemon_api import (
     _request,
 )
 from tests.test_guard_headless_daemon_api import _seed_guard_cloud as _seed_daemon_cloud
-from tests.test_policy_bundle_parser import computed_policy_bundle_hash
 
 
 def _unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
@@ -171,14 +170,14 @@ def test_paged_text_is_verified_against_its_digest(monkeypatch: pytest.MonkeyPat
             {"value": "wörld", "total": len(encoded), "sha256": digest, "next": None},
         ],
     )
-    assert bridge.policy_bundle_paged_text("v1_canonical_payload", {}) == text
+    assert policy_bundle_paged_text("v1_canonical_payload", {}) == text
 
     _fake_pages(
         monkeypatch,
         [{"value": "tampered", "total": len(encoded), "sha256": digest, "next": None}],
     )
     with pytest.raises(PolicyBundleNativeUnavailableError):
-        bridge.policy_bundle_paged_text("v1_canonical_payload", {})
+        policy_bundle_paged_text("v1_canonical_payload", {})
 
 
 # -- verdict helpers -----------------------------------------------------------
@@ -290,13 +289,14 @@ def test_runner_downgrade_check_raises_on_an_unavailable_transition(monkeypatch:
         "bundleVersion": 3,
         "bundleHash": "sha256:" + "a" * 64,
     }
-    monkeypatch.setattr(
-        guard_runner_module,
-        "validate_policy_bundle_v2_transition",
-        lambda *_args, **_kwargs: NATIVE_UNAVAILABLE_REJECTION,
-    )
-    with pytest.raises(PolicyBundleNativeUnavailableError):
+    with _resident_outage(monkeypatch), pytest.raises(PolicyBundleNativeUnavailableError):
         guard_runner_module._policy_bundle_is_version_downgrade(None, v2)
+
+
+def test_candidate_admission_raises_on_an_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    candidate: dict[str, object] = {"contractVersion": "guard-policy-bundle.v2", "bundleVersion": 3}
+    with _resident_outage(monkeypatch), pytest.raises(PolicyBundleNativeUnavailableError):
+        parser.policy_bundle_admission_rejection(candidate, None)
 
 
 def _signed_policy_bundle(store: GuardStore) -> dict[str, object]:
@@ -337,7 +337,9 @@ def test_daemon_policy_sync_reports_a_native_rejection_as_a_400_verdict(
     def _rejected(*_args: object, **_kwargs: object) -> object:
         raise PolicyBundleNativeError("limit_bytes")
 
-    patch_daemon_global(monkeypatch, "activate_with_reason", _rejected)
+    from codex_plugin_scanner.guard import policy_bundle_activation
+
+    monkeypatch.setattr(policy_bundle_activation, "activate_with_reason", _rejected)
     store = GuardStore(tmp_path / "guard-home")
     status, payload = _post_policy_sync(store, _signed_policy_bundle(store))
 

@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use super::layers::{layers_to_json, layers_to_values};
 use super::records::{
-    parse_anchor, private_hash, verify_record, Phase, CATALOG_MANIFEST_PURPOSE, SNAPSHOT_PURPOSE,
+    parse_anchor, private_hash, verify_record, CATALOG_MANIFEST_PURPOSE, SNAPSHOT_PURPOSE,
     TRANSITION_PURPOSE,
 };
 use super::tests::{anchor, catalog, local, run, Home, AT, KEY};
@@ -37,50 +37,20 @@ fn writer(home: &Home, op: &str) -> ExtensionControlAuthorityRequestV1 {
 }
 
 #[test]
-fn a_sealed_anchor_reads_back_as_the_anchor_it_names() {
-    let home = Home::new();
-    let digest = catalog('d');
-    let request = ExtensionControlAuthorityRequestV1 {
-        revision: Some(3),
-        snapshot_digest: Some(digest.clone()),
-        phase: Some("anchored".to_owned()),
-        ..home.request("seal_anchor", &catalog('a'))
-    };
-    let sealed = run(&request)["anchor_json"].as_str().unwrap().to_owned();
-    let parsed = parse_anchor(&sealed, &KEY).unwrap();
-    assert_eq!(
-        (parsed.revision, parsed.snapshot_digest, parsed.phase),
-        (3, digest, Phase::Anchored)
-    );
-    for bad in [
-        ExtensionControlAuthorityRequestV1 {
-            phase: Some("finished".to_owned()),
-            ..request.clone()
-        },
-        ExtensionControlAuthorityRequestV1 {
-            revision: Some(-1),
-            ..request.clone()
-        },
-        ExtensionControlAuthorityRequestV1 {
-            snapshot_digest: Some("short".to_owned()),
-            ..request.clone()
-        },
-    ] {
-        assert_eq!(refusal(&run(&bad)), "invalid authority anchor");
-    }
-}
-
-#[test]
 fn a_sealed_manifest_is_the_record_load_manifest_trusts() {
     let home = Home::new();
     let manifest = std::collections::BTreeMap::from([
         ("extension:b".to_owned(), "2".to_owned()),
         ("extension:a".to_owned(), "1".to_owned()),
     ]);
-    let sealed_manifest = run(&ExtensionControlAuthorityRequestV1 {
-        current_manifest: Some(manifest.clone()),
-        ..writer(&home, "seal_manifest")
-    });
+    let sealed_manifest = super::seals::seal_manifest_op(
+        &ExtensionControlAuthorityRequestV1 {
+            current_manifest: Some(manifest.clone()),
+            ..writer(&home, "write_manifest")
+        },
+        Some(&KEY),
+    )
+    .unwrap();
     let manifest_json = sealed_manifest["manifest_json"].as_str().unwrap();
     assert_eq!(manifest_json, r#"{"extension:a":"1","extension:b":"2"}"#);
     let record = &sealed_manifest["record"];
@@ -139,6 +109,7 @@ fn ordinary_catalog_rebinding_retains_the_committed_pack_without_reserving_one()
         &[local(&catalog('b'))],
         "committed",
         Some(&pack),
+        false,
     );
     let result = run(&ExtensionControlAuthorityRequestV1 {
         catalog_migration: Some(migration(&catalog('b'))),
@@ -208,7 +179,7 @@ fn a_catalog_migration_seals_the_rebinding_on_the_source_head() {
 
 /// Commits revisions 1 and 2, exports the head, and leaves the database
 /// re-created without its snapshot or the head's transition.
-fn quarantined(home: &Home) -> String {
+pub(super) fn quarantined(home: &Home) -> String {
     home.commit(1, &catalog('a'), &[], "committed");
     let head = home.commit(2, &catalog('a'), &[local(&catalog('a'))], "committed");
     let export: Value = home

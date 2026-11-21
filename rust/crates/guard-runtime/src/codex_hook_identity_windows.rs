@@ -28,6 +28,22 @@ pub(crate) fn process_start_token(pid: u32) -> Option<String> {
     token_from_start_marker(&marker)
 }
 
+/// Windows answers the start token without `ps`, so there is nothing for a
+/// timeout to bound.
+#[cfg(windows)]
+pub(crate) fn process_start_token_within(
+    pid: u32,
+    _timeout: std::time::Duration,
+) -> Option<String> {
+    process_start_token(pid)
+}
+
+/// `sid:<SID>` of the user the process's token runs as.
+#[cfg(windows)]
+pub(crate) fn process_owner_marker(pid: u32) -> Option<String> {
+    guard_runtime_windows_process::process_owner_sid(pid)
+}
+
 #[cfg(test)]
 mod tests {
     use super::token_from_start_marker;

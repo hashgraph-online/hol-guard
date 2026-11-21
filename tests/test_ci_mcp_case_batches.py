@@ -33,15 +33,15 @@ def test_empty_native_mcp_inventory_fails_instead_of_skipping_the_matrix():
 
 
 def test_native_mcp_matrix_collects_without_installed_native_metadata(monkeypatch):
-    from codex_plugin_scanner.guard.runtime import mcp_server_contribution
+    from tests import mcp_contribution_loader
 
-    load = mcp_server_contribution.load_mcp_contribution_payloads
+    load = mcp_contribution_loader.load_mcp_contribution_payloads
 
     def source_only(root=None):
         assert root is not None, "collection must not request installed native metadata"
         return load(root)
 
-    monkeypatch.setattr(mcp_server_contribution, "load_mcp_contribution_payloads", source_only)
+    monkeypatch.setattr(mcp_contribution_loader, "load_mcp_contribution_payloads", source_only)
     path = Path(__file__).with_name("test_guard_contributed_mcp_native.py")
     spec = importlib.util.spec_from_file_location("tests._mcp_collection_probe", path)
     assert spec is not None and spec.loader is not None

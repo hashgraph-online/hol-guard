@@ -168,6 +168,7 @@ fn malformed_arguments_are_typed_errors_not_allows() {
         "authority_signature",
         "authority_gate",
         "policy_shadow_mismatch",
+        "policy_shadow_verdict",
         "skill_content_risk",
     ] {
         assert_eq!(

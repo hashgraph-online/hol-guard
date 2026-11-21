@@ -78,40 +78,6 @@ def _read_installed(path: Path, *, limit: int) -> bytes:
     return read_bytes(path, limit=limit, anchor=_installation_root())
 
 
-def compatibility_payloads(family: str) -> tuple[dict[str, Any], ...] | None:
-    """Explicit offline legacy API; never load the library on decision paths.
-
-    Only genuine legacy absence permits fallback. An advertised installed bundle
-    must authenticate through both release manifests before any metadata reads.
-    """
-    if family not in {"commands", "mcp"}:
-        raise ValueError("unknown compatibility metadata family")
-    if not advertised():
-        return None
-    bundle = load_installed_bundle()
-
-    # Offline traversals commonly read thousands of members; one session verifies
-    # and copies the runtime once for all of them.
-    with lifecycle.session():
-        try:
-            result = run_source_compiler(
-                "bundle-compatibility",
-                {
-                    "family": family,
-                    "source_sha": bundle.source_sha,
-                    "engine": bundle.engine,
-                    "data": bundle.data.decode("utf-8"),
-                    "max_bytes": MAX_BYTES,
-                },
-                fetch=lambda reference: bundle._fetch(
-                    cast(dict[str, Any], reference["location"]), cast(int, reference["length"])
-                ),
-            )
-        except NativeSourceCompilerError as error:
-            raise ValueError(f"installed compatibility metadata unavailable: {error}") from error
-    return tuple(cast(list[dict[str, Any]], result["payloads"])) if result["available"] else None
-
-
 _ANSWERS: dict[str, tuple[tuple[object, ...], object]] = {}
 _ANSWERS_LOCK = threading.Lock()
 

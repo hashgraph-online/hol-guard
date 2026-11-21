@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING, TextIO
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..adapters.base import HarnessContext
     from ..config import GuardConfig
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 from ..dashboard_launcher import (
@@ -521,8 +521,8 @@ def desktop_bootstrap_document_for_running_daemon(
     """Build or reuse the bootstrap document for the daemon that is already up."""
 
     def build() -> dict[str, object]:
-        from ..adapters.base import HarnessContext
         from ..config import load_guard_config, overlay_synced_guard_policy
+        from ..harness_context import HarnessContext
         from ..synced_policy import synced_policy_payload
 
         context = HarnessContext(
@@ -608,8 +608,38 @@ def _run_guard_desktop_command(
         if context is None or store is None:
             raise RuntimeError("Guard candidate qualification requires local Guard context")
         return run_desktop_qualification(args, context=context, store=store, output_stream=output_stream or sys.stdout)
+    if getattr(args, "desktop_command", None) == "library-call":
+        from pathlib import Path as _Path
+
+        from .desktop_library_call import run_library_call
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard library call requires --guard-home.", file=sys.stderr)
+            return 2
+        return run_library_call(_Path(resolved_home))
+    if getattr(args, "desktop_command", None) == "library-serve":
+        from pathlib import Path as _Path
+
+        from .desktop_library_call import serve_library_calls
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard library calls require --guard-home.", file=sys.stderr)
+            return 2
+        return serve_library_calls(_Path(resolved_home))
+    if getattr(args, "desktop_command", None) == "daemon-workers":
+        from pathlib import Path as _Path
+
+        from ..workers.host import run_worker_host
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard daemon workers require --guard-home.", file=sys.stderr)
+            return 2
+        return run_worker_host(_Path(resolved_home))
     if getattr(args, "desktop_command", None) == "dashboard-update":
-        from ..daemon.dashboard_update_runner import main as dashboard_update_main
+        from ..updates.dashboard_update_runner import main as dashboard_update_main
 
         resolved_home = getattr(args, "guard_home", None) or guard_home
         if resolved_home is None:

@@ -8,6 +8,7 @@ use std::path::Path;
 use winapi::shared::minwindef::{DWORD, FALSE};
 use winapi::shared::ntdef::HANDLE;
 use winapi::um::fileapi::{GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION};
+use winapi::um::winbase::MoveFileExW;
 use winapi::um::winnt::{
     FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
 };
@@ -69,6 +70,19 @@ pub fn remove_file_if_same(path: &Path, expected: &std::fs::File) -> io::Result<
     }
     mark_handle_for_delete(&current)?;
     Ok(true)
+}
+
+/// Rename `from` to `to` only when `to` does not exist, for a file or a
+/// directory. Without `MOVEFILE_REPLACE_EXISTING` the move fails with
+/// `AlreadyExists` rather than replacing a name another writer published.
+pub fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
+    let from = super::wide_path(from)?;
+    let to = super::wide_path(to)?;
+    // SAFETY: Both paths are NUL-terminated and outlive the synchronous call.
+    if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) } == FALSE {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 pub(super) fn file_information(handle: HANDLE) -> io::Result<(DWORD, DWORD, DWORD)> {

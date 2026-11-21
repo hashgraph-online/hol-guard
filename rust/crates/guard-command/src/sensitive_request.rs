@@ -15,7 +15,6 @@ use crate::benign_request_api::{
 use crate::codex_output_env::Ctx;
 use crate::command_evaluation::CommandDecisionFloor;
 use crate::command_model::{parse_shell_command, CanonicalCommand};
-use crate::compound_artifact::compound_artifact;
 use crate::hook_adapter_value::OValue;
 use crate::sfrs_dispatcher::{extract_sensitive_tool_action_request, ExtractInputs};
 use crate::sfrs_dispatcher_request::{NativeEvaluationView, ToolActionRequestMatch};
@@ -28,7 +27,6 @@ use crate::sfrs_requests::{
     extract_sensitive_file_read_request_from_action, extract_sensitive_file_write_request,
     harness_protected_write_paths, FileReadRequest, FileWriteRequest, SensitivePath,
 };
-use crate::unmodeled_shell_artifact::unmodeled_shell_artifact;
 use crate::CommandModelRequestV1;
 
 #[cfg(all(test, unix))]
@@ -50,8 +48,6 @@ pub const QUERIES: &[&str] = &[
     "benign_tool_action",
     "read_only_lookup_target_is_safe",
     "benign_github_shell",
-    "unmodeled_shell_artifact",
-    "compound_artifact",
 ];
 
 /// Answer one query. `controls` is the extension-control snapshot the
@@ -182,8 +178,6 @@ pub fn evaluate(
                     || gh_pr_create_uses_safe_ephemeral_body(command, ctx)
             ))
         }
-        "unmodeled_shell_artifact" => unmodeled_shell_artifact(input, ctx),
-        "compound_artifact" => compound_artifact(input, cwd, home, ctx),
         _ => Err("native_sensitive_request_query_unknown"),
     }
 }

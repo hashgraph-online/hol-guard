@@ -48,11 +48,16 @@ _SANDBOX_DENIAL = re.compile(
     r"|nodename nor servname provided|Connection refused"
 )
 _CURL_NETWORK_EXITS = frozenset({6, 7})
+# A Windows path starts at a drive, or at the operator's home once evidence redaction hides the
+# account name: the Windows Gauntlet installs the candidate under that home, so both Guard's
+# Python and the adapter's temporary request file are named from ``{{operator_home}}``.
+WINDOWS_ROOT = r"(?:[A-Za-z]:|\{\{operator_home\}\})"
 # On Windows the adapter runs the sink with Guard's own Python and this fixed bootstrap,
 # naming the package root with forward slashes so the shell keeps it intact.
-_WINDOWS_PYTHON = re.compile(r"[A-Za-z]:\\(?:[^\\/:*?\"<>|']+\\)*python\.exe", re.IGNORECASE)
+# Only the executable name is case-insensitive; the redaction marker is matched exactly.
+_WINDOWS_PYTHON = re.compile(WINDOWS_ROOT + r"\\(?:[^\\/:*?\"<>|']+\\)*(?i:python\.exe)")
 _WINDOWS_BOOTSTRAP = re.compile(
-    r"import sys;sys\.path\.insert\(0, '[A-Za-z]:/[^'\\]*'\);"
+    r"import sys;sys\.path\.insert\(0, '" + WINDOWS_ROOT + r"/[^'\\]*'\);"
     r"from codex_plugin_scanner\.cli import main;raise SystemExit\(main\(sys\.argv\[1:\]\)\)"
 )
 # Redaction folds the shell-quoted spelling of a fixture path into its placeholder. A Windows
@@ -115,10 +120,10 @@ def contained_wrapper_argv(command: object, expected_workspace: str) -> tuple[li
         return None, "contained wrapper workspace binding differs from the reviewed caller"
     if argv[6] != "--request-file":
         return None, "contained wrapper request-file flag is missing"
+    # A redacted home is not a drive to PureWindowsPath; the root pattern proves the path absolute.
     request = PureWindowsPath(argv[7]) if windows else Path(argv[7])
     if (
-        not request.is_absolute()
-        or (windows and re.match(r"[A-Za-z]:\\", argv[7]) is None)
+        (re.match(WINDOWS_ROOT + r"\\", argv[7]) is None if windows else not request.is_absolute())
         or request.name != "request.json"
         or not request.parent.name.startswith("hol-guard-contained-test-")
     ):

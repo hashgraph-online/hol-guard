@@ -19,7 +19,7 @@ because the first attempted fix did not address the cause.
 ## The failure
 
 `prepare_native_hook_policy` is the last gate before a prompt is reviewed
-(`src/codex_plugin_scanner/guard/daemon/hook_policy_admission.py`). When
+(`src/codex_plugin_scanner/guard/hook_review/hook_policy_admission.py`). When
 `HookWorker.prepare_workspace_policy` returns `None`, it writes the
 `native_policy_not_ready` fail-safe and the prompt never reaches Guard. So the
 whole incident reduces to one question: why did the worker hold no policy?

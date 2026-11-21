@@ -111,45 +111,11 @@ impl SkillScan {
     /// Besides a link where a skill could sit, a link the walk cannot see
     /// through could hide a nested skill root.
     pub(super) fn left_link(&mut self, relative: &str, target: Option<&Path>) {
-        if may_hold_skills(relative) || !target.is_some_and(|target| self.walked(relative, target))
+        if may_hold_skills(relative)
+            || !target.is_some_and(|target| walked(&self.roots, relative, target))
         {
             self.linked += 1;
         }
-    }
-
-    /// Whether the walk reads `target` (linked from `relative`) at its own
-    /// path: it resolves inside the worktree and outside skipped directories.
-    /// A link there to yet another link is judged where that link sits.
-    fn walked(&self, relative: &str, target: &Path) -> bool {
-        let inside = if target.is_absolute() {
-            self.roots
-                .iter()
-                .find_map(|root| target.strip_prefix(root).ok())
-                .map(Path::to_path_buf)
-        } else {
-            Path::new(relative)
-                .parent()
-                .map(|parent| parent.join(target))
-        };
-        let Some(inside) = inside else {
-            return false;
-        };
-        let mut depth = 0usize;
-        for component in inside.components() {
-            match component {
-                Component::CurDir => {}
-                Component::ParentDir if depth > 0 => depth -= 1,
-                Component::Normal(name)
-                    if !name
-                        .to_str()
-                        .is_some_and(|name| super::SKIP_DIRS.contains(&name)) =>
-                {
-                    depth += 1
-                }
-                _ => return false,
-            }
-        }
-        true
     }
 
     /// Run the skill rules over the exact bytes that were hashed for `relative`.
@@ -261,6 +227,41 @@ impl SkillScan {
             "findings": findings,
         })
     }
+}
+
+/// Whether the walk reads `target` (linked from `relative`) at its own
+/// path: it resolves inside the worktree and outside skipped directories.
+/// A link there to yet another link is judged where that link sits.
+pub(super) fn walked(roots: &[PathBuf], relative: &str, target: &Path) -> bool {
+    let inside = if target.is_absolute() {
+        roots
+            .iter()
+            .find_map(|root| target.strip_prefix(root).ok())
+            .map(Path::to_path_buf)
+    } else {
+        Path::new(relative)
+            .parent()
+            .map(|parent| parent.join(target))
+    };
+    let Some(inside) = inside else {
+        return false;
+    };
+    let mut depth = 0usize;
+    for component in inside.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir if depth > 0 => depth -= 1,
+            Component::Normal(name)
+                if !name
+                    .to_str()
+                    .is_some_and(|name| super::SKIP_DIRS.contains(&name)) =>
+            {
+                depth += 1
+            }
+            _ => return false,
+        }
+    }
+    true
 }
 
 fn is_skill_path(relative: &str) -> bool {

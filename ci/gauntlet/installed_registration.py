@@ -11,8 +11,10 @@ that registers nothing fails even if it reports success.
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +36,12 @@ GUARD_COMMAND_MARKERS = ("hol-guard", "hol_guard", "guard-command", "codex_plugi
 #: have no gate at all, and that notice says in so many words that it does not
 #: block the command, so matching on wording turned every unrelated install
 #: failure into "this host has a gate".
-GATE_REASONS = ("approval_gate_required", "approval_gate_totp_required", "lifecycle_gate")
+GATE_REASONS = (
+    "approval_gate_required",
+    "approval_gate_interactive_required",
+    "approval_gate_totp_required",
+    "lifecycle_gate",
+)
 
 
 class GateBlockedError(RuntimeError):
@@ -63,7 +70,7 @@ def install_harness(
 ) -> dict[str, Any]:
     """Run the shipped install command for ``harness`` into a lane-owned home."""
 
-    environment = isolated_environment(home=home, guard_home=guard_home)
+    environment = isolated_environment(home=home, guard_home=guard_home, native_runtime=runtime.native_runtime)
     completed = run_guard(
         runtime,
         [
@@ -94,6 +101,22 @@ def install_harness(
         "payload": json_payload(completed),
         "stderr_tail": (completed.stderr or "").strip()[-600:],
     }
+
+
+def stop_daemon(runtime: InstalledRuntime, *, home: Path, guard_home: Path, timeout: float = 60.0) -> int | None:
+    """Stop the daemon an install started in a lane-owned home. Returns its exit code."""
+
+    environment = isolated_environment(home=home, guard_home=guard_home, native_runtime=runtime.native_runtime)
+    try:
+        completed = run_guard(
+            runtime,
+            ["daemon", "stop", "--home", str(home), "--guard-home", str(guard_home), "--json"],
+            environment=environment,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return None
+    return completed.returncode
 
 
 def _is_guard_command(value: object) -> bool:
@@ -132,6 +155,127 @@ def guard_handlers(group: object) -> list[dict[str, Any]]:
     return found
 
 
+def split_windows_command_line(command: str) -> list[str]:
+    """Split a command line the way a Windows program's C runtime reads it.
+
+    Guard writes a Windows hook command with ``subprocess.list2cmdline``. POSIX
+    ``shlex`` treats each backslash in such a line as an escape and drops it, so
+    ``C:\\guard\\hol-guard.exe`` would become ``C:guardhol-guard.exe``. This
+    follows the C runtime instead: whitespace separates arguments outside
+    quotes, ``2n`` backslashes before a quote become ``n`` and toggle quoting,
+    ``2n+1`` become ``n`` and a literal quote, and any other backslash is kept.
+    """
+
+    argv: list[str] = []
+    current: list[str] = []
+    in_word = False
+    quoted = False
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if char == "\\":
+            run = 0
+            while index < len(command) and command[index] == "\\":
+                run += 1
+                index += 1
+            if index < len(command) and command[index] == '"':
+                current.append("\\" * (run // 2))
+                if run % 2:
+                    current.append('"')
+                    index += 1
+            else:
+                current.append("\\" * run)
+            in_word = True
+            continue
+        if char == '"':
+            if quoted and index + 1 < len(command) and command[index + 1] == '"':
+                current.append('"')
+                index += 2
+                continue
+            quoted = not quoted
+            in_word = True
+        elif char in " \t" and not quoted:
+            if in_word:
+                argv.append("".join(current))
+                current = []
+                in_word = False
+        else:
+            current.append(char)
+            in_word = True
+        index += 1
+    if quoted:
+        raise ValueError("unbalanced quote in command line")
+    if in_word:
+        argv.append("".join(current))
+    return argv
+
+
+#: Every character PowerShell reads as a single quote, so Guard's writer doubles
+#: each of them inside a literal.
+POWERSHELL_SINGLE_QUOTES = "'\u2018\u2019\u201a\u201b"
+
+
+def split_powershell_call(command: str) -> list[str]:
+    """Split a PowerShell call-operator line such as ``& 'C:\\Program Files\\x.exe' hook``.
+
+    Codex runs its hook command through PowerShell on Windows, and Guard writes
+    this form when the program path needs quoting. Each token is either a
+    single-quoted literal, where a doubled quote stands for one, or a bare word.
+    PowerShell counts the typographic single quotes as quotes too.
+    Anything else is a line this lane cannot read, so it raises.
+    """
+
+    rest = command.strip()
+    if not rest.startswith("&"):
+        raise ValueError("not a PowerShell call-operator line")
+    rest = rest[1:]
+    argv: list[str] = []
+    index = 0
+    while True:
+        while index < len(rest) and rest[index] in " \t":
+            index += 1
+        if index == len(rest):
+            break
+        if rest[index] in POWERSHELL_SINGLE_QUOTES:
+            index += 1
+            literal: list[str] = []
+            while True:
+                if index >= len(rest):
+                    raise ValueError("unbalanced quote in PowerShell call")
+                if rest[index] in POWERSHELL_SINGLE_QUOTES:
+                    if index + 1 < len(rest) and rest[index + 1] in POWERSHELL_SINGLE_QUOTES:
+                        literal.append(rest[index])
+                        index += 2
+                        continue
+                    index += 1
+                    break
+                literal.append(rest[index])
+                index += 1
+            argv.append("".join(literal))
+        else:
+            start = index
+            while index < len(rest) and rest[index] not in " \t":
+                if rest[index] in POWERSHELL_SINGLE_QUOTES or rest[index] == '"':
+                    raise ValueError("quote inside a bare PowerShell token")
+                index += 1
+            argv.append(rest[start:index])
+        if index < len(rest) and rest[index] not in " \t":
+            raise ValueError("PowerShell token runs into the next one")
+    if not argv:
+        raise ValueError("empty PowerShell call")
+    return argv
+
+
+def split_command_line(command: str, *, windows: bool | None = None) -> list[str]:
+    """Split a registered hook command line by the rules of this host's shell."""
+
+    if os.name == "nt" if windows is None else windows:
+        if command.lstrip().startswith("&"):
+            return split_powershell_call(command)
+        return split_windows_command_line(command)
+    return shlex.split(command)
+
+
 def handler_argv(handler: dict[str, Any]) -> list[str]:
     """The exact argv a harness would run for one Guard hook handler.
 
@@ -147,7 +291,7 @@ def handler_argv(handler: dict[str, Any]) -> list[str]:
         argv.extend(str(part) for part in command)
     elif isinstance(command, str):
         try:
-            argv.extend(shlex.split(command))
+            argv.extend(split_command_line(command))
         except ValueError:
             # Unbalanced quoting: no argv the harness could run either, so
             # report nothing rather than a command line this lane invented.
@@ -347,6 +491,7 @@ def assess_harness(home: Path, harness: str, expectation: dict[str, Any]) -> dic
 
 __all__ = [
     "CONTRACT_PATH",
+    "POWERSHELL_SINGLE_QUOTES",
     "GateBlockedError",
     "assess_claude",
     "assess_codex",
@@ -358,4 +503,7 @@ __all__ = [
     "load_contract",
     "read_config",
     "runnable_handlers",
+    "split_command_line",
+    "split_powershell_call",
+    "split_windows_command_line",
 ]

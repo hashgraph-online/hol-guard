@@ -9,15 +9,15 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_hook_repair as repair
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_authority_receipt_path, hook_secret_path
 from codex_plugin_scanner.guard.codex_hook_manifest import CODEX_AUTHORITY_REPAIR_ACTION
 from codex_plugin_scanner.guard.codex_hook_recovery import (
     commit_hook_publication,
     hook_publication_pending,
     recover_hook_publication,
 )
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests.codex_hook_paths_support import hook_authority_receipt_path, hook_secret_path
 
 from .test_codex_hook_recovery import installed  # noqa: F401 -- shared isolated fixture
 from .test_codex_hook_repair_authorization import _grant, prepared_repair  # noqa: F401 -- shared isolated fixture
@@ -110,6 +110,7 @@ def test_foreign_config_is_preserved_and_both_causes_retained(prepared_repair, m
 def test_expired_parent_retains_inverse_without_resetting_budget(prepared_repair, monkeypatch):  # noqa: F811
     context, config, manifest, prepared = prepared_repair
     original_write = repair.atomic_write_bytes
+    original_monotonic = repair.time.monotonic
     with codex_install_transaction(context.guard_home, config, actor=CODEX_AUTHORITY_REPAIR_ACTION) as owner:
         authorization = _authorize(prepared, owner)
 
@@ -126,7 +127,10 @@ def test_expired_parent_retains_inverse_without_resetting_budget(prepared_repair
         assert failure.value.rollback_error.reason == "deadline_exceeded"
         assert hook_publication_pending(context.guard_home)
         assert manifest.exists()
-        monkeypatch.undo()
+        # Restore only this test's patches; undo() would also drop the
+        # suite's native runtime pins, which recovery needs to verify.
+        monkeypatch.setattr(repair.time, "monotonic", original_monotonic)
+        monkeypatch.setattr(repair, "atomic_write_bytes", original_write)
         assert recover_hook_publication(context.guard_home)
     assert not manifest.exists()
 

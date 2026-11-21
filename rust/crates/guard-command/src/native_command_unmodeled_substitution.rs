@@ -18,10 +18,20 @@
 //! background job, an expansion that builds a program name, an interpreter or
 //! a lookup the lookup reader did not prove, or fed to a launcher, a
 //! `find -exec` or an option that can stand before the program.
+//!
+//! Two reads come out of the same scan. `bounded_substitutions` answers the
+//! strict question: may the text be rewritten with the output stood in for,
+//! and whose owners does it add. `reviewable_substitutions` answers the
+//! weaker one the uncertain floor asks: can every program this text runs be
+//! named well enough to put the command on a review card. Only the second
+//! reads a value an assignment keeps, and it never lowers a floor: the
+//! uncertain floor starts at `review` and only rises, so the most a command
+//! gains by clearing it is an approval card where it had a block with
+//! nothing to answer.
 
 use std::collections::BTreeSet;
 
-use super::{is_assignment, named_words, INTERPRETERS, SHELL_PREFIXES};
+use super::{find_exec_programs, is_assignment, named_words, INTERPRETERS, SHELL_PREFIXES};
 
 /// Stands in for a bounded substitution's output: one ordinary word.
 const OUTPUT: &str = "guard_substituted_output";
@@ -32,14 +42,27 @@ const LOOKUPS: &[&str] = &["command", "which", "type", "whence", "where", "hash"
 
 /// Launchers the unmodeled reader does not list as interpreters. Each runs
 /// the program named by a later word.
-const LAUNCHERS: &[&str] = &[
+pub(super) const LAUNCHERS: &[&str] = &[
     "pkexec",
+    "run0",
+    "gsudo",
+    "runcon",
+    "setpriv",
     "runuser",
     "unshare",
     "nsenter",
     "firejail",
     "systemd-run",
 ];
+
+/// How far a substitution's output is followed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ValueFlow {
+    /// To an argument of a program this text names. The rewrite read.
+    Arguments,
+    /// Also to a value a standalone assignment keeps. The reviewability read.
+    Assignments,
+}
 
 pub(super) struct BoundedSubstitutions {
     /// The text with each bounded substitution replaced by an inert word.
@@ -53,6 +76,76 @@ pub(super) struct BoundedSubstitutions {
 /// as the path it opens, or `None` when one is not bounded. Text with no
 /// substitution comes back unchanged.
 pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> {
+    scan(text, ValueFlow::Arguments)
+}
+
+/// The same read, following a value a standalone assignment keeps as well.
+///
+/// `latest=$(ls | sort -V | tail -n 1)` runs exactly the programs it names and
+/// keeps their output as a word the rest of the text expands, yet no program
+/// receives that output here, so the rewrite read stops and the command
+/// reached an evaluation failure: a block with no approval row, where the same
+/// pipeline written as an argument got a review card. The commands that expand
+/// the name are its receivers and join the owners, so a contributed extension
+/// that owns one still judges arguments this text does not hold.
+pub(super) fn reviewable_substitutions(text: &str) -> Option<BoundedSubstitutions> {
+    scan(text, ValueFlow::Assignments)
+}
+
+/// The text with each escaped backtick read as the plain character it is.
+///
+/// `\`` substitutes nothing, quoted or not: `grep -F "| \`$file\` |"` looks
+/// for a Markdown code span. Refusing every backtick blocked that search with
+/// no approval left to give. Inside single quotes a backslash is literal and
+/// so is the backtick after it, so it is read the same way there. An
+/// unescaped backtick is left in place for the callers to refuse.
+pub(super) fn without_escaped_backticks(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    // Nested substitutions, ANSI-C quotes and shell comments can desynchronize
+    // this shallow quote reader. An apostrophe inside a comment is not a quote
+    // to the shell; conservatively preserve backticks whenever `#` appears.
+    // The downstream classifier then fails closed on any active substitution.
+    let ambiguous_quoting = text.contains("$(")
+        || text.contains('#')
+        || text.as_bytes().windows(2).any(|pair| pair == [0x24, 0x27]);
+    let (mut single, mut double) = (false, false);
+    let mut chars = text.chars();
+    while let Some(character) = chars.next() {
+        if single {
+            single = character != '\'';
+            out.push(if character == '`' && !ambiguous_quoting {
+                'x'
+            } else {
+                character
+            });
+            continue;
+        }
+        match character {
+            '\\' => {
+                out.push('\\');
+                match chars.next() {
+                    Some('`') => out.push('x'),
+                    Some(next) => out.push(next),
+                    None => {}
+                }
+            }
+            '\'' if !double => {
+                single = true;
+                out.push(character);
+            }
+            '"' => {
+                double = !double;
+                out.push(character);
+            }
+            _ => out.push(character),
+        }
+    }
+    out
+}
+
+fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
+    let folded = super::heredoc::fold_printed_heredocs(text);
+    let text = folded.as_str();
     if text.contains("<<") || text.contains('`') {
         return None;
     }
@@ -64,7 +157,13 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
     // is the target of a redirect.
     let mut words: Vec<String> = Vec::new();
     let mut word = String::new();
+    // Whether each finished word, and the one being read, held quoting or
+    // an escape: a quoted `"do"` is a program name, not a keyword.
+    let mut quoted: Vec<bool> = Vec::new();
+    let mut word_quoted = false;
     let mut redirect_target = false;
+    // The names standalone assignments gave a substitution's output.
+    let mut assigned: BTreeSet<String> = BTreeSet::new();
     let mut index = 0;
     while index < chars.len() {
         let character = chars[index];
@@ -92,17 +191,32 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
                 Some(&'(') => Some(crate::parser_segments::arithmetic_close(&chars, index)?),
                 _ => None,
             };
-            let receiver = receiving_program(&words, &word, redirect_target)?;
+            let close = match arithmetic {
+                Some(close) => close,
+                None => closing_parenthesis(&chars, index + 2)?,
+            };
+            let receiver = receiving_program(
+                &words,
+                &quoted,
+                &word,
+                redirect_target,
+                flow,
+                command_continues(&chars, close + 1, double),
+            )?;
+            if receiver.is_none() {
+                if let Some((name, _)) = word.split_once('=') {
+                    assigned.insert(name.to_owned());
+                }
+            }
             // Arithmetic prints a number and reaches no program of its own,
             // so it leaves the owner set the rest of the text names.
-            let (close, printed) = match arithmetic {
-                Some(close) => (close, crate::parser_segments::ARITHMETIC_VALUE),
+            let printed = match arithmetic {
+                Some(_) => crate::parser_segments::ARITHMETIC_VALUE,
                 None => {
-                    let close = closing_parenthesis(&chars, index + 2)?;
                     let inner: String = chars[index + 2..close].iter().collect();
-                    programs.extend(inner_programs(&inner)?);
-                    programs.insert(receiver);
-                    (close, OUTPUT)
+                    programs.extend(inner_programs(&inner, flow)?);
+                    programs.extend(receiver);
+                    OUTPUT
                 }
             };
             word.push_str(printed);
@@ -118,11 +232,23 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
             // characters are literal text and never run anything, and `>(cmd)`
             // writes into a program this text does not bound, so neither is
             // read here.
-            let receiver = receiving_program(&words, &word, redirect_target)?;
             let close = closing_parenthesis(&chars, index + 2)?;
+            let receiver = receiving_program(
+                &words,
+                &quoted,
+                &word,
+                redirect_target,
+                flow,
+                command_continues(&chars, close + 1, double),
+            )?;
+            if receiver.is_none() {
+                if let Some((name, _)) = word.split_once('=') {
+                    assigned.insert(name.to_owned());
+                }
+            }
             let inner: String = chars[index + 2..close].iter().collect();
-            programs.extend(inner_programs(&inner)?);
-            programs.insert(receiver);
+            programs.extend(inner_programs(&inner, flow)?);
+            programs.extend(receiver);
             word.push_str(OUTPUT);
             out.push_str(OUTPUT);
             index = close + 1;
@@ -149,16 +275,27 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
         out.push(character);
         index += 1;
         match character {
-            '\\' => escaped = true,
-            '\'' if !double => single = true,
-            '"' => double = !double,
+            '\\' => {
+                escaped = true;
+                word_quoted = true;
+            }
+            '\'' if !double => {
+                single = true;
+                word_quoted = true;
+            }
+            '"' => {
+                double = !double;
+                word_quoted = true;
+            }
             _ if double => word.push(character),
             '<' | '>' => {
                 // `2>` names a descriptor, not an argument.
                 if !word.is_empty() && !word.chars().all(|value| value.is_ascii_digit()) {
                     words.push(std::mem::take(&mut word));
+                    quoted.push(word_quoted);
                 }
                 word.clear();
+                word_quoted = false;
                 redirect_target = true;
                 // `>&`, `>>`, `>|` and `<>` are one operator.
                 while let Some(&next) = chars.get(index) {
@@ -172,6 +309,8 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
             ';' | '&' | '|' | '(' | ')' | '{' | '}' | '\n' => {
                 words.clear();
                 word.clear();
+                quoted.clear();
+                word_quoted = false;
                 redirect_target = false;
             }
             _ if character.is_whitespace() => {
@@ -181,16 +320,259 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
                         redirect_target = false;
                     } else {
                         words.push(finished);
+                        quoted.push(word_quoted);
                     }
+                    word_quoted = false;
                 }
             }
             _ => word.push(character),
         }
     }
+    // Quoting that never closes means this reader stopped agreeing with the
+    // shell somewhere in the text, and everything after that point was copied
+    // without being read: an apostrophe in a trailing comment, as in
+    // `id=$(cat id) # don\'t` followed by `echo $(gh pr list)`, swallowed a
+    // whole second substitution and left `gh` out of the set the owner check
+    // reads. The text is refused rather than read half way, which keeps the
+    // evaluation failure it already had.
+    if single || double {
+        return None;
+    }
+    // The rewrite read never records an assignment, so this reader is reached
+    // only by the reviewability read and the `Arguments` negatives stay exactly
+    // where they were.
+    if !assigned.is_empty() {
+        programs.extend(value_consumers(text, &assigned)?);
+    }
     Some(BoundedSubstitutions {
         text: out,
         programs,
     })
+}
+
+/// Whether another word of the same simple command follows the position.
+///
+/// `NAME=$(...)` that stands alone keeps the output as a value the rest of the
+/// text expands. `GH_HOST=$(cat host.txt) gh pr list` hands it straight to the
+/// command beside it as a setting that program reads, which is neither a value
+/// this reader follows nor an argument, so the two shapes are told apart by
+/// what comes after the assignment rather than by what came before it.
+///
+/// The lookahead starts at the word *after* the one the substitution sits in.
+/// `latest="$(cat VERSION)"` closes its quote after the `)`, and reading that
+/// quote as a following program made an everyday spelling of a standalone
+/// assignment look like a prefix, so the value was never followed and the
+/// command kept the block this pass exists to remove.
+fn command_continues(chars: &[char], start: usize, quoted: bool) -> bool {
+    let (mut single, mut double, mut escaped) = (false, quoted, false);
+    let mut words = vec![String::new()];
+    for character in chars.get(start.min(chars.len())..).unwrap_or_default() {
+        let character = *character;
+        if single {
+            single = character != '\'';
+        } else if escaped {
+            escaped = false;
+        } else {
+            match character {
+                '\\' => escaped = true,
+                '\'' if !double => single = true,
+                '"' => double = !double,
+                ';' | '&' | '|' | '\n' if !double => break,
+                // A `#` that opens a word starts a comment, and the shell runs
+                // nothing after it: `id=$(cat id) # keep $id` is a standalone
+                // assignment, not a setting prefix for a command named `#`.
+                // Inside quoting it is ordinary text, so the word the
+                // substitution sits in has to close before a `#` reads that
+                // way: `T="$(cat id) #s" gh pr view 12` still runs `gh`.
+                '#' if !double && words.len() > 1 && words.last().is_some_and(String::is_empty) => {
+                    break
+                }
+                _ if character.is_whitespace() && !double => {
+                    words.push(String::new());
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        if let Some(word) = words.last_mut() {
+            word.push(character);
+        }
+    }
+    // The first word is the tail of the word the substitution sits in, never a
+    // program the value is handed to.
+    words
+        .iter()
+        .skip(1)
+        .filter(|raw| !raw.is_empty())
+        .any(|raw| !is_assignment(raw) && !SHELL_PREFIXES.contains(&program_name(raw).as_str()))
+}
+
+/// Whether the text expands a parameter one of `names` holds.
+///
+/// A saved value is read as `$NAME`, as `${NAME}` and through every parameter
+/// operator — `${NAME:-fallback}`, `${NAME%%/*}`, `${#NAME}` — so the name is
+/// taken out of the reference rather than matched against two spellings.
+/// Missing a reference drops the receiver that owns the value, which is the
+/// one thing this pass may not do.
+fn expands_a_name(piece: &str, names: &BTreeSet<String>) -> bool {
+    let chars: Vec<char> = piece.chars().collect();
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] != '$' {
+            index += 1;
+            continue;
+        }
+        let mut start = index + 1;
+        if chars.get(start) == Some(&'{') {
+            start += 1;
+            // `${#NAME}` is the value's length and `${!NAME}` reads the name
+            // the value holds: the parameter still follows the operator.
+            while matches!(chars.get(start), Some(&('#' | '!'))) {
+                start += 1;
+            }
+        }
+        let mut end = start;
+        while chars
+            .get(end)
+            .is_some_and(|value| value.is_ascii_alphanumeric() || *value == '_')
+        {
+            end += 1;
+        }
+        if names.contains(&chars[start..end].iter().collect::<String>()) {
+            return true;
+        }
+        index = end.max(index + 1);
+    }
+    false
+}
+
+/// The programs the text hands a value one of `names` holds.
+///
+/// A value an assignment keeps reaches the commands that expand the name, so
+/// those are its receivers: `TARGET=$(cat id); gh pr view $TARGET` hands the
+/// output to `gh` exactly as `gh pr view "$(cat id)"` does, and the owner that
+/// judges `gh` arguments still refuses text it cannot read.
+///
+/// A statement that reads the value without naming the program it reaches is
+/// `None`: an owner this reader cannot name is exactly the evaluation failure
+/// the pass has to keep. A subshell or a brace group around the statement is
+/// read through, because `(gh pr view $TARGET)` runs `gh` and taking the
+/// bracket as the receiver would hand the owner check a name no extension can
+/// own.
+fn value_consumers(text: &str, names: &BTreeSet<String>) -> Option<BTreeSet<String>> {
+    let mut consumers = BTreeSet::new();
+    for piece in statements(text)? {
+        if !expands_a_name(&piece, names) {
+            continue;
+        }
+        let mut receiver = None;
+        for raw in piece.split_whitespace() {
+            let raw = raw.trim_start_matches(['{', '}']);
+            let name = program_name(raw);
+            if raw.is_empty()
+                || raw.starts_with('-')
+                || is_assignment(raw)
+                || SHELL_PREFIXES.contains(&name.as_str())
+            {
+                continue;
+            }
+            // A program position built from an expansion names whatever the
+            // value holds, and one that is quoting alone names nothing this
+            // reader can hand an owner check.
+            if raw.contains('$') || name.is_empty() {
+                return None;
+            }
+            // A construct that rebinds the value to a name this reader does
+            // not follow hands it to a program the text names nowhere this
+            // scan reads: in `for t in $TARGET; do gh pr view $t; done` the
+            // receiver is `for`, and taking that for the owner would drop
+            // `gh` from the set the owner check reads.
+            if matches!(
+                name.as_str(),
+                "for"
+                    | "select"
+                    | "set"
+                    | "read"
+                    | "mapfile"
+                    | "readarray"
+                    | "getopts"
+                    | "done"
+                    | "eval"
+                    // These copy the value to a second name the tracker never
+                    // followed, so `T=$(cat id); export U=$T; gh pr view $U`
+                    // read `export` for the receiver and left `gh` out of the
+                    // set the owner check reads.
+                    | "export"
+                    | "declare"
+                    | "local"
+                    | "readonly"
+                    | "typeset"
+            ) {
+                return None;
+            }
+            receiver = Some(name);
+            break;
+        }
+        consumers.insert(receiver?);
+    }
+    Some(consumers)
+}
+
+/// The text's statements, split where the shell reads a separator.
+///
+/// A `(`, a `)` or a `|` inside a quoted word is ordinary text:
+/// `printf "(%s)" "$version"` is one statement whose program is `printf`.
+/// Splitting on the parenthesis cut it in half and left a piece whose first
+/// word was quoting, so the receiver that owns the value was lost.
+///
+/// A `#` that opens a word starts a comment the shell runs nothing from, so
+/// the rest of the line is dropped rather than read as a statement whose
+/// program is `#`. Text whose quoting never closes is `None`: an open quote
+/// swallows every separator after it, and the piece holding the value would
+/// carry words belonging to statements that are not its own.
+fn statements(text: &str) -> Option<Vec<String>> {
+    let mut pieces = vec![String::new()];
+    let (mut single, mut double, mut escaped, mut comment) = (false, false, false, false);
+    let mut word_start = true;
+    for character in text.chars() {
+        if comment {
+            if character == '\n' {
+                comment = false;
+                pieces.push(String::new());
+                word_start = true;
+            }
+            continue;
+        }
+        // A backslash puts the character after it inside the word, a space
+        // included, so `echo a\ #` is one word and the `#` is ordinary text.
+        let escaped_here = escaped && !single;
+        if single {
+            single = character != '\'';
+        } else if escaped {
+            escaped = false;
+        } else {
+            match character {
+                '\\' => escaped = true,
+                '\'' if !double => single = true,
+                '"' => double = !double,
+                '#' if !double && word_start => {
+                    comment = true;
+                    continue;
+                }
+                '\n' | ';' | '&' | '|' | '(' | ')' if !double => {
+                    pieces.push(String::new());
+                    word_start = true;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        word_start = !escaped_here && !single && !double && character.is_whitespace();
+        if let Some(piece) = pieces.last_mut() {
+            piece.push(character);
+        }
+    }
+    (!single && !double).then_some(pieces)
 }
 
 /// The program a substitution's result reaches, or `None` when this text does
@@ -205,9 +587,32 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
 /// word shaped like a setting is never read as a substitution's result
 /// whatever program receives it. The POSIX dot builtin runs what it is given
 /// as shell code, exactly as `source` does, so it is refused the same way.
-fn receiving_program(words: &[String], word: &str, redirect_target: bool) -> Option<String> {
-    if redirect_target || is_assignment(word) {
+fn receiving_program(
+    words: &[String],
+    quoted: &[bool],
+    word: &str,
+    redirect_target: bool,
+    flow: ValueFlow,
+    followed: bool,
+) -> Option<Option<String>> {
+    if redirect_target {
         return None;
+    }
+    if is_assignment(word) {
+        // `NAME=$(...)` keeps the output as a value: no program receives it
+        // here. The reviewability read follows that value to the commands
+        // that expand the name; the rewrite read stops, because a prefix
+        // assignment hands the value straight to the program the rest of this
+        // command names and `env NAME=` and `make NAME=` are settings whatever
+        // program receives them.
+        // A bare `do`, `then`, `else` or `elif` opens the body of a loop or a
+        // conditional, so `for e in a; do sum=$(...); done` keeps the value
+        // exactly as the same assignment on its own does. Quoted or escaped,
+        // the same word is a program receiving the assignment as an argument.
+        let standalone = words.iter().zip(quoted).all(|(word, quoted)| {
+            !quoted && matches!(word.as_str(), "do" | "then" | "else" | "elif")
+        });
+        return (flow == ValueFlow::Assignments && standalone && !followed).then_some(None);
     }
     let receiver = words
         .iter()
@@ -224,7 +629,7 @@ fn receiving_program(words: &[String], word: &str, redirect_target: bool) -> Opt
     {
         return None;
     }
-    Some(name)
+    Some(Some(name))
 }
 
 /// The `)` that closes a substitution opened just before `start`. A nested
@@ -254,18 +659,113 @@ fn closing_parenthesis(chars: &[char], start: usize) -> Option<usize> {
 /// A `#` is refused along with the other shell punctuation: the scan for the
 /// closing `)` does not read comments, so a `)` inside one ends the text early
 /// and the words after it would never reach this list.
-fn inner_programs(inner: &str) -> Option<Vec<String>> {
-    if inner.contains(['`', '<', '>', '(', ')', '{', '}', '\n', '\\', '#'])
+fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
+    // `$(shasum -a 256 a.js | awk '{print $1}')` is the everyday way to keep
+    // one field of a program's output. An `awk` whose program only filters and
+    // prints starts nothing, and the reader outside a substitution already
+    // reads it as `true`; reading the same program here keeps its braces and
+    // `$1` from refusing the substitution, which left a block with no approval
+    // to give. A program that names `system`, `getline` or a pipe keeps its
+    // words and is refused below as before.
+    let unawked;
+    // The rewrite drops every word of the awk command, so it runs only on a
+    // text with no nested substitution: `awk -vX="$(gh pr list)"` would
+    // otherwise lose the program its option value starts.
+    let nested = inner.contains("$(") || inner.contains(['`', '<', '>']);
+    let named = named_words(inner);
+    // The filter still runs, so an extension that owns it still judges it.
+    let mut filters: Vec<String> = Vec::new();
+    let inner = if !nested
+        && named
+            .iter()
+            .any(|name| matches!(name.as_str(), "awk" | "gawk" | "mawk" | "nawk"))
+    {
+        unawked = super::without_plain_awk(inner);
+        if unawked.as_str() != inner {
+            filters = ["awk", "gawk", "mawk", "nawk"]
+                .into_iter()
+                .filter(|name| named.contains(*name))
+                .map(str::to_owned)
+                .collect();
+        }
+        unawked.as_str()
+    } else {
+        inner
+    };
+    if inner.contains(['`', '<', '>', '(', ')', '\n', '#'])
         || inner.contains("$(")
         || !expansions_are_names(inner)
-        || named_words(inner)
+    {
+        return None;
+    }
+    let mut programs = Vec::new();
+    let mut plain = inner.to_owned();
+    // An `-exec` action runs a program only this reader names, whatever
+    // spelling ends its body: `-exec basename {} \;` and `-exec basename ';'`
+    // are the same walk, so the brace-free one must not skip the reader that
+    // refuses an interpreter, a launcher or an expansion standing there.
+    //
+    // An action only runs something when a walker is there to run it. The
+    // action is read out of `named_words`, so a quoted `"-exec"` cannot hide
+    // one, and the walker is read out of the command positions, because a
+    // name that is only an argument runs nothing: `rg -l -- "-exec" src` and
+    // `rg -l -- "-exec" tools/gfind` are ordinary searches.
+    //
+    // `gfind` and `/opt/homebrew/bin/gnufind` run the same walk, so every
+    // command whose name ends in `find` reaches `find_exec_programs`, which
+    // refuses the spellings it does not recognise.
+    let named = named_words(inner);
+    let walks = flow == ValueFlow::Assignments
+        && super::EXEC_ACTIONS
+            .iter()
+            .any(|action| named.contains(*action))
+        && inner
+            .split(['\n', ';', '&', '|', '(', ')', '`'])
+            .any(|piece| {
+                let words: Vec<&str> = piece.split_whitespace().collect();
+                super::xargs::command_index(&words).is_some_and(|index| {
+                    // `"find"` and `fi\nd` run the same walk, so the quoting
+                    // comes off before the name is read, exactly as
+                    // `named_words` reads the rest of the text.
+                    let unquoted: String = words[index]
+                        .chars()
+                        .filter(|character| !matches!(character, '\'' | '"' | '\\'))
+                        .collect();
+                    super::command_basename(&unquoted).ends_with("find")
+                })
+            });
+    if inner.contains(['{', '}', '\\']) {
+        // `{}` is find's placeholder for the path it found and `\;` ends an
+        // `-exec` body: neither opens a brace group nor hides punctuation, and
+        // the walk's programs are the ones `find_exec_programs` already reads
+        // outside a substitution. Any other brace or escape stays refused.
+        if !walks {
+            return None;
+        }
+        plain = inner.replace("{}", " ").replace("\\;", " ");
+        if plain.contains(['{', '}', '\\']) {
+            return None;
+        }
+    }
+    if walks {
+        let walked = find_exec_programs(inner)?;
+        if walked.is_empty() {
+            return None;
+        }
+        programs.extend(walked);
+    }
+    // An interpreter runs text this scan does not hold. The rewrite read looks
+    // for its name anywhere in the substitution; the reviewability read looks
+    // at the programs it runs, because a word such as `versions/node` inside a
+    // path the substitution reads starts nothing.
+    if flow != ValueFlow::Assignments
+        && named
             .iter()
             .any(|name| INTERPRETERS.contains(&name.as_str()))
     {
         return None;
     }
-    let mut programs = Vec::new();
-    for command in split_commands(inner)? {
+    for command in split_commands(&plain)? {
         let Some(first) = command.split_whitespace().next() else {
             continue;
         };
@@ -284,6 +784,14 @@ fn inner_programs(inner: &str) -> Option<Vec<String>> {
         }
         programs.push(name);
     }
+    if flow == ValueFlow::Assignments
+        && programs
+            .iter()
+            .any(|name| INTERPRETERS.contains(&name.as_str()))
+    {
+        return None;
+    }
+    programs.extend(filters);
     (!programs.is_empty()).then_some(programs)
 }
 

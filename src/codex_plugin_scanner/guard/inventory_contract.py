@@ -34,34 +34,15 @@ from .inventory_agent_types import AgentInventoryType as AgentInventoryType
 from .inventory_agent_types import agent_type as _agent_type
 from .inventory_contract_constants import _AIBOM_METADATA_KEYS as _AIBOM_METADATA_KEYS
 from .inventory_contract_constants import _FREE_FORM_RECORD_KEYS as _FREE_FORM_RECORD_KEYS
-from .inventory_contract_constants import _IGNORED_TREE_DIR_NAMES as _IGNORED_TREE_DIR_NAMES
 from .inventory_contract_constants import _INVENTORY_DATETIME_KEYS as _INVENTORY_DATETIME_KEYS
-from .inventory_contract_constants import _MAX_FINGERPRINT_FILE_BYTES as _MAX_FINGERPRINT_FILE_BYTES
-from .inventory_contract_constants import _MCP_DELETE_RE as _MCP_DELETE_RE
-from .inventory_contract_constants import _MCP_MODEL_RE as _MCP_MODEL_RE
-from .inventory_contract_constants import _MCP_NETWORK_RE as _MCP_NETWORK_RE
-from .inventory_contract_constants import _MCP_PERMISSION_RE as _MCP_PERMISSION_RE
-from .inventory_contract_constants import _MCP_READ_RE as _MCP_READ_RE
-from .inventory_contract_constants import _MCP_SECRET_RE as _MCP_SECRET_RE
-from .inventory_contract_constants import _MCP_SHELL_RE as _MCP_SHELL_RE
-from .inventory_contract_constants import _MCP_WRITE_RE as _MCP_WRITE_RE
 from .inventory_contract_constants import _OPTIONAL_ONLY_CONTRACT_KEYS as _OPTIONAL_ONLY_CONTRACT_KEYS
 from .inventory_contract_constants import _SAFE_SERIALIZED_MARKERS as _SAFE_SERIALIZED_MARKERS
 from .inventory_contract_constants import _SENSITIVE_KEY_RE as _SENSITIVE_KEY_RE
 from .inventory_contract_constants import _SENSITIVE_VALUE_RE as _SENSITIVE_VALUE_RE
 from .inventory_contract_constants import _SERIALIZER_REDACTED_VALUE as _SERIALIZER_REDACTED_VALUE
-from .inventory_contract_constants import _SERIALIZER_SECRET_ASSIGNMENT_RE as _SERIALIZER_SECRET_ASSIGNMENT_RE
-from .inventory_contract_constants import _SERIALIZER_UNSAFE_PATH_PATTERN as _SERIALIZER_UNSAFE_PATH_PATTERN
-from .inventory_contract_constants import _SERIALIZER_UNSAFE_PATH_RE as _SERIALIZER_UNSAFE_PATH_RE
-from .inventory_contract_constants import _UNSAFE_PATH_MARKERS as _UNSAFE_PATH_MARKERS
 from .inventory_contract_constants import _WHITESPACE_RE as _WHITESPACE_RE
 from .inventory_contract_constants import _path_has_symlink_component as _path_has_symlink_component
-from .inventory_contract_fingerprints import _fingerprint_file_bytes as _fingerprint_file_bytes
-from .inventory_contract_fingerprints import _inventory_snapshot_content_hash as _inventory_snapshot_content_hash
-from .inventory_contract_fingerprints import _stable_snapshot_sort_key as _stable_snapshot_sort_key
-from .inventory_contract_fingerprints import _stable_snapshot_value as _stable_snapshot_value
 from .inventory_contract_fingerprints import fingerprint_mapping as fingerprint_mapping
-from .inventory_contract_fingerprints import fingerprint_path_tree as fingerprint_path_tree
 from .inventory_contract_fingerprints import fingerprint_text as fingerprint_text
 from .inventory_contract_fingerprints import inventory_item_id as inventory_item_id
 from .inventory_contract_items import _artifact_classification_entry as _artifact_classification_entry
@@ -70,26 +51,17 @@ from .inventory_contract_items import _mcp_tool_items_from_artifact as _mcp_tool
 from .inventory_contract_mcp import _apply_tool_trust_attestation_metadata as _apply_tool_trust_attestation_metadata
 from .inventory_contract_mcp import _attestation_path_hash as _attestation_path_hash
 from .inventory_contract_mcp import _attestation_repository_id as _attestation_repository_id
-from .inventory_contract_mcp import _capabilities_for_mcp_tool as _capabilities_for_mcp_tool
-from .inventory_contract_mcp import _first_present_value as _first_present_value
-from .inventory_contract_mcp import _mcp_schema_signal_text as _mcp_schema_signal_text
-from .inventory_contract_mcp import _mcp_tool_definitions as _mcp_tool_definitions
 from .inventory_contract_mcp import _optional_context_string as _optional_context_string
-from .inventory_contract_mcp import _risk_level_for_capabilities as _risk_level_for_capabilities
-from .inventory_contract_mcp import _string_value as _string_value
 from .inventory_contract_metadata import _aibom_detection_module as _aibom_detection_module
 from .inventory_contract_metadata import _aibom_trust_metadata_module as _aibom_trust_metadata_module
 from .inventory_contract_metadata import _apply_aibom_metadata_enrichment as _apply_aibom_metadata_enrichment
 from .inventory_contract_metadata import _inventory_item_description_module as _inventory_item_description_module
 from .inventory_contract_models import DockerProofStatus as DockerProofStatus
-from .inventory_contract_models import GuardAgentIntegrationRun as GuardAgentIntegrationRun
 from .inventory_contract_models import GuardAgentInventoryDockerProof as GuardAgentInventoryDockerProof
 from .inventory_contract_models import GuardAgentInventoryDrift as GuardAgentInventoryDrift
 from .inventory_contract_models import GuardAgentInventoryFinding as GuardAgentInventoryFinding
 from .inventory_contract_models import GuardAgentInventoryItem as GuardAgentInventoryItem
 from .inventory_contract_models import GuardAgentInventorySnapshot as GuardAgentInventorySnapshot
-from .inventory_contract_models import GuardHarnessSetupStep as GuardHarnessSetupStep
-from .inventory_contract_models import GuardInventoryRiskComponent as GuardInventoryRiskComponent
 from .inventory_contract_models import GuardInventorySource as GuardInventorySource
 from .inventory_contract_models import InventoryCapability as InventoryCapability
 from .inventory_contract_models import InventoryConfidence as InventoryConfidence
@@ -107,9 +79,6 @@ from .inventory_contract_redaction import _safe_artifact_metadata as _safe_artif
 from .inventory_contract_redaction import _safe_finding_text as _safe_finding_text
 from .inventory_contract_redaction import _safe_json as _safe_json
 from .inventory_contract_redaction import _safe_source_detail as _safe_source_detail
-from .inventory_contract_redaction import _sanitize_paths as _sanitize_paths
-from .inventory_contract_redaction import _sanitize_serializer_string as _sanitize_serializer_string
-from .inventory_contract_redaction import classify_endpoint_host as classify_endpoint_host
 from .inventory_contract_redaction import redact_headers as redact_headers
 from .inventory_contract_redaction import redact_local_path as redact_local_path
 from .inventory_contract_redaction import redact_url as redact_url
@@ -118,6 +87,7 @@ from .native_inventory_scan_findings import (
     InventoryScanFindingsUnavailableError,
     native_inventory_scan_findings,
 )
+from .native_inventory_snapshot_digest import native_inventory_snapshot_digest
 from .native_inventory_source_evidence import native_inventory_source_evidence
 from .path_security import path_has_symlink_component as path_has_symlink_component
 from .skill_directory_identity import validated_complete_skill_directory_hash as validated_complete_skill_directory_hash
@@ -435,7 +405,7 @@ def inventory_snapshot_from_detection(
         include_symlinks=include_symlinks,
     )
     sources = (*config_sources, *scanner_sources)
-    snapshot_hash = _inventory_snapshot_content_hash(
+    snapshot_hash = native_inventory_snapshot_digest(
         agent_type=harness,
         items=item_tuple,
         findings=scan_findings,

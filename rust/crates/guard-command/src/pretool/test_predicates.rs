@@ -18,6 +18,9 @@
 //! lists `~/.ssh` before `test` starts, and what the directory holds decides
 //! how many operands `test` receives. `"$P"` and `'$P'` reach `test` as one
 //! word that nothing has expanded.
+//!
+//! `[ -t 0 ]` belongs here too. It asks whether a descriptor the shell
+//! already holds is a terminal, which opens nothing and reads no data.
 
 /// Operators that compare two already-expanded operands. The numeric ones
 /// parse their operands as integers; neither form reads anything.
@@ -39,7 +42,10 @@ pub(super) fn without_negation(arguments: &[String]) -> &[String] {
 pub(super) fn answers_from_operands(arguments: &[String], text: &str) -> bool {
     let shaped = match without_negation(arguments) {
         [word] => plain_operand(word),
-        [predicate, word] => matches!(predicate.as_str(), "-n" | "-z") && plain_operand(word),
+        [predicate, word] => {
+            (matches!(predicate.as_str(), "-n" | "-z") && plain_operand(word))
+                || (predicate == "-t" && file_descriptor(word))
+        }
         [left, operator, right] => {
             COMPARISONS.contains(&operator.as_str()) && plain_operand(left) && plain_operand(right)
         }
@@ -92,6 +98,11 @@ fn expansions_quoted(arguments: &[String], text: &str) -> bool {
     !rest.contains('$')
 }
 
+/// `0`, `1` or `2`: a descriptor number written out, as `-t` takes it.
+fn file_descriptor(word: &str) -> bool {
+    (1..=3).contains(&word.len()) && word.bytes().all(|byte| byte.is_ascii_digit())
+}
+
 /// A word the shell has already expanded to a plain string. A leading `-`
 /// would be read as a predicate rather than as an operand, and a command
 /// substitution runs a command this proof does not stand for.
@@ -142,6 +153,8 @@ mod tests {
             vec!["$COUNT", "-gt", "0"],
             vec!["!", "-z", "$CI"],
             vec!["$CI"],
+            vec!["-t", "0"],
+            vec!["!", "-t", "1"],
         ] {
             assert!(
                 answers_from_operands(&arguments(&words), &format!("test {}", quoted_text(&words))),
@@ -161,6 +174,8 @@ mod tests {
             vec!["~/.ssh/id_*", "=", "x"],
             vec!["/root/?", "=", "x"],
             vec!["-z", "/etc/[a-z]*"],
+            vec!["-t", "$FD"],
+            vec!["-t", "/dev/tty"],
             vec![],
         ] {
             assert!(

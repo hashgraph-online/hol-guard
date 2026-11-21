@@ -114,3 +114,50 @@ def test_bounded_cached_diffs_leave_the_decision_to_the_read_proof(tmp_path: Pat
         return
     assert payload["classification"]["action_class"] == "git read command"
     assert payload["controlling_rule_id"] == "command.git.diff"
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git diff --cached package.json",
+        "git diff --staged src/one.ts package.json",
+        "git diff --cached src",
+        "git diff --cached --stat package.json",
+    ),
+)
+def test_present_pathspec_operands_leave_the_decision_to_the_read_proof(tmp_path: Path, command: str) -> None:
+    home, repository = _repository(tmp_path)
+    (repository / "package.json").write_text("{}\n", encoding="utf-8")
+    (repository / "src").mkdir()
+    (repository / "src" / "one.ts").write_text("export {};\n", encoding="utf-8")
+    payload = inspect_command(command, cwd=repository, home_dir=home)
+
+    # Narrowing the staged diff to files that are already there prints the same
+    # staged content as the `--` form, which the ordinary diff owner decides.
+    assert payload["status"] in {"review", "no_match"}
+    assert payload["classification"]["action_class"] != "git index inspection"
+    assert all(rule["rule_id"] != "command.git.index-inspection" for rule in payload["rules"])
+    if payload["status"] == "no_match":
+        return
+    assert payload["classification"]["action_class"] == "git read command"
+    assert payload["controlling_rule_id"] == "command.git.diff"
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        # A branch is not a file in the working tree, so Git reads it as a
+        # revision and compares the index against another commit.
+        "git diff --cached origin/main",
+        "git diff --cached ../other-project",
+        "git diff --cached missing/report.json",
+        "git diff --cached --output=staged.diff package.json",
+    ),
+)
+def test_unbounded_cached_diff_operands_keep_the_index_owner(tmp_path: Path, command: str) -> None:
+    home, repository = _repository(tmp_path)
+    (repository / "package.json").write_text("{}\n", encoding="utf-8")
+    payload = inspect_command(command, cwd=repository, home_dir=home)
+
+    assert payload["status"] == "review"
+    assert any(rule["rule_id"] == "command.git.index-inspection" for rule in payload["rules"])

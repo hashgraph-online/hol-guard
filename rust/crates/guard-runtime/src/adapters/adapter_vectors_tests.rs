@@ -1,5 +1,5 @@
-//! Replays Gemini, Antigravity, Devin, Grok, Kimi, OpenCode and Cursor detection
-//! vectors recorded from the original Python implementation (see
+//! Replays Gemini, Antigravity, Devin, Grok, Kimi, OpenCode, Cursor and Cline
+//! detection vectors recorded from the original Python implementation (see
 //! `testdata/gemini/record_adapter_vectors.py`).
 //! Fixture trees and expected artifacts, paths and warnings come from Python,
 //! never from Rust output. `<ROOT>` is the fixture root.
@@ -17,6 +17,7 @@ const GROK: &str = include_str!("../../testdata/grok/vectors.json");
 const KIMI: &str = include_str!("../../testdata/kimi/vectors.json");
 const OPENCODE: &str = include_str!("../../testdata/opencode/vectors.json");
 const CURSOR: &str = include_str!("../../testdata/cursor/vectors.json");
+const CLINE: &str = include_str!("../../testdata/cline/vectors.json");
 
 fn check(case: &Value, name: &str, root_text: &str, result: KindResult) -> Result<(), String> {
     if case["refused"] == true {
@@ -114,6 +115,11 @@ fn replays_every_recorded_cursor_detection_case() {
     );
 }
 
+#[test]
+fn replays_every_recorded_cline_detection_case() {
+    replay_all(CLINE, "guard-cline-vectors.v1", crate::cline_detect::detect);
+}
+
 fn valid_request(harness: &str) -> Value {
     let mut valid = json!({"harness": harness, "home": "/nonexistent/home", "workspace": null});
     if harness == "grok" {
@@ -122,6 +128,9 @@ fn valid_request(harness: &str) -> Value {
     }
     if harness == "opencode" || harness == "cursor" {
         valid["configs"] = json!([]);
+    }
+    if harness == "cline" {
+        valid["mcp_settings"] = json!([]);
     }
     if harness == "opencode" {
         valid["skip_verified_mcp_companions"] = json!(true);
@@ -169,6 +178,7 @@ fn malformed_requests_are_refused() {
         ("kimi", crate::kimi_detect::detect),
         ("opencode", crate::opencode_detect::detect),
         ("cursor", crate::cursor_detect::detect),
+        ("cline", crate::cline_detect::detect),
     ] {
         let valid = valid_request(harness);
         assert!(detect(&valid).is_ok(), "{harness}");

@@ -254,7 +254,7 @@ def test_storage_reads_keep_owned_controls_without_claiming_native_authorization
         assert all(item.rule.default_mode == "disabled" for item in observations), command
         # Read capability metadata is not an authenticated network/executable
         # proof, so the independent native review floor must survive.
-        assert reviewed.native_minimum_action == "review", command
+        assert reviewed.payload["minimum_action"] == "review", command
         assert reviewed.evaluation.minimum_action == "review", command
         assert reviewed.payload["explicitly_benign"] is False, command
         assert not reviewed.evaluation.decision_plane.proof_routes, command
@@ -266,7 +266,7 @@ def test_storage_reads_keep_owned_controls_without_claiming_native_authorization
             cwd=tmp_path,
             controls=(("permission", permission.permission_id, "disabled"),),
         )
-        assert disabled.native_minimum_action == "block", command
+        assert disabled.payload["minimum_action"] == "block", command
         assert disabled.evaluation.minimum_action == "block", command
 
 

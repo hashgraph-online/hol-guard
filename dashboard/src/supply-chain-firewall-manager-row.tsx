@@ -1,4 +1,4 @@
-import { Fragment, useCallback } from "react";
+import { useCallback } from "react";
 import {
   HiMiniArrowPath,
   HiMiniBeaker,
@@ -59,6 +59,8 @@ type ManagerRowProps = {
   onRemoveConfirm: (manager: string) => void;
   onRemoveCancel: () => void;
   onOpenDetails: (manager: string) => void;
+  /** Off when the group heading above already names the state. */
+  showStatus?: boolean;
 };
 
 const STATUS_MARK_CLASS: Record<ReturnType<typeof resolveShimStatus>["tone"], string> = {
@@ -70,8 +72,9 @@ const STATUS_MARK_CLASS: Record<ReturnType<typeof resolveShimStatus>["tone"], st
 
 /**
  * One line of the manager roster. Wide screens read it left to right as a
- * ledger entry: which tool, how its shell finds it, then its state and what
- * you can do about it. Phones stack the same three parts.
+ * ledger entry: which tool, one sentence on what is wrong, then what you can
+ * do about it. Phones stack the same three parts. Shell paths and proof
+ * details live in the manager drawer, not on the row.
  */
 export function ManagerRow({
   manager,
@@ -88,6 +91,7 @@ export function ManagerRow({
   onRemoveConfirm,
   onRemoveCancel,
   onOpenDetails,
+  showStatus = true,
 }: ManagerRowProps) {
   const status = resolveShimStatus(shim);
   const installAvailable = actionIsAvailable(actions.install ?? "disabled");
@@ -111,7 +115,7 @@ export function ManagerRow({
   const handleOpenDetails = useCallback(() => onOpenDetails(manager), [onOpenDetails, manager]);
 
   return (
-    <li className="grid min-w-0 gap-x-6 gap-y-2 py-3.5 md:grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] md:items-start">
+    <li data-testid="manager-row" className="grid min-w-0 gap-x-6 gap-y-2 py-3.5 md:grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] md:items-start">
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="flex min-w-0 items-center gap-2">
           <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${STATUS_MARK_CLASS[status.tone]}`} />
@@ -130,41 +134,12 @@ export function ManagerRow({
             />
           )}
         </span>
-        {shim?.detected && <span className="pl-4 text-xs text-slate-500">Detected</span>}
       </div>
 
-      <div className="flex min-w-0 flex-col gap-1 pl-4 md:pl-0">
-        {shim?.path_summary !== null && shim?.path_summary !== undefined && (
-          <p className="break-words font-mono text-[11px] leading-relaxed text-slate-600">
-            Shell path: <PathText value={shim.path_summary} />
-          </p>
-        )}
-        {shim?.last_intercept_proof_at !== null && shim?.last_intercept_proof_at !== undefined ? (
-          <p className="text-xs text-slate-500">
-            Last protection test {formatRelativeTime(shim.last_intercept_proof_at)}
-          </p>
-        ) : shim?.installed ? (
-          <p className="text-xs text-slate-500">No protection test recorded yet</p>
-        ) : null}
-        {shim?.activation_state === "restart_required" && (
-          <p className="text-xs text-slate-600">
-            Guard updated your shell profile. Open a new shell or restart AI apps to activate this shim.
-          </p>
-        )}
-        {shim?.activation_state === "repair_required" && !shim.path_broken && (
-          <p className="text-xs text-slate-600">
-            Guard can add the shim directory to your shell profile automatically, then this manager will be ready after a restart.
-          </p>
-        )}
-        {shim?.path_broken && (
-          <p className="text-xs font-medium text-slate-700">
-            Restart your shell after repair so PATH exports reload.
-          </p>
-        )}
-      </div>
+      <ManagerRowNote shim={shim} />
 
       <div className="flex flex-wrap items-center gap-2 pl-4 md:justify-end md:pl-0 [&_button]:h-11 md:[&_button]:h-9 md:[&_button]:min-h-9">
-        <Tag tone={status.tone}>{status.label}</Tag>
+        {showStatus && <Tag tone={status.tone}>{status.label}</Tag>}
         {isConfirmingRemove ? (
           <>
             <IconActionButton
@@ -189,7 +164,7 @@ export function ManagerRow({
             {showInstall && (
               <IconActionButton
                 showLabel
-                variant="primary"
+                variant="outline"
                 label="Protect"
                 icon={<HiMiniShieldCheck className="h-4 w-4" />}
                 onClick={handleInstall}
@@ -199,7 +174,7 @@ export function ManagerRow({
             {showRepair && (
               <IconActionButton
                 showLabel
-                variant="primary"
+                variant="outline"
                 label="Fix PATH"
                 icon={<HiMiniWrenchScrewdriver className="h-4 w-4" />}
                 onClick={handleRepair}
@@ -235,21 +210,23 @@ export function ManagerRow({
   );
 }
 
-/** Lets a long shell path wrap after each slash instead of mid-name. */
-function PathText({ value }: { value: string }) {
-  const parts = value.split("/");
-  return (
-    <>
-      {parts.map((part, index) => (
-        <Fragment key={index}>
-          {index > 0 ? (
-            <>
-              /<wbr />
-            </>
-          ) : null}
-          {part}
-        </Fragment>
-      ))}
-    </>
-  );
+/** One plain sentence on what is wrong with this tool, or when it was last tested. */
+export function managerRowNote(shim: PackageShimEntry | undefined): string | null {
+  if (!shim?.installed) return null;
+  if (shim.activation_state === "restart_required") {
+    return "Open a new shell, and restart AI apps that run it, to turn this on.";
+  }
+  // The PATH summary names Guard's shim and the real binary, not whichever copy actually runs
+  // first, so the row names the tool and leaves the paths to the drawer.
+  if (shim.integrity === "tampered") return "Guard's shim was changed on disk. Repair it to restore checks.";
+  if (shim.path_broken) return `Another ${shim.manager} runs before Guard's shim, so installs skip Guard.`;
+  if (shim.activation_state === "repair_required") return "Guard's shim folder is not on PATH yet.";
+  if (shim.last_intercept_proof_at) return `Tested ${formatRelativeTime(shim.last_intercept_proof_at)}`;
+  return "Not tested yet. Run a test to confirm installs are checked.";
+}
+
+function ManagerRowNote({ shim }: { shim: PackageShimEntry | undefined }) {
+  const note = managerRowNote(shim);
+  if (note === null) return <span aria-hidden="true" className="hidden md:block" />;
+  return <p className="min-w-0 break-words pl-4 text-sm leading-6 text-slate-600 md:pl-0">{note}</p>;
 }

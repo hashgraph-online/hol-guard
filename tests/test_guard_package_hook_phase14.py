@@ -8,6 +8,7 @@ import io
 import json
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -18,8 +19,8 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 import codex_plugin_scanner.guard.native_supply_chain_eval as evaluator_module
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.package_review_settings import prove_npm_install
@@ -477,7 +478,7 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Claude compatibility hooks must not depend on Node for supply-chain enforcement."""
-    from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+    from codex_plugin_scanner.guard.claude_hook_entry import claude_argv
 
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -508,8 +509,7 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
     monkeypatch.delenv("HOL_GUARD_TEST_PACKAGE_ENTITLEMENT_JSON", raising=False)
     monkeypatch.delenv("HOL_GUARD_TEST_CLOUD_UNREACHABLE_URL", raising=False)
 
-    adapter = ClaudeCodeHarnessAdapter()
-    command = adapter._daemon_hook_command_parts(context)
+    command = claude_argv("daemon", context)
     bridge_config = json.loads(command[-1])
     fallback_command = bridge_config["fallback_command"]
     assert isinstance(fallback_command, list)
@@ -520,6 +520,7 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
         "tool_input": {"command": "npm install minimist@1.2.8"},
         "cwd": str(workspace_dir),
     }
+    started = time.perf_counter()
     result = subprocess.run(
         fallback_command,
         input=json.dumps(event),
@@ -528,15 +529,22 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
         timeout=40,
         check=False,
     )
+    elapsed = time.perf_counter() - started
     payload = json.loads(result.stdout)
+    # A fail-closed answer here reads as a bare `deny` unless the evidence
+    # travels with it. The reason code names the route that produced it and the
+    # wall time separates a refusal the policy reached from one a busy host ran
+    # out of time for, which is the difference between a regression and a
+    # loaded runner.
+    evidence = f"reason_code={payload.get('reason_code')!r} after {elapsed:.2f}s: {payload}"
 
-    assert result.returncode == 0
+    assert result.returncode == 0, evidence
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     # `blocked_request_mode="ask"` opts this surface into prompting, so the
     # install reaches Claude as an `ask` backed by a queued package review.
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-    assert payload["policy_action"] == "review"
-    assert payload["reason_code"] == "native_package_review"
-    assert payload["approval_requests"]
+    assert payload["reason_code"] == "native_package_review", evidence
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask", evidence
+    assert payload["policy_action"] == "review", evidence
+    assert payload["approval_requests"], evidence
     reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "requires review before this package or script command can execute" in reason

@@ -71,6 +71,13 @@ fn policy_store(request: &NativeBashCaptureV1) -> (PolicySnapshotStore, GuardHoo
             execution_environment: Some(request.execution_environment.clone()),
         },
         recording_only: false,
+        local_cli_rules: None,
+        observe_local_cli: false,
+        record_receipt: false,
+        record_activity: false,
+        record_pre_tool_activity: false,
+        structured_output_config: None,
+        containment_sink: None,
     };
     (store, envelope)
 }

@@ -62,6 +62,38 @@ fn type_hides_definition(arguments: &[String]) -> bool {
     type_word || (path_only && !all)
 }
 
+/// A lookup that only prints where a name resolves: `which`, zsh's `whence`,
+/// plus the `type` and `command -v` forms above. None of them runs the program
+/// it names or binds a shell variable.
+///
+/// zsh's `where` is `whence -ca`, and the csh-style output prints the body of a
+/// matching shell function, so it is not modelled here at all. Every caller
+/// then gets the same answer for it, whatever its own question is.
+pub(super) fn safe_path_lookup(executable: &str, arguments: &[String]) -> bool {
+    let letters = match executable {
+        "which" => "as",
+        "whence" => "apv",
+        _ => return safe_lookup_arguments(executable, arguments),
+    };
+    let mut names = 0;
+    let mut options = true;
+    for argument in arguments {
+        if options && argument == "--" {
+            options = false;
+        } else if options && argument.len() > 1 && argument.starts_with('-') {
+            if !argument[1..].chars().all(|letter| letters.contains(letter)) {
+                return false;
+            }
+        } else if plain_name(argument) {
+            options = false;
+            names += 1;
+        } else {
+            return false;
+        }
+    }
+    names > 0
+}
+
 fn plain_name(argument: &str) -> bool {
     !argument.starts_with('-')
         && argument

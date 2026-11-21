@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import importlib.util
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +12,18 @@ from unittest.mock import Mock
 import pytest
 
 from codex_plugin_scanner.guard import native_command_control_windows_lock as lock
+
+PROBE = Path(__file__).resolve().parents[1] / "ci" / "native_runtime" / "probe_installed_command_control_lock.py"
+
+
+def _probe():
+    # Load by path: a test that leaves scripts/ on sys.path makes `ci` resolve to
+    # scripts/ci, which has no native_runtime, for the rest of the worker.
+    spec = importlib.util.spec_from_file_location("probe_installed_command_control_lock", PROBE)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.mark.parametrize(("shared", "expected_flags"), [(True, 1), (False, 3)])
@@ -67,7 +80,7 @@ def test_overlapped_uses_windows_32_bit_dwords_on_every_host() -> None:
 
 
 def test_independent_child_open_shares_delete_with_live_private_creation_handle(tmp_path: Path) -> None:
-    from ci.native_runtime import probe_installed_command_control_lock as probe
+    probe = _probe()
 
     calls = []
 
@@ -86,7 +99,7 @@ def test_independent_child_open_shares_delete_with_live_private_creation_handle(
 
 @pytest.mark.parametrize("invalid", [None, ctypes.c_void_p(-1).value])
 def test_independent_child_open_failure_is_never_reported_as_lock_contention(tmp_path: Path, invalid) -> None:
-    from ci.native_runtime import probe_installed_command_control_lock as probe
+    probe = _probe()
 
     kernel32 = SimpleNamespace(CreateFileW=Mock(return_value=invalid))
     with pytest.raises(RuntimeError, match="child_open_failed"):
@@ -95,7 +108,7 @@ def test_independent_child_open_failure_is_never_reported_as_lock_contention(tmp
 
 @pytest.mark.skipif(os.name != "nt", reason="real Windows LockFileEx process boundary")
 def test_real_windows_authority_leases_against_independent_whole_file_child(tmp_path: Path, monkeypatch) -> None:
-    from ci.native_runtime import probe_installed_command_control_lock as probe
+    probe = _probe()
 
     # Source regression invocation retains the independent child ABI but cannot
     # assert installed provenance; the installed -I probe does that in wheel CI.

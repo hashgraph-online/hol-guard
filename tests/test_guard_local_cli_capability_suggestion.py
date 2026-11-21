@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.approval_gate import update_settings
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -25,7 +25,7 @@ _IDENTITY = UnlistedCliIdentity(
 def _service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[GuardStore, LocalCliApiService]:
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home", staticmethod(lambda: home))
     store = GuardStore(home)
     store.record_local_cli_observation(_IDENTITY, seen_at=_SEEN, surface="cli")
     update_settings(

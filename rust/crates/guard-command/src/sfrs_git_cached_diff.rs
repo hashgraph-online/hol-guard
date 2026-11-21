@@ -6,6 +6,7 @@
 
 use crate::codex_output_env::Ctx;
 use crate::sfrs_shell_tokens::shell_segment_primary_command;
+use std::path::{Path, PathBuf};
 
 const CONTROL_PREFIXES: [&str; 6] = ["!", "elif", "else", "fi", "if", "then"];
 const GIT_GLOBAL_FLAG_OPTIONS: [&str; 6] = [
@@ -204,15 +205,85 @@ pub(crate) fn git_diff_operands(tokens: &[String]) -> Option<Vec<String>> {
     None
 }
 
+/// Without a `--`, git reads an operand that names a revision as a revision and
+/// only falls back to a pathspec when the name is present in the working tree.
+/// The separator form admits no revision but `HEAD`, so the bare form holds to
+/// the same policy the only way git itself tells the two apart: the operand has
+/// to name something that is already there. `git diff --cached origin/main`
+/// stays a review; a name that is both a file and a ref makes git refuse the
+/// command as ambiguous rather than diff the ref.
+fn operand_is_a_present_path(operand: &str, cwd: Option<&Path>) -> bool {
+    if operand.starts_with(':') {
+        // `:!dir` and `:^dir` exclusions. A ref name cannot carry a colon, so
+        // git can only read these as pathspecs.
+        return true;
+    }
+    let Some(cwd) = cwd else {
+        return false;
+    };
+    // `symlink_metadata` rather than `exists`: a broken symlink is still an
+    // entry git sees, and any other error (an unreadable parent) refuses.
+    cwd.join(operand).symlink_metadata().is_ok()
+}
+
+/// The directory git resolves a bare operand against. A leading `-C <dir>`
+/// route moves it there, so an operand that is present beside the shell's own
+/// working directory proves nothing about the repository git actually reads;
+/// a relative route needs that working directory to resolve at all.
+pub(crate) fn cached_diff_operand_directory(
+    tokens: &[String],
+    cwd: Option<&Path>,
+) -> Option<PathBuf> {
+    let route = stripped_git_args(tokens)
+        .filter(|args| args.first().map(String::as_str) == Some("-C"))
+        .and_then(|args| args.get(1).cloned());
+    let Some(route) = route else {
+        return cwd.map(Path::to_path_buf);
+    };
+    let route = PathBuf::from(route);
+    if route.is_absolute() {
+        return Some(route);
+    }
+    cwd.map(|cwd| cwd.join(route))
+}
+
 /// `_cached_diff_operands_are_safe`.
-pub(crate) fn cached_diff_operands_are_safe(args: &[String], ctx: &Ctx) -> bool {
+pub(crate) fn cached_diff_operands_are_safe(
+    args: &[String],
+    cwd: Option<&Path>,
+    ctx: &Ctx,
+) -> bool {
     if args.len() > 20 {
         return false;
     }
     let has_index_flag =
         |items: &[String]| items.iter().any(|item| listed(&INDEX_DIFF_FLAGS, item));
     let Some(separator) = args.iter().position(|arg| arg == "--") else {
-        return has_index_flag(args) && args.iter().all(|arg| listed(&SAFE_CACHED_DIFF_FLAGS, arg));
+        if !has_index_flag(args) {
+            return false;
+        }
+        // `git diff --cached src/app.ts` is the same staged read as the `--`
+        // form; git takes the trailing operands as pathspecs. Hold every
+        // option to the safe list so an output-writing flag such as
+        // `--output=<file>` can never reach the pathspec check.
+        let paths: Vec<String> = args
+            .iter()
+            .filter(|arg| !listed(&SAFE_CACHED_DIFF_FLAGS, arg))
+            .cloned()
+            .collect();
+        if paths.is_empty() {
+            return true;
+        }
+        if paths.len() > 16 || paths.iter().any(|path| path.starts_with('-')) {
+            return false;
+        }
+        if !paths
+            .iter()
+            .all(|path| operand_is_a_present_path(path, cwd))
+        {
+            return false;
+        }
+        return ctx.host.cached_diff_pathspecs(&paths);
     };
     let revisions = &args[..separator];
     if !has_index_flag(revisions) {

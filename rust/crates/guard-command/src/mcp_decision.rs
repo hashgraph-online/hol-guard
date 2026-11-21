@@ -605,7 +605,7 @@ pub fn package_token(command_name: &str, args: &[String]) -> Option<String> {
 
 /// `_split_package_token` (:297-316) — `(name, version)` out of a package
 /// specifier.
-fn split_package_token(value: &str) -> (Option<String>, Option<String>) {
+pub(crate) fn split_package_token(value: &str) -> (Option<String>, Option<String>) {
     let (pip_style_name, pip_style_version) = split_pip_style_specifier(value);
     if pip_style_name.is_some() {
         return (pip_style_name, pip_style_version);
@@ -1323,8 +1323,7 @@ fn evaluate_tool_call_inner(
     );
     let mut pending_decision: Option<Value> = None;
     let mut claim_disposition: Option<ApprovalReuseClaimDisposition> = None;
-    if reuse.should_claim && saved_decision.is_some() {
-        let decision = saved_decision.as_ref().expect("checked is_some");
+    if let Some(decision) = saved_decision.as_ref().filter(|_| reuse.should_claim) {
         let raw_claim_disposition = store.approval_reuse_claim_disposition(decision);
         if let Some("consumed" | "retained") = raw_claim_disposition.as_deref() {
             claim_disposition = match raw_claim_disposition.as_deref() {

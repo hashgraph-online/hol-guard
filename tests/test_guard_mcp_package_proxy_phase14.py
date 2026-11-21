@@ -15,10 +15,10 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_scope_support import package_request_runtime_workspace_scope
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact, package_request_policy_hash
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard.proxy.runtime_mcp import CodexMcpGuardProxy, Run
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import extract_package_intent_request
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_store_support import resolve_policy
 
 pytestmark = [
     pytest.mark.usefixtures("approval_questionnaire_mode"),
@@ -1135,7 +1136,8 @@ def test_phase14_codex_package_inline_approval_is_remembered(
     assert "error" not in second_result["responses"][2]
     assert len(approvals) == 1
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             package_artifact.harness,
             package_artifact.artifact_id,
             artifact_hash=package_digest,

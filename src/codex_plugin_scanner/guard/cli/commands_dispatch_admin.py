@@ -28,19 +28,19 @@ if TYPE_CHECKING:
     )
 
 
-from ..adapters.diagnostic_probes import without_command_probes
 from ..approval_gate_nudge import approval_gate_posture
-from ..daemon.bounded_http import daemon_admission_snapshot
-from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
+from ..command_probes import without_command_probes
+from ..harness_version_api import compatibility_or_unknown
 from ..native_aibom_summaries import NativeAibomSummariesError
-from ..native_runtime_admission import native_resident_admission_snapshot
+from ..native_command_state import CommandStateRefusedError, CommandStateUnavailableError
+from ..native_daemon_peer import load_guard_daemon_endpoint_url
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
 from ..runtime.connector_setup_items import connector_setup_status
 from ..shims import package_shim_dashboard_status
 from ._commands_shared import *
 from .commands_dispatch_trust import build_trust_doctor_payload
 from .commands_parser_helpers import *
-from .doctor_native_runtime import doctor_native_availability
+from .doctor_native_runtime import native_runtime_section
 from .doctor_readiness import doctor_runtime_readiness
 
 
@@ -296,8 +296,33 @@ def _run_guard_doctor_command(
             getattr(args, "json", False),
         )
         return 0
+    if getattr(args, "native", False):
+        # Native state alone, without the rest of doctor's scan. Nothing is
+        # started or repaired here, so support can ask for it at any time.
+        import sys
+
+        from .render import emit_guard_payload
+        from .runtime_posture_command import render_runtime_status
+
+        with without_command_probes():
+            section = native_runtime_section(guard_home)
+        if getattr(args, "json", False):
+            # Both branches honour the caller's stream; a caller that captures
+            # the text report must not have the JSON one land on stdout instead.
+            emit_guard_payload(
+                "doctor",
+                {"generated_at": _now(), "native_runtime": section},
+                True,
+                output_stream=output_stream,
+            )
+        else:
+            # The doctor renderer describes a harness; this payload describes a
+            # runtime, so it is rendered by the command that owns that report.
+            stream = output_stream if output_stream is not None else sys.stdout
+            stream.write(render_runtime_status(section))
+        return 0
     if getattr(args, "harnesses", False):
-        from ..adapters.contracts import HARNESS_CONTRACTS
+        from ..setup_contracts import HARNESS_CONTRACTS
 
         contracts_payload = [
             {
@@ -320,9 +345,12 @@ def _run_guard_doctor_command(
         )
         return 0
     if args.harness:
-        adapter = get_adapter(args.harness)
-        payload: dict[str, object] = adapter.diagnostics(context)
+        harness = resolve_harness(args.harness)
+        payload: dict[str, object] = harness_diagnostics(harness, context)
         payload["runtime_readiness"] = doctor_runtime_readiness(payload)
+        # The native runtime decides the per-event proof states; a failure
+        # reports version_unknown, never a proven state.
+        payload["version_compatibility"] = compatibility_or_unknown(harness, context)
         payload["runtime_detector_registry"] = _runtime_detector_registry_payload(config)
         payload["connect_health"] = _guard_doctor_connect_health_payload(store)
         if args.harness == "codex":
@@ -332,7 +360,7 @@ def _run_guard_doctor_command(
         with without_command_probes():
             for detection in detect_all(context):
                 item = detection.to_dict()
-                diagnostics = get_adapter(detection.harness).diagnostics(context)
+                diagnostics = harness_diagnostics(detection.harness, context)
                 item["setup_status"] = diagnostics.get("setup_status")
                 item["warnings"] = diagnostics.get("warnings", [])
                 item["runtime_readiness"] = doctor_runtime_readiness(diagnostics)
@@ -384,7 +412,11 @@ def _run_guard_doctor_command(
     payload["package_shims"] = package_shims_payload
     command_queue_payload = command_queue_status(store)
     if getattr(args, "repair", False):
-        command_queue_payload["repair"] = repair_command_queue_state(store)
+        try:
+            command_queue_payload["repair"] = repair_command_queue_state(store)
+        except (CommandStateRefusedError, CommandStateUnavailableError) as error:
+            code = error.code if isinstance(error, CommandStateRefusedError) else error.reason
+            command_queue_payload["repair"] = {"repaired": [], "repaired_count": 0, "error": code}
     payload["command_queue"] = command_queue_payload
     if getattr(args, "repair", False):
         # `doctor --repair` and `hol-guard repair` share one engine. Shims and
@@ -409,18 +441,7 @@ def _run_guard_doctor_command(
         )
         native_runtime_repair = repair[0] if repair is not None else None
     with nullcontext() if args.harness else without_command_probes():
-        availability = doctor_native_availability(guard_home)
-    native_runtime: dict[str, object] = {
-        "availability": availability,
-        "admission": native_resident_admission_snapshot(),
-        "daemon_http": daemon_admission_snapshot(),
-    }
-    bundled_runtime = bundled_native_runtime_report()
-    if bundled_runtime is not None:
-        native_runtime["bundled"] = bundled_runtime
-    if native_runtime_repair is not None:
-        native_runtime["repair"] = native_runtime_repair
-    payload["native_runtime"] = native_runtime
+        payload["native_runtime"] = native_runtime_section(guard_home, repair=native_runtime_repair)
     payload["trust"] = build_trust_doctor_payload(store)
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
     from ..native_inventory_url_redaction import NativeInventoryUrlRedactionError
@@ -436,6 +457,11 @@ def _run_guard_doctor_command(
     from ..protection_posture import protection_status_fields
 
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
+    payload["protection_basis"] = "configured_posture_and_hook_registration"
+    payload["protection_health_note"] = (
+        "Live protection health is a separate runtime check. Run `hol-guard approvals list --json` "
+        "to inspect protection_health; trust it for current enforcement health."
+    )
     # A doctor run that reports a broken or partial registration must not also
     # report the posture as though something were applying it. Judge the one
     # harness this run inspected, or every harness the global run detected.

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+  "version": "v1.0.0",
+  "entity": {
+    "type": "organisation",
+    "role": "maintainer",
+    "name": "Hashgraph Online",
+    "email": "security@hol.org",
+    "description": "Hashgraph Online maintains HOL Guard.",
+    "webpageUrl": {
+      "url": "https://github.com/hashgraph-online/hol-guard"
+    }
+  },
+  "projects": [
+    {
+      "guid": "hol-guard",
+      "name": "HOL Guard",
+      "description": "HOL Guard reviews AI agent actions before they run, including shell commands, file access, package installs and MCP tool calls. It allows, blocks or requests approval according to policy.",
+      "webpageUrl": {
+        "url": "https://github.com/hashgraph-online/hol-guard"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/hashgraph-online/hol-guard"
+      },
+      "licenses": ["spdx:Apache-2.0"],
+      "tags": ["security", "developer-tools", "ai", "python", "rust"]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "github-sponsors",
+        "type": "payment-provider",
+        "address": "https://github.com/sponsors/hashgraph-online"
+      }
+    ],
+    "plans": [
+      {
+        "guid": "stability-and-harness-support",
+        "status": "active",
+        "name": "HOL Guard stability and harness support",
+        "description": "Roadmap: first, reproduce reported bugs, add regression tests and improve approval reuse and recovery. Next, test hook delivery, tool calls, approvals, retries and failure handling across supported agent harnesses, and document coverage gaps. Then, strengthen installation, upgrade and runtime checks on macOS, Linux and Windows, and update setup and troubleshooting docs. Priorities follow reported bugs and integration needs.",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "other",
+        "channels": ["github-sponsors"]
+      }
+    ]
+  }
+}

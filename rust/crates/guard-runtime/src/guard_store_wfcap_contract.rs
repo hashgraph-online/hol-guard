@@ -224,6 +224,21 @@ fn claim_signature(claim: &Value, key: &[u8], key_id: &str) -> WfResult<String> 
     Ok(hmac_hex(key, &frame("claim-envelope", &authenticated)))
 }
 
+/// `sign_workflow_capability`: the signed envelope for a validated claim.
+///
+/// The resident owns the capability key, so no caller supplies a signature it
+/// produced itself.
+pub(crate) fn sign_claim(claim: &Value, key: &[u8], key_id: &str) -> WfResult<Value> {
+    let signature = claim_signature(claim, key, key_id)?;
+    Ok(serde_json::json!({
+        "envelope_schema": CLAIM_ENVELOPE_SCHEMA,
+        "algorithm": ALGORITHM,
+        "claim": claim.clone(),
+        "key_id": key_id,
+        "signature": signature,
+    }))
+}
+
 /// `verify_workflow_capability_signature` on a decoded envelope.
 pub(crate) fn verify_claim_signature(signed: &Value, key: &[u8], key_id: &str) -> WfResult<()> {
     validate_key(key)?;

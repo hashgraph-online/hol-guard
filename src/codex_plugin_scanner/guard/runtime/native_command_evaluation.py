@@ -27,11 +27,6 @@ class NativeCommandEvaluation:
     payload: dict[str, object]
     snapshot: ExtensionControlRuntimeSnapshot
 
-    @property
-    def native_minimum_action(self) -> str:
-        """Native classification before authenticated host policy proofs."""
-        return str(self.payload["minimum_action"])
-
 
 @dataclass(frozen=True, slots=True, repr=False)
 class NativeCommandReview:
@@ -57,6 +52,7 @@ def native_command_review(
     timeout_seconds: float = 0.5,
     record_health: bool = True,
     admit_unenrolled: bool = False,
+    timeout_ceiling_seconds: float = 1.0,
 ) -> NativeCommandReview | None:
     """The resident's review of ``command``, or None without a usable native result.
 
@@ -89,6 +85,7 @@ def native_command_review(
         timeout_seconds=timeout_seconds,
         record_health=record_health,
         extension_evidence=True,
+        timeout_ceiling_seconds=timeout_ceiling_seconds,
     )
     if native is None:
         return None
@@ -148,6 +145,7 @@ def review_command_native(
     timeout_seconds: float = 0.5,
     record_health: bool = True,
     admit_unenrolled: bool = False,
+    timeout_ceiling_seconds: float = 1.0,
 ) -> NativeCommandEvaluation | None:
     """Return a bound native projection, or None without a usable native result."""
     review = native_command_review(
@@ -160,6 +158,7 @@ def review_command_native(
         timeout_seconds=timeout_seconds,
         record_health=record_health,
         admit_unenrolled=admit_unenrolled,
+        timeout_ceiling_seconds=timeout_ceiling_seconds,
     )
     if review is None:
         return None

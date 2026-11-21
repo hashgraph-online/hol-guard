@@ -89,7 +89,7 @@ def test_cisco_policy_query_sends_the_configuration_and_not_a_verdict(
 
 
 def test_sensitive_read_facts_send_the_configuration_and_not_a_verdict() -> None:
-    from codex_plugin_scanner.guard.native_mcp_sensitive_read import _config_facts
+    from tests.native_mcp_sensitive_read_client import _config_facts
 
     config = _config(risk_actions={"local_secret_read": "block"})
     artifact = GuardArtifact(

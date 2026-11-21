@@ -27,6 +27,8 @@ const DELIVERY_KEYS: [&str; 14] = [
     "extensionProjectionDigest",
     "lastKnownGoodBundleHash",
 ];
+pub(crate) const GENERIC_IDENTITY_KEYS: [&str; 4] =
+    ["workspaceId", "deviceId", "bundleVersion", "bundleHash"];
 const BAD: &str = "invalid_policy_bundle_delivery";
 const MISMATCH: &str = "policy_bundle_delivery_mismatch";
 
@@ -191,7 +193,7 @@ pub(crate) fn validate_managed(
     }
 }
 
-fn increment(token: &str) -> Option<Value> {
+pub(crate) fn increment(token: &str) -> Option<Value> {
     let next = match token.parse::<i128>() {
         Ok(number) => (number + 1).to_string(),
         Err(_) if token.bytes().all(|b| b.is_ascii_digit()) => {
@@ -266,8 +268,15 @@ pub fn ack_payload(request: &AckRequest) -> Result<Obj, String> {
     {
         return legacy_ack(request);
     }
-    let (Some(delivery), Some(revision), Some(digest)) = (
-        request.delivery,
+    let Some(delivery) = request.delivery else {
+        if has_extension_semantics(request.bundle) {
+            return Ok(Obj::new());
+        }
+        // The generic acknowledgement is reporting only: a bundle Cloud cannot
+        // acknowledge this way still activates, as it did before the shape existed.
+        return Ok(generic_ack(request).unwrap_or_default());
+    };
+    let (Some(revision), Some(digest)) = (
         request.applied_revision.filter(|v| !v.is_null()),
         request.applied_digest.filter(|v| !v.is_null()),
     ) else {
@@ -280,10 +289,65 @@ pub fn ack_payload(request: &AckRequest) -> Result<Obj, String> {
             .ok_or("invalid_policy_bundle_acknowledgement")?;
         candidate.insert(field.to_owned(), value.clone());
     }
+    candidate.insert(
+        "appliedExtensionAuthorityRevision".to_owned(),
+        revision.clone(),
+    );
+    candidate.insert(
+        "appliedEffectiveProjectionDigest".to_owned(),
+        digest.clone(),
+    );
+    sequenced_ack(request, candidate, &DELIVERY_KEYS)
+}
+
+/// A v2 bundle without Extension semantics has no managed delivery. Its
+/// acknowledgement binds the device to the signed bundle alone, the shape
+/// Cloud accepts as the generic v2 acknowledgement.
+fn generic_ack(request: &AckRequest) -> Result<Obj, String> {
+    let mut candidate = Obj::new();
+    for field in GENERIC_IDENTITY_KEYS {
+        let value = if field == "deviceId" {
+            Value::String(request.device_id.to_owned())
+        } else {
+            request
+                .bundle
+                .get(field)
+                .cloned()
+                .ok_or("invalid_policy_bundle_acknowledgement")?
+        };
+        candidate.insert(field.to_owned(), value);
+    }
+    sequenced_ack(request, candidate, &GENERIC_IDENTITY_KEYS)
+}
+
+/// The status that follows `previous` for the same identity. An applied
+/// acknowledgement stays applied. Cloud moves a failed or offline generic
+/// acknowledgement back only through received and validated, one step per
+/// acknowledgement, so a bundle that failed and now validates climbs back to
+/// applied over the next syncs instead of being refused.
+///
+/// A managed acknowledgement does not climb: Guard reports a managed failure
+/// by retracting it in the legacy shape, so a stored managed failure for the
+/// same delivery keeps the transition check that refuses it.
+fn next_status(requested: &str, previous: Option<&str>, generic: bool) -> &'static str {
+    match previous {
+        Some("applied") => "applied",
+        Some("failed" | "offline") if generic => "received",
+        Some("received") if generic => "validated",
+        _ if requested == "applied" => "applied",
+        _ => "validated",
+    }
+}
+
+/// Continue the sequence of a previous acknowledgement for the same identity,
+/// or start one.
+fn sequenced_ack(request: &AckRequest, candidate: Obj, identity: &[&str]) -> Result<Obj, String> {
+    let generic = !candidate.contains_key("deliveryId");
     let matching = request.previous.filter(|previous| {
-        DELIVERY_KEYS
-            .iter()
-            .all(|field| py_eq_opt(previous.get(*field), candidate.get(*field)))
+        previous.contains_key("deliveryId") != generic
+            && identity
+                .iter()
+                .all(|field| py_eq_opt(previous.get(*field), candidate.get(*field)))
     });
     let previous_sequence = matching
         .and_then(|previous| previous.get("sequence"))
@@ -292,30 +356,20 @@ pub fn ack_payload(request: &AckRequest) -> Result<Obj, String> {
         Some(token) => increment(token).ok_or("invalid_policy_bundle_acknowledgement")?,
         None => Value::from(1),
     };
-    let applied = request.status == "applied"
-        || matching.is_some_and(|previous| {
-            previous.get("status").and_then(Value::as_str) == Some("applied")
-        });
+    let status = next_status(
+        request.status,
+        matching.and_then(|previous| previous.get("status").and_then(Value::as_str)),
+        generic,
+    );
     let observed =
         normalized_observed_at(request.synced_at).ok_or("invalid_policy_bundle_acknowledgement")?;
     let mut ack = candidate;
-    ack.insert(
-        "appliedExtensionAuthorityRevision".to_owned(),
-        revision.clone(),
-    );
-    ack.insert(
-        "appliedEffectiveProjectionDigest".to_owned(),
-        digest.clone(),
-    );
     ack.insert(
         "contractVersion".to_owned(),
         Value::String(CONTRACT.to_owned()),
     );
     ack.insert("sequence".to_owned(), sequence);
-    ack.insert(
-        "status".to_owned(),
-        Value::String(if applied { "applied" } else { "validated" }.to_owned()),
-    );
+    ack.insert("status".to_owned(), Value::String(status.to_owned()));
     ack.insert("observedAt".to_owned(), Value::String(observed));
     ack.insert("errorCode".to_owned(), Value::Null);
     validate_ack(&ack, matching).map_err(str::to_owned)?;
@@ -352,6 +406,29 @@ fn base<'a>(
 }
 
 /// `effective_policy_bundle_acknowledgement`.
+/// A stored generic acknowledgement that has not reached applied, kept while
+/// Guard enforces a bundle without Extension semantics again: a bundle that
+/// failed validation and now passes, for example from last-good. Guard keeps
+/// climbing it toward applied instead of reporting the failure forever.
+///
+/// Only an acknowledgement of this same bundle on this device climbs: a
+/// stored failure of another bundle (cached bundle B fails while Guard falls
+/// back to last-good A) is kept as reported, never restarted for A.
+fn recovering(effective: &Obj, stored: &Obj, device_id: &str) -> bool {
+    !stored.contains_key("deliveryId")
+        && stored.get("contractVersion").and_then(Value::as_str) == Some(CONTRACT)
+        && matches!(
+            stored.get("status").and_then(Value::as_str),
+            Some("failed" | "offline" | "received" | "validated")
+        )
+        && stored.get("deviceId").and_then(Value::as_str) == Some(device_id)
+        && GENERIC_IDENTITY_KEYS
+            .iter()
+            .filter(|field| **field != "deviceId")
+            .all(|field| py_eq_opt(stored.get(*field), effective.get(*field)))
+        && !has_extension_semantics(effective)
+}
+
 pub(crate) fn effective_ack(request: &EffectiveRequest) -> Result<Obj, String> {
     if request
         .effective
@@ -368,6 +445,12 @@ pub(crate) fn effective_ack(request: &EffectiveRequest) -> Result<Obj, String> {
         )
     });
     if !activating {
+        if let Some(stored) = request
+            .stored
+            .filter(|stored| recovering(request.effective, stored, request.device_id))
+        {
+            return ack_payload(&base(request, request.device_id, Some(stored), None));
+        }
         return Ok(request.stored.cloned().unwrap_or_default());
     }
     let delivered = request

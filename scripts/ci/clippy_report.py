@@ -31,7 +31,7 @@ COMMAND = [
     "warnings",
 ]
 SCHEMA = "hol-guard.clippy-report.v1"
-TOOLCHAIN = "1.88.0"
+TOOLCHAIN = "1.89.0"
 REPORT = "clippy.jsonl"
 
 

@@ -11,8 +11,15 @@
 //!   configuration and re-applies the managed policy, returning the fields
 //!   that composition decides. Without a payload it only re-applies the
 //!   managed policy.
+//! - `harness_postures` ranks each configured per-harness override against
+//!   the machine-wide baseline and derives the mode and security level an
+//!   override implies, so no caller recalculates a posture.
+//! - `watch_auto_revert_deadlines` dates when each Watch posture reverts:
+//!   the machine-wide one and each harness override, from its stored stamp
+//!   plus `watch_auto_revert_hours`. The caller compares its own clock, so
+//!   the answer stays a function of the configuration alone.
 //!
-//! Both are pure functions of the request; nothing on disk is read.
+//! All four are pure functions of the request; nothing on disk is read.
 
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -20,12 +27,13 @@ use std::io::Read;
 use guard_command::action_lattice::normalize_guard_action;
 use guard_command::effect_decision::GuardAction;
 use guard_command::local_supply_chain::VALID_RISK_ACTION_KEYS;
-use guard_contracts::RiskActionConfigV1;
+use guard_contracts::{HarnessPostureConfigV1, RiskActionConfigV1};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 use crate::guard_config_coerce as coerce;
 use crate::guard_config_harness as harness;
+use crate::guard_config_iso::iso_epoch_micros;
 use crate::guard_config_managed::{apply_managed_policy, ManagedInput};
 use crate::package_authority_config as base;
 use crate::risk_action::configured_risk_action;
@@ -78,6 +86,22 @@ struct Request {
     /// `overlay`: the managed policy the loaded configuration carries.
     #[serde(default)]
     managed: Option<ManagedInput>,
+    /// `harness_postures`: the baseline and the configured overrides.
+    #[serde(default)]
+    postures: Option<HarnessPostureConfigV1>,
+    /// `watch_auto_revert_deadlines`: the Watch postures and their stamps.
+    #[serde(default)]
+    watch: Option<WatchInput>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WatchInput {
+    auto_revert_hours: i64,
+    protection_posture: String,
+    watch_entered_at: Option<String>,
+    harness_postures: BTreeMap<String, String>,
+    harness_watch_entered_at: BTreeMap<String, String>,
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -118,8 +142,56 @@ fn resolve(request: &Request) -> Result<Value, &'static str> {
                 "config": overlay(config, request.payload.as_ref(), request.managed.as_ref()),
             }))
         }
+        "harness_postures" => {
+            let facts = request.postures.as_ref().ok_or(INVALID)?;
+            Ok(harness_postures(facts))
+        }
+        "watch_auto_revert_deadlines" => {
+            let watch = request.watch.as_ref().ok_or(INVALID)?;
+            Ok(watch_auto_revert_deadlines(watch))
+        }
         _ => Err(INVALID),
     }
+}
+
+/// The posture governing every registered harness, the baseline it is
+/// measured against, and the configuration fields each override implies.
+fn harness_postures(facts: &HarnessPostureConfigV1) -> Value {
+    let baseline = harness::global_effective(&facts.protection_posture, &facts.mode);
+    json!({
+        "baseline": baseline,
+        "effective": harness::effective_map(baseline, &facts.harness_postures),
+        "views": harness::posture_views(baseline, &facts.harness_postures, &facts.security_level),
+    })
+}
+
+/// When the machine-wide Watch posture and each harness Watch override
+/// reverts: its stored stamp plus the auto-revert window, in microseconds
+/// since the Unix epoch. A zero or negative window never reverts, and neither
+/// does a stamp that does not parse or a deadline past the representable
+/// range.
+fn watch_auto_revert_deadlines(watch: &WatchInput) -> Value {
+    let window = watch.auto_revert_hours.checked_mul(3_600_000_000);
+    let deadline = |posture: &str, stamp: Option<&String>| {
+        if posture != "watch" {
+            return None;
+        }
+        let window = window.filter(|window| *window > 0)?;
+        let entered = stamp.map(String::as_str).and_then(iso_epoch_micros)?;
+        entered.checked_add(window)
+    };
+    let harnesses: BTreeMap<&String, i64> = watch
+        .harness_postures
+        .iter()
+        .filter_map(|(harness, posture)| {
+            let stamp = watch.harness_watch_entered_at.get(harness);
+            Some((harness, deadline(posture, stamp)?))
+        })
+        .collect();
+    json!({
+        "protection_posture": deadline(&watch.protection_posture, watch.watch_entered_at.as_ref()),
+        "harnesses": harnesses,
+    })
 }
 
 /// The action every risk class resolves to for `harness`. A class nothing

@@ -25,8 +25,8 @@ from codex_plugin_scanner.guard.workflow_capabilities import (
     WORKFLOW_CAPABILITY_RECEIPT_ENVELOPE_SCHEMA,
     SignedWorkflowCapability,
     SignedWorkflowCapabilityReceipt,
+    WorkflowCapabilityClaim,
     WorkflowCapabilityError,
-    sign_workflow_capability,
 )
 from tests.test_guard_workflow_capabilities import (
     _KEY,
@@ -37,6 +37,7 @@ from tests.test_guard_workflow_capabilities import (
     _now,
     _store,
 )
+from tests.workflow_capability_frame_support import sign_workflow_capability
 
 
 @pytest.fixture(autouse=True)
@@ -97,20 +98,18 @@ def test_claim_and_revoke_race_is_serializable(tmp_path) -> None:
 def test_store_rejects_every_unauthorized_issue_without_persistence(tmp_path) -> None:
     store = _store(tmp_path)
     base = _claim(capability_id="wc-issue-base")
-    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_capability"):
+    with pytest.raises(WorkflowCapabilityError, match="invalid_capability_claim"):
         store.issue_workflow_capability(
-            cast(SignedWorkflowCapability, cast(object, base)),
+            cast(WorkflowCapabilityClaim, object()),
             approval_provenance_id=base.approval_provenance_id,
         )
-    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_capability"):
+    # The resident holds the capability key, so a caller never hands a signed
+    # envelope back to be issued: it is not a claim and never reaches the key.
+    with pytest.raises(WorkflowCapabilityError, match="invalid_capability_claim"):
         store.issue_workflow_capability(
-            cast(SignedWorkflowCapability, object()),
+            cast(WorkflowCapabilityClaim, cast(object, sign_workflow_capability(base, key=_KEY, key_id=_KEY_ID))),
             approval_provenance_id=base.approval_provenance_id,
         )
-
-    wrong_key = sign_workflow_capability(base, key=b"x" * 32, key_id=_KEY_ID)
-    with pytest.raises(WorkflowCapabilityError, match="signature_invalid"):
-        store.issue_workflow_capability(wrong_key, approval_provenance_id=base.approval_provenance_id)
     future = _claim(capability_id="wc-issue-future", not_before=_now(10))
     with pytest.raises(WorkflowCapabilityError, match="not_yet_valid"):
         _issue(store, future)
@@ -124,12 +123,6 @@ def test_store_rejects_every_unauthorized_issue_without_persistence(tmp_path) ->
         _issue(store, expired)
     with pytest.raises(WorkflowCapabilityError, match="approval_binding_mismatch"):
         _issue(store, base, approval_provenance_id="provenance-drift")
-    tampered = replace(
-        sign_workflow_capability(base, key=_KEY, key_id=_KEY_ID),
-        signature="0" * 64,
-    )
-    with pytest.raises(WorkflowCapabilityError, match="signature_invalid"):
-        store.issue_workflow_capability(tampered, approval_provenance_id=base.approval_provenance_id)
 
     with sqlite3.connect(store.path) as connection:
         capability_count = connection.execute("select count(*) from guard_workflow_capabilities").fetchone()

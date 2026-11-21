@@ -255,13 +255,24 @@ def _shown_wrapper(wrapper: str) -> re.Pattern[str]:
     return re.compile("".join(pattern))
 
 
+def shell_script(command: str) -> str:
+    """The script Codex's shell envelope carries, or the command itself.
+
+    Codex on Windows runs a command through PowerShell or Git Bash and shows
+    that envelope. On POSIX, and in every other lane, the transcript shows the
+    command the model wrote on its own. A judge that reads the command against
+    something the catalog names has to compare the script either way.
+    """
+    envelope = _SHELL.fullmatch(command)
+    return envelope.group(1) if envelope else command
+
+
 def _runs(command: object, shown: re.Pattern[str]) -> bool:
     """Whether a transcript command is exactly the wrapper, alone or inside its shell envelope."""
     if not isinstance(command, str):
         return False
-    envelope = _SHELL.fullmatch(command)
     # Codex shows the command's backslashes escaped.
-    inner = (envelope.group(1) if envelope else command).replace("\\\\", "\\")
+    inner = shell_script(command).replace("\\\\", "\\")
     return shown.fullmatch(inner) is not None
 
 

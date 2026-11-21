@@ -87,31 +87,3 @@ def test_omp_receipt_is_bound_to_fresh_probe_id():
     assert observation is not None
     assert observation["native_receipt"]["harness"] == "omp"
     assert observation["native_receipt"]["decision_id"] == receipt["decision_id"]
-
-
-@pytest.mark.parametrize("layout", ["legacy", "current", "partial", "foreign_path"])
-def test_observation_package_identity_requires_complete_new_roles_and_preserves_legacy(monkeypatch, layout):
-    from pathlib import Path
-
-    from codex_plugin_scanner.guard import codex_hook_runtime_trust as trust
-    from codex_plugin_scanner.guard.adapters.codex import _hook_packaged_file_paths
-
-    paths = dict(_hook_packaged_file_paths())
-    assert {"hook_probe", "native_receipt"} <= paths.keys()
-    if layout == "legacy":
-        paths.pop("hook_probe")
-        paths.pop("native_receipt")
-    elif layout == "partial":
-        paths.pop("native_receipt")
-    elif layout == "foreign_path":
-        paths["hook_probe"] = Path("/untrusted/probe.py")
-    manifest = {"packaged_files": [{"role": role, "path": str(path)} for role, path in paths.items()]}
-    # File identity validation is covered by the authenticated install suites;
-    # this fixture isolates legacy/new dependency-set and path admission.
-    monkeypatch.setattr(trust, "verify_regular_file_identity", lambda _identity: None)
-    if layout in {"partial", "foreign_path"}:
-        with pytest.raises(ValueError):
-            identities = trust._verified_packaged_files(manifest)
-            trust._verify_transport(identities, manifest)
-    else:
-        assert set(trust._verified_packaged_files(manifest)) == set(paths)

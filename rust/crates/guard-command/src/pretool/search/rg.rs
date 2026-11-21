@@ -6,18 +6,17 @@ use super::{
     ReadContext, SearchValueRole,
 };
 
-pub(in crate::pretool) fn safe_rg_stdin_arguments(arguments: &[String]) -> bool {
-    safe_rg_arguments_inner(
-        arguments,
-        crate::pretool::PathContext::default(),
-        true,
-        true,
-        true,
-    )
-}
-
-pub(super) fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
-    safe_rg_arguments_inner(arguments, context, false, true, true)
+/// `literal_words` are the segment's quoted words, as
+/// `listing_reads::literal_words` reads them.
+pub(in crate::pretool) fn safe_rg_stdin_arguments(
+    arguments: &[String],
+    literal_words: &[String],
+) -> bool {
+    let context = crate::pretool::PathContext {
+        literal_words,
+        ..Default::default()
+    };
+    safe_rg_arguments_inner(arguments, context, true, true, true)
 }
 
 /// An `rg` segment inside its command. A missing operand is proven only
@@ -36,17 +35,28 @@ pub(super) fn safe_rg_segment(
     // `git diff | rg PATTERN` in a repository whose `.gitignore` carries a
     // `!.env.example` rule went to review for a search that never touches
     // the tree.
+    let words = crate::pretool::listing_reads::literal_words(&segment.text);
+    let context = ReadContext {
+        literal_words: &words,
+        ..context
+    };
     if segment.pipeline_index > 0
         && config_cannot_add_arguments(&segment.arguments, context)
-        && safe_rg_stdin_arguments(&segment.arguments)
+        && safe_rg_stdin_arguments(&segment.arguments, &words)
     {
         return true;
     }
-    let absent = model
-        .segments
-        .iter()
-        .filter(|other| other.span != segment.span)
-        .all(|other| super::grep::creates_nothing(other, true));
+    // The absent-root proof reads a root as the command spells it. Windows
+    // drops the backslashes of an unquoted `C:\work\missing` before `rg`
+    // runs, so the search would open the drive-relative `C:workmissing` the
+    // proof never measured; the drive screen keeps the proof to spellings
+    // that reach the program intact.
+    let absent = crate::pretool::directory_targets::drive_targets_quoted(segment)
+        && model
+            .segments
+            .iter()
+            .filter(|other| other.span != segment.span)
+            .all(super::grep::creates_nothing);
     safe_rg_arguments_inner(&segment.arguments, context, false, true, absent)
 }
 
@@ -340,10 +350,20 @@ fn rg_arguments_pass(
             // pass rather than refused here: `--files` may be spelled after
             // its operands, and what it leaves is a listing, which owes the
             // proof a listing owes.
+            //
+            // A root that is not there walks nothing: `rg` prints its own
+            // "No such file or directory" and exits, the way `ls` of the
+            // same path does. Agents pass a fixed list of roots
+            // (`rg PATTERN src tests docs`) whether or not each one exists,
+            // and probe for an optional directory the same way. The
+            // listing proof screens the nearest existing ancestor and every
+            // missing name, and `allow_absent` keeps it to commands whose
+            // other steps cannot put a file, directory or link there first.
             if unsafe_search_value(SearchValueRole::Path, argument, context)
                 && !tree::rg_root_inside_cwd(argument, context)
                 && !sibling::rg_sibling_repository_root(argument, context)
                 && !sibling::named_path(argument, context, allow_absent)
+                && !proven_absent_root(argument, context, allow_absent)
                 && !tree::safe_recursive_search_target(argument, context)
                 && !tree::safe_literal_bracket_search_target(argument, context)
                 && (!argument.contains(['*', '?', '['])
@@ -395,7 +415,10 @@ fn rg_arguments_pass(
                 && names_only_globs_proven(arguments, &unproven_roots, context)))
         && (!stdin_only || pattern_supplied)
         && (stdin_only || config_disabled || context.ripgrep_config_absent)
-        && (stdin_only || paths_only || !prove_roots || rg_whitelist::roots_proven(&roots, context))
+        && (stdin_only
+            || paths_only
+            || !prove_roots
+            || rg_whitelist::roots_proven(&roots, &narrowing_globs(arguments), context))
         && (unscreened_globs.is_empty()
             || super::super::search_scope::rg_glob_scope_proven(
                 scope,
@@ -439,15 +462,42 @@ fn names_only_globs_proven(arguments: &[String], roots: &[&str], context: ReadCo
     )
 }
 
-/// Every `-g`, `--glob` or `--iglob` value that selects rather than excludes.
+/// A root that is not there, where no other step of the command could put
+/// one there first. The filesystem screen runs only when `allow_absent`
+/// holds, so a command that creates the root pays nothing for the check.
+fn proven_absent_root(value: &str, context: ReadContext<'_>, allow_absent: bool) -> bool {
+    allow_absent && super::grep::absent_target(value, context)
+}
+
+/// The inclusions that may narrow which re-included entries a search can
+/// reach, empty when they cannot be read that way.
 ///
-/// A short cluster ends at its first option that takes a value, which is the
-/// rest of the argument or the next one. Every other long option that takes
-/// a value consumes the next argument too, as `rg` parses it, so a `--`
-/// spelled as that value (`--context-separator --`) never ends the scan
-/// before a later `-g`.
+/// `--iglob` folds case and the scope filter's matcher does not, so a search
+/// carrying one narrows nothing. Exclusions only take files away, so leaving
+/// them out keeps the modeled selection at least as wide as ripgrep's.
+fn narrowing_globs(arguments: &[String]) -> Vec<&str> {
+    // Parse option values using the same rules as the inclusions. A bare
+    // `--` may itself be the value of `--context-separator` rather than
+    // ending the option list; an `--iglob` after it is still case-blind.
+    let (globs, case_blind) = parsed_inclusion_globs(arguments);
+    if case_blind {
+        Vec::new()
+    } else {
+        globs
+    }
+}
+
+/// Every `-g`, `--glob` or `--iglob` value that selects rather than excludes.
 fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
+    parsed_inclusion_globs(arguments).0
+}
+
+/// Share the option/value scan between the inclusion list and the
+/// case-blind guard. A short cluster ends at its first value-taking option;
+/// long options consume a separate value when no `=` value was attached.
+fn parsed_inclusion_globs(arguments: &[String]) -> (Vec<&str>, bool) {
     let mut globs = Vec::new();
+    let mut case_blind = false;
     let mut arguments = arguments.iter();
     while let Some(argument) = arguments.next() {
         if argument == "--" {
@@ -455,9 +505,17 @@ fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
         }
         let value = if let Some(long) = argument.strip_prefix("--") {
             match long.split_once('=') {
-                Some(("glob" | "iglob", value)) => Some(value),
+                Some(("glob", value)) => Some(value),
+                Some(("iglob", value)) => {
+                    case_blind = true;
+                    Some(value)
+                }
                 Some(_) => None,
-                None if matches!(long, "glob" | "iglob") => arguments.next().map(String::as_str),
+                None if long == "glob" => arguments.next().map(String::as_str),
+                None if long == "iglob" => {
+                    case_blind = true;
+                    arguments.next().map(String::as_str)
+                }
                 None if options::rg_value_role(argument).is_some() => {
                     arguments.next();
                     None
@@ -487,15 +545,199 @@ fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
             globs.push(value);
         }
     }
-    globs
+    (globs, case_blind)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{config_option_present, safe_rg_stdin_arguments};
+    use super::{config_option_present, safe_rg_segment, safe_rg_stdin_arguments};
 
     fn arguments(line: &str) -> Vec<String> {
         line.split_whitespace().map(str::to_owned).collect()
+    }
+
+    /// A root with nothing at it opens no file and walks no directory, so
+    /// `rg` reads it the way `grep -r` and `ls` already read the same path.
+    /// The screens stay: a missing name inside a credential location is
+    /// still refused, and a step that could create the root first takes the
+    /// proof away.
+    #[test]
+    fn a_missing_root_is_proven_unless_a_step_could_create_it() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/rg-absent-roots")
+            .join(std::process::id().to_string());
+        let home = root.join("home");
+        let repo = home.join("work/app");
+        std::fs::create_dir_all(repo.join("src")).unwrap();
+        std::fs::create_dir_all(home.join(".ssh")).unwrap();
+        std::fs::write(repo.join("src/index.ts"), "export const x = 1;\n").unwrap();
+        let (home, repo) = (
+            crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+            crate::runtime_read_paths::canonicalize_text(&repo).unwrap(),
+        );
+        let context = crate::pretool::PathContext {
+            home_dir: home.to_str(),
+            cwd: repo.to_str(),
+            ripgrep_config_absent: true,
+            gem_config_absent: true,
+            http_config_absent: false,
+            openssl_config_absent: false,
+            ..Default::default()
+        };
+        let r = repo.display();
+        let h = home.display();
+        for (command, allowed) in [
+            (format!("rg -ln x {r}/src"), true),
+            // The operand is not there: the search prints an error and
+            // exits, alone as much as beside a real root.
+            (format!("rg -ln x {r}/missing"), true),
+            (format!("rg -ln x {r}/src {r}/missing"), true),
+            (format!("rg --files {r}/missing"), true),
+            (format!("rg -ln x {r}/missing || echo none"), true),
+            (format!("rg -ln x {r}/missing | head -5"), true),
+            // A missing name may not spell a credential location, and the
+            // ancestor it hangs from must be one a listing could name.
+            (format!("rg -ln x {h}/.ssh/missing"), false),
+            (format!("rg -ln x {r}/missing/id_rsa"), false),
+            (format!("rg -ln x {r}/missing/.env"), false),
+            // A peer step that could put a file, directory or link at the
+            // root takes the proof away: `rg` walks whatever appears there.
+            (
+                format!("mkdir -p {r}/missing && rg -ln x {r}/missing"),
+                false,
+            ),
+            (format!("touch {r}/missing && rg -n x {r}/missing"), false),
+            (
+                format!("ln -s {r}/src {r}/missing && rg -ln x {r}/missing"),
+                false,
+            ),
+            (format!("rg -ln x {r}/missing; mkdir -p {r}/missing"), false),
+        ] {
+            let model = crate::parse_command(&crate::CommandModelRequestV1 {
+                command: command.clone(),
+                dialect: "posix".to_owned(),
+                transport: "shell_string".to_owned(),
+                extraction_provenance: "guard-shell".to_owned(),
+            })
+            .unwrap();
+            let Some(segment) = model
+                .segments
+                .iter()
+                .find(|segment| segment.executable.as_deref() == Some("rg"))
+            else {
+                assert!(!allowed, "{command}");
+                continue;
+            };
+            assert_eq!(
+                safe_rg_segment(&model, segment, context),
+                allowed,
+                "{command}"
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// The shell expands `~` from its own `HOME`, while the absent-root proof
+    /// reads the declared one. When the two name different directories the
+    /// search can walk a tree that is there under the shell's home although
+    /// the proof measured a name that is not there under the declared one, so
+    /// a `~` root keeps its review until `shell_home_matches` holds.
+    #[test]
+    fn a_tilde_root_is_proven_absent_only_once_the_shell_home_matches() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/rg-absent-tilde-roots")
+            .join(std::process::id().to_string());
+        let declared = root.join("declared");
+        let shell = root.join("shell");
+        std::fs::create_dir_all(declared.join("work/app/src")).unwrap();
+        // The same spelling names a real tree under the shell's home.
+        std::fs::create_dir_all(shell.join("work/notes")).unwrap();
+        std::fs::write(shell.join("work/notes/todo.md"), "fixture\n").unwrap();
+        let declared = crate::runtime_read_paths::canonicalize_text(&declared).unwrap();
+        let cwd = declared.join("work/app");
+        for (shell_home_matches, allowed) in [(false, false), (true, true)] {
+            let context = crate::pretool::PathContext {
+                home_dir: declared.to_str(),
+                cwd: cwd.to_str(),
+                ripgrep_config_absent: true,
+                gem_config_absent: true,
+                http_config_absent: false,
+                openssl_config_absent: false,
+                shell_home_matches,
+                ..Default::default()
+            };
+            let command = "rg -ln fixture ~/work/notes".to_owned();
+            let model = crate::parse_command(&crate::CommandModelRequestV1 {
+                command: command.clone(),
+                dialect: "posix".to_owned(),
+                transport: "shell_string".to_owned(),
+                extraction_provenance: "guard-shell".to_owned(),
+            })
+            .unwrap();
+            let segment = model
+                .segments
+                .iter()
+                .find(|segment| segment.executable.as_deref() == Some("rg"))
+                .unwrap();
+            assert_eq!(
+                safe_rg_segment(&model, segment, context),
+                allowed,
+                "{command} with shell_home_matches={shell_home_matches}"
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Windows drops the backslashes of an unquoted drive path before the
+    /// program runs, so `rg PATTERN C:\work\notes` opens the drive-relative
+    /// `C:worknotes` while the absent-root proof measured the spelling as
+    /// written. The proof waits for a spelling that reaches `rg` intact.
+    #[cfg(windows)]
+    #[test]
+    fn an_unquoted_drive_root_is_never_proven_absent() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/rg-absent-drive-roots")
+            .join(std::process::id().to_string());
+        std::fs::create_dir_all(root.join("work/app/src")).unwrap();
+        let root = crate::runtime_read_paths::canonicalize_text(&root).unwrap();
+        let cwd = root.join("work/app");
+        // The same missing root, spelled with the separators Windows uses.
+        let missing = root.join("work").join("notes").display().to_string();
+        let context = crate::pretool::PathContext {
+            home_dir: root.to_str(),
+            cwd: cwd.to_str(),
+            ripgrep_config_absent: true,
+            gem_config_absent: true,
+            http_config_absent: false,
+            openssl_config_absent: false,
+            shell_home_matches: true,
+            ..Default::default()
+        };
+        for (quoted, allowed) in [(false, false), (true, true)] {
+            let command = if quoted {
+                format!("rg -ln fixture \"{missing}\"")
+            } else {
+                format!("rg -ln fixture {missing}")
+            };
+            let model = crate::parse_command(&crate::CommandModelRequestV1 {
+                command: command.clone(),
+                dialect: "posix".to_owned(),
+                transport: "shell_string".to_owned(),
+                extraction_provenance: "guard-shell".to_owned(),
+            })
+            .unwrap();
+            let segment = model
+                .segments
+                .iter()
+                .find(|segment| segment.executable.as_deref() == Some("rg"))
+                .unwrap();
+            assert_eq!(
+                safe_rg_segment(&model, segment, context),
+                allowed,
+                "{command}"
+            );
+        }
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -528,6 +770,26 @@ mod tests {
         }
     }
 
+    #[test]
+    fn case_blind_globs_after_consumed_option_values_cannot_narrow() {
+        use super::{inclusion_globs, narrowing_globs};
+        let args = arguments("KEY --context-separator -- --iglob *.TS -g src/**");
+        assert_eq!(inclusion_globs(&args), vec!["*.TS", "src/**"]);
+        assert!(narrowing_globs(&args).is_empty());
+
+        for line in ["KEY --iglob=*.TS -g src/**", "KEY --iglob *.TS -g src/**"] {
+            assert!(narrowing_globs(&arguments(line)).is_empty(), "{line}");
+        }
+
+        // An option's operand, or a positional operand after the real
+        // delimiter, is not an actual case-insensitive glob.
+        assert_eq!(
+            narrowing_globs(&arguments("KEY -e --iglob -g src/**")),
+            vec!["src/**"]
+        );
+        assert!(inclusion_globs(&arguments("KEY -- --iglob *.TS -g src/**")).is_empty());
+    }
+
     /// The pattern a piped `rg` matches is text, but the shell expands the
     /// word first: `.env{,.local}` leaves a second operand `rg` would open,
     /// so the stdin proof refuses it while an ordinary pattern keeps it.
@@ -548,10 +810,10 @@ mod tests {
             "token.*expired",
             "-e auth.*header",
         ] {
-            assert!(safe_rg_stdin_arguments(&arguments(line)), "{line}");
+            assert!(safe_rg_stdin_arguments(&arguments(line), &[]), "{line}");
         }
         for line in [".env{,.local}", "-e .env{,.local}", ".env*", ".ssh/*"] {
-            assert!(!safe_rg_stdin_arguments(&arguments(line)), "{line}");
+            assert!(!safe_rg_stdin_arguments(&arguments(line), &[]), "{line}");
         }
     }
 }

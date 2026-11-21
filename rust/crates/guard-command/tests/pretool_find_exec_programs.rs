@@ -198,21 +198,62 @@ fn a_literal_interpreter_name_in_an_exec_body_is_an_argument() {
     // `find src -exec echo sh {} \;`, which runs nothing but `echo`.
     let (root, _cleanup) = workspace("literal-argument");
     let controls = git_github_controls("default", "default");
+    let plain = evaluate(&root, &controls, "find src -exec echo {} \\;");
     for command in [
         "find src -exec echo sh {} \\;",
         "find src -exec echo bash python3 {} \\;",
     ] {
         let result = evaluate(&root, &controls, command);
         assert_ne!(result.reason_code, EVALUATION_FAILED, "{command}");
-        assert_ne!(
-            result.reason_code, "native_command_review_required",
+        // An interpreter name in `echo`'s argv decides nothing: the command
+        // reads exactly as `find src -exec echo {} \;` does on every host.
+        assert_eq!(
+            (&result.reason_code, &result.minimum_action),
+            (&plain.reason_code, &plain.minimum_action),
             "{command}: {}",
             result.reason
         );
+        // Windows reviews the plain command itself, so only the comparison
+        // above holds on every host.
+        if cfg!(unix) {
+            assert_ne!(
+                result.reason_code, "native_command_review_required",
+                "{command}: {}",
+                result.reason
+            );
+        }
         assert_ne!(
             result.minimum_action, "block",
             "{command}: {}",
             result.reason
         );
+    }
+}
+
+#[test]
+fn a_parameter_outside_the_walk_does_not_refuse_it() {
+    let (root, _cleanup) = workspace("walk-parameter");
+    let controls = git_github_controls("default", "default");
+    // find searches the roots this text names. A parameter in another command
+    // of the same text is that command's operand and changes nothing about what
+    // the walk searches, yet asking every parameter in the whole text to be a
+    // root path refused the walk along with it: a block with no approval row,
+    // where the walk on its own reviewed.
+    for command in [
+        r#"find src -type d -exec basename {} \; | sort -V; printf 'latest=%s' "$latest""#,
+        r#"printf 'root=%s' "$root"; find src -type f -exec basename {} \;"#,
+        r#"find "$HOME/.tools/versions/node/$latest/lib" -maxdepth 1 -type d -exec basename {} \;"#,
+    ] {
+        let result = evaluate(&root, &controls, command);
+        assert_ne!(result.reason_code, EVALUATION_FAILED, "{command}");
+    }
+    // A parameter the walk itself reads, and that is not a root path, still
+    // leaves the walk unread.
+    for command in [
+        r#"find "$dir" -type f -exec basename {} \;"#,
+        r#"find src -name "$pattern" -exec basename {} \;"#,
+    ] {
+        let result = evaluate(&root, &controls, command);
+        assert_ne!(result.minimum_action, "allow", "{command}");
     }
 }

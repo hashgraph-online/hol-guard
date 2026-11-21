@@ -11,10 +11,42 @@
 
 use super::search_pattern_clearance::PatternClearance;
 use super::search_scope_filter::SearchFilter;
-use super::search_scope_walk::{walk_scope, walk_scope_cleared, walk_scope_with, Ignores};
+use super::search_scope_walk::{
+    walk_listing_scope, walk_scope, walk_scope_cleared, walk_scope_with, Ignores,
+};
 use serde_json::{Map, Value};
+
+#[path = "search_scope_claude.rs"]
+mod claude;
+pub(super) use claude::claude_grep_directory_scope_proven;
+#[path = "search_scope_grok.rs"]
+mod grok;
+use grok::grok_grep_directory_scope_proven;
+#[path = "search_scope_cursor.rs"]
+mod cursor;
+use cursor::cursor_grep_directory_scope_proven;
+#[path = "search_scope_grep_include.rs"]
+mod grep_include;
+pub(super) use grep_include::{grep_include_scope_proven, grep_include_walk_proven};
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
+
+/// True when a harness's own search tool provably reaches no sensitive file.
+pub(super) fn harness_search_scope_proven(
+    harness: &str,
+    tool: Option<&str>,
+    payload: &Value,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    match (harness, tool) {
+        ("claude-code", Some("Grep")) => claude_grep_directory_scope_proven(payload, home_dir, cwd),
+        ("claude-code", Some("Glob")) => claude_glob_scope_proven(payload, home_dir, cwd),
+        ("grok", Some("Grep" | "grep")) => grok_grep_directory_scope_proven(payload, home_dir, cwd),
+        ("cursor", Some("Grep")) => cursor_grep_directory_scope_proven(payload, home_dir, cwd),
+        _ => false,
+    }
+}
 
 /// Links into the main checkout one names-only walk may follow and prove.
 const MAX_CHECKOUT_LINK_WALKS: usize = 8;
@@ -37,35 +69,11 @@ const CLAUDE_GREP_KEYS: &[&str] = &[
     "multiline",
 ];
 
-/// True when a Claude `Grep` directory search cannot reach a sensitive file.
-/// A single-file target returns false so the existing file-read proof decides.
-pub(super) fn claude_grep_directory_scope_proven(
-    payload: &Value,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> bool {
-    let Some(input) = claude_grep_input(payload) else {
-        return false;
-    };
-    let target = match input.get("path") {
-        None => ".",
-        Some(Value::String(path)) if !path.is_empty() => path.as_str(),
-        Some(_) => return false,
-    };
-    let Some(filter) = SearchFilter::from_input(input) else {
-        return false;
-    };
-    let Some(root) = verified_directory_root(target, home_dir, cwd) else {
-        return false;
-    };
-    !super::read_paths::inside_agent_state_tree(&root, home_dir)
-        && walk_scope(&root, &filter, Ignores::Ripgrep, false, home_dir, &mut None).is_ok()
-}
-
 /// Shell `rg` with `-g` inclusions the name screen cannot clear, such as
 /// `*.md` or `README*`: true when below each directory root no sensitive
 /// file matches one of them. ripgrep searches such a file even when it is
-/// hidden or ignored, and the walk inspects every one. The other globs were
+/// hidden or ignored, and the walk inspects every one; a committed file plain
+/// `rg` reaches over the same root is not held again. The other globs were
 /// screened already and can only add safe files or remove some. A root that
 /// is a regular file was screened as a path, and ripgrep reads it whatever
 /// the globs say.
@@ -81,15 +89,27 @@ pub(super) fn rg_glob_scope_proven(
     roots.iter().all(
         |target| match verified_directory_root(target, home_dir, cwd) {
             Some(root) => {
-                // ripgrep matches a path-shaped glob against the path from
-                // its match base, the working directory. Only a walk that
-                // starts there renders the same path, so a search target of
-                // its own leaves such a glob unmodeled.
-                (!filter.is_path_shaped()
-                    || working_directory_root(home_dir, cwd).as_deref() == Some(root.as_path()))
-                    && !super::read_paths::inside_agent_state_tree(&root, home_dir)
-                    && walk_scope(&root, &filter, Ignores::Ripgrep, false, home_dir, &mut None)
-                        .is_ok()
+                // ripgrep matches a path-shaped glob against the path from its
+                // match base, the working directory, so the walk renders each
+                // entry under the root's own path from there.
+                let Some(base) = super::search_scope_glob::glob_match_base(
+                    target,
+                    &root,
+                    filter.is_path_shaped(),
+                    verified_directory_root(".", home_dir, cwd).as_deref(),
+                ) else {
+                    return false;
+                };
+                !super::read_paths::inside_agent_state_tree(&root, home_dir)
+                    && walk_scope(
+                        &root,
+                        &filter.rooted_at(base),
+                        Ignores::RipgrepGlob,
+                        false,
+                        home_dir,
+                        &mut None,
+                    )
+                    .is_ok()
             }
             None => cwd.is_some_and(|cwd| {
                 std::fs::symlink_metadata(Path::new(cwd).join(target))
@@ -150,15 +170,36 @@ pub(super) fn claude_glob_scope_proven(
 /// trees (`~/.agent/skills`, `~/.agent/artifacts`) the per-file rules that
 /// deny direct reads do not apply to a directory walk, so the walk must reach
 /// only documents a direct read would allow.
+///
+/// A plain-text `clearance` pattern lets the search through when every
+/// sensitive file in reach is one the pattern cannot match: the host prints
+/// only matching lines, so such a file adds nothing to its output.
 pub(super) fn content_search_scope_proven(
     target: &str,
     home_dir: Option<&str>,
     cwd: Option<&str>,
+    clearance: Option<&PatternClearance>,
+) -> bool {
+    SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
+        filtered_content_search_scope_proven(target, &filter, home_dir, cwd, clearance)
+    })
+}
+
+/// [`content_search_scope_proven`] for a host that opens only the files
+/// `filter` selects. Every directory is still entered, hidden and ignored
+/// ones included, so a selected file anywhere below the root is screened.
+fn filtered_content_search_scope_proven(
+    target: &str,
+    filter: &SearchFilter,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    clearance: Option<&PatternClearance>,
 ) -> bool {
     unfiltered_directory_root(target, home_dir, cwd).is_some_and(|root| {
         (!super::read_paths::inside_agent_state_tree(&root, home_dir)
             || super::read_paths::agent_state_tree_holds_only_documents(&root, home_dir))
-            && unfiltered_walk_proven(&root, home_dir)
+            && walk_scope_cleared(&root, filter, Ignores::None, clearance, home_dir, &mut None)
+                .is_ok()
     })
 }
 
@@ -200,11 +241,12 @@ pub(super) fn content_search_blocker(
 }
 
 fn unfiltered_walk_proven(root: &Path, home: Option<&str>) -> bool {
-    unfiltered_walk_cleared(root, None, home)
+    SearchFilter::from_input(&Map::new())
+        .is_some_and(|filter| walk_listing_scope(root, &filter, home).is_ok())
 }
 
-/// [`unfiltered_walk_proven`], where a sensitive file the `clearance` pattern
-/// provably cannot match does not fail the proof.
+/// The unfiltered content walk, where a sensitive file the `clearance`
+/// pattern provably cannot match does not fail the proof.
 fn unfiltered_walk_cleared(
     root: &Path,
     clearance: Option<&PatternClearance>,
@@ -355,19 +397,53 @@ fn unfiltered_directory_root(
         .filter(|root| root.is_dir())
 }
 
+/// Whether Grok's camel-case copies of the tool name and input, where both
+/// spellings are sent, repeat the snake-case values, and the host did not cut
+/// the input short. A copy that differs from the value a proof reads could be
+/// the one the host acts on.
+pub(super) fn mirrored_input_matches(root: &Map<String, Value>) -> bool {
+    let differs = |copy: &str, original: &str| {
+        root.get(copy)
+            .zip(root.get(original))
+            .is_some_and(|(copy, original)| copy != original)
+    };
+    !differs("toolInput", "tool_input")
+        && !differs("toolName", "tool_name")
+        && root
+            .get("toolInputTruncated")
+            .is_none_or(|truncated| truncated == &Value::Bool(false))
+}
+
 fn claude_grep_input(payload: &Value) -> Option<&Map<String, Value>> {
+    grep_input(payload, false)
+}
+
+/// The `Grep` input, with Claude's keys. Grok also sends camel-case copies of
+/// the tool name and input; `mirrored` accepts those only when they repeat
+/// the snake-case values and the input was not truncated.
+fn grep_input(payload: &Value, mirrored: bool) -> Option<&Map<String, Value>> {
     let root = payload.as_object()?;
-    if root.get("tool_name").and_then(Value::as_str) != Some("Grep") {
+    // Grok names its tool `grep`; Claude Code names it `Grep`.
+    let name = root.get("tool_name").and_then(Value::as_str);
+    if name != Some("Grep") && !(mirrored && name == Some("grep")) {
+        return None;
+    }
+    let input = root.get("tool_input")?.as_object()?;
+    let unmatched_copy = if mirrored {
+        !mirrored_input_matches(root)
+    } else {
+        root.contains_key("toolInput")
+    };
+    if unmatched_copy {
         return None;
     }
     // Alternate spellings could carry a second, conflicting input.
-    if ["toolInput", "tool_args", "arguments", "input", "parameters"]
+    if ["tool_args", "arguments", "input", "parameters"]
         .iter()
         .any(|key| root.contains_key(*key))
     {
         return None;
     }
-    let input = root.get("tool_input")?.as_object()?;
     if input
         .keys()
         .any(|key| !CLAUDE_GREP_KEYS.contains(&key.as_str()))
@@ -414,11 +490,6 @@ fn verified_directory_root(
     }
     let canonical = std::fs::canonicalize(candidate).ok()?;
     canonical.is_dir().then_some(canonical)
-}
-
-/// The directory ripgrep matches a path-shaped glob against.
-fn working_directory_root(home_dir: Option<&str>, cwd: Option<&str>) -> Option<PathBuf> {
-    verified_directory_root(".", home_dir, cwd)
 }
 
 #[cfg(test)]

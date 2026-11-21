@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from tests.pi_continuation_support import WATCH_POSTURE_STUB
+from tests.pi_extension_support import managed_extension_source
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
@@ -37,6 +38,7 @@ function invalidateInputApprovalResumes() { inputApprovalResumeGeneration++; }
 function invalidateToolApprovalResumes() {}
 function invalidateApprovalContinuations() {}
 function handlerAbortSignal(ctx) { return ctx.signal; }
+function contextSessionId(ctx) { return ctx.sessionId ?? null; }
 function captureInputApprovalResumeBinding() { return null; }
 function approvalBlockedReason(_response, reason) { return reason; }
 function scheduleApprovalResume() {}
@@ -52,7 +54,7 @@ async function runGuard(payload, cwd) {
   return payload.prompt === 'protected' ? {decision: 'deny', reason: 'protected'} : {decision: 'allow'};
 }
 """
-        + source[cache_start:cache_end]
+        + WATCH_POSTURE_STUB + source[cache_start:cache_end]
         + source[input_start:input_end]
         + """
 const ctx = {cwd: '/fixture', ui: {notify(reason) { notices.push(reason); }}};
@@ -145,6 +147,7 @@ const pi = {on(name, callback) {callbacks[name] = callback;}};
 function loadGuardDaemonConnection() {return {stateId: 'fixture'};}
 function invalidateInputApprovalResumes() {inputApprovalResumeGeneration++;}
 function invalidateToolApprovalResumes() {}
+function contextSessionId(ctx) { return ctx.sessionId ?? null; }
 function captureInputApprovalResumeBinding() {return null;}
 function handlerAbortSignal(ctx) {return ctx.signal;}
 async function daemonWorkspaceReadiness() {
@@ -159,7 +162,7 @@ async function runGuard(_payload, _cwd, options) {
   return {decision: 'allow'};
 }
 """
-        + source[start:end]
+        + WATCH_POSTURE_STUB + source[start:end]
         + source[input_start:input_end]
         + """
 const controller = new AbortController();

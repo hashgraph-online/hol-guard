@@ -1,5 +1,13 @@
 import { daemonApi, expect, expectNoErrorBoundary, test } from "./fixtures";
-import { expectedRows, loadPackageShims, managerCard, supplySeed } from "./supply-chain-helpers";
+import {
+  expectedRows,
+  loadPackageShims,
+  managerCard,
+  openActivity,
+  rosterSection,
+  showAllManagers,
+  supplySeed,
+} from "./supply-chain-helpers";
 
 type Receipt = {
   receipt_id: string;
@@ -92,6 +100,7 @@ test.describe("Supply chain actions against the live daemon", () => {
     const seed = supplySeed(state);
     await page.goto("/supply-chain");
     await expect(page.getByRole("heading", { level: 1, name: "Supply Chain", exact: true })).toBeVisible();
+    await openActivity(page);
     const rail = page.getByRole("region", { name: "Recent supply chain evidence" });
     await expect(rail.getByText("Workspace audit completed", { exact: true })).toBeVisible();
     await expect(
@@ -146,7 +155,9 @@ test.describe("Supply chain actions against the live daemon", () => {
     expect(receipts.map((receipt) => receipt.receipt_id)).toContain(receiptId);
 
     if (detected) {
-      await expect(card.getByText("Detected, not protected", { exact: true })).toBeVisible();
+      await showAllManagers(page);
+      await expect(rosterSection(page, "Not protected yet").getByRole("button", { name: `Open ${manager} manager details`, exact: true })).toBeVisible();
+      await expect(card.getByRole("button", { name: "Protect", exact: true })).toBeVisible();
     } else {
       await expect(card).toHaveCount(0);
     }
@@ -155,7 +166,10 @@ test.describe("Supply chain actions against the live daemon", () => {
     // A reload keeps the removal.
     await page.reload();
     await expect(page.getByRole("heading", { level: 1, name: "Supply Chain", exact: true })).toBeVisible();
-    if (detected) await expect(managerCard(page, manager).getByText("Detected, not protected", { exact: true })).toBeVisible();
+    if (detected) {
+      await showAllManagers(page);
+      await expect(rosterSection(page, "Not protected yet").getByRole("button", { name: `Open ${manager} manager details`, exact: true })).toBeVisible();
+    }
     await expect(managerCard(page, other).getByText("PATH broken", { exact: true })).toBeVisible();
 
     // Put it back so the machine ends in the seeded state.

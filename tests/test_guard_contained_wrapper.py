@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.runtime.contained_wrapper import (
 from codex_plugin_scanner.guard.runtime.restricted_node_test import nearest_project_root
 from codex_plugin_scanner.guard.runtime.restricted_package_test import resolve_package_test
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
+from tests import restricted_vitest_ops
 
 
 def required_profile() -> dict[str, object]:
@@ -365,13 +366,13 @@ def test_subdirectory_runs_resolve_from_the_workspace_root(tmp_path: Path) -> No
 
 
 def test_bunx_cwd_selects_a_directory_inside_the_workspace(tmp_path: Path) -> None:
-    assert restricted_vitest.bun_vitest_invocation(["bunx", "--cwd", "web", "vitest", "run", "x"]) == (
+    assert restricted_vitest_ops.bun_vitest_invocation(["bunx", "--cwd", "web", "vitest", "run", "x"]) == (
         "web",
         ("run", "x"),
     )
-    assert restricted_vitest.bun_vitest_invocation(["bunx", "--cwd=web", "vitest", "run"]) == ("web", ("run",))
-    assert restricted_vitest.bun_vitest_invocation(["bunx", "vitest", "run"]) is None
-    assert restricted_vitest.bun_vitest_invocation(["bunx", "--cwd", "web", "x", "vitest", "run"]) is None
+    assert restricted_vitest_ops.bun_vitest_invocation(["bunx", "--cwd=web", "vitest", "run"]) == ("web", ("run",))
+    assert restricted_vitest_ops.bun_vitest_invocation(["bunx", "vitest", "run"]) is None
+    assert restricted_vitest_ops.bun_vitest_invocation(["bunx", "--cwd", "web", "x", "vitest", "run"]) is None
     workspace = tmp_path / "project"
     workspace.mkdir()
     (tmp_path / "other").mkdir()

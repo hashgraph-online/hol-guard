@@ -11,7 +11,7 @@
 
 #[path = "chain_directory_copies.rs"]
 mod directory_copies;
-pub(super) use directory_copies::{creation_chain, mkdir_chain};
+pub(super) use directory_copies::{creation_chain, mkdir_chain, removal_chain};
 
 use crate::CanonicalCommandV1;
 use std::path::{Component, Path, PathBuf};
@@ -19,8 +19,8 @@ use std::path::{Component, Path, PathBuf};
 /// Segments that print, filter or copy a file. None changes directory,
 /// renames a file or creates a link.
 const CHAIN_PEERS: &[&str] = &[
-    "cat", "cp", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl", "printf", "rg", "sort",
-    "tail", "tr", "true", "uniq", "wc",
+    "cat", "cmp", "cp", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl", "printf", "rg",
+    "sort", "tail", "tr", "true", "uniq", "wc",
 ];
 
 /// Scratch editors that may also share a chain. Each segment is still proven
@@ -55,10 +55,41 @@ const GIT_OBJECT_READERS: &[&str] = &[
     "show-ref",
 ];
 
-/// Plain peers beside Git object reads. This is the guard for a temporary file
-/// a chain writes or reads; [`peers_only`] stays the guard for copies.
+/// GitHub CLI reads that only print what they fetch: `gh pr view 7 --json
+/// files > /tmp/pr7.json; jq -c . /tmp/pr7.json`. None writes a file, changes
+/// directory, renames a file or creates a link, so one may fill or sit beside
+/// a temporary file the way a Git object read does. A command that checks
+/// out, clones or downloads stays out, and each `gh` segment still needs its
+/// own proof.
+const GH_READERS: &[(&str, &[&str])] = &[
+    ("issue", &["list", "view"]),
+    ("pr", &["checks", "diff", "list", "view"]),
+    ("release", &["list", "view"]),
+    ("repo", &["view"]),
+    ("run", &["list", "view"]),
+];
+
+/// `gh api ...` or one of [`GH_READERS`]. `gh` takes no global option before
+/// its command, so the first two words name it.
+fn gh_read(segment: &crate::CommandSegmentV1) -> bool {
+    match segment.arguments.as_slice() {
+        [command, ..] if command == "api" => true,
+        [command, subcommand, ..] => GH_READERS
+            .iter()
+            .any(|(name, reads)| command == name && reads.contains(&subcommand.as_str())),
+        _ => false,
+    }
+}
+
+/// Plain peers beside Git object reads, GitHub CLI reads or a `base64`
+/// decode. This is the
+/// guard for a temporary file a chain writes or reads; [`peers_only`] stays
+/// the guard for copies and workspace writes, so `cat a | base64 -d > run.sh`
+/// keeps its review. `base64` is held to `base64_reads.rs`, which never admits
+/// its output-file option.
 pub(super) fn temporary_peers(model: &CanonicalCommandV1) -> bool {
     peers_only(model)
+        || plain_chain(model, &["base64"])
         || (plain_chain(model, &["git"])
             && model.segments.iter().all(|segment| {
                 segment.executable.as_deref() != Some("git")
@@ -69,6 +100,11 @@ pub(super) fn temporary_peers(model: &CanonicalCommandV1) -> bool {
                             .iter()
                             .any(|argument| argument.starts_with("--output")))
             }))
+        || (plain_chain(model, &["gh"])
+            && model
+                .segments
+                .iter()
+                .all(|segment| segment.executable.as_deref() != Some("gh") || gh_read(segment)))
 }
 
 /// Like [`peers_only`], but `extra` names may also appear in the chain.
@@ -85,6 +121,79 @@ pub(super) fn plain_chain(model: &CanonicalCommandV1, extra: &[&str]) -> bool {
                     CHAIN_PEERS.contains(&executable) || extra.contains(&executable)
                 })
         })
+}
+
+/// Stream filters that read input or named files and print to standard
+/// output. None can run another program, create a link or rename a file.
+const PIPE_FILTERS: &[&str] = &[
+    "base64",
+    "cat",
+    "column",
+    "cut",
+    "egrep",
+    "fgrep",
+    "fmt",
+    "fold",
+    "grep",
+    "head",
+    "hexdump",
+    "jq",
+    "md5",
+    "md5sum",
+    "nl",
+    "od",
+    "paste",
+    "rev",
+    "rg",
+    "sha1sum",
+    "sha256sum",
+    "shasum",
+    "sort",
+    "tail",
+    "tr",
+    "uniq",
+    "wc",
+    "xxd",
+];
+
+/// Commands that may only start the pipeline: they print text or fetched
+/// content. `gh` qualifies only for `gh api`, which never touches the tree.
+fn pipe_source(executable: &str, arguments: &[String]) -> bool {
+    matches!(executable, "curl" | "echo" | "printf")
+        || (executable == "gh" && arguments.first().is_some_and(|value| value == "api"))
+}
+
+/// One pipeline, `a | b | c`, whose last command alone carries the file
+/// write. The shell opens that file while the earlier commands run, so a
+/// command that creates a link could swap the leaf the target check proved.
+/// Every command must be a known stream filter, and only the first may be a
+/// fetch or print source. The pipeline without its redirect still has to earn
+/// its own allow before the write is allowed.
+pub(super) fn final_pipeline_write(model: &CanonicalCommandV1) -> bool {
+    let Some(first) = model.segments.first() else {
+        return false;
+    };
+    model.segments.len() > 1
+        && model.wrapper_chain.is_empty()
+        && !model.path_overridden
+        && model.segments.iter().enumerate().all(|(index, segment)| {
+            segment.pipeline_index == index
+                && segment.execution_context == first.execution_context
+                && segment.wrapper_chain.is_empty()
+                && segment.environment_names.is_empty()
+                && !segment.path_overridden
+                && segment.executable.as_deref().is_some_and(|executable| {
+                    PIPE_FILTERS.contains(&executable)
+                        || (index == 0 && pipe_source(executable, &segment.arguments))
+                })
+        })
+}
+
+/// A single `|`: not `||`, and not `|&`, which also pipes standard error.
+pub(super) fn plain_pipe(chars: &[char], index: usize) -> bool {
+    chars[index] == '|'
+        && !matches!(chars.get(index + 1), Some('|' | '&'))
+        && (index == 0 || chars[index - 1] != '|')
 }
 
 /// An absolute temporary path that is absent or a regular single-link file
@@ -123,19 +232,47 @@ pub(super) fn absent_temporary_read_target(
 
 /// A read of an absent temporary file relies on the chain not creating a link
 /// at that path first, so it is only proven beside plain peers. `mkdir` makes
-/// directories and never links, so it may share such a chain too.
+/// directories and never links, and `rm` only removes names, so either may
+/// share such a chain too.
 pub(super) fn absent_reads_bounded(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
 ) -> bool {
     model.segments.len() == 1
         || temporary_peers(model)
-        || plain_chain(model, &["awk", "mkdir", "sed"])
+        || plain_chain(model, &["awk", "mkdir", "rm", "sed"])
+        || fetch_then_read(model)
         || !model.segments.iter().any(|segment| {
             segment.arguments.iter().any(|argument| {
                 absent_temporary_read_target(argument, context.home_dir, context.cwd)
             })
         })
+}
+
+/// `gh api repos/o/r/contents/a.json --jq .content > /tmp/a.b64 && base64 -D -i
+/// /tmp/a.b64`: a fetch whose saved output later peers read back. Neither
+/// `gh api` nor `curl` changes directory, renames a file or creates a link, so
+/// a temporary file that is absent now is still absent when a later peer opens
+/// it, or is the regular file a redirect created. Only the first step may
+/// fetch, and each step still needs its own proof. `base64` may decode the
+/// saved file here, held to `base64_reads.rs`, which never admits its
+/// output-file option; it stays out of [`CHAIN_PEERS`], so a decode is never
+/// a peer of a chain that writes a workspace file.
+fn fetch_then_read(model: &CanonicalCommandV1) -> bool {
+    let fetches = |segment: &crate::CommandSegmentV1| match segment.executable.as_deref() {
+        Some("curl") => true,
+        Some("gh") => segment
+            .arguments
+            .first()
+            .is_some_and(|value| value == "api"),
+        _ => false,
+    };
+    model.segments.len() > 1
+        && plain_chain(model, &["base64", "curl", "gh"])
+        && fetches(&model.segments[0])
+        && model.segments[1..]
+            .iter()
+            .all(|segment| !matches!(segment.executable.as_deref(), Some("curl" | "gh")))
 }
 
 /// `cp` shares a chain in two shapes, both only beside plain peers: a staged

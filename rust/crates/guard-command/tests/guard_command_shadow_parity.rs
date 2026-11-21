@@ -1,8 +1,9 @@
 //! Replay the shadow rollout decisions Python recorded.
 //!
-//! Every row in the fixture came out of `command_shadow_evaluation`, so a
-//! disagreement here is a real divergence between the two halves rather than a
-//! difference of opinion about what the controls ought to mean.
+//! Every row in the fixture came out of the Python `command_shadow_evaluation`
+//! module before its rollout controls moved here, so a disagreement is a real
+//! regression rather than a difference of opinion about what the controls ought
+//! to mean. Python still checks the comparison and disposition rows.
 
 use std::collections::{BTreeMap, BTreeSet};
 

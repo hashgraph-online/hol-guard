@@ -1,4 +1,9 @@
-"""HOL Guard supply-chain bundle verification and offline evaluation."""
+"""HOL Guard supply-chain bundle errors and keyring loading.
+
+Reading and verifying a bundle belong to the native runtime
+(``guard_command::supply_chain_bundle``); what is left here is the error
+family callers already distinguish and the saved keyring's wire form.
+"""
 
 from __future__ import annotations
 
@@ -11,51 +16,16 @@ from .supply_chain_bundle_base import (
     SupplyChainBundleRollbackError,
     SupplyChainBundleSignatureError,
 )
-from .supply_chain_bundle_models import (
-    SupplyChainBundle,
-    SupplyChainBundleAdvisory,
-    SupplyChainBundleEmergencyDeny,
-    SupplyChainBundlePackage,
-    SupplyChainBundlePolicyRule,
-    SupplyChainBundleResponse,
-    SupplyChainBundleSourceHash,
-    SupplyChainVerificationKey,
-)
-from .supply_chain_bundle_runtime import (
-    OfflineSupplyChainDecision,
-    canonical_supply_chain_bundle_payload,
-    check_supply_chain_bundle_freshness,
-    check_supply_chain_bundle_rollback,
-    evaluate_cached_supply_chain_bundle,
-    load_supply_chain_bundle_response,
-    load_supply_chain_verification_keys,
-    payload_hash_for_supply_chain_bundle,
-    verify_supply_chain_bundle_response,
-)
+from .supply_chain_verification_keys import SupplyChainVerificationKey, load_supply_chain_verification_keys
 
 __all__ = [
-    "OfflineSupplyChainDecision",
-    "SupplyChainBundle",
-    "SupplyChainBundleAdvisory",
-    "SupplyChainBundleEmergencyDeny",
     "SupplyChainBundleError",
     "SupplyChainBundleExpiredError",
     "SupplyChainBundleKeyringError",
     "SupplyChainBundleMalformedError",
-    "SupplyChainBundlePackage",
     "SupplyChainBundlePayloadHashError",
-    "SupplyChainBundlePolicyRule",
-    "SupplyChainBundleResponse",
     "SupplyChainBundleRollbackError",
     "SupplyChainBundleSignatureError",
-    "SupplyChainBundleSourceHash",
     "SupplyChainVerificationKey",
-    "canonical_supply_chain_bundle_payload",
-    "check_supply_chain_bundle_freshness",
-    "check_supply_chain_bundle_rollback",
-    "evaluate_cached_supply_chain_bundle",
-    "load_supply_chain_bundle_response",
     "load_supply_chain_verification_keys",
-    "payload_hash_for_supply_chain_bundle",
-    "verify_supply_chain_bundle_response",
 ]

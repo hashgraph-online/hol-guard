@@ -15,6 +15,7 @@ const PACKAGE_TEST: &str = "native_package_test_readonly_containment_required";
 const NODE_TOOL: &str = "native_node_tool_readonly_containment_required";
 const NODE_BUILD: &str = "native_node_build_output_containment_required";
 const WORKSPACE: &str = "native_workspace_containment_required";
+const NODE_TEST: &str = "native_node_test_readonly_containment_required";
 const HARNESSES: [&str; 3] = ["omp", "claude-code", "codex"];
 
 fn root() -> PathBuf {
@@ -62,11 +63,21 @@ thread_local! {
 }
 
 fn classify(cwd: &Path, harness: &str, command: &str) -> PreToolResultV1 {
+    evaluate(cwd, harness, json!({"command": command}))
+}
+
+/// As [`classify`], for a host whose run directory is a tool argument rather
+/// than the session directory.
+fn classify_in(cwd: &Path, harness: &str, command: &str, directory: &str) -> PreToolResultV1 {
+    evaluate(cwd, harness, json!({"command": command, "cwd": directory}))
+}
+
+fn evaluate(cwd: &Path, harness: &str, input: serde_json::Value) -> PreToolResultV1 {
     let home = HOME.with(|declared| declared.borrow().clone());
     evaluate_pre_tool_envelope_with_context(
         harness,
         "PreToolUse",
-        &json!({"tool_name": "bash", "tool_input": {"command": command}}),
+        &json!({"tool_name": "bash", "tool_input": input}),
         None,
         None,
         home.as_deref(),
@@ -100,13 +111,19 @@ fn package_script_receipts_match_the_sinks() {
             assert_ne!(result.decision, "allow", "{harness}: {name}");
             assert_ne!(result.minimum_action, "allow", "{harness}: {name}");
             match expected {
-                Some(reason) if cfg!(target_os = "macos") => assert_eq!(
-                    (result.minimum_action.as_str(), result.reason_code.as_str()),
-                    ("sandbox-required", reason),
-                    "{harness}: {name}"
-                ),
+                Some(reason) if guard_command::pretool::workspace_sandbox_available() => {
+                    assert_eq!(
+                        (result.minimum_action.as_str(), result.reason_code.as_str()),
+                        ("sandbox-required", reason),
+                        "{harness}: {name}"
+                    )
+                }
                 Some(_) => {}
                 None => {
+                    // This route declines the case, but another sink may still
+                    // claim the command -- `bun test` has a read-only profile
+                    // of its own -- so what the receipt must not carry is one
+                    // of this route's own reasons.
                     assert!(
                         ![PACKAGE_TEST, NODE_TOOL, NODE_BUILD]
                             .contains(&result.reason_code.as_str()),
@@ -114,7 +131,20 @@ fn package_script_receipts_match_the_sinks() {
                         result.reason_code
                     );
                     if result.minimum_action == "sandbox-required" {
-                        assert_eq!(result.reason_code, WORKSPACE, "{harness}: {name}");
+                        // `bun test` is Bun's own runner rather than a package
+                        // script, so its read-only profile claims the command
+                        // where a host runs that sink. Every other declined
+                        // case reaches the general workspace sandbox.
+                        let expected: &[&str] = if command == "bun test" {
+                            &[WORKSPACE, NODE_TEST]
+                        } else {
+                            &[WORKSPACE]
+                        };
+                        assert!(
+                            expected.contains(&result.reason_code.as_str()),
+                            "{harness}: {name}: {}",
+                            result.reason_code
+                        );
                     }
                 }
             }
@@ -264,5 +294,126 @@ fn an_unverifiable_vite_config_output_does_not_take_the_build_receipt() {
     let through_a_package = classify(&project, "omp", "npm run build");
     assert_ne!(through_a_package.decision, "allow");
     assert_ne!(through_a_package.reason_code, NODE_BUILD);
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// Bun started on an installed entrypoint runs the same program Node does, so
+/// it takes the receipt Node takes, also when the run names another checkout.
+/// Installs, `bun x` and a refused build output keep Bun's own reading.
+#[test]
+fn bun_on_an_installed_entrypoint_takes_the_node_route() {
+    let root = root();
+    let vitest = "vitest/vitest.mjs";
+    let ws = project(&root, "main", json!({}), &[VITE, vitest]);
+    let tree = project(&root, "tree", json!({}), &[]);
+    let modules = ws.join("node_modules");
+    let builds = [
+        format!("{{}} {} build", modules.join(VITE).display()),
+        format!("{{}} node_modules/{VITE} build --root {}", tree.display()),
+    ];
+    let runs = [
+        format!("{{}} ./node_modules/{vitest} run"),
+        format!(
+            "{{}} {} run --root {}",
+            modules.join(vitest).display(),
+            tree.display()
+        ),
+    ];
+    for harness in HARNESSES {
+        for shape in builds.iter().chain(&runs) {
+            let bun = classify(&ws, harness, &shape.replacen("{}", "bun", 1));
+            let node = classify(&ws, harness, &shape.replacen("{}", "node", 1));
+            assert_ne!(bun.decision, "allow", "{harness}: {shape}");
+            // A run node itself does not contain says nothing about bun.
+            if cfg!(target_os = "macos")
+                && (builds.contains(shape) || node.minimum_action == "sandbox-required")
+            {
+                assert_eq!(
+                    (bun.minimum_action.as_str(), bun.reason_code.as_str()),
+                    (node.minimum_action.as_str(), node.reason_code.as_str()),
+                    "{harness}: {shape}"
+                );
+                if builds.contains(shape) {
+                    assert_eq!(bun.reason_code, NODE_BUILD, "{harness}: {shape}");
+                }
+            }
+        }
+        for command in [
+            "bun install",
+            "bun add left-pad",
+            "bun x vite build --outDir /tmp/out",
+            "bun node_modules/vite/bin/vite.js build --outDir /tmp/out",
+        ] {
+            let result = classify(&ws, harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+            assert_ne!(result.reason_code, NODE_BUILD, "{harness}: {command}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// A test-named script whose body is a read-only tool keeps the package
+/// receipt only while that tool is installed where the sink resolves it. The
+/// sink reads the same body and plans it as that tool, so a receipt issued
+/// without the tool names a run the sink then refuses; the command belongs on
+/// the generic route instead.
+#[test]
+fn a_test_named_tool_body_keeps_the_receipt_only_while_the_tool_is_installed() {
+    let root = root();
+    let scripts = json!({"test:types": "tsc --noEmit -p ."});
+    let without = project(&root, "types-absent", scripts.clone(), &[]);
+    let with = project(&root, "types-present", scripts, &["typescript/bin/tsc"]);
+    for harness in HARNESSES {
+        let absent = classify(&without, harness, "npm run test:types");
+        assert_ne!(absent.decision, "allow", "{harness}");
+        assert_ne!(absent.reason_code, PACKAGE_TEST, "{harness}");
+        let present = classify(&with, harness, "npm run test:types");
+        assert_ne!(present.decision, "allow", "{harness}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(present.reason_code, PACKAGE_TEST, "{harness}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// Oh My Pi's `bash` tool runs its command in the optional `cwd` argument, so
+/// a run in a scratch checkout outside the session is judged there. A
+/// reproduction left under a temporary root is a project with a manifest and
+/// no repository: reading only a repository marker gave it no root, the
+/// package-test route declined it, and `npm test` fell through to the generic
+/// package prompt while the same command in the session's own directory ran
+/// contained.
+#[test]
+fn a_test_run_in_a_scratch_project_outside_the_session_takes_the_package_route() {
+    let root = root();
+    let session = project(&root, "session", json!({"test": "node --test"}), &[]);
+    let scratch = root.join("scratch/slug-repro");
+    std::fs::create_dir_all(&scratch).unwrap();
+    std::fs::write(
+        scratch.join("package.json"),
+        json!({"name": "slug-repro", "scripts": {"test": "node --test"}}).to_string(),
+    )
+    .unwrap();
+    let own = classify(&session, "omp", "npm test");
+    let outside = classify_in(&session, "omp", "npm test", scratch.to_str().unwrap());
+    assert_ne!(outside.decision, "allow");
+    assert_ne!(outside.minimum_action, "allow");
+    // Only the package-test sandbox is rooted there: a build or a tool run in
+    // a directory no repository roots keeps the prompt it had.
+    let build = classify_in(&session, "omp", "npm run build", scratch.to_str().unwrap());
+    assert_ne!(build.reason_code, PACKAGE_TEST);
+    assert_ne!(build.reason_code, NODE_BUILD);
+    if guard_command::pretool::workspace_sandbox_available() {
+        // The session's own run is the answer the scratch run has to match:
+        // one command, one route.
+        assert_eq!(own.reason_code, PACKAGE_TEST);
+        assert_eq!(
+            (
+                outside.minimum_action.as_str(),
+                outside.reason_code.as_str()
+            ),
+            ("sandbox-required", PACKAGE_TEST)
+        );
+    }
     let _ = std::fs::remove_dir_all(root);
 }

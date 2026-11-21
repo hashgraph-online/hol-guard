@@ -6,13 +6,15 @@ after the next run, so the Extensions refresh replays recent paused commands
 through the same identity rules. Replay never executes anything, never grants
 authority and never bumps the observed count of a CLI that is already listed.
 Each replayed CLI keeps the time of its paused request, so it can age out.
+A replayed CLI keeps the file its command launched, as the hook records it, so
+Load commands can read its help without asking the operator where it is.
 """
 
 from __future__ import annotations
 
 import logging
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -70,7 +72,9 @@ def discover_observed_local_clis(store: GuardStore, *, seen_at: str, home_dir: P
             store.record_local_cli_observation(
                 identity,
                 seen_at=latest_seen.get((command, str(workspace)), seen_at),
-                source_path=identity.path_class or observation_path_class(identity.source_path),
+                source_path=identity.path_class
+                or launched_file(identity.source_path)
+                or observation_path_class(identity.source_path),
                 surface="cli",
                 only_if_missing=True,
                 replayed_at=seen_at,
@@ -78,6 +82,37 @@ def discover_observed_local_clis(store: GuardStore, *, seen_at: str, home_dir: P
             known.add(identity.cli_id)
             added += 1
     return added
+
+
+def launched_file(source_path: str | None) -> str | None:
+    """The resolved file a command launched, as ``local_cli_hook_op::launched_file`` keeps it."""
+
+    return source_path if source_path and Path(source_path).is_absolute() else None
+
+
+def paused_launch_paths(store: GuardStore, item: Mapping[str, object], *, home_dir: Path | None) -> Iterator[str]:
+    """Files Guard's paused commands launched as ``item``, newest first.
+
+    A tool listed before the hook kept the launched file has only a path class,
+    but the command Guard paused still names the file. Only commands that
+    mention the tool's name are identified, and nothing runs.
+    """
+
+    cli_id, name = item.get("cli_id"), item.get("name")
+    if not isinstance(cli_id, str) or not isinstance(name, str) or not name:
+        return
+    records = store.list_approval_requests(status=None, limit=MAX_OBSERVED_CLI_REQUESTS)
+    for command, workspace in commands_from_requests(records):
+        if name not in command or not workspace.is_dir():
+            continue
+        with track_local_cli_identity_failures() as failures:
+            identities = identify_unlisted_cli_identities(command, cwd=workspace, home_dir=home_dir)
+        if failures:
+            continue
+        for identity in identities:
+            found = launched_file(identity.source_path)
+            if identity.cli_id == cli_id and found is not None:
+                yield found
 
 
 def _latest_request_times(records: Sequence[Mapping[str, object]]) -> dict[tuple[str, str], str]:
@@ -104,4 +139,10 @@ def backfill_observed_local_clis(store: GuardStore, *, seen_at: str, home_dir: P
         _LOGGER.warning("observed CLI backfill failed", exc_info=True)
 
 
-__all__ = ["backfill_observed_local_clis", "commands_from_requests", "discover_observed_local_clis"]
+__all__ = [
+    "backfill_observed_local_clis",
+    "commands_from_requests",
+    "discover_observed_local_clis",
+    "launched_file",
+    "paused_launch_paths",
+]

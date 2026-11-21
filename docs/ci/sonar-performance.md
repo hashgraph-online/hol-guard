@@ -29,7 +29,7 @@ use, not a measurement of garbage-collection pause time.
 
 ## Resource tuning
 
-The dedicated Sonar job remains on the existing `ubuntu-latest` public runner.
+The dedicated Sonar job remains on the existing `ubuntu-24.04` public runner.
 Only its analysis step receives `SONAR_SCANNER_JAVA_OPTS=-Xmx6g` and
 `-Dsonar.python.analysis.threads=4`. The heap setting provides headroom for the
 analysis graph; the thread setting uses the four logical CPUs on this runner

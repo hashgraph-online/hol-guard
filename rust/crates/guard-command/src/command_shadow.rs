@@ -6,12 +6,12 @@
 //! answers which cohorts a given activity is sampled into and how the two
 //! actions compare on the severity lattice.
 //!
-//! Python's `command_shadow_evaluation` resolves the same controls from four
-//! environment variables, buckets an activity with a length-framed SHA-256, and
-//! reads the comparison off `guard_action_severity`. Every rule here is that
-//! module's, including the directions it fails in: a malformed value disables
-//! recording rather than widening it, and an unrecognised cohort list disables
-//! every cohort rather than none.
+//! The controls come from four environment variables, an activity is bucketed
+//! with a length-framed SHA-256, and the comparison is read off the action
+//! severity lattice. Every rule here was ported from the Python module that
+//! used to resolve them, including the directions it fails in: a malformed
+//! value disables recording rather than widening it, and an unrecognised cohort
+//! list disables every cohort rather than none.
 
 use std::collections::BTreeSet;
 

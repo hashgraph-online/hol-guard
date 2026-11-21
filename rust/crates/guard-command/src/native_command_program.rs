@@ -23,7 +23,7 @@ use crate::command_database_matchers::DatabaseMatcher;
 use crate::command_operand_matchers::OperandMatcher;
 use crate::command_option_parsing::{
     argument_semantics, flags_present_in_all_option_parses_with_deadline, known_option_advance,
-    matches_subcommands_conservatively_with_deadline,
+    matches_subcommands_conservatively_with_deadline, ArgumentSemantics,
 };
 use crate::command_specialized_matchers::SpecializedMatcher;
 use crate::command_structured_matchers::StructuredMatcher;
@@ -40,6 +40,21 @@ const MAX_DEPTH: usize = 32;
 const MATCH_DETAIL: &str = "Matched bounded structured command constraints.";
 #[cfg(not(guard_source_bootstrap))]
 static EMBEDDED_PROGRAM: &[u8] = guard_command_catalog_data::PROGRAM_JSON_ZST;
+/// The error every evaluation step raises when it stops because the
+/// request's deadline passed. A caller tells it apart from a command the
+/// controls could not match, because the two deserve different floors.
+pub(crate) const NATIVE_COMMAND_DEADLINE_EXCEEDED: &str = "native_command_deadline_exceeded";
+
+/// Whether an evaluation error means the check ran out of time rather than
+/// failing on what it read. The compatibility pass raises its own deadline
+/// identity, so both names answer here.
+pub(crate) fn is_deadline_error(error: &str) -> bool {
+    matches!(
+        error,
+        NATIVE_COMMAND_DEADLINE_EXCEEDED | "native_command_compatibility_deadline"
+    )
+}
+
 /// SHA-256 hex of the exact packaged program bytes (with trailing newline).
 #[cfg(not(guard_source_bootstrap))]
 pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = guard_command_catalog_data::PROGRAM_JSON_SHA256;
@@ -483,7 +498,7 @@ impl NativeCommandProgram {
     }
 }
 
-fn basename(value: &str) -> &str {
+pub(crate) fn basename(value: &str) -> &str {
     value.rsplit(['/', '\\']).next().unwrap_or(value)
 }
 

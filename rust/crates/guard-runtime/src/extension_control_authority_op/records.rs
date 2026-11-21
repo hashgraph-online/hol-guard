@@ -29,6 +29,9 @@ const PRIVATE_REF_DOMAIN: &[u8] = b"hol-guard.extension-control.private-ref.v1\x
 pub(crate) enum Fault {
     Tampered(String),
     Degraded(String),
+    /// A command-pack activation refused by name; the caller raises the
+    /// pack error it names.
+    Pack(String),
 }
 
 pub(crate) type Res<T> = Result<T, Fault>;
@@ -228,11 +231,7 @@ pub(super) fn query_rows<P: rusqlite::Params>(
     params: P,
 ) -> Res<Vec<Row>> {
     let mut statement = connection.prepare(sql).map_err(store_fault)?;
-    let names: Vec<String> = statement
-        .column_names()
-        .iter()
-        .map(|name| (*name).to_owned())
-        .collect();
+    let names: Vec<String> = statement.column_names().map(str::to_owned).collect();
     let rows = statement
         .query_map(params, |row| {
             let mut values = Row::new();

@@ -351,9 +351,3 @@ def _memo_get(key: str) -> dict[str, Any] | None:
             return None
         _MEMO.move_to_end(key)
         return cast("dict[str, Any]", json.loads(json.dumps(cached)))
-
-
-def clear_native_guard_config_memo() -> None:
-    with _MEMO_LOCK:
-        _MEMO.clear()
-        _RESOLVE_MEMO.clear()

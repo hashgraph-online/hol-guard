@@ -55,14 +55,26 @@ def test_fast_alpha_compiler_cache_warms_from_main_in_its_own_namespace(ref, eve
     (_, prepare), _ = _release_compile_steps()
     env = prepare["env"]
     assert _evaluate(env["SCCACHE_GHA_RW_MODE"], ref=ref, event=event, fast_codegen=True) == mode
+    if ref == "refs/heads/main" and event == "workflow_dispatch":
+        assert (
+            _evaluate(
+                env["SCCACHE_GHA_RW_MODE"],
+                ref=ref,
+                event=event,
+                fast_codegen=True,
+                allow_cache_write=False,
+            )
+            == "READ_ONLY"
+        )
     # Fast-codegen objects never mix with the fat-LTO stable namespace.
     assert _evaluate(env["SCCACHE_GHA_VERSION"], ref=ref, event=event, fast_codegen=True) == "release-native-fast-v1"
     assert _evaluate(env["SCCACHE_GHA_VERSION"], ref=ref, event=event, fast_codegen=False) == "release-native-v1"
 
 
-def _evaluate(value, *, ref, event, fast_codegen):
+def _evaluate(value, *, ref, event, fast_codegen, allow_cache_write=True):
     expression = value.strip()[3:-2]
     for name, replacement in {
+        "inputs.allow_cache_write": allow_cache_write,
         "github.ref": ref,
         "github.event_name": event,
         "inputs.fast_codegen": fast_codegen,

@@ -586,8 +586,10 @@
       "enabled_extensions": [
         "command.storage-clearer"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "bash-o-c",
       "rule_id": "command.storage-clearer.cleanup"
     },

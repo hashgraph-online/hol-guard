@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import inventory_contract_fingerprints as fingerprints
 from codex_plugin_scanner.guard import native_inventory_snapshot_digest as bridge
 from codex_plugin_scanner.guard.inventory_contract_models import (
     GuardAgentInventoryFinding,
@@ -176,25 +175,3 @@ def test_an_answer_that_is_not_a_digest_fails_closed(monkeypatch: pytest.MonkeyP
     _resident(monkeypatch, lambda _request: payload)
     with pytest.raises(bridge.InventorySnapshotDigestUnavailableError):
         _ask()
-
-
-def test_the_snapshot_hash_is_the_residents_answer(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Nothing recomputes the identity in Python: the contract helper is the
-    # bridge call and nothing else.
-    asked: list[dict[str, object]] = []
-
-    def fake(**kwargs: object) -> str:
-        asked.append(kwargs)
-        return _DIGEST
-
-    monkeypatch.setattr(fingerprints, "native_inventory_snapshot_digest", fake)
-    answered = fingerprints._inventory_snapshot_content_hash(
-        agent_type="codex",
-        items=(_item(),),
-        findings=(),
-        sources=(),
-        runtime_version=None,
-    )
-    assert answered == _DIGEST
-    assert asked[0]["agent_type"] == "codex"
-    assert asked[0]["runtime_version"] is None

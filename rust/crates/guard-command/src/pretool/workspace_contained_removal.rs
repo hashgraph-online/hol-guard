@@ -3,13 +3,15 @@
 //! The destructive-shell rule matches every `rm`, `dd`, `truncate` and in-place
 //! edit, and marks each match uncertain because the rule alone cannot prove a
 //! target is safe to lose. A plain `rm` or `rmdir` in the workspace is ordinary
-//! cleanup, and `sed -i` is the same file edit an agent's own edit tool makes:
-//! the sandbox keeps both off the network, credentials, the home directory and
-//! `.git`, so this module accepts that uncertainty for those programs only.
-//! A sed script cannot reach past the sandbox either, so it is not parsed. A
-//! recursive removal could still take uncommitted work with it, so each of its
-//! targets must be missing or ignored by Git, and it must run before any other
-//! command could create or move what it names.
+//! cleanup, `truncate` empties or resizes a file the same way `> file` does,
+//! and `sed -i` or `perl -i` is the same file edit an agent's own edit tool
+//! makes, whether it names its files or `find -exec` hands them over: the
+//! sandbox keeps all of them off the network, credentials, the home directory
+//! and `.git`, so this module accepts that uncertainty for those programs
+//! only. command_shape screens sed scripts so shell execution cannot
+//! hide behind containment; perl's runs in the sandbox like any perl. A
+//! recursive removal could take uncommitted work, so its targets must be missing
+//! or Git-ignored, and it must run before any other command, perl included.
 use super::super::git_session_probe::Probe;
 use super::PathContext;
 use crate::CanonicalCommandV1;
@@ -18,6 +20,9 @@ use guard_contracts::{
     PreToolResultV1,
 };
 use std::path::Path;
+
+#[path = "workspace_contained_edit_scripts.rs"]
+mod edit_scripts;
 
 pub(super) const SHELL_DESTRUCTION: &str = "command.shell-mutations.destructive-shell";
 
@@ -29,14 +34,16 @@ fn segment_indexes(observation: &NativeCommandObservationV1) -> impl Iterator<It
         .chain(observation.effective_segment_indexes.iter().copied())
 }
 
-/// The operands of a plain `rm` or `rmdir` segment and whether it recurses,
-/// no operands for an in-place `sed` edit, or `None` for any other program,
-/// option or shell expansion.
+/// The operands of a plain `rm`, `rmdir` or `truncate` segment and whether it
+/// recurses, no operands for an in-place `sed` or `perl` edit, or `None` for
+/// any other program, option or shell expansion.
 fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)> {
     let segment = model.segments.get(index)?;
     let program = segment.executable.as_deref()?;
-    if !matches!(program, "rm" | "rmdir" | "sed")
-        || segment.path_overridden
+    if !matches!(
+        program,
+        "rm" | "rmdir" | "sed" | "perl" | "truncate" | "find"
+    ) || segment.path_overridden
         || !segment.wrapper_chain.is_empty()
         || !segment.environment_names.is_empty()
     {
@@ -44,6 +51,22 @@ fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)
     }
     if program == "sed" {
         return in_place_edit(&segment.arguments).then(|| (false, Vec::new()));
+    }
+    // `find ... -type f -exec sed -i ... {} +` makes the same edit over each
+    // file the walk found; the reach check holds the walk to the workspace.
+    if program == "find" {
+        return crate::find_exec_sed(&segment.arguments)
+            .is_some_and(|edit| in_place_edit(&edit[1..]))
+            .then(|| (false, Vec::new()));
+    }
+    // Perl runs its script in the sandbox whatever the switches; the reach
+    // check still holds every operand to the workspace.
+    if program == "perl" {
+        return (super::super::inplace_edit_reason::inplace_editor(segment) == Some("perl"))
+            .then(|| (false, Vec::new()));
+    }
+    if program == "truncate" {
+        return truncate_targets(&segment.arguments).map(|operands| (false, operands));
     }
     let (mut recursive, mut options, mut operands) = (false, true, Vec::new());
     for argument in &segment.arguments {
@@ -70,6 +93,72 @@ fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)
         }
     }
     (program == "rm" || !recursive).then_some((recursive, operands))
+}
+
+/// The file operands of a `truncate` segment, or `None` for an option neither
+/// GNU nor BSD documents, or a word the shell would expand. Truncating a file
+/// is the write `> file` performs, so the targets are held to the same bounds
+/// a plain removal is: the reach check still refuses one outside the
+/// workspace.
+///
+/// That check reads the word it is given, so a pattern is refused here rather
+/// than accepted for its literal spelling: the shell picks the files, and
+/// `.*/*` names nothing outside the workspace while selecting what is inside
+/// `.git`.
+fn truncate_targets(arguments: &[String]) -> Option<Vec<&str>> {
+    let (mut options, mut operands) = (true, Vec::new());
+    let mut words = arguments.iter();
+    while let Some(argument) = words.next() {
+        let argument = argument.as_str();
+        if options && argument == "--" {
+            options = false;
+        } else if options && argument.starts_with("--") {
+            let long = &argument[2..];
+            let (name, value) = long
+                .split_once('=')
+                .map_or((long, None), |(name, value)| (name, Some(value)));
+            match name {
+                "no-create" | "io-blocks" if value.is_none() => {}
+                // The size, or the file whose size to copy.
+                "size" | "reference" => {
+                    if value.is_none() && words.next().is_none() {
+                        return None;
+                    }
+                }
+                _ => return None,
+            }
+        } else if options && argument.len() > 1 && argument.starts_with('-') {
+            let flags = &argument[1..];
+            for (position, flag) in flags.char_indices() {
+                match flag {
+                    'c' | 'o' => {}
+                    // The rest of the word, or the next word, is the value. A
+                    // size is a count, so it is read either way; a reference is
+                    // a path, and the reach check reads a separate word but
+                    // skips anything still attached to its option, so the
+                    // attached spelling would carry a file past it unseen.
+                    's' => {
+                        if position + 1 == flags.len() && words.next().is_none() {
+                            return None;
+                        }
+                        break;
+                    }
+                    'r' => {
+                        if position + 1 != flags.len() || words.next().is_none() {
+                            return None;
+                        }
+                        break;
+                    }
+                    _ => return None,
+                }
+            }
+        } else if argument.is_empty() || argument.contains(['$', '`', '~', '*', '?', '[', '{']) {
+            return None;
+        } else {
+            operands.push(argument);
+        }
+    }
+    (!operands.is_empty()).then_some(operands)
 }
 
 /// Whether `sed` runs with `-i` (GNU or BSD spelling) and only the options
@@ -182,7 +271,9 @@ pub(super) fn loses_work(
         .segments
         .iter()
         .enumerate()
-        .position(|(index, _)| removal(model, index).is_none())
+        .position(|(index, segment)| {
+            removal(model, index).is_none() || segment.executable.as_deref() == Some("perl")
+        })
         .unwrap_or(model.segments.len());
     if removals.iter().any(|(index, _)| *index > first_other) {
         return true;
@@ -308,6 +399,30 @@ fn broad_target(argument: &str, workspace: &Path, below: usize) -> bool {
     workspace.starts_with(&normal) || (root_glob && normal.parent() == Some(workspace.as_path()))
 }
 
+/// The files a `find ... -exec sed -i ... {} +` edits, spelled as the glob
+/// that names them: each root joined with the walk's first name test, or the
+/// bare root when it has none. `find . -name '*.py' -exec sed -i` then reads
+/// as `sed -i ./*.py`, an edit the wipe screen lets through, and `find .
+/// -type f -exec sed -i` as an edit of the whole root, which it does not.
+fn found_targets(segment: &crate::CommandSegmentV1) -> Option<Vec<String>> {
+    if segment.executable.as_deref() != Some("find") {
+        return None;
+    }
+    crate::find_exec_sed(&segment.arguments)?;
+    let at = segment.arguments.iter().position(|word| word == "-exec")?;
+    let shape = crate::read_only_fanout::find_shape(&segment.arguments[..at])?;
+    Some(
+        shape
+            .roots
+            .iter()
+            .map(|root| match shape.patterns.first() {
+                Some(pattern) => format!("{}/{pattern}", root.trim_end_matches('/')),
+                None => root.clone(),
+            })
+            .collect(),
+    )
+}
+
 pub(super) fn destroys_workspace(
     result: &PreToolResultV1,
     model: &CanonicalCommandV1,
@@ -325,10 +440,18 @@ pub(super) fn destroys_workspace(
         .any(|index| {
             model.segments.get(index).is_none_or(|segment| {
                 let below = below.get(index).copied().unwrap_or(0);
+                if let Some(targets) = found_targets(segment) {
+                    return targets
+                        .iter()
+                        .any(|target| broad_target(target, workspace, below));
+                }
+                let scripts = edit_scripts::edit_scripts(segment);
                 segment
                     .arguments
                     .iter()
-                    .any(|argument| broad_target(argument, workspace, below))
+                    .enumerate()
+                    .filter(|(position, _)| !scripts.contains(position))
+                    .any(|(_, argument)| broad_target(argument, workspace, below))
             })
         })
 }

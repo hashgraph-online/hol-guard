@@ -2,6 +2,7 @@ import {
   approvalDecisionContractKey,
   approvalDecisionSubjectKey,
   ADVANCED_SCOPE_VALUES,
+  BLOCK_SCOPE_CHOICES,
   DEFAULT_SCOPE_CHOICES,
   advancedScopeChoicesForRequest,
   buildDecisionPayload,
@@ -9,6 +10,7 @@ import {
   normalizeDecisionScope,
   recommendedScopeForAction,
   requestSupportsScope,
+  scopeChoiceWithDuration,
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
   onceOnlyReasonCopy,
@@ -384,4 +386,42 @@ assert(
   DEFAULT_SCOPE_CHOICES.find((choice) => choice.value === "workspace")?.label ===
     "Allow and remember for this project",
   "T-AS-26: workspace choice copy matches the primary allow button",
+);
+
+const exactOnce = DEFAULT_SCOPE_CHOICES.find((item) => item.value === "artifact");
+assert(
+  exactOnce !== undefined && scopeChoiceWithDuration(exactOnce, false) === exactOnce,
+  "T-AS-30: the one-time exact action keeps its one-time copy",
+);
+assert(
+  exactOnce !== undefined &&
+    scopeChoiceWithDuration(exactOnce, true).label === "Always allow this exact action" &&
+    !scopeChoiceWithDuration(exactOnce, true).description.includes("Nothing is saved"),
+  "T-AS-34: Always allow on the exact action relabels the choice and drops the one-time description",
+);
+
+const simpleMarkup = renderToStaticMarkup(
+  createElement(ReviewScopeControls, {
+    commonScopeOptions: DEFAULT_SCOPE_CHOICES.filter((item) => item.value === "artifact"),
+    broaderScopeOptions: DEFAULT_SCOPE_CHOICES.filter((item) => item.value === "harness"),
+    advancedScopeOptions: [],
+    blockScopeOptions: [],
+    hasAllowScope: true,
+    taskCapabilityCopy: null,
+    exactActionPersistenceEligible: false,
+    rememberExactAction: false,
+    allowScope: "artifact",
+    blockScope: "artifact",
+    onAllowScopeChange: ignoreScopeChange,
+    onBlockScopeChange: ignoreScopeChange,
+    onRememberExactActionChange: ignoreScopeChange,
+  }),
+);
+assert(
+  simpleMarkup.includes("Allow just this once") && simpleMarkup.includes("Approval scope"),
+  "T-AS-32: the card shows the one-time choice under its section label",
+);
+assert(
+  !simpleMarkup.includes("Applies to") && !simpleMarkup.includes("Expires") && !simpleMarkup.includes("Policy"),
+  "T-AS-33: a scope choice is a label and one line, with no applies-to, expiry or policy table",
 );

@@ -18,7 +18,7 @@ import pytest
 
 import scripts.build_native_hol_guard_wheel as wheel_builder
 import scripts.native_slo_session as native_slo_session
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from scripts.build_native_hol_guard_wheel import NativeWheelError, build_native_wheel
 from scripts.native_slo_session import AdapterSession
 

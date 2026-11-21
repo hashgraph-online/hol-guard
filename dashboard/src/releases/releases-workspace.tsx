@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { HiMiniArrowTopRightOnSquare } from "react-icons/hi2";
+
 import { ActionButton, EmptyState } from "../approval-center-primitives";
 import { ReleaseArchiveList } from "./components/release-archive-list";
 import { ReleaseDetailPanel } from "./components/release-detail-panel";
@@ -8,10 +10,12 @@ import { fetchReleaseDetail, fetchReleaseIndex } from "./releases-api";
 import {
   dismissWhatsNew,
   failureCopy,
+  holReleaseUrl,
   installedStanding,
   isRetryable,
   isWhatsNewDismissed,
   openingSlug,
+  readsOnHol,
 } from "./releases-model";
 import type { InstalledStanding } from "./releases-model";
 import type { ReleaseDetail, ReleaseFeedFailure, ReleaseIndex } from "./releases-types";
@@ -27,21 +31,36 @@ type DetailState =
   | { kind: "ready"; detail: ReleaseDetail }
   | { kind: "failed"; failure: ReleaseFeedFailure };
 
-function FailureNotice(props: { failure: ReleaseFeedFailure; onRetry?: () => void }) {
-  const copy = failureCopy(props.failure);
+function FailureAction(props: { failure: ReleaseFeedFailure; holUrl: string; onRetry?: () => void }) {
+  if (props.onRetry) {
+    return (
+      <ActionButton variant="outline" onClick={props.onRetry}>
+        Try again
+      </ActionButton>
+    );
+  }
+  if (!readsOnHol(props.failure)) {
+    return null;
+  }
   return (
-    <EmptyState
-      title={copy.title}
-      body={copy.body}
-      action={
-        props.onRetry ? (
-          <ActionButton variant="outline" onClick={props.onRetry}>
-            Try again
-          </ActionButton>
-        ) : undefined
-      }
-    />
+    <a
+      href={props.holUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-brand-dark/15 px-4 text-sm font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/40 hover:text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30 motion-reduce:transition-none"
+    >
+      Read it on hol.org
+      <HiMiniArrowTopRightOnSquare className="size-4" aria-hidden="true" />
+      <span className="sr-only">(opens in a new tab)</span>
+    </a>
   );
+}
+
+function FailureNotice(props: { failure: ReleaseFeedFailure; holUrl: string; onRetry?: () => void }) {
+  const copy = failureCopy(props.failure);
+  const hasAction = Boolean(props.onRetry) || readsOnHol(props.failure);
+  const action = hasAction ? <FailureAction {...props} /> : undefined;
+  return <EmptyState title={copy.title} body={copy.body} action={action} />;
 }
 
 function LoadingNotice({ label }: { label: string }) {
@@ -214,6 +233,7 @@ export function ReleasesWorkspace({ installedVersion }: { installedVersion?: str
       {indexState.kind === "failed" ? (
         <FailureNotice
           failure={indexState.failure}
+          holUrl={holReleaseUrl(null)}
           onRetry={isRetryable(indexState.failure) ? () => setReloadToken((token) => token + 1) : undefined}
         />
       ) : null}
@@ -243,6 +263,7 @@ export function ReleasesWorkspace({ installedVersion }: { installedVersion?: str
             {detailState.kind === "failed" ? (
               <FailureNotice
                 failure={detailState.failure}
+                holUrl={holReleaseUrl(selectedSlug)}
                 onRetry={
                   isRetryable(detailState.failure) ? () => setDetailToken((token) => token + 1) : undefined
                 }

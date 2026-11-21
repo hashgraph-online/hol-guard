@@ -304,11 +304,6 @@ fn diagnose_row(
             return Some(("approval_reuse_integrity_failure".to_owned(), hash()));
         }
     }
-    if text(row, "expires_at")
-        .is_some_and(|expires| guard_contracts::timestamp_has_expired(&expires, &ctx.now))
-    {
-        return Some(("approval_reuse_expired".to_owned(), hash()));
-    }
     let is_token = |value: Option<&str>| value.is_some_and(|v| v.starts_with(CONTEXT_TOKEN_PREFIX));
     if is_token(stored_hash.as_deref()) || is_token(artifact_hash) {
         let saved = stored_hash.clone().map_or(Value::Null, Value::String);
@@ -330,6 +325,17 @@ fn diagnose_row(
         .is_some_and(|stored| Some(stored.as_str()) != request.publisher.as_deref());
     if workspace_changed || publisher_changed || !same_identity {
         return Some(("approval_reuse_identity_changed".to_owned(), hash()));
+    }
+    // Expiry is the last question, not the first. A stale row that also names
+    // a different workspace, publisher or payload never stood a chance of
+    // authorizing this request, and reporting it as expired tells the reader
+    // their standing approval lapsed when the mismatch above is what stopped
+    // the reuse. Only a row that matched on every other count is reported as
+    // expired.
+    if text(row, "expires_at")
+        .is_some_and(|expires| guard_contracts::timestamp_has_expired(&expires, &ctx.now))
+    {
+        return Some(("approval_reuse_expired".to_owned(), hash()));
     }
     None
 }

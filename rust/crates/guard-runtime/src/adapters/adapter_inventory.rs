@@ -26,6 +26,21 @@ pub(crate) use guard_adapter_detection::{
     carried, json_document, json_payload, mcp_fields, SkillNaming, ERR_NAME, ERR_VALUE,
 };
 
+/// A skill root named relative to its identity root (`relative_to(...).as_posix()`,
+/// else the root itself), so discovery-issue ids carry no absolute local path.
+pub(crate) fn skill_root_label(skill_root: &Path, identity_root: &Path) -> String {
+    let label = skill_root
+        .strip_prefix(identity_root)
+        .unwrap_or(skill_root)
+        .to_string_lossy()
+        .into_owned();
+    if cfg!(windows) {
+        label.replace('\\', "/")
+    } else {
+        label
+    }
+}
+
 /// The directories one detection request names.
 pub(crate) struct Request {
     pub(crate) home: PathBuf,
@@ -218,6 +233,7 @@ impl Inventory {
         naming: &SkillNaming<'_>,
         skill_root: &Path,
         identity_root: &Path,
+        prefix: &str,
     ) -> Result<(), &'static str> {
         let root = self.fs(skill_root);
         let identity_root = self.fs(identity_root);
@@ -237,7 +253,7 @@ impl Inventory {
             let skill_md = py_join(skill_root, &relative);
             self.found(&skill_md);
             let parent = relative.rsplit_once('/').map_or(".", |(parent, _)| parent);
-            let relative_id = format!("skills/{parent}");
+            let relative_id = format!("{prefix}/{parent}");
             let name = match naming {
                 SkillNaming::Prefixed => relative_id.as_str(),
                 SkillNaming::Bare { .. } => parent,
@@ -265,13 +281,19 @@ impl Inventory {
                 py_join(skill_root, &relative)
             };
             self.found(&path);
-            let relative_id = format!("skills/.guard-discovery/{}", issue.issue_id);
+            let relative_id = format!("{prefix}/.guard-discovery/{}", issue.issue_id);
             self.warnings.push(format!(
                 "{label} {} skill discovery is incomplete; approval reuse is disabled.",
                 scope.scope
             ));
             let key = match naming {
-                SkillNaming::Prefixed => issue.issue_id.clone(),
+                SkillNaming::Prefixed => {
+                    if prefix == "skills" {
+                        issue.issue_id.clone()
+                    } else {
+                        format!("{prefix}:{}", issue.issue_id)
+                    }
+                }
                 SkillNaming::Bare { root_label } => format!("{root_label}:{}", issue.issue_id),
             };
             self.artifacts.push(scope.wire(
@@ -337,6 +359,6 @@ impl guard_adapter_detection::DetectionHost for Inventory {
         skill_root: &Path,
         identity_root: &Path,
     ) -> Result<(), &'static str> {
-        self.skills(scope, label, naming, skill_root, identity_root)
+        self.skills(scope, label, naming, skill_root, identity_root, "skills")
     }
 }

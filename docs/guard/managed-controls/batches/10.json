@@ -1,8 +1,8 @@
 {
   "batch": 10,
   "evidence": [
-    "src/codex_plugin_scanner/guard/managed_controls/compatibility.py",
-    "src/codex_plugin_scanner/guard/managed_controls/migration.py",
+    "tests/managed_controls/compatibility.py",
+    "tests/managed_controls/migration.py",
     "tests/managed_controls/test_compatibility_migration.py"
   ],
   "repository": "hashgraph-online/hol-guard",

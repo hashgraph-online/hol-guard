@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -19,7 +20,7 @@ def native(monkeypatch, tmp_path):
         return b"runtime"
 
     @contextmanager
-    def verified_executable(raw):
+    def verified_executable(raw, sha256=None):
         calls["copies"] += 1
         yield Path(tmp_path / "runtime")
 
@@ -245,3 +246,35 @@ def test_an_authoring_refusal_keeps_its_code_through_the_session(native, authori
     with pytest.raises(NativeSourceCompilerError) as raised:
         bundle_baseline.validation_base({}, Path("compiler"), installed=True, directory=tmp_path)
     assert raised.value.code == "refused"
+
+
+def test_a_startup_migration_verifies_the_runtime_once_for_its_migrate_and_write(native, monkeypatch):
+    # A fresh home's first start migrates and then writes the floor it gets
+    # back, and both reach the runtime. On Windows each separate check of the
+    # kept copy re-reads about 100 MB.
+    from codex_plugin_scanner.guard.catalog_delivery import lifecycle_store
+
+    @contextmanager
+    def no_legacy(store):
+        yield {}
+
+    monkeypatch.setattr(lifecycle_store, "require_exclusive_command_control_mutation_lease", lambda home: None)
+    monkeypatch.setattr(lifecycle_store, "legacy_transport", no_legacy)
+    monkeypatch.setattr(lifecycle_store, "read", lambda store: None)
+    monkeypatch.setattr(lifecycle_store, "_stamp", lambda store: None)
+    monkeypatch.setattr(lifecycle_store, "_key", lambda store: b"k")
+    monkeypatch.setattr(lifecycle_store, "_mark", lambda store, stamp: None)
+    monkeypatch.setattr(lifecycle, "release_evidence", lambda authority: {})
+    monkeypatch.setattr(
+        transport, "_decode_output", lambda stdout, returncode, stderr: {"record": "floor", "stamp": "stamp"}
+    )
+    written = []
+
+    def write(store, record):
+        lifecycle.invoke("read", key="6b", floor=record)
+        written.append(record)
+
+    monkeypatch.setattr(lifecycle_store, "write", write)
+    lifecycle_store.migrate_installed(SimpleNamespace(guard_home=Path("/guard")), object())
+    assert written == ["floor"]
+    assert native == {"verify": 1, "copies": 1, "runs": 2}

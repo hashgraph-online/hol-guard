@@ -66,12 +66,9 @@ pub(super) fn inherited_preload_configured(
             .iter()
             .any(|name| names.contains(&name.to_ascii_uppercase().as_str()))
     };
-    let preload = named(&[
-        "NODE_OPTIONS",
-        "LD_PRELOAD",
-        "LD_AUDIT",
-        "DYLD_INSERT_LIBRARIES",
-    ]);
+    // A heap-size or diagnostics-only `NODE_OPTIONS` loads nothing.
+    let preload = named(&["LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"])
+        || (!environment.node_options_inert && named(&["NODE_OPTIONS"]));
     let psqlrc = named(&["PSQLRC"]);
     (preload || psqlrc)
         && model.segments.iter().any(|segment| {

@@ -65,13 +65,13 @@ jobs:
           # checks it against SOURCE_SHA below, so a pull request has to build its own head
           # rather than the merge commit Actions checks out by default.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '22'
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: '3.12'
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: 0.9.26
           enable-cache: true
@@ -161,7 +161,7 @@ jobs:
           uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
           (cd native-dist && shasum -a 256 ./*.whl)
       - name: Upload the native wheel
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ${{ matrix.artifact }}
           path: native-dist/*.whl

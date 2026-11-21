@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.actions import normalize_opencode_payload
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
@@ -154,7 +154,7 @@ def test_normalize_opencode_payload_uses_inner_command_for_shell_wrappers(tmp_pa
         "tool_input": {"command": ("lean-ctx -c 'rg -n \"service_principal|reauthorization\" src app __tests__ docs'")},
     }
 
-    envelope = normalize_opencode_payload(payload, workspace=workspace, home_dir=home_dir)
+    envelope = normalize_harness_payload("opencode", "", payload, workspace=workspace, home_dir=home_dir)
 
     assert envelope.command is not None
     assert envelope.command.startswith("rg -n")
@@ -171,7 +171,9 @@ def test_normalize_opencode_payload_preserves_repo_local_wrapper_command(tmp_pat
         "tool_input": {"command": "./bin/lean-ctx -c 'python -c \"import time; time.sleep(1)\"'"},
     }
 
-    envelope = normalize_opencode_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path / "home")
+    envelope = normalize_harness_payload(
+        "opencode", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path / "home"
+    )
 
     assert envelope.command is not None
     assert envelope.command.startswith("./bin/lean-ctx -c")
@@ -229,7 +231,9 @@ def test_wrapped_shell_command_ignores_spoofed_guard_inner_command(tmp_path: Pat
         },
     }
 
-    envelope = normalize_opencode_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path / "home")
+    envelope = normalize_harness_payload(
+        "opencode", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path / "home"
+    )
 
     assert envelope.command is not None
     assert envelope.command.startswith("curl -sS -X POST")

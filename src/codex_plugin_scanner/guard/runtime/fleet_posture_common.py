@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
-import re
 import secrets
-from collections.abc import Iterable
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -17,12 +14,6 @@ if TYPE_CHECKING:
 SCHEMA_VERSION = "fleet-posture/v1"
 CAPABILITY = "fleet-posture/v1"
 MAX_PAYLOAD_BYTES = 65536
-MAX_ITEMS_PER_SYNC = 250
-MAX_TOOLS = 32
-MAX_BLIND_SPOTS = 8
-MAX_BLIND_SPOT_LENGTH = 80
-STALE_AFTER = timedelta(days=7)
-FULL_REFRESH_AFTER = timedelta(days=7)
 
 LAST_SENT_STATE_KEY = "fleet_posture_last"
 SETTINGS_STATE_KEY = "fleet_posture_settings"
@@ -44,6 +35,7 @@ HARNESS_IDS = frozenset(
         "grok",
         "hermes",
         "kimi",
+        "muse",
         "omp",
         "openclaw",
         "opencode",
@@ -52,8 +44,6 @@ HARNESS_IDS = frozenset(
         "zcode",
     }
 )
-
-_SHA256_HEX = re.compile(r"^[a-f0-9]{64}$")
 
 
 def utc(value: datetime | None) -> datetime:
@@ -85,34 +75,8 @@ def normalized_timestamp(value: object) -> str | None:
     return iso(parsed) if parsed is not None else None
 
 
-def text_digest(text: str) -> str:
-    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def digest_rows(rows: Iterable[Iterable[object]]) -> str:
-    """Digest of rows sorted lexicographically, serialized as compact JSON."""
-
-    ordered = sorted(
-        ([("" if cell is None else str(cell)) for cell in row] for row in rows),
-    )
-    return text_digest(json.dumps(ordered, separators=(",", ":"), ensure_ascii=False))
-
-
-def normalized_hash(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    text = value.strip().lower()
-    if text.startswith("sha256:"):
-        text = text[len("sha256:") :]
-    return f"sha256:{text}" if _SHA256_HEX.match(text) else None
-
-
 def clip(value: str, limit: int) -> str:
     return value if len(value) <= limit else value[:limit]
-
-
-def json_size(payload: object) -> int:
-    return len(json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
 
 
 def keyed_digest(key: bytes, text: str) -> str:

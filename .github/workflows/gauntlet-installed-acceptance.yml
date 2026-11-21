@@ -28,12 +28,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  TARGET: x86_64-unknown-linux-musl
-  PLATFORM_TAG: manylinux_2_17_x86_64
   REPEAT: ${{ inputs.repeat || '5' }}
   REPORT_ONLY: ${{ inputs.report_only && '--report-only' || '' }}
-  # The development profile the Gauntlet already builds with: no LTO, 16 codegen units. The lane
-  # tests install and hook behaviour, which the optimisation level does not change.
+  # No LTO and 16 codegen units keep the build short. The workspace keeps its shipped
+  # optimisation level: verdicts do not depend on it, but the cold-start timings this lane
+  # reports do. An unoptimised runtime made first starts on Linux and macOS look 1.5 s or
+  # more slower than a release build.
   CARGO_PROFILE_RELEASE_LTO: 'false'
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
 
@@ -41,7 +41,10 @@ jobs:
   installed-acceptance:
     name: Installed acceptance (wheel and frozen bundle)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
+    env:
+      TARGET: x86_64-unknown-linux-musl
+      PLATFORM_TAG: manylinux_2_17_x86_64
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -52,7 +55,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: 0.9.26
           enable-cache: true
@@ -76,11 +79,8 @@ jobs:
           set -euo pipefail
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          uv run --no-sync python scripts/release/workspace_opt_profile.py --opt-level 0 \
-            --output "$RUNNER_TEMP/dev-workspace-profile.toml"
           cargo build --manifest-path rust/Cargo.toml --locked --release --target "$TARGET" \
-            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source \
-            --config "$RUNNER_TEMP/dev-workspace-profile.toml"
+            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
           "rust/target/$TARGET/release/hol-guard-runtime" self-test --json
           "rust/target/$TARGET/release/guard-command-source" export-trust \
             > contracts/extensions/build-trust-class-map.v1.json
@@ -95,7 +95,13 @@ jobs:
           compiler: ${{ env.COMPILER }}
 
       - name: Lane tests
-        run: uv run --no-sync python -m pytest tests/test_gauntlet_installed_lane.py -q
+        # The ownership fixture invokes the native runner-authority endpoint. Its
+        # executable was just built above, but these tests run before wheel
+        # installation and must not fall back to the absent packaged runtime.
+        env:
+          HOL_GUARD_NATIVE_REGRESSION: '1'
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/${{ env.TARGET }}/release/hol-guard-runtime
+        run: uv run --no-sync python -m pytest tests/test_gauntlet_installed_lane.py tests/test_gauntlet_installed_permission_and_prompt.py tests/test_gauntlet_installed_replay_verdict.py tests/test_gauntlet_installed_auth_denial.py tests/test_gauntlet_installed_startup.py tests/test_gauntlet_installed_windows_argv.py -q
 
       - name: Check out the matching historical client
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -139,6 +145,11 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          # This lane builds the development profile above, so the runtime is several times the
+          # shipped size. These wheels are never published; they name a larger bound and the
+          # release path keeps the default.
+          wheel_bound=(--max-runtime-bytes $((512 * 1024 * 1024)))
+          echo "RUNTIME_BOUND=$((512 * 1024 * 1024))" >> "$GITHUB_ENV"
           runtime="rust/target/$TARGET/release/hol-guard-runtime"
           compiler="rust/target/$TARGET/release/guard-command-source"
           "$compiler" export-built > source-compiled.json
@@ -154,7 +165,8 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --rule-digest "$RULE_DIGEST" \
             --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
-            --base-program-digest "$(jq -r '.program.program_digest' source-compiled.json)"
+            --base-program-digest "$(jq -r '.program.program_digest' source-compiled.json)" \
+            "${wheel_bound[@]}"
           WHEEL=$(find native-dist -maxdepth 1 -type f -name 'hol_guard-*.whl' -print)
           test "$(printf '%s\n' "$WHEEL" | wc -l)" -eq 1
           echo "WHEEL=$PWD/$WHEEL" >> "$GITHUB_ENV"
@@ -165,12 +177,15 @@ jobs:
           python3 -m venv --copies "$RUNNER_TEMP/wheel-venv"
           # Harden lane-owned copies; the runner's shared interpreter may be group-writable.
           chmod go-w "$RUNNER_TEMP/wheel-venv"/bin/python*
-          PYTHONPATH= "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install --no-compile \
+          # Compile bytecode as `pipx install hol-guard` does. Without it the first
+          # harness in each venv pays a one-off compile inside its cold-start timing.
+          PYTHONPATH= "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install \
             --index-url https://pypi.org/simple "$WHEEL"
           python3 -m ci.gauntlet installed \
             --runtime "$RUNNER_TEMP/wheel-venv/bin/hol-guard" \
-            --harness claude-code codex omp zcode \
+            --harness claude-code codex muse omp zcode \
             --repeat "$REPEAT" \
+            --uninstall-restore \
             $REPORT_ONLY \
             --output "$RUNNER_TEMP/evidence/wheel"
 
@@ -182,7 +197,8 @@ jobs:
             --wheel "$WHEEL" \
             --destination "$RUNNER_TEMP/native-runtime" \
             --expected-version "$VERSION" \
-            --expected-target "$TARGET"
+            --expected-target "$TARGET" \
+            --max-runtime-bytes "$RUNTIME_BOUND"
           uv run --no-sync python scripts/release/stage_guard_cloud_review_artifacts.py --source-root "$PWD"
           uv pip install --python .venv/bin/python --no-deps --force-reinstall "$WHEEL"
           uv run --no-sync pyinstaller \
@@ -207,8 +223,9 @@ jobs:
           set -euo pipefail
           python3 -m ci.gauntlet installed \
             --runtime "$ONEDIR/hol-guard" \
-            --harness claude-code codex omp zcode \
+            --harness claude-code codex muse omp zcode \
             --repeat "$REPEAT" \
+            --uninstall-restore \
             --require-frozen \
             $REPORT_ONLY \
             --output "$RUNNER_TEMP/evidence/frozen"
@@ -222,8 +239,149 @@ jobs:
 
       - name: Publish the evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: installed-acceptance-evidence
           path: ${{ runner.temp }}/evidence/**/installed-acceptance.json
+          if-no-files-found: warn
+
+  # Startup readiness on the other operating systems the wheel ships for. The job above
+  # covers Linux, the upgrade history and the frozen bundle; this one installs the native wheel
+  # on macOS and Windows and runs the same lane, so the daemon's cold start after install and the
+  # first hook's latency are measured on each host the release claims.
+  startup-readiness:
+    name: Installed acceptance (wheel, ${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos
+            runner: macos-15
+            target: aarch64-apple-darwin
+            platform_tag: macosx_11_0_arm64
+            exe: ''
+          - os: windows
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform_tag: win_amd64
+            exe: .exe
+    defaults:
+      run:
+        shell: bash
+    env:
+      TARGET: ${{ matrix.target }}
+      PLATFORM_TAG: ${{ matrix.platform_tag }}
+      EXE: ${{ matrix.exe }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: 0.9.26
+          enable-cache: true
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Sync the Python environment
+        run: uv sync --frozen --group ci-test --python 3.12
+
+      - name: Build the native runtime and the source compiler
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$TARGET" \
+            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          "rust/target/$TARGET/release/hol-guard-runtime$EXE" self-test --json
+          "rust/target/$TARGET/release/guard-command-source$EXE" export-trust \
+            > contracts/extensions/build-trust-class-map.v1.json
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "COMPILER=$PWD/rust/target/$TARGET/release/guard-command-source$EXE" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/stage-command-projections
+        with:
+          compiler: ${{ env.COMPILER }}
+
+      - name: Assemble the native wheel
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          runtime="rust/target/$TARGET/release/hol-guard-runtime$EXE"
+          compiler="rust/target/$TARGET/release/guard-command-source$EXE"
+          "$compiler" export-built > source-compiled.json
+          HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" uv build --wheel --out-dir pure-dist
+          RULE_DIGEST=$("$runtime" capabilities --json | python -I -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+            --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+            --runtime "$runtime" \
+            --output-dir native-dist \
+            --version "$VERSION" \
+            --platform-tag "$PLATFORM_TAG" \
+            --target "$TARGET" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST" \
+            --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
+            --base-program-digest "$(jq -r '.program.program_digest' source-compiled.json)" \
+            --max-runtime-bytes $((512 * 1024 * 1024))
+          WHEEL=$(find native-dist -maxdepth 1 -type f -name 'hol_guard-*.whl' -print)
+          test "$(printf '%s\n' "$WHEEL" | wc -l)" -eq 1
+          echo "WHEEL=$PWD/$WHEEL" >> "$GITHUB_ENV"
+
+      - name: Installed acceptance against the wheel
+        run: |
+          set -euo pipefail
+          python -m venv --copies "$RUNNER_TEMP/wheel-venv"
+          if [[ -n "$EXE" ]]; then bin="$RUNNER_TEMP/wheel-venv/Scripts"; else bin="$RUNNER_TEMP/wheel-venv/bin"; fi
+          # Compile bytecode as `pipx install hol-guard` does; see the Linux step.
+          PYTHONPATH= "$bin/python$EXE" -m pip install \
+            --index-url https://pypi.org/simple "$WHEEL"
+          python -m ci.gauntlet installed \
+            --runtime "$bin/hol-guard$EXE" \
+            --harness claude-code codex muse omp zcode \
+            --repeat "$REPEAT" \
+            --uninstall-restore \
+            $REPORT_ONLY \
+            --output "$RUNNER_TEMP/evidence/wheel-${{ matrix.os }}"
+
+      - name: Summarise the findings
+        if: always()
+        run: |
+          set -euo pipefail
+          python -I ci/gauntlet/summarise_installed_acceptance.py "$RUNNER_TEMP/evidence" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      # The lane's harness homes hold Windows profile folders the upload action cannot scan, so
+      # copy only the reports out before publishing them.
+      - name: Collect the reports
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/reports"
+          for report in "$RUNNER_TEMP"/evidence/*/installed-acceptance.json; do
+            [[ -f "$report" ]] || continue
+            lane=$(basename "$(dirname "$report")")
+            mkdir -p "$RUNNER_TEMP/reports/$lane"
+            cp "$report" "$RUNNER_TEMP/reports/$lane/"
+          done
+
+      - name: Publish the evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: installed-acceptance-evidence-${{ matrix.os }}
+          path: ${{ runner.temp }}/reports/**/installed-acceptance.json
           if-no-files-found: warn

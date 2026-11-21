@@ -107,3 +107,23 @@ fn yarn_add_cwd_names_a_directory_not_a_package() {
         .collect();
     assert_eq!(names, ["left-pad"]);
 }
+
+#[test]
+fn uv_and_pip_value_options_name_no_package() {
+    for command in [
+        "uv pip install --python .venv/bin/python left-pad",
+        "uv add -p 3.12 left-pad",
+        "uv add --no-binary left-pad",
+        "uv pip install --no-binary :all: left-pad",
+        "pip install -t ./vendor left-pad",
+    ] {
+        let tokens: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        let request = parse_protect_command(&tokens).expect("the install parses");
+        let names: Vec<_> = request
+            .targets
+            .iter()
+            .filter_map(|target| target.package_name.clone())
+            .collect();
+        assert_eq!(names, ["left-pad"], "{command}");
+    }
+}

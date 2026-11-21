@@ -1,5 +1,6 @@
 //! The POSIX process start token behind `current_process_identity`: the
-//! Linux `/proc` start tick, else the start time a trusted `ps` reports.
+//! Linux `/proc` start tick, else the start time a trusted `ps` reports. The
+//! owner marker is the process's real uid, read the same two ways.
 
 use std::fs::File;
 use std::io::Read;
@@ -13,6 +14,7 @@ const TRUSTED_PS_PATHS: [&str; 2] = ["/bin/ps", "/usr/bin/ps"];
 const PS_TIMEOUT: Duration = Duration::from_millis(500);
 const PS_POLL: Duration = Duration::from_millis(1);
 const PROC_STAT_LIMIT: u64 = 4096;
+const PROC_STATUS_LIMIT: u64 = 64 * 1024;
 
 /// `str.split()` with no argument: CPython's whitespace for ASCII text.
 fn py_split(text: &str) -> Vec<&str> {
@@ -60,10 +62,14 @@ fn universal_newlines(text: &str) -> String {
     text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
-/// `ps -p <pid> -o lstart=` with the 0.5 second cap Python applies.
-fn ps_start_time(ps: &str, pid: u32) -> Option<String> {
+/// `ps -p <pid> -o <field>` under `timeout`: its stripped output, if `ps`
+/// succeeded and printed anything.
+fn ps_field(ps: &str, pid: u32, field: &str, timeout: Duration) -> Option<String> {
+    if timeout.is_zero() {
+        return None;
+    }
     let mut child = Command::new(ps)
-        .args(["-p", &pid.to_string(), "-o", "lstart="])
+        .args(["-p", &pid.to_string(), "-o", field])
         .env_clear()
         .env("LANG", "C")
         .env("LC_ALL", "C")
@@ -72,7 +78,7 @@ fn ps_start_time(ps: &str, pid: u32) -> Option<String> {
         .stderr(Stdio::piped())
         .spawn()
         .ok()?;
-    let deadline = Instant::now() + PS_TIMEOUT;
+    let deadline = Instant::now() + timeout;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
@@ -90,19 +96,59 @@ fn ps_start_time(ps: &str, pid: u32) -> Option<String> {
         return None;
     }
     let text = universal_newlines(std::str::from_utf8(&stdout).ok()?);
-    let started = py_strip(&text);
-    (!started.is_empty()).then(|| started.to_owned())
+    let value = py_strip(&text);
+    (!value.is_empty()).then(|| value.to_owned())
 }
 
 /// `_process_start_token(pid)` without a deadline.
 pub(crate) fn process_start_token(pid: u32) -> Option<String> {
+    process_start_token_within(pid, PS_TIMEOUT)
+}
+
+/// The start token, giving `ps` at most `timeout` (capped at half a second).
+pub(crate) fn process_start_token_within(pid: u32, timeout: Duration) -> Option<String> {
     if Path::new("/proc").is_dir() {
         if let Some(tick) = linux_proc_stat(pid) {
             return Some(format!("linux:{tick}"));
         }
     }
     let ps = trusted_ps_path()?;
-    ps_start_time(&ps, pid).map(|started| format!("posix:{started}"))
+    ps_field(&ps, pid, "lstart=", timeout.min(PS_TIMEOUT)).map(|started| format!("posix:{started}"))
+}
+
+/// `uid:<n>` for the process's real uid: the `Uid:` line of
+/// `/proc/<pid>/status` when it can be read, else what `ps` reports.
+pub(crate) fn process_owner_marker(pid: u32) -> Option<String> {
+    if let Some(answer) = proc_status_uid(pid) {
+        return answer;
+    }
+    let ps = trusted_ps_path()?;
+    let output = ps_field(&ps, pid, "uid=", PS_TIMEOUT)?;
+    uid_marker(py_split(&output).first()?)
+}
+
+/// The answer the `Uid:` line gives, or `None` when there is no readable
+/// ASCII status file with one and `ps` has to be asked.
+fn proc_status_uid(pid: u32) -> Option<Option<String>> {
+    let mut bytes = Vec::new();
+    File::open(format!("/proc/{pid}/status"))
+        .ok()?
+        .take(PROC_STATUS_LIMIT)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if !bytes.is_ascii() {
+        return None;
+    }
+    let text = String::from_utf8(bytes).ok()?;
+    let line = text.lines().find(|line| line.starts_with("Uid:"))?;
+    Some(py_split(line).get(1).copied().and_then(uid_marker))
+}
+
+fn uid_marker(raw: &str) -> Option<String> {
+    if raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    raw.parse::<u64>().ok().map(|uid| format!("uid:{uid}"))
 }
 
 #[cfg(all(test, unix))]
@@ -130,5 +176,31 @@ mod tests {
             "{token}"
         );
         assert_eq!(process_start_token(pid), Some(token));
+    }
+
+    #[test]
+    fn uid_markers_drop_leading_zeros_and_refuse_other_text() {
+        assert_eq!(uid_marker("0501").as_deref(), Some("uid:501"));
+        assert_eq!(uid_marker("0").as_deref(), Some("uid:0"));
+        for raw in ["", "-1", "5a", "+5", "\u{0665}"] {
+            assert_eq!(uid_marker(raw), None, "{raw}");
+        }
+    }
+
+    #[test]
+    fn own_owner_marker_is_the_real_uid() {
+        let uid = nix::unistd::getuid().as_raw();
+        assert_eq!(
+            process_owner_marker(std::process::id()),
+            Some(format!("uid:{uid}"))
+        );
+    }
+
+    #[test]
+    fn a_spent_timeout_never_asks_ps() {
+        assert_eq!(
+            ps_field("/bin/ps", std::process::id(), "lstart=", Duration::ZERO),
+            None
+        );
     }
 }

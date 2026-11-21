@@ -1,0 +1,724 @@
+{
+ "cases": [
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "home": "home",
+   "name": "missing",
+   "payload": "{}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"b\": 1, \"a\": {\"x\": [1, 2.5, null, true]}, \"b\": 2}"
+    }
+   ],
+   "home": "home",
+   "name": "strict_json",
+   "payload": "{\"b\": 2, \"a\": {\"x\": [1, 2.5, null, true]}}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "[1]"
+    }
+   ],
+   "home": "home",
+   "name": "not_an_object",
+   "payload": "{}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{not json at all"
+    }
+   ],
+   "home": "home",
+   "name": "unparseable",
+   "payload": "{}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": ""
+    }
+   ],
+   "home": "home",
+   "name": "empty_file",
+   "payload": "{}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "﻿{\"a\": 1}"
+    }
+   ],
+   "home": "home",
+   "name": "bom",
+   "payload": "{}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "7b2261223a2022ff227d",
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json"
+    }
+   ],
+   "home": "home",
+   "name": "not_utf8",
+   "payload": "{}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [
+    "home/.openclaw/openclaw.json"
+   ],
+   "files": [],
+   "home": "home",
+   "name": "directory",
+   "payload": "{}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "// head\n{\"url\": \"http://x/*y*/\", /* block\n spans */ \"b\": \"a//b\", \"c\": 'it\\'s // not'}\n"
+    }
+   ],
+   "home": "home",
+   "name": "comments",
+   "payload": "{\"url\": \"http://x/*y*/\", \"b\": \"a//b\", \"c\": \"it's // not\"}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "// c\r{\"a\": 1}\r"
+    }
+   ],
+   "home": "home",
+   "name": "carriage_return_comment",
+   "payload": "{\"a\": 1}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "// c\r\n{\"a\": 1}\r\n"
+    }
+   ],
+   "home": "home",
+   "name": "crlf_comment",
+   "payload": "{\"a\": 1}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"a\": 1} /* open"
+    }
+   ],
+   "home": "home",
+   "name": "unterminated_block_comment",
+   "payload": "{\"a\": 1}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"a\": [1, 2, ], \"s\": \"x,}\", \"o\": {\"k\": 1,\n\t},\n}"
+    }
+   ],
+   "home": "home",
+   "name": "trailing_commas",
+   "payload": "{\"a\": [1, 2], \"s\": \"x,}\", \"o\": {\"k\": 1}}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"a\": 1, // c\n}"
+    }
+   ],
+   "home": "home",
+   "name": "comma_before_comment",
+   "payload": "{\"a\": 1}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{a: 1, $b: 2, _c-d: {e9: 3}, 'q': 4, 9x: 5}"
+    }
+   ],
+   "home": "home",
+   "name": "json5_keys",
+   "payload": "{}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{ a  : 1,\n  b\t:\n 2 }"
+    }
+   ],
+   "home": "home",
+   "name": "json5_key_space_before_colon",
+   "payload": "{\"a\": 1, \"b\": 2}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{a 1}"
+    }
+   ],
+   "home": "home",
+   "name": "json5_key_without_colon",
+   "payload": "{}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{a: b}"
+    }
+   ],
+   "home": "home",
+   "name": "json5_value_identifier",
+   "payload": "{}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{a: 'it\\'s', b: 'say \"hi\"', c: 'x\\\\y', d: 'n\\nt\\tq\\/', e: '\\u0041', f: '\\z'}"
+    }
+   ],
+   "home": "home",
+   "name": "single_quote_escapes",
+   "payload": "{\"a\": \"it's\", \"b\": \"say \\\"hi\\\"\", \"c\": \"x\\\\y\", \"d\": \"n\\nt\\tq/\", \"e\": \"u0041\", \"f\": \"z\"}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{a: 'one \\\"two\\\"'}"
+    }
+   ],
+   "home": "home",
+   "name": "double_quotes_inside_single",
+   "payload": "{\"a\": \"one \\\"two\\\"\"}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"a\": \"it's\", b: 'ok',}"
+    }
+   ],
+   "home": "home",
+   "name": "single_inside_double",
+   "payload": "{\"a\": \"it's\", \"b\": \"ok\"}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{näme: 'ü', b: 'é'}"
+    }
+   ],
+   "home": "home",
+   "name": "unicode_text",
+   "payload": "{}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"n\": NaN, \"i\": Infinity, \"big\": 123456789012345678901234567890}"
+    }
+   ],
+   "home": "home",
+   "name": "nan_and_big",
+   "payload": "{\"n\": NaN, \"i\": Infinity, \"big\": 123456789012345678901234567890}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": [\"a.json\", \"\", \"  \", 5, null, \"b.txt\", \"sub/c.JSON\", \" d.json5 \"], \"z\": 0}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/a.json",
+     "text": "{\"a\": 1, \"m\": {\"x\": 1, \"y\": [1]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/b.txt",
+     "text": "{\"b\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/sub/c.JSON",
+     "text": "{\"c\": 1, \"m\": {\"y\": [2], \"z\": 1}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/d.json5",
+     "text": "{d: 1, m: {x: 'd'}}"
+    }
+   ],
+   "home": "home",
+   "name": "include_list",
+   "payload": "{\"a\": 1, \"m\": {\"x\": \"d\", \"y\": [2], \"z\": 1}, \"c\": 1, \"d\": 1, \"z\": 0}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"m\": {\"x\": \"local\"}, \"$include\": \"a.yaml\", \"k\": \"local\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/a.yaml",
+     "text": "{\"k\": \"inc\", \"m\": {\"x\": \"inc\", \"y\": \"inc\"}, \"n\": 1}"
+    }
+   ],
+   "home": "home",
+   "name": "include_local_wins",
+   "payload": "{\"k\": \"local\", \"m\": {\"x\": \"local\", \"y\": \"inc\"}, \"n\": 1}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": [\"a.json\", \"b.json\"], \"s\": {\"z\": 1}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/a.json",
+     "text": "{\"s\": 1, \"t\": {\"x\": 1}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/b.json",
+     "text": "{\"s\": {\"y\": 1}, \"t\": 2}"
+    }
+   ],
+   "home": "home",
+   "name": "include_object_replaces_scalar",
+   "payload": "{\"s\": {\"y\": 1, \"z\": 1}, \"t\": 2}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": {\"path\": \"a.json\"}, \"a\": 0}"
+    }
+   ],
+   "home": "home",
+   "name": "include_not_string",
+   "payload": "{\"a\": 0}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": \"gone.json\", \"a\": 0}"
+    }
+   ],
+   "home": "home",
+   "name": "include_missing",
+   "payload": "{\"a\": 0}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": \"a.json\", \"a\": 0}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/a.json",
+     "text": "[1, 2]"
+    }
+   ],
+   "home": "home",
+   "name": "include_not_object",
+   "payload": "{\"a\": 0}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": \"a.json\", \"a\": 0}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/a.json",
+     "text": "{broken"
+    }
+   ],
+   "home": "home",
+   "name": "include_unparseable",
+   "payload": "{\"a\": 0}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": \"a.json\", \"root\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/a.json",
+     "text": "{\"$include\": [\"openclaw.json\", \"a.json\"], \"a\": 1}"
+    }
+   ],
+   "home": "home",
+   "name": "include_cycle",
+   "payload": "{\"a\": 1, \"root\": 1}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": [\"a.json\", \"b.json\"]}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/a.json",
+     "text": "{\"$include\": \"s.json\", \"a\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/b.json",
+     "text": "{\"$include\": \"s.json\", \"b\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/s.json",
+     "text": "{\"shared\": {\"n\": 1}}"
+    }
+   ],
+   "home": "home",
+   "name": "include_twice",
+   "payload": "{\"shared\": {\"n\": 1}, \"a\": 1, \"b\": 1}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": \"c1.json\", \"level\": 0}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/c1.json",
+     "text": "{\"$include\": \"c2.json\", \"l1\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/c2.json",
+     "text": "{\"$include\": \"c3.json\", \"l2\": 2}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/c3.json",
+     "text": "{\"$include\": \"c4.json\", \"l3\": 3}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/c4.json",
+     "text": "{\"$include\": \"c5.json\", \"l4\": 4}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/c5.json",
+     "text": "{\"$include\": \"c6.json\", \"l5\": 5}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/c6.json",
+     "text": "{\"$include\": \"c7.json\", \"l6\": 6}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/c7.json",
+     "text": "{\"$include\": \"c8.json\", \"l7\": 7}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/c8.json",
+     "text": "{\"$include\": \"c9.json\", \"l8\": 8}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/c9.json",
+     "text": "{\"$include\": \"c10.json\", \"l9\": 9}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/c10.json",
+     "text": "{\"$include\": \"c11.json\", \"l10\": 10}"
+    }
+   ],
+   "home": "home",
+   "name": "include_depth_limit",
+   "payload": "{\"l8\": 8, \"l7\": 7, \"l6\": 6, \"l5\": 5, \"l4\": 4, \"l3\": 3, \"l2\": 2, \"l1\": 1, \"level\": 0}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": [\"../up.json\", \"<ROOT>/abs/x.json5\"]}"
+    },
+    {
+     "mode": 420,
+     "path": "home/up.json",
+     "text": "{\"up\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "abs/x.json5",
+     "text": "{abs: true}"
+    }
+   ],
+   "home": "home",
+   "name": "include_parent_and_absolute",
+   "payload": "{\"up\": 1, \"abs\": true}",
+   "symlinks": []
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": \"linked/a.json\"}"
+    },
+    {
+     "mode": 420,
+     "path": "elsewhere/a.json",
+     "text": "{\"$include\": \"b.json\", \"a\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "elsewhere/b.json",
+     "text": "{\"b\": \"beside the target\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/linked/b.json",
+     "text": "{\"b\": \"beside the link\"}"
+    }
+   ],
+   "home": "home",
+   "name": "include_through_link",
+   "payload": "{\"b\": \"beside the target\", \"a\": 1}",
+   "symlinks": [
+    {
+     "path": "home/.openclaw/linked/a.json",
+     "target": "<ROOT>/elsewhere/a.json"
+    }
+   ]
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "elsewhere/real.json",
+     "text": "{\"$include\": \"x.json\", \"a\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "elsewhere/x.json",
+     "text": "{\"x\": 1}"
+    }
+   ],
+   "home": "home",
+   "name": "config_is_link",
+   "payload": "{\"x\": 1, \"a\": 1}",
+   "symlinks": [
+    {
+     "path": "home/.openclaw/openclaw.json",
+     "target": "<ROOT>/elsewhere/real.json"
+    }
+   ]
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "home": "home",
+   "name": "dangling_link",
+   "payload": "{}",
+   "symlinks": [
+    {
+     "path": "home/.openclaw/openclaw.json",
+     "target": "<ROOT>/gone.json"
+    }
+   ]
+  },
+  {
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.openclaw/openclaw.json",
+     "text": "{\"$include\": \"a.json\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.openclaw/a.json",
+     "text": "{\"v\": \"\\udc00\"}"
+    }
+   ],
+   "home": "home",
+   "name": "lone_surrogate_value",
+   "payload": "{\"v\": \"\\udc00\"}",
+   "symlinks": []
+  }
+ ],
+ "schema": "guard-openclaw-config-vectors.v1"
+}

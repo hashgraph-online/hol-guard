@@ -426,7 +426,7 @@ def test_worker_stabilization_requires_an_idle_scheduler_and_caps_warmup() -> No
         scheduler = SimpleNamespace(stats=lambda: stats)
         return cast(
             AdapterSession,
-            SimpleNamespace(daemon=SimpleNamespace(_server=SimpleNamespace(runtime_hook_scheduler=scheduler))),
+            SimpleNamespace(daemon=SimpleNamespace(hook_capacity=scheduler.stats)),
         )
 
     assert _stabilize_ready_hook_workers(session_with({"active_limit": 4, "active": 0})) == 4
@@ -440,8 +440,8 @@ def test_installed_adapter_corpus_covers_all_declared_routes_and_sizes(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     routes = route_matrix()
-    assert len(routes) == 23
-    assert len({harness for harness, _ in routes}) == 14
+    assert len(routes) == 25
+    assert len({harness for harness, _ in routes}) == 15
     assert {event for _, event in routes} == {"PreToolUse", "PostToolUse"}
     for size_class in SIZE_CLASSES:
         encoded = json.dumps(payload("PostToolUse", size_class), separators=(",", ":"))

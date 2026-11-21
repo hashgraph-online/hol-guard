@@ -51,7 +51,7 @@
 //!   defers. The decision lookup never selects one, since the relay gives it
 //!   no bundle identities, so this only guards the claim itself.
 
-use super::store::{self, STORE_UNREADABLE};
+use super::store::{self, STORE_NEWER, STORE_UNREADABLE};
 use super::{
     admit, ask, encode, package, package_spend, queue, resolve, settle, Answer, ClaimContext,
     Claimed, HeldClaim, Resolved, Routed, ASK_MODE, IDENTITY_FAILED,
@@ -246,7 +246,8 @@ pub(super) fn open_for_claim(guard_home: &str) -> Result<Connection, &'static st
         .map_err(|_| STORE_UNREADABLE)?;
     match schema_version(&connection).map_err(|_| STORE_UNREADABLE)? {
         Some(version) if version <= SUPPORTED_SCHEMA_VERSION => Ok(connection),
-        _ => Err(STORE_UNREADABLE),
+        Some(_) => Err(STORE_NEWER),
+        None => Err(STORE_UNREADABLE),
     }
 }
 
@@ -307,7 +308,17 @@ fn after_claim(
                     append,
                 })));
             }
-            queue::safe_alternative(mode, fresh.redaction_level.as_deref(), policy_action)?
+            queue::safe_alternative(
+                mode,
+                fresh.redaction_level.as_deref(),
+                context
+                    .admitted
+                    .binding
+                    .review
+                    .approval_center_origin
+                    .as_deref(),
+                policy_action,
+            )?
         }
         routed => routed,
     };

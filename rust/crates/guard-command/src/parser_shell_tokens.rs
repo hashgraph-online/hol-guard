@@ -63,13 +63,16 @@ fn shell_tokens_mode(
                 }
             }
             Quote::None => match current {
-                '2' if exclude_stderr_redirect
-                    && !token_started
-                    && is_stderr_to_null_redirect(&chars, index, preserve_backslash) =>
+                '1' | '2' | '&' | '>'
+                    if exclude_stderr_redirect
+                        && !token_started
+                        && null_sink_redirect_end(&chars, index, preserve_backslash).is_some() =>
                 {
                     // A shell redirection is not an argv operand. Preserve it
                     // in segment.text/spans, but exclude it from argument proofs.
-                    for _ in 0..10 {
+                    let end = null_sink_redirect_end(&chars, index, preserve_backslash)
+                        .unwrap_or(index + 1);
+                    for _ in index + 1..end {
                         characters.next();
                     }
                 }

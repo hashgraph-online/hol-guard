@@ -642,13 +642,15 @@ fn launch(arguments: &[String]) -> Result<i32, RestrictedPytestError> {
     let _ = std::io::stdout().write_all(&output.stdout);
     let _ = std::io::stderr().write_all(&output.stderr);
     if output.output_limited {
-        eprintln!("\n[HOL Guard truncated protected evaluation output]");
+        crate::runtime_output::stderr_line(format_args!(
+            "\n[HOL Guard truncated protected evaluation output]"
+        ));
     }
     if output.timed_out {
-        eprintln!(
+        crate::runtime_output::stderr_line(format_args!(
             "HOL Guard stopped protected evaluation after its {}-second deadline.",
             launch.timeout.as_secs()
-        );
+        ));
         return Ok(124);
     }
     Ok(output.exit_code.unwrap_or(1))
@@ -659,7 +661,10 @@ pub(crate) fn main(arguments: &[String]) -> i32 {
     match launch(arguments) {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("{}: {}", error.reason_code, error.message);
+            crate::runtime_output::stderr_line(format_args!(
+                "{}: {}",
+                error.reason_code, error.message
+            ));
             2
         }
     }

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import codex_hook_publication_helpers as publication_helpers
 
 
 def _command_group(command: str) -> dict[str, object]:
@@ -37,7 +37,7 @@ def test_install_config_hooks_rejects_foreign_owner_without_mutation(tmp_path: P
     }
     before = deepcopy(payload)
     with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
-        CodexHarnessAdapter._install_config_hooks(payload, context, config_path=tmp_path / "config.toml")
+        publication_helpers.install_config_hooks(payload, context, config_path=tmp_path / "config.toml")
     assert payload == before
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)

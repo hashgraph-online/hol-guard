@@ -53,6 +53,7 @@ pub(super) enum Override {
     Undecided,
 }
 
+#[derive(Clone)]
 pub(super) struct SearchFilter {
     include: Vec<String>,
     exclude: Vec<String>,
@@ -60,6 +61,9 @@ pub(super) struct SearchFilter {
     /// An inclusion that holds a `/` matches the path a walk reaches an
     /// entry by, not its name, so the walk must offer that path.
     path_shaped: bool,
+    /// The search root's own path from the directory those paths are
+    /// matched against, empty when the two are the same directory.
+    base: String,
 }
 
 impl SearchFilter {
@@ -70,6 +74,7 @@ impl SearchFilter {
             exclude: Vec::new(),
             types: &[],
             path_shaped: false,
+            base: String::new(),
         };
         if let Some(kind) = input.get("type") {
             let kind = kind.as_str()?;
@@ -104,6 +109,9 @@ impl SearchFilter {
         if negated {
             filter.exclude = expanded;
         } else {
+            if !single_width_wildcards_absent(glob) {
+                return None;
+            }
             filter.include = expanded;
         }
         Some(filter)
@@ -119,7 +127,16 @@ impl SearchFilter {
         let mut include = Vec::new();
         let mut path_shaped = false;
         for glob in globs {
-            if glob.starts_with('!') || glob.contains('\\') {
+            // A comment-shaped glob can be ignored, and some ripgrep
+            // versions trim trailing whitespace before matching. The
+            // bounded matcher does neither, so these inputs cannot narrow
+            // a hidden-file proof across supported ripgrep versions.
+            if glob.starts_with('!')
+                || glob.starts_with('#')
+                || glob.trim_end() != *glob
+                || glob.contains('\\')
+                || !single_width_wildcards_absent(glob)
+            {
                 return None;
             }
             for pattern in expand_braces(glob).ok()? {
@@ -152,7 +169,23 @@ impl SearchFilter {
             exclude: Vec::new(),
             types: &[],
             path_shaped,
+            base: String::new(),
         })
+    }
+
+    /// A copy whose walk renders every entry under `base`, the search
+    /// root's own path from the directory ripgrep matches a path-shaped
+    /// inclusion against. Empty when the two are the same directory.
+    pub(super) fn rooted_at(&self, base: String) -> Self {
+        Self {
+            base,
+            ..self.clone()
+        }
+    }
+
+    /// Where a walk of the search root starts its paths.
+    pub(super) fn base(&self) -> &str {
+        &self.base
     }
 
     /// Apply glob overrides to one entry. `relative` is the entry's path
@@ -228,6 +261,11 @@ impl SearchFilter {
         })
     }
 
+    /// The inclusion patterns, as this filter models them.
+    pub(super) fn inclusions(&self) -> &[String] {
+        &self.include
+    }
+
     pub(super) fn type_allows(&self, name: &str) -> bool {
         self.types.is_empty()
             || self
@@ -235,6 +273,18 @@ impl SearchFilter {
                 .iter()
                 .any(|pattern| glob_matches(pattern, name).unwrap_or(true))
     }
+}
+
+/// Whether a glob leaves out the two constructs this matcher reads a byte at
+/// a time while a search reads them a character at a time.
+///
+/// `?` consumes one byte here and one character in both grep and ripgrep, so
+/// `?.env` would model a multi-byte name as unselected while the search opens
+/// it. A bracket is worse: `[[:punct:]]` is a named class to a search and an
+/// ordinary set of bytes to `glob_matches`, so the two disagree about which
+/// names it selects. An inclusion that holds either one is left unmodeled.
+fn single_width_wildcards_absent(glob: &str) -> bool {
+    !glob.contains(['?', '[', ']'])
 }
 
 fn has_top_level_comma(glob: &str) -> bool {

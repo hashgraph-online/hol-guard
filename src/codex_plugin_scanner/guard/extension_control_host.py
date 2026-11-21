@@ -1,0 +1,380 @@
+"""The extension-control service the native daemon answers its control routes from.
+
+``/v1/extension-controls/*`` reads and writes run here, inside the resident
+library process the native daemon keeps for calls that hold state between
+requests. A preview's proof lives in this service until its apply, as it did
+in the long-running daemon, so the two must reach the same process. A
+short-lived call builds a fresh service; its reads answer as before and an
+apply finds no proof to consume.
+
+Startup admits the installed release, enrolls a fresh home and reads the
+authority exactly as the daemon did; see ``ExtensionControlHost.start``.
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+import time
+from collections.abc import Callable, Mapping
+from contextlib import suppress
+from pathlib import Path
+from typing import Any
+
+from .installed_authority_migration_turn import installed_authority_migration_turn
+from .native_policy_snapshot_constants import NativePolicySnapshotError
+from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
+from .runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
+from .runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
+from .runtime_health import background_loop_gate
+from .runtime_health.background_diagnostics import failure_detail, record_background_event, record_background_notice
+from .store import GuardStore
+
+_LOGGER = logging.getLogger(__name__)
+
+_READS = {
+    "/v1/extension-controls/catalog": "catalog",
+    "/v1/extension-controls/effective": "effective",
+    "/v1/extension-controls/history": "history",
+}
+_WRITES = {
+    "/v1/extension-controls/test": "test_command",
+    "/v1/extension-controls/inspect": "inspect_command",
+    "/v1/extension-controls/preview": "preview",
+    "/v1/extension-controls/apply": "apply",
+    "/v1/extension-controls/acknowledge-degraded": "acknowledge_degraded",
+    "/v1/extension-controls/recover-authority": "recover_authority",
+}
+REFRESH_PATH = "/v1/extension-controls/refresh"
+
+
+class _InstalledAuthorityMigrationError(Exception):
+    """The installed release's command-pack authority is not migrated yet."""
+
+
+# The worker host waits out another process's migration: that process does the
+# same work, and once it lands this one finds it done in a moment.
+WORKER_MIGRATION_TURN_WAIT_SECONDS = 180.0
+_SLOW_MIGRATION_SECONDS = 5.0
+_MIGRATION_RETRY_INTERVAL_SECONDS = 5.0
+_MIGRATION_BUSY_RETRY_INTERVAL_SECONDS = 0.25
+
+
+def _verify_installed_bundle_early() -> None:
+    """Verify the installed release bundle before waiting for the migration turn.
+
+    At a cold start the daemon's artifact reconcile usually holds the turn
+    while the worker host waits for it. Verification is native and its answer
+    is reused only while the installed files stay the same, so doing it here
+    overlaps that wait instead of following it. The migration loads the bundle
+    again under the turn; a failure here is left for that load to raise and
+    record. The daemon's worker host starts this check before its imports;
+    then this waits for that one instead of running it again.
+    """
+
+    from .cli.desktop_daemon_workers import wait_for_early_bundle_check
+
+    if wait_for_early_bundle_check():
+        return
+    from .catalog_delivery.preparation_authority import load_installed_bundle
+
+    with suppress(Exception):
+        load_installed_bundle()
+
+
+def migrate_installed_authority(
+    store: GuardStore,
+    *,
+    wait_seconds: float = WORKER_MIGRATION_TURN_WAIT_SECONDS,
+    on_phase: Callable[[str], None] | None = None,
+    on_busy: Callable[[], None] | None = None,
+) -> bool:
+    """Admit the installed release's command packs, recording why when it cannot.
+
+    A runtime upgrade changes the command engine, and the resident refuses any
+    policy snapshot whose packs an older engine compiled. Until this runs
+    after an upgrade every hook fails closed, so the daemon's worker host runs
+    it before its first policy publication and retries it until it lands.
+
+    Only one process migrates at a time. A caller that finds another process
+    migrating waits up to ``wait_seconds`` for its turn and otherwise returns
+    False without recording a failure, leaving the migration pending.
+
+    ``on_phase`` hears ``bundle_checked`` once the early bundle check is done
+    (only when ``wait_seconds`` is positive)
+    and ``turn_held`` once this process holds the turn, so a cold start shows
+    which of them it waited on.
+    """
+
+    def report(step: str) -> None:
+        # Progress is optional: a reporter that fails must not skip admission.
+        if on_phase is not None:
+            with suppress(Exception):
+                on_phase(step)
+
+    started = time.monotonic()
+    if wait_seconds > 0:
+        # Only a caller that will wait has a wait to overlap. One that gives
+        # up at once (an extension-control host) would pay the check and then
+        # fall back anyway.
+        _verify_installed_bundle_early()
+        report("bundle_checked")
+    try:
+        with installed_authority_migration_turn(store.guard_home, wait_seconds=wait_seconds) as held:
+            if not held:
+                _LOGGER.info("Installed command-pack authority is being migrated by another Guard process")
+                if on_busy is not None:
+                    with suppress(Exception):
+                        on_busy()
+                return False
+            report("turn_held")
+            store.migrate_installed_command_pack_authority()
+    except Exception as error:
+        elapsed_ms = round((time.monotonic() - started) * 1000)
+        # Every new library process retries this, so an unchanged failure is
+        # logged when it starts and then every few hours, not on each restart.
+        background_loop_gate.report_failure(
+            store.guard_home,
+            background_loop_gate.AUTHORITY_MIGRATION,
+            f"failed:{type(error).__name__}",
+            (("installed_authority_migration_failed", f"{failure_detail(error)} elapsed_ms={elapsed_ms}"),),
+        )
+        _LOGGER.warning("Installed command-pack authority could not be migrated: %s", error, exc_info=True)
+        return False
+    background_loop_gate.report_success(store.guard_home, background_loop_gate.AUTHORITY_MIGRATION)
+    elapsed = time.monotonic() - started
+    if elapsed >= _SLOW_MIGRATION_SECONDS:
+        record_background_notice("installed_authority_migration_slow", f"elapsed_ms={round(elapsed * 1000)}")
+    return True
+
+
+class ExtensionControlHost:
+    """One Guard home's extension-control API, its runtime and its refresh."""
+
+    def __init__(self, store: GuardStore) -> None:
+        from .extension_controls.extension_control_api import ExtensionControlApiService
+
+        self.store = store
+        self._installed_authority_pending = False
+        self._installed_authority_retry_at = 0.0
+        self._on_core_registry = False
+        try:
+            self._migrate_installed_authority()
+            self._enroll_authority_by_default()
+            from .catalog_delivery.projection import capture
+
+            _, registry, _ = capture(store)
+            view = self._startup_view(registry)
+        except (_InstalledAuthorityMigrationError, NativePolicySnapshotError):
+            registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
+            view = store._tampered_view(registry.catalog_digest)
+            self._on_core_registry = True
+        self.runtime = ExtensionControlRuntime(view)
+        self.api = ExtensionControlApiService(store=store, registry=registry, runtime=self.runtime)
+
+    def _migrate_installed_authority(self) -> None:
+        """Admit the installed release, or report why it cannot be admitted yet.
+
+        A failure leaves the migration pending. The service then starts on a
+        tampered authority, so every hook fails closed, and each refresh
+        retries it before reading anything newer.
+        """
+
+        # An extension-control host never queues behind another process's
+        # migration: it starts on the fallback view and retries on refresh.
+        busy = False
+
+        def mark_busy() -> None:
+            nonlocal busy
+            busy = True
+
+        if not migrate_installed_authority(self.store, wait_seconds=0.0, on_busy=mark_busy):
+            self._installed_authority_pending = True
+            self._installed_authority_retry_at = time.monotonic() + (
+                _MIGRATION_BUSY_RETRY_INTERVAL_SECONDS if busy else _MIGRATION_RETRY_INTERVAL_SECONDS
+            )
+            raise _InstalledAuthorityMigrationError
+        self._installed_authority_pending = False
+
+    def _enroll_authority_by_default(self) -> None:
+        """Enroll a fresh install so its controls are protected without a setup step."""
+
+        try:
+            view = self.store.enroll_extension_control_authority_by_default(
+                BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+            )
+        except Exception as error:
+            background_loop_gate.report_failure(
+                self.store.guard_home,
+                background_loop_gate.AUTHORITY_ENROLLMENT,
+                f"failed:{type(error).__name__}",
+                (("default_authority_enrollment_failed", failure_detail(error)),),
+            )
+            # The redacted detail is in the background event; the log names the class only.
+            _LOGGER.warning("Extension-control authority could not be enrolled by default: %s", type(error).__name__)
+            return
+        if view.health is not AuthorityHealth.PROTECTED:
+            # A home that stays unprotected is skipped by every new library
+            # process; the state is logged when it starts or changes.
+            background_loop_gate.report_failure(
+                self.store.guard_home,
+                background_loop_gate.AUTHORITY_ENROLLMENT,
+                f"skipped:{view.health.value}",
+                (("default_authority_enrollment_skipped", f"health={view.health.value}"),),
+            )
+            return
+        background_loop_gate.report_success(self.store.guard_home, background_loop_gate.AUTHORITY_ENROLLMENT)
+
+    def _startup_view(self, registry: CommandSafetyExtensionRegistry) -> ExtensionControlAuthorityView:
+        """Read the authority without letting a busy lease stop the service.
+
+        A lease timeout falls back to the shared lease, and only if that is
+        unobtainable too does the service start on a view with no layers,
+        which the next refresh replaces. Both attempts share one budget.
+        """
+
+        from .native_command_control_authority_io import (
+            AUTHORITY_LOCK_TIMEOUT_SECONDS,
+            NativeCommandControlAuthorityUnavailableError,
+            NativeCommandControlMutationRequiredError,
+        )
+
+        deadline = time.monotonic() + AUTHORITY_LOCK_TIMEOUT_SECONDS
+        with suppress(NativeCommandControlAuthorityUnavailableError):
+            return self.store.read_extension_control_authority_for_registry(
+                registry, lock_timeout_seconds=AUTHORITY_LOCK_TIMEOUT_SECONDS / 2
+            )
+        remaining = deadline - time.monotonic()
+        if remaining > 0.0:
+            with suppress(NativeCommandControlAuthorityUnavailableError, NativeCommandControlMutationRequiredError):
+                return self.store.read_extension_control_authority_for_registry(
+                    registry, read_only=True, lock_timeout_seconds=remaining
+                )
+        return self.store.extension_control_authority_unreadable_view(registry.catalog_digest)
+
+    def refresh(self) -> ExtensionControlRuntimeSnapshot:
+        """Recapture the active activation and rebind the API to it."""
+
+        from .catalog_delivery.projection import capture, require_current
+        from .native_command_control_authority_io import (
+            NativeCommandControlAuthorityUnavailableError,
+            NativeCommandControlMutationRequiredError,
+            hold_command_control_authority_lock,
+        )
+        from .native_command_control_authority_store import _key as authority_key
+
+        def read(*, shared: bool) -> ExtensionControlRuntimeSnapshot:
+            _, registry, activation_digest = capture(self.store)
+            with hold_command_control_authority_lock(self.store.guard_home, shared=shared):
+                require_current(self.store, authority_key(self.store), activation_digest)
+                view = self.store.read_extension_control_authority_for_registry(registry, read_only=shared)
+                snapshot = self.runtime.refresh(view)
+            # Serve the registry the runtime now holds a view for, so the
+            # effective controls and the catalog report the same digest.
+            # Rebind after the lease is released: apply() takes the API lock
+            # before that lease.
+            if (
+                self._on_core_registry or registry.catalog_digest != self.api.catalog_digest
+            ) and self.api.rebind_registry(registry, installed=snapshot):
+                self._on_core_registry = False
+            return snapshot
+
+        if self._installed_authority_pending:
+            now = time.monotonic()
+            if now < self._installed_authority_retry_at:
+                # A failed native migration is fail-closed, but it must not
+                # make every hook pay the migration cost while the authority
+                # service is unavailable. Keep serving the current tampered
+                # view and retry on the next backoff window.
+                return self.runtime.current()
+            try:
+                self._migrate_installed_authority()
+            except _InstalledAuthorityMigrationError:
+                return self.runtime.current()
+            self._installed_authority_retry_at = 0.0
+            self._enroll_authority_by_default()
+        try:
+            try:
+                snapshot = read(shared=True)
+            except NativeCommandControlMutationRequiredError:
+                return read(shared=False)
+            if snapshot.health is AuthorityHealth.RECOVERY_REQUIRED:
+                # Only a writer may roll back a prepared transition a failed
+                # save left behind.
+                return read(shared=False)
+            return snapshot
+        except NativeCommandControlAuthorityUnavailableError:
+            return self.runtime.current()
+
+    def respond(self, method: str, path: str, payload: dict[str, object]) -> dict[str, object]:
+        """The whole reply for one extension-control request."""
+
+        from .extension_controls.extension_control_api import ExtensionControlApiError
+
+        try:
+            if method == "GET" and path in _READS:
+                body = getattr(self.api, _READS[path])()
+            elif method == "POST" and path in _WRITES:
+                body = getattr(self.api, _WRITES[path])(payload)
+            elif method == "POST" and path == REFRESH_PATH:
+                try:
+                    self.refresh()
+                except Exception as error:
+                    # The page that posts here has no other way forward, so
+                    # record the failure and serve what the runtime holds.
+                    record_background_event("extension_control_refresh_failed", failure_detail(error))
+                body = self.api.effective(reread=False)
+            else:
+                from .library_calls import LibraryCallError
+
+                raise LibraryCallError("invalid_arguments")
+        except ExtensionControlApiError as error:
+            return {"status": error.status, "body": error.to_payload(), "no_store": False}
+        return {"status": 200, "body": body, "no_store": True}
+
+
+_HOSTS: dict[Path, ExtensionControlHost] = {}
+_HOSTS_LOCK = threading.Lock()
+
+
+def host_for(store: GuardStore) -> ExtensionControlHost:
+    """The host this process keeps for ``store``'s Guard home."""
+
+    home = Path(store.guard_home)
+    with _HOSTS_LOCK:
+        host = _HOSTS.get(home)
+        if host is None:
+            host = ExtensionControlHost(store)
+            _HOSTS[home] = host
+        return host
+
+
+def existing_host(store: GuardStore) -> ExtensionControlHost | None:
+    """The host this process already keeps for ``store``'s Guard home, if any."""
+
+    with _HOSTS_LOCK:
+        return _HOSTS.get(Path(store.guard_home))
+
+
+def extension_control(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """``route.extension_control``: ``{method, path, payload?}`` to a whole reply."""
+
+    from .library_calls import LibraryCallError
+
+    method = args.get("method")
+    path = args.get("path")
+    payload = args.get("payload", {})
+    if method not in {"GET", "POST"} or not isinstance(path, str) or not isinstance(payload, dict):
+        raise LibraryCallError("invalid_arguments")
+    return host_for(store).respond(method, path, payload)
+
+
+EXTENSION_CONTROL_CALLS = {"route.extension_control": extension_control}
+
+__all__ = [
+    "EXTENSION_CONTROL_CALLS",
+    "ExtensionControlHost",
+    "existing_host",
+    "host_for",
+    "migrate_installed_authority",
+]

@@ -10,10 +10,10 @@ from codex_plugin_scanner.guard.managed_controls.feature_flags import (
     GUARD_POLICY_EXTENSION_TARGETS_V1,
     ManagedControlsFeatureFlags,
 )
-from codex_plugin_scanner.guard.managed_controls.redaction import (
+from tests.managed_controls.redaction import (
     redact_managed_controls,
 )
-from codex_plugin_scanner.guard.managed_controls.telemetry import (
+from tests.managed_controls.telemetry import (
     TelemetryPrivacyError,
     managed_controls_telemetry_event,
 )

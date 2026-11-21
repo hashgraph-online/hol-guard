@@ -48,35 +48,29 @@
 //! holds the failure until the client acknowledges the identifier it
 //! recovered from in a later request.
 
-use std::collections::HashMap;
 use std::io;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::path::Path;
+use std::sync::atomic::Ordering;
+use std::sync::TryLockError;
 
-use guard_command::hook_evidence_writer::{
-    ComposioApi, EvidenceWriterDeps, NativeEvidenceJournal, NativeReceiptValidation,
-    ReceiptValidationApi, RuntimeHookEvidenceWriter,
-};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
-use crate::hook_evidence_activity::NativeCorrelation;
-use crate::hook_evidence_composio::NativeComposio;
-use crate::hook_evidence_store::{NativeEvidenceStore, PolicyBarrierApi, StoreFatalSignal};
-use crate::hook_evidence_store_timeout::NativeSqliteTimeout;
+#[path = "hook_evidence_writer_registry.rs"]
+mod registry;
+
+#[cfg(test)]
+pub(crate) use registry::while_slot_busy;
+use registry::{canonical_home, slot, with_running, with_writer, ResidentWriter};
+pub(crate) use registry::{drained_fatal, record_direct, record_drained, record_edge_receipt};
 
 pub(crate) const HOOK_EVIDENCE_WRITER_REQUEST_SCHEMA: &str =
     "guard-hook-evidence-writer-request.v1";
 pub(crate) const HOOK_EVIDENCE_WRITER_RESULT_SCHEMA: &str = "guard-hook-evidence-writer-result.v1";
 /// The feature advertised to callers that route evidence here.
 pub(crate) const HOOK_EVIDENCE_WRITER_FEATURE: &str = "hook-evidence-writer-v1";
+pub(crate) const HOOK_EVIDENCE_POST_TOOL_FEATURE: &str = "hook-evidence-post-tool-v1";
 
-/// `RuntimeHookEvidenceWriter.__init__` defaults (:88-92).
-const MAX_RECORDS: usize = 2_000;
-const MAX_BYTES: usize = 16 * 1024 * 1024;
-const MAX_BATCH: usize = 50;
-const BATCH_WAIT_SECONDS: f64 = 0.025;
 /// `submit_command_activity(approval_reuse_status=)` default (:153).
 const APPROVAL_REUSE_NOT_APPLICABLE: &str = "not-applicable";
 /// The client's own request bound (`_MAX_REQUEST_BYTES`): a request larger
@@ -126,6 +120,12 @@ pub(crate) enum HookEvidenceWriterActionV1 {
         payload: Map<String, Value>,
         succeeded: bool,
     },
+    /// Classify the tool result and queue discovery before command activity.
+    SubmitPostToolActivity {
+        harness: String,
+        event: String,
+        payload: Map<String, Value>,
+    },
     /// `submit_native_decision_receipt` (:243).
     SubmitNativeDecisionReceipt { receipt: Map<String, Value> },
     /// Build this home's writer without queueing anything.
@@ -164,161 +164,6 @@ struct HookEvidenceWriterResultV1 {
     status: String,
     code: String,
     payload: Value,
-}
-
-/// The policy barrier the store seam closes after a discovery write. It
-/// records the mutation for the caller instead of reaching into the Python
-/// publisher registry this process has no handle on.
-struct MutationCounter(Arc<AtomicU64>);
-
-impl PolicyBarrierApi for MutationCounter {
-    fn notify_policy_mutation(&self, _guard_home: &Path) {
-        self.0.fetch_add(1, Ordering::SeqCst);
-    }
-}
-
-/// One Guard home's writer, the mutations its store seam has recorded, and
-/// the fatal store failure it is waiting to report.
-struct ResidentWriter {
-    writer: Arc<RuntimeHookEvidenceWriter>,
-    mutations: Arc<AtomicU64>,
-    fatal: StoreFatalSignal,
-}
-
-/// One Guard home's writer slot. Holding the slot's lock serializes every
-/// request for that home: a submission cannot queue onto a writer a stop has
-/// already begun draining, and a stop cannot drop a writer a later submission
-/// built. Both matter because the writers for one home share one journal file.
-struct HomeSlot {
-    writer: Mutex<Option<ResidentWriter>>,
-}
-
-fn registry() -> &'static Mutex<HashMap<PathBuf, Arc<HomeSlot>>> {
-    static REGISTRY: OnceLock<Mutex<HashMap<PathBuf, Arc<HomeSlot>>>> = OnceLock::new();
-    REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn build(guard_home: &Path, source: &str) -> Result<ResidentWriter, io::Error> {
-    let mutations = Arc::new(AtomicU64::new(0));
-    let store = NativeEvidenceStore::new(
-        guard_home.to_path_buf(),
-        source,
-        Box::new(MutationCounter(Arc::clone(&mutations))),
-    );
-    let fatal = store.fatal();
-    // The journal validates the records it rewrites with the same pair the
-    // writer validates submissions with, so both share one instance each.
-    let receipts: Arc<dyn ReceiptValidationApi + Send + Sync> = Arc::new(NativeReceiptValidation);
-    let composio: Arc<dyn ComposioApi + Send + Sync> = Arc::new(NativeComposio);
-    let deps = EvidenceWriterDeps {
-        correlation: Box::new(NativeCorrelation::new(guard_home.to_path_buf())),
-        journal: Box::new(NativeEvidenceJournal::new(
-            Arc::clone(&receipts),
-            Arc::clone(&composio),
-        )),
-        receipts,
-        composio,
-        sqlite_timeout: Box::new(NativeSqliteTimeout),
-    };
-    let writer = RuntimeHookEvidenceWriter::new(
-        Arc::new(store),
-        deps,
-        MAX_RECORDS,
-        MAX_BYTES,
-        MAX_BATCH,
-        BATCH_WAIT_SECONDS,
-        None,
-    )?;
-    Ok(ResidentWriter {
-        writer: Arc::new(writer),
-        mutations,
-        fatal,
-    })
-}
-
-/// This Guard home's slot. Slots are never removed: an empty slot costs a
-/// pointer, and keeping it is what lets a stop and a racing submission agree
-/// on which writer they are talking about.
-fn slot(guard_home: &Path) -> Arc<HomeSlot> {
-    let mut registry = registry().lock().unwrap_or_else(|e| e.into_inner());
-    Arc::clone(registry.entry(guard_home.to_path_buf()).or_insert_with(|| {
-        Arc::new(HomeSlot {
-            writer: Mutex::new(None),
-        })
-    }))
-}
-
-/// The home as the filesystem names it.
-///
-/// One home can be spelled more than one way — through a symlink, with a
-/// component that resolves away — and each spelling would otherwise take its
-/// own slot and its own writer, two writers appending to the one journal that
-/// home owns. A home that cannot be resolved keeps the spelling it arrived
-/// with; the store seam refuses it the same way either way.
-fn canonical_home(guard_home: &Path) -> PathBuf {
-    std::fs::canonicalize(guard_home).unwrap_or_else(|_| guard_home.to_path_buf())
-}
-
-/// Run `act` against this Guard home's writer, started on first use.
-fn with_writer<T>(
-    guard_home: &Path,
-    source: &str,
-    act: impl FnOnce(&ResidentWriter) -> T,
-) -> Result<T, io::Error> {
-    let slot = slot(guard_home);
-    let mut held = slot.writer.lock().unwrap_or_else(|e| e.into_inner());
-    // A writer whose thread has exited drains nothing more, so anything
-    // queued onto it would sit there. It is replaced — but what it still
-    // holds is the two signals it exists to deliver, and dropping it would
-    // drop them silently. The replacement carries them instead.
-    let mut carried = None;
-    if held
-        .as_ref()
-        .is_some_and(|resident| resident.writer.has_exited())
-    {
-        carried = held.take();
-    }
-    // A writer whose drain ran out of time has not left the journal yet. A
-    // second writer for the same home would append to the file the first one
-    // still owns, so this request is refused until that worker leaves.
-    if held
-        .as_ref()
-        .is_some_and(|resident| resident.writer.is_stopping())
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::WouldBlock,
-            "the hook evidence writer for this Guard home is still draining",
-        ));
-    }
-    if held.is_none() {
-        let fresh = match build(guard_home, source) {
-            Ok(fresh) => fresh,
-            Err(error) => {
-                // The replacement failed, so the exited writer goes back into
-                // the slot. It still holds the mutation count and the store
-                // failure this request exists to report, and an empty slot
-                // would answer `stats` with an idle home instead of the fault.
-                *held = carried;
-                return Err(error);
-            }
-        };
-        if let Some(gone) = carried {
-            fresh
-                .mutations
-                .fetch_add(gone.mutations.swap(0, Ordering::SeqCst), Ordering::SeqCst);
-            fresh.fatal.adopt(&gone.fatal);
-        }
-        *held = Some(fresh);
-    }
-    Ok(act(held.as_ref().expect("the writer was just built")))
-}
-
-/// Run `act` against this Guard home's writer only if one is already running.
-/// `stats` must not start a writer that no submission has asked for.
-fn with_running<T>(guard_home: &Path, act: impl FnOnce(&ResidentWriter) -> T) -> Option<T> {
-    let slot = slot(guard_home);
-    let held = slot.writer.lock().unwrap_or_else(|e| e.into_inner());
-    held.as_ref().map(act)
 }
 
 /// The widest drain a caller may ask for. `timeout_seconds` arrives as an
@@ -395,6 +240,50 @@ fn stats_payload(resident: &ResidentWriter) -> Value {
         "store_fatal": fatal,
         "started": true,
     })
+}
+
+/// The writer's counters for the daemon's health details, without taking
+/// the signals its client reads: a health read must not swallow a policy
+/// mutation or a fatal store error.
+pub(crate) fn health_stats(guard_home: &Path) -> Value {
+    // Never waits on a slot that is starting or draining a writer.
+    let slot = slot(&canonical_home(guard_home));
+    let held = match slot.writer.try_lock() {
+        Ok(held) => Some(held),
+        Err(TryLockError::Poisoned(poisoned)) => Some(poisoned.into_inner()),
+        Err(TryLockError::WouldBlock) => None,
+    };
+    let mut payload = held
+        .as_ref()
+        .and_then(|held| held.as_ref())
+        .map(|resident| {
+            let stats = resident.writer.stats();
+            json!({
+                "queued": stats.queued,
+                "queued_bytes": stats.queued_bytes,
+                "accepted": stats.accepted,
+                "processed": stats.processed,
+                "dropped": stats.dropped,
+                "failures": stats.failures,
+                "recovered": stats.recovered,
+                "durable_pending": stats.durable_pending,
+                "degraded": stats.degraded,
+                "running": stats.running,
+                "receipt_accepted": stats.receipt_accepted,
+                "receipt_processed": stats.receipt_processed,
+                "receipt_deduped": stats.receipt_deduped,
+                "receipt_dropped": stats.receipt_dropped,
+                "receipt_failures": stats.receipt_failures,
+                "receipt_durable_pending": stats.receipt_durable_pending,
+                "started": true,
+            })
+        })
+        .unwrap_or_else(idle_stats);
+    if let Some(fields) = payload.as_object_mut() {
+        fields.remove("policy_mutations");
+        fields.remove("store_fatal");
+    }
+    payload
 }
 
 /// A writer that was never started has nothing queued and is not running.
@@ -524,6 +413,23 @@ fn evaluate(request: &HookEvidenceWriterRequestV1) -> Result<Value, WriterError>
         HookEvidenceWriterActionV1::SubmitNativeDecisionReceipt { receipt } => {
             let (queued, reported) = with_writer(&guard_home, &request.source, |resident| {
                 let queued = resident.writer.submit_native_decision_receipt(receipt);
+                (queued, signals(resident))
+            })
+            .map_err(started)?;
+            Ok(queued_payload(queued, reported))
+        }
+        HookEvidenceWriterActionV1::SubmitPostToolActivity {
+            harness,
+            event,
+            payload,
+        } => {
+            let (queued, reported) = with_writer(&guard_home, &request.source, |resident| {
+                let queued = crate::edge_receipt::queue_post_tool_activity(
+                    &resident.writer,
+                    harness,
+                    event,
+                    payload,
+                );
                 (queued, signals(resident))
             })
             .map_err(started)?;

@@ -60,9 +60,11 @@ fn parses_the_installed_codex_proxy_argv() {
 #[test]
 fn harness_defaults_follow_the_proxy_command() {
     for (proxy, harness, transport, elicitation) in [
+        ("cline-mcp-proxy", "cline", "stdio", true),
         ("codex-mcp-proxy", "codex", "stdio", true),
         ("copilot-mcp-proxy", "copilot", "stdio", true),
         ("cursor-mcp-proxy", "cursor", "stdio", true),
+        ("hermes-mcp-proxy", "hermes", "stdio", true),
         ("opencode-mcp-proxy", "opencode", "local", false),
     ] {
         let parsed = parse(&base(proxy)).unwrap();

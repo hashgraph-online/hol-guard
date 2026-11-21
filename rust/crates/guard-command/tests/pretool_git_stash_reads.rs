@@ -19,6 +19,13 @@ fn printing_stash_forms_are_proven_reads() {
             "git stash list -n 3",
             "git stash list --max-count=3",
             "git stash list -3",
+            // A layout only chooses how an entry reads; `git log` takes the
+            // same words over the same ref.
+            "git stash list --oneline",
+            "git stash list --date=short",
+            "git stash list --format=%gd",
+            "git stash list --pretty=short --abbrev-commit",
+            "git stash list --oneline -3",
             "git stash list | head -3",
             "git stash show",
             "git stash show -p stash@{0}",
@@ -45,8 +52,22 @@ fn printing_stash_forms_are_proven_reads() {
             "git stash show stash@{0} stash@{1}",
             "git stash show --unknown-option",
             // A listing that asks for patches runs the diff drivers the
-            // read proof did not clear.
+            // read proof did not clear, so no layout spelling reaches them.
             "git stash list --patch",
+            "git stash list --stat",
+            "git stash list --name-only",
+            "git stash list --oneline --patch",
+            // A `%G` placeholder verifies the entry's signature with the
+            // configured program, and the proof rebuilds the listing as a
+            // fixed `git log -g --first-parent refs/stash`, so it never
+            // reads the format the request carried.
+            "git stash list --format=%G?",
+            "git stash list --format=%GS",
+            "git stash list --pretty=format:%G?",
+            "git stash list --format=%+GS",
+            "git stash list --oneline --format=%G?",
+            // Two counts still name a form the grammar does not carry.
+            "git stash list -3 -n 5",
             "git stash list --unknown-option",
         ] {
             let result = session.evaluate_at(command, cwd);

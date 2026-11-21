@@ -10,8 +10,15 @@ import {
 import { reviewDecisionShortcutAllowed } from "./approval-keyboard";
 import { approvalProofRecentlySatisfied, buildApprovalProofCredentials } from "./approval-proof-inline";
 import { buildDecisionPayload, willPersistExactAction } from "./approval-scopes";
-import { approvalGateRefreshNeeded, resolvedStateForItem, useShownRequestCheck } from "./review-decision-state";
+import {
+  approvalGateDemandedCode,
+  approvalGateRefreshNeeded,
+  resolvedStateForItem,
+  useShownRequestCheck,
+} from "./review-decision-state";
 import { fetchResolvedApprovalGate } from "./use-resolved-approval-gate";
+import { GuardDecisionSignInRequiredError, guardDecisionSession } from "./guard-api";
+import type { DecisionSignInReason } from "./dashboard-session-scope";
 import type { DecisionScope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import type { ReviewWorkspaceProps } from "./review-workspace";
 
@@ -82,9 +89,49 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
   // One decision at a time: the gate preflight runs before `submitting` is set.
   const [preflighting, setPreflighting] = useState(false);
   const [effectiveApprovalGate, setEffectiveApprovalGate] = useState(params.approvalGate);
+  // Set once the server refuses this request for want of a code (#7528). The refreshed gate
+  // can still report a recent confirmation, so from then on only a typed code is sent.
+  const [freshCodeRequired, setFreshCodeRequired] = useState(false);
   const approvalGate = effectiveApprovalGate;
   const useCooldown = defaultUseApprovalCooldown(approvalGate) && !cooldownOptOut;
   const decisionBusy = submitting !== null || preflighting;
+  // Why this tab cannot decide the shown request, or null when it can.
+  const [signInReason, setSignInReason] = useState<DecisionSignInReason | null>(null);
+  const shownRequestId = item?.request_id ?? null;
+
+  const recheckSignIn = useCallback((): boolean => {
+    if (shownRequestId === null) {
+      setSignInReason(null);
+      return true;
+    }
+    const verdict = guardDecisionSession(shownRequestId);
+    if (verdict.kind === "ready") {
+      setSignInReason(null);
+      return true;
+    }
+    // The panel replaces every decision control, so an earlier error, its
+    // Retry, and an open credentials dialog go with it.
+    setSignInReason(verdict.reason);
+    setErrorMessage(null);
+    setPendingAction(null);
+    setPendingContractKey(null);
+    return false;
+  }, [shownRequestId]);
+
+  useEffect(() => {
+    recheckSignIn();
+    // A session opened in another tab (Desktop, `hol-guard approvals open`)
+    // lands in shared storage; pick it up without a reload.
+    const handleStorage = () => {
+      recheckSignIn();
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleStorage);
+    };
+  }, [recheckSignIn]);
 
   useEffect(() => {
     setEffectiveApprovalGate(params.approvalGate);
@@ -102,6 +149,7 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
     setCooldownOptOut(false);
     setPendingAction(null);
     setPendingContractKey(null);
+    setFreshCodeRequired(false);
   }, [decisionSubjectKey]);
 
   const handleResolve = useCallback(
@@ -132,16 +180,19 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
           requestedScope,
           action === "allow" ? rememberExactAction : watchOnlyObservation,
         );
+        // Guard ignores a recorded password cooldown once the authenticator is on, so after a
+        // refusal for want of a code the cooldown must not suppress the proof either.
         const includeGateFields =
           gateRequired &&
           gate?.configured === true &&
-          requiresApprovalPasswordPrompt(
-            gate.cooldown_active,
-            gate.strict_all_decisions,
-            requestedScope,
-          );
+          (freshCodeRequired ||
+            requiresApprovalPasswordPrompt(
+              gate.cooldown_active,
+              gate.strict_all_decisions,
+              requestedScope,
+            ));
         const proof = includeGateFields
-          ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode })
+          ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }, freshCodeRequired)
           : {};
         await onResolve({
           ...buildDecisionPayload({
@@ -167,6 +218,7 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
         setCooldownOptOut(false);
         setPendingAction(null);
         setPendingContractKey(null);
+        setFreshCodeRequired(false);
         if (gateRequired && (gate?.cooldown_seconds ?? 0) > 0) {
           // A password approval may have opened the cooldown window; pick it up without a reload.
           // A refresh that finds no gate is authoritative too: a removed gate must stop
@@ -179,8 +231,16 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
         }
       } catch (err) {
         if (!isStillShown(requestId)) return;
+        if (err instanceof GuardDecisionSignInRequiredError) {
+          setErrorMessage(null);
+          setPendingAction(null);
+          setPendingContractKey(null);
+          setSignInReason(err.reason);
+          return;
+        }
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
+        if (approvalGateDemandedCode(err)) setFreshCodeRequired(true);
         if (approvalGateRefreshNeeded(err)) {
           setSubmitting(null);
           try {
@@ -206,6 +266,7 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
       approvalPassword,
       approvalTotpCode,
       cooldownOptOut,
+      freshCodeRequired,
       resolutionBlockReason,
       canSubmitAllow,
       hasAllowScope,
@@ -215,6 +276,8 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
   const handleRequestResolve = useCallback(
     (action: "allow" | "block") => {
       if (resolutionBlockReason !== null || decisionBusy) return;
+      // Ask for a session that can decide before the gate asks for a password.
+      if (!recheckSignIn()) return;
       if (action === "allow" && !hasAllowScope) {
         setErrorMessage("This action has no eligible approval scope.");
         return;
@@ -265,17 +328,18 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
           const gateEnabled =
             approvalGateRequiredForResolution(current, action, requestedScope) &&
             current?.configured === true &&
-            requiresApprovalPasswordPrompt(
-              current.cooldown_active,
-              current.strict_all_decisions,
-              requestedScope,
-            );
+            (freshCodeRequired ||
+              requiresApprovalPasswordPrompt(
+                current.cooldown_active,
+                current.strict_all_decisions,
+                requestedScope,
+              ));
           if (!gateEnabled) {
             void handleResolve(action, current);
             return;
           }
           setErrorMessage(null);
-          if (!approvalProofRecentlySatisfied(current)) {
+          if (freshCodeRequired || !approvalProofRecentlySatisfied(current)) {
             setPendingAction(action);
             setPendingContractKey(decisionContractKey);
             return;
@@ -301,12 +365,14 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
       blockScopeOptions.length,
       decisionBusy,
       decisionContractKey,
+      freshCodeRequired,
       handleResolve,
       hasAllowScope,
       canSubmitAllow,
       isStillShown,
       item,
       approvalGate,
+      recheckSignIn,
       resolutionBlockReason,
     ]
   );
@@ -381,6 +447,12 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
     setCooldownOptOut(false);
   }, []);
 
+  const handleSignInRecheck = useCallback(() => {
+    if (recheckSignIn()) {
+      setErrorMessage(null);
+    }
+  }, [recheckSignIn]);
+
   const handleRetryLastAction = useCallback(() => {
     setErrorMessage(null);
     if (lastAction !== null) {
@@ -403,6 +475,7 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
     approvalPassword,
     approvalTotpCode,
     errorMessage,
+    freshCodeRequired,
     handleAllow,
     handleApprovalPasswordChange,
     handleApprovalTotpCodeChange,
@@ -410,10 +483,12 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
     handleModalCancel,
     handleModalSubmit,
     handleRetryLastAction,
+    handleSignInRecheck,
     handleUseCooldownChange,
     pendingAction,
     resolved,
     setResolved,
+    signInReason,
     submitting,
     useCooldown,
   };

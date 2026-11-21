@@ -14,7 +14,7 @@ paths on Windows.
 
 ```sh
 uv sync --frozen --extra dev
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
 ```
 
 The focused test checks deterministic compilation, exact schema projections,
@@ -44,8 +44,8 @@ checkout, build the compiler and runtime against the current generated
 artifacts:
 
 ```sh
-cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
-cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml -p hol-guard-runtime
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml -p hol-guard-runtime
 export HOL_GUARD_NATIVE_SOURCE_COMPILER="$PWD/rust/target/release/guard-command-source"
 export HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER="$PWD/rust/target/release/guard-command-source"
 export HOL_GUARD_NATIVE_BINARY="$PWD/rust/target/release/hol-guard-runtime"

@@ -72,6 +72,18 @@ fn original_portable_contained_argv_vectors() {
     .unwrap();
     let mut count = 0;
     for case in vectors["cases"].as_array().unwrap() {
+        // No caller asks for the test-script screen as an operation any more,
+        // so its recorded vectors read the screen the planners still use.
+        if case["operation"] == "test_script" {
+            let input = &case["input"];
+            let named = named_test_script(
+                input["value"].as_str().unwrap(),
+                input["node"].as_bool().unwrap_or(false),
+            );
+            assert_eq!(json!({ "value": named }), case["expected"], "case={case}");
+            count += 1;
+            continue;
+        }
         if let Some(result) = evaluate(case["operation"].as_str().unwrap(), &case["input"]) {
             assert_eq!(result, case["expected"], "case={case}");
             count += 1;
@@ -129,6 +141,75 @@ fn only_a_bare_pnpm_exec_reads_as_vitest() {
     ] {
         let result = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
         assert!(result.get("value").is_none(), "{command} {result}");
+    }
+}
+
+/// The route that admits `npm exec` peels npm's own exec options, so the sink
+/// has to read the same argv or the run it planned is not the run that was
+/// admitted.
+#[test]
+fn npm_exec_reads_the_runner_behind_its_own_options() {
+    for command in [
+        json!(["npm", "exec", "--no", "--", "vitest", "run"]),
+        json!(["npm", "exec", "--prefer-offline", "vitest", "run"]),
+        json!(["npm", "x", "-y", "--silent", "vitest", "run"]),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        assert_eq!(kind["value"]["vitest"], true, "{command} {kind}");
+        assert_eq!(kind["value"]["node_tool"], false, "{command} {kind}");
+        let arguments = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
+        assert_eq!(arguments["value"], json!(["run"]), "{command}");
+    }
+    for command in [
+        // `--workspace` chooses which package the run reaches, so it is not
+        // one of the options that only precede the tool.
+        json!(["npm", "exec", "--workspace", "app", "vitest", "run"]),
+        // pnpm's and yarn's exec options select packages too, and neither is
+        // read from npx's table.
+        json!(["pnpm", "exec", "--no", "vitest", "run"]),
+        json!(["yarn", "exec", "--no", "vitest", "run"]),
+        json!(["npm", "exec", "--no", "--"]),
+    ] {
+        let result = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
+        assert!(result.get("value").is_none(), "{command} {result}");
+    }
+}
+
+/// The admission and the classifier read one spelling, so the kind the sink
+/// plans is always the kind the admitting reason names. `manager_exec_tool`
+/// takes that one reading rather than keeping a second copy of it beside the
+/// admission's: if the two answered differently, a widening on either side
+/// would admit a run on one route and leave the sink refusing it on another.
+#[test]
+fn the_classifier_reads_the_local_bin_spelling_the_admission_reads() {
+    for (command, tool) in [
+        (json!(["pnpm", "exec", "vitest", "run"]), "vitest"),
+        (json!(["npm", "exec", "--", "jest", "--ci"]), "jest"),
+        (
+            json!(["npm", "x", "--yes", "mocha", "--reporter", "spec"]),
+            "mocha",
+        ),
+        (json!(["yarn", "exec", "tsc", "--noEmit"]), "tsc"),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        let expected = tool == "tsc";
+        assert_eq!(kind["value"]["node_tool"], expected, "{command} {kind}");
+        assert_eq!(kind["value"]["vitest"], !expected, "{command} {kind}");
+    }
+    // pnpm resolves a bare word against the manifest before it falls back to
+    // `pnpm exec`, and since pnpm 7 the words behind that word go to the
+    // script, so the shorthand cannot be read as the local-bin run without the
+    // manifest neither side here sees. Both readings leave it alone together.
+    for command in [
+        json!(["pnpm", "vitest", "run"]),
+        json!(["pnpm", "jest", "--ci"]),
+        json!(["pnpm", "tsc", "--noEmit"]),
+        json!(["pnpm", "test"]),
+        json!(["pnpm", "run", "test"]),
+        json!(["pnpm", "-r", "vitest", "run"]),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        assert_eq!(kind["value"]["vitest"], false, "{command} {kind}");
     }
 }
 
@@ -224,71 +305,47 @@ fn contained_target_answers_the_sink() {
 }
 
 #[test]
-fn launcher_program_reports_where_the_parser_reads_the_program() {
-    let offset =
-        |command: &[&str]| evaluate("launcher_program", &json!({ "command": command })).unwrap();
-    assert_eq!(
-        offset(&["nice", "-n", "10", "pytest", "-q"]),
-        json!({"value": 3})
-    );
-    assert_eq!(offset(&["nice", "pytest", "-q"]), json!({"value": 1}));
-    assert_eq!(
-        offset(&["stdbuf", "-oL", "pytest", "-q"]),
-        json!({"value": 2})
-    );
-    // The shell's `exec` is read here too. The sink keeps no list of launcher
-    // names of its own, so every name this op answers for is one it peels.
-    assert_eq!(offset(&["exec", "pytest", "-q"]), json!({"value": 1}));
-    // The sink refuses every shape the native parser leaves in place.
-    for command in [
-        &["./nice", "-n", "10", "pytest"][..],
-        &["C:\\tools\\nice", "pytest"],
-        &["stdbuf", "pytest", "-q"],
-        &["nohup", "pytest", "-q"],
-        &["nice", "-n", "10", "python3", "deploy.py"],
-        &["pytest", "-q"],
-        &["exec"],
-        &["exec", "-a", "name", "pytest"],
-        &["exec", "./deploy.sh"],
+fn contained_target_reads_a_bounded_inline_shell_as_its_script() {
+    // The review reads `bash -ec 'pytest -q'` as `pytest -q`, so the sink has
+    // to plan that script or it refuses the run the review sent it.
+    for (text, script) in [
+        ("bash -ec 'pytest -q'", "pytest -q"),
+        ("sh -c 'pytest -q'", "pytest -q"),
+        ("bash -e -c 'pytest -q'", "pytest -q"),
     ] {
-        assert_eq!(offset(command), json!({"value": null}), "{command:?}");
+        let input = json!({ "text": text });
+        assert_eq!(
+            evaluate("contained_target", &input).unwrap()["value"],
+            json!(script),
+            "{text}"
+        );
+    }
+    // A shell that reads more than its script, a script of several commands
+    // (run bare, it would lose `-e`), a script that expands, a brace Bash would
+    // expand, or a command with no shell in front stays whole.
+    for text in [
+        "bash -lc 'pytest -q'",
+        "zsh -c 'pytest -q'",
+        "bash -ec 'pytest -q; echo done'",
+        "bash -ec 'pytest -q && rm -rf x'",
+        "bash -ec 'pytest -q | tee log'",
+        "bash -c 'pytest \"$X\"'",
+        "bash -ec 'python3 build.py {fast,full}'",
+        "bash -ec 'python3 build.py ~+'",
+        "bash -ec 'python3 build.py ~-/out'",
+        "bash -ec 'python3 build.py ~1'",
+        "pytest -q",
+    ] {
+        let input = json!({ "text": text });
+        assert_eq!(
+            evaluate("contained_target", &input).unwrap()["value"],
+            Value::Null,
+            "{text}"
+        );
     }
 }
 
-#[test]
-fn transparent_prefix_reports_where_the_parser_reads_the_program() {
-    let offset =
-        |command: &[&str]| evaluate("transparent_prefix", &json!({ "command": command })).unwrap();
-    assert_eq!(offset(&["command", "pytest", "-q"]), json!({"value": 1}));
-    assert_eq!(offset(&["time", "pytest", "-q"]), json!({"value": 1}));
-    assert_eq!(
-        offset(&["env", "CI=1", "pytest", "-q"]),
-        json!({"value": 2})
-    );
-    // The parser reads the two system paths as the `env` they name, so the
-    // sink peels them too rather than planning `/usr/bin/env` as the program.
-    assert_eq!(
-        offset(&["/usr/bin/env", "CI=1", "pytest", "-q"]),
-        json!({"value": 2})
-    );
-    assert_eq!(offset(&["/bin/env", "CI=1", "pytest"]), json!({"value": 2}));
-    assert_eq!(
-        offset(&["env", "CI=1", "TZ=UTC", "pytest"]),
-        json!({"value": 3})
-    );
-    for command in [
-        // An `env` carrying no assignment only bypasses shell functions, and
-        // extension floors key on that spelling, so it stays the executable.
-        &["env", "pytest", "-q"][..],
-        &["env", "-i", "pytest"],
-        &["env", "CI=1"],
-        // A word that is no assignment and no program leaves the prefix whole.
-        &["env", "FOO=1", "A-B=1", "rm"],
-        &["command", "-v", "pytest"],
-        &["time", "-p", "pytest"],
-        &["nice", "pytest"],
-        &["pytest", "-q"],
-    ] {
-        assert_eq!(offset(command), json!({"value": null}), "{command:?}");
-    }
-}
+#[path = "contained_argv_program_tests.rs"]
+mod program;
+#[path = "contained_argv_script_tests.rs"]
+mod script;

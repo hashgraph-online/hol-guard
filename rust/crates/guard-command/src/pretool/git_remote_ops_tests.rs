@@ -103,3 +103,34 @@ fn an_unnamed_route_is_refused() {
         None
     );
 }
+
+fn config(entries: &[(&str, &str)]) -> super::config::GitConfig {
+    entries
+        .iter()
+        .map(|(key, value)| ((*key).to_owned(), vec![(*value).to_owned()]))
+        .collect()
+}
+
+/// A listing is paged under its own key. `pager.fetch` is the fetch's, and
+/// reading it in the listing's place leaves the program `pager.ls-remote`
+/// names unexamined.
+#[test]
+fn a_listing_reads_its_own_pager_key() {
+    assert!(super::listing_pager_free(&config(&[])));
+    assert!(super::listing_pager_free(&config(&[(
+        "pager.fetch",
+        "/opt/example/run"
+    )])));
+    assert!(super::listing_pager_free(&config(&[(
+        "pager.ls-remote",
+        "false"
+    )])));
+    assert!(!super::listing_pager_free(&config(&[(
+        "pager.ls-remote",
+        "/opt/example/run"
+    )])));
+    assert!(!super::listing_pager_free(&config(&[(
+        "pager.ls-remote",
+        "true"
+    )])));
+}

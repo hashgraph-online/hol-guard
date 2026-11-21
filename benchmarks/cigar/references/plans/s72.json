@@ -1,0 +1,85 @@
+{
+ "repo": "boltons",
+ "seed": 72,
+ "steps": [
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Append the given data to the end of the Table.\" Reply with its file path and function name.",
+   "question": {
+    "name": "extend",
+    "path": "boltons/tableutils.py",
+    "qual": "Table.extend",
+    "sentence": "Append the given data to the end of the Table."
+   }
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_get_real_index` to `_get_real_index_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 5,
+    "files": [
+     "boltons/setutils.py"
+    ],
+    "new": "_get_real_index_impl",
+    "old": "_get_real_index",
+    "path": "boltons/setutils.py"
+   }
+  },
+  {
+   "doc": {
+    "module": "boltons.urlutils",
+    "path": "boltons/urlutils.py",
+    "qual": "quote_path_part"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `quote_path_part` in boltons/urlutils.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_funcutils_fb_py3.py::test_wraps_async"
+     ],
+     "line": 837,
+     "new": "            kwargs['is_async'] = False\n",
+     "orig": "            kwargs['is_async'] = True\n",
+     "path": "boltons/funcutils.py",
+     "qual": "FunctionBuilder.from_func"
+    }
+   ]
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_iterutils.py::test_rstrip",
+      "tests/test_iterutils.py::test_strip"
+     ],
+     "line": 254,
+     "new": "                    broken = False\n",
+     "orig": "                    broken = True\n",
+     "path": "boltons/iterutils.py",
+     "qual": "rstrip_iter"
+    },
+    {
+     "failing": [
+      "tests/test_timeutils.py::test_daterange_infinite"
+     ],
+     "line": 370,
+     "new": "        finished = lambda now, stop: True\n",
+     "orig": "        finished = lambda now, stop: False\n",
+     "path": "boltons/timeutils.py",
+     "qual": "daterange"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

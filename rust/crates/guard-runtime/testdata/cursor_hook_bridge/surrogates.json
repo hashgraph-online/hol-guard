@@ -9,7 +9,7 @@
   {
    "input": "{\"hook_event_name\":\"preToolUse\",\"tool_name\":\"Shell\",\"tool_input\":{\"command\":\"ls \\uDBFF\\uDFFF \\udfff\"},\"cwd\":\"/nonexistent-cursor-cwd\"}",
    "event": "preToolUse",
-   "sent": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Shell\",\"tool_input\":{\"command\":\"ls \\udbff\\udfff \\udfff\"},\"cwd\":\"/nonexistent-cursor-cwd\"}"
+   "sent": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Shell\",\"tool_input\":{\"command\":\"ls \\udbff\\udfff \\udfff\"},\"cwd\":\"/nonexistent-cursor-cwd\",\"cursor_route_probe\":true}"
   },
   {
    "input": "{\"hook_event_name\":\"beforeMCPExecution\",\"tool_name\":\"x\\ud834\",\"tool_input\":\"{\\\"a\\\": 1}\",\"workspace_roots\":[\"/nonexistent-\\ud800\"]}",

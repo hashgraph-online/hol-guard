@@ -80,6 +80,7 @@ struct CloudContext<'a> {
     bundle_decision: Option<&'a str>,
     fail_closed: OnceCell<String>,
     entitlement: OnceCell<Map<String, Value>>,
+    budget: SyncBudget,
 }
 
 impl CloudContext<'_> {
@@ -192,6 +193,8 @@ impl CloudContext<'_> {
 
     /// The pre-request failures of `_resolve_guard_sync_auth_context`.
     fn auth_resolution_failure(&self, error: &EvalError) -> CloudOutcome {
+        let outage = super::cloud_failures::refresh_outage_as_validation(error);
+        let error = outage.as_ref().unwrap_or(error);
         match error {
             EvalError::Validation(reason) => {
                 if self.can_fallback_from_cloud_failure() {
@@ -244,6 +247,7 @@ impl CloudContext<'_> {
     }
 
     fn post(&self, auth_context: &Value, url: &str, data: &[u8]) -> EvalResult<Map<String, Value>> {
+        let (first, retry) = cloud_evaluate_timeouts(self.targets.len());
         let request = self.deps.guard_sync.guard_sync_request(
             auth_context,
             url,
@@ -252,11 +256,9 @@ impl CloudContext<'_> {
             None,
             None,
         )?;
-        self.deps.guard_sync.urlopen_json_with_timeout_retry(
-            &request,
-            TIMEOUT_SECONDS,
-            RETRY_TIMEOUT_SECONDS,
-        )
+        self.deps
+            .guard_sync
+            .urlopen_json_with_timeout_retry(&request, first, retry, &self.budget)
     }
 
     /// POST with the single forced-refresh retry on HTTP 401.
@@ -449,6 +451,7 @@ pub(super) fn evaluate_with_cloud(
         bundle_decision,
         fail_closed: OnceCell::new(),
         entitlement: OnceCell::new(),
+        budget: SyncBudget::new(CLOUD_EVALUATE_BUDGET_SECONDS),
     };
     let auth_context = match deps
         .guard_sync

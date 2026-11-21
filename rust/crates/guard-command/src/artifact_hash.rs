@@ -182,7 +182,7 @@ fn redact_url(value: &str) -> String {
 }
 
 /// `_redact_arg`: mask an inline header or query-style credential.
-fn redact_arg(value: &str) -> String {
+pub fn redact_arg(value: &str) -> String {
     let lowered = value.to_lowercase();
     if lowered.contains("authorization:")
         || lowered.contains("api-key:")

@@ -12,13 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.client import (
-    GuardDaemonResponseSchemaError,
+from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard.managed_controls.feature_flags import GUARD_EXTENSION_CATALOG_SYNC_V1
+from codex_plugin_scanner.guard.native_daemon_client import (
     GuardSurfaceDaemonClient,
 )
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.managed_controls.feature_flags import GUARD_EXTENSION_CATALOG_SYNC_V1
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime import extension_control_limits as limits_module
 from codex_plugin_scanner.guard.runtime import managed_controls_sync, runner
 from codex_plugin_scanner.guard.runtime.command_extensions import CommandSafetyExtensionRegistry
@@ -39,6 +38,7 @@ from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import 
     load_generated_command_catalog_bytes,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support import cloud_sync_transport
 from tests.test_managed_controls_limits import _catalog_extension
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,21 +87,6 @@ def _read(payload: bytes, max_bytes: int, *, read1: bool) -> bytes:
         deadline=time.monotonic() + 10,
         max_bytes=max_bytes,
     )
-
-
-@pytest.mark.parametrize("read1", (True, False))
-@pytest.mark.parametrize("cap", (MAX_DAEMON_GET_RESPONSE_BYTES, MAX_DAEMON_CATALOG_RESPONSE_BYTES))
-def test_client_body_cap_boundaries(cap: int, read1: bool) -> None:
-    assert len(_read(b"x" * (cap - 1), cap, read1=read1)) == cap - 1
-    assert len(_read(b"x" * cap, cap, read1=read1)) == cap
-    with pytest.raises(GuardDaemonResponseSchemaError, match="size limit"):
-        _read(b"x" * (cap + 1), cap, read1=read1)
-
-
-@pytest.mark.parametrize("max_bytes", (0, -1, MAX_DAEMON_CATALOG_RESPONSE_BYTES + 1, True, 1.5))
-def test_client_rejects_unbounded_read_limits(max_bytes: object) -> None:
-    with pytest.raises(ValueError, match="positive bounded integer"):
-        _read(b"{}", max_bytes, read1=True)  # pyright: ignore[reportArgumentType]
 
 
 # The negotiation verdicts (budgets, downgrades, upload URL) live in the resident; their
@@ -339,7 +324,9 @@ def test_runtime_sync_sends_nothing_when_upload_exceeds_cloud_cap(
 ) -> None:
     oversized = _catalog_with_size(CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES + 1)
     monkeypatch.setattr(runner, "build_builtin_extension_catalog_wire", lambda **_kwargs: oversized)
-    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: pytest.fail("must not upload"))
+    monkeypatch.setattr(
+        cloud_sync_transport, "_guard_sync_request", lambda *_args, **_kwargs: pytest.fail("must not upload")
+    )
     summary = runner._sync_extension_catalog_from_runtime_handshake(
         guard_home=tmp_path,
         auth_context={},

@@ -6,7 +6,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [],
@@ -27,7 +26,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": null
    },
    "artifacts": [],
@@ -48,7 +46,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [],
@@ -75,7 +72,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [],
@@ -102,7 +98,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [],
@@ -129,7 +124,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"gateway\": \"x\", \"agents\": {\"defaults\": \"y\"}, \"hooks\": {}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -188,7 +182,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"gateway\": {\"mode\": \"local\", \"bind\": \"lan\", \"auth\": {\"mode\": \"password\"}}, \"agents\": {\"defaults\": {\"workspace\": \"~/ws\", \"sandbox\": {\"mode\": \"non-main\"}}}, \"hooks\": {\"enabled\": true}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -247,7 +240,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"gateway\": {\"mode\": 1, \"bind\": null, \"auth\": \"token\"}, \"agents\": {\"defaults\": {\"workspace\": \"\", \"sandbox\": {\"mode\": [\"x\"]}}}, \"hooks\": [\"x\"], \"z\": 1}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -306,7 +298,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"channels\": {\"telegram\": {\"dmPolicy\": \"open\", \"allowFrom\": [\"*\"]}, \"discord\": {\"dm\": {\"policy\": \"open\", \"allowFrom\": [\"*\", 1, 1.5, true, null]}}, \"slack\": {\"enabled\": false, \"dmPolicy\": \"open\", \"allowFrom\": [\"*\"]}, \"zero\": {\"enabled\": 0, \"dmPolicy\": \"\", \"dm\": {\"policy\": \"pairing\"}, \"allowFrom\": [], \"x\": 1}, \"whatsapp\": {\"dmPolicy\": 3, \"allowFrom\": \"*\", \"dm\": \"x\"}, \"matrix\": {}, \"not_dict\": \"x\", \"list\": [\"y\"]}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -529,7 +520,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"channels\": [\"telegram\"]}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -588,7 +578,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"mcp\": {\"servers\": {\"dup\": {\"command\": \"node\", \"args\": [\"a\", 2, 1e+20, 0.1, false, null, {\"k\": 1}]}, \"same\": {\"command\": \"uvx\", \"args\": [\"tool\"], \"env\": {\"B\": \"2\", \"A\": 1}}, \"off\": {\"command\": \"off\", \"enabled\": false}, \"remote\": {\"url\": \"https://mcp.example/x\", \"headers\": {\"Authorization\": \"Bearer x\", \"Nested\": {\"a\": [1]}}}, \"  padded  \": {\"command\": \"p\", \"transport\": \" Streamable-HTTP \"}, \"sse\": {\"url\": \"https://mcp.example/s\", \"transport\": \"SSE\"}, \"weird\": {\"command\": \"w\", \"transport\": \"carrier-pigeon\"}, \"blank_transport\": {\"command\": \"b\", \"transport\": \"   \", \"url\": \"  \"}, \"numbers\": {\"command\": 5, \"url\": 7, \"transport\": 3, \"enabled\": 0, \"env\": [\"x\"], \"headers\": \"h\"}, \"   \": {\"command\": \"blank\"}, \"not_dict\": \"x\"}, \"mcpServers\": {\"dup\": {\"command\": \"python\", \"args\": [\"other\"]}, \"same\": {\"command\": \"uvx\", \"args\": [\"tool\"], \"env\": {\"A\": \"x\", \"B\": \"y\"}}, \"off\": {\"command\": \"fallback\"}, \"compat_only\": {\"url\": \"https://mcp.example/c\", \"transport\": \"http\"}}}, \"mcpServers\": {\"dup\": {\"command\": \"node\", \"args\": [\"a\", 2, 1e+20, 0.1, false, null, {\"k\": 1}]}, \"same\": {\"command\": \"uvx\", \"args\": [\"tool\"], \"enabled\": false}, \"top_only\": {\"command\": \"t\", \"enabled\": null}}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -1066,7 +1055,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"mcp\": {\"servers\": [\"x\"], \"mcpServers\": null}, \"mcpServers\": \"y\"}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -1134,7 +1122,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"mcp\": \"x\", \"mcpServers\": {\"only\": {\"command\": \"o\"}}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -1224,7 +1211,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"mcp\": {\"servers\": {\"x\": {\"command\": \"a\", \"enabled\": false}}}, \"mcpServers\": {\"x\": {\"command\": \"b\", \"enabled\": false}}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -1283,7 +1269,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"mcp\": {\"servers\": {\"\\u00c4rger\": {\"command\": \"n\\u00f6d\\u00e9\", \"args\": [\"\\u00fc\", \"\\ud83d\\ude00\"], \"env\": {\"\\u00c9\": 1}}}}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -1380,7 +1365,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"mcpServers\": {\"inc\": {\"command\": \"i\", \"args\": [\"a\"]}}, \"channels\": {\"telegram\": {\"dmPolicy\": \"open\"}}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -1503,7 +1487,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -1863,7 +1846,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"gateway\": {\"mode\": \"local\", \"bind\": \"lan\", \"auth\": {\"mode\": \"password\"}}, \"agents\": {\"defaults\": {\"workspace\": \"~/ws\", \"sandbox\": {\"mode\": \"non-main\"}}}, \"hooks\": {\"enabled\": true}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -2371,7 +2353,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -2427,7 +2408,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"skills\": {\"load\": {\"extraDirs\": [\"~/extra\", \" rel \", \"<ROOT>/abs\", 5, \"   \", \"~/.openclaw/skills\", \"scripts/skills\", null, \"~\", \"~/missing\"]}}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -2807,7 +2787,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"skills\": {\"load\": {\"extraDirs\": \"~/x\"}}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -2895,7 +2874,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"agents\": {\"defaults\": {\"workspace\": \"<ROOT>/abs-ws\"}}, \"skills\": {\"load\": {\"extraDirs\": [\"~/\"]}}}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -3008,7 +2986,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -3144,7 +3121,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -3227,7 +3203,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -3344,7 +3319,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": "<ROOT>/work"
    },
    "artifacts": [
@@ -3601,7 +3575,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{}",
     "workspace": null
    },
    "artifacts": [
@@ -3657,7 +3630,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "home",
-    "payload": "{\"gateway\": {\"mode\": \"local\", \"bind\": \"lan\", \"auth\": {\"mode\": \"password\"}}, \"agents\": {\"defaults\": {\"workspace\": \"~/ws\", \"sandbox\": {\"mode\": \"non-main\"}}}, \"hooks\": {\"enabled\": true}, \"channels\": {\"t\": {}}, \"skills\": {\"load\": {\"extraDirs\": [\"extra\"]}}}",
     "workspace": "work"
    },
    "artifacts": [
@@ -3823,7 +3795,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"channels\": {\"bad\\ud800\": {}}}",
     "workspace": "<ROOT>/work"
    },
    "dir_modes": {},
@@ -3848,7 +3819,6 @@
     "cwd": "<ROOT>",
     "harness": "openclaw",
     "home": "<ROOT>/home",
-    "payload": "{\"mcpServers\": {\"bad\": {\"command\": \"\\udc00\"}}}",
     "workspace": "<ROOT>/work"
    },
    "dir_modes": {},

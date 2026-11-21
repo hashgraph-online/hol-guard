@@ -1282,20 +1282,6 @@ def check_no_approval_bypass_defaults(
     )
 
 
-def check_uninspected_binaries(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult | None:
-    """List packaged executables the scan skipped; None when there are none or the walk itself failed.
-
-    A failed walk is already reported by the content checks that share it.
-    """
-    resolved_plugin_dir = plugin_dir.resolve()
-    uninspected: list[UninspectedBinary] = []
-    try:
-        _scan_all_files(resolved_plugin_dir, files, uninspected)
-    except (ScanInputUnreadableError, ScanBudgetExceededError):
-        return None
-    return uninspected_binary_check(resolved_plugin_dir, uninspected) if uninspected else None
-
-
 def run_security_checks(plugin_dir: Path, *, instruction_files: tuple[Path, ...] = ()) -> tuple[CheckResult, ...]:
     """Run the security checks; ``instruction_files`` are read as agent instructions by the approval check."""
     uninspected: list[UninspectedBinary] = []

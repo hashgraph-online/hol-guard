@@ -3,6 +3,9 @@ use crate::pretool::source_reads::sensitive_command_input;
 
 /// A pattern handed to a filter that reads only standard input names no file,
 /// so a listing piped into it is ordinary work rather than a sensitive read.
+/// A credential word in that pattern is a pattern like any other: the stage
+/// can only narrow what the stages before it already wrote, so the piped
+/// command discloses less than the producer the screens allow on its own.
 #[test]
 fn a_stdin_filter_pattern_is_not_a_sensitive_target() {
     for command in [
@@ -11,6 +14,11 @@ fn a_stdin_filter_pattern_is_not_a_sensitive_target() {
         "ls -R . | sort | grep -v .env",
         "ls -R . | rg .env",
         "git status --short | grep -v .env",
+        "ls -la | grep -i secret.txt | head -5",
+        "ls -R . | grep AWS_SECRET_ACCESS_KEY",
+        "git diff -- src | rg -n password",
+        "git diff --stat | grep -i api_key",
+        "cat src/config.ts | rg -n \"password|secret\"",
     ] {
         assert!(
             !sensitive_command_input(command),
@@ -20,17 +28,18 @@ fn a_stdin_filter_pattern_is_not_a_sensitive_target() {
 }
 
 /// Only the filter's own arguments are set aside. A producer that names a
-/// sensitive file keeps its signal, a credential word keeps its signal
-/// wherever it appears, a matcher that opens a file of its own is not a stdin
-/// filter at all, and a word the shell can still act on — an attached
-/// redirect, an unquoted glob — is not a pattern yet.
+/// sensitive file keeps its signal, a matcher that opens a file of its own is
+/// not a stdin filter at all, and a word the shell can still act on — an
+/// attached redirect, an unquoted glob — is not a pattern yet. Each of these
+/// is a stage that can reach a secret the earlier stages never wrote, which
+/// is what the exemption refuses to shed.
 #[test]
 fn only_a_proven_stdin_filter_sheds_its_pattern() {
     for command in [
         "cat .env | grep DATABASE",
-        "ls -la | grep -i secret.txt | head -5",
+        "cat .env | grep -v DATABASE | head -5",
         "ls -R ~/.ssh | grep -v known_hosts",
-        "ls -R . | grep AWS_SECRET_ACCESS_KEY",
+        "printenv | grep -i path",
         "ls -R . | grep -f .env",
         "ls -R . | grep --file=.env",
         "ls -R . | grep -r .env /etc",

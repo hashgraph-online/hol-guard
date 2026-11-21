@@ -15,9 +15,8 @@
   "homepage": "https://github.com/ashmoonori-afk/birkin-mnemosyne",
   "license": "MIT",
   "launch": {
-    "kind": "package-launcher",
-    "command": "uvx",
-    "package": "birkin-mnemosyne[mcp]"
+    "kind": "direct-command",
+    "command": "mnemosyne-mcp"
   },
   "riskClasses": ["external-filesystem-write", "external-memory-archive", "external-note-rewrite"],
   "tools": [
@@ -56,12 +55,12 @@
     "https://github.com/ashmoonori-afk/birkin-mnemosyne/blob/08e518d31bb71e5e8c530a5a0f8930c5f194b300/benchmarks/retrieval/RESULTS.md"
   ],
   "saferAlternatives": [
-    "Configure uvx with --from birkin-mnemosyne[mcp], then mnemosyne-mcp --vault PATH; the console script differs from the package name.",
+    "Install 'birkin-mnemosyne[mcp]==0.7.0' in a dedicated Python environment, then configure the installed mnemosyne-mcp executable with --vault PATH over stdio.",
     "Inspect memory_search, memory_list, or memory_curation_catalog before approving note changes; memory_get_note also persists usage history.",
     "Use memory_remember mode=create to avoid overwriting notes; replace requires expected_version from a fresh memory_get_note.",
     "Preview memory_forget with confirm=false and memory_curate with apply=false before approving archival or curation.",
     "Use an explicitly selected vault with only intended notes; its path is not an OS sandbox, and existing symlinks can expose other files.",
     "Check or restrict MNEMOSYNE_IDENTITY_ROOT / --identity-root too: memory_identity_read and memory_startup_read can read files under that separate root outside the selected vault.",
-    "Launch exactly birkin-mnemosyne[mcp] (optionally ==VERSION). Other spellings such as [mcp,semantic], birkin_mnemosyne or no extra are outside this entry and keep your ordinary Guard policy."
+    "This preset matches the installed mnemosyne-mcp executable. Launcher wrappers such as uvx --from remain subject to your ordinary Guard policy."
   ]
 }

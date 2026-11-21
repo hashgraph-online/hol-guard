@@ -60,7 +60,7 @@ def test_changed_path_gate_maps_live_cli_hook_support(monkeypatch: pytest.Monkey
 
 
 def test_changed_path_gate_maps_every_production_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
-    path = "src/codex_plugin_scanner/guard/adapters/antigravity.py"
+    path = "src/codex_plugin_scanner/guard/native_harness_ops.py"
     monkeypatch.setattr(MODULE, "_changed_files", lambda _base_ref: (path,))
 
     changed = MODULE._changed_path_gate(MODULE._manifest(), "base")
@@ -180,7 +180,7 @@ def test_self_protected_contract_requires_an_owner(monkeypatch: pytest.MonkeyPat
 
 def _copy_pretool_graph_sources(root: Path) -> None:
     for relative in (
-        "src/codex_plugin_scanner/guard/daemon/server.py",
+        "src/codex_plugin_scanner/guard/routes/request_handler.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_hook_payload.py",

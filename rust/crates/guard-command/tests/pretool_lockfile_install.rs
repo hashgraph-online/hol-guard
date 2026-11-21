@@ -135,7 +135,7 @@ impl Lab {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: true,
-            library_search_paths: Default::default(),
+            ..Default::default()
         };
         evaluate_pre_tool_envelope_with_execution_context(
             "codex",
@@ -149,8 +149,12 @@ impl Lab {
                 cdpath_unset: true,
                 npm_config_inert: true,
                 pip_config_inert: true,
+                python_environment_inert: true,
                 shell_home_matches: true,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 ..PathContext::default()
             },

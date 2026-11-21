@@ -23,8 +23,10 @@ SEED_MODULES: tuple[str, ...] = (
     "inbox",
     "evidence",
     "extensions",
+    "custom_cli_options",
     "policy",
     "settings",
+    "context_assistance",
     "supply_chain",
     "command_health",
 )

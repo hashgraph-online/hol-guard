@@ -8,10 +8,8 @@ from enum import Enum
 from typing import cast
 
 from .extension_control_contract import (
-    CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
     ControlState,
-    ControlSurface,
     ControlTarget,
     ControlTargetKind,
     ExtensionControl,
@@ -48,24 +46,6 @@ class ExtensionControlAuthorityView:
     # The authority was never read, so this view reports no reading rather than
     # a verdict about it. It grants nothing, and the next read replaces it.
     unread: bool = False
-
-    def layers_for(self, surface: ControlSurface) -> tuple[ExtensionControlLayer, ...]:
-        if self.health is AuthorityHealth.PROTECTED:
-            return self.layers
-        if type(surface) is ControlSurface and surface in {
-            ControlSurface.TRUSTED_LOCAL_RECOVERY,
-            ControlSurface.TRUSTED_LOCAL_PROOF,
-        }:
-            return ()
-        return (
-            ExtensionControlLayer(
-                schema_version=CONTROL_SCHEMA_VERSION,
-                kind=ControlLayerKind.LOCAL_ADMIN,
-                catalog_digest=self.catalog_digest,
-                global_lockdown=True,
-                controls=(),
-            ),
-        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.managed_controls.capabilities import (
+from tests.managed_controls.capabilities import (
     MANAGED_CONTROL_CAPABILITIES,
     CapabilityNegotiationError,
     RuntimeCapabilityAdvertisement,

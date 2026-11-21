@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.evidence_hash import (
+from tests.python_oracles.evidence_hash import (
     canonical_guard_evidence_payload,
     guard_evidence_hash,
 )

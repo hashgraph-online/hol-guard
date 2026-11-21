@@ -27,16 +27,17 @@ use crate::local_mcp_grant_identity::is_command_id;
 const INVALID: StoreError = StoreError::Invalid("native_guard_store_args_invalid");
 
 /// One `LocalCliCommand` as it crosses the wire.
-struct Command<'a> {
-    command_id: &'a str,
+pub(crate) struct Command<'a> {
+    pub(crate) command_id: &'a str,
     name: &'a str,
     usage: &'a str,
     description: &'a str,
     parent_id: Option<&'a str>,
 }
 
-fn commands<'a>(args: &Args<'a>) -> StoreResult<Vec<Command<'a>>> {
-    let Some(Value::Array(items)) = args.raw("commands") else {
+/// The `commands` list of a catalog write or a continuity catalog seed.
+pub(crate) fn parse_commands(value: Option<&Value>) -> StoreResult<Vec<Command<'_>>> {
+    let Some(Value::Array(items)) = value else {
         return Err(INVALID);
     };
     let mut parsed = Vec::with_capacity(items.len());
@@ -87,7 +88,7 @@ pub(crate) fn write_local_cli_catalog(
     if merging && limit < 1 {
         return value_error("invalid local CLI catalog");
     }
-    let commands = commands(args)?;
+    let commands = parse_commands(args.raw("commands"))?;
     let seen_at = args.opt_str("seen_at")?;
 
     let catalog = match args.raw("mcp_catalog") {
@@ -184,7 +185,7 @@ fn merge_commands(
     Ok(known)
 }
 
-fn insert_command(
+pub(crate) fn insert_command(
     connection: &Connection,
     cli_id: &str,
     command: &Command<'_>,

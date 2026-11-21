@@ -16,6 +16,7 @@
 //! replay identity the caller records, so the signing half stays where the keys
 //! are. Every refusal carries Python's wording.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value};
@@ -43,7 +44,7 @@ pub struct TrustAttestationVerificationKey {
 pub struct TrustAttestationVerificationPolicy {
     pub revoked_key_ids: BTreeSet<String>,
     pub key_not_before: BTreeMap<String, String>,
-    pub minimum_sequence: Option<i64>,
+    pub minimum_sequence: Option<String>,
     pub seen_replay_keys: BTreeSet<String>,
     pub now: Option<String>,
     /// The verifier's own nonce policy, which Python defaults to false.
@@ -93,12 +94,27 @@ fn instant(payload: &Map<String, Value>, field: &str) -> Option<AttestationInsta
         .and_then(parse_attestation_timestamp)
 }
 
-/// Python's `isinstance(sequence, int)` for a sequence the payload check kept.
+/// Compare two runs of decimal digits, neither of them bounded by a width.
 ///
-/// That check already refused anything but a non-negative integer, so the
-/// value is a run of digits here, and a run too wide for `i128` is wider than
-/// any minimum a verifier can hold.
-fn sequence_advances(sequence: Option<&Value>, minimum: i64) -> bool {
+/// Leading zeros carry no value, so both sides arrive without them: the longer
+/// run is then the larger number, and runs of equal length order the way their
+/// bytes do. An empty run is zero.
+fn digits_exceed(candidate: &str, minimum: &str) -> bool {
+    match candidate.len().cmp(&minimum.len()) {
+        Ordering::Greater => true,
+        Ordering::Less => false,
+        Ordering::Equal => candidate > minimum,
+    }
+}
+
+/// Python's `sequence > minimum_sequence`, for integers of either width.
+///
+/// The payload check already refused anything but a non-negative integer, so
+/// the sequence is a run of digits here. The minimum is the digits the caller
+/// wrote rather than a number this crate has to hold, because the caller's
+/// integers are unbounded; comparing the two as text keeps a limit of any size
+/// answerable instead of turning it into a verifier that could not run.
+fn sequence_advances(sequence: Option<&Value>, minimum: &str) -> bool {
     let Some(Value::Number(number)) = sequence else {
         return false;
     };
@@ -106,11 +122,21 @@ fn sequence_advances(sequence: Option<&Value>, minimum: i64) -> bool {
     if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
         return false;
     }
-    match text.parse::<i128>() {
-        Ok(value) => value > i128::from(minimum),
-        // A run of digits too wide for `i128` outruns every minimum.
-        Err(_) => true,
+    let (negative, digits) = match minimum.strip_prefix('-') {
+        Some(magnitude) => (true, magnitude),
+        None => (false, minimum),
+    };
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        // A limit that is not a decimal integer is not one a sequence can be
+        // shown to clear, so it refuses rather than being read past.
+        return false;
     }
+    let digits = digits.trim_start_matches('0');
+    if negative && !digits.is_empty() {
+        // Every sequence the payload check admits is above a negative limit.
+        return true;
+    }
+    digits_exceed(text.trim_start_matches('0'), digits)
 }
 
 fn key_is_trusted(
@@ -220,7 +246,7 @@ pub fn trust_attestation_under_signature(
         }
     }
 
-    if let Some(minimum) = policy.minimum_sequence {
+    if let Some(minimum) = policy.minimum_sequence.as_deref() {
         if !sequence_advances(payload.get("sequence"), minimum) {
             return refuse("Trust attestation sequence is not monotonic");
         }

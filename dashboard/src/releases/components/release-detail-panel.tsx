@@ -29,7 +29,9 @@ import {
   formatReleaseDate,
   groupChangesByKind,
   groupReleaseAssets,
+  holReleaseUrl,
   normalizeVersionLabel,
+  trimmedNote,
   verificationLabel,
 } from "../releases-model";
 import type { MergedContributor } from "../releases-model";
@@ -41,6 +43,26 @@ function CoverageNote({ note }: { note: string }) {
     <p className="flex items-start gap-2 rounded-xl bg-surface-1 px-3 py-2.5 text-sm leading-6 text-brand-dark/75">
       <HiMiniInformationCircle className="mt-[3px] size-4 shrink-0 text-brand-dark/45" aria-hidden="true" />
       <span>{note}</span>
+    </p>
+  );
+}
+
+/** Said under a list Guard trimmed: how much is shown, and where the rest
+ * is. A very long release stays readable here instead of failing to load. */
+function TrimmedNote({ note, href }: { note: string; href: string }) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm leading-6 text-brand-dark/75">
+      <span className="tabular-nums">{note}</span>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1 rounded font-medium text-brand-dark underline decoration-brand-dark/25 underline-offset-[3px] transition-colors duration-150 hover:text-brand-blue hover:decoration-brand-blue/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30 motion-reduce:transition-none"
+      >
+        See the full list on hol.org
+        <HiMiniArrowTopRightOnSquare className="size-3.5" aria-hidden="true" />
+        <span className="sr-only">(opens in a new tab)</span>
+      </a>
     </p>
   );
 }
@@ -211,6 +233,9 @@ export function ReleaseDetailPanel({
   const note = coverageNote(detail.coverage);
   // What is in this release, counted, before a word of it is read.
   const countLabel = useMemo(() => changeCountLabel(sections), [sections]);
+  const holUrl = holReleaseUrl(detail.slug);
+  const changesTrimmed = trimmedNote(detail.changes.length, detail.changesTotal, "change entries");
+  const rosterTrimmed = trimmedNote(detail.roster.length, detail.rosterTotal, "contributor credits");
   const changeList =
     sections.length > 0 ? (
       <div className="space-y-5">
@@ -324,6 +349,7 @@ export function ReleaseDetailPanel({
       ) : (
         changeList
       )}
+      {changesTrimmed ? <TrimmedNote note={changesTrimmed} href={holUrl} /> : null}
 
       {detail.roster.length > 0 ? (
         <section aria-labelledby="release-roster-heading" className="space-y-2.5">
@@ -335,6 +361,7 @@ export function ReleaseDetailPanel({
               <ContributorChip key={contributor.creditId} contributor={contributor} />
             ))}
           </ul>
+          {rosterTrimmed ? <TrimmedNote note={rosterTrimmed} href={holUrl} /> : null}
         </section>
       ) : null}
 

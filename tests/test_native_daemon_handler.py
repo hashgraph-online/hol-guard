@@ -10,12 +10,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard import native_daemon_handler as handler_transport
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.native_daemon_handler import NativeDaemonHandlerError
 
 pytestmark = pytest.mark.native_route_unpinned
@@ -81,24 +79,6 @@ def test_unusable_replies_raise_instead_of_deciding(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(handler_transport, "_decide", refuse)
     with pytest.raises(NativeDaemonHandlerError):
         handler_transport.native_requests_list("limit=5", guard_home=tmp_path)
-
-
-def test_handler_fails_closed_with_a_503_when_the_resident_cannot_answer(tmp_path: Path) -> None:
-    handler = object.__new__(_GuardDaemonHandler)
-    handler.server = SimpleNamespace(store=SimpleNamespace(guard_home=tmp_path))  # type: ignore[assignment]
-    written: list[tuple[int, dict[str, object]]] = []
-    handler._write_json = lambda payload, status=200, **_kwargs: written.append((status, payload))  # type: ignore[method-assign]
-
-    def unavailable() -> handler_transport.HandlerDecision:
-        raise NativeDaemonHandlerError("native_daemon_handler_unavailable")
-
-    assert handler._native_handler_decision(unavailable) is None
-    assert written == [(503, {"error": "native_handler_policy_unavailable"})]
-    rejection = handler_transport.HandlerDecision("reject", 400, {"error": "x"}, {})
-    assert handler._native_handler_decision(lambda: rejection) is None
-    assert written[-1] == (400, {"error": "x"})
-    proceed = handler_transport.HandlerDecision("proceed", 200, {}, {"a": 1})
-    assert handler._native_handler_decision(lambda: proceed) is proceed
 
 
 @pytest.mark.parametrize(

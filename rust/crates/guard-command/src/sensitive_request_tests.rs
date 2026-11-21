@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 
 use super::{evaluate, QUERIES};
-use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, InspectionHost};
 
 /// A host with no resident services: every trust probe fails closed.
 struct Host;
@@ -18,9 +18,6 @@ impl InspectionHost for Host {
     }
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         false
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("unavailable")
     }
 }
 
@@ -449,9 +446,6 @@ impl InspectionHost for SecretFreeHost {
     }
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         false
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("unavailable")
     }
 }
 

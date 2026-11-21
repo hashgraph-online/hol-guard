@@ -114,7 +114,7 @@ pub(crate) fn apply_to_envelope(
 
 /// The shell text of a command tool call, a `[shell, -c, script, args...]`
 /// argv included.
-fn command_text(payload: &Value) -> Option<String> {
+pub(crate) fn command_text(payload: &Value) -> Option<String> {
     match payload.pointer("/tool_input/command")? {
         Value::String(text) => Some(text.clone()),
         Value::Array(argv) => {
@@ -160,11 +160,16 @@ fn runtime_launches(
             true,
         );
         for segment in &model.segments {
-            if let Some(executable) = launched(segment).filter(|name| is_runtime_name(name)) {
+            if let Some((executable, arguments)) =
+                launched(segment).filter(|(name, _)| is_runtime_name(name))
+            {
                 let cwd = cwd.filter(|_| known.cwd);
                 let search_path = search_path.filter(|_| known.path && !segment.path_overridden);
                 if let Some(path) = resolve(executable, cwd, search_path) {
-                    if !launches.contains(&path) {
+                    let probe = model.wrapper_chain.is_empty()
+                        && version_probe(segment, arguments)
+                        && !script(&path);
+                    if !probe && !launches.contains(&path) {
                         launches.push(path);
                     }
                 }
@@ -233,24 +238,62 @@ impl Known {
     }
 }
 
-/// The program a segment starts, looking through the shell's `exec`.
-fn launched(segment: &CommandSegment) -> Option<&str> {
+/// The program a segment starts and the arguments it gets, looking through
+/// the shell's `exec`.
+fn launched(segment: &CommandSegment) -> Option<(&str, &[String])> {
     let executable = segment.executable.as_deref()?;
     if executable != "exec" {
-        return Some(executable);
+        return Some((executable, &segment.arguments));
     }
-    let mut arguments = segment.arguments.iter();
-    while let Some(argument) = arguments.next() {
+    let arguments = &segment.arguments;
+    let mut index = 0;
+    while let Some(argument) = arguments.get(index) {
         match argument.as_str() {
-            "-a" => {
-                arguments.next();
+            "-a" => index += 1,
+            "--" => {
+                let program = arguments.get(index + 1)?;
+                return Some((program, &arguments[index + 2..]));
             }
-            "--" => return arguments.next().map(String::as_str),
             flag if flag.starts_with('-') => {}
-            program => return Some(program),
+            program => return Some((program, &arguments[index + 1..])),
         }
+        index += 1;
     }
     None
+}
+
+/// `node -v` and `node --version` print the build's version and exit before
+/// any script, module or option file is read, so the advisories have nothing
+/// to reach. An environment prefix such as `NODE_OPTIONS` or a wrapper keeps
+/// it a launch.
+fn version_probe(segment: &CommandSegment, arguments: &[String]) -> bool {
+    segment.environment_names.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && matches!(arguments, [only] if only == "-v" || only == "--version")
+}
+
+/// A script that calls itself `node` runs whatever it holds, `--version`
+/// included. Only a compiled build answers the flag itself, so only a regular
+/// file that opens as ELF, Mach-O or PE is one. A FIFO or device is never
+/// opened, and text without `#!` (which a shell still runs) stays a launch.
+fn script(path: &Path) -> bool {
+    use std::io::Read;
+    if !std::fs::metadata(path).is_ok_and(|meta| meta.is_file()) {
+        return true;
+    }
+    let mut head = [0u8; 4];
+    std::fs::File::open(path)
+        .and_then(|mut file| file.read_exact(&mut head))
+        .map_or(true, |()| {
+            !matches!(
+                head,
+                [0x7f, b'E', b'L', b'F']
+                    | [0xfe, 0xed, 0xfa, 0xce | 0xcf]
+                    | [0xce | 0xcf, 0xfa, 0xed, 0xfe]
+                    | [0xca, 0xfe, 0xba, 0xbe]
+                    | [b'M', b'Z', _, _]
+            )
+        })
 }
 
 fn is_runtime_name(executable: &str) -> bool {
@@ -377,19 +420,34 @@ pub(crate) fn raise(
     } else {
         (configured, action, FINDING)
     };
-    if minimum > floor {
-        return result;
-    }
     let reason = if reason_code == OBSERVED && configured > ActionFloor::Warn {
         format!("{} Guard would have required {action}.", finding.describe())
     } else {
         finding.describe()
     };
+    if minimum > floor {
+        // In watch mode a stronger intrinsic result, such as a workspace
+        // launch reviewed because no sandbox can contain it, keeps its own
+        // code and action. The text still records what this finding would
+        // have required, so watch does not lose it behind that review.
+        if observe && configured > ActionFloor::Warn {
+            result.reason = if result.reason.trim().is_empty() {
+                reason
+            } else {
+                format!("{reason} Also: {}", result.reason)
+            };
+        }
+        return result;
+    }
     if minimum == floor {
         // The same floor raised for another reason keeps its decision; a
         // review held by this finding carries its code, with the earlier
-        // reason kept in the text so the prompt still shows it.
-        if floor >= ActionFloor::Review {
+        // reason kept in the text so the prompt still shows it. In watch
+        // mode a warning that stands in for a stronger configured action
+        // records that action over a plain warning the same way.
+        if floor >= ActionFloor::Review
+            || (reason_code == OBSERVED && configured > ActionFloor::Warn)
+        {
             result.explicitly_benign = false;
             result.reason_code = reason_code.into();
             result.reason = if result.reason.trim().is_empty() {

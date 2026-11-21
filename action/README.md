@@ -20,6 +20,10 @@ Advanced distribution paths are available when you need them:
 - `install_source: local` is the explicit dogfood path for `uses: ./action` inside the source repo.
 - `ghcr.io/hashgraph-online/hol-guard` is the container distribution for enterprise runners that prefer a reviewed OCI image over runtime package installation.
 
+## Find scanned plugins
+
+Public plugin repositories can be listed in the [HOL Plugins marketplace](https://hol.org/registry/plugins?utm_source=hol_marketplace&utm_medium=plugins_github_action). Each listing shows its latest scan, trust evidence and install steps for every supported runtime. Claiming your own listing is free.
+
 ## Usage
 
 ```yaml
@@ -61,7 +65,8 @@ Security-conscious consumers should prefer the commit-SHA form, the same guidanc
 | `upload_sarif` | Upload the generated SARIF report to GitHub code scanning when `mode: scan` | `false` |
 | `sarif_category` | SARIF category used during GitHub code scanning upload | `ai-plugin-scanner` |
 | `write_step_summary` | Write a concise markdown summary to the GitHub Actions job summary | `true` |
-| `publish_hint` | On public github.com repositories, add a link to the repository's HOL Plugins listing (claim it free, add a trust badge) to the concise job summary. Makes no network request. | `true` |
+| `publish_hint` | On public github.com repositories, add a link to the repository's HOL Plugins listing (claim it free, add a trust badge) to the concise job summary and the pull request comment. The job summary also links a free pre-flight of the scanned folder against the Claude, Codex and Cursor plugin directory submission rules. Makes no network request. | `true` |
+| `report_to_hol` | Opt in to send the scan summary to HOL Plugins: score, grade, finding counts by severity, scanner version, commit, run ID and the scanned folder. No code, file contents or finding text. Listings built from the repository then show the latest result as checked in CI. Public github.com repositories only; the job needs `permissions: id-token: write`, because HOL checks GitHub's OIDC token for the repository, commit and run. A failed report is logged and never fails the job. | `false` |
 | `registry_payload_output` | Write a machine-readable plugin ecosystem payload JSON file for registry or awesome-list automation | `""` |
 | `min_score` | Fail if score is below this threshold (0-100) | `0` |
 | `fail_on_severity` | Fail on findings at or above this severity: `none`, `critical`, `high`, `medium`, `low`, `info` | `none` |
@@ -114,6 +119,17 @@ Mode notes:
 - `submit` writes the plugin-quality artifact to `output` when provided, otherwise `plugin-quality.json`. `registry_payload_output` remains dedicated to the separate HOL registry payload.
 - `online`, `submission_enabled`, and `upload_sarif` are the only common paths that intentionally reach beyond the runner after the scanner package itself has been installed. With `online: false` (the default), env-configured external analyzer credentials are removed from the scan environment, so runner- or organization-level `MCP_SCANNER_API_KEY` / `MCP_SCANNER_LLM_API_KEY` secrets cannot send repository content to external analyzers.
 - `pr_comment_status` currently defaults to `skipped` in this Marketplace wrapper path.
+- The action does not read a token on its own, so it posts no PR comment by default. To enable the comment, pass the workflow token through the step's `env` and grant `pull-requests: write`:
+
+  ```yaml
+  permissions:
+    contents: read
+    pull-requests: write
+  steps:
+    - uses: hashgraph-online/ai-plugin-scanner-action@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  ```
 
 ## Examples
 

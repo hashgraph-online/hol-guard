@@ -224,6 +224,17 @@ fn read_prefix_before_a_verified_cd_keeps_the_cd_compound_decision() {
              && git remote -v && echo \"---\" && git log --oneline -5"
         ),
         format!("pwd && cd {repository} && git log -1 --format=%h | head -1"),
+        format!("ls {root}; cd {repository} && git status"),
+        format!("sleep 1; cd {repository} && git status --short | head -5"),
+        // A `||` fallback in the prefix only picks which proven read runs;
+        // the `;` still starts the `cd` whatever the prefix returned.
+        format!("ls {root}/missing 2>/dev/null || echo none; cd {repository} && git status"),
+        format!(
+            "lsof -iTCP:3000 -sTCP:LISTEN 2>/dev/null | head -3; echo \"---\"; \
+             ls {root}/missing 2>/dev/null || echo \"none\"; echo \"---\"; \
+             cd {repository} && git check-ignore README.md && echo ignored || echo tracked"
+        ),
+        format!("ls {root}/missing || echo none && cd {repository} && ls app"),
     ] {
         let result = decide(&space, &space.root, &command);
         assert_eq!(
@@ -247,8 +258,17 @@ fn only_a_proven_read_prefix_before_a_single_cd_is_set_aside() {
         format!("touch {root}/marker && cd {repository} && git status"),
         format!("ls {root} && cd {repository} && rm -rf app"),
         format!("ls {root} && cd {repository} && git status && cd {root} && ls"),
-        format!("ls {root}; cd {repository} && git status"),
         format!("ls {root} || cd {repository} && git status"),
+        format!("ls {root} | cd {repository} && git status"),
+        // `a && b || cd <dir> && git status` groups as `(a && b || cd <dir>)
+        // && git status`, so the read runs in the starting folder whenever
+        // the prefix succeeds.
+        format!("ls {root} && pwd || cd {repository} && git status"),
+        format!("cat {home}/.ssh/id_ed25519 || echo none; cd {repository} && git status"),
+        format!("echo $((PATH=10)); cd {repository} && ls ."),
+        format!("echo $((PATH=10)) && cd {repository} && ls ."),
+        format!("echo $((PATH=10)); ls {root}"),
+        format!("cat {home}/.ssh/id_ed25519; cd {repository} && git status"),
     ] {
         let result = decide(&space, &space.root, &command);
         assert_ne!(
@@ -257,6 +277,64 @@ fn only_a_proven_read_prefix_before_a_single_cd_is_set_aside() {
             result.decision
         );
     }
+}
+
+/// After `;` or `||` a read runs in the `cd` destination when the `cd`
+/// worked, so a name that is harmless where the command started is not
+/// proof for the file of the same name in the destination.
+#[cfg(unix)]
+#[test]
+fn a_read_after_a_cd_chunk_is_proved_where_the_cd_left_the_shell() {
+    let (space, _cleanup) = workspace("chunk-fallback");
+    let repository = shell_word(&space.repository);
+    std::fs::create_dir_all(space.home.join(".ssh")).unwrap();
+    std::fs::write(space.home.join(".ssh/id_ed25519"), "fixture\n").unwrap();
+    // The same name is a plain file where the command starts and a link to a
+    // key in the folder the `cd` enters.
+    std::fs::write(space.root.join("notes.txt"), "plain\n").unwrap();
+    std::os::unix::fs::symlink(
+        space.home.join(".ssh/id_ed25519"),
+        space.repository.join("notes.txt"),
+    )
+    .unwrap();
+    for command in [
+        format!("cd {repository} && ls; cat notes.txt"),
+        format!("cd {repository} && ls || cat notes.txt"),
+        format!("cd {repository} && git status; cat notes.txt"),
+        format!("cd {repository} && git status || cat notes.txt"),
+    ] {
+        let result = decide(&space, &space.root, &command);
+        assert_ne!(
+            result.reason_code, "native_exact_safe_command",
+            "{command}: {}",
+            result.decision
+        );
+    }
+    // A subshell, or a second `cd` that fails, leaves the shell where the
+    // first `cd` put it, not where the command started.
+    let other = space.root.join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(other.join("notes.txt"), "plain\n").unwrap();
+    let other = shell_word(&other);
+    for command in [
+        format!("cd {repository} && ls; (cd {other} && ls); cat notes.txt"),
+        format!("cd {repository} && ls; cd {other} && ls; cat notes.txt"),
+    ] {
+        let result = decide(&space, &space.root, &command);
+        assert_ne!(
+            result.reason_code, "native_exact_safe_command",
+            "{command}: {}",
+            result.decision
+        );
+    }
+    let notes = shell_word(&space.root.join("notes.txt"));
+    let command = format!("cd {repository} && ls; cat {notes}");
+    let result = decide(&space, &space.root, &command);
+    assert_eq!(
+        result.decision, "allow",
+        "{command}: {}",
+        result.reason_code
+    );
 }
 
 /// Local Git reads before the `cd` write nothing the reads after it could

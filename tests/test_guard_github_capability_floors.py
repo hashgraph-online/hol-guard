@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    classify_github_shell_capabilities,
     extract_sensitive_tool_action_request,
 )
 from tests.native_command_test_support import extract_sensitive_tool_action_request_native_test
@@ -159,96 +158,18 @@ def test_explicit_false_delete_branch_squash_merge_with_sleep_is_prompt_free() -
 
 
 @pytest.mark.parametrize(
-    ("command", "capabilities"),
-    (
-        ("gh pr view 1; gh pr lock 1", ("read_remote", "maintain_remote")),
-        ("gh pr lock 1; gh pr view 1", ("read_remote", "maintain_remote")),
-        ("gh pr view 1; gh repo delete o/r --yes", ("read_remote", "delete_remote")),
-        ("gh repo delete o/r --yes; gh pr view 1", ("read_remote", "delete_remote")),
-        ("sh -c 'gh pr lock 1; gh pr view 1'", ("read_remote", "maintain_remote")),
-    ),
-)
-def test_shell_composition_preserves_read_and_mutating_capabilities(
-    tmp_path: Path,
-    command: str,
-    capabilities: tuple[GitHubCommandCapability, ...],
-) -> None:
-    assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
-
-    assert assessment is not None
-    assert assessment.capabilities == capabilities
-    assert assessment.action_floor == oracle_assessment(capabilities, "test.reason", "test detail").action_floor
-    assert assessment.workflow_authorizable is False
-
-
-def test_empty_shell_segments_do_not_break_github_capability_analysis(tmp_path: Path) -> None:
-    assessment = classify_github_shell_capabilities(
-        "echo first; ; echo second && || ; ; gh pr view 1",
-        home_dir=tmp_path,
-    )
-
-    assert assessment is not None
-    assert assessment.capabilities == ("read_remote",)
-
-
-@pytest.mark.parametrize(
     "command",
     (
-        "false && ; gh pr view 1",
-        "false && && gh pr view 1",
-        "true || ; gh pr view 1",
-        "true || || gh pr view 1",
+        "false && true || gh repo delete o/r --yes",
+        "true >/missing/path || false || gh repo delete o/r --yes",
+        "true>/missing/path || gh repo delete o/r --yes",
+        "true && false || gh repo delete o/r --yes",
+        "false || gh repo delete o/r --yes",
+        "make && gh repo delete o/r --yes",
+        "true && gh repo delete o/r --yes",
     ),
 )
-def test_malformed_separators_do_not_carry_stale_conditional_state(
-    tmp_path: Path,
-    command: str,
-) -> None:
-    assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
-
-    assert assessment is not None
-    assert assessment.capabilities == ("read_remote",)
-
-
-@pytest.mark.parametrize(
-    ("command", "capabilities"),
-    (
-        ("false | true && gh pr view 1", ("read_remote",)),
-        ("false | true && gh repo delete example/project --yes", ("delete_remote",)),
-    ),
-)
-def test_pipeline_boundary_preserves_following_github_capability(
-    tmp_path: Path,
-    command: str,
-    capabilities: tuple[GitHubCommandCapability, ...],
-) -> None:
-    assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
-
-    assert assessment is not None
-    assert assessment.capabilities == capabilities
-
-
-@pytest.mark.parametrize(
-    ("command", "capabilities"),
-    (
-        ("false && true || gh repo delete o/r --yes", ("delete_remote",)),
-        ("true >/missing/path || false || gh repo delete o/r --yes", ("delete_remote",)),
-        ("true>/missing/path || gh repo delete o/r --yes", ("delete_remote",)),
-        ("true && false || gh repo delete o/r --yes", ("delete_remote",)),
-        ("false || gh repo delete o/r --yes", ("delete_remote",)),
-        ("make && gh repo delete o/r --yes", ("delete_remote",)),
-        ("true && gh repo delete o/r --yes", ("delete_remote",)),
-    ),
-)
-def test_left_associative_and_or_does_not_skip_reachable_github_deletes(
-    tmp_path: Path,
-    command: str,
-    capabilities: tuple[GitHubCommandCapability, ...],
-) -> None:
-    assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
-
-    assert assessment is not None
-    assert assessment.capabilities == capabilities
+def test_left_associative_and_or_does_not_skip_reachable_github_deletes(tmp_path: Path, command: str) -> None:
     match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
     assert match is not None
 
@@ -263,74 +184,8 @@ def test_unknown_and_grouped_and_or_chains_keep_reachable_github_deletes(tmp_pat
     )
 
     for command in commands:
-        assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
-
-        assert assessment is not None
-        assert assessment.capabilities == ("delete_remote",)
         match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
         assert match is not None
-
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        "false && gh repo delete o/r --yes",
-        "true || gh repo delete o/r --yes",
-        "false && true && gh repo delete o/r --yes",
-    ),
-)
-def test_statically_dead_and_or_skips_github_deletes(tmp_path: Path, command: str) -> None:
-    assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
-
-    assert assessment is None
-
-
-def test_unknown_and_or_chains_skip_only_provably_dead_github_deletes(tmp_path: Path) -> None:
-    commands = (
-        "unknown && false && gh repo delete o/r --yes",
-        "unknown || true || gh repo delete o/r --yes",
-    )
-
-    for command in commands:
-        assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
-        assert assessment is None
-
-
-def test_local_write_cannot_mask_remote_secret_capability(tmp_path: Path) -> None:
-    assessment = classify_github_shell_capabilities(
-        "gh repo set-default o/r; gh secret set TOKEN --body value",
-        home_dir=tmp_path,
-    )
-
-    assert assessment is not None
-    assert assessment.capabilities == ("write_local", "secret_remote")
-    assert assessment.capability == "secret_remote"
-    assert assessment.action_floor == "block"
-
-
-@pytest.mark.parametrize(
-    ("command", "capabilities", "primary"),
-    (
-        ("gh secret set TOKEN --body value > result.txt", ("write_local", "secret_remote"), "secret_remote"),
-        ("gh repo delete o/r --yes > result.txt", ("write_local", "delete_remote"), "delete_remote"),
-        (
-            "gh pr merge 17 --delete-branch > result.txt",
-            ("write_local", "merge_remote", "delete_remote"),
-            "delete_remote",
-        ),
-    ),
-)
-def test_redirection_retains_the_underlying_remote_capability(
-    tmp_path: Path,
-    command: str,
-    capabilities: tuple[GitHubCommandCapability, ...],
-    primary: GitHubCommandCapability,
-) -> None:
-    assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
-
-    assert assessment is not None
-    assert assessment.capabilities == capabilities
-    assert assessment.capability == primary
 
 
 @pytest.mark.parametrize(
@@ -365,79 +220,3 @@ def test_branch_deletion_keeps_a_destructive_floor(tmp_path: Path, command: str)
 
     assert match is not None
     assert match.action_class == "git destructive command"
-
-
-_NATIVE_SHELL_ASSESSMENT = {
-    "capability": "secret_remote",
-    "capabilities": ["write_local", "secret_remote"],
-    "reason_code": "github.shell.combined-capabilities",
-    "detail": "The shell composition contains multiple GitHub capabilities.",
-    "action_floor": "block",
-    "workflow_authorizable": False,
-}
-
-
-@pytest.mark.parametrize(
-    "malformed",
-    (
-        {"action_floor": "permit"},
-        {"action_floor": None},
-        {"action_floor": ["block"]},
-        {"action_floor": {"action": "block"}},
-        {"capability": "steal_remote", "capabilities": ["steal_remote"]},
-        {"capabilities": ["write_local", "secret_remote", "steal_remote"]},
-        {"workflow_authorizable": "false"},
-        {"capability": "read_remote"},
-        {"capabilities": "secret_remote"},
-        {"reason_code": None},
-    ),
-)
-def test_shell_capability_carrier_rejects_a_malformed_native_answer(
-    monkeypatch: pytest.MonkeyPatch,
-    malformed: dict[str, object],
-) -> None:
-    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
-    from codex_plugin_scanner.guard.runtime.secret_file_request_services import github_shell_capabilities
-
-    monkeypatch.setattr(
-        github_shell_capabilities,
-        "shell_request_authority",
-        lambda _entry, _arguments: {**_NATIVE_SHELL_ASSESSMENT, **malformed},
-    )
-
-    with pytest.raises(NativeRunnerAuthorityError, match=r"^native_github_shell_capabilities_invalid$"):
-        classify_github_shell_capabilities("gh secret set TOKEN", home_dir=None)
-
-
-def test_carrier_capability_names_match_the_rust_contract() -> None:
-    """The carrier's accepted names are exactly the ones ``GitHubCapability::as_str`` returns."""
-
-    import re
-
-    from codex_plugin_scanner.guard.runtime.secret_file_request_services import github_shell_capabilities
-
-    contract = Path(__file__).resolve().parents[1] / "rust/crates/guard-command/src/github_capability_contract.rs"
-    body = contract.read_text(encoding="utf-8").split("fn as_str", 1)[1].split("\n    }\n", 1)[0]
-    rust_names = set(re.findall(r'Self::\w+ => "([a-z_]+)"', body))
-
-    assert rust_names
-    assert rust_names == set(github_shell_capabilities._CAPABILITY_NAMES)
-
-
-def test_shell_capability_carrier_takes_floor_and_eligibility_from_the_resident(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from codex_plugin_scanner.guard.runtime.secret_file_request_services import github_shell_capabilities
-
-    monkeypatch.setattr(
-        github_shell_capabilities,
-        "shell_request_authority",
-        lambda _entry, _arguments: dict(_NATIVE_SHELL_ASSESSMENT),
-    )
-
-    assessment = classify_github_shell_capabilities("gh secret set TOKEN", home_dir=None)
-
-    assert assessment is not None
-    assert assessment.capabilities == ("write_local", "secret_remote")
-    assert assessment.action_floor == "block"
-    assert assessment.workflow_authorizable is False

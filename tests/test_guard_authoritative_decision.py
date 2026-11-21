@@ -11,9 +11,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import service as consumer_service
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime import guard_run_launch as guard_run_launch
 from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
@@ -22,11 +22,11 @@ from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.decisions import (
     AUTHORITATIVE_DECISION_INCONSISTENT,
     AuthoritativeGuardDecision,
-    authoritative_decision_from_artifact,
     build_authoritative_decision,
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.authoritative_decision_client import authoritative_decision_from_artifact
 from tests.guard_authority_gate_support import evaluation_authority_error, runner_native_authority
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
@@ -135,6 +135,17 @@ def _assert_authoritative_projection(
     assert composition["scoring_recommendation_non_authoritative"] is True
     assert "scoring_recommendation" not in composition
     assert authoritative_decision_from_artifact(item) == decision
+
+
+def _use_stub_launch(monkeypatch: pytest.MonkeyPatch) -> None:
+    command = [sys.executable, "-c", "pass"]
+    monkeypatch.setattr(guard_run_launch, "preview_launch_commands", lambda *_args, **_kwargs: (list(command),))
+    monkeypatch.setattr(
+        guard_run_launch, "launch_command_from_authorized_plan", lambda *_args, **_kwargs: list(command)
+    )
+    monkeypatch.setattr(
+        guard_run_launch, "prepare_launch_environment", lambda _harness, _context, inherited: dict(inherited)
+    )
 
 
 def test_evaluate_detection_does_not_serialize_scoring_allow_as_the_enforced_verdict(
@@ -353,24 +364,13 @@ def test_guard_run_fails_closed_before_launch_for_invalid_authority_contract(
         "receipts_recorded": 0,
     }
 
-    class _LaunchAdapter(HarnessAdapter):
-        def launch_command(self, _context: HarnessContext, _args: list[str]) -> list[str]:
-            return [sys.executable, "-c", "pass"]
-
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
-
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda *_args, **_kwargs: _detection(artifact))
     monkeypatch.setattr(
         wrapper_run,
         "evaluate_detection",
         lambda *_args, **_kwargs: copy.deepcopy(contradictory),
     )
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: _LaunchAdapter())
+    _use_stub_launch(monkeypatch)
     monkeypatch.setattr(
         wrapper_run_finish.subprocess,
         "run",
@@ -423,12 +423,8 @@ def test_unanimous_allow_launches_without_a_new_prompt(
         lambda *_args, **_kwargs: _scoring_inputs("allow"),
     )
 
-    class _LaunchAdapter(HarnessAdapter):
-        def launch_command(self, _context: HarnessContext, _args: list[str]) -> list[str]:
-            return [sys.executable, "-c", "pass"]
-
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda *_args, **_kwargs: _detection(artifact))
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: _LaunchAdapter())
+    _use_stub_launch(monkeypatch)
 
     output = wrapper_run.guard_run(
         "codex",
@@ -474,12 +470,8 @@ def test_exact_allow_once_keeps_scoring_recommendation_diagnostic_at_launch(
         lambda *_args, **_kwargs: _scoring_inputs("require_reapproval"),
     )
 
-    class _LaunchAdapter(HarnessAdapter):
-        def launch_command(self, _context: HarnessContext, _args: list[str]) -> list[str]:
-            return [sys.executable, "-c", "pass"]
-
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda *_args, **_kwargs: _detection(artifact))
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: _LaunchAdapter())
+    _use_stub_launch(monkeypatch)
 
     def _allow_once(
         _detection_value: HarnessDetection,

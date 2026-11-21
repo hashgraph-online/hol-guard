@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _runtime_artifact_policy_action
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
@@ -23,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
 )
 from tests.native_command_test_support import real_native_review_fixture
+from tests.runtime_artifact_policy_support import _runtime_artifact_policy_action
 
 
 def _native_fixture(command: str, *, controls=(), force_rule_ids=("command.git.stash",)):

@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
+from unittest import mock
 
 import pytest
+import tomlkit
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.omp_code_mode import OMP_CODE_MODE_WARNING, omp_code_mode_warnings
-from codex_plugin_scanner.guard.codex_hook_trust import (
-    CODEX_HOOK_TRUST_WARNING,
-    apply_codex_hook_trust_doctor,
-    codex_command_hook_hash,
-    stale_guard_hook_coordinates,
-)
+from codex_plugin_scanner.guard import diagnostics_bridge
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
+from codex_plugin_scanner.guard.codex_hook_registration import codex_doctor_result
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests.python_oracles.codex_hook_trust import codex_command_hook_hash
 
 GUARD_COMMAND = "/opt/guard/1.2.3/hol-guard-codex-hook --harness codex"
 
@@ -69,57 +69,99 @@ def _payload(trusted: str | None, config_path: Path) -> dict[str, object]:
     return payload
 
 
+def stale_guard_hook_coordinates(payload: dict[str, object], config_path: Path) -> bool:
+    """Whether the live Codex hook state reads Guard's hooks as untrusted.
+
+    ``config_path`` is ``<home>/.codex/config.toml``, the one config Codex reads.
+    """
+
+    home = config_path.parent.parent
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(tomlkit.dumps({"hooks": payload["hooks"]}), encoding="utf-8")
+    context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=home / "guard-home")
+    return bool(codex_native_hook_state(context)["hook_trust_stale"])
+
+
 def test_stale_trust_detection(tmp_path: Path) -> None:
-    config = tmp_path / "config.toml"
+    config = tmp_path / ".codex" / "config.toml"
     handler = {"type": "command", "command": GUARD_COMMAND, "timeout": 30}
     good = codex_command_hook_hash("PreToolUse", "Bash", handler)
-    assert stale_guard_hook_coordinates(_payload(good, config), config) == []
+    assert not stale_guard_hook_coordinates(_payload(good, config), config)
     assert stale_guard_hook_coordinates(_payload(None, config), config)
     assert stale_guard_hook_coordinates(_payload("sha256:" + "0" * 64, config), config)
 
 
 def test_stale_trust_ignores_foreign_hooks(tmp_path: Path) -> None:
-    config = tmp_path / "config.toml"
+    config = tmp_path / ".codex" / "config.toml"
     payload = {"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "/usr/bin/other-tool"}]}]}}
-    assert stale_guard_hook_coordinates(payload, config) == []
+    assert not stale_guard_hook_coordinates(payload, config)
 
 
 def test_stale_trust_skips_disabled_handlers(tmp_path: Path) -> None:
-    config = tmp_path / "config.toml"
+    config = tmp_path / ".codex" / "config.toml"
     handler = {"type": "command", "command": GUARD_COMMAND, "timeout": 30}
     disabled_group = {"hooks": {"PreToolUse": [{"matcher": "Bash", "enabled": False, "hooks": [handler]}]}}
     disabled_handler = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{**handler, "disabled": True}]}]}}
     switched_off = _payload(None, config)
     switched_off["hooks"]["state"] = {f"{config}:pre_tool_use:0:0": {"enabled": False}}  # type: ignore[index]
     for payload in (disabled_group, disabled_handler, switched_off):
-        assert stale_guard_hook_coordinates(payload, config) == []
+        assert not stale_guard_hook_coordinates(payload, config)
 
 
 def test_stale_trust_accepts_canonical_config_path(tmp_path: Path) -> None:
     real = tmp_path / "real"
     real.mkdir()
-    (tmp_path / "link").symlink_to(real)
-    config = tmp_path / "link" / "config.toml"
+    (tmp_path / ".codex").symlink_to(real)
+    config = tmp_path / ".codex" / "config.toml"
     handler = {"type": "command", "command": GUARD_COMMAND, "timeout": 30}
     good = codex_command_hook_hash("PreToolUse", "Bash", handler)
     payload = _payload(None, config)
     payload["hooks"]["state"] = {f"{real / 'config.toml'}:pre_tool_use:0:0": {"trusted_hash": good}}  # type: ignore[index]
-    assert stale_guard_hook_coordinates(payload, config) == []
+    assert not stale_guard_hook_coordinates(payload, config)
+
+
+_ACTIVE_HOOKS = {
+    "config_present": True,
+    "codex_hooks_enabled": True,
+    "managed_hook_installed": True,
+    "integrity_status": "valid",
+    "protection_active": True,
+}
 
 
 @pytest.mark.parametrize(("stale", "status"), [(True, "partial"), (False, "active")])
 def test_doctor_does_not_report_untrusted_hooks_active(stale: bool, status: str) -> None:
-    payload: dict[str, object] = {"warnings": ["existing"], "setup_status": "active"}
-    apply_codex_hook_trust_doctor(payload, {"hook_trust_stale": stale})
-    assert payload["setup_status"] == status
-    assert (CODEX_HOOK_TRUST_WARNING in payload["warnings"]) is stale  # type: ignore[operator]
-    assert "/hooks" in CODEX_HOOK_TRUST_WARNING and "press t" in CODEX_HOOK_TRUST_WARNING
+    warnings, setup_status = codex_doctor_result(["existing"], {**_ACTIVE_HOOKS, "hook_trust_stale": stale}, "active")
+    assert setup_status == status
+    trust = [item for item in warnings if "/hooks" in item and "press t" in item]
+    assert bool(trust) is stale
+    assert "existing" in warnings
 
 
 def test_doctor_keeps_broken_status_when_trust_is_stale() -> None:
-    payload: dict[str, object] = {"warnings": [], "setup_status": "broken"}
-    apply_codex_hook_trust_doctor(payload, {"hook_trust_stale": True})
-    assert payload["setup_status"] == "broken"
+    state = {"config_present": True, "codex_hooks_enabled": False, "hook_trust_stale": True}
+    assert codex_doctor_result([], state, "active")[1] == "broken"
+
+
+OMP_CODE_MODE_WARNING = (
+    "Oh My Pi Codex code mode sends every tool call through eval, which Guard reviews. "
+    "Set providers.openai-codex.codeMode to off in {path} so Guard can allow ordinary reads and edits."
+)
+_AGENT_ENV = ("PI_CODING_AGENT_DIR", "PI_CONFIG_DIR")
+
+
+def omp_code_mode_warnings(home: Path, workspace: Path | None = None, *, environ: dict[str, str]) -> list[str]:
+    """The code-mode warnings the Oh My Pi diagnostics add under ``environ``."""
+    context = HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=home.parent / "guard-home")
+    cleared = {name: "" for name in _AGENT_ENV}
+    with (
+        mock.patch.dict(os.environ, {**cleared, **environ}),
+        mock.patch.object(diagnostics_bridge, "native_diagnostics", lambda **_kwargs: {"warnings": []}),
+    ):
+        for name in _AGENT_ENV:
+            if name not in environ:
+                del os.environ[name]
+        return list(harness_ops.diagnostics("omp", context)["warnings"])
 
 
 _AUTO = "providers:\n  openai-codex:\n    codeMode: auto\n"
@@ -181,11 +223,21 @@ def test_omp_code_mode_honors_agent_dir_environment(tmp_path: Path) -> None:
     ]
 
 
+def test_omp_code_mode_resolves_a_relative_agent_dir_against_the_caller(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    custom = _write(tmp_path / "agent/config.yml", _AUTO)
+    monkeypatch.chdir(tmp_path)
+    assert omp_code_mode_warnings(tmp_path / "home", environ={"PI_CODING_AGENT_DIR": "agent"}) == [
+        OMP_CODE_MODE_WARNING.format(path=custom)
+    ]
+
+
 def test_omp_diagnostics_include_warning(tmp_path: Path) -> None:
     home = tmp_path / "home"
     config = _write(home / ".omp/agent/config.yml", _AUTO)
     context = HarnessContext(
         home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard-home", home_override_explicit=True
     )
-    payload = get_adapter("omp").diagnostics(context)
+    payload = harness_ops.diagnostics("omp", context)
     assert OMP_CODE_MODE_WARNING.format(path=config) in payload["warnings"]

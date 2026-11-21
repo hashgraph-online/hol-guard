@@ -15,11 +15,14 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
+#[path = "hook_evidence_batch_tests.rs"]
+mod batch_tests;
+
 use crate::hook_evidence_writer::{
     ComposioActionSchema, ComposioWorkflowProposal, CorrelationApi, CorrelationHandle,
     EvidenceJournalApi, EvidenceRecord, EvidenceStoreApi, EvidenceWriterDeps,
     InstallationCorrelationKey, ObservedMcpTool, ReceiptValidationApi, RuntimeHookEvidenceWriter,
-    RuntimeHookEvidenceWriterStats, SqliteTimeoutApi,
+    RuntimeHookEvidenceWriterStats, SqliteTimeoutApi, POLICY_SOURCE_FENCE_WINDOW_EVENT,
 };
 
 /// The correlation digest every fixture starts from, before a prevented
@@ -30,6 +33,7 @@ const BASE_DIGEST: &str = "9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9
 #[derive(Debug, Clone, PartialEq)]
 enum StoreCall {
     PreReplayProbe(Map<String, Value>),
+    NativeDecisionReceipt(String),
     RecordCommandActivity {
         evidence: Map<String, Value>,
         invocation_preview: Option<String>,
@@ -37,6 +41,11 @@ enum StoreCall {
     ActivityLookup(String),
     Transition(Map<String, Value>),
     ObservationConflict(String),
+    GuardEvent {
+        event_name: String,
+        payload: Map<String, Value>,
+        occurred_at: String,
+    },
 }
 
 #[derive(Default)]
@@ -165,6 +174,20 @@ impl EvidenceStoreApi for StubStore {
         Ok(true)
     }
 
+    fn record_guard_event(
+        &self,
+        event_name: &str,
+        payload: &Map<String, Value>,
+        occurred_at: &str,
+    ) -> Result<(), io::Error> {
+        self.push(StoreCall::GuardEvent {
+            event_name: event_name.to_owned(),
+            payload: payload.clone(),
+            occurred_at: occurred_at.to_owned(),
+        });
+        Ok(())
+    }
+
     fn record_composio_discovery(
         &self,
         _source: &ObservedMcpTool,
@@ -179,6 +202,9 @@ impl EvidenceStoreApi for StubStore {
         &self,
         receipt: &Map<String, Value>,
     ) -> Result<bool, io::Error> {
+        if let Some(decision_id) = receipt.get("decision_id").and_then(Value::as_str) {
+            self.push(StoreCall::NativeDecisionReceipt(decision_id.to_owned()));
+        }
         match &self.receipt_behaviour {
             ReceiptBehaviour::Accept => Ok(true),
             ReceiptBehaviour::Park(gate) => {
@@ -943,6 +969,31 @@ fn a_receipt_handoff_returns_before_the_store_has_written_it() {
     assert!(journal.records().is_empty());
 }
 
+#[test]
+fn receipt_handoffs_preserve_submission_order() {
+    let store = StubStore::with_receipts(queue_home(), ReceiptBehaviour::Accept);
+    let journal = RecordingJournal::new();
+    let writer = queue_writer(Arc::clone(&store), Arc::clone(&journal), 64);
+
+    for index in 0..32 {
+        assert!(writer.submit_native_decision_receipt(&receipt(&format!("decision-{index}"))));
+    }
+    assert!(writer.stop(DRAIN_BUDGET_SECONDS));
+
+    let submitted = store
+        .calls()
+        .into_iter()
+        .filter_map(|call| match call {
+            StoreCall::NativeDecisionReceipt(decision_id) => Some(decision_id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let expected = (0..32)
+        .map(|index| format!("decision-{index}"))
+        .collect::<Vec<_>>();
+    assert_eq!(submitted, expected);
+}
+
 /// A worker inside a store write cannot see its drain deadline pass, and a
 /// stop that joined it unconditionally would wait for that write however long
 /// it took — past the budget it was given and past the caller's transport
@@ -1209,6 +1260,24 @@ fn wait_for_stats(
     }
 }
 
+/// Block until the journal holds no records, or a bounded deadline passes.
+///
+/// A dropped record leaves the journal in the batch settle that follows the
+/// store pass, after the statistics reporting the drop are already published.
+/// Reading the journal the moment `receipt_dropped` rises therefore races that
+/// settle rather than observing it, so the wait is what proves the record was
+/// cleared; a journal that never empties still fails here.
+fn wait_for_empty_journal(journal: &RecordingJournal) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !journal.records().is_empty() && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(1));
+    }
+    assert!(
+        journal.records().is_empty(),
+        "the dropped record was never cleared from the journal"
+    );
+}
+
 /// A receipt waiting out its backoff keeps its place in the queue without
 /// holding the worker: one submitted behind it is written before the waiting
 /// receipt gets another attempt.
@@ -1249,7 +1318,7 @@ fn a_receipt_the_store_never_takes_is_dropped_after_its_last_attempt() {
     assert_eq!(dropped.receipt_failures, 8);
     assert_eq!(dropped.receipt_durable_pending, 0);
     assert!(dropped.degraded);
-    assert!(journal.records().is_empty());
+    wait_for_empty_journal(&journal);
 
     assert!(writer.stop(DRAIN_BUDGET_SECONDS));
 }
@@ -1321,4 +1390,64 @@ fn a_rewrite_that_drops_invalid_lines_still_lets_the_writer_stop() {
     assert_eq!(stats.processed, 1);
     assert_eq!(stats.failures, 2);
     assert!(stats.degraded);
+}
+
+fn fence_window() -> Map<String, Value> {
+    let Value::Object(payload) = json!({
+        "started_at": "2026-11-06T19:19:50.000000+00:00",
+        "ended_at": "2026-11-06T19:19:51.250000+00:00",
+        "absorbed_calls": 1,
+        "exhausted_calls": 0,
+    }) else {
+        unreachable!("object literal");
+    };
+    payload
+}
+
+#[test]
+fn a_fence_window_event_reaches_the_event_log() {
+    let (store, writer) = fixture(false);
+    assert!(writer.submit_guard_event(
+        POLICY_SOURCE_FENCE_WINDOW_EVENT,
+        fence_window(),
+        "2026-11-06T19:19:51.250000+00:00",
+    ));
+    assert!(writer.stop(5.0), "writer drained");
+
+    let calls = store.calls();
+    let [StoreCall::GuardEvent {
+        event_name,
+        payload,
+        occurred_at,
+    }] = calls.as_slice()
+    else {
+        panic!("expected one event write, got {calls:?}");
+    };
+    assert_eq!(event_name, POLICY_SOURCE_FENCE_WINDOW_EVENT);
+    assert_eq!(payload, &fence_window());
+    assert_eq!(occurred_at, "2026-11-06T19:19:51.250000+00:00");
+}
+
+#[test]
+fn the_writer_takes_only_the_events_it_names() {
+    let (store, writer) = fixture(false);
+    assert!(!writer.submit_guard_event(
+        "policy_mutation",
+        fence_window(),
+        "2026-11-06T19:19:51.250000+00:00",
+    ));
+    assert!(!writer.submit_guard_event(
+        POLICY_SOURCE_FENCE_WINDOW_EVENT,
+        fence_window(),
+        "not a timestamp",
+    ));
+    let mut oversized = fence_window();
+    oversized.insert("padding".to_owned(), json!("x".repeat(8192)));
+    assert!(!writer.submit_guard_event(
+        POLICY_SOURCE_FENCE_WINDOW_EVENT,
+        oversized,
+        "2026-11-06T19:19:51.250000+00:00",
+    ));
+    assert!(writer.stop(5.0), "writer drained");
+    assert!(store.calls().is_empty(), "{:?}", store.calls());
 }

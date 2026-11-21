@@ -1,7 +1,7 @@
 """Hook decisions answered by the native runtime.
 
-The shared ``hook_decide`` resident operation, and the plan of what a
-Claude-native approval saves. There is no Python evaluator: a reply that is
+The shared ``hook_decide`` resident operation, the review response it
+renders, and the shape of what a Claude-native approval saves. There is no Python evaluator: a reply that is
 not a bound, strictly decoded ``ok`` raises ``NativeHookDecisionError`` and
 callers fail closed.
 """
@@ -11,7 +11,8 @@ from __future__ import annotations
 import dataclasses
 import functools
 import os
-from collections.abc import Callable, Mapping
+import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -19,31 +20,15 @@ from .native_execution import _resident_request
 from .native_resident_decision import ResidentOperation, resident_decide, shape_fields
 
 HOOK_DECISION_FEATURE = "hook-decision-v1"
-# What a Claude-native approval saves; a resident that predates it rejects the
-# query, so the capability is demanded first and nothing is saved without it.
-HOOK_DECISION_NATIVE_PERMISSION_PERSIST_FEATURE = "hook-decision-native-permission-persist-plan-v1"
+# The rendered response a native review shows the agent, silent or paused; a
+# resident that predates it rejects the query, and the hook fails closed.
+HOOK_DECISION_REVIEW_RESPONSE_FEATURE = "hook-decision-review-response-v1"
 _UNAVAILABLE = "native_hook_decision_unavailable"
 _INVALID = "native_hook_decision_payload_invalid"
 _TIMEOUT_SECONDS = 5.0
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 
-_ACTION_NAMES = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _OPT_STR = (str, type(None))
-_PERSIST_INPUT_FIELDS = frozenset(
-    {
-        "artifact_id",
-        "artifact_hash",
-        "artifact_type",
-        "config_path",
-        "source_scope",
-        "raw_command_text",
-        "wrapper_chain",
-        "action",
-        "reason",
-        "source",
-        "authoritative_action",
-    }
-)
 _PERSIST_PLAN_FIELDS: dict[str, Any] = {
     "stored_artifact_hash": _OPT_STR,
     "policy_action": _OPT_STR,
@@ -81,12 +66,6 @@ def _shape(value: object, fields: Mapping[str, Any]) -> dict[str, Any]:
     return shape_fields(value, fields, lambda: NativeHookDecisionError(_INVALID))
 
 
-def _action(value: object) -> str:
-    if not isinstance(value, str) or value not in _ACTION_NAMES:
-        raise NativeHookDecisionError(_INVALID)
-    return value
-
-
 _OPERATION = ResidentOperation(
     operation="hook_decide",
     feature=HOOK_DECISION_FEATURE,
@@ -99,22 +78,6 @@ _OPERATION = ResidentOperation(
 )
 
 
-def _decide(
-    query: Mapping[str, object],
-    guard_home: Path | None,
-    validate: Callable[[dict[str, Any]], None],
-    feature: str = HOOK_DECISION_FEATURE,
-) -> dict[str, Any]:
-    # A request gets the same budget as the hook edge that accepted its payload.
-    return resident_decide(
-        _OPERATION if feature == _OPERATION.feature else dataclasses.replace(_OPERATION, feature=feature),
-        functools.partial(_resident_request, max_request_bytes=_MAX_REQUEST_BYTES),
-        query,
-        guard_home,
-        validate,
-    )
-
-
 def _tilde_home() -> str | None:
     """``os.path.expanduser("~")``, or ``None`` when the host cannot resolve it."""
 
@@ -122,52 +85,53 @@ def _tilde_home() -> str | None:
     return None if home.startswith("~") else home
 
 
-def native_permission_persist_plan(
-    inputs: Mapping[str, object],
-    *,
-    guard_home: Path | None = None,
-) -> dict[str, Any]:
-    """What a Claude-native approval saves: the stored hash, the events, the inventory disposition.
+def validated_permission_persist_plan(value: object) -> dict[str, Any]:
+    """``value`` when it is a well-formed persist plan, else ``NativeHookDecisionError``."""
 
-    The stored hash is what a later lookup matches a saved approval by, so only
-    the resident decides it. The caller performs the writes the plan names, in
-    order, and writes nothing when this raises.
+    plan = _shape(value, _PERSIST_PLAN_FIELDS)
+    stored, policy_action = plan["stored_artifact_hash"], plan["policy_action"]
+    if (stored is None) != (policy_action is None) or policy_action not in {None, "allow", "block"}:
+        raise NativeHookDecisionError(_INVALID)
+    names: list[str] = []
+    for event in plan["events"]:
+        fields = _shape(event, _PERSIST_EVENT_FIELDS)
+        if _PERSIST_EVENT_PHASE.get(fields["name"]) != fields["before_policy"]:
+            raise NativeHookDecisionError(_INVALID)
+        names.append(fields["name"])
+    if tuple(names) not in _PERSIST_EVENT_SEQUENCES[stored is not None]:
+        raise NativeHookDecisionError(_INVALID)
+    return plan
+
+
+def native_review_response(
+    kind: str, inputs: Mapping[str, object], *, guard_home: Path, deadline: float | None = None
+) -> dict[str, Any]:
+    """The rendered PreToolUse response a native review shows the agent.
+
+    ``kind`` is ``silent_review_block`` or ``paused_review``. The resident
+    composes the reason and the signed review link from ``inputs``; this raises
+    ``NativeHookDecisionError`` when it cannot, and the caller fails closed. A
+    spent ``deadline`` (``time.monotonic()``) is an outage.
     """
 
-    if set(inputs) != _PERSIST_INPUT_FIELDS:
-        raise NativeHookDecisionError(_INVALID)
+    timeout = _TIMEOUT_SECONDS if deadline is None else min(_TIMEOUT_SECONDS, deadline - time.monotonic())
+    if timeout <= 0:
+        raise NativeHookDecisionError(_UNAVAILABLE)
 
     def validate(payload: dict[str, Any]) -> None:
-        if set(payload) != {"kind", *_PERSIST_PLAN_FIELDS}:
-            raise NativeHookDecisionError(_INVALID)
-        plan = _shape({key: payload[key] for key in _PERSIST_PLAN_FIELDS}, _PERSIST_PLAN_FIELDS)
-        stored, policy_action = plan["stored_artifact_hash"], plan["policy_action"]
-        if (stored is None) != (policy_action is None) or policy_action not in {None, "allow", "block"}:
-            raise NativeHookDecisionError(_INVALID)
-        names: list[str] = []
-        for event in plan["events"]:
-            fields = _shape(event, _PERSIST_EVENT_FIELDS)
-            if _PERSIST_EVENT_PHASE.get(fields["name"]) != fields["before_policy"]:
-                raise NativeHookDecisionError(_INVALID)
-            names.append(fields["name"])
-        if tuple(names) not in _PERSIST_EVENT_SEQUENCES[stored is not None]:
+        if set(payload) != {"kind", "response"} or payload["kind"] != kind or not isinstance(payload["response"], dict):
             raise NativeHookDecisionError(_INVALID)
 
-    payload = _decide(
-        {
-            "kind": "native_permission_persist_plan",
-            "inputs": {**inputs, "tilde_home": _tilde_home()},
-        },
-        guard_home,
-        validate,
-        HOOK_DECISION_NATIVE_PERMISSION_PERSIST_FEATURE,
-    )
-    return {key: payload[key] for key in _PERSIST_PLAN_FIELDS}
+    operation = dataclasses.replace(_OPERATION, feature=HOOK_DECISION_REVIEW_RESPONSE_FEATURE, timeout_seconds=timeout)
+    query = {"kind": kind, "inputs": dict(inputs)}
+    request = functools.partial(_resident_request, max_request_bytes=_MAX_REQUEST_BYTES)
+    return dict(resident_decide(operation, request, query, guard_home, validate)["response"])
 
 
 __all__ = [
     "HOOK_DECISION_FEATURE",
-    "HOOK_DECISION_NATIVE_PERMISSION_PERSIST_FEATURE",
+    "HOOK_DECISION_REVIEW_RESPONSE_FEATURE",
     "NativeHookDecisionError",
-    "native_permission_persist_plan",
+    "native_review_response",
+    "validated_permission_persist_plan",
 ]

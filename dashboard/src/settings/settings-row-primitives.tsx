@@ -1,4 +1,5 @@
 import { useCallback, useId, type ChangeEvent, type ReactNode } from "react";
+import { SelectMenu, type SelectMenuOption } from "../select-menu";
 
 export interface SettingsFormSectionProps {
   title: string;
@@ -126,6 +127,31 @@ export function SettingsSelectRow({
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+export interface SettingsMenuRowProps<T extends string> {
+  label: string;
+  description?: string;
+  value: T;
+  options: ReadonlyArray<SelectMenuOption<T>>;
+  onChange: (value: T) => void;
+  disabled?: boolean;
+}
+
+/** SettingsSelectRow's layout with the dashboard dropdown instead of a native select. */
+export function SettingsMenuRow<T extends string>({ label, description, value, options, onChange, disabled = false }: SettingsMenuRowProps<T>) {
+  const labelId = useId();
+  const descriptionId = useId();
+  return (
+    <div className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_240px] md:items-center">
+      <div>
+        <p id={labelId} className="guard-settings-body font-medium text-brand-dark">{label}</p>
+        {description ? <p id={descriptionId} className="guard-settings-caption mt-0.5 text-slate-500">{description}</p> : null}
+      </div>
+      <SelectMenu labelledBy={labelId} describedBy={description ? descriptionId : undefined} value={value} options={options}
+        disabled={disabled} onChange={onChange} />
     </div>
   );
 }

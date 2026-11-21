@@ -52,6 +52,16 @@ pub(super) fn unproven_steps_reason(
     if unproven.is_empty() || unproven.len() == total {
         return None;
     }
+    // Whether any proven step would still do something on its own. A step
+    // that only filters what the step before it printed, and a leading `cd`,
+    // are proven but carry no work of their own: telling the agent to run
+    // them separately turns one review into two and leaves the same steps
+    // under review, so the advice is withheld rather than reversed.
+    let splittable = model.segments.iter().enumerate().any(|(index, segment)| {
+        let proven = !unproven.contains(&index);
+        let leading_cd = index == 0 && cwd.is_some();
+        proven && !(stdin_filter_segment(segment) || leading_cd)
+    });
     let steps = unproven
         .iter()
         .take(MAX_NAMED_STEPS)
@@ -72,11 +82,18 @@ pub(super) fn unproven_steps_reason(
     } else {
         ("Steps", "are", "need")
     };
+    let advice = if splittable {
+        format!(
+            " Run the proven-safe steps as separate commands; only the unproven {} {need} review.",
+            noun.to_lowercase(),
+        )
+    } else {
+        " The other steps do no work of their own, so splitting the command would not avoid the review.".to_owned()
+    };
     Some(format!(
-        "HOL Guard requires review because this command chains {total} steps and {noun} {}{more} ({}) {verb} not proven read-only. Run the proven-safe steps as separate commands; only the unproven {} {need} review.",
+        "HOL Guard requires review because this command chains {total} steps and {noun} {}{more} ({}) {verb} not proven read-only.{advice}",
         steps.join(", "),
         labels.join(", "),
-        noun.to_lowercase(),
     ))
 }
 

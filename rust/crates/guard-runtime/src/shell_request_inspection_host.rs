@@ -1,6 +1,6 @@
 //! Resident filesystem and sensitivity services for the fused shell kernels.
-use crate::codex_tool_output_op::ResidentInspectionHost;
-use guard_command::{GitCheck, GitProbe, GitRun, InspectionHost};
+use crate::resident_inspection_host::ResidentInspectionHost;
+use guard_command::{GitCheck, GitProbe, InspectionHost};
 use guard_contracts::CompoundGitSegmentV1;
 use serde_json::json;
 
@@ -22,9 +22,6 @@ impl InspectionHost for ShellInspectionHost<'_> {
     }
     fn git_safety(&self, check: GitCheck, cwd: Option<&str>, arguments: &[String]) -> bool {
         self.base.git_safety(check, cwd, arguments)
-    }
-    fn run_git(&self, git: &str, args: &[String], cwd: &str) -> GitRun {
-        self.base.run_git(git, args, cwd)
     }
     fn compound_git_chain(&self, segments: &[CompoundGitSegmentV1], complete: bool) -> bool {
         self.base.compound_git_chain(segments, complete)

@@ -9,10 +9,9 @@ import time
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import ClassVar
-from urllib.parse import urlparse
 
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
-from codex_plugin_scanner.guard.daemon.discovery import (
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
+from tests.guard_daemon_state_signing import (
     DAEMON_DISCOVERY_CHALLENGE_TTL_SECONDS,
     authenticated_challenge_payload,
     load_daemon_discovery_key,
@@ -108,78 +107,6 @@ class _DaemonHandler(BaseHTTPRequestHandler):
         return
 
 
-class _ResumeDaemonHandler(_DaemonHandler):
-    request_id: ClassVar[str] = "abcd1234ef567890"
-    resolution: ClassVar[str | None] = None
-    policy_action: ClassVar[str] = "require-reapproval"
-    approve_after: ClassVar[float] = 0.0
-    started_at: ClassVar[float] = 0.0
-    get_count: ClassVar[int] = 0
-    finalize_count: ClassVar[int] = 0
-    finalize_completed: ClassVar[bool] = True
-    finalize_payload: ClassVar[dict[str, object] | None] = None
-
-    def do_POST(self) -> None:
-        if self.path == "/v1/daemon/identity-challenge":
-            super().do_POST()
-            return
-        if self.path == f"/v1/requests/{type(self).request_id}/live-decision":
-            length = int(self.headers.get("Content-Length", "0"))
-            raw_body = self.rfile.read(length)
-            parsed_body = json.loads(raw_body) if raw_body else {}
-            type(self).finalize_payload = parsed_body if isinstance(parsed_body, dict) else None
-            type(self).finalize_count += 1
-            if self.headers.get("X-Guard-Token") != type(self).auth_token:
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
-            self._write_json(
-                {
-                    "action": type(self).resolution,
-                    "completed": type(self).finalize_completed
-                    and type(self).policy_action in {"review", "require-reapproval"},
-                }
-            )
-            return
-        length = int(self.headers.get("Content-Length", "0"))
-        _ = self.rfile.read(length)
-        type(self).captured_guard_token = self.headers.get("X-Guard-Token")
-        request_url = f"http://127.0.0.1:{self.server.server_address[1]}/requests/{type(self).request_id}"
-        self._write_json(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        "HOL Guard paused this command for review. "
-                        f"Open HOL Guard to approve or keep this blocked: {request_url}"
-                    ),
-                }
-            }
-        )
-
-    def do_GET(self) -> None:
-        parsed = urlparse(self.path)
-        type(self).get_count += 1
-        if parsed.path != f"/v1/requests/{type(self).request_id}":
-            self._write_json({"error": "not_found"}, status=404)
-            return
-        if self.headers.get("X-Guard-Token") != type(self).auth_token:
-            self._write_json({"error": "unauthorized"}, status=401)
-            return
-        elapsed = time.monotonic() - type(self).started_at
-        if type(self).resolution is None or elapsed < type(self).approve_after:
-            self._write_json({"status": "pending", "request_id": type(self).request_id})
-            return
-        self._write_json(
-            {
-                "status": "resolved",
-                "request_id": type(self).request_id,
-                "resolution_action": type(self).resolution,
-                "policy_action": type(self).policy_action,
-            }
-        )
-
-
 class _ProxyHandler(BaseHTTPRequestHandler):
     captured_paths: ClassVar[list[str]] = []
 
@@ -222,3 +149,55 @@ def _write_authenticated_daemon_files(guard_home: Path, port: int) -> None:
     _DaemonHandler.response_body = b"{}"
     _DaemonHandler.challenge_mode = "valid"
     _DaemonHandler.challenge_count = 0
+
+
+def signed_native_bridge_argv(runtime: Path, guard_home: Path, registered: dict[str, object]) -> tuple[str, ...]:
+    """The bridge argv a real install registers, with the signed manifest it authenticates.
+
+    The native bridge runs nothing until the registration matches a manifest
+    signed with this home's key, so a test that runs the bridge directly
+    records one the way the installer does.
+    """
+    from datetime import datetime, timezone
+
+    from codex_plugin_scanner.guard.codex_hook_file_integrity import (
+        describe_executable_file,
+        describe_regular_file,
+    )
+    from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_bytes
+    from tests.codex_hook_integrity_fixtures import load_or_create_hook_secret, sign_hook_manifest
+    from tests.codex_hook_paths_support import canonical_manifest_bytes, hook_manifest_path
+
+    def canonical_path(path):
+        return str(Path(path).expanduser().resolve(strict=False))
+
+    config_target = guard_home.parent / ".codex" / "config.toml"
+    config_target.parent.mkdir(parents=True, exist_ok=True)
+    config_target.touch()
+    manifest_path = hook_manifest_path(guard_home, config_target)
+    config = dict(registered)
+    config["manifest_path"] = str(manifest_path)
+    config_argument = json.dumps(config, separators=(",", ":"))
+    argv = (str(runtime), "codex-hook-bridge", config_argument)
+    secret = load_or_create_hook_secret(guard_home)
+    interpreter = describe_executable_file(Path(sys.executable), role="interpreter")
+    unsigned: dict[str, object] = {
+        "schema_version": 2,
+        "harness": "codex",
+        "installation_id": secret.installation_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "context": {"runtime_guard_home": canonical_path(guard_home)},
+        "config": {"scope": "global", "target": canonical_path(config_target)},
+        "interpreter": interpreter,
+        "packaged_files": [describe_regular_file(runtime, role="bridge", executable_required=True)],
+        "events": [{"argv": list(argv)}],
+        "fallback": {"argv": list(config["fallback_command"]), "interpreter": interpreter},
+        "daemon_start": {"argv": list(config["start_command"]), "interpreter": interpreter},
+    }
+    atomic_write_bytes(
+        manifest_path,
+        canonical_manifest_bytes(sign_hook_manifest(unsigned, secret)),
+        mode=0o600,
+        private=True,
+    )
+    return argv

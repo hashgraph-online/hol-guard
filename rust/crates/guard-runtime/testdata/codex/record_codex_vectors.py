@@ -22,6 +22,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import shlex
 import shutil
 import sys
 import tempfile
@@ -185,7 +186,7 @@ def run_case(spec: dict) -> dict:
     try:
         workspace = {"work": root / "work", "root": root, None: None}[spec.get("workspace", "work")]
         context = HarnessContext(home_dir=root / HOME, workspace_dir=workspace, guard_home=root / "guard-home")
-        command = codex._hook_command(context)
+        command = shlex.join(codex._hook_command_parts(context))
         materialize(root, spec, command)
         AUTHENTICATED[:] = walk(spec.get("authenticated", []), lambda text: text.replace(CMD, command))
         request = request_for(context, spec, root, command)

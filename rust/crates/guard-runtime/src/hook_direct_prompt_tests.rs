@@ -14,54 +14,32 @@ fn a_prompt_answer_needs_its_receipt() {
         }))
         .unwrap()
     };
-    assert!(prompt_answer(&reviewed(json!({ "decision_id": "d" })), false).is_ok());
+    assert!(prompt_answer(&reviewed(json!({ "decision_id": "d" }))).is_ok());
     assert_eq!(
-        prompt_answer(&reviewed(Value::Null), false),
+        prompt_answer(&reviewed(Value::Null)),
         Err(HookDirectDefer::EdgeFailed)
     );
     assert_eq!(
-        prompt_answer(&post_edge(json!({})), false),
+        prompt_answer(&post_edge(json!({}))),
         Err(HookDirectDefer::EdgeFailed)
     );
 }
 
 #[test]
-fn only_a_prompt_the_daemon_restyles_carries_its_notice() {
-    let reviewed = |action: &str| {
-        serde_json::to_vec(&json!({
-            "schema": "guard-hook-edge-result.v2",
-            "event_name": "UserPromptSubmit",
-            "result": {
-                "decision": "block",
-                "minimum_action": action,
-                "reason": "Synthetic prompt reason",
-            },
-            "harness_response": { "hookSpecificOutput": { "hookEventName": "UserPromptSubmit" } },
-            "receipt": { "decision_id": "d" },
-        }))
-        .unwrap()
-    };
-    for action in ["require-reapproval", "block", "sandbox-required"] {
-        let noticed = prompt_answer(&reviewed(action), true).unwrap();
-        assert!(
-            noticed["harness_response"]["systemMessage"].is_string(),
-            "{action}: {noticed}"
-        );
-        let plain = prompt_answer(&reviewed(action), false).unwrap();
-        assert!(
-            plain["harness_response"].get("systemMessage").is_none(),
-            "{action}"
-        );
-    }
-    let briefed = prompt_answer(&reviewed("require-reapproval"), true).unwrap();
-    assert!(briefed["harness_response"]["hookSpecificOutput"]["additionalContext"].is_string());
-    for action in ["allow", "warn", "review", ""] {
-        let answered = prompt_answer(&reviewed(action), true).unwrap();
-        assert!(
-            answered["harness_response"].get("systemMessage").is_none(),
-            "{action}"
-        );
-    }
+fn a_prompt_answer_returns_the_edge_response_unchanged() {
+    let edge = json!({
+        "schema": "guard-hook-edge-result.v2",
+        "event_name": "UserPromptSubmit",
+        "result": {
+            "decision": "block",
+            "minimum_action": "require-reapproval",
+            "reason": "Synthetic prompt reason",
+        },
+        "harness_response": { "hookSpecificOutput": { "hookEventName": "UserPromptSubmit" } },
+        "receipt": { "decision_id": "d" },
+    });
+    let answered = prompt_answer(&serde_json::to_vec(&edge).unwrap()).unwrap();
+    assert_eq!(answered["harness_response"], edge["harness_response"]);
 }
 
 #[test]

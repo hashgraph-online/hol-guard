@@ -55,13 +55,9 @@ POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES = POLICY_SNAPSHOT_MAX_BYTES + 16 * 1024
 
 NATIVE_RUNTIME_STATE_DIRECTORY = "native-runtime"
 NATIVE_POLICY_VERIFIER_KEY_NAME = "policy-verifier.key"
-_V3_GENERATION_SCHEMA = "guard-native-policy-snapshot-generation.v3"
-_V3_GENERATION_STATE_NAME = "native-policy-snapshot-generation-v3.json"
-_V3_GENERATION_LOCK_NAME = "native-policy-snapshot-generation-v3.lock"
 _RUST_GENERATION_FLOOR_NAME = "policy-snapshot-generation-floor.json"
 _RUST_SNAPSHOT_STATE_NAME = "policy-snapshot-v3.json"
 NATIVE_POLICY_SNAPSHOT_CACHE_NAME = "policy-snapshot-publisher-v3.json"
-_NATIVE_POLICY_SNAPSHOT_PENDING_NAME = "policy-snapshot-publisher-v3.pending.json"
 _VERIFIER_KEY_BYTES = 32
 _PUBLISH_RETRY_SECONDS = 0.25
 _PUBLISH_TIMEOUT_SECONDS = 8.0 if sys.platform == "win32" else 2.0
@@ -77,9 +73,15 @@ _PUBLISH_RETRY_MAX_SECONDS = 5.0
 # next publish usually succeeds. A hook waits for that ACK inside a deadline of
 # a few seconds, so the backoff for these codes stays well under it. Every
 # other failure keeps the exponential delay.
+#
+# ``native_approval_authority_busy`` is the policy write losing a short wait
+# for the approval-authority lock to another Guard process. On a loaded host
+# that wait is easy to miss and the holder releases it within moments, so the
+# hook waits for the next attempt instead of refusing the action at once.
 TRANSIENT_PUBLICATION_ERRORS = frozenset(
     {
         "native_policy_snapshot_resident_changed",
+        "native_approval_authority_busy",
         "native_resident_restart_budget_busy",
         "native_command_control_mutation_in_progress",
         "native_command_control_authority_not_current",
@@ -103,7 +105,6 @@ _REQUIRED_PUBLISH_FEATURES = frozenset(
         "native-command-control-fence-v1",
     }
 )
-_VALID_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _VALID_INPUT_MODES = frozenset({"observe", "prompt", "enforce"})
 _MAX_U64 = (1 << 64) - 1
 
@@ -144,14 +145,6 @@ _WINDOWS_ACCESS_ALLOWED_ACE_TYPE = 0
 _WINDOWS_INHERITED_ACE = 0x10
 _WINDOWS_FILE_ALL_ACCESS = 0x001F01FF
 _WINDOWS_SYSTEM_SID = "S-1-5-18"
-_ACTION_SEVERITY = {
-    "allow": 0,
-    "warn": 1,
-    "review": 2,
-    "require-reapproval": 3,
-    "sandbox-required": 4,
-    "block": 5,
-}
 
 
 class NativePolicySnapshotError(RuntimeError):

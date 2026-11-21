@@ -1,12 +1,4 @@
-"""An observed tools/call the relay forwards matches the proxy's observe forward.
-
-Under ``mode = "observe"`` the proxy forwards a call it would have stopped for
-approval (``_observe_tool_forward``) and records an allow receipt under the
-``policy-observe`` decision source, with the resident's ``observe_mode`` item
-after the decision's own evidence. It queues no inbox row. The resident
-answers that forward natively; the daemon's drain then writes the receipt from
-the resident's evidence with the same recorder call the proxy makes.
-"""
+"""Receipt evidence from an MCP proxy call forwarded in Watch mode."""
 
 from __future__ import annotations
 
@@ -16,8 +8,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard import approvals, mcp_tool_calls, native_mcp_tool_call_identity
-from codex_plugin_scanner.guard.daemon.mcp_relay_evidence_drain import _decision, record_mcp_relay_evidence
+from codex_plugin_scanner.guard import approvals, mcp_tool_calls
 from codex_plugin_scanner.guard.native_mcp_proxy_decision import tool_facts
 from codex_plugin_scanner.guard.proxy import runtime_mcp, runtime_mcp_projection
 
@@ -44,45 +35,6 @@ OBSERVED = {
 }
 
 
-def _wire_decision(**fields: object) -> dict[str, object]:
-    return {
-        "action": "review",
-        "policy_action": "review",
-        "source": "policy",
-        "signals": ["MCP tool call deletes files.", "Target path looks sensitive."],
-        "summary": "summary",
-        "risk_categories": ["destructive"],
-        "normalization_reason_code": None,
-        "original_action": None,
-        "approval_reuse_status": None,
-        "approval_reuse_reason_code": None,
-        "current_action": None,
-        "saved_action": None,
-        "pending_approval_reuse_decision": None,
-        "approval_reuse_claim_disposition": None,
-        "post_claim_revalidated": False,
-        "post_claim_authority": None,
-        **fields,
-    }
-
-
-def _record(**fields: object) -> dict[str, object]:
-    return {
-        "kind": "mcp_tool_call",
-        "harness": "codex",
-        "outcome": "forward",
-        "decision_source": "policy-observe",
-        "policy_action": "allow",
-        "tool_name": "delete_secret_file",
-        "params": PARAMS,
-        "arguments": {"format": "mapping", "entries": [["path", ".env"], ["force", True]]},
-        "identity": {"wire": True},
-        "decision": _wire_decision(),
-        "evidence_append": [OBSERVE_ITEM],
-        **fields,
-    }
-
-
 class _Projector:
     def __init__(self, guard_home: Path) -> None:
         self.guard_home = guard_home
@@ -96,10 +48,6 @@ class _Projector:
 def recorded(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]]:
     calls: list[tuple[str, dict[str, Any]]] = []
 
-    def decode(payload: object, *, expect_hash: bool, token: bool) -> SimpleNamespace:
-        assert payload == {"wire": True} and expect_hash and token
-        return SimpleNamespace(artifact=ARTIFACT, artifact_hash=TOKEN)
-
     def recorder(kind: str) -> Any:
         def record(**kwargs: Any) -> list[dict[str, object]]:
             calls.append((kind, {key: value for key, value in kwargs.items() if key != "now"}))
@@ -107,7 +55,6 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]
 
         return record
 
-    monkeypatch.setattr(native_mcp_tool_call_identity, "_decode", decode)
     monkeypatch.setattr(runtime_mcp_projection, "McpCallProjector", _Projector)
     for module in (mcp_tool_calls, runtime_mcp):
         monkeypatch.setattr(module, "allow_tool_call", recorder("allow"))
@@ -117,7 +64,14 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]
 
 
 def _observe(tmp_path: Path, store: object) -> tuple[Any, dict[str, Any]]:
-    decision = _decision(_wire_decision())
+    decision = mcp_tool_calls.ToolCallDecision(
+        action="review",
+        source="policy",
+        signals=("MCP tool call deletes files.", "Target path looks sensitive."),
+        summary="summary",
+        risk_categories=("destructive",),
+        policy_action="review",
+    )
     authority = runtime_mcp._ToolCallAuthority(  # pyright: ignore[reportPrivateUsage]
         artifact=ARTIFACT,  # type: ignore[arg-type]
         artifact_hash=TOKEN,
@@ -156,43 +110,16 @@ def _observe(tmp_path: Path, store: object) -> tuple[Any, dict[str, Any]]:
     )
 
 
-def test_the_drain_records_what_the_proxy_observe_forward_records(
+def test_the_proxy_observe_forward_records_an_allow_receipt(
     tmp_path: Path, recorded: list[tuple[str, dict[str, Any]]]
 ) -> None:
     store = object()
     response, _event = _observe(tmp_path, store)
     assert response == RESPONSE
-    proxied = list(recorded)
-    recorded.clear()
-
-    assert record_mcp_relay_evidence(store, tmp_path, _record())
-
-    # One allow receipt and no inbox row, from either side.
     assert [kind for kind, _ in recorded] == ["allow"]
-    assert recorded == proxied
     [(_, allow)] = recorded
     assert allow["remember"] is False
     assert allow["decision_source"] == "policy-observe"
     assert allow["policy_action"] == "allow"
     assert allow["risk_categories"] == ("destructive",)
     assert allow["additional_scanner_evidence"][-1] == OBSERVE_ITEM
-
-
-def test_an_observed_forward_without_an_override_records_no_observe_item(
-    tmp_path: Path, recorded: list[tuple[str, dict[str, Any]]]
-) -> None:
-    assert record_mcp_relay_evidence(object(), tmp_path, _record(policy_action="warn", evidence_append=[]))
-
-    [(kind, allow)] = recorded
-    assert kind == "allow"
-    assert allow["policy_action"] == "warn"
-    assert OBSERVE_ITEM not in allow["additional_scanner_evidence"]
-
-
-def test_an_observed_forward_the_proxy_could_not_have_written_is_dropped(
-    tmp_path: Path, recorded: list[tuple[str, dict[str, Any]]]
-) -> None:
-    # Observe only ever executes as allow or warn.
-    assert not record_mcp_relay_evidence(object(), tmp_path, _record(policy_action="review"))
-    assert not record_mcp_relay_evidence(object(), tmp_path, _record(review={"redaction_level": "partial"}))
-    assert recorded == []

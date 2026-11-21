@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -10,6 +12,7 @@ import pytest
 
 import codex_plugin_scanner.guard.config as config_module
 from codex_plugin_scanner.guard.config import (
+    GuardConfig,
     load_guard_config,
     maybe_auto_revert_watch,
     resolve_risk_action,
@@ -17,13 +20,16 @@ from codex_plugin_scanner.guard.config import (
 )
 from codex_plugin_scanner.guard.harness_posture import (
     config_for_harness,
+    harness_posture_status,
     harness_posture_summary,
+    known_harness_ids,
     protection_settings_payload,
 )
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicy, ManagedPolicyState
 from codex_plugin_scanner.guard.native_policy_snapshot_harness_postures import (
     read_harness_postures_sidecar,
-    recording_only_for_binding,
+    sidecar_generation_to_retire,
+    signed_watch_ends,
     write_harness_postures_sidecar,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -80,13 +86,36 @@ def test_harness_watch_auto_reverts_to_inherit_after_window(tmp_path: Path) -> N
 def test_harness_watch_auto_revert_ignores_unparseable_stamp(tmp_path: Path) -> None:
     from dataclasses import replace
 
-    from codex_plugin_scanner.guard.harness_posture import harness_watch_auto_revert_due
+    from codex_plugin_scanner.guard.harness_posture import watch_auto_revert_due
 
     guard_home = tmp_path / ".hol-guard"
     update_guard_settings(guard_home, {"harness_postures": {"codex": "watch"}})
     config = load_guard_config(guard_home)
     broken = replace(config, harness_watch_entered_at={"codex": "not-a-timestamp"})
-    assert harness_watch_auto_revert_due(broken, now=datetime.now(timezone.utc)) == ()
+    later = datetime.now(timezone.utc) + timedelta(hours=500)
+    assert watch_auto_revert_due(broken, now=later) == (False, ())
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        pytest.param({"harnesses": {}}, id="missing-posture-deadline"),
+        pytest.param({"protection_posture": None}, id="missing-harnesses"),
+        pytest.param({"protection_posture": "soon", "harnesses": {}}, id="text-deadline"),
+        pytest.param({"protection_posture": None, "harnesses": {"codex": True}}, id="bool-harness-deadline"),
+    ],
+)
+def test_a_malformed_watch_deadline_answer_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object]
+) -> None:
+    from codex_plugin_scanner.guard import harness_posture
+    from codex_plugin_scanner.guard.config_file_io import ConfigFileTrustError
+
+    monkeypatch.setattr(harness_posture, "resolve_native_guard_config", lambda _op, _fields: answer)
+    config = load_guard_config(tmp_path / ".hol-guard")
+
+    with pytest.raises(ConfigFileTrustError, match="native_guard_config_invalid"):
+        harness_posture.watch_auto_revert_due(config)
 
 
 def test_harness_watch_auto_revert_disabled_with_zero_hours(tmp_path: Path) -> None:
@@ -111,6 +140,19 @@ def test_config_for_harness_applies_override_and_noops_without_one(tmp_path: Pat
     scoped = config_for_harness(config, "codex")
     assert scoped.mode == "observe" and scoped.protection_posture == "watch"
     assert config_for_harness(config, "claude-code") is config
+
+
+def test_config_for_harness_derives_the_mode_and_level_its_posture_implies(tmp_path: Path) -> None:
+    guard_home = tmp_path / ".hol-guard"
+    config = update_guard_settings(
+        guard_home, {"protection_posture": "protected", "harness_postures": {"codex": "extra_careful"}}
+    )
+    scoped = config_for_harness(config, "codex")
+    assert (scoped.protection_posture, scoped.mode, scoped.security_level) == ("extra_careful", "enforce", "strict")
+    assert scoped.protection_posture_explicit is True
+    # Watch keeps the level it found rather than loosening it.
+    watching = config_for_harness(update_guard_settings(guard_home, {"harness_postures": {"codex": "watch"}}), "codex")
+    assert (watching.mode, watching.security_level) == ("observe", config.security_level)
 
 
 def test_managed_lock_rejects_local_watch_write(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -151,19 +193,6 @@ def test_settings_set_protection_payload_for_harness_and_inherit() -> None:
     assert protection_settings_payload("watch", harness=None, inherit=False)["protection_posture"] == "watch"
 
 
-def test_recording_only_for_binding_semantics() -> None:
-    assert recording_only_for_binding(None, "codex") is False
-    assert recording_only_for_binding({"mode": "observe"}, "codex") is True
-    assert recording_only_for_binding({"mode": "enforce"}, "codex") is False
-    enforce_with_watch = {"mode": "enforce", "harness_postures": {"codex": "watch"}}
-    assert recording_only_for_binding(enforce_with_watch, "codex") is True
-    assert recording_only_for_binding(enforce_with_watch, "claude-code") is False
-    observe_with_protected = {"mode": "observe", "harness_postures": {"codex": "protected"}}
-    assert recording_only_for_binding(observe_with_protected, "codex") is False
-    assert recording_only_for_binding(observe_with_protected, "claude-code") is True
-    assert recording_only_for_binding({"mode": "enforce", "harness_postures": {"codex": "bogus"}}, "codex") is False
-
-
 def test_sidecar_is_bound_to_generation_and_digest_and_authenticated(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store._policy_integrity_secret_material(create=True)
@@ -180,14 +209,90 @@ def test_sidecar_is_bound_to_generation_and_digest_and_authenticated(tmp_path: P
     assert read_harness_postures_sidecar(store, generation=3, policy_digest=digest) == {}
 
 
-def test_sidecar_without_postures_removes_stale_file(tmp_path: Path) -> None:
+def test_sidecar_without_postures_signs_an_empty_override_map(tmp_path: Path) -> None:
+    import codex_plugin_scanner.guard.native_policy_snapshot_harness_postures as sidecar_module
+
     store = GuardStore(tmp_path / "guard-home")
     store._policy_integrity_secret_material(create=True)
     digest = "d" * 64
     write_harness_postures_sidecar(store, generation=1, policy_digest=digest, postures={"codex": "watch"})
-    write_harness_postures_sidecar(store, generation=2, policy_digest=digest, postures={})
+    assert write_harness_postures_sidecar(store, generation=2, policy_digest=digest, postures={}) == {}
     assert read_harness_postures_sidecar(store, generation=1, policy_digest=digest) == {}
-    assert not (tmp_path / "guard-home" / "native-runtime" / "harness-postures-v1.json").exists()
+    assert read_harness_postures_sidecar(store, generation=2, policy_digest=digest) == {}
+
+    document = json.loads(
+        (tmp_path / "guard-home" / "native-runtime" / "harness-postures-v1.json").read_text(encoding="utf-8")
+    )
+    assert document["generation"] == 2
+    assert document["harness_postures"] == {}
+    verifier_key = sidecar_module._verifier_key_for_store(store)
+    assert verifier_key is not None
+    assert (
+        document["mac"]
+        == hmac.new(
+            verifier_key,
+            b"hol-guard/harness-postures/v2\0"
+            + json.dumps(
+                {
+                    "generation": 2,
+                    "harness_postures": {},
+                    "harness_watch_ends_at_us": {},
+                    "policy_digest": digest,
+                    "watch_ends_at_us": 0,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+    )
+
+
+def test_sidecar_signs_when_each_watch_ends(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store._policy_integrity_secret_material(create=True)
+    digest = "d" * 64
+    sidecar = tmp_path / "guard-home" / "native-runtime" / "harness-postures-v1.json"
+    postures = {"codex": "watch", "cursor": "protected"}
+    write_harness_postures_sidecar(
+        store,
+        generation=3,
+        policy_digest=digest,
+        postures=postures,
+        watch_ends=(None, {"codex": 1_700_000_000_000_000, "cursor": 5}),
+    )
+    document = json.loads(sidecar.read_text(encoding="utf-8"))
+    # Only a Watch override keeps a deadline.
+    assert document["harness_watch_ends_at_us"] == {"codex": 1_700_000_000_000_000}
+    assert document["watch_ends_at_us"] is None
+    assert read_harness_postures_sidecar(store, generation=3, policy_digest=digest) == postures
+
+    # A moved deadline breaks the MAC.
+    document["harness_watch_ends_at_us"] = {"codex": 1_800_000_000_000_000}
+    sidecar.write_text(json.dumps(document), encoding="utf-8")
+    assert read_harness_postures_sidecar(store, generation=3, policy_digest=digest) == {}
+
+    # Deadlines that could not be resolved sign every Watch as already over.
+    write_harness_postures_sidecar(store, generation=4, policy_digest=digest, postures=postures)
+    document = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert document["harness_watch_ends_at_us"] == {"codex": 0}
+    assert document["watch_ends_at_us"] == 0
+
+
+def test_a_changed_sidecar_retires_its_generation(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store._policy_integrity_secret_material(create=True)
+    digest = "d" * 64
+    watch = {"codex": "watch"}
+    ends = signed_watch_ends(watch, (None, {"codex": 9}))
+    assert sidecar_generation_to_retire(store, postures=watch, watch_ends=ends) is None
+    write_harness_postures_sidecar(
+        store, generation=3, policy_digest=digest, postures=watch, watch_ends=(None, {"codex": 9})
+    )
+    assert sidecar_generation_to_retire(store, postures=watch, watch_ends=ends) is None
+    assert sidecar_generation_to_retire(store, postures={}, watch_ends=signed_watch_ends({}, (None, {}))) == 3
+    moved = signed_watch_ends(watch, (None, {"codex": 10}))
+    assert sidecar_generation_to_retire(store, postures=watch, watch_ends=moved) == 3
 
 
 def test_full_settings_save_keeps_global_watch_timer(tmp_path: Path) -> None:
@@ -239,3 +344,34 @@ def test_failed_sidecar_write_binds_no_overrides(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(sidecar_module, "_write_private_file", _fail)
     assert write_harness_postures_sidecar(store, generation=2, policy_digest=digest, postures={"codex": "watch"}) == {}
     assert read_harness_postures_sidecar(store, generation=2, policy_digest=digest) == {}
+
+
+def test_an_unoverridden_harness_does_not_ask_the_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def boom(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise AssertionError("runtime")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.harness_posture.resolve_native_guard_config", boom)
+    config = GuardConfig(guard_home=tmp_path, workspace=None, harness_postures={"codex": "watch"})
+    assert config_for_harness(config, "claude-code") is config
+
+
+def test_status_asks_the_runtime_once(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    harnesses = known_harness_ids()
+    calls = {"n": 0}
+
+    def fake(_op: str, _fields: object) -> dict[str, object]:
+        calls["n"] += 1
+        view = {"posture": "protected", "mode": "enforce", "security_level": "standard"}
+        return {
+            "baseline": "protected",
+            "effective": {harness: "protected" for harness in harnesses},
+            "views": {harness: view for harness in harnesses},
+        }
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.harness_posture.resolve_native_guard_config", fake)
+    rows = harness_posture_status(GuardConfig(guard_home=tmp_path, workspace=None))
+    assert calls["n"] == 1
+    assert [row["harness"] for row in rows] == list(harnesses)
+    summary = harness_posture_summary(GuardConfig(guard_home=tmp_path, workspace=None))
+    assert calls["n"] == 2
+    assert summary["harnesses_in_watch"] == []

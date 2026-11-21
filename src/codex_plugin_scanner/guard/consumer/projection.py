@@ -8,7 +8,7 @@ it.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -165,26 +165,3 @@ def removed_outcome(store: GuardStore, harness: str, **fields: object) -> dict[s
     """What the composed decision means for an artifact removed from the harness."""
 
     return native_consumer_project("removed_outcome", {"harness": harness, **fields}, guard_home=_home(store))
-
-
-def incident_context(
-    *,
-    harness: str,
-    artifact: GuardArtifact | None,
-    changed_fields: Sequence[str],
-    guard_home: Path | None = None,
-    **fields: object,
-) -> dict[str, str]:
-    """Incident copy for one artifact decision."""
-
-    answer = native_consumer_project(
-        "incident_context",
-        {
-            "harness": harness,
-            "artifact": wire_artifact(artifact) if artifact is not None else None,
-            "changed_fields": list(changed_fields),
-            **fields,
-        },
-        guard_home=guard_home,
-    )
-    return {key: str(value) for key, value in answer.items()}

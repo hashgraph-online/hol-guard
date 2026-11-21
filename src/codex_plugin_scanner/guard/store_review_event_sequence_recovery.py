@@ -45,3 +45,33 @@ class StoreReviewEventSequenceRecoveryMixin:
             },
         )
         return {int(old): int(new) for old, new in pairs}
+
+    def settle_rejected_review_events(
+        self,
+        *,
+        sequences: list[int],
+        results: list[dict[str, object]],
+        events: list[list[object]],
+        acknowledged: list[int],
+        acknowledged_through: int | None,
+        binding: dict[str, str],
+        changed_at: str,
+    ) -> tuple[list[int], bool]:
+        """Settle one batch's rejected events; returns retained indexes and progress."""
+
+        settled = self._native_store_call(
+            "settle_rejected_review_events",
+            {
+                "sequences": sequences,
+                "results": results,
+                "events": events,
+                "acknowledged": acknowledged,
+                "acknowledged_through": acknowledged_through,
+                "binding": {key: binding.get(key) for key in _BINDING_ORDER},
+                "changed_at": changed_at,
+            },
+        )
+        return [int(index) for index in settled["retained"]], bool(settled["progressed"])
+
+    def forget_review_rejection_counts(self, *, sequences: list[int], changed_at: str) -> None:
+        self._native_store_call("forget_review_rejection_counts", {"sequences": sequences, "changed_at": changed_at})

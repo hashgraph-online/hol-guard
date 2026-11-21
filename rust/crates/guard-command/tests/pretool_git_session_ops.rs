@@ -411,6 +411,48 @@ fn forged_checkout_is_not_a_push_or_removal_target() {
     ));
 }
 
+/// Tidying up from inside the linked worktree just finished with. A linked
+/// worktree marks itself with a `.git` file naming the administrative
+/// directory it shares, not a `.git` directory of its own, so reading the
+/// marker as a directory left the whole shape asking: pruning removes no file
+/// and opens no checkout wherever Git runs it.
+#[test]
+fn pruning_is_quiet_from_inside_a_linked_worktree() {
+    let session = session("maintenance-inside");
+    let worktree = session.worktree.clone();
+    for command in [
+        "git worktree prune",
+        "git worktree prune --dry-run --verbose",
+        "git worktree prune && git worktree list",
+        "git worktree prune && git worktree list --porcelain",
+    ] {
+        let result = session.evaluate_at(command, &worktree);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("allow", "native_exact_safe_worktree_maintenance"),
+            "{command}"
+        );
+    }
+    // The marker alone proves nothing. A directory holding a `.git` file that
+    // names something other than a registration of a real checkout is not a
+    // worktree, and pruning from it keeps its review.
+    let forged = session.home.join("forged");
+    std::fs::create_dir_all(forged.join(".vcs-meta")).unwrap();
+    std::fs::write(forged.join(".git"), "gitdir: .vcs-meta\n").unwrap();
+    for command in [
+        "git worktree prune",
+        "git worktree prune --expire=now",
+        "git worktree prune && rm -rf node_modules",
+    ] {
+        let result = session.evaluate_at(command, &forged);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
+
 #[test]
 fn worktree_maintenance_is_quiet_without_force_or_lock() {
     let session = session("maintenance");

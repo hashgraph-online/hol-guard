@@ -763,6 +763,7 @@ fn harness_watch_keeps_credential_output_from_the_model() {
         );
         assert_eq!(watched.decision, "deny", "{code}");
         assert_eq!(watched.reason_code, code);
+        assert!(watched.observe_mode, "{code}");
     }
 }
 
@@ -999,3 +1000,6 @@ fn claude_user_question_outputs_are_quiet_without_lowering_output_floors() {
     .unwrap();
     assert_eq!(reviewed.decision, "deny");
 }
+
+#[path = "policy_enforcement_admitted_call_tests.rs"]
+mod admitted_call_tests;

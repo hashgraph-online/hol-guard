@@ -33,12 +33,15 @@ pub(super) fn seal_revision_op(
         .revision
         .filter(|revision| *revision >= 1)
         .ok_or_else(|| tampered("managed controls revision must be positive"))?;
+    Ok(json!({ "state": revision_state(revision, key)? }))
+}
+
+/// The sealed publication epoch `revision`, as the store keeps it.
+pub(super) fn revision_state(revision: i64, key: &[u8]) -> Res<Value> {
     let payload = Map::from_iter([("revision".to_owned(), json!(revision))]);
     Ok(json!({
-        "state": {
-            "revision": revision,
-            "authentication": authentication(payload, key, REVISION_PURPOSE)?,
-        }
+        "revision": revision,
+        "authentication": authentication(payload, key, REVISION_PURPOSE)?,
     }))
 }
 

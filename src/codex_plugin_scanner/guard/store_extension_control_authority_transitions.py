@@ -1,33 +1,31 @@
 """Applying the resident's verdicts on extension-control transitions.
 
 The resident decides whether a prepared transition is resumed, committed or
-abandoned; this module performs the writes it cannot, under the caller's lease.
+abandoned and writes the result itself; this module asks it under the caller's
+lease and supplies the protected pack state only this process reads.
 """
 
 # pyright: reportAttributeAccessIssue=false, reportPrivateUsage=false, reportUnknownArgumentType=false, reportUnknownMemberType=false, reportUnknownVariableType=false
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from .native_extension_control_authority import view_to_wire
 from .runtime.extension_control_authority import (
-    AuthorityAnchor,
     AuthorityHealth,
-    AuthorityPhase,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
 )
 from .store_extension_control_authority_support import (
     _ExtensionControlAuthoritySupportMixin,
     _now,
-    _plan_pack_digest,
-    _row_int,
-    _row_str,
 )
 
-_RESUMED_OUTCOMES = frozenset({"commit_pending", "mark_committed", "finish"})
+if TYPE_CHECKING:
+    from .store import GuardStore
 
 
 def _plan(reply: dict[str, object]) -> dict[str, object]:
@@ -44,71 +42,6 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         reply = self._extension_control_authority_op(op, key=key, anchor_json=self._read_anchor_json(), **fields)
         return _plan(reply)
 
-    def _apply_resumed_transition(
-        self,
-        connection: sqlite3.Connection,
-        outcome: str,
-        revision: int,
-        *,
-        current: ExtensionControlAuthorityView | None,
-        key: bytes,
-        pack_record_digest: str | None = None,
-    ) -> ExtensionControlAuthorityView | None:
-        """Apply the resident's verdict on a prepared transition.
-
-        ``abandon`` removes the prepared row and returns None; every other
-        outcome finishes the transition and returns the view it left.
-        ``pack_record_digest`` is the pack record the resident found the
-        authenticated transition binds.
-        """
-
-        self._invalidate_native_extension_control_policy()
-        row = connection.execute(
-            "select * from extension_control_authority_transition where revision = ?", (revision,)
-        ).fetchone()
-        if row is None:
-            raise ExtensionControlAuthorityError("idempotent transition state mismatch")
-        if outcome == "abandon":
-            _ = connection.execute("delete from extension_control_authority_transition where revision = ?", (revision,))
-            from .catalog_delivery.activation_journal import abandon
-
-            abandon(connection, revision)
-            return None
-
-        def queue_event() -> None:
-            self._queue_extension_control_change_event(
-                connection,
-                revision=revision,
-                previous_revision=_row_int(row, "previous_revision"),
-                layers_json=_row_str(row, "layers_json"),
-                occurred_at=_row_str(row, "created_at"),
-            )
-
-        if outcome == "current" and current is not None:
-            queue_event()
-            connection.commit()
-            return current
-        if outcome not in _RESUMED_OUTCOMES:
-            raise ExtensionControlAuthorityError("invalid extension control authority plan")
-        if outcome == "commit_pending":
-            self._commit_pending_transition(connection, row, pack_record_digest)
-        elif outcome == "mark_committed":
-            _ = connection.execute(
-                "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
-                (AuthorityPhase.COMMITTED.value, _now(), revision),
-            )
-        connection.commit()
-        self._write_and_verify_anchor(
-            AuthorityAnchor(revision, _row_str(row, "snapshot_digest"), AuthorityPhase.COMMITTED),
-            key=key,
-        )
-        queue_event()
-        connection.commit()
-        resumed = self._read_extension_control_authority_locked(_row_str(row, "catalog_digest"))
-        if resumed.health is not AuthorityHealth.PROTECTED or resumed.revision != revision:
-            raise ExtensionControlAuthorityError("idempotent transition recovery failed")
-        return resumed
-
     def _resume_transition(
         self, connection: sqlite3.Connection, revision: int, *, key: bytes
     ) -> ExtensionControlAuthorityView | None:
@@ -117,14 +50,102 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         plan = self._authority_plan("resume_plan", key=key, revision=revision)
         if plan["outcome"] == "absent":
             return None
-        return self._apply_resumed_transition(
-            connection,
-            str(plan["outcome"]),
-            revision,
-            current=None,
-            key=key,
-            pack_record_digest=_plan_pack_digest(plan),
-        )
+        self._invalidate_native_extension_control_policy()
+        # The resident takes the verdict again inside the transaction that
+        # applies it, then seals the committed anchor into the vault, refreshes
+        # the last-good export and queues the change event.
+        reply = self._resume_extension_control_op(revision, key=key, now=_now())
+        return self._adopt_resumed_transition(reply, revision)
+
+    def _resume_extension_control_op(
+        self, revision: int, *, key: bytes, now: str, **fields: object
+    ) -> dict[str, object]:
+        """Have the resident resume ``revision``, with the pack state it asks for.
+
+        A row whose commit activates a command pack comes back ``pack_bound``.
+        The resident then needs the protected pack state, which only this
+        process reads: the verifier key, the lifecycle floor and the active
+        security record. It names anything still owed with nothing written:
+        the retained evidence a link sealed before lifecycle binding needs, or
+        a floor that has to move first. The floor moves here, before the
+        resident installs the activation it admits.
+        """
+
+        def resume(**pack: object) -> dict[str, object]:
+            return self._extension_control_authority_op(
+                "resume",
+                key=key,
+                anchor_json=self._read_anchor_json(),
+                revision=revision,
+                now=now,
+                event_queue_limit=self._guard_event_queue_limit,
+                **fields,
+                **pack,
+            )
+
+        reply = resume()
+        if reply.get("pack_bound") is not True:
+            return reply
+        from .catalog_delivery import active_security, lifecycle_store
+        from .native_command_control_authority_io import require_exclusive_command_control_mutation_lease
+        from .native_command_control_authority_store import _key
+        from .native_store_policy import encode_key
+
+        require_exclusive_command_control_mutation_lease(self.guard_home)
+        pack_key = encode_key(_key(cast("GuardStore", self)))
+        with contextlib.ExitStack() as transport:
+            evidence: object = None
+            floor_moved = False
+            while True:
+                pack_finish: dict[str, object] = {
+                    "key_b64": pack_key,
+                    "floor": lifecycle_store.read(self),
+                    "security": active_security.read(self),
+                    "legacy_evidence": evidence,
+                }
+                reply = resume(pack_finish={name: value for name, value in pack_finish.items() if value is not None})
+                owed = reply.get("pack_floor_owed")
+                if reply.get("pack_legacy_owed") is True and evidence is None:
+                    evidence = transport.enter_context(lifecycle_store.legacy_transport(self))
+                elif isinstance(owed, dict) and not floor_moved:
+                    lifecycle_store.commit(self, owed.get("before"), owed.get("after"))
+                    floor_moved = True
+                elif reply.get("pack_legacy_owed") is True or isinstance(owed, dict):
+                    raise ExtensionControlAuthorityError("extension control authority concurrent update")
+                else:
+                    return reply
+
+    def _adopt_resumed_transition(
+        self, reply: dict[str, object], revision: int
+    ) -> ExtensionControlAuthorityView | None:
+        """Mirror the anchor a resident ``resume`` sealed and read the result."""
+
+        resumed_head = reply.get("resumed")
+        if resumed_head is None:
+            return None
+        if not isinstance(resumed_head, dict) or not isinstance(resumed_head.get("catalog_digest"), str):
+            raise ExtensionControlAuthorityError("invalid extension control authority plan")
+        sealed = reply.get("anchor_json")
+        if not isinstance(sealed, str):
+            raise ExtensionControlAuthorityError("invalid extension control anchor seal")
+        # The row is committed; an unrecorded anchor is finished on the next read.
+        try:
+            self._mirror_resident_anchor(sealed)
+        except Exception as exc:
+            raise ExtensionControlAuthorityError("extension control authority final anchor unavailable") from exc
+        resumed = self._read_extension_control_authority_locked(str(resumed_head["catalog_digest"]))
+        if resumed.health is not AuthorityHealth.PROTECTED or resumed.revision != revision:
+            raise ExtensionControlAuthorityError("idempotent transition recovery failed")
+        return resumed
+
+    def _mirror_resident_anchor(self, sealed: str) -> None:
+        """Mirror an anchor the resident sealed into the store this process reads."""
+
+        store = self._secret_store()
+        if store.get_secret(self._anchor_ref()) != sealed:
+            store.set_secret(self._anchor_ref(), sealed)
+            if store.get_secret(self._anchor_ref()) != sealed:
+                raise ExtensionControlAuthorityError("extension control anchor read-back mismatch")
 
     def _roll_back_abandoned_transition(
         self,
@@ -145,42 +166,33 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         Returns whether the abandoned row was removed.
         """
 
+        from .native_command_control_authority_io import NativeCommandControlAuthorityUnavailableError
         from .native_policy_snapshot_constants import NativePolicySnapshotError
 
-        plan = self._authority_plan(
-            "rollback_plan",
-            key=key,
-            revision=revision,
-            snapshot_digest=snapshot_digest,
-            now=_now(),
-            own_transition_digest=own_transition_digest,
-        )
+        fields: dict[str, object] = {
+            "revision": revision,
+            "snapshot_digest": snapshot_digest,
+            "own_transition_digest": own_transition_digest,
+        }
+        plan = self._authority_plan("rollback_plan", key=key, now=_now(), **fields)
         if plan["outcome"] != "abandon":
             return False
         try:
-            with self._connect() as connection:
-                _ = self._apply_resumed_transition(connection, "abandon", revision + 1, current=None, key=key)
-                _ = connection.execute(
-                    "delete from extension_control_authority_proof "
-                    "where transition_revision = ? and consumed_at is null",
-                    (revision + 1,),
-                )
-        except (ExtensionControlAuthorityError, NativePolicySnapshotError):
             # Readers holding only a shared lease cannot mutate; explicit
             # recovery remains available.
+            self._invalidate_native_extension_control_policy()
+            # The resident decides again inside the transaction that removes
+            # the row, so nothing changes between the verdict and the write.
+            reply = self._extension_control_authority_op(
+                "roll_back", key=key, anchor_json=self._read_anchor_json(), now=_now(), **fields
+            )
+        except (
+            ExtensionControlAuthorityError,
+            NativePolicySnapshotError,
+            NativeCommandControlAuthorityUnavailableError,
+        ):
             return False
-        return True
-
-    def _validate_transition_chain(
-        self,
-        revision: int,
-        *,
-        current_snapshot_digest: str,
-        key: bytes,
-    ) -> None:
-        self._extension_control_authority_op(
-            "validate_chain", key=key, revision=revision, snapshot_digest=current_snapshot_digest
-        )
+        return reply.get("rolled_back") is True
 
     def list_extension_control_authority_history(
         self,
@@ -208,40 +220,3 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             if not isinstance(history, list):
                 raise ExtensionControlAuthorityError("invalid extension control history")
             return cast(list[dict[str, object]], history)
-
-    def _commit_pending_transition(
-        self, connection: sqlite3.Connection, row: sqlite3.Row, pack_record_digest: str | None
-    ) -> None:
-        self._validate_serialized_layers(_row_str(row, "layers_json"))
-        from .catalog_delivery.activation_journal import finish
-
-        finish(self, connection, row, expected_pack=pack_record_digest)
-        _ = connection.execute(
-            """
-            update extension_control_authority_snapshot
-            set revision = ?, catalog_digest = ?, layers_json = ?, previous_digest = snapshot_digest,
-                snapshot_json = ?, snapshot_digest = ?, snapshot_mac = ?, committed_at = ?
-            where singleton = 1 and revision = ?
-            """,
-            (
-                _row_int(row, "revision"),
-                _row_str(row, "catalog_digest"),
-                _row_str(row, "layers_json"),
-                _row_str(row, "snapshot_json"),
-                _row_str(row, "snapshot_digest"),
-                _row_str(row, "snapshot_mac"),
-                _row_str(row, "created_at"),
-                _row_int(row, "previous_revision"),
-            ),
-        )
-        _ = connection.execute(
-            "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
-            (AuthorityPhase.COMMITTED.value, _now(), _row_int(row, "revision")),
-        )
-
-    def _pending_transition(self, revision: int) -> sqlite3.Row | None:
-        with self._connect() as connection:
-            return connection.execute(
-                "select * from extension_control_authority_transition where revision = ?",
-                (revision,),
-            ).fetchone()

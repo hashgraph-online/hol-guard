@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import list_adapters
 from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.native_harness_ops import list_harnesses
 from codex_plugin_scanner.guard.runtime.approval_attention import (
     ApprovalAttentionCoordinator,
     request_max_severity,
@@ -128,9 +128,9 @@ def _schedule(
 
 
 def test_attention_policy_is_harness_agnostic(tmp_path: Path) -> None:
-    for adapter in list_adapters():
-        root = tmp_path / adapter.harness
-        store, runtime, result = _queue_operation(root, harness=adapter.harness, severity="medium")
+    for harness in list_harnesses():
+        root = tmp_path / harness
+        store, runtime, result = _queue_operation(root, harness=harness, severity="medium")
         now = [100.0]
         opened_urls: list[str] = []
         coordinator = _schedule(store, runtime, result, now=now, opened_urls=opened_urls)

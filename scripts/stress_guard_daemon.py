@@ -22,11 +22,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.append(str(_REPO_ROOT))
 
-from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state  # noqa: E402
-from codex_plugin_scanner.guard.daemon.lifecycle_journal import load_daemon_lifecycle_events  # noqa: E402
-from codex_plugin_scanner.guard.daemon.manager import (  # noqa: E402
+from codex_plugin_scanner.guard.native_daemon_manage import (  # noqa: E402
     ensure_guard_daemon,
     guard_daemon_retirement_is_complete,
+    load_authenticated_daemon_state,
+    load_daemon_lifecycle_events,
     load_guard_daemon_auth_token,
     retire_all_guard_daemons_for_home,
 )
@@ -345,7 +345,10 @@ def run_stress(
     if max_hook_latency_ms <= 0:
         raise ValueError("max_hook_latency_ms must be positive")
 
-    with tempfile.TemporaryDirectory(prefix="hol-guard-daemon-stress-") as temporary:
+    # A worker the cleanup just stopped can still land one last file in the
+    # home while the directory is removed. That is a cleanup diagnostic, and
+    # like the others it must not replace the measured result.
+    with tempfile.TemporaryDirectory(prefix="hol-guard-daemon-stress-", ignore_cleanup_errors=True) as temporary:
         root = Path(temporary)
         store, execution, guard_home = _prepare_stress_execution(root, receipt_count)
         try:

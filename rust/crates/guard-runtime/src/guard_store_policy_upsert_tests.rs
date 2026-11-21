@@ -47,11 +47,11 @@ fn vectors() -> Value {
 }
 
 /// The key `record_vectors.py` signed with.
-fn key() -> Vec<u8> {
+pub(crate) fn key() -> Vec<u8> {
     (0u8..32).collect()
 }
 
-fn key_id() -> String {
+pub(crate) fn key_id() -> String {
     vectors()["integrity_key_id"]
         .as_str()
         .expect("key id")
@@ -59,7 +59,7 @@ fn key_id() -> String {
 }
 
 /// The two local rows of the `steady_current` vector, signed at generation 3.
-fn signed_rows() -> Vec<Value> {
+pub(crate) fn signed_rows() -> Vec<Value> {
     vectors()["cases"]
         .as_array()
         .expect("cases")
@@ -80,7 +80,7 @@ fn sql_value(value: &Value) -> SqlValue {
     }
 }
 
-fn store(rows: &[Value]) -> Connection {
+pub(crate) fn store(rows: &[Value]) -> Connection {
     let connection = Connection::open_in_memory().unwrap();
     connection.execute_batch(SCHEMA).unwrap();
     let placeholders = vec!["?"; ROW_COLUMNS.len()].join(", ");
@@ -98,7 +98,7 @@ fn store(rows: &[Value]) -> Connection {
 }
 
 /// Every row in the table, by `decision_id`.
-fn dump(connection: &Connection) -> Vec<Value> {
+pub(crate) fn dump(connection: &Connection) -> Vec<Value> {
     let sql = format!(
         "select {} from policy_decisions order by decision_id",
         ROW_COLUMNS.join(", ")
@@ -154,11 +154,11 @@ fn call(connection: &Connection, args: &Map<String, Value>) -> Value {
     upsert_policy(connection, &Args(args)).expect("upsert")
 }
 
-fn generation(row: &Value) -> Option<i64> {
+pub(crate) fn generation(row: &Value) -> Option<i64> {
     row["integrity_generation"].as_i64()
 }
 
-fn verifies_at(row: &Value, trusted_generation: i64) -> bool {
+pub(crate) fn verifies_at(row: &Value, trusted_generation: i64) -> bool {
     verify_local_policy_row(
         row,
         Some(&key()),

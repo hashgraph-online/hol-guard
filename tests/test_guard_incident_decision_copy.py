@@ -6,13 +6,13 @@ from dataclasses import replace
 
 import pytest
 
-from codex_plugin_scanner.guard.incident import build_incident_context
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
 )
+from tests.incident_context_support import build_incident_context
 
 
 @pytest.mark.parametrize(

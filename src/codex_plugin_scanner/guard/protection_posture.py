@@ -1,8 +1,6 @@
-"""Machine-wide protection posture and dual-write to legacy mode/level."""
+"""Machine-wide protection posture: its valid values, bounds and copy."""
 
 from __future__ import annotations
-
-from .models import GuardMode
 
 VALID_PROTECTION_POSTURES = frozenset({"protected", "extra_careful", "watch"})
 DEFAULT_PROTECTION_POSTURE = "protected"
@@ -45,18 +43,6 @@ def coerce_protection_posture(value: object) -> str:
     if posture is None:
         raise ValueError("Invalid Guard protection posture.")
     return posture
-
-
-def dual_write_from_posture(
-    posture: str,
-    *,
-    current_security_level: str | None = None,
-) -> tuple[GuardMode, str | None]:
-    if posture == "watch":
-        return "observe", current_security_level
-    if posture == "extra_careful":
-        return "enforce", "strict"
-    return "enforce", "balanced"
 
 
 def posture_label(posture: str) -> str:

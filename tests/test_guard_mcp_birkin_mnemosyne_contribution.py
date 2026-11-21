@@ -63,18 +63,19 @@ def _birkin_catalog(mcp_policy_delivery, monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(mcp_policy_catalog_fixture, "_CATALOG_HOMES", {})
 
 
-def _identity(package: str = "birkin-mnemosyne[mcp]") -> McpServerIdentity:
+def _identity(
+    command: str = "mnemosyne-mcp", args: tuple[str, ...] = ("--vault", "/chosen/vault")
+) -> McpServerIdentity:
     return build_mcp_server_identity(
         config_path="",
-        command="uvx",
-        args=("--from", package, "mnemosyne-mcp", "--vault", "/chosen/vault"),
+        command=command,
+        args=args,
         transport="stdio",
         env={},
     )
 
 
-def _artifact(tool_name: str, package: str = "birkin-mnemosyne[mcp]") -> GuardArtifact:
-    identity = _identity(package)
+def _artifact(tool_name: str, identity: McpServerIdentity | None = None) -> GuardArtifact:
     return build_tool_call_artifact(
         harness="claude-code",
         server_name="mnemosyne",
@@ -82,7 +83,7 @@ def _artifact(tool_name: str, package: str = "birkin-mnemosyne[mcp]") -> GuardAr
         source_scope="user",
         config_path=".mcp.json",
         transport="stdio",
-        server_identity=identity,
+        server_identity=identity if identity is not None else _identity(),
     )
 
 
@@ -95,23 +96,22 @@ def test_catalog_is_external_and_off(canonical_packs) -> None:
     assert payload["enabled"] is False
     assert payload["trust_class"] == "external"
     assert payload["activation"] == "opt-in"
+    assert payload["mcp_launch"] == {"kind": "direct-command", "command": "mnemosyne-mcp"}
+    assert payload["permissions"][0]["example_command"] == "mnemosyne-mcp"
 
 
-@pytest.mark.parametrize("package", ("birkin-mnemosyne[mcp]", "birkin-mnemosyne[mcp]==0.7.0"))
-def test_documented_launcher_matches_with_extras_and_user_vault(package: str) -> None:
+@pytest.mark.parametrize("command", ("mnemosyne-mcp", "/opt/fixture/bin/mnemosyne-mcp"))
+def test_installed_launcher_matches_with_user_vault(command: str) -> None:
     enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, _CATALOG_ID, ControlState.ENABLED),))
-    reviewed = apply_contributed_mcp_decision(enabled, _artifact("memory_remember", package), "allow")
+    reviewed = apply_contributed_mcp_decision(enabled, _artifact("memory_remember", _identity(command)), "allow")
     assert reviewed is not None
     assert reviewed[:2] == ("review", "catalog-mcp-extension")
 
 
-@pytest.mark.parametrize(
-    "package",
-    ("birkin-mnemosyne[mcp,semantic]", "birkin_mnemosyne[mcp]", "birkin-mnemosyne", "birkin-mnemosyne[semantic]"),
-)
-def test_undeclared_launcher_spellings_are_outside_this_entry(package: str) -> None:
+def test_uvx_wrapper_retains_ordinary_policy() -> None:
     enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, _CATALOG_ID, ControlState.ENABLED),))
-    assert apply_contributed_mcp_decision(enabled, _artifact("memory_remember", package), "allow") is None
+    wrapper = _identity("uvx", ("--from", "birkin-mnemosyne[mcp]", "mnemosyne-mcp", "--vault", "/chosen/vault"))
+    assert apply_contributed_mcp_decision(enabled, _artifact("memory_remember", wrapper), "allow") is None
 
 
 @pytest.mark.parametrize("tool_name", _REVIEWED_TOOLS)
@@ -163,7 +163,7 @@ def test_custom_device_grant_wins_over_enabled_contribution() -> None:
         store,
         identity,
         states={"memory_remember": "allow"},
-        example_label="uvx --from birkin-mnemosyne[mcp] mnemosyne-mcp --vault /chosen/vault",
+        example_label="mnemosyne-mcp --vault /chosen/vault",
         commands=(LocalCliCommand("memory_remember", "memory_remember", "memory_remember", "Store a memory note"),),
     )
     granted = apply_local_mcp_extension_decision(store, artifact, "review")

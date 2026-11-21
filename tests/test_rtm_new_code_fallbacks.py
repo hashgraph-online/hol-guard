@@ -313,6 +313,7 @@ def test_unclaimed_saved_package_approval_is_dropped_without_a_resident(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, resident_down: bool
 ) -> None:
     current = SimpleNamespace(
+        intent=SimpleNamespace(redacted_command="npm install left-pad"),
         artifact=SimpleNamespace(artifact_id="package:npm:left-pad"),
         artifact_hash="hash",
         evaluation=_PackageEvaluation(),

@@ -101,6 +101,55 @@ pub(super) fn inert_loader_search_path(name: &str, windows: bool) -> bool {
             .any(|known| known.eq_ignore_ascii_case(name))
 }
 
+/// A launcher directory an installed program owns: one that sits outside the
+/// agent's reach by the same rules a loader search path has to meet, whether
+/// the installation lives below home or above it.
+///
+/// Above home, a prefix the home owner installed into (Homebrew's
+/// `/opt/homebrew/bin`, `/usr/local/bin` on Intel Macs) also counts when no
+/// other user can write it. The agent can write such a prefix, but so it can
+/// write `~/.local/bin`, which already counts: the bare name runs the same file
+/// from `PATH` without review, so the path spelling adds no reach. Loader
+/// search paths keep the stricter rule.
+pub(super) fn trusted_program_directory(directory: &Path, home: &Path, cwd: &Path) -> bool {
+    home_loader_directory(directory, home, cwd)
+        || owner_installed_prefix(directory, home, cwd)
+        || (trusted_location(directory, home, cwd) && !agent_writable_loader_tree(directory, home))
+}
+
+/// A canonical directory above home, outside the working directory and, unless
+/// home is one too, the temporary directories, whose every ancestor is owned by
+/// root or the home owner and writable by no other user. The directory itself
+/// may not be world-writable even with the sticky bit, which still lets any
+/// user add a program name it does not hold yet.
+#[cfg(unix)]
+fn owner_installed_prefix(directory: &Path, home: &Path, cwd: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    if !fs::metadata(directory).is_ok_and(|metadata| metadata.mode() & 0o002 == 0) {
+        return false;
+    }
+    let Ok(home) = fs::canonicalize(home) else {
+        return false;
+    };
+    let Ok(home_metadata) = fs::metadata(&home) else {
+        return false;
+    };
+    let canonical_cwd = fs::canonicalize(cwd).ok();
+    fs::canonicalize(directory).ok().as_deref() == Some(directory)
+        && !directory.starts_with(&home)
+        && !directory.starts_with(cwd)
+        && !canonical_cwd
+            .as_deref()
+            .is_some_and(|cwd| directory.starts_with(cwd))
+        && (!temporary_location(directory) || temporary_location(&home))
+        && owner_only_ancestors(directory, &home, &home_metadata)
+}
+
+#[cfg(not(unix))]
+fn owner_installed_prefix(_directory: &Path, _home: &Path, _cwd: &Path) -> bool {
+    false
+}
+
 fn trusted_loader_entry(entry: &Path, home: &Path, cwd: &Path) -> bool {
     if !entry.is_absolute() || process_relative_loader_prefix(entry) {
         return false;
@@ -124,7 +173,6 @@ fn trusted_loader_entry(entry: &Path, home: &Path, cwd: &Path) -> bool {
 /// users cannot rename entries they do not own.
 #[cfg(unix)]
 fn home_loader_directory(directory: &Path, home: &Path, cwd: &Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
     let Ok(home) = fs::canonicalize(home) else {
         return false;
     };
@@ -142,11 +190,22 @@ fn home_loader_directory(directory: &Path, home: &Path, cwd: &Path) -> bool {
     {
         return false;
     }
+    owner_only_ancestors(directory, &home, &home_metadata)
+}
+
+/// Every ancestor is owned by root or the home owner, and no other user can
+/// write it: group write counts as another user's at or below home, and above
+/// home when the group is not the home owner's. A sticky world-writable
+/// ancestor above home such as `/tmp` is accepted because other users cannot
+/// rename entries they do not own.
+#[cfg(unix)]
+fn owner_only_ancestors(directory: &Path, home: &Path, home_metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
     let owner = home_metadata.uid();
     directory.ancestors().all(|ancestor| {
         fs::metadata(ancestor).is_ok_and(|metadata| {
             let mode = metadata.mode();
-            let at_or_below_home = ancestor.starts_with(&home);
+            let at_or_below_home = ancestor.starts_with(home);
             let sticky_above_home = !at_or_below_home && mode & 0o1000 != 0;
             // Below home, the group-write bit is enough. Owning the directory
             // does not stop another member of its group from planting a library.

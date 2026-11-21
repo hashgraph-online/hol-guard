@@ -10,8 +10,10 @@ to the HTTP client exactly as Rust produced it.
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -26,6 +28,8 @@ from .strict_json_pairs import unique_json_object
 CATALOG_READ_FEATURE = "catalog-read-model-v1"
 CATALOG_DISCOVERY_FEATURE = "catalog-read-discovery-v2"
 MAX_CATALOG_V2_BODY_BYTES = 262_144
+CATALOG_V2_ROLLOUT_ENV = "HOL_GUARD_CATALOG_READ_V2"
+_DISABLED_VALUES = frozenset({"0", "off", "false", "disabled"})
 MAX_CATALOG_V2_ROUTE_BYTES = 512
 MAX_CATALOG_V2_QUERY_BYTES = 2048
 MAX_CATALOG_V2_IF_NONE_MATCH_BYTES = 2048
@@ -103,10 +107,6 @@ def _supports_catalog_read(status: NativeRuntimeStatus) -> bool:
     if "catalog-prepare-v1" in features and "catalog-prepare-batch-v1" not in features:
         return False
     return _RESIDENT_PROTOCOL_FEATURE in features and CATALOG_READ_FEATURE in features
-
-
-def native_catalog_read_available() -> bool:
-    return _supports_catalog_read(native_runtime_status())
 
 
 def native_catalog_read(
@@ -217,12 +217,19 @@ def native_catalog_read(
     return result
 
 
+def catalog_read_v2_enabled(environ: Mapping[str, str] | None = None) -> bool:
+    """The v2 read path is on unless the rollback switch turns it off."""
+    values = os.environ if environ is None else environ
+    return values.get(CATALOG_V2_ROLLOUT_ENV, "").strip().lower() not in _DISABLED_VALUES
+
+
 __all__ = [
     "CATALOG_READ_FEATURE",
     "CATALOG_READ_PREPARATION_FAILED",
     "CATALOG_READ_TRANSPORT_FAILED",
+    "CATALOG_V2_ROLLOUT_ENV",
     "MAX_CATALOG_V2_BODY_BYTES",
     "NativeCatalogReadResult",
+    "catalog_read_v2_enabled",
     "native_catalog_read",
-    "native_catalog_read_available",
 ]

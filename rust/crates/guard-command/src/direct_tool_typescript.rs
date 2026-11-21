@@ -22,8 +22,12 @@ pub(super) fn direct_typescript_diagnostic_filter_context(
         || compiler.effective_cwd.as_deref() != Some(workspace)
         || grep.control_before != ["|"]
         || marker.control_before != ["||"]
-        || compiler.tokens != ["npx", "tsc", "--noEmit", "2>&1"]
-        || !compiler_is_bound(workspace, home, authority)
+    {
+        return None;
+    }
+    let (arguments, through_npx) = typescript_compiler_call(&compiler.tokens)?;
+    if arguments != ["--noEmit", "2>&1"]
+        || !compiler_is_bound(workspace, home, authority, through_npx)
         || grep.tokens.len() != 3
         || grep.tokens[..2] != ["grep", "-E"]
         || grep.tokens[2].chars().count() > 512
@@ -36,11 +40,40 @@ pub(super) fn direct_typescript_diagnostic_filter_context(
     Some(context.clone())
 }
 
-fn compiler_is_bound(workspace: &Path, home: &Path, authority: &dyn DirectToolAuthority) -> bool {
+/// The spellings of a workspace's own TypeScript compiler that name the one
+/// binary `workspace_npx_typescript_runner_is_bound` pins to its `typescript`
+/// package. `npx` resolves `node_modules/.bin/tsc` from the workspace, and a
+/// path to that same link reaches it without npx in between.
+const LOCAL_TYPESCRIPT_BINARIES: &[&str] = &["./node_modules/.bin/tsc", "node_modules/.bin/tsc"];
+
+/// The arguments a local TypeScript run carries, and whether `npx` resolved
+/// the compiler.
+///
+/// A project runs its own compiler either way, and both spellings end at the
+/// link the binding check pins, so the spelling decides only whether npx is
+/// on the line and has to be a trusted program itself.
+fn typescript_compiler_call(tokens: &[String]) -> Option<(&[String], bool)> {
+    match tokens {
+        [npx, compiler, arguments @ ..] if npx == "npx" && compiler == "tsc" => {
+            Some((arguments, true))
+        }
+        [compiler, arguments @ ..] if LOCAL_TYPESCRIPT_BINARIES.contains(&compiler.as_str()) => {
+            Some((arguments, false))
+        }
+        _ => None,
+    }
+}
+
+fn compiler_is_bound(
+    workspace: &Path,
+    home: &Path,
+    authority: &dyn DirectToolAuthority,
+    through_npx: bool,
+) -> bool {
     authority.within_budget()
         && shell_read_execution_environment_is_safe(workspace, authority)
         && !node_execution_environment_is_configurable(workspace, home, authority)
-        && trusted_path_command("npx", workspace, home, authority)
+        && (!through_npx || trusted_path_command("npx", workspace, home, authority))
         && trusted_path_command("node", workspace, home, authority)
         && workspace_typescript_is_bound(workspace, authority)
         && workspace_npx_typescript_runner_is_bound(workspace)
@@ -52,7 +85,7 @@ fn routine_context(
     home: &Path,
     authority: &dyn DirectToolAuthority,
 ) -> bool {
-    if !context.complete || ![2, 4, 5].contains(&context.segments.len()) {
+    if !context.complete || ![2, 3, 4, 5].contains(&context.segments.len()) {
         return false;
     }
     let directory = &context.segments[0];
@@ -78,10 +111,11 @@ fn routine_context(
         }
         tokens = &tokens[1..];
     }
-    if tokens.len() < 2
-        || tokens[..2] != ["npx", "tsc"]
-        || !typescript_no_emit_args_are_safe(&tokens[2..], workspace)
-        || !compiler_is_bound(workspace, home, authority)
+    let Some((arguments, through_npx)) = typescript_compiler_call(tokens) else {
+        return false;
+    };
+    if !typescript_no_emit_args_are_safe(arguments, workspace)
+        || !compiler_is_bound(workspace, home, authority, through_npx)
     {
         return false;
     }
@@ -133,6 +167,20 @@ fn typescript_no_emit_args_are_safe(args: &[String], workspace: &Path) -> bool {
         "--skipLibCheck",
         "--strict",
     ];
+    // Options that only shape the diagnostics the run prints. tsc's parser
+    // reads an optional `true` or `false` after each of them, and neither
+    // value turns emit on, so the word after one is consumed as its value
+    // rather than refused the way a boolean compiler option's is.
+    // `passed_tail_reports_only` admits this same set through a package
+    // manager's `--` tail.
+    const REPORTING: &[&str] = &[
+        "--diagnostics",
+        "--explainFiles",
+        "--extendedDiagnostics",
+        "--listFilesOnly",
+        "--noErrorTruncation",
+        "--pretty",
+    ];
     const PATH_FLAGS: &[&str] = &["--baseUrl", "--project", "-p", "--rootDir", "--typeRoots"];
     const VALUE: &[&str] = &[
         "--jsx",
@@ -166,6 +214,13 @@ fn typescript_no_emit_args_are_safe(args: &[String], workspace: &Path) -> bool {
             return false;
         }
         if let Some((flag, value)) = arg.split_once('=') {
+            if REPORTING.contains(&flag) {
+                if !matches!(value.to_lowercase().as_str(), "false" | "true") {
+                    return false;
+                }
+                index += 1;
+                continue;
+            }
             if !VALUE.contains(&flag)
                 || value.is_empty()
                 || (flag == "--types" && !typescript_package_list_is_safe(value))
@@ -174,6 +229,11 @@ fn typescript_no_emit_args_are_safe(args: &[String], workspace: &Path) -> bool {
                 return false;
             }
             index += 1;
+        } else if REPORTING.contains(&arg.as_str()) {
+            index += match args.get(index + 1) {
+                Some(value) if matches!(value.to_lowercase().as_str(), "false" | "true") => 2,
+                _ => 1,
+            };
         } else if BOOLEAN.contains(&arg.as_str()) {
             if args
                 .get(index + 1)

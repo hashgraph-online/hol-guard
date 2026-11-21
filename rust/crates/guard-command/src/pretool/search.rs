@@ -1,7 +1,9 @@
 use super::sensitive_read_path_argument as sensitive_path_argument;
+use brace::expand_brace_globs;
 use glob_class::glob_class_matches;
 use std::collections::{HashSet, VecDeque};
 mod agent_root;
+mod brace;
 mod fd;
 mod git_metadata;
 mod glob_class;
@@ -9,8 +11,11 @@ pub(super) mod grep;
 mod hint;
 mod names_only;
 mod options;
+#[cfg(test)]
+mod repeat_walk_tests;
 mod rg;
 mod rg_whitelist;
+mod rg_whitelist_file;
 mod roots;
 mod sibling;
 mod tree;
@@ -23,11 +28,14 @@ use options::unsafe_search_value;
 pub(super) use rg::{rg_hidden_whitelist_reason, safe_rg_stdin_arguments};
 pub(super) use sibling::named_path as sibling_repository_named_file;
 pub(super) use tree::{
-    glob_matches_nothing, safe_glob_operand, safe_literal_bracket_read_target,
+    glob_matches_nothing, key_file_name, listable_spelling, safe_glob_operand,
+    safe_literal_bracket_listing_target, safe_literal_bracket_read_target,
     safe_literal_bracket_tree, safe_recursive_listing_target, safe_recursive_target,
     safe_recursive_target_through_links, safe_unmatched_glob_operand, SECRET_EXTENSIONS,
 };
-pub(super) use walk_memo::with_walk_memo;
+#[cfg(test)]
+pub(super) use walk_memo::{count_walk, take_walks};
+pub(super) use walk_memo::{memoized_keyed, memoized_proof, with_walk_memo};
 
 /// Whether no step of `model` creates a filesystem entry.
 ///
@@ -38,10 +46,7 @@ pub(super) use walk_memo::with_walk_memo;
 /// peers; a whole-command answer serves the readers that prove one operand
 /// at a time.
 pub(super) fn command_creates_nothing(model: &crate::CanonicalCommandV1) -> bool {
-    model
-        .segments
-        .iter()
-        .all(|segment| grep::creates_nothing(segment, false))
+    model.segments.iter().all(grep::creates_nothing)
 }
 
 /// A names-only walk (`find`) rooted at a project-metadata directory such as
@@ -224,51 +229,6 @@ fn glob_intersects_contains_family(pattern: &[u8], needle: &[u8], star_consumes:
         |state, value| Some(contains_family_transition(needle, state, value)),
     )
 }
-fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
-    let mut expanded = vec![pattern.to_owned()];
-    for _depth in 0..8 {
-        let Some(index) = expanded
-            .iter()
-            .position(|candidate| candidate.contains('{'))
-        else {
-            return Some(expanded);
-        };
-        let candidate = expanded.swap_remove(index);
-        let open = candidate.find('{')?;
-        let close = candidate[open + 1..].find('}')? + open + 1;
-        let choices: Vec<&str> = candidate[open + 1..close].split(',').collect();
-        // A brace with no comma and no `..`, such as Git's `HEAD^{commit}`,
-        // `@{u}` or a Go template `{{.Server.Version}}`, is literal text to the
-        // shell and a single alternative to a glob, so it is checked as its
-        // inner text: `{.env}` and `{{.env}}` still name `.env`. A `..`
-        // sequence such as `.en{v..v}` expands in bash, so it keeps failing
-        // closed.
-        if choices.len() == 1 && !choices[0].contains("..") {
-            let trimmed = choices[0].trim_start_matches('{');
-            if !trimmed.contains('{') {
-                let nested_braces = choices[0].len() - trimmed.len();
-                let closing = "}".repeat(nested_braces);
-                let suffix = candidate[close + 1..]
-                    .strip_prefix(closing.as_str())
-                    .unwrap_or(&candidate[close + 1..]);
-                expanded.push(format!("{}{trimmed}{suffix}", &candidate[..open],));
-                continue;
-            }
-        }
-        if choices.len() < 2 || expanded.len() + choices.len() > 16 {
-            return None;
-        }
-        for choice in choices {
-            expanded.push(format!(
-                "{}{}{}",
-                &candidate[..open],
-                choice,
-                &candidate[close + 1..]
-            ));
-        }
-    }
-    None
-}
 pub(super) fn glob_can_select_sensitive_path(value: &str) -> bool {
     glob_selects_sensitive_path(value, true)
 }
@@ -326,6 +286,7 @@ fn glob_selects_sensitive_path(value: &str, path_operand: bool) -> bool {
     ];
     patterns.iter().any(|pattern| {
         pattern.split('/').any(|component| {
+            let component = &*glob_class::widen_unmodeled_class(component);
             let bytes = component.as_bytes();
             let code_extension = component
                 .rsplit_once('.')
@@ -428,17 +389,12 @@ fn short_search_option(
     Ok((None, false))
 }
 
-pub(super) fn safe_search_arguments_with_context(
-    executable: &str,
-    arguments: &[String],
+pub(super) fn safe_fd_segment(
+    model: &crate::CanonicalCommandV1,
+    segment: &crate::CommandSegmentV1,
     context: ReadContext<'_>,
 ) -> bool {
-    match executable {
-        "rg" => rg::safe_rg_arguments(arguments, context),
-        "fd" => fd::safe_fd_arguments(arguments, context),
-        "grep" => grep::safe_grep_arguments(arguments, context),
-        _ => false,
-    }
+    fd::safe_fd_segment(model, segment, context)
 }
 
 pub(super) fn safe_rg_segment(
@@ -449,68 +405,10 @@ pub(super) fn safe_rg_segment(
     rg::safe_rg_segment(model, segment, context)
 }
 
-pub(super) fn safe_grep_stdin_arguments(arguments: &[String]) -> bool {
-    grep::safe_stdin_arguments(arguments)
+pub(super) fn safe_grep_stdin_arguments(arguments: &[String], literal_words: &[String]) -> bool {
+    grep::safe_stdin_arguments(arguments, literal_words)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{glob_can_select_sensitive_path, literal_glob_names_sensitive_path};
-
-    /// Both forms read the glob's own text the same way. They part over the
-    /// wider question a path operand answers: whether some longer string the
-    /// glob could match would hold a credential marker. Every regex that
-    /// joins two words with `.*` could, so a pattern is read on its text
-    /// alone.
-    #[test]
-    fn a_regex_wildcard_names_no_credential_on_its_own_text() {
-        for selecting in [".env*", ".ssh/*", "*secret*", "id_*", "*.pem"] {
-            assert!(literal_glob_names_sensitive_path(selecting), "{selecting}");
-            assert!(glob_can_select_sensitive_path(selecting), "{selecting}");
-        }
-        // A credential marker joined to a second word with `.*` is still a
-        // regex. A path operand spelled the same way is refused, because it
-        // is a glob some credential file could sit under.
-        for regex in [
-            "cookie.*name",
-            "a.*b",
-            "auth_token.*=",
-            "delegate.*=>",
-            "auth.*provider",
-            "token.*expired",
-            "credentials.*load",
-            "auth.*header",
-        ] {
-            assert!(!literal_glob_names_sensitive_path(regex), "{regex}");
-        }
-        for operand in ["auth.*provider", "token.*expired", "credentials.*load"] {
-            assert!(glob_can_select_sensitive_path(operand), "{operand}");
-        }
-    }
-
-    #[test]
-    fn brace_sequences_still_select_sensitive_names() {
-        // Git's brace suffixes and Go template fields are one literal alternative.
-        for literal in [
-            "head^{commit}",
-            "4dc51cdaa1^{tree}",
-            "head@{0}",
-            "@{u}",
-            "{{.server.version}}",
-        ] {
-            assert!(!glob_can_select_sensitive_path(literal), "{literal}");
-        }
-        // Bash expands a `..` sequence: `.en{v..v}` is `.env`.
-        for selecting in [
-            ".en{v..v}",
-            ".npmr{c..c}",
-            "config/.en{v..v}",
-            ".en{v..v..1}",
-            "{.env}",
-            "{{.env}}",
-            "{.env,readme.md}",
-        ] {
-            assert!(glob_can_select_sensitive_path(selecting), "{selecting}");
-        }
-    }
-}
+#[path = "search_tests.rs"]
+mod tests;

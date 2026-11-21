@@ -120,12 +120,14 @@ pub(super) fn route(
 pub(super) fn safe_alternative(
     blocked_request_mode: Option<&str>,
     redaction_level: Option<&str>,
+    center: Option<&str>,
     policy_action: String,
 ) -> Result<Routed, &'static str> {
     match (blocked_request_mode, redaction_level) {
         (Some(SAFE_ALTERNATIVE_MODE), Some(level)) => Ok(Routed::SafeAlternative {
             policy_action,
             redaction_level: level.to_owned(),
+            center: center.map(str::to_owned),
         }),
         _ => Err(ROUTE_UNSUPPORTED),
     }

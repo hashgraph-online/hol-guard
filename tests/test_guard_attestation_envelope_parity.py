@@ -19,9 +19,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.trust_attestation import (
-    _normalize_pem,
-    _public_key_fingerprint,
+from codex_plugin_scanner.guard.runtime.trust_attestation import _normalize_pem
+from tests.trust_attestation_verify_support import (
+    public_key_fingerprint,
     verify_trust_attestation,
 )
 
@@ -84,4 +84,4 @@ def test_a_recorded_envelope_is_accepted_or_refused_as_recorded(case: dict[str, 
 @pytest.mark.parametrize("recorded", _VECTORS["fingerprints"], ids=lambda recorded: repr(recorded["pem"]))
 def test_a_recorded_public_key_fingerprints_as_recorded(recorded: dict[str, str]) -> None:
     assert _normalize_pem(recorded["pem"]) == recorded["normalized"]
-    assert _public_key_fingerprint(recorded["pem"]) == recorded["fingerprint"]
+    assert public_key_fingerprint(recorded["pem"]) == recorded["fingerprint"]

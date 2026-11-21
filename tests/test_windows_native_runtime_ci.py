@@ -142,7 +142,10 @@ def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> Non
     job = load_ci_workflow()["jobs"]["windows-shim-admin"]
     assert job["runs-on"] == "windows-latest"
     assert job["strategy"]["fail-fast"] is False
-    assert job["strategy"]["matrix"]["shim-gate"] == ["vectors", "native-op", "mcp"]
+    shim_matrix = job["strategy"]["matrix"]["shim-gate"]
+    assert "github.event_name == 'pull_request'" in shim_matrix
+    assert '["vectors", "mcp"]' in shim_matrix
+    assert '["vectors", "native-op", "mcp"]' in shim_matrix
     assert job["env"]["CARGO_PROFILE_TEST_DEBUG"] == "line-tables-only"
     assert not any(
         key in job["env"]
@@ -182,10 +185,7 @@ def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> Non
         "cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test shim_admin_vectors"
         in vector["run"]
     )
-    assert (
-        "cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib shim_op"
-        in native_op["run"]
-    )
+    assert "cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib shim_op" in native_op["run"]
     child_tree = next(
         step for step in steps if step.get("name") == "Contain MCP server process trees in a JobObject on Windows"
     )
@@ -232,8 +232,15 @@ def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
             "hol-guard-runtime --lib daemon_storage_hold",
             "hol-guard-runtime --lib windows_expanded_home",
             "guard-runtime-windows-process --test process_liveness",
+            "hol-guard-runtime --lib health_lease_state",
+            "hol-guard-runtime --lib supervisor_verdict",
             "hol-guard-runtime --lib managed_owner_lock",
             "hol-guard-runtime --lib owner_release",
+            "hol-guard-runtime --lib harness_coverage",
+            "hol-guard-runtime --lib ownership_acl_verdict",
+            "hol-guard-runtime --lib user_health_state",
+            "guard-command --lib egress_proxy_credentials",
+            "hol-guard-runtime --lib proxy_credentials",
         ],
         "mcp": [
             "guard-runtime-windows-process --test child_tree",
@@ -255,7 +262,7 @@ def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
         ]
         assert selected[gate] == commands
     flattened = [command for commands in selected.values() for command in commands]
-    assert len(flattened) == len(set(flattened)) == 16
+    assert len(flattened) == len(set(flattened)) == 23
 
 
 def test_cross_platform_builds_no_native_runtime() -> None:

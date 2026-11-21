@@ -45,7 +45,7 @@ class WorkspaceServers:
 def workspace_mcp_servers(store: Any, root: Path, *, home_dir: Path | None = None) -> WorkspaceServers:
     """The MCP servers Guard's adapters find for ``root``, wherever they are configured."""
 
-    from .adapters.harness_mcp_discovery import configured_harness_detections
+    from .mcp_discovery_client import configured_harness_detections
 
     skipped: list[str] = []
     detections = configured_harness_detections(

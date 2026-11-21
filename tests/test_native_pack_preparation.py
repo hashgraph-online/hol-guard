@@ -436,8 +436,8 @@ def test_missing_corrupt_and_related_metadata_admission(delivery, monkeypatch, t
 
 def test_prepared_dataclass_through_real_daemon_control_commit(delivery, tmp_path, monkeypatch):
     from codex_plugin_scanner.guard.catalog_delivery import activation_store, preparation_authority, projection
-    from codex_plugin_scanner.guard.daemon import extension_control_prepared as candidates
-    from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
+    from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
+    from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
     from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
     from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
     from tests.guard_extension_control_authority_fixtures import _PASSWORD
@@ -479,15 +479,15 @@ def test_prepared_dataclass_through_real_daemon_control_commit(delivery, tmp_pat
     # optional enable; rebinding to the core catalog changes the same revision.
     from types import SimpleNamespace
 
-    from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHTTPServer
+    from codex_plugin_scanner.guard.extension_control_host import ExtensionControlHost
 
-    refreshed = _GuardDaemonHTTPServer.refresh_extension_control_runtime(
+    refreshed = ExtensionControlHost.refresh(
         SimpleNamespace(
             store=store,
-            extension_control_runtime=service._runtime,
-            extension_control_api=service,
+            runtime=service._runtime,
+            api=service,
             _installed_authority_pending=False,
-            _extension_control_on_core_registry=False,
+            _on_core_registry=False,
         )
     )
     assert refreshed.revision == service._runtime.current().revision
@@ -499,13 +499,13 @@ def test_prepared_dataclass_through_real_daemon_control_commit(delivery, tmp_pat
     with monkeypatch.context() as patches:
         patches.setattr(projection, "capture", lambda store: before_capture)
         with pytest.raises(NativePolicySnapshotError, match="native_command_pack_projection_changed"):
-            _GuardDaemonHTTPServer.refresh_extension_control_runtime(
+            ExtensionControlHost.refresh(
                 SimpleNamespace(
                     store=store,
-                    extension_control_runtime=service._runtime,
-                    extension_control_api=service,
+                    runtime=service._runtime,
+                    api=service,
                     _installed_authority_pending=False,
-                    _extension_control_on_core_registry=False,
+                    _on_core_registry=False,
                 )
             )
     assert service._runtime.current() == refreshed

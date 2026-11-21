@@ -36,6 +36,7 @@ from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure
 from .native_supply_chain_archive import ArchiveFulfilment
 from .native_supply_chain_egress import EGRESS_REQUIRED_CODE, EgressExchanger, EgressProtocolError, private_spool_dir
+from .native_workspace_inventory import check_audit_deadline
 from .runtime.package_request_evaluation import _persist_evidence
 from .runtime.restricted_archive_contract import RestrictedArchiveDownload
 
@@ -165,6 +166,8 @@ def _record_unbound_answer(guard_home: Path) -> None:
 
 
 def _send_eval_request(request: dict[str, object], guard_home: Path) -> dict[str, Any]:
+    # One evaluation can take several rounds; an audit past its deadline sends none of them.
+    check_audit_deadline()
     try:
         request_sha256 = "sha256:" + _canonical_request_sha256(request)
     except (TypeError, ValueError) as error:
@@ -389,6 +392,7 @@ def unavailable_block_evaluation(artifact: GuardArtifact) -> Any:
             dashboard_url=None,
             harness_message=_UNAVAILABLE_MESSAGE,
         ),
+        review_settlement=("block", _UNAVAILABLE_MESSAGE),
     )
 
 
@@ -400,12 +404,15 @@ def evaluate_package_request_native(
     now: str | None = None,
     external_archive_network_authorized: bool = False,
     retain_external_archive_blob: bool = False,
+    record_evidence: bool = True,
 ) -> Any:
     """Evaluate one package request in the resident; fail closed when it cannot answer.
 
     With ``retain_external_archive_blob`` the evaluation carries the verified
     external-archive blobs the resident asked the caller to keep; the caller
-    removes them with ``download.cleanup()``.
+    removes them with ``download.cleanup()``. ``record_evidence=False`` is for a
+    background assessment: it reports findings, and an evidence row would show a
+    package nobody tried to install as a blocked request.
     """
 
     guard_home = getattr(store, "guard_home", None)
@@ -451,9 +458,13 @@ def evaluate_package_request_native(
         _cleanup(downloads)
         raise
     try:
+        evaluation = replace(
+            evaluation, review_settlement=_review_settlement(payload.get("review_settlement"), evaluation.decision)
+        )
         if downloads:
             evaluation = replace(evaluation, external_archive_downloads=tuple(downloads))
-        _persist_evidence(store=store, artifact=artifact, evaluation=evaluation, now=_now_text(now))
+        if record_evidence:
+            _persist_evidence(store=store, artifact=artifact, evaluation=evaluation, now=_now_text(now))
     except ValueError:
         # The recorder refuses a reply whose evidence ids do not cover the
         # packages it would record. That disagreement is about this
@@ -465,6 +476,18 @@ def evaluate_package_request_native(
         _cleanup(downloads)
         raise
     return evaluation
+
+
+def _review_settlement(value: object, decision: str) -> tuple[str, str | None]:
+    """The resident's settlement; anything unreadable leaves the verdict standing."""
+
+    if isinstance(value, dict) and isinstance(action := value.get("action"), str):
+        reason = value.get("reason")
+        if action in {"block", "guide"} and isinstance(reason, str) and reason:
+            return (action, reason)
+        if action in {"allow", "review"} and "reason" in value and reason is None:
+            return (action, None)
+    return ("block", "HOL Guard blocked this package install.") if decision == "block" else ("review", None)
 
 
 def _cleanup(downloads: list[RestrictedArchiveDownload]) -> None:

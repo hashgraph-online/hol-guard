@@ -11,6 +11,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::risk_action_config::RiskActionConfigV1;
+
 /// Schema discriminator for the request.
 pub const PACKAGE_AUTHORITY_REQUEST_SCHEMA: &str = "guard-package-authority-request.v1";
 /// Schema discriminator for the result.
@@ -468,9 +470,22 @@ pub struct PackageApprovalHashRequestV1 {
     /// `exception_id`, `matched_rule_id`, `packages`, `policy_version`,
     /// `reasons`.
     pub evaluation: Value,
-    /// Hydrated `GuardConfig` policy view (`{"available": false}` when no
-    /// config is bound).
+    /// The policy view already hydrated, for a caller that holds no
+    /// configuration to hydrate it from: `{"available": false}` when none is
+    /// bound, and the natively built view on the relay path. A caller that
+    /// holds the configuration sends `config_facts` instead and this is absent.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
     pub config_policy: Value,
+    /// The configuration fields the policy view is hydrated from, as they were
+    /// loaded: `mode`, `security_level`, `protection_posture`,
+    /// `protection_posture_explicit`, `managed_locked_settings`,
+    /// `managed_policy_status`, `managed_policy_hash`, `risk_actions`,
+    /// `harness_risk_actions`, `harness_postures`, and the `artifact_actions`,
+    /// `publisher_actions` and `harness_actions` override maps. The resident
+    /// resolves `package_script` and the override from them, so no caller
+    /// sends a resolved action.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_facts: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub additional_current_action: Option<Value>,
     /// `artifact_hash` only: the signed-store path the cached advisory feed is
@@ -546,9 +561,9 @@ pub struct PackagePolicyResolveRequestV1 {
 // ---------------------------------------------------------------------------
 // PackagePosture — resident op owning the local supply-chain posture: the
 // status, health, bundle and policy projection `local_supply_chain.py` used to
-// derive in Python. The caller hydrates the store payloads, the bound
-// configuration actions and the package-manager shim status; the runtime
-// decides every derived field.
+// derive in Python. The caller hydrates the store payloads, the configuration
+// the risk actions are resolved from and the package-manager shim status; the
+// runtime decides every derived field.
 // ---------------------------------------------------------------------------
 
 /// Capability advertised when the supply-chain posture op exists.
@@ -576,11 +591,11 @@ pub struct PackagePostureRequestV1 {
     /// The cached signed bundle body (empty object when unset).
     pub bundle_payload: Value,
     pub security_level: String,
-    /// Configured `cloud_advisory` / `package_script` risk actions.
+    /// The configuration the `cloud_advisory` and `package_script` actions
+    /// reported in the posture are resolved from. The caller sends the fields
+    /// rather than the two actions, so the resident resolves them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub config_cloud_advisory_action: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub config_package_script_action: Option<String>,
+    pub risk_action_config: Option<RiskActionConfigV1>,
     /// Package-manager shim status; carried through unchanged.
     pub package_manager_protection: Value,
 }

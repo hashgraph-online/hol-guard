@@ -49,6 +49,11 @@ pub struct HolLinks {
 /// Where the README block sends readers to learn what Guard does.
 const INSTALL_DOCS: &str = "https://hol.org/guard/docs/plugin-scanner/install-with-hol-guard";
 
+/// The Skills CLI release the printed `npx` commands pin, so a reader runs
+/// the version HOL tested rather than whatever npm serves that day. Keep it
+/// equal to the portal's `SKILLS_CLI_VERSION`.
+const SKILLS_CLI: &str = "skills@1.7.4";
+
 /// `block` asks for the README install block; `slug` is the HOL listing it
 /// names (default: the repository).
 pub fn links(detection: &Detection, block: bool, slug: Option<&str>) -> Result<Links, String> {
@@ -104,12 +109,14 @@ fn install_block(slug: &str, install: &[Install]) -> Option<String> {
     );
     Some(
         [
-            format!("<!-- hol-install-block:v1 slug={slug} -->"),
+            format!("<!-- hol-install-block:v2 slug={slug} -->"),
             format!("Install with [HOL Guard]({INSTALL_DOCS}), which checks the [HOL listing]({listing}) and asks before each runtime:"),
             String::new(),
             "```sh".to_owned(),
             format!("hol-guard plugin install {slug} --apply"),
             "```".to_owned(),
+            String::new(),
+            "Get HOL Guard with `pipx install hol-guard` or `uv tool install hol-guard`.".to_owned(),
             String::new(),
             "<details>".to_owned(),
             "<summary>Install with each runtime's own CLI</summary>".to_owned(),
@@ -181,8 +188,8 @@ fn base_links(detection: &Detection) -> Links {
         {
             install.push(Install {
                 runtime: Runtime::AgentSkills,
-                commands: vec![format!("npx skills add {repository}")],
-                verify: Some("npx skills list".to_owned()),
+                commands: vec![format!("npx {SKILLS_CLI} add {repository}")],
+                verify: Some(format!("npx {SKILLS_CLI} list")),
             });
         }
     }

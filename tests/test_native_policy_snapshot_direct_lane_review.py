@@ -2,20 +2,12 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard import native_policy_snapshot_direct_lane_review as review
-from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_review import (
-    DIRECT_HOOK_REVIEW_FACTS_FEATURE,
-    uniform_blocked_request_mode,
-    with_review_facts,
-)
+from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_review import with_review_facts
 from codex_plugin_scanner.guard.native_policy_snapshot_publication import NativePolicySnapshotPublicationMixin
-
-FEATURES = (DIRECT_HOOK_REVIEW_FACTS_FEATURE,)
-
 
 LISTENING = {"daemon_host": "127.0.0.1", "daemon_port": 4781}
 
@@ -35,16 +27,13 @@ def _cwd(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _bound(store: object, mode: str | None = "ask") -> dict[str, object]:
-    bound = with_review_facts({"generation": 1}, store=store, features=FEATURES, blocked_request_mode=mode)
+    bound = with_review_facts({"generation": 1}, store=store, blocked_request_mode=mode)
     assert bound is not None
     return bound
 
 
-def test_facts_bind_only_for_a_resident_that_accepts_them() -> None:
-    assert with_review_facts({"generation": 1}, store=_Store(), features=(), blocked_request_mode="ask") == {
-        "generation": 1
-    }
-    assert with_review_facts(None, store=_Store(), features=FEATURES, blocked_request_mode="ask") is None
+def test_facts_bind_to_the_binding() -> None:
+    assert with_review_facts(None, store=_Store(), blocked_request_mode="ask") is None
     assert _bound(_Store()) == {
         "generation": 1,
         "blocked_request_mode": "ask",
@@ -90,23 +79,12 @@ def test_a_fact_the_resident_cannot_accept_is_left_out(monkeypatch: pytest.Monke
     assert "review_host_cwd" not in _bound(_Store())
 
 
-def test_the_mode_binds_only_when_every_compiled_config_agrees() -> None:
-    def config(mode: object) -> object:
-        return SimpleNamespace(blocked_request_mode=mode)
-
-    assert uniform_blocked_request_mode([config("ask"), config("ask")]) == "ask"
-    assert uniform_blocked_request_mode([config("safe-alternative")]) == "safe-alternative"
-    assert uniform_blocked_request_mode([config("ask"), config("safe-alternative")]) is None
-    assert uniform_blocked_request_mode([config("prompt")]) is None
-    assert uniform_blocked_request_mode([]) is None
-
-
 class _Publisher(NativePolicySnapshotPublicationMixin):
     def __init__(self, store: _Store) -> None:
         self.store = store
         self._condition = threading.Condition()
         self._publish_event = threading.Event()
-        self._closed = False
+        self._close_event = threading.Event()
         self._acked = True
         self._snapshot = {"generation": 7}
         self._direct_lane_ack_target: tuple[int, str] | None = (7, "digest")

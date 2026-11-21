@@ -11,11 +11,11 @@ import pytest
 
 from codex_plugin_scanner.guard import evaluation_cli_run as cli_run
 from codex_plugin_scanner.guard import evaluation_runner as runner
-from codex_plugin_scanner.guard.adapters.hook_python_subprocess import ProbeResult
 from codex_plugin_scanner.guard.evaluation_cli import main
 from codex_plugin_scanner.guard.evaluation_contracts import EvaluationContractError, EvaluationProfile
 from codex_plugin_scanner.guard.evaluation_preflight import EvaluationSetup, setup_evaluation
 from codex_plugin_scanner.guard.evaluation_witness import FileWitnessPair
+from codex_plugin_scanner.guard.probe_subprocess import ProbeResult
 
 from .evaluation_cli_fixtures import _profile
 

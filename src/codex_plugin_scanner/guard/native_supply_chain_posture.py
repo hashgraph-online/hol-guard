@@ -3,7 +3,8 @@
 The resident owns the local supply-chain posture: the status, the health, the
 refresh schedule, the bundle and the cloud-managed policy projection. This
 module only hydrates the facts the resident cannot read (the sync payloads, the
-configured risk actions and the package-manager shim status), transports one
+configuration the reported risk actions are resolved from and the
+package-manager shim status), transports one
 request and strictly validates the reply. A missing, mismatched or malformed
 answer raises :class:`NativePackagePostureError`; there is no Python fallback.
 """
@@ -13,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .config import GuardConfig, resolve_risk_action
+from .config import GuardConfig, risk_action_config_facts
 from .native_context import _resolve_digest_home
 from .native_package_approval_hash import _transport
 
@@ -69,12 +70,13 @@ def _hydrate(store: Any, config: GuardConfig, *, now: str | None) -> dict[str, o
         "remote_policy": _dict_payload(synced_policy_payload(store)),
         "bundle_payload": _bundle_projection(cached_bundle.get("bundle")) if isinstance(cached_bundle, dict) else {},
         "security_level": config.security_level,
+        # The configuration itself, not the two actions it resolves to: the
+        # resident owns every verdict it reports.
+        "risk_action_config": risk_action_config_facts(config),
     }
     for key, value in (
         ("now", now),
         ("workspace_id", workspace_id),
-        ("config_cloud_advisory_action", resolve_risk_action(config, "cloud_advisory", harness=None)),
-        ("config_package_script_action", resolve_risk_action(config, "package_script", harness=None)),
     ):
         if value is not None:
             request[key] = value

@@ -130,7 +130,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     env = acceptance_environment(root, target, compiler)
     build_command = [
         "cargo",
-        "+1.88.0",
+        "+1.89.0",
         "build",
         "--locked",
         "--manifest-path",

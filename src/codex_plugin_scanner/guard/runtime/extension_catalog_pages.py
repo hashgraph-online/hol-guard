@@ -36,6 +36,10 @@ def native_call(home: Path, **request: object) -> dict[str, Any]:
         raise ExtensionCatalogUnavailableError("Native complete catalog producer unavailable")
     if reply.get("error") == "catalog_limit":
         raise ExtensionCatalogLimitError("Complete catalog exceeds native wire limits")
+    if reply.get("error") == "catalog_unavailable":
+        # A view evicted by a concurrent publish, or a lost draft or lease, is
+        # absence, not malformed metadata; callers downgrade instead of failing.
+        raise ExtensionCatalogUnavailableError("Native complete catalog view unavailable")
     payload = reply.get("payload")
     if not isinstance(payload, dict) or "error" in reply:
         raise ValueError("Native complete catalog producer rejected metadata")

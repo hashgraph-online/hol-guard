@@ -41,7 +41,9 @@ pub(super) fn process_is_running(process: &OwnedHandle) -> io::Result<bool> {
     }
 }
 
-pub(super) fn process_start_marker_for_handle(process: &OwnedHandle) -> io::Result<String> {
+/// The kernel creation time of the process behind `process`, as one
+/// `FILETIME` value.
+pub(super) fn process_creation_filetime(process: &OwnedHandle) -> io::Result<u64> {
     let mut creation = winapi::shared::minwindef::FILETIME {
         dwLowDateTime: 0,
         dwHighDateTime: 0,
@@ -72,7 +74,11 @@ pub(super) fn process_start_marker_for_handle(process: &OwnedHandle) -> io::Resu
     {
         return Err(io::Error::last_os_error());
     }
-    let value = (u64::from(creation.dwHighDateTime) << 32) | u64::from(creation.dwLowDateTime);
+    Ok((u64::from(creation.dwHighDateTime) << 32) | u64::from(creation.dwLowDateTime))
+}
+
+pub(super) fn process_start_marker_for_handle(process: &OwnedHandle) -> io::Result<String> {
+    let value = process_creation_filetime(process)?;
     Ok(format!("windows:{value:016x}"))
 }
 

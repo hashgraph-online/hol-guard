@@ -62,6 +62,7 @@ def test_event_upload_refreshes_oauth_once_without_requeueing(tmp_path: Path, mo
     assert refreshes == [True]
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_command_lease_refreshes_oauth_once_and_uses_new_token_for_job(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -121,25 +122,32 @@ def test_restart_after_lease_before_application_releases_exact_request_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store, job = exact_job_store(tmp_path, request_id="crash-after-lease")
-    first_ack = True
+    settle = command_queue._settle_authorized_job
+    first_settle = True
 
-    def crash_after_lease(
+    def lease(
         _auth: dict[str, object],
         *,
         method: str,
         path: str,
         payload: dict[str, object],
     ) -> dict[str, object]:
-        nonlocal first_ack
         del method, payload
         if path == "/lease":
             return {"item": job, "protocolVersion": 2}
-        if first_ack:
-            first_ack = False
-            raise SystemExit("simulated daemon crash after lease")
         return {"ok": True}
 
-    monkeypatch.setattr(command_queue, "_exact_json_request", crash_after_lease)
+    def crash_before_application(*args: object) -> dict[str, object]:
+        # The acknowledgement is in flight beside settlement, so the daemon
+        # can die after the lease and before the job is applied.
+        nonlocal first_settle
+        if first_settle:
+            first_settle = False
+            raise SystemExit("simulated daemon crash after lease")
+        return settle(*args)
+
+    monkeypatch.setattr(command_queue, "_exact_json_request", lease)
+    monkeypatch.setattr(command_queue, "_settle_authorized_job", crash_before_application)
     monkeypatch.setattr(
         command_queue,
         "_resolve_command_queue_auth_context",

@@ -10,6 +10,7 @@
 use std::path::Path;
 use std::time::Instant;
 
+pub mod content_coding;
 mod framing_guard;
 mod manifest;
 mod member_paths;

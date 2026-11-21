@@ -22,7 +22,7 @@ fn parses_simple_command_without_execution() {
 
 #[cfg(unix)]
 #[test]
-fn parses_only_literal_stderr_null_sink_without_changing_quoted_arguments() {
+fn parses_only_literal_null_device_sinks_without_changing_quoted_arguments() {
     let parsed = parse_command(&request("ls -la src 2>/dev/null; echo done")).unwrap();
     assert_eq!(parsed.confidence, "exact");
     assert_eq!(parsed.segments[0].arguments, ["-la", "src"]);
@@ -33,13 +33,65 @@ fn parses_only_literal_stderr_null_sink_without_changing_quoted_arguments() {
         "ls 2>/dev/null.env",
         "ls 2>/dev/null/other",
         "ls 12>/dev/null",
-        "ls 2>>/dev/null",
-        "ls >/dev/null",
         "ls 2> .env",
         "ls src2>/dev/null",
         "cat foo\\ 2>/dev/null",
         "cat foo\\\n2>/dev/null",
         "cat foo\\ 2>&1",
+    ] {
+        assert_ne!(
+            parse_command(&request(command)).unwrap().confidence,
+            "exact",
+            "{command}"
+        );
+    }
+}
+
+/// A redirect whose target is the null device writes nowhere, so the command
+/// beside it is the command the agent asked for. Reading only `2>/dev/null`
+/// left `ls -la src > /dev/null` unparsed, and the read it names reviewed.
+#[cfg(unix)]
+#[test]
+fn a_redirect_to_the_null_device_leaves_the_command_it_follows() {
+    for command in [
+        "ls -la src >/dev/null",
+        "ls -la src > /dev/null",
+        "ls -la src 1>/dev/null",
+        "ls -la src 1> /dev/null",
+        "ls -la src &>/dev/null",
+        "ls -la src >>/dev/null",
+        "ls -la src 2>>/dev/null",
+        "ls -la src 2> /dev/null",
+    ] {
+        let parsed = parse_command(&request(command)).unwrap();
+        assert_eq!(parsed.confidence, "exact", "{command}");
+        assert_eq!(parsed.segments.len(), 1, "{command}");
+        assert_eq!(
+            parsed.segments[0].executable.as_deref(),
+            Some("ls"),
+            "{command}"
+        );
+        assert_eq!(parsed.segments[0].arguments, ["-la", "src"], "{command}");
+        assert_eq!(parsed.segments[0].text, command, "{command}");
+    }
+    // `2>&1` merges rather than redirects, so it stays the operand the
+    // argument pass already reads it as.
+    for command in ["ls -la src >/dev/null 2>&1", "ls -la src > /dev/null 2>&1"] {
+        let parsed = parse_command(&request(command)).unwrap();
+        assert_eq!(parsed.confidence, "exact", "{command}");
+        assert_eq!(
+            parsed.segments[0].arguments,
+            ["-la", "src", "2>&1"],
+            "{command}"
+        );
+    }
+    // A target that only reads like the null device still writes a file.
+    for command in [
+        "ls -la src > /dev/nullx",
+        "ls -la src > out.log",
+        "ls -la src >> notes.md",
+        "ls -la src 1> out.log",
+        "ls -la src &> out.log",
     ] {
         assert_ne!(
             parse_command(&request(command)).unwrap().confidence,
@@ -246,4 +298,27 @@ fn rejects_oversized_commands_without_partial_exact_parse() {
         Some("command_byte_limit_exceeded")
     );
     assert!(parsed.segments.is_empty());
+}
+
+#[test]
+fn the_compile_check_shortcut_reads_a_route_group_but_not_a_subshell() {
+    let route_group = parse_command(&request(
+        "cd 'app/(group)' && find src -name '*.py' -exec python -m py_compile {} +",
+    ))
+    .unwrap();
+    assert_eq!(
+        route_group.confidence, "exact",
+        "{:?}",
+        route_group.uncertainty_reason
+    );
+    assert_eq!(route_group.segments.len(), 2);
+    assert_eq!(route_group.segments[0].arguments, ["app/(group)"]);
+
+    // The same text without quotes is a subshell, whatever follows it.
+    let subshell = parse_command(&request(
+        "cd app/(group) && find src -name '*.py' -exec python -m py_compile {} +",
+    ))
+    .unwrap();
+    assert_eq!(subshell.confidence, "uncertain");
+    assert!(subshell.segments.is_empty());
 }

@@ -131,6 +131,7 @@ def _finding(item: object) -> dict[str, object] | None:
         or not _is_count(occurrences)
         or not isinstance(fingerprint, str)
         or not _FINGERPRINT.fullmatch(fingerprint)
+        or not isinstance(severity, str)
         or severity not in _SEVERITIES
     ):
         return None

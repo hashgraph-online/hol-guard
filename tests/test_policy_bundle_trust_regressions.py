@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 from typing import cast
 
@@ -13,7 +14,6 @@ from codex_plugin_scanner.guard.policy_bundle_decisions import build_policy_bund
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     policy_bundle_acceptance_checkpoint,
     policy_bundle_rejection_message,
-    validated_policy_bundle_payload,
 )
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     POLICY_BUNDLE_KEY_PURPOSE,
@@ -30,11 +30,18 @@ from codex_plugin_scanner.guard.runtime.supply_chain_bundle import (
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.synced_policy import synced_policy_bundle_validation
 from tests.guard_review_signing_helpers import review_verification_keys
+from tests.policy_bundle_parser_support import validated_policy_bundle_payload
 from tests.policy_bundle_signing_helpers import (
     TEST_POLICY_BUNDLE_WORKSPACE_ID,
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
     sign_policy_bundle,
+)
+from tests.policy_store_support import replace_remote_policies, resolve_policy
+
+_NEEDS_RESIDENT = pytest.mark.skipif(
+    os.environ.get("HOL_GUARD_NATIVE_REGRESSION") != "1",
+    reason="the rejection text comes from the native resident",
 )
 
 
@@ -452,7 +459,8 @@ def test_cached_bundle_older_than_acceptance_checkpoint_is_not_authority(
         policy_bundle_acceptance_checkpoint(newer),
         _SYNCED_AT,
     )
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         build_policy_bundle_decisions(
             older,
             device_id=store.get_device_metadata()["installation_id"],
@@ -467,7 +475,8 @@ def test_cached_bundle_older_than_acceptance_checkpoint_is_not_authority(
     assert validated is None
     assert reason == "bundle_version_downgrade"
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:captured-old-allow",
             "sha256:captured-old-allow",
@@ -612,6 +621,7 @@ def test_invalid_explicit_matcher_families_cannot_fall_back_to_broad_family(
     assert build_policy_bundle_decisions(signed_bundle, device_id="device-1", device_name="Device") == []
 
 
+@_NEEDS_RESIDENT
 def test_inactive_rollout_rejection_has_actionable_remediation() -> None:
     assert policy_bundle_rejection_message("inactive_rollout_state") == (
         "The authenticated policy bundle is not active for local enforcement. "

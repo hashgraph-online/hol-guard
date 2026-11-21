@@ -8,55 +8,33 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import client, live_identity
+from codex_plugin_scanner.guard import native_daemon_client as client
 
 
-@pytest.mark.security_critical
-@pytest.mark.parametrize(
-    "status,body,expected",
-    [
-        (200, b'{"ok":true}', {"ok": True}),
-        (302, b'{"ok":true}', None),
-        (500, b'{"ok":true}', None),
-        (200, b"[]", None),
-        (200, b"not-json", None),
-        (200, b"\xff", None),
-        (200, b" " * 65_537, None),
-    ],
-)
-def test_health_probe_is_bounded_proxy_free_and_does_not_follow_redirects(
-    monkeypatch: pytest.MonkeyPatch, status: int, body: bytes, expected: object
-) -> None:
-    """Use a real loopback server to verify token delivery and refusal of unsafe responses."""
-    requests: list[tuple[str, str | None]] = []
+def _authenticated_state(guard_home) -> dict[str, object]:
+    return {
+        "package_version": "3.0.181",
+        "host": "127.0.0.1",
+        "port": 24781,
+        "pid": 321,
+        "compatibility_version": 2,
+        "runtime_fingerprint": "runtime-generation-1",
+        "generation": "daemon-generation-1",
+        "user": "uid:501",
+        "start_marker": "process-start-1",
+        "guard_home": str(guard_home),
+    }
 
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
-            """Return the selected response and record any attempted redirect follow-up."""
-            requests.append((self.path, self.headers.get("X-Guard-Token")))
-            self.send_response(status)
-            self.send_header("Location", "/redirected")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
 
-        def log_message(self, message_format: str, *args: object) -> None:
-            """Keep the test server's expected error statuses out of console output."""
-
-    for key in ("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
-        monkeypatch.setenv(key, "http://127.0.0.1:1")
-    monkeypatch.setenv("NO_PROXY", "")
-    monkeypatch.setenv("no_proxy", "")
-    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
-        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
-        thread.start()
-        try:
-            url = f"http://127.0.0.1:{server.server_port}"
-            assert live_identity._proxy_disabled_health_details(url, "test-token") == expected
-            assert requests == [("/v1/healthz/details", "test-token")]
-        finally:
-            server.shutdown()
-            thread.join(timeout=2)
+def _health_details(state: dict[str, object]) -> dict[str, object]:
+    return {
+        "ok": True,
+        "guard_home": state["guard_home"],
+        "package_version": state["package_version"],
+        "compatibility_version": state["compatibility_version"],
+        "runtime_fingerprint": state["runtime_fingerprint"],
+        "pid": state["pid"],
+    }
 
 
 @pytest.mark.security_critical
@@ -74,14 +52,12 @@ def test_health_probe_is_bounded_proxy_free_and_does_not_follow_redirects(
         "http://[::1]:1234#fragment",
     ],
 )
-def test_health_probe_rejects_invalid_authorities_before_connecting(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
-    """Malformed and non-loopback URLs must not open a socket with the daemon token."""
+def test_health_probe_rejects_invalid_authorities_before_connecting(url: str) -> None:
+    """Malformed and non-loopback URLs must not open a socket with the daemon key.
 
-    def unexpected_connection(*args: object, **kwargs: object) -> None:
-        """Fail immediately if URL validation allows a network connection."""
-        pytest.fail("Invalid daemon authority reached the network transport")
+    The native client refuses them before connecting (`only_loopback_daemon_urls_are_reached`).
+    """
 
-    monkeypatch.setattr(client, "HTTPConnection", unexpected_connection)
     assert client.read_guard_health_details(url, "test-token") is None
 
 
@@ -137,7 +113,7 @@ def test_health_probe_invalid_or_expired_operation_deadline_never_connects(monke
     def unexpected_connection(*args, **kwargs):
         pytest.fail("expired or invalid operation opened a connection")
 
-    monkeypatch.setattr(client, "HTTPConnection", unexpected_connection)
+    monkeypatch.setattr(client, "_exchange", unexpected_connection)
     assert (
         client.read_guard_health_details(
             "http://127.0.0.1:1234",
@@ -146,66 +122,3 @@ def test_health_probe_invalid_or_expired_operation_deadline_never_connects(monke
         )
         is None
     )
-
-
-@pytest.mark.parametrize(
-    "fault",
-    [None, "version", "fingerprint", "path", "source", "superseded", "expiry", "reread_expiry"],
-)
-def test_exact_live_identity_requires_planned_executable_generation_through_admission(tmp_path, monkeypatch, fault):
-    executable = tmp_path / "core-generation" / "hol-guard"
-    binding = live_identity.DaemonArtifactBinding(executable, "a" * 64, "3.13.1")
-    state = {
-        "package_version": binding.package_version,
-        "executable": str(executable),
-        "source_root": str(executable),
-        "runtime_fingerprint": binding.executable_sha256,
-        "pid": 123,
-        "host": "127.0.0.1",
-        "port": 4321,
-        "state_id": "first-state",
-        "compatibility_version": live_identity.GUARD_DAEMON_COMPATIBILITY_VERSION,
-    }
-    if fault in {"version", "fingerprint", "path", "source"}:
-        field, value = {
-            "version": ("package_version", "4.0.0"),
-            "fingerprint": ("runtime_fingerprint", "b" * 64),
-            "path": ("executable", str(tmp_path / "foreign-core")),
-            "source": ("source_root", str(tmp_path / "foreign-source")),
-        }[fault]
-        state[field] = value
-    current = dict(state)
-    calls = []
-    deadline = time.monotonic() + 5
-    state_reads = []
-
-    def read_state(_home):
-        state_reads.append(True)
-        if fault == "reread_expiry" and len(state_reads) == 2:
-            monkeypatch.setattr(live_identity.time, "monotonic", lambda: deadline + 1)
-        return dict(current)
-
-    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", read_state)
-    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "fixture-token")
-
-    def health(url, token, *, deadline_monotonic):
-        calls.append((url, token, deadline_monotonic))
-        if fault == "superseded":
-            current["state_id"] = "replacement-state"
-        if fault == "expiry":
-            monkeypatch.setattr(live_identity.time, "monotonic", lambda: deadline + 1)
-        return {**state, "ok": True, "guard_home": str(tmp_path)}
-
-    monkeypatch.setattr(live_identity, "_proxy_disabled_health_details", health)
-    result = live_identity.verified_live_guard_daemon_identity(
-        tmp_path,
-        expected_artifact=binding,
-        deadline_monotonic=deadline,
-    )
-    if fault is None:
-        assert result is not None and binding.matches(result)
-    else:
-        assert result is None
-    assert len(calls) == (0 if fault in {"version", "fingerprint", "path", "source"} else 1)
-    if calls:
-        assert calls[0][2] == deadline

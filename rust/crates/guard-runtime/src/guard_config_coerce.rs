@@ -72,6 +72,14 @@ pub(crate) fn update_channel(value: Option<&Value>) -> &'static str {
     }
 }
 
+pub(crate) fn update_mode(value: Option<&Value>) -> &'static str {
+    match string_in(value, &["automatic", "ask", "off"]) {
+        Some("ask") => "ask",
+        Some("off") => "off",
+        _ => "automatic",
+    }
+}
+
 pub(crate) fn sandbox_analysis(value: Option<&Value>) -> &'static str {
     match string_in(value, &["off", "suspicious", "strict"]) {
         Some("suspicious") => "suspicious",

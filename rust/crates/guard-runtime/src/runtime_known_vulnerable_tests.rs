@@ -85,6 +85,11 @@ fn a_known_affected_build_is_held_for_review_with_both_choices() {
     let raised = raise(result("allow"), &found, "require-reapproval", false);
     validate_pre_tool_result_matrix(&raised).unwrap();
     assert_eq!(raised.minimum_action, "require-reapproval");
+    // Both floors stay at a review action, so the exact-action token is
+    // issued and the prompt offers Allow once and Always allow
+    // (`a_known_vulnerable_runtime_approval_survives_a_feed_update`).
+    assert_eq!(raised.policy_action, "require-reapproval");
+    assert_eq!(raised.decision, "deny");
     assert_eq!(raised.reason_code, FINDING);
     assert!(is_review_finding(&raised.reason_code));
     assert!(!raised.explicitly_benign);
@@ -150,6 +155,39 @@ fn watch_records_the_would_be_review_and_lets_the_launch_run() {
     let warned = raise(result("allow"), &found, "warn", false);
     assert_eq!(warned.minimum_action, "warn");
     assert!(!warned.reason.contains("would have"));
+}
+
+#[test]
+fn watch_records_a_would_be_block_over_an_earlier_warning() {
+    let found = finding("22.1.0", json!([rule("CVE-1", "critical", "22.5.0")])).unwrap();
+    let observed = raise(result("warn"), &found, "block", true);
+    validate_pre_tool_result_matrix(&observed).unwrap();
+    assert_eq!(observed.minimum_action, "warn");
+    assert_eq!(observed.decision, "allow");
+    assert_eq!(observed.reason_code, OBSERVED);
+    assert!(observed.reason.contains("would have required block"));
+    assert!(
+        observed.reason.ends_with("Also: native test"),
+        "{}",
+        observed.reason
+    );
+    let kept = raise(result("warn"), &found, "warn", true);
+    assert_eq!(kept.reason_code, "native_test");
+}
+
+#[test]
+fn watch_records_the_finding_behind_a_stronger_intrinsic_review() {
+    let found = finding("22.1.0", json!([rule("CVE-1", "critical", "22.5.0")])).unwrap();
+    let observed = raise(result("review"), &found, "block", true);
+    validate_pre_tool_result_matrix(&observed).unwrap();
+    assert_eq!(observed.minimum_action, "review");
+    assert_eq!(observed.reason_code, "native_test");
+    assert!(observed.reason.contains("would have required block"));
+    assert!(observed.reason.ends_with("Also: native test"));
+    let quiet = raise(result("review"), &found, "warn", true);
+    assert_eq!(quiet.reason, "native test");
+    let enforced = raise(result("require-reapproval"), &found, "review", false);
+    assert_eq!(enforced.reason, "native test");
 }
 
 #[test]
@@ -242,6 +280,91 @@ fn launches_resolve_the_way_the_shell_would() {
     // A relative PATH entry is looked up from the working directory.
     assert_eq!(launches_on("node a.js", "tools"), tools);
     assert!(launches("npm test && python3 -V && echo node").is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_version_probe_is_not_a_launch_the_advisories_reach() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let bin = root.path().join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    // A compiled build, not a script.
+    std::fs::write(bin.join("node"), b"\x7fELF\x02\x01\x01\0").unwrap();
+    std::fs::set_permissions(bin.join("node"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    executable(&root.path().join("node"));
+    let search = bin.to_string_lossy().into_owned();
+    let launches =
+        |command: &str| runtime_launches(command, Some(root.path()), root.path(), Some(&search));
+    for command in [
+        "node --version",
+        "node -v",
+        "node --version 2>/dev/null",
+        "exec node -v",
+        "exec -a app -- node --version",
+        "command -v bun node pnpm npm; node --version; bun --version 2>/dev/null",
+    ] {
+        assert!(launches(command).is_empty(), "{command}");
+    }
+    for command in [
+        "node --version a.js",
+        "node -v -e 'run()'",
+        "node -e 'run()'",
+        "NODE_OPTIONS=--require=./x.js node --version",
+        "env NODE_OPTIONS=--require=./x.js node --version",
+        "env node --version",
+        "nice node -v",
+        // A script named node runs its own text, whatever the flag.
+        "./node --version",
+        "node --version && node a.js",
+        "exec node a.js",
+    ] {
+        assert_eq!(launches(command).len(), 1, "{command}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn only_a_compiled_build_answers_the_version_flag_itself() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let launches = |name: &str| {
+        let path = root.path().join(name).join("node");
+        runtime_launches(
+            &format!("{} --version", path.display()),
+            Some(root.path()),
+            root.path(),
+            None,
+        )
+        .len()
+    };
+    for (name, head) in [
+        ("mach", &b"\xcf\xfa\xed\xfe\x07\0"[..]),
+        ("pe", &b"MZ\x90\0"[..]),
+        ("text", &b"exec /opt/node/bin/node app.js\n"[..]),
+        ("short", &b"\x7f"[..]),
+    ] {
+        let dir = root.path().join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("node"), head).unwrap();
+        std::fs::set_permissions(dir.join("node"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    assert_eq!(launches("mach"), 0);
+    assert_eq!(launches("pe"), 0);
+    // Text without `#!` still runs through the shell, and a cut-off file
+    // proves nothing.
+    assert_eq!(launches("text"), 1);
+    assert_eq!(launches("short"), 1);
+    // A FIFO is never opened, so the check cannot hang on it.
+    let fifo = root.path().join("fifo");
+    std::fs::create_dir_all(&fifo).unwrap();
+    let status = std::process::Command::new("mkfifo")
+        .arg(fifo.join("node"))
+        .status()
+        .unwrap();
+    assert!(status.success());
+    std::fs::set_permissions(fifo.join("node"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(launches("fifo"), 1);
 }
 
 #[test]

@@ -10,6 +10,12 @@ pub(super) fn post_action_type(
     if payload_kind == GuardHookPayloadKindV2::SourceFileRef {
         return Ok(PreToolActionTypeV1::FileRead);
     }
+    // Grok's dispatcher input names the MCP tool it ran, so the nested names
+    // describe that tool rather than a second selector for the call.
+    let harness = super::normalized_harness(&request.harness);
+    if super::super::policy_enforcement_mcp_provider::grok_dispatch(&request.payload, &harness)? {
+        return Ok(PreToolActionTypeV1::McpTool);
+    }
     let mut maps = Vec::new();
     let mut nodes = 0usize;
     collect_fact_maps(&request.payload, 0, &mut nodes, &mut maps)?;

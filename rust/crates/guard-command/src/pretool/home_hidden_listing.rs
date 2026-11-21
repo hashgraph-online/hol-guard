@@ -46,6 +46,60 @@ pub(in crate::pretool) fn home_hidden_directory(
         && super::super::resolved_location_allowed(&canonical, home_dir, cwd, false)
 }
 
+/// How many entries a size summary may stat before its proof gives up. A
+/// tool cache worth summarizing in a hook budget holds far fewer; a larger
+/// tree keeps its review rather than stall the decision.
+const MAX_SUMMARY_ENTRIES: usize = 4_096;
+
+/// Whether a size summary of `value` (`du -sh ~/.cache/pip`) prints nothing
+/// but the names [`home_hidden_directory`] already lets a listing print.
+///
+/// `du -s` and `du -d 1` still walk the whole tree to add it up. A walk that
+/// succeeds prints no name below the operand's own entries, but a directory it
+/// cannot read or enter makes it print that directory's full path as an error,
+/// and that path can name a nested hidden or private entry no listing shows.
+/// So every directory below the operand is opened here the way `du` opens it,
+/// through its own `.` entry, which needs both read and search permission, and
+/// every entry is looked up without following links. Any failure, or a tree
+/// larger than [`MAX_SUMMARY_ENTRIES`], keeps the review.
+pub(in crate::pretool) fn home_hidden_size_summary(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    if !home_hidden_directory(value, home_dir, cwd) {
+        return false;
+    }
+    let Some((canonical, _)) = resolved_home_entry(value, home_dir, cwd) else {
+        return false;
+    };
+    let mut pending = vec![canonical];
+    let mut inspected = 0_usize;
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(directory.join(".")) else {
+            return false;
+        };
+        for entry in entries {
+            inspected += 1;
+            if inspected > MAX_SUMMARY_ENTRIES {
+                return false;
+            }
+            let Ok(entry) = entry else {
+                return false;
+            };
+            // `symlink_metadata` never follows a link, as `du` without `-L`
+            // does not; a link is counted by its own size and not entered.
+            let Ok(meta) = std::fs::symlink_metadata(entry.path()) else {
+                return false;
+            };
+            if meta.file_type().is_dir() {
+                pending.push(entry.path());
+            }
+        }
+    }
+    true
+}
+
 /// The canonical path of `value` and its path relative to the home directory,
 /// for a spelling that names an entry of the home directory and nothing else.
 ///
@@ -116,6 +170,65 @@ pub(in crate::pretool) fn home_hidden_tool_directory(
     }
 }
 
+/// Whether `expanded` spells a path below a hidden tool directory of the home
+/// directory that does not exist.
+///
+/// A name that is not there prints `No such file or directory` and nothing
+/// else, so what a probe may spell is what a listing of the same path would
+/// be allowed to print if it existed. The screens are
+/// [`home_hidden_tool_directory`]'s, minus the ones that read a directory
+/// that is not there: one hidden component directly below home, nothing
+/// hidden deeper, the credential-store screen over the whole relative path,
+/// and the shared roots (`~/.config`, `~/.local/share`) named only together
+/// with the tool directory below them.
+///
+/// `ancestor` is the deepest part of the path that does exist. It is resolved
+/// and compared with its own spelling, so a link in the existing prefix
+/// cannot dress `~/.aws` as `~/.config`, and the answer to the probe cannot
+/// report on a store the spelling never named.
+pub(in crate::pretool) fn absent_home_hidden_tool_path(
+    expanded: &Path,
+    ancestor: &Path,
+    home_dir: Option<&str>,
+) -> bool {
+    let Some(raw_home) = home_dir else {
+        return false;
+    };
+    let Ok(home) = std::fs::canonicalize(raw_home) else {
+        return false;
+    };
+    let below = |path: &'_ Path| -> Option<PathBuf> {
+        path.strip_prefix(raw_home)
+            .or_else(|_| path.strip_prefix(&home))
+            .ok()
+            .map(Path::to_path_buf)
+    };
+    let (Some(relative), Some(existing)) = (below(expanded), below(ancestor)) else {
+        return false;
+    };
+    if std::fs::canonicalize(ancestor).ok() != Some(home.join(&existing)) {
+        return false;
+    }
+    let Some(first) = relative.components().next() else {
+        return false;
+    };
+    if !first.as_os_str().to_string_lossy().starts_with('.')
+        || relative
+            .components()
+            .skip(1)
+            .any(|name| name.as_os_str().to_string_lossy().starts_with('.'))
+        || !clears_store_screen(&relative)
+    {
+        return false;
+    }
+    let lowered = lowered_names(&relative);
+    match lowered.first().map(String::as_str) {
+        Some(".config") => lowered.len() > 1,
+        Some(".local") => lowered.len() > 2,
+        _ => true,
+    }
+}
+
 /// How many entries of a tool directory are read before the screen below
 /// gives up. A tool keeps tens of entries at its top level; a root holding
 /// thousands is not the inventory this proof is for.
@@ -157,6 +270,73 @@ pub(in crate::pretool) fn home_hidden_walk_clears_stores(
         };
         if !clears_store_screen(&relative.join(entry.file_name())) {
             return false;
+        }
+    }
+    true
+}
+
+/// How many entries a link-name walk reads before its proof gives up.
+const MAX_LINK_WALK_ENTRIES: usize = 4_096;
+
+/// How deep a walk with no `-maxdepth` is followed before it keeps the
+/// review: `find` itself has no limit, so a tree that goes deeper than this
+/// is one whose every link name was not read.
+const MAX_UNBOUNDED_LINK_DEPTH: usize = 32;
+
+/// Whether every link a `-type l` walk of `value` would print, down to
+/// `max_depth`, has a name `ordinary_name` accepts outside every credential
+/// store. With no `max_depth` the walk has to reach the bottom of the tree.
+///
+/// `find -type l` prints link names and never follows them, so what it can
+/// disclose is the names themselves. Rather than reason about a glob, the
+/// tree is walked here the way `find` walks it: links are not entered, every
+/// directory down to the bound is opened, and each link found must have an
+/// ordinary name and a path that clears the store screen. A directory that
+/// cannot be opened, or a tree past [`MAX_LINK_WALK_ENTRIES`], keeps the
+/// review.
+pub(in crate::pretool) fn home_hidden_link_names(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    max_depth: Option<usize>,
+    ordinary_name: impl Fn(&str) -> bool,
+) -> bool {
+    let Some((canonical, relative)) = resolved_home_entry(value, home_dir, cwd) else {
+        return false;
+    };
+    let mut pending = vec![(canonical, relative, 0_usize)];
+    let mut inspected = 0_usize;
+    while let Some((directory, relative, depth)) = pending.pop() {
+        match max_depth {
+            Some(limit) if depth >= limit => continue,
+            // An unbounded `find` keeps descending; stopping here would
+            // leave the links below unread and still answer for them.
+            None if depth >= MAX_UNBOUNDED_LINK_DEPTH => return false,
+            _ => {}
+        }
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            return false;
+        };
+        for entry in entries {
+            inspected += 1;
+            if inspected > MAX_LINK_WALK_ENTRIES {
+                return false;
+            }
+            let Ok(entry) = entry else {
+                return false;
+            };
+            let Ok(kind) = entry.file_type() else {
+                return false;
+            };
+            let name = entry.file_name();
+            let path = relative.join(&name);
+            if kind.is_symlink() {
+                if !name.to_str().is_some_and(&ordinary_name) || !clears_store_screen(&path) {
+                    return false;
+                }
+            } else if kind.is_dir() {
+                pending.push((entry.path(), path, depth + 1));
+            }
         }
     }
     true

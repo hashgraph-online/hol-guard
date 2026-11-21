@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_resident_client
+from codex_plugin_scanner.guard import native_resident_client_pool as pool_module
 from codex_plugin_scanner.guard.native_resident_client import (
     _PersistentNativeClient,
     _PersistentNativeClientPool,
@@ -73,7 +73,7 @@ def test_a_stream_idle_past_the_ttl_is_reaped_and_the_newest_stays_parked(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(native_resident_client, "_IDLE_STREAM_TTL_SECONDS", 0.05)
+    monkeypatch.setattr(pool_module, "_IDLE_STREAM_TTL_SECONDS", 0.05)
     spawned: list[subprocess.Popen[bytes]] = []
     _spawning_request(monkeypatch, spawned, threading.Barrier(2))
     pool = _pool(tmp_path)

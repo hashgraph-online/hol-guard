@@ -20,8 +20,8 @@ from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import (
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityBinding,
     WorkflowCapabilityRuleBinding,
-    canonical_framed_payload,
 )
+from tests.workflow_capability_frame_support import canonical_framed_payload
 
 REPOSITORY = "example/repo"
 LOCK_COMMAND = f"gh issue lock 17 --repo {REPOSITORY}"

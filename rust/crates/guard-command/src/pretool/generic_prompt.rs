@@ -2,6 +2,13 @@ use super::sensitive_command;
 use regex::Regex;
 use std::sync::OnceLock;
 
+#[path = "generic_prompt_masks.rs"]
+mod masks;
+use masks::{
+    mask_credential_categories, mask_format_options, mask_liveness_probes, mask_rereads,
+    mask_transfer_tool_info, mask_url_paths,
+};
+
 const BYPASS_PATTERNS: [&str; 10] = [
     "disable hol-guard",
     "hol-guard disable",
@@ -49,7 +56,7 @@ fn referential_access_pattern() -> &'static Regex {
 fn prompt_requests_secret(value: &str) -> bool {
     static VALUE_REQUEST: OnceLock<Regex> = OnceLock::new();
     static CLAUSE_BREAK: OnceLock<Regex> = OnceLock::new();
-    let lowered = value.to_ascii_lowercase().replace('\\', "/");
+    let lowered = mask_credential_categories(&value.to_ascii_lowercase().replace('\\', "/"));
     let mut locations = lowered.clone();
     for word in CREDENTIAL_WORDS {
         locations = locations.replace(word, " ");
@@ -269,7 +276,28 @@ pub(super) fn prompt_injection_intent(values: &[String]) -> bool {
         Regex::new(r"(?i)\b(?:ignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+instructions?|ignore\s+(?:the\s+)?system\s+prompt|(?:do\s+not|don't)\s+(?:tell|notify|alert|inform)\s+(?:the\s+)?users?|hide\s+(?:this|it|the\s+(?:action|instruction|request))\s+from\s+(?:the\s+)?logs?|(?:reveal|print|show)\s+(?:the\s+)?(?:system\s+prompt|developer\s+instructions?)|(?:remove|strip)\s+(?:the\s+)?(?:guard\s+)?hooks?)\b")
             .expect("bounded prompt injection intent")
     });
-    values.iter().any(|value| pattern.is_match(value))
+    values
+        .iter()
+        .any(|value| pattern.is_match(value) || forwarded_injection(value))
+}
+
+/// Injection templates that ride inside quoted data a prompt forwards, such
+/// as a record pasted into a subagent brief: a misspelled "ignore your
+/// previous instructions", a fake message from the user addressed to the
+/// model, and a `(system_message)` marker in front of an instruction.
+fn forwarded_injection(value: &str) -> bool {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN
+        .get_or_init(|| {
+            Regex::new(concat!(
+                r"(?i)ignore\s+(?:all\s+)?(?:of\s+)?(?:your|the|any)\s+(?:previous|prior|earlier|above|preceding)\s+[a-z]{0,3}n?structions?\b",
+                r"|\bthis\s+is\s+an\s+important\s+message\s+from\s+me\b[^\n]{0,80}\bto\s+you\b",
+                r"|\bbefore\s+you\s+can\s+solve\s+the\s+task\s+that\s+i\s+gave\s+you\b",
+                r"|#{2,}\s*\(\s*system_message\s*\)",
+            ))
+            .expect("bounded forwarded injection templates")
+        })
+        .is_match(value)
 }
 
 pub(super) fn exfil_prompt_intent(values: &[String]) -> bool {
@@ -285,9 +313,10 @@ pub(super) fn exfil_prompt_intent(values: &[String]) -> bool {
         .map(|pattern| Regex::new(pattern).expect("bounded exfiltration prompt intent"))
         .collect()
     });
-    values
-        .iter()
-        .any(|value| patterns.iter().any(|pattern| pattern.is_match(value)))
+    values.iter().any(|value| {
+        let value = mask_transfer_encoding(&mask_url_paths(value));
+        patterns.iter().any(|pattern| pattern.is_match(&value))
+    })
 }
 
 pub(super) fn destructive_prompt_intent(values: &[String]) -> bool {
@@ -359,7 +388,12 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
             .replace_all(&normalized, "human authentication")
             .into_owned()
     };
-    let sensitive_antecedent = sensitive_command(&remainder);
+    let mentions_secret = sensitive_command(&remainder);
+    // Only preserve a reread as risky when the earlier text actually asks
+    // for a credential value. A catalog path or a sentence saying that a
+    // file is not a credential store may contain words such as "secrets"
+    // without making the later reread sensitive.
+    let sensitive_antecedent = prompt_requests_secret(&remainder);
     // Mask only the prohibited verb, never its targets or later instructions.
     remainder = mask_destructive_prohibitions(&remainder);
     let documents = [
@@ -419,35 +453,56 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
         .get_or_init(|| Regex::new(r"(?i)\.env\.example\b").expect("bounded template reference"));
     remainder = env_template.replace_all(&remainder, " ").into_owned();
     let risky_action = RISK_ACTION.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:rm\s+-[a-z]*[rf]\b|delete\b|erase\b|wipe\b|format\b|kill\b|upload\b|exfiltrat[a-z]*\b|transfer\b|curl\b|wget\b|sudo\b|bash\s+-c\b|sh\s+-c\b|powershell\b|cmd\s+/c\b|subprocess\b|spawn\s*\(|exec\s*\(|send\s+(?:data|payload|file|secret|token|credential)\b|post\s+(?:payload|data|file|secret)\b|sync\s+(?:output|data)\b|(?:send|post|sync|transfer)\s+(?:to|over|via|at)\s+(?:webhook|server|slack|discord|https?://)\b|then\s+(?:read|open|print|summari[sz]e|show|dump|include|use|grab|upload|send)\s+(?:it|them|those|files|secrets)\b)")
+        Regex::new(r"(?i)\b(?:rm\s+-[a-z]*[rf]\b|(?:delete|erase|wipe|upload)\b[^.!?;\n]{0,60}(?:\b(?:files?|director(?:y|ies)|folders?|repos?|repositor(?:y|ies)|workspace|contents?|disks?|drives?|volumes?|partitions?|databases?|tables?|backups?|dumps?|data|payload|secrets?|tokens?|credentials?|keys?|config|logs?|history|branch|everything|it|them|those|these)\b|\b[a-z0-9_-]+\.[a-z0-9]{1,8}\b|/[a-z0-9_./-]+)|kill\b(?:[^.!?;\n]{0,60}\b(?:process(?:es)?|pids?|daemons?|containers?|sessions?)\b|\s+-[0-9a-z]+|\s+[0-9]+)|pkill\b|killall\b|format\b|exfiltrat[a-z]*\b|transfer\b|curl\b|wget\b|sudo\b|bash\s+-c\b|sh\s+-c\b|powershell\b|cmd\s+/c\b|subprocess\b|spawn\s*\(|exec\s*\(|send\s+(?:data|payload|file|secret|token|credential)\b|post\s+(?:payload|data|file|secret)\b|sync\s+(?:output|data)\b|(?:send|post|sync|transfer)\s+(?:to|over|via|at)\s+(?:webhook|server|slack|discord|https?://)\b|then\s+(?:read|open|print|summari[sz]e|show|dump|include|use|grab|upload|send)\s+(?:it|them|those|files|secrets)\b)")
             .expect("bounded risky prompt action")
     });
     let referential = REFERENTIAL_INSTRUCTION.get_or_init(|| {
         Regex::new(r"(?i)\b(?:now|then|afterwards|also)\s+(?:do|perform|execute|follow|run|use)\s+(?:it|that|this|them|example)\b")
             .expect("bounded referential prompt instruction")
     });
-    if referential.is_match(&remainder)
-        && (sensitive_antecedent || risky_action.is_match(&normalized))
-    {
+    if referential.is_match(&remainder) && (mentions_secret || risky_action.is_match(&normalized)) {
         return false;
     }
-    // Naming a credential is not a request for its value; locations, env
-    // dumps and value requests still keep the prompt off the benign path.
-    // Words inside an unconditional prohibition ("never X or Y") are not
-    // requested actions; the strong intent detectors run on the raw prompt.
+    // A named credential is not a request for its value; locations, env dumps
+    // and value requests are. Words in an unconditional prohibition ("never X
+    // or Y") are not requested actions. The liveness, reread and tool-info
+    // masks only answer the action scan; the secret check keeps a reread
+    // intact, since it still points back at a credential named earlier, and
+    // a reread after a sensitive antecedent stays visible to the action scan.
+    let probes = mask_liveness_probes(&mask_transfer_tool_info(&remainder));
+    let action_text = if sensitive_antecedent {
+        probes
+    } else {
+        mask_rereads(&probes)
+    };
     !prompt_requests_secret(&remainder)
-        && !risky_action.is_match(&mask_format_options(&mask_negated_clauses(&remainder)))
+        && !risky_action.is_match(&mask_transfer_encoding(&mask_format_options(
+            &mask_negated_clauses(&action_text),
+        )))
 }
 
-/// `--format`, `-format` and the `format:` value of `--pretty=format:` choose
-/// how a command prints its output; the bare word, or an assignment such as
-/// `operation=format`, still asks to format a disk.
-fn mask_format_options(value: &str) -> String {
-    static OPTION: OnceLock<Regex> = OnceLock::new();
-    OPTION
+/// `Transfer-Encoding` and `Content-Transfer-Encoding` name how an HTTP or
+/// MIME body is encoded on the wire; a request to transfer data still names
+/// the verb on its own. Only the header-name forms are masked, and nothing is
+/// masked once the text names an outside destination, so the header name
+/// cannot hide a request to move data somewhere.
+fn mask_transfer_encoding(value: &str) -> String {
+    static ENCODING: OnceLock<Regex> = OnceLock::new();
+    static DESTINATION: OnceLock<Regex> = OnceLock::new();
+    let destination = DESTINATION.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:to|into|onto|at)\s+(?:(?:the|my|our|an?|this|that|remote|external)\s+)*(?:[a-z][a-z0-9+.-]*://|[a-z0-9-]+(?:\.[a-z0-9-]+)+\b|(?:server|endpoint|webhook|host|gist|pastebin|slack|discord|telegram|url|bucket)s?\b)")
+            .expect("bounded transfer destination")
+    });
+    if destination.is_match(value) {
+        return value.to_owned();
+    }
+    ENCODING
         .get_or_init(|| {
-            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:").expect("bounded format option")
+            Regex::new(
+                r"(?i)\b(?:content-)?transfer-encodings?\b|\bchunked\s+transfer[\s-]+encodings?\b",
+            )
+            .expect("bounded transfer encoding")
         })
-        .replace_all(value, "${1}output-layout")
+        .replace_all(value, "wire-encoding")
         .into_owned()
 }

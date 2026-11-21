@@ -240,6 +240,8 @@ impl PyPath {
         Some(self.comps[base.comps.len()..].to_vec())
     }
 
+    // Only the Unix package context build walks parent directories.
+    #[cfg(unix)]
     pub(crate) fn pop_parent_components(&self) -> Vec<Self> {
         let mut parents = Vec::new();
         let mut current = self.clone();

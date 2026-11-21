@@ -1,0 +1,28 @@
+[package]
+name = "guard-yanez-pulse"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+base64ct.workspace = true
+# Guard verifies one signature at a time; no worker threads.
+blst = { version = "=0.3.17", features = ["no-threads"] }
+hex.workspace = true
+hmac.workspace = true
+ring.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }
+zeroize = "1.9.0"
+
+[lints]
+workspace = true
+
+[features]
+# Fake Yanez deployment with real signing keys, for acceptance tests here
+# and in guard-runtime. Never enabled in a release build.
+testkit = []

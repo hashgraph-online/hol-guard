@@ -283,4 +283,163 @@ mod tests {
         assert_eq!(maintenance["action_floor"], "review");
         assert_eq!(maintenance["workflow_authorizable"], true);
     }
+
+    fn classify_composition(command: &str) -> Value {
+        let host = NoEnvHost;
+        let context = Ctx::new(&host, "/", "/");
+        dispatch(
+            "classify_github_shell_capabilities",
+            &json!({"command_text": command, "home_dir": null}),
+            &context,
+        )
+        .unwrap()["value"]
+            .clone()
+    }
+
+    #[test]
+    fn shell_composition_keeps_every_reachable_capability() {
+        for (command, capabilities, floor) in [
+            (
+                "gh pr view 1; gh pr lock 1",
+                json!(["read_remote", "maintain_remote"]),
+                "review",
+            ),
+            (
+                "gh pr lock 1; gh pr view 1",
+                json!(["read_remote", "maintain_remote"]),
+                "review",
+            ),
+            (
+                "gh pr view 1; gh repo delete o/r --yes",
+                json!(["read_remote", "delete_remote"]),
+                "require-reapproval",
+            ),
+            (
+                "gh repo delete o/r --yes; gh pr view 1",
+                json!(["read_remote", "delete_remote"]),
+                "require-reapproval",
+            ),
+            (
+                "sh -c 'gh pr lock 1; gh pr view 1'",
+                json!(["read_remote", "maintain_remote"]),
+                "review",
+            ),
+        ] {
+            let value = classify_composition(command);
+            assert_eq!(value["capabilities"], capabilities, "{command}");
+            assert_eq!(value["action_floor"], floor, "{command}");
+            assert_eq!(value["workflow_authorizable"], false, "{command}");
+        }
+    }
+
+    #[test]
+    fn separators_and_pipelines_never_hide_a_following_capability() {
+        for (command, capability) in [
+            (
+                "echo first; ; echo second && || ; ; gh pr view 1",
+                "read_remote",
+            ),
+            ("false && ; gh pr view 1", "read_remote"),
+            ("false && && gh pr view 1", "read_remote"),
+            ("true || ; gh pr view 1", "read_remote"),
+            ("true || || gh pr view 1", "read_remote"),
+            ("false | true && gh pr view 1", "read_remote"),
+            (
+                "false | true && gh repo delete example/project --yes",
+                "delete_remote",
+            ),
+        ] {
+            assert_eq!(
+                classify_composition(command)["capabilities"],
+                json!([capability]),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn and_or_chains_skip_only_provably_dead_deletes() {
+        for command in [
+            "false && true || gh repo delete o/r --yes",
+            "true >/missing/path || false || gh repo delete o/r --yes",
+            "true>/missing/path || gh repo delete o/r --yes",
+            "true && false || gh repo delete o/r --yes",
+            "false || gh repo delete o/r --yes",
+            "make && gh repo delete o/r --yes",
+            "true && gh repo delete o/r --yes",
+            "true || unknown && gh repo delete o/r --yes",
+            "false && unknown || gh repo delete o/r --yes",
+            "(true || unknown) && gh repo delete o/r --yes",
+            "(false && unknown) || gh repo delete o/r --yes",
+            "true && (false || unknown) || gh repo delete o/r --yes",
+        ] {
+            assert_eq!(
+                classify_composition(command)["capabilities"],
+                json!(["delete_remote"]),
+                "{command}"
+            );
+        }
+        for command in [
+            "false && gh repo delete o/r --yes",
+            "true || gh repo delete o/r --yes",
+            "false && true && gh repo delete o/r --yes",
+            "unknown && false && gh repo delete o/r --yes",
+            "unknown || true || gh repo delete o/r --yes",
+        ] {
+            assert_eq!(classify_composition(command), Value::Null, "{command}");
+        }
+    }
+
+    #[test]
+    fn local_writes_and_redirections_keep_the_remote_capability_primary() {
+        for (command, capabilities, primary) in [
+            (
+                "gh repo set-default o/r; gh secret set TOKEN --body value",
+                json!(["write_local", "secret_remote"]),
+                "secret_remote",
+            ),
+            (
+                "gh secret set TOKEN --body value > result.txt",
+                json!(["write_local", "secret_remote"]),
+                "secret_remote",
+            ),
+            (
+                "gh repo delete o/r --yes > result.txt",
+                json!(["write_local", "delete_remote"]),
+                "delete_remote",
+            ),
+            (
+                "gh pr merge 17 --delete-branch > result.txt",
+                json!(["write_local", "merge_remote", "delete_remote"]),
+                "delete_remote",
+            ),
+        ] {
+            let value = classify_composition(command);
+            assert_eq!(value["capabilities"], capabilities, "{command}");
+            assert_eq!(value["capability"], primary, "{command}");
+        }
+        assert_eq!(
+            classify_composition("gh repo set-default o/r; gh secret set TOKEN --body value")
+                ["action_floor"],
+            "block"
+        );
+    }
+
+    #[test]
+    fn single_quoted_env_split_string_body_is_not_a_substitution() {
+        let host = NoEnvHost;
+        let context = Ctx::new(&host, "/", "/");
+        let command =
+            "echo $(date) && env -S'gh pr create --body \"Verification: `python -m build`\"'";
+        let outcome = dispatch(
+            "pr_flags",
+            &json!({"command_text": command, "depth": 0}),
+            &context,
+        )
+        .unwrap();
+        assert_eq!(
+            outcome["flags"]["_gh_pr_create_body_has_shell_command_substitution"],
+            false
+        );
+    }
 }

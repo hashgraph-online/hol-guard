@@ -67,19 +67,6 @@ class StoreCommandActivityMaintenanceMixin:
             int(outcome[5]),
         )
 
-    def rebuild_command_activity_rollups(
-        self: _NativeOwner,
-        *,
-        now: datetime,
-    ) -> None:
-        """Rebuild all retained-detail aggregates atomically for reconciliation."""
-
-        _require_utc(now)
-        self._native_store_call("rebuild_command_activity_rollups", {"now": now.isoformat()})
-
-    def command_activity_rollups_are_reconciled(self: _NativeOwner) -> bool:
-        return bool(self._native_store_call("command_activity_rollups_are_reconciled", {}))
-
 
 def _aggregate_cutoff(now: datetime) -> date:
     month_index = now.year * 12 + now.month - 1 - (COMMAND_ACTIVITY_AGGREGATE_MONTHS - 1)

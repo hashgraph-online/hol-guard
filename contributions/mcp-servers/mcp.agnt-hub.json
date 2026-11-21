@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.agnt-hub",
+  "version": "1.0.0",
+  "name": "Agent Hub",
+  "description": "Coordination server and live Kanban dashboard for multi-agent AI coding with advisory file locking and worktree isolation. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "github.mayanksharma-2812",
+    "displayName": "Mayank Sharma",
+    "url": "https://github.com/MayankSharma-2812/agnt-hub"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/MayankSharma-2812/agnt-hub",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "agent-hub-mcp"
+  },
+  "riskClasses": [
+    "external-filesystem-write",
+    "remote-state-mutation",
+    "agent-coordination"
+  ],
+  "tools": [
+    { "name": "hub_whoami", "state": "inherit" },
+    { "name": "hub_heartbeat", "state": "review" },
+    { "name": "hub_list_tasks", "state": "inherit" },
+    { "name": "hub_get_task", "state": "inherit" },
+    { "name": "hub_read_inbox", "state": "review" },
+    { "name": "hub_claim_task", "state": "review" },
+    { "name": "hub_update_task_status", "state": "review" },
+    { "name": "hub_create_task", "state": "review" },
+    { "name": "hub_send_message", "state": "review" },
+    { "name": "hub_lock_files", "state": "review" },
+    { "name": "hub_release_locks", "state": "review" },
+    { "name": "hub_add_artifact", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/MayankSharma-2812/agnt-hub",
+    "https://github.com/MayankSharma-2812/agnt-hub/blob/main/packages/mcp-shim/package.json",
+    "https://github.com/MayankSharma-2812/agnt-hub/blob/main/packages/mcp-shim/src/tools.ts",
+    "https://github.com/MayankSharma-2812/agnt-hub/blob/main/docs/SPEC_PACK.md"
+  ],
+  "saferAlternatives": [
+    "Start with hub_whoami, hub_list_tasks, and hub_get_task to inspect server and task state without modifying records or acquiring locks.",
+    "hub_heartbeat updates agent status, last_seen_at, and sets or clears current task; hub_read_inbox marks returned messages as read for the requesting agent.",
+    "Acquire granular file locks with hub_lock_files before modifying code and promptly call hub_release_locks upon completion.",
+    "This entry matches the agent-hub-mcp executable. When launched via node or local script paths, Guard keeps its normal handling; configure it on the Protect page."
+  ]
+}

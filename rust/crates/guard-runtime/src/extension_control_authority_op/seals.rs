@@ -23,10 +23,10 @@ use super::records::{
 use super::Ctx;
 
 /// The owner-only copy of the latest committed snapshot beside `guard.db`.
-const LAST_GOOD_FILE_NAME: &str = "extension-control-last-good.json";
-const LAST_GOOD_SCHEMA: &str = "guard.extension-control-last-good.v1";
-const MAX_EXPORT_BYTES: usize = 1024 * 1024;
-const EXPORT_FIELDS: [&str; 5] = [
+pub(super) const LAST_GOOD_FILE_NAME: &str = "extension-control-last-good.json";
+pub(super) const LAST_GOOD_SCHEMA: &str = "guard.extension-control-last-good.v1";
+pub(super) const MAX_EXPORT_BYTES: usize = 1024 * 1024;
+pub(super) const EXPORT_FIELDS: [&str; 5] = [
     "revision",
     "catalog_digest",
     "layers_json",
@@ -50,32 +50,8 @@ pub(super) fn anchor_json(anchor: &Anchor, key: &[u8]) -> Res<String> {
     canonical(&json!({ "record": record, "digest": digest, "mac": mac }))
 }
 
-/// `seal_anchor`: the anchor the caller writes to the credential store.
-pub(super) fn seal_anchor_op(
-    request: &ExtensionControlAuthorityRequestV1,
-    key: Option<&[u8]>,
-) -> Res<Value> {
-    let key = require_key(key)?;
-    let (Some(revision), Some(snapshot_digest), Some(phase)) = (
-        request.revision.filter(|revision| *revision >= 0),
-        request
-            .snapshot_digest
-            .as_deref()
-            .filter(|digest| digest.chars().count() == 64),
-        request.phase.as_deref().and_then(Phase::parse),
-    ) else {
-        return Err(tampered("invalid authority anchor"));
-    };
-    let anchor = Anchor {
-        revision,
-        snapshot_digest: snapshot_digest.to_owned(),
-        phase,
-    };
-    Ok(json!({ "anchor_json": anchor_json(&anchor, key)? }))
-}
-
-/// `seal_manifest`: the record `_write_catalog_manifest` stores for the
-/// current catalog's trusted target manifest.
+/// The record `write_manifest` stores for the current catalog's trusted
+/// target manifest.
 pub(super) fn seal_manifest_op(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,

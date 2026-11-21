@@ -182,6 +182,12 @@ fn project(request: &PackageAuditProjectionRequestV1) -> Result<Value, String> {
         PackageAuditQueryV1::ProtectProjection(query) => {
             crate::package_protect_projection_op::protect_projection(query)
         }
+        PackageAuditQueryV1::WorkspaceFindings(query) => {
+            Ok(crate::workspace_package_findings::workspace_findings(query))
+        }
+        PackageAuditQueryV1::PackageIdentities(query) => {
+            Ok(crate::workspace_package_findings::package_identities(query))
+        }
         PackageAuditQueryV1::EmptyOutcome(query) => {
             let (outcome, message) = resolve_empty_audit_outcome(
                 &query.manifest_paths,

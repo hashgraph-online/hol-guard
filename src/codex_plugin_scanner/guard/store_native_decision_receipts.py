@@ -8,6 +8,7 @@ import sqlite3
 from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Protocol
 
 from .native_decision_receipt import validate_native_decision_receipt
@@ -148,7 +149,7 @@ class StoreNativeDecisionReceiptsMixin:
                 ).fetchone()
         if row is None:
             return None
-        return validate_stored_native_decision_receipt(dict(row))
+        return validate_stored_native_decision_receipt(dict(row), guard_home=getattr(self, "guard_home", None))
 
 
 def _receipt_wire(receipt: Mapping[str, object]) -> str:
@@ -169,7 +170,9 @@ def _mapping_as_object(value: object) -> dict[str, object]:
     raise TypeError("native decision receipt is not JSON data")
 
 
-def validate_stored_native_decision_receipt(row: Mapping[str, object]) -> dict[str, object] | None:
+def validate_stored_native_decision_receipt(
+    row: Mapping[str, object], *, guard_home: Path | None = None, deadline_monotonic: float | None = None
+) -> dict[str, object] | None:
     """Validate one complete stored row, including its content-bound decision ID."""
     result = dict(row)
     result.pop("recorded_at", None)
@@ -195,7 +198,7 @@ def validate_stored_native_decision_receipt(row: Mapping[str, object]) -> dict[s
         if result.get(field) not in (0, 1):
             return None
         result[field] = bool(result[field])
-    return validate_native_decision_receipt(result)
+    return validate_native_decision_receipt(result, guard_home=guard_home, deadline_monotonic=deadline_monotonic)
 
 
 __all__ = [

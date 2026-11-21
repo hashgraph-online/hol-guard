@@ -25,7 +25,7 @@ fn test_containment_requirement_cannot_override_lockdown() {
     binding.effective_digest = binding.compute_effective_digest().unwrap();
     assert_eq!(
         evaluate(&binding, "python3 -m pytest -q").minimum_action,
-        if cfg!(any(target_os = "macos", windows)) {
+        if crate::pretool::workspace_sandbox_available() || cfg!(windows) {
             "sandbox-required"
         } else {
             "review"
@@ -437,6 +437,55 @@ fn diagnostic_shell_commands_preserve_an_approvable_review() {
 }
 
 #[test]
+fn an_expired_deadline_keeps_an_administrator_disable_blocked() {
+    let program = packaged_command_program().unwrap();
+    let rule = program
+        .rules
+        .iter()
+        .find(|item| item.rule_id == "command.git.hard-reset")
+        .unwrap();
+    let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
+        "schema": "guard.native-command-control-binding.v1",
+        "program_digest": program.program_digest,
+        "catalog_digest": program.catalog_digest,
+        "trust_digest": program.trust_digest,
+        "health": "protected", "revision": 1, "managed_revision": 0,
+        "effective_digest": "",
+        "layers": [{
+            "schema_version": "1.0.0", "kind": "local-admin",
+            "catalog_digest": program.catalog_digest, "global_lockdown": false,
+            "controls": [{
+                "target_kind": "permission",
+                "target_id": rule.permission_id,
+                "state": "disabled"
+            }]
+        }]
+    }))
+    .unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+    let intrinsic = crate::pretool::evaluate_pre_tool_envelope(
+        "claude-code",
+        "PreToolUse",
+        &serde_json::json!({"tool_name": "mcp__filesystem__read_file", "tool_input": {"path": "fixture.txt"}}),
+    );
+    let result = controls.apply_with_tool(
+        None,
+        intrinsic,
+        Some("mcp__filesystem__read_file"),
+        &[],
+        Some(Instant::now() - std::time::Duration::from_secs(1)),
+    );
+    // An administrator disable is not the user's to clear, and an unfinished
+    // check cannot show this command falls outside it, so the block stands.
+    assert_eq!(result.minimum_action, "block");
+    assert_eq!(
+        result.reason_code,
+        "native_command_extension_evaluation_failed"
+    );
+}
+
+#[test]
 fn delegated_deadline_failure_is_not_an_administrator_disable() {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
@@ -462,7 +511,7 @@ fn delegated_deadline_failure_is_not_an_administrator_disable() {
         &[],
         Some(Instant::now() - std::time::Duration::from_secs(1)),
     );
-    assert_eq!(result.minimum_action, "block");
+    assert_eq!(result.minimum_action, "review");
     assert_eq!(result.decision, "deny");
     let evidence = result.command_extensions.as_ref().unwrap();
     assert_eq!(
@@ -473,13 +522,13 @@ fn delegated_deadline_failure_is_not_an_administrator_disable() {
     assert_eq!(evidence.binding.observation_count, 0);
     assert_eq!(
         result.reason_code,
-        "native_command_extension_evaluation_failed"
+        "native_command_extension_evaluation_timed_out"
     );
-    assert_eq!(result.reason, super::floor::EXPIRED_DEADLINE_REASON);
+    assert_eq!(result.reason, super::floor::TIMED_OUT_REVIEW_REASON);
 }
 
 #[test]
-fn expired_extension_deadline_fail_closes_a_proven_benign_command() {
+fn expired_extension_deadline_asks_about_a_proven_benign_command() {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
         "schema": "guard.native-command-control-binding.v1",
@@ -509,14 +558,17 @@ fn expired_extension_deadline_fail_closes_a_proven_benign_command() {
         intrinsic,
         Some(Instant::now() - std::time::Duration::from_secs(1)),
     );
-    assert_eq!(result.minimum_action, "block");
+    // A deadline that ran out inspected nothing, so Guard asks instead of
+    // deciding: a review keeps Allow once and Always allow on the card, where
+    // a block leaves ordinary work with no approval that can clear it.
+    assert_eq!(result.minimum_action, "review");
     assert!(!result.explicitly_benign);
     assert_eq!(result.decision, "deny");
     assert_eq!(
         result.reason_code,
-        "native_command_extension_evaluation_failed"
+        "native_command_extension_evaluation_timed_out"
     );
-    assert_eq!(result.reason, super::floor::EXPIRED_DEADLINE_REASON);
+    assert_eq!(result.reason, super::floor::TIMED_OUT_REVIEW_REASON);
 }
 
 #[test]

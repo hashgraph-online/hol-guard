@@ -1,6 +1,5 @@
 //! Authenticated same-connection transport for the native Codex hook
-//! bridge: a port of `_daemon_response_once` in
-//! `codex_daemon_hook_transport.py`. The bridge proves the daemon's identity
+//! bridge. The bridge proves the daemon's identity
 //! with a signed challenge, checks that the daemon auth token belongs to the
 //! same signed state, then posts the hook with the token and the proof on
 //! one loopback connection inside one absolute deadline.
@@ -25,6 +24,7 @@ use crate::claude_hook_bridge_transport::{
     hook_event_name, json_failure, new_nonce, request_identity_challenge, BridgeError,
 };
 use crate::claude_hook_bridge_url::assert_loopback_http_url;
+use crate::codex_hook_bridge_direct_resident::{DirectMiss, DIRECT_MISS_HEADER};
 use crate::hook_env_stamp::with_remaining_hint;
 use crate::resident_transport::constant_time_eq;
 
@@ -115,6 +115,7 @@ pub(crate) fn authenticated_codex_hook_response(
     query: &str,
     data: &str,
     deadline: Instant,
+    miss: DirectMiss,
 ) -> Result<String, HookFailure> {
     let state = authenticated_state(state_path)
         .map_err(|message| unsent(BridgeError::Transport(message), true))?;
@@ -165,6 +166,7 @@ pub(crate) fn authenticated_codex_hook_response(
                 ("X-Guard-Token", &token),
                 ("X-Guard-Daemon-Nonce", &nonce),
                 ("X-Guard-Daemon-Proof", &proof),
+                (DIRECT_MISS_HEADER, miss.code()),
             ],
             hinted.as_bytes(),
             deadline,
@@ -192,10 +194,30 @@ pub(crate) fn authenticated_codex_hook_response(
 /// Python's call raised `OSError` or `HTTPException` (nothing was settled,
 /// the same request may be sent again), `Refused` where it raised
 /// `ValueError` (a status other than 200, an oversized or malformed body).
+/// `Rejected` is a 409 whose body names the daemon's stable rejection code,
+/// so the bridge can say why a decision was not applied.
 #[derive(Debug, PartialEq)]
 pub(crate) enum ApprovalFailure {
     Retry,
     Refused,
+    Rejected(String),
+}
+
+/// The daemon's rejection code from a 409 body: `{"error": "<code>"}` with a
+/// code of 1 to 80 characters from `[a-z0-9_]`. Anything else is not a
+/// stable code and is not repeated.
+fn rejection_code(text: &[u8]) -> Option<String> {
+    let parsed =
+        crate::pyjson::parse_mapping_lone_surrogates(py_strip(&String::from_utf8_lossy(text)))
+            .ok()?;
+    let Some(crate::pyjson::PyVal::Str(code)) = parsed.value.get("error") else {
+        return None;
+    };
+    let stable = (1..=80).contains(&code.len())
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_');
+    stable.then(|| code.clone())
 }
 
 const APPROVAL_DEADLINE: &str = "daemon request exceeded the hook deadline";
@@ -249,11 +271,15 @@ pub(crate) fn approval_request(
         return Err(ApprovalFailure::Refused);
     }
     if head.status != 200 {
-        return if head.status == 404 && body.is_none() {
-            Ok(None)
-        } else {
-            Err(ApprovalFailure::Refused)
-        };
+        if head.status == 404 && body.is_none() {
+            return Ok(None);
+        }
+        if head.status == 409 {
+            if let Some(code) = rejection_code(&text) {
+                return Err(ApprovalFailure::Rejected(code));
+            }
+        }
+        return Err(ApprovalFailure::Refused);
     }
     match crate::pyjson::parse_mapping_lone_surrogates(py_strip(&String::from_utf8_lossy(&text))) {
         Ok(parsed) if matches!(parsed.value, crate::pyjson::PyVal::Dict(_)) => {

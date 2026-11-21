@@ -2,6 +2,13 @@
 use super::PolicySnapshotStore;
 
 impl PolicySnapshotStore {
+    pub(crate) fn swarm(&self) -> &crate::swarm_op::ResidentSwarm {
+        &self.swarm
+    }
+
+    pub(crate) fn context_assistance(&self) -> &crate::context_assistance_service::Service {
+        &self.context_assistance
+    }
     /// Evidence of direct hook answers, waiting for the daemon to drain it.
     pub(crate) fn direct_evidence(&self) -> &crate::hook_direct_evidence::DirectEvidenceQueue {
         &self.direct_evidence

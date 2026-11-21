@@ -17,7 +17,7 @@ import sys
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import TextIO, cast
 
 from ..native_contained_wrapper_plan import (
     ContainedWrapperPlanUnavailableError,
@@ -151,7 +151,8 @@ def peel_contained_wrapper(
     when it names a sibling repository's root from `cwd`, such as a linked
     worktree beside the checkout, or, on Windows, a workspace directory joined
     by `&&`; after a cd into a sibling root, the core may be an `&&` list of
-    plain commands, which is re-authorized there. Only a cd into a sibling
+    plain commands, each optionally bounded by one `| head -N` or `| tail -N`,
+    which is re-authorized there. Only a cd into a sibling
     repository may end in `;` or carry `2>/dev/null`: the directory is resolved
     by native authority and nothing is peeled when it is gone, so the core
     never falls back to the session directory the way the shell would after a
@@ -172,6 +173,33 @@ def peel_contained_wrapper(
     if not isinstance(plan, Mapping):
         raise ValueError("unsupported wrapper shape")
     return str(plan["core"]), Path(str(plan["directory"])), _output_filter(plan.get("output"))
+
+
+def _carries_a_byte_bound(stages: tuple[Stage, ...]) -> bool:
+    """Report whether any stage of the chain cuts the output by bytes."""
+    return any(len(stage) == 3 and stage[1] == "-c" for stage in stages)
+
+
+def _write_through(destination: TextIO, text: str, encoding: str) -> None:
+    """Write the filtered text as the bytes the pipeline would have produced.
+
+    Every stage of a chain can put a lone surrogate in the text: `keep_bytes`
+    carries a partial character through as one, and a matcher stage decodes
+    its own output with `surrogateescape`. A text stream encodes with
+    `errors="strict"`, so writing a surrogate there raises and loses every
+    byte the core produced. The underlying binary buffer takes the encoded
+    bytes instead, with `surrogateescape` putting each escaped byte back as
+    itself; a stream without a buffer (a test capture, a `StringIO`) still
+    takes the text.
+    """
+    buffer = getattr(destination, "buffer", None)
+    if buffer is None:
+        destination.write(text)
+        destination.flush()
+        return
+    destination.flush()
+    buffer.write(text.encode(encoding, "surrogateescape"))
+    buffer.flush()
 
 
 @contextlib.contextmanager
@@ -203,7 +231,14 @@ def bounded_output(output: OutputFilter | None) -> Iterator[None]:
             if diagnostics:
                 sys.stderr.write(diagnostics)
                 sys.stderr.flush()
+            # A byte bound cut UTF-8 bytes, so its text goes back out as the
+            # same bytes. Every other chain keeps the stream's own encoding,
+            # which is what the core's writes would have been encoded as.
+            encoding = "utf-8" if _carries_a_byte_bound(output.stages) else (destination.encoding or "utf-8")
+            _write_through(destination, text, encoding)
         else:
             text = "".join(keep_lines(captured.getvalue().splitlines(keepends=True), output.kind, output.count))
-        destination.write(text)
-        destination.flush()
+            # A line bound cuts between characters, so this text keeps the
+            # stream's own encoding rather than being re-encoded as UTF-8.
+            destination.write(text)
+            destination.flush()

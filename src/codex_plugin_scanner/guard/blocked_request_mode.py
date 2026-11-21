@@ -5,6 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
+# The deny text for a native result that carries no reason of its own.
+# `blocked_request_mode::BLOCKED_REASON` in Rust is the same string.
+BLOCKED_REASON = "HOL Guard blocked this action."
+
 SAFE_ALTERNATIVE_GUIDANCE = (
     "This action remains blocked. Continue with a safe, permitted alternative that respects "
     "the same protection. Do not retry an equivalent command, bypass Guard, or seek permission "
@@ -35,7 +39,8 @@ def asks_for_approval(config: object) -> bool:
 
 _APPROVAL_WAIT = (
     "It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). "
-    "Do not retry the same action until it is approved; continue with other work meanwhile."
+    "Allow once lets this exact action run one time; Always allow keeps allowing it until the user removes "
+    "that choice. Do not retry the same action until it is approved; continue with other work meanwhile."
 )
 # A queued row whose retry cannot reuse a one-time approval (no retry binding):
 # telling the agent to wait for approval sends it into a retry that is blocked again.
@@ -97,14 +102,6 @@ def connector_setup_reason(
     return " ".join(part for part in (reason, redirect, SAFE_ALTERNATIVE_GUIDANCE) if part)
 
 
-def is_unlinked_connector_setup_reason(text: object) -> bool:
-    """Whether ``text`` carries a default-mode connector setup reason.
-
-    Harness renderers add no approval link and no approval step to it.
-    """
-    return isinstance(text, str) and CONNECTOR_SETUP_REASON_PREFIX in text and SAFE_ALTERNATIVE_GUIDANCE in text
-
-
 # Plain-language next steps keyed by the reason code Rust already returned.
 _REASON_CODE_HINTS = {
     "native_destructive_command": (
@@ -112,11 +109,19 @@ _REASON_CODE_HINTS = {
         "or target one specific path."
     ),
     "native_package_review": (
-        "Package installs download code from a registry, so Guard reviews them. An install that "
-        "only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile "
-        "--ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci "
-        "--ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this "
-        "was already that form, reuse dependencies that are already installed where you can."
+        "Package installs download code from a registry, so Guard reviews them. For npm, pnpm and bun, "
+        "an install that only restores the committed lockfile and runs no scripts (`bun install "
+        "--frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts "
+        "--ignore-pnpmfile` or `npm ci --ignore-scripts`) can proceed once Guard has checked the "
+        "lockfile and settings; if this was already that form, reuse dependencies that are already "
+        "installed where you can. Other package managers, such as pip, uv or cargo, have no form "
+        "Guard passes without review."
+    ),
+    # Cloud gave no verdict, so the lockfile-only advice above would be paused the same way.
+    "native_package_cloud_unavailable": (
+        "Guard Cloud could not check this package, so Guard paused the install instead of "
+        "treating it as safe. This is not a finding about the package, and another form of the "
+        "same install is paused the same way until Guard Cloud can check it."
     ),
     "native_network_review": "This makes a network request that Guard has not seen before.",
     "native_file_read_review": (
@@ -177,4 +182,19 @@ def safe_alternative_reason(
     reason = reason.strip()
     if wait in (_NOT_QUEUED, _APPROVAL_CANNOT_UNBLOCK):
         reason = reason.replace(_INBOX_APPROVAL_OFFER, "")
-    return " ".join(part for part in (reason, hint, wait) if part)
+    return " ".join(part for part in (reason, hint, matched_rule(reason_code), wait) if part)
+
+
+def matched_rule(reason_code: str | None) -> str:
+    """Name the native rule that held the action, so the agent can tell holds apart.
+
+    Only a plain rule identifier is named; ``unknown`` and anything else say nothing.
+    """
+    code = reason_code or ""
+    if (
+        code == "unknown"
+        or not 0 < len(code) <= 64
+        or not all(c.isascii() and (c.islower() or c.isdigit() or c == "_") for c in code)
+    ):
+        return ""
+    return f"Guard rule: `{code}`."

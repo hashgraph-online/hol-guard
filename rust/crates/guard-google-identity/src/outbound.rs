@@ -4,7 +4,6 @@
 use crate::worker_input::GoogleWorkerInput;
 use guard_scanner::secret_detection::scan_secret_text;
 use sha2::{Digest, Sha256};
-use zeroize::Zeroize;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum OutboundInspectionError {
@@ -49,7 +48,7 @@ impl GoogleWorkerInput {
             let found = !summary.findings.is_empty();
             // Candidate strings are private detector scratch, never telemetry.
             for finding in &mut summary.findings {
-                finding.candidate.zeroize();
+                finding.scrub_candidate();
             }
             if found {
                 return Err(OutboundInspectionError::CredentialDetected);

@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import harness_ops_support as harness_support
 from tests.conftest import guard_commands_module
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
+from tests.package_review_settings import review_package_signals
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -412,19 +414,6 @@ def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
     assert "combines sensitive data access with network transfer" in str(hook_output["permissionDecisionReason"])
 
 
-def test_gr081b_codex_reviewable_pretooluse_is_live_wait_candidate() -> None:
-    assert guard_commands_module._codex_hook_waits_for_browser_approval(
-        argparse.Namespace(harness="codex", json=False),
-        event_name="PreToolUse",
-        policy_action="review",
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Read",
-            "tool_input": {"path": "/workspace/project/.env"},
-        },
-    )
-
-
 @pytest.mark.usefixtures("native_hook_force")
 def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
@@ -599,7 +588,7 @@ def test_gr087_opencode_managed_mcp_uses_native_ask_runtime_overlay(tmp_path: Pa
         encoding="utf-8",
     )
 
-    manifest = OpenCodeHarnessAdapter().install(context)
+    manifest = harness_support.install("opencode", context)
     runtime_config = json.loads(Path(str(manifest["runtime_config_path"])).read_text(encoding="utf-8"))
 
     assert runtime_config["permission"]["team-tools_*"] == "ask"
@@ -633,9 +622,26 @@ def test_gr089_copilot_autopilot_shell_exfil_returns_terminal_stop(tmp_path: Pat
     assert "network" in str(hook_output["permissionDecisionReason"]).lower()
 
 
-def test_gr097_hook_reason_deduplicates_duplicate_copy() -> None:
-    from codex_plugin_scanner.guard.cli.commands import _native_hook_reason
-
-    reason = _native_hook_reason("HOL Guard blocked this action.", "HOL Guard blocked this action.", "Retry.")
-
-    assert reason == "HOL Guard blocked this action. Retry."
+@pytest.mark.usefixtures("native_hook_force")
+def test_codex_json_pretool_package_install_names_its_request(tmp_path: Path) -> None:
+    review_package_signals(tmp_path / "guard-home")
+    exit_code, output = _run_hook(
+        tmp_path,
+        harness="codex",
+        json_output=True,
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm install is-even@1.0.0"},
+        },
+    )
+    payload = _json_line(output)
+    request_id = payload["guardApprovalRequestId"]
+    approval_url = payload["guardApprovalUrl"]
+    assert exit_code == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert isinstance(request_id, str)
+    assert re.fullmatch(r"[A-Za-z0-9_-]{8,128}", request_id)
+    assert isinstance(approval_url, str)
+    assert re.match(r"https?://", approval_url)
+    assert request_id in approval_url

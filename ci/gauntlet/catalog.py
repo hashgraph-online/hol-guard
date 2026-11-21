@@ -16,17 +16,29 @@ from .approval_retry_bash import (
     MUTATION_CASE,
     targets_script,
 )
+from .approval_retry_relay import RELAY_ORACLE
 from .extension_adapters import extension_adapter
+from .file_write_cases import FILE_WRITE_ORACLE
+from .task_brief_cases import TASK_BRIEF_ORACLE
+from .output_cases import OUTPUT_ORACLE
 from .fixtures import digest_file
 from .remote_code import REMOTE_CODE_CASES
+from .repeat_cases import REPEAT_ORACLE, valid_repeat_commands
 from .supply_chain import PACKAGE_BLOCK_REASONS
 
 CATALOG = Path(__file__).with_name("scenarios.json")
+# The catalog's own bound. A run writes one case file per scenario, so `bundle`
+# derives the evidence inventory's bound from this one: raising it here raises
+# what an export and an import will carry.
+MAX_SCENARIOS = 448
 # Connector setup cases: an additive catalog, like the approve-then-retry lane's, so the omp
 # runner and the installed lane never meet an oracle they cannot judge.
 CONNECTOR_CATALOG = Path(__file__).with_name("connector_setup.json")
 CONNECTOR_SETUP_ORACLES = frozenset({"connector-setup", "connector-setup-ask"})
-WATCH_COMMAND = "python -I -S -c 'print(\"ordinary-watch-fixture\")'"
+# Watch needs a harmless command that Guard would still stop when enforcing. A
+# program that only computes and prints is proven read-only, so this one touches
+# the filesystem with a stat; the benign gate pins that verdict.
+WATCH_COMMAND = 'python -I -S -c \'import os; print("ordinary-watch-fixture", os.path.isdir("."))\''
 WATCH_OUTPUT = "ordinary-watch-fixture"
 _WINDOWS_DRIVE_PATH = re.compile(r"[A-Za-z]:\\.+")
 WATCH_PROMPT = (
@@ -106,7 +118,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
     """Parse scenario data without importing candidate Python code."""
     if not isinstance(data, dict) or not isinstance(data.get("scenarios"), list):
         raise ValueError("scenario catalog must contain an array")
-    if not 1 <= len(data["scenarios"]) <= 256:
+    if not 1 <= len(data["scenarios"]) <= MAX_SCENARIOS:
         raise ValueError("scenario catalog count exceeds its bound")
     if data.get("schema") != "hol.guard-gauntlet.scenarios.v1":
         raise ValueError("unsupported Gauntlet scenario schema")
@@ -166,10 +178,16 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "blocked-extension",
             "blocked-package",
             "blocked-memory-note",
+            "blocked-eval-shell",
+            FILE_WRITE_ORACLE,
+            OUTPUT_ORACLE,
+            TASK_BRIEF_ORACLE,
+            REPEAT_ORACLE,
             "native-tools",
             "full-task",
             "approved-retry",
             BASH_LIFECYCLE_ORACLE,
+            RELAY_ORACLE,
             "connector-setup",
             "connector-setup-ask",
             "connector-tool",
@@ -192,6 +210,27 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("native-tools cases are allow-only and must name their required tools")
         if scenario.oracle == "blocked-memory-note" and (scenario.commands or scenario.required_tools != ("learn",)):
             raise ValueError("memory-note protection cases drive the learn tool alone")
+        if scenario.oracle == "blocked-eval-shell" and (scenario.commands or scenario.required_tools != ("eval",)):
+            raise ValueError("eval shell protection cases drive the eval tool alone")
+        if scenario.oracle == TASK_BRIEF_ORACLE and (
+            scenario.expectation != "block" or scenario.commands or scenario.required_tools != ("task",)
+        ):
+            raise ValueError("task-brief protection cases drive one blocked task call alone")
+        if scenario.oracle == REPEAT_ORACLE and (
+            scenario.expectation != "block"
+            or not valid_repeat_commands(scenario.commands)
+            or scenario.required_tools
+            or scenario.path
+        ):
+            raise ValueError("repeat protection cases list one command six times and nothing else")
+        if scenario.oracle == FILE_WRITE_ORACLE and (
+            scenario.commands or scenario.required_tools not in {("write",), ("edit",)} or not scenario.path
+        ):
+            raise ValueError("file-write protection cases drive one write or edit call at one pinned file")
+        if scenario.oracle == OUTPUT_ORACLE and (
+            scenario.expectation != "block" or len(scenario.commands) != 1 or scenario.path or scenario.required_tools
+        ):
+            raise ValueError("output protection cases run one exact command whose output Guard must stop")
         if scenario.oracle == "full-task" and (
             scenario.expectation != "allow" or scenario.commands or "core" in scenario.profiles
         ):
@@ -220,6 +259,15 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
                 or scenario.profiles != ("approval-retry",)
             ):
                 raise ValueError("Bash approval lifecycle case has an invalid id, outcome, command or profile")
+        if scenario.oracle == RELAY_ORACLE and (
+            scenario.expectation != "allow"
+            or len(scenario.commands) != 1
+            or scenario.required_tools != ("bash",)
+            or scenario.profiles != ("approval-retry",)
+        ):
+            raise ValueError(
+                "a relayed approval link case holds one bash command and runs only in the approval-retry profile"
+            )
         _validate_connector(scenario)
         if scenario.oracle == "blocked-extension":
             extension_adapter(scenario.commands[0])

@@ -6,16 +6,29 @@
 mod policy_bundle_crypto;
 mod policy_bundle_decisions;
 mod policy_bundle_delivery;
+mod policy_bundle_dpop;
+mod policy_bundle_dpop_proof;
+mod policy_bundle_failed_ack;
+#[cfg(test)]
+mod policy_bundle_failed_ack_tests;
 mod policy_bundle_families;
+#[cfg(test)]
+mod policy_bundle_generic_ack_tests;
 mod policy_bundle_json;
 mod policy_bundle_keys;
 mod policy_bundle_keys_ctx;
 mod policy_bundle_op;
+mod policy_bundle_op_admission;
+#[cfg(test)]
+mod policy_bundle_op_admission_tests;
 mod policy_bundle_op_delivery;
 mod policy_bundle_op_keys;
 mod policy_bundle_op_page;
 #[cfg(test)]
 mod policy_bundle_op_page_tests;
+mod policy_bundle_op_review;
+#[cfg(test)]
+mod policy_bundle_op_review_tests;
 mod policy_bundle_op_synced;
 #[cfg(test)]
 mod policy_bundle_op_tests;
@@ -23,6 +36,9 @@ mod policy_bundle_op_validate;
 #[cfg(test)]
 mod policy_bundle_op_vectors_tests;
 mod policy_bundle_py;
+mod policy_bundle_rejection;
+#[cfg(test)]
+mod policy_bundle_rejection_tests;
 mod policy_bundle_time;
 mod policy_bundle_v1;
 mod policy_bundle_v1_rules;
@@ -30,6 +46,7 @@ mod policy_bundle_v2;
 mod policy_bundle_v2_ack;
 
 pub use policy_bundle_op::evaluate_policy_bundle_authority_request as evaluate;
+pub use policy_bundle_op::{evaluate_with_payload_hasher, PayloadHasher};
 
 /// Timestamp semantics shared with runtime callers.
 pub mod time {

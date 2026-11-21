@@ -132,3 +132,107 @@ fn replays_every_recorded_guard_session_scenario() {
     }
     assert!(compared_steps >= 70, "only {compared_steps} recorded steps");
 }
+
+fn call(home: &Path, method: &str, args: Value) -> Value {
+    let step = serde_json::json!({"method": method, "wire_args": args});
+    run_step(home, "guard", "2026-01-01T00:00:00+00:00", &step)
+}
+
+fn tables(home: &Path) -> Value {
+    let connection = Connection::open(home.join("guard.db")).unwrap();
+    normalize(&serde_json::json!({
+        "sessions": dump(&connection, "guard_sessions", "session_id"),
+        "operations": dump(&connection, "guard_operations", "operation_id"),
+    }))
+}
+
+/// The arguments `link_codex_live_wait` sent as two upserts before it was one
+/// store call.
+fn separate_upserts(home: &Path, request_id: &str, workspace: Value, metadata: &str, now: &str) {
+    let id = format!("codex-hook-{request_id}");
+    let session = call(
+        home,
+        "upsert_guard_session",
+        serde_json::json!({
+            "session_id": id, "harness": "codex", "surface": "harness-adapter",
+            "status": "waiting_on_approval", "client_name": "codex-hook",
+            "client_title": "Codex hook", "client_version": null, "workspace": workspace,
+            "capabilities_json": "[\"approval-resolution\"]", "now": now,
+        }),
+    );
+    assert_eq!(session["status"], "ok", "{session}");
+    let operation = call(
+        home,
+        "upsert_guard_operation",
+        serde_json::json!({
+            "operation_id": id, "session_id": id, "harness": "codex",
+            "operation_type": "tool_call", "status": "waiting_on_approval",
+            "approval_request_ids_json": format!("[\"{request_id}\"]"), "resume_token": null,
+            "metadata_json": metadata, "now": now,
+        }),
+    );
+    assert_eq!(operation["status"], "ok", "{operation}");
+}
+
+#[test]
+fn linking_a_codex_live_wait_writes_what_the_two_upserts_wrote() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let empty = serde_json::json!({"seed": {}});
+    let first = r#"{"codex_browser_wait_timeout_seconds": 30, "hook_event_name": "PreToolUse"}"#;
+    let second = r#"{"codex_browser_wait_timeout_seconds": 45, "workspace": "/w"}"#;
+    let steps = [
+        ("req-1", Value::Null, first, "2026-01-01T00:00:00+00:00"),
+        (
+            "req-1",
+            Value::from("/w"),
+            second,
+            "2026-01-01T00:01:00+00:00",
+        ),
+        (
+            "req-2",
+            Value::from("/w"),
+            first,
+            "2026-01-01T00:02:00+00:00",
+        ),
+    ];
+    let (linked, separate) = (temp_home("codex-link-one"), temp_home("codex-link-two"));
+    build_database(&linked.join("guard.db"), &vectors, &empty);
+    build_database(&separate.join("guard.db"), &vectors, &empty);
+    for (request_id, workspace, metadata, now) in steps {
+        let reply = call(
+            &linked,
+            "link_codex_live_wait",
+            serde_json::json!({
+                "request_id": request_id, "workspace": workspace.clone(),
+                "metadata_json": metadata, "now": now,
+            }),
+        );
+        assert_eq!(reply["status"], "ok", "{reply}");
+        separate_upserts(&separate, request_id, workspace, metadata, now);
+        assert_eq!(tables(&linked), tables(&separate), "{request_id} at {now}");
+    }
+    let _ = std::fs::remove_dir_all(&linked);
+    let _ = std::fs::remove_dir_all(&separate);
+}
+
+#[test]
+fn a_codex_live_wait_without_metadata_writes_nothing() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let home = temp_home("codex-link-invalid");
+    build_database(
+        &home.join("guard.db"),
+        &vectors,
+        &serde_json::json!({"seed": {}}),
+    );
+    let reply = call(
+        &home,
+        "link_codex_live_wait",
+        serde_json::json!({"request_id": "req-1", "now": "2026-01-01T00:00:00+00:00"}),
+    );
+    assert_eq!(reply["status"], "error", "{reply}");
+    assert_eq!(
+        tables(&home),
+        serde_json::json!({"sessions": [], "operations": []})
+    );
+    let _ = std::fs::remove_dir_all(&home);
+}

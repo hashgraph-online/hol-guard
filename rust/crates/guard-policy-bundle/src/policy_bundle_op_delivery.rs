@@ -8,6 +8,7 @@ use crate::policy_bundle_delivery::{
     ack_payload, effective_ack, has_extension_semantics, validate_delivery, validate_managed,
     AckRequest, EffectiveRequest, Managed,
 };
+use crate::policy_bundle_failed_ack::{failed_ack, FailedRequest};
 use crate::policy_bundle_families::saved_families;
 use crate::policy_bundle_op::{
     field, flag, object_document, optional_text, text_field, Fail, Handled,
@@ -94,6 +95,19 @@ fn effective(input: &Obj) -> Handled {
     Ok(json!({ "ack": effective_ack(&request)? }))
 }
 
+fn failure(input: &Obj) -> Handled {
+    let bundle = object_document(input, "bundle_chunks")?;
+    let request = FailedRequest {
+        device_id: text_field(input, "device_id")?,
+        device_name: text_field(input, "device_name")?,
+        bundle: &bundle,
+        synced_at: text_field(input, "synced_at")?,
+        error_code: text_field(input, "error_code")?,
+        previous: obj(input.get("previous")),
+    };
+    Ok(json!({ "ack": failed_ack(&request) }))
+}
+
 pub(crate) fn handle(kind: &str, input: &Obj) -> Option<Handled> {
     Some(match kind {
         "build_decisions" => decisions(input),
@@ -104,6 +118,7 @@ pub(crate) fn handle(kind: &str, input: &Obj) -> Option<Handled> {
             .map(|bundle| json!({ "value": has_extension_semantics(&bundle) })),
         "ack_payload" => acknowledgement(input),
         "effective_ack" => effective(input),
+        "failed_ack" => failure(input),
         _ => return None,
     })
 }

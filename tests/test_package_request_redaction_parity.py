@@ -1,6 +1,6 @@
 """The package argv redaction Python keeps must match the native one.
 
-``redact_package_request_token`` strips credentials out of a package argv token
+``_sanitize_url`` strips credentials out of a package argv token
 before Guard persists the command it reviewed. The resident keeps its own copy
 of that routine in ``guard_command::package_intent_common::sanitize_url``, and
 each side redacts the command on the route it owns, so a rule edited in one
@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.package_intent_common import redact_package_request_token
+from codex_plugin_scanner.guard.runtime.package_intent_common import _sanitize_url
 
 _VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "package-request-redaction.v1.json").read_text(encoding="utf-8")
@@ -33,7 +33,7 @@ def test_the_fixture_is_the_shape_both_sides_read() -> None:
 
 @pytest.mark.parametrize("case", _VECTORS["cases"], ids=lambda case: case["name"])
 def test_a_recorded_token_redacts_to_its_recorded_text(case: dict[str, str]) -> None:
-    assert redact_package_request_token(case["token"]) == case["redacted"]
+    assert _sanitize_url(case["token"]) == case["redacted"]
 
 
 def test_credentials_never_survive_the_recorded_cases() -> None:

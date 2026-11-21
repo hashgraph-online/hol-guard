@@ -13,10 +13,10 @@ from typing import Final, cast
 
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityError,
-    canonical_framed_payload,
     parse_utc_timestamp,
     validate_workflow_capability_identifier,
 )
+from tests.workflow_capability_frame_support import canonical_framed_payload
 from tests.workflow_capability_transitions_support import _integer, _optional_string, _string
 
 AUTHORITY_STATE_SCHEMA: Final = "hol-guard.workflow-capability-authority-state.v1"

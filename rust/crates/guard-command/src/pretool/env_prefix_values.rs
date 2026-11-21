@@ -9,7 +9,9 @@
 //! command without the value, so such a verdict goes to the reviewed
 //! projection, which knows which profiles drop or carry settings.
 
-use super::{assignment, inert_assignment, shell_assignment, COMMAND_SEPARATORS};
+use super::settings::inert_assignment;
+use super::words::{assignment, shell_assignment};
+use super::COMMAND_SEPARATORS;
 use crate::cloud_scrub_shell::shell_tokens;
 
 /// True when a leading setting of any simple command in `command` is not
@@ -74,6 +76,13 @@ mod tests {
             "env NODE_ENV=test ls",
             "env -u GH_TOKEN FOO=1 ls",
             "LC_ALL=C LOG_LEVEL=debug ls src",
+            // A build or test setting the projection drops is still a value
+            // the program reads: a contained run of the projected command
+            // would stop refusing the lint, repeat the cached test or widen
+            // the failure count the caller asked for.
+            "RUSTFLAGS=-Dwarnings cargo test",
+            "GOFLAGS=-count=1 go test ./...",
+            "PYTEST_ADDOPTS=--maxfail=1 pytest",
         ] {
             assert!(removes_values(command), "{command}");
         }

@@ -47,7 +47,7 @@ export function initialAddCommand(search: string): string {
 
 /** A Protect link opened from a request held on this connector (`?setup=<request>&identity=<hash>`). */
 export type ConnectorSetupLink = { requestId: string; identityHash: string };
-export type ConnectorSetupMatch = "ready" | "identity_changed" | "decided";
+export type ConnectorSetupMatch = "ready" | "reallow" | "identity_changed" | "decided";
 export type ConnectorGroupOutcome = { status: string; resolvedCount: number; retryHint: string | null };
 
 const SETUP_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -62,10 +62,30 @@ export function connectorSetupLinkFromSearch(search: string): ConnectorSetupLink
   return { requestId, identityHash };
 }
 
-/** Only the exact identity that was held, still undecided, may be set up from the link. */
-export function connectorSetupMatch(item: Pick<LocalCliItem, "identity_hash" | "state">, link: ConnectorSetupLink): ConnectorSetupMatch {
+/**
+ * Only the exact identity that was held may be set up from the link: one still
+ * undecided, or one whose allow was recorded for an earlier version of the file.
+ */
+export function connectorSetupMatch(
+  item: Pick<LocalCliItem, "identity_hash" | "state" | "stale" | "surface">,
+  link: ConnectorSetupLink,
+): ConnectorSetupMatch {
   if (item.identity_hash !== link.identityHash) return "identity_changed";
-  return item.state === "unset" ? "ready" : "decided";
+  if (item.state === "unset") return "ready";
+  return allowedEarlierVersion(item) ? "reallow" : "decided";
+}
+
+/**
+ * A CLI allowed on this device for an earlier version of its file, so the allow no longer applies.
+ * A changed MCP server or package.json can bring new tools or scripts, so it keeps its full review.
+ */
+export function allowedEarlierVersion(item: Pick<LocalCliItem, "state" | "stale" | "surface">): boolean {
+  return item.surface === "cli" && item.state === "allowed" && item.stale === true;
+}
+
+/** Whether a setup link may set this connector up and release the requests held on it. */
+export function connectorSetupReady(match: ConnectorSetupMatch | null): boolean {
+  return match === "ready" || match === "reallow";
 }
 
 export function shortIdentity(identityHash: string): string {

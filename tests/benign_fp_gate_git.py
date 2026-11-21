@@ -63,11 +63,21 @@ def _session_worktree(org: Path, home: Path) -> None:
     (portal / ".deploy-production.lock.d").mkdir()
     # Installed, gitignored test runner whose `.bin` shim agents list from another checkout.
     _node_package(portal, "vitest", _NODE_PACKAGES["vitest"])
+    # Vitest keeps its `bin` shim at the package root and the CLI module that
+    # shim imports under `dist`, and sessions name either one directly.
+    runner = portal / "node_modules" / "vitest"
+    _write(runner / "vitest.mjs", "#!/usr/bin/env node\nimport './dist/cli.js';\n")
+    (runner / "vitest.mjs").chmod(0o755)
+    _write(runner / "dist" / "cli.js", f"console.log('vitest {_NODE_PACKAGES['vitest']}');\n")
     worktree = org.parent / "app-portal-fix"
     _git(portal, "worktree", "add", "--quiet", "-b", "fix/report-lane", str(worktree), home=home)
     _git(home, "clone", "--quiet", str(portal), str(org.parent / "app-portal-clone"), home=home)
     _write(worktree / "scripts" / "report.ts", "console.log(process.env.REPORT_WINDOW ?? '7d');\n")
     _git(worktree, "commit", "--quiet", "-am", "widen report window", home=home)
+    # The lane this worktree left before it came back, so ``-`` names a
+    # branch the checkout still holds rather than a detached commit.
+    _git(worktree, "switch", "--quiet", "-c", "spike/report-window", home=home)
+    _git(worktree, "switch", "--quiet", "fix/report-lane", home=home)
     portal_manifest = {"name": "app-portal", "private": True, "devDependencies": {"vite": "^7.1.5"}}
     _write(worktree / "package.json", json.dumps(portal_manifest) + "\n")
     _bun_lockfile(worktree, {"vite": _NODE_PACKAGES["vite"]})
@@ -75,6 +85,8 @@ def _session_worktree(org: Path, home: Path) -> None:
     # before it runs either, so the probe has to find one of each.
     _write(worktree / "vite.config.ts", "export default { build: { outDir: 'dist' } };\n")
     _write(worktree / "vitest.config.ts", "export default { test: { environment: 'node' } };\n")
+    # The one test file a session names when it runs a single case from here.
+    _write(worktree / "src" / "index.test.ts", "import { test } from 'vitest';\ntest('report window', () => {});\n")
     # The worktree deliberately has no ``node_modules``. Cases link the main
     # checkout's tree in here and then list the worktree, which is what a
     # session does to skip a second install; if the directory were already

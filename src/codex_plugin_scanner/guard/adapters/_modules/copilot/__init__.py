@@ -1,1 +1,0 @@
-"""Internal copilot adapter helpers."""

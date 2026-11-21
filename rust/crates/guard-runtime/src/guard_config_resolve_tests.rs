@@ -280,3 +280,181 @@ fn run_command_rejects_unknown_ops_fields_and_schemas() {
         assert!(run_command(request.to_string().as_bytes()).is_err());
     }
 }
+
+fn postures(posture: &str, mode: &str, overrides: Value) -> HarnessPostureConfigV1 {
+    HarnessPostureConfigV1 {
+        protection_posture: posture.to_owned(),
+        mode: mode.to_owned(),
+        security_level: "balanced".to_owned(),
+        harness_postures: serde_json::from_value(overrides).unwrap(),
+    }
+}
+
+#[test]
+fn an_observing_install_reads_as_watch_whatever_its_posture_says() {
+    let resolved = harness_postures(&postures("extra_careful", "observe", json!({})));
+    assert_eq!(resolved["baseline"], "watch");
+    assert_eq!(resolved["effective"]["codex"], "watch");
+}
+
+#[test]
+fn an_override_never_weakens_a_stricter_baseline() {
+    let resolved = harness_postures(&postures(
+        "extra_careful",
+        "enforce",
+        json!({"codex": "protected"}),
+    ));
+    assert_eq!(resolved["effective"]["codex"], "extra_careful");
+    assert_eq!(resolved["views"]["codex"]["posture"], "extra_careful");
+    assert_eq!(resolved["views"]["codex"]["security_level"], "strict");
+}
+
+#[test]
+fn a_watch_override_is_honored_under_any_baseline() {
+    let resolved = harness_postures(&postures(
+        "extra_careful",
+        "enforce",
+        json!({"codex": "watch"}),
+    ));
+    assert_eq!(resolved["effective"]["codex"], "watch");
+    assert_eq!(resolved["views"]["codex"]["mode"], "observe");
+    // Watch leaves the level alone rather than loosening it.
+    assert_eq!(resolved["views"]["codex"]["security_level"], "balanced");
+}
+
+#[test]
+fn a_stricter_override_turns_protection_back_on_under_a_global_watch() {
+    let resolved = harness_postures(&postures(
+        "watch",
+        "observe",
+        json!({"codex": "extra_careful"}),
+    ));
+    assert_eq!(resolved["baseline"], "watch");
+    assert_eq!(resolved["effective"]["codex"], "extra_careful");
+    assert_eq!(resolved["views"]["codex"]["mode"], "enforce");
+}
+
+#[test]
+fn a_harness_without_an_override_has_no_view_of_its_own() {
+    let resolved = harness_postures(&postures(
+        "protected",
+        "enforce",
+        json!({"codex": "extra_careful"}),
+    ));
+    assert_eq!(resolved["effective"]["claude-code"], "protected");
+    assert!(resolved["views"].get("claude-code").is_none());
+}
+
+#[test]
+fn every_registered_harness_resolves_to_a_posture() {
+    let resolved = harness_postures(&postures("protected", "enforce", json!({})));
+    let effective = object(resolved["effective"].clone());
+    assert_eq!(
+        effective.len(),
+        guard_command::harness_identity::REGISTERED_HARNESS_COUNT
+    );
+    assert!(effective.values().all(|posture| posture == "protected"));
+}
+
+#[test]
+fn the_posture_op_needs_its_facts() {
+    let request: Request =
+        serde_json::from_value(json!({"schema": SCHEMA, "op": "harness_postures"})).unwrap();
+    assert_eq!(resolve(&request).unwrap_err(), INVALID);
+}
+
+const ENTERED: &str = "2026-01-01T00:00:00+00:00";
+const ENTERED_MICROS: i64 = 1_767_225_600_000_000;
+const HOUR: i64 = 3_600_000_000;
+
+fn deadlines(hours: i64, fields: Value) -> Value {
+    let mut input = json!({
+        "auto_revert_hours": hours,
+        "protection_posture": "watch",
+        "watch_entered_at": ENTERED,
+        "harness_postures": {"codex": "watch", "cursor": "watch", "claude-code": "protected"},
+        "harness_watch_entered_at": {
+            "codex": ENTERED,
+            "cursor": "2026-01-01T07:00:00-05:00",
+            "claude-code": ENTERED,
+        },
+    });
+    for (key, value) in fields.as_object().unwrap() {
+        input[key] = value.clone();
+    }
+    let reply =
+        run(&json!({"schema": SCHEMA, "op": "watch_auto_revert_deadlines", "watch": input}));
+    assert_eq!(reply["ok"], true, "{reply}");
+    reply["result"].clone()
+}
+
+#[test]
+fn each_watch_posture_reverts_its_window_after_its_stamp() {
+    assert_eq!(
+        deadlines(24, json!({})),
+        json!({
+            "protection_posture": ENTERED_MICROS + 24 * HOUR,
+            "harnesses": {
+                "codex": ENTERED_MICROS + 24 * HOUR,
+                "cursor": ENTERED_MICROS + 36 * HOUR,
+            },
+        })
+    );
+}
+
+#[test]
+fn a_naive_stamp_is_read_as_utc() {
+    let answer = deadlines(
+        2,
+        json!({
+            "watch_entered_at": "2026-01-01T00:00:00",
+            "harness_watch_entered_at": {"codex": "2026-01-01"},
+        }),
+    );
+    assert_eq!(
+        answer,
+        json!({
+            "protection_posture": ENTERED_MICROS + 2 * HOUR,
+            "harnesses": {"codex": ENTERED_MICROS + 2 * HOUR},
+        })
+    );
+}
+
+#[test]
+fn watch_never_reverts_without_a_window_a_stamp_or_a_watch_posture() {
+    let none = json!({"protection_posture": null, "harnesses": {}});
+    assert_eq!(deadlines(0, json!({})), none);
+    assert_eq!(deadlines(-1, json!({})), none);
+    assert_eq!(deadlines(i64::MAX, json!({})), none);
+    let unwatched = deadlines(
+        24,
+        json!({
+            "protection_posture": "protected",
+            "harness_postures": {"codex": "watch", "cursor": "watch"},
+            "harness_watch_entered_at": {"codex": "not-a-timestamp"},
+        }),
+    );
+    assert_eq!(unwatched, none);
+    let unstamped = deadlines(24, json!({"watch_entered_at": null}));
+    assert_eq!(unstamped["protection_posture"], Value::Null);
+    let unparseable = deadlines(24, json!({"watch_entered_at": "2026-01-01T10"}));
+    assert_eq!(unparseable["protection_posture"], Value::Null);
+}
+
+#[test]
+fn the_watch_op_needs_its_input() {
+    let request: Request =
+        serde_json::from_value(json!({"schema": SCHEMA, "op": "watch_auto_revert_deadlines"}))
+            .unwrap();
+    assert_eq!(resolve(&request).unwrap_err(), INVALID);
+    // A partial input is refused before any op runs.
+    let partial = json!({
+        "schema": SCHEMA,
+        "op": "watch_auto_revert_deadlines",
+        "watch": {"auto_revert_hours": 24, "protection_posture": "watch"},
+    });
+    assert_eq!(
+        run_command(partial.to_string().as_bytes()).unwrap_err(),
+        INVALID
+    );
+}

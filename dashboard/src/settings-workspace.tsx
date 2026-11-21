@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import {
   HiMiniShieldCheck,
   HiMiniCheckCircle,
@@ -39,6 +39,7 @@ import {
   revokeApprovalGateCooldown,
 } from "./guard-api";
 import { commitDashboardLocation } from "./dashboard-location";
+import { navigateFromAnchor } from "./shell-navigation-link";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
 import { GuardHookRemovalPanel } from "./guard-hook-removal-panel";
 import { GuardRepairControl } from "./guard-repair-control";
@@ -70,6 +71,7 @@ export {
   TotpEnrollmentQrPanel,
 } from "./totp-enrollment-qr-panel";
 import { TotpEnrollmentQrPanel } from "./totp-enrollment-qr-panel";
+import { PulseSettingsPanel } from "./pulse-settings-panel";
 import {
   SettingsSaveProofModal,
   resolveSettingsSaveProofKind,
@@ -80,6 +82,7 @@ import {
 } from "./settings-save-proof-modal";
 import type {
   GuardApprovalGatePublicConfig,
+  GuardContextAssistanceConfig,
   GuardNotificationSetupResult,
   GuardRuntimeSnapshot,
   GuardProtectionCapability,
@@ -92,6 +95,11 @@ import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./set
 import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
 import { ApprovalPasswordSection } from "./settings/approval-password-copy";
 import { CloudReviewSettings } from "./settings/cloud-review-settings";
+import { CloudActionsSettings } from "./settings/cloud-actions-settings";
+import { ContextAssistanceSettings } from "./context-assistance/settings-panel";
+import { ContextDataRepairPanel } from "./context-assistance/data-repair-panel";
+import { settingsWithContextOff } from "./context-assistance/settings-model";
+import { withCigarSelection } from "./context-assistance/selection-settings";
 export { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
 import {
   applyPresentationMode,
@@ -516,14 +524,20 @@ function saveStatusText(saveSuccess: boolean, saveError: string | null): string 
 
 type SettingsWorkspaceProps = {
   onApprovalGateChange?: (gate: GuardApprovalGatePublicConfig) => void;
+  contextOnly?: boolean;
+  onNavigate?: (pathname: string) => void;
 };
 
-export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspaceProps) {
+export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, onNavigate }: SettingsWorkspaceProps) {
   const [returnToExtensions] = useState(() => new URLSearchParams(window.location.search).get("returnTo") === "extensions");
   const approvalSetupRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SettingsState>({ kind: "loading" });
   const [draft, setDraft] = useState<GuardSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [contextAssistanceBusy, setContextAssistanceBusy] = useState(false);
+  // The Watch banner saves on its own; hold the page Save while it runs so an
+  // older draft cannot land after it and turn Watch back on.
+  const [watchBannerBusy, setWatchBannerBusy] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [clearingApprovals, setClearingApprovals] = useState(false);
@@ -539,6 +553,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
   const [pendingPosture, setPendingPosture] = useState<ProtectionPosture | null>(null);
   const [activeTab, setActiveTab] = useState<LocalSettingsTabKey>(() => resolveInitialSettingsTab(window.location.search));
+  const [pulseSetupOpen, setPulseSetupOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
     if (!returnToExtensions || activeTab !== "approval" || state.kind !== "ready") return;
@@ -624,12 +639,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
   useEffect(() => {
     const handlePopState = () => {
+      if (pulseSetupOpen) return;
       setActiveTab(resolveInitialSettingsTab(window.location.search));
       setActionMessage(null);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [pulseSetupOpen]);
 
   useEffect(() => {
     function handleBeforeUnload(event: BeforeUnloadEvent) {
@@ -750,7 +766,15 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     applyDraftPosture(posture);
   }, [applyDraftPosture]);
 
-  const handleTurnProtectionOn = useCallback(() => {
+  // The banner has already saved the change (with approval proof when the gate
+  // is on). Record the saved settings and end Watch in the draft too, keeping
+  // any other unsaved edits on the page.
+  const handleProtectionTurnedOn = useCallback((payload: GuardSettingsPayload | null) => {
+    if (payload !== null) {
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      setState({ kind: "ready", payload: normalizedPayload });
+      savedSettingsRef.current = normalizedPayload.settings;
+    }
     setDraft((value) => {
       if (value === null) return value;
       const cleared = clearHarnessWatchOverrides(value);
@@ -887,6 +911,32 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       onApprovalGateChange?.(gate);
     }
   }, [onApprovalGateChange]);
+
+  const handleContextAssistanceChange = useCallback((config: GuardContextAssistanceConfig) => {
+    setDraft((current) => current ? { ...current, context_assistance: config } : current);
+    setSaveSuccess(false);
+  }, []);
+
+  const handleCigarSelectionChanged = useCallback((config: GuardContextAssistanceConfig, previous: GuardContextAssistanceConfig) => {
+    const saved = savedSettingsRef.current;
+    if (!saved) return;
+    const next = withCigarSelection(saved, config, previous);
+    if (next === saved) return;
+    savedSettingsRef.current = next;
+    setDraft((current) => current ? withCigarSelection(current, config, previous, true) : current);
+    setState((current) => current.kind === "ready" ? {
+      ...current, payload: { ...current.payload, settings: withCigarSelection(current.payload.settings, config, previous) },
+    } : current);
+  }, []);
+
+  const handleContextAssistanceStopped = useCallback((config: GuardContextAssistanceConfig) => {
+    const saved = savedSettingsRef.current;
+    if (saved) savedSettingsRef.current = settingsWithContextOff(saved, config);
+    setDraft((current) => current ? settingsWithContextOff(current, config) : current);
+    setState((current) => current.kind === "ready" ? {
+      ...current, payload: { ...current.payload, settings: settingsWithContextOff(current.payload.settings, config) },
+    } : current);
+  }, []);
 
   const openProofModal = useCallback((
     mode: SettingsSaveProofMode,
@@ -1164,7 +1214,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, [pendingProofAction, executeSave, executeImportSettings, executeResetSettings, executeMaintenanceWithProof]);
 
   const handleSave = useCallback(() => {
-    if (draft === null) {
+    if (draft === null || watchBannerBusy) {
       return;
     }
     const savedGateConfig = savedSettingsRef.current?.approval_gate ?? null;
@@ -1181,7 +1231,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       return;
     }
     void executeSave();
-  }, [approvalGateEnabled, draft, executeSave, openProofModal]);
+  }, [approvalGateEnabled, draft, executeSave, openProofModal, watchBannerBusy]);
 
   const handleOpenPasswordChangeModal = useCallback((mode: "change-password" | "setup-gate" = "change-password") => {
     if (mode === "setup-gate") {
@@ -1282,6 +1332,23 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       setTotpActionPending(null);
     }
   }, [totpActionPassword, approvalGateTotpCode, onApprovalGateChange]);
+
+  const handlePulseSettingsPayload = useCallback((payload: GuardSettingsPayload) => {
+    const normalized = normalizeSettingsPayload(payload);
+    const nextGate = normalized.settings.approval_gate;
+    if (!nextGate) return;
+    setState((current) => current.kind === "ready"
+      ? { ...current, payload: { ...current.payload, settings: { ...current.payload.settings, approval_gate: nextGate } } }
+      : current);
+    setDraft((current) => current ? { ...current, approval_gate: nextGate } : current);
+    savedSettingsRef.current = savedSettingsRef.current
+      ? { ...savedSettingsRef.current, approval_gate: nextGate }
+      : savedSettingsRef.current;
+    setApprovalGateEnabled(nextGate.enabled);
+    setApprovalGateCooldown(nextGate.cooldown_seconds);
+    setApprovalGateStrictAllDecisions(nextGate.strict_all_decisions);
+    onApprovalGateChange?.(nextGate);
+  }, [onApprovalGateChange]);
 
   const handleDisableTotp = useCallback(async () => {
     handleRequestDisableTotp();
@@ -1539,13 +1606,28 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
   return (
     <div className="flex min-h-[calc(100dvh-11rem)] flex-col gap-6">
+      {contextOnly ? (
+        <ContextAssistanceSettings workspace value={draft.context_assistance} savedValue={state.payload.settings.context_assistance}
+          gate={state.payload.settings.approval_gate ?? null}
+          locked={(draft.managed_locked_settings ?? []).some((key) => key === "context_assistance" || key.startsWith("context_assistance."))}
+          disabled={saving || proofModalOpen} onChange={handleContextAssistanceChange}
+          onStopped={handleContextAssistanceStopped} onBusyChange={setContextAssistanceBusy}
+          onSelectionChanged={handleCigarSelectionChanged}
+          data={<ContextDataRepairPanel savedEnabled={Boolean(state.payload.settings.context_assistance?.enabled)}
+            disabled={saving || proofModalOpen} onStopped={handleContextAssistanceStopped} onBusyChange={setContextAssistanceBusy} />} />
+      ) : <>
       <WorkspacePageHeader
         eyebrow="This machine"
         title="Protection"
         description="Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate."
       />
       {watchBanner !== null ? (
-        <WatchProtectionBanner model={watchBanner} onTurnProtectionOn={handleTurnProtectionOn} />
+        <WatchProtectionBanner
+          model={watchBanner}
+          onTurnedOn={handleProtectionTurnedOn}
+          onBusyChange={setWatchBannerBusy}
+          disabled={saving || proofModalOpen}
+        />
       ) : null}
 
       <div className="relative">
@@ -1653,6 +1735,14 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 />
               </SettingsFormSection>
             ) : null}
+
+            <SettingsFormSection title="CIGAR" description="Gives your AI app the project files that match what you ask.">
+              <div className="flex flex-wrap items-center justify-between gap-3 py-4">
+                <p className="max-w-xl text-sm text-slate-500">Turn it on, pick project folders and choose which AI apps use it on the CIGAR page.</p>
+                <a className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 px-4 text-sm font-semibold text-brand-dark hover:bg-slate-50"
+                  href={guardAwareHref("/cigar")} onClick={(event) => { if (onNavigate) navigateFromAnchor(event, "/cigar", { onNavigate }); }}>Open CIGAR</a>
+              </div>
+            </SettingsFormSection>
 
             <SettingsFormSection title="Timing and features">
               <div className="space-y-4 py-3">
@@ -1789,6 +1879,14 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               onVerifyTotpEnrollment={handleVerifyTotpEnrollment}
               onDisableTotp={handleDisableTotp}
               onRevokeCooldown={handleRequestRevokeCooldown}
+              pulseSettings={
+                <PulseSettingsPanel
+                  gateConfig={draft.approval_gate ?? null}
+                  savedGateConfig={savedSettingsRef.current?.approval_gate ?? null}
+                  onSettingsPayload={handlePulseSettingsPayload}
+                  onSetupOpenChange={setPulseSetupOpen}
+                />
+              }
             />
             </div>
             <SettingsFormSection
@@ -1939,8 +2037,12 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           </div>
         )}
 
+        {activeTab === "cloud-actions" && <CloudActionsSettings />}
+
         {activeTab === "maintenance" && (
           <div className="flex min-h-0 flex-1 flex-col space-y-6">
+            <ContextDataRepairPanel savedEnabled={Boolean(state.payload.settings.context_assistance?.enabled)} disabled={saving || proofModalOpen}
+              onStopped={handleContextAssistanceStopped} onBusyChange={setContextAssistanceBusy} />
             <SettingsFormSection title="Keep this machine tidy" description="Export, reset, clear history, or fix a broken approval link.">
               <div className="space-y-4 py-3">
                 {perfSnapshot !== null ? <DiagnosticsPerfCard snapshot={perfSnapshot} /> : null}
@@ -2045,21 +2147,22 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         )}
       </SettingsSectionShell>
       </div>
+      </>}
 
-      <div
+      {(!contextOnly || hasUnsavedChanges(savedSettingsRef.current, draft) || saving || saveSuccess || saveError || proofModalOpen) ? <div
         className="sticky bottom-2 mt-auto rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:bottom-4 sm:p-4"
         role="region"
-        aria-label="Save settings"
+        aria-label={contextOnly ? "Save CIGAR preferences" : "Save settings"}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <ActionButton onClick={handleSave} disabled={saving || saveSuccess}>
+            <ActionButton onClick={handleSave} disabled={saving || saveSuccess || contextAssistanceBusy || watchBannerBusy}>
               {saveSuccess ? (
                 <span className="flex items-center gap-2">
                   <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" />
                   Saved
                 </span>
-              ) : saving ? "Saving…" : "Save settings"}
+              ) : saving ? "Saving…" : contextOnly ? "Save CIGAR preferences" : "Save settings"}
             </ActionButton>
             {hasUnsavedChanges(savedSettingsRef.current, draft) && (
               <span className="ml-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-attention">
@@ -2073,13 +2176,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           ) : saveError ? (
             <p className="text-sm text-brand-purple">{saveError}</p>
           ) : (
-            <p className="hidden text-xs text-slate-500 sm:block">Use this for local tuning. Team policy from Guard Cloud may still override some decisions.</p>
+            <p className="hidden text-xs text-slate-500 sm:block">{contextOnly ? "Saving records your choices. Start the runtime after saving. Managed policy may restrict availability." : "Use this for local tuning. Team policy from Guard Cloud may still override some decisions."}</p>
           )}
           <div aria-live="polite" aria-atomic="true" className="sr-only">
             {saveStatusText(saveSuccess, saveError)}
           </div>
         </div>
-      </div>
+      </div> : null}
 
       {proofModalOpen && pendingProofAction !== null ? (
         <SettingsSaveProofModal
@@ -2379,6 +2482,8 @@ type ApprovalGateCardProps = {
   onVerifyTotpEnrollment: () => void;
   onDisableTotp: () => void;
   onRevokeCooldown: () => void;
+  /** The Yanez Pulse card, shown below the authenticator card. */
+  pulseSettings?: ReactNode;
 };
 
 function ApprovalGateCard(props: ApprovalGateCardProps) {
@@ -2388,6 +2493,8 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
   const totpEnabled = props.gateConfig?.totp_enabled === true;
   const totpPending = props.gateConfig?.totp_pending === true;
+  // Pulse pauses the authenticator: its secret is kept, but no codes are accepted.
+  const totpPausedByPulse = props.gateConfig?.pulse_enabled === true;
   const failClosed = props.gateConfig?.fail_closed === true;
   const effectiveCooldownSeconds = effectiveApprovalGateCooldownSeconds(props.cooldownSeconds, totpEnabled);
   const cooldownLabel = cooldownExpiresAt
@@ -2467,8 +2574,8 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
               </p>
             </div>
             <div className="px-4">
-              <Tag tone={totpEnabled ? "green" : totpPending ? "blue" : "slate"}>
-                {totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Not connected"}
+              <Tag tone={totpPausedByPulse ? "slate" : totpEnabled ? "green" : totpPending ? "blue" : "slate"}>
+                {totpPausedByPulse ? "Paused" : totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Not connected"}
               </Tag>
             </div>
           </div>
@@ -2480,7 +2587,12 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                   : "Set an approval password first, then connect an authenticator app for high-risk approvals."}
               </p>
             )}
-            {gateActiveOnDevice && !totpEnabled && !totpPending && (
+            {gateActiveOnDevice && totpPausedByPulse && (
+              <p className="max-w-xl text-xs leading-5 text-slate-500">
+                Yanez Pulse is on, so Guard does not accept authenticator codes. An authenticator you already set up is kept and works again when you turn Pulse off.
+              </p>
+            )}
+            {gateActiveOnDevice && !totpPausedByPulse && !totpEnabled && !totpPending && (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="max-w-xl space-y-1">
                   <p className="text-sm font-medium text-brand-dark">Add a second factor for high-risk approvals.</p>
@@ -2497,7 +2609,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                 </ActionButton>
               </div>
             )}
-            {gateActiveOnDevice && totpPending && (
+            {gateActiveOnDevice && !totpPausedByPulse && totpPending && (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="max-w-xl space-y-1">
                   <p className="text-sm font-medium text-brand-dark">Finish connecting your authenticator app.</p>
@@ -2552,6 +2664,8 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
             />
           )}
         </div>
+
+        {props.pulseSettings}
 
         {cooldownActive && cooldownLabel !== null && (
           <div className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4">

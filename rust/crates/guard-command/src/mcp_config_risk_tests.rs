@@ -121,6 +121,24 @@ fn a_remote_server_over_plain_http_is_reported_and_loopback_is_not() {
 }
 
 #[test]
+fn local_development_hostnames_that_resolve_through_dns_are_reported() {
+    // Only `localhost` and loopback addresses are certain to stay on this
+    // machine. Other names, including `*.localhost` and Docker's host alias,
+    // are resolved by the system resolver, which a network's DNS can answer
+    // with a remote address, so plain HTTP to them can be read or altered.
+    for url in [
+        "http://mcp.localhost:3000/mcp",
+        "http://host.docker.internal:8080/mcp",
+    ] {
+        assert_eq!(
+            ids(None, &[], Some(url)),
+            ["mcp.config.remote-plain-http"],
+            "{url}"
+        );
+    }
+}
+
+#[test]
 fn ordinary_server_launches_are_quiet() {
     for (command, args) in [
         (

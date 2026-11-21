@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from ..config import GuardConfig
-from ..models import GuardAction, HarnessDetection, PolicyDecision
+from ..models import GuardAction, HarnessDetection
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .json_safe_copy import json_safe_copy
 
@@ -62,7 +62,6 @@ _AUTHORITY_ARTIFACT_KEYS = frozenset(
 # Per-request budget for the slimmed artifacts of one chunk (the transport cap
 # is 4 MiB; the reply is a patch, so it stays far below its own 2 MiB cap).
 _CHUNK_BYTES = 512 * 1024
-_SHADOW_KEYS = ("harness", "scope", "artifact_id", "artifact_hash", "workspace", "publisher", "action", "expires_at")
 
 
 @dataclass(frozen=True, slots=True)
@@ -406,14 +405,11 @@ def authority_error(evaluation: Mapping[str, object], *, require_launch_permitte
     return _typed(payload, "authority_error", str, nullable=True)
 
 
-def policy_shadow_mismatch(legacy: Sequence[PolicyDecision], canonical: Sequence[PolicyDecision]) -> tuple[str, ...]:
-    """Reason codes where the legacy and canonical policy rows disagree."""
+def local_identity(observed_at: str) -> tuple[dict[str, object], dict[str, str]]:
+    """The host name and private address a runtime session reports, with their source."""
 
-    def rows(decisions: Sequence[PolicyDecision]) -> list[dict[str, object]]:
-        return [{key: getattr(decision, key) for key in _SHADOW_KEYS} for decision in decisions]
-
-    payload = native_runner_authority("policy_shadow_mismatch", {"legacy": rows(legacy), "canonical": rows(canonical)})
-    return tuple(_typed(payload, "reason_codes", list))
+    payload = native_runner_authority("local_identity", {"observed_at": observed_at})
+    return _typed(payload, "identity", dict), _typed(payload, "source", dict)
 
 
 def receipt_evidence_updates(

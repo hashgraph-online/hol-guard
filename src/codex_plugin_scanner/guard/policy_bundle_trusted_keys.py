@@ -22,7 +22,6 @@ from .native_policy_bundle import (
     policy_bundle_chunks,
     policy_bundle_verdict,
 )
-from .stable_digest import sha256_content_digest
 
 POLICY_BUNDLE_KEY_PURPOSE = "policy_bundle"
 POLICY_BUNDLE_KEYRING_CONTRACT_VERSION = "guard-policy-keyring.v1"
@@ -63,8 +62,6 @@ class PolicyBundleVerificationKey:
 
 
 class _PolicyBundleV2Module(Protocol):
-    def policy_bundle_v2_evidence(self, policy_bundle: dict[str, object]) -> dict[str, object]: ...
-
     def policy_bundle_v2_now_micros(self, now: datetime | None) -> int: ...
 
 
@@ -73,7 +70,9 @@ def _policy_bundle_v2_module() -> _PolicyBundleV2Module:
     return cast(_PolicyBundleV2Module, cast(object, module))
 
 
-def _keys_from_wire(items: object) -> tuple[PolicyBundleVerificationKey, ...]:
+def policy_bundle_keys_from_wire(items: object) -> tuple[PolicyBundleVerificationKey, ...]:
+    """Rebuild key values from a native verdict: the shape is the resident's, not a verdict."""
+
     if not isinstance(items, list):
         raise PolicyBundleNativeUnavailableError("native_policy_bundle_authority_schema_mismatch")
     try:
@@ -98,39 +97,11 @@ def _wire(keys: tuple[PolicyBundleVerificationKey, ...]) -> list[dict[str, objec
     return [key.to_dict() for key in keys]
 
 
-def policy_bundle_key_fingerprint(public_key_pem: str) -> str:
-    normalized_pem = public_key_pem.replace("\r\n", "\n").strip()
-    return sha256_content_digest(normalized_pem.encode("utf-8"))
-
-
-def policy_bundle_verification_key_from_public_key(
-    *,
-    key_id: str,
-    public_key_pem: str,
-    state: str = "active",
-    purpose: str = POLICY_BUNDLE_KEY_PURPOSE,
-    workspace_id: str | None = None,
-    valid_from: str | None = None,
-    valid_until: str | None = None,
-) -> PolicyBundleVerificationKey:
-    normalized_pem = public_key_pem.replace("\r\n", "\n").strip()
-    return PolicyBundleVerificationKey(
-        key_id=key_id.strip(),
-        public_key_pem=normalized_pem,
-        fingerprint_sha256=policy_bundle_key_fingerprint(normalized_pem),
-        state=state,
-        purpose=purpose,
-        workspace_id=workspace_id,
-        valid_from=valid_from,
-        valid_until=valid_until,
-    )
-
-
 def _load_keys(raw: object, *, require_keyring_contract: bool, safe: bool) -> tuple[PolicyBundleVerificationKey, ...]:
     result = policy_bundle_verdict(
         "load_keys", {"raw": raw, "require_contract": require_keyring_contract, "safe": safe}
     )
-    return _keys_from_wire(result.get("keys"))
+    return policy_bundle_keys_from_wire(result.get("keys"))
 
 
 def load_policy_bundle_verification_keys(
@@ -231,16 +202,6 @@ def merge_policy_bundle_trusted_keys(
     return tuple(merged[key_id] for key_id in sorted(merged))
 
 
-def resolve_policy_bundle_signing_key(
-    key_id: str,
-    trusted_keys: tuple[PolicyBundleVerificationKey, ...],
-) -> PolicyBundleVerificationKey | None:
-    for key in trusted_keys:
-        if key.key_id == key_id:
-            return key
-    return None
-
-
 def signing_key_is_current(
     signing_key: PolicyBundleVerificationKey,
     *,
@@ -339,10 +300,7 @@ def validate_synced_policy_bundle(
         request["daemon_version"] = policy_bundle_parser.__version__
         request["bundle_chunks"] = policy_bundle_chunks(policy_bundle)
         result = native_policy_bundle("validate_synced", request)
-        if result.get("needs_evidence") is True:
-            request["evidence"] = v2_module.policy_bundle_v2_evidence(policy_bundle)
-            result = native_policy_bundle("validate_synced", request)
-        anchored = _keys_from_wire(result.get("anchored_keys"))
+        anchored = policy_bundle_keys_from_wire(result.get("anchored_keys"))
     except PolicyBundleNativeError as error:
         return None, _synced_rejection_code(policy_bundle, error), ()
     reason = result.get("error")
@@ -351,7 +309,7 @@ def validate_synced_policy_bundle(
     if result.get("ok") is not True:
         return None, "native_policy_bundle_authority_schema_mismatch", anchored
     try:
-        updated = _keys_from_wire(result.get("updated_keys"))
+        updated = policy_bundle_keys_from_wire(result.get("updated_keys"))
     except PolicyBundleNativeError as error:
         return None, native_rejection_code(error), anchored
     if result.get("contract") == "v2":

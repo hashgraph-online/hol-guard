@@ -170,7 +170,9 @@ export function customExtensionStateLabel(item: LocalCliItem): string {
     if (item.surface === "mcp") return "This connection changed. Review its permissions again.";
     return item.surface === "package-scripts"
       ? "package.json scripts changed. Review the extension again."
-      : "This file changed. Review the extension again.";
+      : item.state === "allowed"
+        ? "You allowed an earlier version of this file. It has changed, so Guard asks again until you allow this version."
+        : "This file changed. Review the extension again.";
   }
   if (item.state === "blocked") return `Every ${unit} from ${source} is blocked.`;
   if (item.state === "allowed") {
@@ -229,6 +231,12 @@ export function connectorSetupCopy(match: ConnectorSetupMatch, name: string): { 
     return {
       title: "This connector changed since the request was held",
       body: `The ${name} Guard sees now has a different identity from the one an agent was held on. Review it before you allow it. The held request stays in the Inbox.`,
+    };
+  }
+  if (match === "reallow") {
+    return {
+      title: `Allow this version of ${name}`,
+      body: "You allowed an earlier version of this file. It has changed since, so Guard paused the agent's calls to it. Allowing this version keeps your command choices, then approves the requests held on it once. If you did not expect the file to change, block it instead.",
     };
   }
   if (match === "decided") {

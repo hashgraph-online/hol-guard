@@ -9,32 +9,28 @@ import re
 from contextlib import redirect_stderr
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, _remove_managed_block
-from codex_plugin_scanner.guard.adapters.grok_hooks import (
-    grok_hook_response_from_guard,
-)
-from codex_plugin_scanner.guard.runtime.actions import normalize_grok_hook_payload
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
+from tests import harness_ops_support as harness_support
 
 from .grok_test_support import _ctx, _fixture
 
 
 class TestGrokAdapterIdentity:
     def test_harness_identifier_is_grok(self) -> None:
-        assert GrokHarnessAdapter.harness == "grok"
+        assert harness_ops.canonical_harness("grok") == "grok"
 
     def test_aliases_resolve(self) -> None:
         for alias in ("grok-build", "grok-build-cli", "xai-grok"):
-            assert get_adapter(alias).harness == "grok"
+            assert harness_ops.canonical_harness(alias) == "grok"
 
-    def test_get_adapter_returns_grok_instance(self) -> None:
-        assert isinstance(get_adapter("grok"), GrokHarnessAdapter)
+    def test_get_adapter_returns_the_native_grok_adapter(self) -> None:
+        assert harness_ops.canonical_harness("grok") == "grok"
 
     def test_grok_is_registered_in_adapter_list(self) -> None:
-        from codex_plugin_scanner.guard.adapters import list_adapters
 
-        assert "grok" in {item.harness for item in list_adapters()}
+        assert "grok" in set(harness_ops.list_harnesses())
 
 
 class TestGrokDetect:
@@ -59,7 +55,7 @@ class TestGrokDetect:
             ),
             encoding="utf-8",
         )
-        result = GrokHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("grok", ctx)
         assert result.harness == "grok"
         assert any(".grok/managed_config.toml" in path for path in result.config_paths)
         hook_artifacts = [artifact for artifact in result.artifacts if artifact.artifact_type == "hook"]
@@ -69,7 +65,7 @@ class TestGrokDetect:
 class TestGrokInstallUninstall:
     def test_install_writes_managed_hooks_and_config(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        manifest = GrokHarnessAdapter().install(ctx)
+        manifest = harness_support.install("grok", ctx)
         managed_config = ctx.home_dir / ".grok" / "config.toml"
         pretool_hook = ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json"
         prompt_hook = ctx.home_dir / ".grok" / "hooks" / "hol-guard-prompt.json"
@@ -93,19 +89,18 @@ class TestGrokInstallUninstall:
         assert "Read(**/.grok/auth/**)" in managed_text
         assert "Read(~/" not in managed_text
         assert "[[hooks.PreToolUse]]" in managed_text and "[[hooks.SessionStart]]" in managed_text
-        from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
+        from codex_plugin_scanner.guard.cli.native_install_checks import _grok_hook_command_is_guard
 
-        assert is_grok_hook_command(pretool_entries[0]["hooks"][0]["command"], ctx)
+        assert _grok_hook_command_is_guard(pretool_entries[0]["hooks"][0]["command"], ctx)
         assert "[compat.claude]" in managed_text
         assert "[compat.cursor]" in managed_text
         assert managed_text.count("hooks = false") >= 2
 
     def test_repeated_install_is_idempotent(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        adapter = GrokHarnessAdapter()
-        adapter.install(ctx)
+        harness_support.install("grok", ctx)
         first_config = (ctx.home_dir / ".grok" / "config.toml").read_text(encoding="utf-8")
-        adapter.install(ctx)
+        harness_support.install("grok", ctx)
         second_config = (ctx.home_dir / ".grok" / "config.toml").read_text(encoding="utf-8")
         assert first_config == second_config
 
@@ -114,9 +109,8 @@ class TestGrokInstallUninstall:
         user_config = ctx.home_dir / ".grok" / "config.toml"
         user_config.parent.mkdir(parents=True, exist_ok=True)
         user_config.write_text("[ui]\nsimple_mode = true\n", encoding="utf-8")
-        adapter = GrokHarnessAdapter()
-        adapter.install(ctx)
-        adapter.uninstall(ctx)
+        harness_support.install("grok", ctx)
+        harness_support.uninstall("grok", ctx)
         assert user_config.read_text(encoding="utf-8") == "[ui]\nsimple_mode = true\n"
         assert not (ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json").exists()
         assert not (ctx.home_dir / ".grok" / "managed_config.toml").exists()
@@ -124,7 +118,9 @@ class TestGrokInstallUninstall:
 
 class TestGrokHookPayload:
     def test_normalize_grok_hook_payload_builds_shell_envelope(self, tmp_path: Path) -> None:
-        envelope = normalize_grok_hook_payload(
+        envelope = normalize_harness_payload(
+            "grok",
+            "",
             _fixture("pretooluse_bash.json"),
             workspace=tmp_path / "workspace",
             home_dir=tmp_path,
@@ -135,17 +131,6 @@ class TestGrokHookPayload:
 
 
 class TestGrokHookResponses:
-    def test_allow_response(self) -> None:
-        assert grok_hook_response_from_guard(policy_action="allow", reason="") == {"decision": "allow"}
-
-    def test_deny_response(self) -> None:
-        payload = grok_hook_response_from_guard(policy_action="block", reason="Blocked by HOL Guard.")
-        assert payload == {"decision": "deny", "reason": "Blocked by HOL Guard."}
-
-    def test_unsatisfied_review_response_is_denied(self) -> None:
-        payload = grok_hook_response_from_guard(policy_action="review", reason="Review in HOL Guard.")
-        assert payload == {"decision": "deny", "reason": "Review in HOL Guard."}
-
     def test_prompt_hook_preserves_native_policy_block(self, tmp_path: Path, native_hook_force: Path) -> None:
         import json as _json
 
@@ -229,12 +214,6 @@ class TestGrokHookResponses:
         assert '"decision":"deny"' in stdout_capture.getvalue()
 
 
-class TestGrokManagedBlockHelpers:
-    def test_remove_managed_block_strips_guard_section(self) -> None:
-        text = "keep = true\n\n# BEGIN HOL GUARD MANAGED GROK\nmanaged = false\n# END HOL GUARD MANAGED GROK\n"
-        assert _remove_managed_block(text).strip() == "keep = true"
-
-
 class TestGrokFixturesAreRedacted:
     def test_fixtures_do_not_include_real_local_paths_or_tokens(self) -> None:
         fixture_dir = Path(__file__).parent / "fixtures" / "grok"
@@ -251,7 +230,9 @@ class TestGrokFixturesAreRedacted:
 
 class TestGrokHookPayloadFixtures:
     def test_webfetch_envelope_keeps_web_tool_name(self, tmp_path: Path) -> None:
-        envelope = normalize_grok_hook_payload(
+        envelope = normalize_harness_payload(
+            "grok",
+            "",
             _fixture("pretooluse_webfetch.json"),
             workspace=tmp_path / "ws",
             home_dir=tmp_path,
@@ -262,7 +243,9 @@ class TestGrokHookPayloadFixtures:
 
 class TestGrokActionEnvelopes:
     def test_read_secret_maps_to_file_read(self, tmp_path: Path) -> None:
-        envelope = normalize_grok_hook_payload(
+        envelope = normalize_harness_payload(
+            "grok",
+            "",
             _fixture("pretooluse_read_secret.json"),
             workspace=tmp_path / "ws",
             home_dir=tmp_path,
@@ -271,7 +254,9 @@ class TestGrokActionEnvelopes:
         assert ".env" in envelope.target_paths[0]
 
     def test_safe_grep_maps_to_file_read(self, tmp_path: Path) -> None:
-        envelope = normalize_grok_hook_payload(
+        envelope = normalize_harness_payload(
+            "grok",
+            "",
             _fixture("pretooluse_grep_safe.json"),
             workspace=tmp_path / "ws",
             home_dir=tmp_path,
@@ -281,7 +266,9 @@ class TestGrokActionEnvelopes:
         assert envelope.command.startswith("grep ")
 
     def test_session_id_is_preserved(self, tmp_path: Path) -> None:
-        envelope = normalize_grok_hook_payload(
+        envelope = normalize_harness_payload(
+            "grok",
+            "",
             _fixture("pretooluse_bash.json"),
             workspace=tmp_path / "ws",
             home_dir=tmp_path,
@@ -293,5 +280,5 @@ class TestGrokActionEnvelopes:
         workspace.mkdir()
         fixture = dict(_fixture("pretooluse_bash.json"))
         fixture["workspaceRoot"] = str(workspace)
-        envelope = normalize_grok_hook_payload(fixture, workspace=workspace, home_dir=tmp_path)
+        envelope = normalize_harness_payload("grok", "", fixture, workspace=workspace, home_dir=tmp_path)
         assert str(workspace) not in (envelope.workspace or "")

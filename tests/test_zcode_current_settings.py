@@ -12,9 +12,10 @@ import json
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.zcode import ZCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.zcode_config import GUARD_MANAGED_MARKER, is_guard_managed_hook_command
-from tests.test_zcode_adapter import _ctx, _write_cli_config
+from codex_plugin_scanner.guard import native_harness_install_ops as harness_install_ops
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from tests import harness_ops_support as harness_support
+from tests.test_zcode_adapter import GUARD_MANAGED_MARKER, _ctx, _write_cli_config, is_guard_managed_hook_command
 
 
 def _file_config(home):
@@ -37,7 +38,7 @@ def test_install_writes_both_surfaces_with_opt_in(tmp_path):
     config = _write_cli_config(context.home_dir, {"hooks": {}, "legacy": True})
     settings = _file_config(context.home_dir)
     settings.write_text(json.dumps({"ui": {"theme": "dark"}}))
-    manifest = ZCodeHarnessAdapter().install(context)
+    manifest = harness_support.install("zcode", context)
 
     assert manifest["config_path"] == str(config)
     installed_config = json.loads(config.read_text())
@@ -68,7 +69,7 @@ def test_install_refreshes_misdirected_setting_json_install(tmp_path):
         )
     )
 
-    manifest = ZCodeHarnessAdapter().install(context)
+    manifest = harness_support.install("zcode", context)
 
     assert manifest["config_path"] == str(config)
     migrated = json.loads(settings.read_text())
@@ -90,7 +91,7 @@ def test_install_preserves_user_handlers_on_both_surfaces(tmp_path):
     settings.write_text(
         json.dumps({"locale": "en", "hooks": {"enabled": True, "events": {"Stop": [{"hooks": [cli_user]}]}}})
     )
-    ZCodeHarnessAdapter().install(context)
+    harness_support.install("zcode", context)
 
     installed_config = json.loads(config.read_text())
     handlers = [h for g in installed_config["hooks"]["events"]["PreToolUse"] for h in g["hooks"]]
@@ -109,7 +110,7 @@ def test_invalid_config_json_is_rejected(tmp_path, contents):
     settings = _file_config(context.home_dir)
     settings.write_text(json.dumps({"ui": {"theme": "dark"}}))
     with pytest.raises(ValueError):
-        ZCodeHarnessAdapter().prepare_install(context)
+        harness_install_ops.prepare_install("zcode", context)
     assert config.read_text() == contents
     assert json.loads(settings.read_text()) == {"ui": {"theme": "dark"}}
 
@@ -121,7 +122,7 @@ def test_invalid_file_config_is_never_clobbered(tmp_path, contents):
     settings = _file_config(context.home_dir)
     settings.write_text(contents)
     with pytest.raises(ValueError):
-        ZCodeHarnessAdapter().prepare_install(context)
+        harness_install_ops.prepare_install("zcode", context)
     assert settings.read_text() == contents
 
 
@@ -130,7 +131,7 @@ def test_absent_file_config_is_not_created(tmp_path):
 
     context = _ctx(tmp_path)
     config = _write_cli_config(context.home_dir, {})
-    ZCodeHarnessAdapter().install(context)
+    harness_support.install("zcode", context)
     settings = _file_config(context.home_dir)
     assert not settings.exists()
     assert _managed_handlers(json.loads(config.read_text()))
@@ -141,9 +142,8 @@ def test_uninstall_preserves_user_root_hook_settings(tmp_path):
     _write_cli_config(context.home_dir, {})
     settings = _file_config(context.home_dir)
     settings.write_text(json.dumps({"hooks": {"timeoutMs": 9000, "events": {}}}))
-    adapter = ZCodeHarnessAdapter()
-    adapter.install(context)
-    adapter.uninstall(context)
+    harness_support.install("zcode", context)
+    harness_support.uninstall("zcode", context)
 
     hooks = json.loads(settings.read_text())["hooks"]
     assert hooks == {"timeoutMs": 9000}
@@ -154,9 +154,8 @@ def test_uninstall_restores_each_surface(tmp_path):
     config = _write_cli_config(context.home_dir, {"hooks": {"enabled": False}})
     settings = _file_config(context.home_dir)
     settings.write_text(json.dumps({"hooks": {"enabled": True}}))
-    adapter = ZCodeHarnessAdapter()
-    adapter.install(context)
-    adapter.uninstall(context)
+    harness_support.install("zcode", context)
+    harness_support.uninstall("zcode", context)
 
     remaining_config = json.loads(config.read_text())
     remaining_settings = json.loads(settings.read_text())
@@ -169,9 +168,8 @@ def test_uninstall_removes_guard_introduced_enabled(tmp_path):
     config = _write_cli_config(context.home_dir, {})
     settings = _file_config(context.home_dir)
     settings.write_text(json.dumps({"locale": "en"}))
-    adapter = ZCodeHarnessAdapter()
-    adapter.install(context)
-    adapter.uninstall(context)
+    harness_support.install("zcode", context)
+    harness_support.uninstall("zcode", context)
 
     assert "hooks" not in json.loads(config.read_text())
     assert json.loads(settings.read_text()) == {"locale": "en"}
@@ -182,9 +180,8 @@ def test_uninstall_prunes_both_surfaces(tmp_path):
     config = _write_cli_config(context.home_dir, {})
     settings = _file_config(context.home_dir)
     settings.write_text("{}")
-    adapter = ZCodeHarnessAdapter()
-    adapter.install(context)
-    adapter.uninstall(context)
+    harness_support.install("zcode", context)
+    harness_support.uninstall("zcode", context)
 
     assert "hooks" not in json.loads(config.read_text())
     assert "hooks" not in json.loads(settings.read_text())
@@ -195,12 +192,12 @@ def test_uninstall_handles_removed_file_config(tmp_path):
     config = _write_cli_config(context.home_dir, {"legacy": True})
     settings = _file_config(context.home_dir)
     settings.write_text("{}")
-    adapter = ZCodeHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("zcode", context)
     settings.unlink()
-    adapter.uninstall(context)
+    harness_support.uninstall("zcode", context)
     assert not settings.exists()
-    assert json.loads(config.read_text()) == {"legacy": True, "mcp": {}, "plugins": {}}
+    # Install added the empty Desktop objects; uninstall hands back the user's file.
+    assert json.loads(config.read_text()) == {"legacy": True}
 
 
 def test_install_does_not_enable_disabled_user_handlers(tmp_path):
@@ -221,7 +218,7 @@ def test_install_does_not_enable_disabled_user_handlers(tmp_path):
     )
     before = settings.read_bytes()
     with pytest.raises(ValueError, match="user hooks are disabled"):
-        ZCodeHarnessAdapter().prepare_install(context)
+        harness_install_ops.prepare_install("zcode", context)
     assert settings.read_bytes() == before
 
 
@@ -230,21 +227,19 @@ def test_uninstall_restores_disabled_empty_hooks_after_reinstall(tmp_path):
     legacy = _write_cli_config(context.home_dir, {})
     settings = legacy.with_name("setting.json")
     settings.write_text('{"hooks":{"enabled":false}}')
-    adapter = ZCodeHarnessAdapter()
-    adapter.install(context)
-    adapter.install(context)
-    adapter.uninstall(context)
+    harness_support.install("zcode", context)
+    harness_support.install("zcode", context)
+    harness_support.uninstall("zcode", context)
     assert json.loads(settings.read_text())["hooks"]["enabled"] is False
 
 
 @pytest.mark.parametrize("contents", ["[]", "null", "not json"])
 def test_reinstall_recovers_invalid_install_state(tmp_path, contents):
     context = _ctx(tmp_path)
-    adapter = ZCodeHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("zcode", context)
     state = context.guard_home / "managed/zcode/install.state.json"
     state.write_text(contents)
-    adapter.install(context)
+    harness_support.install("zcode", context)
     assert isinstance(json.loads(state.read_text()), dict)
 
 
@@ -269,18 +264,17 @@ def test_reinstall_recovers_invalid_install_state(tmp_path, contents):
 def test_invalid_saved_hook_preference_preserves_current_setting(tmp_path, recorded_enabled, reinstall):
     context = _ctx(tmp_path)
     config = _write_cli_config(context.home_dir, {"hooks": {"enabled": True}})
-    adapter = ZCodeHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("zcode", context)
     state = context.guard_home / "managed/zcode/install.state.json"
     saved = json.loads(state.read_text())
     saved["hooks_enabled_before"] = recorded_enabled
     state.write_text(json.dumps(saved))
 
     if reinstall:
-        adapter.install(context)
+        harness_support.install("zcode", context)
         refreshed = json.loads(state.read_text())["hooks_enabled_before"]
         assert refreshed[str(config)] == {"present": True, "value": True}
-    adapter.uninstall(context)
+    harness_support.uninstall("zcode", context)
     assert json.loads(config.read_text())["hooks"]["enabled"] is True
 
 
@@ -289,10 +283,9 @@ def test_uninstall_keeps_user_preference_after_external_hook_cleanup(tmp_path):
 
     context = _ctx(tmp_path)
     config = _write_cli_config(context.home_dir, {"hooks": {"enabled": False}})
-    adapter = ZCodeHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("zcode", context)
     config.write_text(json.dumps({"hooks": {"enabled": True, "events": {}}}))
-    adapter.uninstall(context)
+    harness_support.uninstall("zcode", context)
     assert json.loads(config.read_text())["hooks"]["enabled"] is True
 
 
@@ -313,9 +306,8 @@ def test_legacy_setting_json_state_maps_onto_file_config(tmp_path):
             }
         )
     )
-    adapter = ZCodeHarnessAdapter()
-    adapter.install(context)
-    adapter.uninstall(context)
+    harness_support.install("zcode", context)
+    harness_support.uninstall("zcode", context)
 
     assert json.loads(settings.read_text())["hooks"]["enabled"] is False
     assert "hooks" not in json.loads(config.read_text())
@@ -326,6 +318,6 @@ def test_detect_inventories_both_hook_surfaces(tmp_path):
     config = _write_cli_config(context.home_dir, {})
     settings = _file_config(context.home_dir)
     settings.write_text(json.dumps({"hooks": {"enabled": True}}))
-    detected = ZCodeHarnessAdapter().detect(context)
+    detected = harness_ops.detect("zcode", context)
     assert str(config) in detected.config_paths
     assert str(settings) in detected.config_paths

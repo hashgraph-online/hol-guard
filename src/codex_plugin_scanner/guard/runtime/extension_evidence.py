@@ -7,9 +7,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final, cast
 
-from codex_plugin_scanner.guard.action_lattice import is_guard_action
-from codex_plugin_scanner.guard.models import GuardAction
-
 _STABLE_ID: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*")
 _SEMANTIC_VERSION: Final[re.Pattern[str]] = re.compile(
     r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
@@ -57,32 +54,7 @@ def _require_non_empty_frozenset(value: object, label: str) -> frozenset[object]
     return value
 
 
-def _require_enum_tuple(value: object, enum_type: type[Enum], label: str) -> None:
-    items = _require_tuple(value, label)
-    if any(not isinstance(item, enum_type) for item in items):
-        raise ValueError(f"{label} members must be {enum_type.__name__} values")
-    if len(items) != len(set(items)):
-        raise ValueError(f"{label} cannot contain duplicates")
-
-
 def _require_tuple(value: object, label: str) -> tuple[object, ...]:
     if not isinstance(value, tuple):
         raise ValueError(f"{label} must be a tuple")
     return cast(tuple[object, ...], value)
-
-
-def _require_guard_action(value: object, label: str) -> GuardAction:
-    if not is_guard_action(value):
-        raise ValueError(f"{label} must be a canonical GuardAction")
-    return value
-
-
-def _require_enum(value: object, enum_type: type[Enum], label: str) -> None:
-    if not isinstance(value, enum_type):
-        raise ValueError(f"{label} must be an exact {enum_type.__name__} value")
-
-
-def _require_enum_frozenset(value: object, enum_type: type[Enum], label: str) -> None:
-    items = _require_non_empty_frozenset(value, label)
-    if any(not isinstance(item, enum_type) for item in items):
-        raise ValueError(f"{label} members must be {enum_type.__name__} values")

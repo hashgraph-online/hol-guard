@@ -171,10 +171,6 @@ def test_a_resident_that_cannot_start_is_not_asked_for_a_redaction(monkeypatch, 
             id="redact-headers",
         ),
         pytest.param(
-            lambda: inventory_contract_redaction.classify_endpoint_host("https://example.test"),
-            id="classify-endpoint-host",
-        ),
-        pytest.param(
             lambda: inventory_contract_redaction._redact_command_value("npx server --api-key k", Path.home(), None),
             id="redact-command-value",
         ),

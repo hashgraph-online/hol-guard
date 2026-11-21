@@ -13,6 +13,7 @@ use serde_json::{json, Map, Value};
 use super::context::{Ctx, EvidenceFile};
 use super::fs_path;
 use super::launcher_sets::is_mutable_launcher;
+use crate::context_digest_local_cli::python_path_name;
 
 pub(crate) const LOCAL_BIN_RUNNERS: [&str; 6] = ["npx", "bunx", "pnpm", "pnpx", "yarn", "npm"];
 const PRETARGET_OPTIONS: [&str; 2] = ["-y", "--yes"];
@@ -49,9 +50,30 @@ pub(crate) fn read_manifest(path: &str) -> Manifest {
     serde_json::from_str(&text).map_or(Manifest::Unreadable, Manifest::Data)
 }
 
+/// `runner_name`: the package runner an executable names, if any.
+pub(crate) fn runner_name(executable: &str) -> Option<&'static str> {
+    let mut base = python_path_name(&executable.replace('\\', "/")).to_lowercase();
+    if base.ends_with(".cmd") || base.ends_with(".exe") {
+        base.truncate(base.len() - 4);
+    }
+    LOCAL_BIN_RUNNERS
+        .iter()
+        .copied()
+        .find(|runner| *runner == base)
+}
+
 /// The bin a runner launches, or `None` for any selector form.
 pub(crate) fn runner_target<'a>(runner: &str, arguments: &'a [String]) -> Option<&'a str> {
     runner_split(runner, arguments).map(|(target, _)| target)
+}
+
+/// `package_runner_target`: the bin a whole command's tokens launch through a
+/// package runner, or `None` when the first token is not a runner or the rest
+/// select something other than a plain bin.
+pub(crate) fn package_runner_target(tokens: &[String]) -> Option<String> {
+    let (executable, arguments) = tokens.split_first()?;
+    let runner = runner_name(executable)?;
+    runner_target(runner, arguments).map(str::to_owned)
 }
 
 /// `_split_runner_arguments`: the bin a runner launches and the arguments it
@@ -270,3 +292,7 @@ pub(crate) fn runner_local_bin(
     }
     Some(Value::Object(record))
 }
+
+#[cfg(test)]
+#[path = "runner_bin_tests.rs"]
+mod tests;

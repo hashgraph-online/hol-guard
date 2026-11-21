@@ -207,6 +207,73 @@ pub(crate) fn with_coverage(hint: Option<Value>, coverage: Option<Value>) -> Opt
     }
 }
 
+/// `_validated_segment`: one stored step, rebuilt from the keys it knows.
+fn validated_segment(value: &Value) -> Option<(u64, Value)> {
+    let segment = value.as_object()?;
+    let index = segment_index(segment.get("index"))?;
+    let mut checked = Map::new();
+    checked.insert("index".to_owned(), json!(index));
+    checked.insert(
+        "executable".to_owned(),
+        json!(executable(segment.get("executable"))),
+    );
+    for key in ID_KEYS {
+        let raw = segment.get(key)?.as_array()?;
+        if raw.len() > MAX_SEGMENT_IDS {
+            return None;
+        }
+        let ids = raw
+            .iter()
+            .map(|item| catalog_id(Some(item)))
+            .collect::<Option<Vec<_>>>()?;
+        checked.insert(key.to_owned(), json!(ids));
+    }
+    let has_extension = checked
+        .get("extension_ids")
+        .and_then(Value::as_array)
+        .is_some_and(|ids| !ids.is_empty());
+    has_extension.then_some((index, Value::Object(checked)))
+}
+
+/// `validated_extension_coverage_hint`: a shape-checked copy of a stored
+/// coverage hint, read either standalone or from the `coverage` key an allow
+/// hint carries.
+pub(crate) fn validated(value: &Value) -> Option<Value> {
+    let mut fields = value.as_object()?;
+    while fields.get("schema").and_then(Value::as_str) != Some(EXTENSION_COVERAGE_HINT_SCHEMA) {
+        fields = fields.get("coverage")?.as_object()?;
+    }
+    let catalog_digest = digest(fields.get("catalog_digest"))?;
+    let raw_segments = fields.get("segments")?.as_array()?;
+    if raw_segments.is_empty() || raw_segments.len() > MAX_COVERED_SEGMENTS {
+        return None;
+    }
+    let mut segments: BTreeMap<u64, Value> = BTreeMap::new();
+    for raw in raw_segments {
+        let (index, segment) = validated_segment(raw)?;
+        if segments.insert(index, segment).is_some() {
+            return None;
+        }
+    }
+    let last = *segments.keys().next_back()?;
+    let mut hint = json!({
+        "schema": EXTENSION_COVERAGE_HINT_SCHEMA,
+        "catalog_digest": catalog_digest,
+        "segments": segments.into_values().collect::<Vec<_>>(),
+    });
+    match fields.get("segment_total") {
+        None | Some(Value::Null) => {}
+        Some(total) => {
+            let total = total.as_u64().filter(|total| {
+                last < *total
+                    && usize::try_from(*total).is_ok_and(|total| total <= MAX_SEGMENT_TOTAL)
+            })?;
+            hint["segment_total"] = json!(total);
+        }
+    }
+    Some(hint)
+}
+
 /// Python truthiness for a JSON value.
 fn truthy(value: &Value) -> bool {
     match value {

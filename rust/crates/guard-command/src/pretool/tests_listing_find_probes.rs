@@ -11,9 +11,9 @@ fn request(command: &str) -> CommandModelRequestV1 {
     }
 }
 
-struct Fixture {
-    home: String,
-    workspace: String,
+pub(super) struct Fixture {
+    pub(super) home: String,
+    pub(super) workspace: String,
 }
 
 fn write(root: &std::path::Path, file: &str) {
@@ -24,7 +24,7 @@ fn write(root: &std::path::Path, file: &str) {
 
 static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-fn fixture() -> Fixture {
+pub(super) fn fixture() -> Fixture {
     // Keep the fixture outside $TMPDIR, which canonicalizes under /private/var.
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/pretool-listing-find")
@@ -36,10 +36,10 @@ fn fixture() -> Fixture {
     let _ = std::fs::remove_dir_all(&base);
     let (home, ws) = (base.join("home"), base.join("ws"));
     for file in [
-        "app/registry/[slug]/page.tsx",
-        "app/registry/[.x]/page.tsx",
-        "app/registry/[!x]/page.tsx",
-        "app/registry/alpha/page.tsx",
+        "app/items/[slug]/page.tsx",
+        "app/items/[.x]/page.tsx",
+        "app/items/[!x]/page.tsx",
+        "app/items/alpha/page.tsx",
         "app/password-reset-email.tsx",
         "app/secret-sandbox-x/page.tsx",
         "app/.well-known/ai-plugin.txt",
@@ -75,7 +75,7 @@ fn fixture() -> Fixture {
     }
 }
 
-fn allowed_in(fixture: &Fixture, cwd: &str, command: &str) -> bool {
+pub(super) fn allowed_in(fixture: &Fixture, cwd: &str, command: &str) -> bool {
     evaluate_pre_tool_with_context(&request(command), Some(&fixture.home), Some(cwd))
         .is_ok_and(|decision| decision.minimum_action == "allow")
 }
@@ -85,21 +85,21 @@ fn recursive_listing_and_globs_stay_inside_clean_trees() {
     let fixture = fixture();
     let ws = fixture.workspace.as_str();
     for command in [
-        "ls -R app/registry",
-        "ls -lR app/registry",
+        "ls -R app/items",
+        "ls -lR app/items",
         "ls -R src",
         "ls --recursive src",
-        "ls app/registry/*/",
-        "ls app/registry/a*/",
-        "ls \"app/registry/[slug]\"",
-        "ls -R 'app/registry/[slug]'",
+        "ls app/items/*/",
+        "ls app/items/a*/",
+        "ls \"app/items/[slug]\"",
+        "ls -R 'app/items/[slug]'",
         "ls src/*.ts",
         // Bash passes an unmatched bracket word through literally.
-        "ls app/registry/[slug]",
-        "ls -la app/registry/[slug]",
-        "ls app/registry/[slug] src",
+        "ls app/items/[slug]",
+        "ls -la app/items/[slug]",
+        "ls app/items/[slug] src",
         // The unmatched bracket drops out under nullglob; `src` remains.
-        "ls -R app/registry/[slug] src",
+        "ls -R app/items/[slug] src",
         // A recursion without `-a` prints no hidden name and descends into no
         // hidden directory, so the credential file below `bad` is not part of
         // what the listing can emit.
@@ -132,9 +132,9 @@ fn recursive_listing_and_globs_stay_inside_clean_trees() {
         "ls src/{a,b}",
         // An unmatched bracket operand is read literally only when no class
         // could match a dotfile and recursion could not fall back to the cwd.
-        "ls -R app/registry/[slug]",
-        "ls app/registry/[!x]",
-        "ls app/registry/[.x]",
+        "ls -R app/items/[slug]",
+        "ls app/items/[!x]",
+        "ls app/items/[.x]",
         "ls nothing/[slug]",
         // `[,-0]` includes `.`, so dotglob can select `.env`.
         "ls [,-0]env",
@@ -158,9 +158,9 @@ fn grep_tree_walk_matches_what_the_walk_can_emit() {
     let ws = fixture.workspace.as_str();
     for command in [
         "grep -rln registry src",
-        "grep -rn needle app/registry src",
-        "grep -r needle app/registry app/password-reset-email.tsx",
-        "grep -rl needle app/registry/alpha",
+        "grep -rn needle app/items src",
+        "grep -r needle app/items app/password-reset-email.tsx",
+        "grep -rl needle app/items/alpha",
     ] {
         assert!(allowed_in(&fixture, ws, command), "{command}");
     }
@@ -225,6 +225,10 @@ fn find_admits_only_read_only_predicates() {
         "find src \\( -name '*.ts' -o -name '*.tsx' \\) -type f",
         "find src -type l",
         "find src -path '*/x/*' -prune -o -type f -print",
+        "find src -printf '%p'",
+        "find src -type f -printf '%f\\n'",
+        "find src -type f -printf '%h/%f\\0'",
+        "find src -path '*/lib/*' -type f -print",
     ] {
         assert!(allowed_in(&fixture, ws, command), "{command}");
     }
@@ -239,7 +243,12 @@ fn find_admits_only_read_only_predicates() {
         "find src -fprint out.txt",
         "find src -fprint0 out.txt",
         "find src -fls out.txt",
-        "find src -printf '%p'",
+        "find src -printf '%l\\n'",
+        "find src -printf '%s %p\\n'",
+        "find src -printf '%10f'",
+        "find src -printf '%u'",
+        "find src -printf '\\c'",
+        "find src -printf",
         "find -L src -type f",
         "find src -follow",
         "find src -type x",

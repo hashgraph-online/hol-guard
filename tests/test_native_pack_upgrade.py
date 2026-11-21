@@ -92,19 +92,10 @@ def release(tmp_path, monkeypatch):
 
 
 def legacy_store(tmp_path, monkeypatch, *, revisions=1):
-    # The frozen released v4 schema implementation creates the disk fixture.
-    from pathlib import Path
-
-    from codex_plugin_scanner.guard import store_extension_control_authority_commit as commits
-
-    namespace = {"__package__": "codex_plugin_scanner.guard"}
-    frozen = Path(__file__).parent / "fixtures/extension-control-schema-v5.py.txt"
-    exec(compile(frozen.read_text(), str(frozen), "exec"), namespace)
+    # No installed bundle: the commits leave the base v4 schema, as a release
+    # before command packs did.
     with monkeypatch.context() as legacy:
         legacy.setattr(preparation_authority, "load_installed_bundle", lambda: None)
-        legacy.setattr(
-            commits, "ensure_extension_control_authority_schema", namespace["ensure_extension_control_authority_schema"]
-        )
         store = _store(tmp_path, MemorySecretStore())
         # Each control commit is one authority revision, so a caller that needs
         # the migration to walk a chain asks for more than the first one.

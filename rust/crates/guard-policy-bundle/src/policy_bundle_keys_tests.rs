@@ -17,17 +17,18 @@ fn key(id: &str, state: &str) -> Key {
 fn authority_requires_anchor_and_active_state() {
     let active = key("k", "active");
     let grace = key("k", "grace");
+    let (active, grace) = (std::slice::from_ref(&active), std::slice::from_ref(&grace));
     assert_eq!(
-        resolve_authorized("k", &[active.clone()], &[], Some("ws"), 0.0).unwrap_err(),
+        resolve_authorized("k", active, &[], Some("ws"), 0.0).unwrap_err(),
         "trusted_key_unavailable"
     );
-    assert!(resolve_authorized("k", &[active.clone()], &[active.clone()], Some("ws"), 0.0).is_ok());
+    assert!(resolve_authorized("k", active, active, Some("ws"), 0.0).is_ok());
     assert_eq!(
-        resolve_authorized("k", &[grace.clone()], &[grace], Some("ws"), 0.0).unwrap_err(),
+        resolve_authorized("k", grace, grace, Some("ws"), 0.0).unwrap_err(),
         "signing_key_not_current"
     );
     assert_eq!(
-        resolve_authorized("k", &[active.clone()], &[active], Some("other"), 0.0).unwrap_err(),
+        resolve_authorized("k", active, active, Some("other"), 0.0).unwrap_err(),
         "signing_key_workspace_mismatch"
     );
 }

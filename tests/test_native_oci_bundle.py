@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
-from codex_plugin_scanner.guard.runtime.execution_assurance_contract import framed_digest
+from tests.execution_assurance_contract import framed_digest
 
 _VECTORS = Path(__file__).parent / "fixtures" / "oci_bundle" / "vectors.json.gz"
 _PLACEHOLDER = "{ROOT}"

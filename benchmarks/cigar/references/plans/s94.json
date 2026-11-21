@@ -1,0 +1,116 @@
+{
+ "repo": "pluggy",
+ "seed": 94,
+ "steps": [
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "testing/test_pluginmanager.py::test_set_blocked"
+     ],
+     "line": 246,
+     "new": "            return False\n",
+     "orig": "            return True\n",
+     "path": "src/pluggy/_manager.py",
+     "qual": "PluginManager.unblock"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "`testing/test_details.py::test_parse_hookimpl_override` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "testing/test_details.py::test_parse_hookimpl_override",
+      "testing/test_hookcaller.py::test_hookrelay_registry",
+      "testing/test_pluginmanager.py::test_get_hookcallers",
+      "testing/test_pluginmanager.py::test_pm",
+      "testing/test_pluginmanager.py::test_pm_name",
+      "testing/test_pluginmanager.py::test_register",
+      "testing/test_pluginmanager.py::test_register_unknown_hooks"
+     ],
+     "line": 284,
+     "new": "    opts.setdefault(\"tryfirst\", True)\n",
+     "orig": "    opts.setdefault(\"tryfirst\", False)\n",
+     "path": "src/pluggy/_hooks.py",
+     "qual": "normalize_hookimpl_opts"
+    }
+   ]
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Return tuple of positional and keywrord argument names for a function, method, class or callable.\" Reply with its file path and function name.",
+   "question": {
+    "name": "varnames",
+    "path": "src/pluggy/_hooks.py",
+    "qual": "varnames",
+    "sentence": "Return tuple of positional and keywrord argument names for a function, method, class or callable."
+   }
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "testing/test_pluginmanager.py::test_hook_tracing[spec-is-class]",
+      "testing/test_pluginmanager.py::test_hook_tracing[spec-is-instance]",
+      "testing/test_tracer.py::test_indent",
+      "testing/test_tracer.py::test_readable_output_dictargs",
+      "testing/test_tracer.py::test_simple"
+     ],
+     "line": 34,
+     "new": "        indent = \"  \" // self.indent\n",
+     "orig": "        indent = \"  \" * self.indent\n",
+     "path": "src/pluggy/_tracing.py",
+     "qual": "TagTracer._format_message"
+    },
+    {
+     "failing": [
+      "testing/test_pluginmanager.py::test_set_blocked"
+     ],
+     "line": 247,
+     "new": "        return True\n",
+     "orig": "        return False\n",
+     "path": "src/pluggy/_manager.py",
+     "qual": "PluginManager.unblock"
+    }
+   ]
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "testing/test_pluginmanager.py::test_has_plugin"
+     ],
+     "line": 318,
+     "new": "        return self.get_plugin(name) is None\n",
+     "orig": "        return self.get_plugin(name) is not None\n",
+     "path": "src/pluggy/_manager.py",
+     "qual": "PluginManager.has_plugin"
+    },
+    {
+     "failing": [
+      "testing/test_pluginmanager.py::test_pm",
+      "testing/test_pluginmanager.py::test_register",
+      "testing/test_pluginmanager.py::test_set_blocked"
+     ],
+     "line": 295,
+     "new": "        return {x for x in self._name2plugin.values() if x is None}\n",
+     "orig": "        return {x for x in self._name2plugin.values() if x is not None}\n",
+     "path": "src/pluggy/_manager.py",
+     "qual": "PluginManager.get_plugins"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

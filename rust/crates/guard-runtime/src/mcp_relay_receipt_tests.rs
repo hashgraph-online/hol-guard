@@ -1,0 +1,545 @@
+use serde_json::{json, Map, Value};
+
+use super::{compose, event::diff_summary, is_plain, write, Stamp};
+use crate::guard_store_cmd_vectors_tests::temp_home;
+use crate::guard_store_tool_call_evidence_tests::{build_database, count, vectors};
+
+const HOME: &str = "/home/guard/.hol-guard";
+const CENTER: &str = "http://127.0.0.1:4781";
+const HASH: &str = "guard-approval-context:v1:0123456789abcdef";
+
+/// A queued relay record as the native relay leaves it.
+pub(crate) fn record(outcome: &str, source: &str, action: &str) -> Value {
+    json!({
+        "kind": "mcp_tool_call",
+        "harness": "codex",
+        "outcome": outcome,
+        "decision_source": source,
+        "policy_action": action,
+        "tool_name": "run_command",
+        "params": {"name": "run_command", "arguments": {"command": "ls -la"}},
+        "arguments": {"format": "mapping", "entries": [["command", "ls -la"]]},
+        "identity": {
+            "artifact": {
+                "artifact_id": "codex:project:shell:run_command",
+                "name": "shell:run_command",
+                "harness": "codex",
+                "source_scope": "project",
+                "config_path": "/work/.codex/config.toml",
+                "command": "npx",
+                "transport": "stdio",
+                "publisher": null,
+                "metadata": {
+                    "mcpSkillFirewall": {"verdict": "clean", "findings": []},
+                    "tool_description": "Run a shell command",
+                },
+            },
+            "runtime_private_metadata": {},
+            "artifact_hash": HASH,
+            "risk_categories": [],
+        },
+        "decision": {
+            "action": action,
+            "policy_action": action,
+            "source": source,
+            "signals": ["shell"],
+            "summary": "runs a shell command",
+            "risk_categories": ["exec"],
+            "normalization_reason_code": null,
+            "original_action": null,
+            "approval_reuse_status": null,
+            "approval_reuse_reason_code": null,
+            "current_action": null,
+            "saved_action": null,
+            "pending_approval_reuse_decision": null,
+            "approval_reuse_claim_disposition": null,
+            "post_claim_revalidated": false,
+            "post_claim_authority": null,
+        },
+    })
+}
+
+fn stamp() -> Stamp {
+    Stamp {
+        receipt_id: "guard-receipt-00000000-0000-4000-8000-000000000000".to_owned(),
+        device_id: "ffffffffffffffffffffffffffffffff".to_owned(),
+        now: "2026-04-02T12:30:00+00:00".to_owned(),
+        store_now: "2026-04-02T12:30:00.000000+00:00".to_owned(),
+    }
+}
+
+fn composed(record: &Value) -> Map<String, Value> {
+    compose(HOME, record, &stamp())
+        .expect("a plain record composes")
+        .0
+}
+
+/// The silent inbox row a composed record adds, if any.
+fn row(record: &Value) -> Option<Map<String, Value>> {
+    compose(HOME, record, &stamp())
+        .expect("a plain record composes")
+        .1
+}
+
+fn edited(mut record: Value, edit: impl FnOnce(&mut Value)) -> Value {
+    edit(&mut record);
+    record
+}
+
+#[test]
+fn a_forward_writes_the_allowed_receipt_inventory_and_event() {
+    let args = composed(&record("forward", "policy", "allow"));
+    let receipt = &args["receipt"];
+    assert_eq!(receipt["receipt_id"], stamp().receipt_id);
+    assert_eq!(receipt["timestamp"], "2026-04-02T12:30:00+00:00");
+    assert_eq!(receipt["policy_decision"], "allow");
+    assert_eq!(
+        receipt["capabilities_summary"],
+        "mcp tool call \u{2022} shell:run_command"
+    );
+    assert_eq!(
+        receipt["changed_capabilities"],
+        json!(["runtime_tool_call", "policy", "shell"])
+    );
+    assert_eq!(
+        receipt["provenance_summary"],
+        "runtime tool call allowed from /work/.codex/config.toml"
+    );
+    assert_eq!(receipt["user_override"], Value::Null);
+    assert_eq!(receipt["approval_source"], "policy");
+    assert_eq!(
+        receipt["diff_summary"],
+        "3 change(s): runtime_tool_call, policy, shell"
+    );
+    assert_eq!(receipt["raw_command_text"], "ls -la");
+    assert_eq!(
+        receipt["scanner_evidence"][0]["mcpSkillFirewall"],
+        json!({"verdict": "clean", "findings": []})
+    );
+    let inventory = &args["inventory"];
+    assert_eq!(inventory["artifact_type"], "tool_call");
+    assert_eq!(inventory["launch_command"], "npx");
+    assert_eq!(inventory["approved"], true);
+    assert_eq!(inventory["now"], "2026-04-02T12:30:00+00:00");
+    assert_eq!(args["now"], "2026-04-02T12:30:00.000000+00:00");
+    assert_eq!(args["event_occurred_at"], "2026-04-02T12:30:00+00:00");
+    assert_eq!(args["event_name"], "runtime_tool_call_allowed");
+    assert_eq!(
+        args["event_payload_json"],
+        format!(
+            "{{\"artifact_id\": \"codex:project:shell:run_command\", \"artifact_hash\": \"{HASH}\", \
+             \"decision_source\": \"policy\", \"policy_action\": \"allow\", \
+             \"risk_categories\": [\"exec\"], \"signals\": [\"shell\"]}}"
+        )
+    );
+}
+
+#[test]
+fn an_inline_refusal_writes_a_not_executed_block() {
+    let args = composed(&record("block", "inline-denied", "review"));
+    let receipt = &args["receipt"];
+    assert_eq!(receipt["user_override"], "inline-deny");
+    assert_eq!(receipt["approval_source"], "inline");
+    assert_eq!(
+        receipt["provenance_summary"],
+        "runtime tool call awaiting review from /work/.codex/config.toml"
+    );
+    assert_eq!(args["inventory"]["approved"], false);
+    assert_eq!(args["event_name"], "runtime_tool_call_review_required");
+    let payload: Value =
+        serde_json::from_str(args["event_payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["execution_outcome"], "not-executed");
+    assert!(args["event_payload_json"]
+        .as_str()
+        .unwrap()
+        .contains("\"policy_action\": \"review\", \"execution_outcome\": \"not-executed\""));
+}
+
+#[test]
+fn an_inline_approval_is_an_override() {
+    let args = composed(&record("forward", "inline-approved", "allow"));
+    assert_eq!(args["receipt"]["user_override"], "inline-approve");
+    assert_eq!(args["receipt"]["approval_source"], "inline");
+}
+
+#[test]
+fn decision_evidence_follows_the_firewall_and_precedes_the_appended_check() {
+    let record = edited(record("forward", "policy", "warn"), |record| {
+        let decision = &mut record["decision"];
+        decision["normalization_reason_code"] = json!("legacy_action");
+        decision["original_action"] = json!("allow");
+        decision["approval_reuse_status"] = json!("accepted");
+        decision["approval_reuse_reason_code"] = json!("same_hash");
+        decision["saved_action"] = json!("warn");
+        record["evidence_append"] = json!([{"source": "post_claim_check"}]);
+    });
+    let evidence = composed(&record)["receipt"]["scanner_evidence"].clone();
+    let sources: Vec<&Value> = evidence
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| &entry["source"])
+        .collect();
+    assert_eq!(
+        sources,
+        [
+            &Value::Null,
+            &json!("guard_action_normalizer"),
+            &json!("approval_reuse"),
+            &json!("post_claim_check"),
+        ]
+    );
+    assert_eq!(evidence[1]["normalized_action"], "warn");
+    assert_eq!(evidence[2]["effective_action"], "warn");
+}
+
+#[test]
+fn the_event_payload_escapes_like_json_dumps() {
+    let record = edited(record("forward", "policy", "allow"), |record| {
+        record["decision"]["signals"] = json!(["caf\u{e9}", "\u{1f600}"]);
+    });
+    let payload = composed(&record)["event_payload_json"].clone();
+    assert!(payload
+        .as_str()
+        .unwrap()
+        .ends_with("\"signals\": [\"caf\\u00e9\", \"\\ud83d\\ude00\"]}"));
+}
+
+#[test]
+fn the_diff_summary_samples_three_changes() {
+    assert_eq!(
+        diff_summary(&["a", "b", "c", "d"]),
+        "4 change(s): a, b, c ..."
+    );
+    assert_eq!(diff_summary(&["a"]), "1 change(s): a");
+}
+
+/// An ask block whose desktop notice the resident raised.
+fn asked(record: Value) -> Value {
+    edited(record, |record| {
+        record["approval"] = json!({
+            "approval_center_url": "http://127.0.0.1:4781/approvals",
+            "review_url": "http://127.0.0.1:4781/approvals/req-1",
+            "request_id": "req-1",
+            "workspace": "/work",
+            "notices": [],
+        });
+    })
+}
+
+#[test]
+fn an_ask_block_writes_the_pending_receipt_with_projected_risk() {
+    let record = asked(edited(
+        record("block", "approval-center-pending", "review"),
+        |record| record["decision"]["risk_categories"] = json!(["decision-only"]),
+    ));
+    let args = composed(&record);
+    assert_eq!(args["receipt"]["approval_source"], "approval_center");
+    assert_eq!(args["receipt"]["user_override"], Value::Null);
+    assert_eq!(args["inventory"]["approved"], false);
+    assert_eq!(args["event_name"], "runtime_tool_call_review_required");
+    let projected =
+        crate::mcp_proxy_projection::call_projection(&guard_contracts::McpCallProjectionQueryV1 {
+            tool_name: "run_command".to_owned(),
+            params: record["params"].clone(),
+            risk: super::record::plain(&record).unwrap().projected_risk,
+        })
+        .unwrap();
+    let payload: Value =
+        serde_json::from_str(args["event_payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        payload["risk_categories"],
+        projected["risk"]["risk_categories"]
+    );
+    assert_ne!(payload["risk_categories"], json!(["decision-only"]));
+}
+
+/// A safe-alternative block, which the proxy records with a silent inbox row.
+fn reviewed(record: Value) -> Value {
+    edited(record, |record| {
+        record["review"] = json!({
+            "redaction_level": "full",
+            "approval_center_url": CENTER,
+        });
+    })
+}
+
+#[test]
+fn a_safe_alternative_block_writes_its_receipt_then_a_silent_row() {
+    let record = reviewed(record("block", "policy-safe-alternative", "review"));
+    let args = composed(&record);
+    assert_eq!(args["receipt"]["approval_source"], "policy");
+    assert_eq!(args["receipt"]["policy_decision"], "review");
+    assert_eq!(args["inventory"]["approved"], false);
+    assert_eq!(args["event_name"], "runtime_tool_call_review_required");
+    let projected =
+        crate::mcp_proxy_projection::call_projection(&guard_contracts::McpCallProjectionQueryV1 {
+            tool_name: "run_command".to_owned(),
+            params: record["params"].clone(),
+            risk: super::record::plain(&record).unwrap().projected_risk,
+        })
+        .unwrap();
+    let payload: Value =
+        serde_json::from_str(args["event_payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        payload["risk_categories"],
+        projected["risk"]["risk_categories"]
+    );
+
+    let row = row(&record).expect("a safe-alternative block adds a row");
+    assert_eq!(row["harness"], "codex");
+    assert_eq!(row["prompt_shown"], false);
+    assert_eq!(row["redaction_level"], "full");
+    assert_eq!(row["now"], stamp().now);
+    // The origin the daemon listens on, as the relay's binding carried it.
+    assert_eq!(row["approval_center_url"], CENTER);
+    assert_eq!(row["continuation"]["harness"], "codex");
+    assert_eq!(row["continuation"]["now"], stamp().now);
+    let items = row["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    let artifacts = row["artifacts"].as_object().unwrap();
+    assert!(artifacts.contains_key("codex:project:shell:run_command"));
+    // The row records the decision's evidence without the firewall verdict.
+    assert!(items[0].get("scanner_evidence").is_none(), "{}", items[0]);
+}
+
+#[test]
+fn a_silent_row_carries_the_decision_and_appended_evidence() {
+    let record = edited(
+        reviewed(record(
+            "block",
+            "policy-safe-alternative",
+            "require-reapproval",
+        )),
+        |record| record["evidence_append"] = json!([{"source": "post_claim_check"}]),
+    );
+    let row = row(&record).expect("a reapproval block adds a row");
+    assert_eq!(
+        row["items"][0]["scanner_evidence"],
+        json!([{"source": "post_claim_check"}])
+    );
+}
+
+#[test]
+fn only_a_reviewable_safe_alternative_adds_a_row() {
+    let blocked = reviewed(record("block", "policy-safe-alternative", "block"));
+    assert!(is_plain(&blocked));
+    assert!(row(&blocked).is_none());
+    assert!(row(&record("block", "policy-block", "review")).is_none());
+    assert!(row(&asked(record("block", "approval-center-pending", "review"))).is_none());
+}
+
+#[test]
+fn records_the_daemon_owns_are_not_plain() {
+    assert!(is_plain(&record("forward", "policy", "allow")));
+    assert!(is_plain(&record("block", "policy-block", "block")));
+    assert!(is_plain(&asked(record(
+        "block",
+        "approval-center-pending",
+        "review"
+    ))));
+    // The daemon opens no approval center for a relayed call, so an ask block
+    // from Cline is the resident's to record as well.
+    assert!(is_plain(&edited(
+        asked(record("block", "approval-center-pending", "review")),
+        |record| {
+            record["harness"] = json!("cline");
+            record["identity"]["artifact"]["harness"] = json!("cline");
+        },
+    )));
+    let not_plain = [
+        record("remember", "policy", "allow"),
+        record("forward", "policy", "review"),
+        record("block", "approval-center-pending", "review"),
+        asked(record("block", "policy-block", "review")),
+        asked(record("forward", "policy", "allow")),
+        edited(
+            asked(record("block", "approval-center-pending", "review")),
+            |record| {
+                record["approval"]["notices"] = json!([{"request_id": "req-1"}]);
+            },
+        ),
+        edited(
+            asked(record("block", "approval-center-pending", "review")),
+            |record| {
+                record["approval"]["request_id"] = json!(" ");
+            },
+        ),
+        edited(
+            asked(record("block", "approval-center-pending", "review")),
+            |record| {
+                record["approval"]["workspace"] = json!(7);
+            },
+        ),
+        edited(
+            asked(record("block", "approval-center-pending", "review")),
+            |record| {
+                record["approval"]["extra"] = json!(true);
+            },
+        ),
+        // A safe-alternative block without its row is the daemon's to write.
+        record("block", "policy-safe-alternative", "review"),
+        reviewed(record("block", "policy-block", "review")),
+        reviewed(record("forward", "policy", "allow")),
+        reviewed(asked(record("block", "approval-center-pending", "review"))),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["redaction_level"] = json!("secret"),
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["extra"] = json!(true),
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"] = json!("full"),
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| {
+                record["review"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("approval_center_url");
+            },
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["approval_center_url"] = json!(4781),
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["approval_center_url"] = json!(" "),
+        ),
+        record("block", "policy-block", "allow"),
+        edited(record("forward", "policy", "allow"), |record| {
+            record["harness"] = json!("claude-code");
+            record["identity"]["artifact"]["harness"] = json!("claude-code");
+        }),
+        edited(record("forward", "policy", "allow"), |record| {
+            record["identity"]["artifact"]["harness"] = json!("cursor");
+        }),
+        edited(record("forward", "policy", "allow"), |record| {
+            record["decision"]["connector_setup"] = json!({});
+        }),
+        edited(record("forward", "policy", "allow"), |record| {
+            record["decision"]["proxy"] = json!({});
+        }),
+        edited(record("forward", "policy", "allow"), |record| {
+            record["decision"]["post_claim_revalidated"] = json!(true);
+            record["decision"]["post_claim_authority"] = json!("fresh");
+        }),
+        edited(record("forward", "policy", "allow"), |record| {
+            record["identity"]["artifact"]["metadata"]
+                .as_object_mut()
+                .unwrap()
+                .remove("mcpSkillFirewall");
+        }),
+        edited(record("forward", "policy", "allow"), |record| {
+            record["identity"]["artifact_hash"] = json!("0123456789abcdef");
+        }),
+        edited(record("forward", "policy", "allow"), |record| {
+            record["arguments"]["entries"] = json!([["command", "rm -rf /"]]);
+        }),
+        edited(record("forward", "policy", "allow"), |record| {
+            record["params"]["name"] = json!("other_tool");
+        }),
+        edited(record("forward", "policy", "allow"), |record| {
+            record["evidence_append"] = json!(["not an object"]);
+        }),
+        edited(record("forward", "policy", "allow"), |record| {
+            record["unexpected"] = json!(true);
+        }),
+    ];
+    for record in &not_plain {
+        assert!(!is_plain(record), "{record}");
+    }
+}
+
+#[test]
+fn a_home_without_a_store_hands_the_record_back() {
+    let home = temp_home("relay-receipt-no-store");
+    let unwritten = write(
+        home.to_str().unwrap(),
+        vec![record("forward", "policy", "allow")],
+    );
+    assert_eq!(unwritten, [record("forward", "policy", "allow")]);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn plain_records_land_in_the_store() {
+    let (receipts, inventory) = vectors();
+    let home = temp_home("relay-receipt-store");
+    build_database(&home.join("guard.db"), &receipts, &inventory);
+    let before = count(&home, "runtime_receipts");
+    let unwritten = write(
+        home.to_str().unwrap(),
+        vec![
+            record("forward", "policy", "allow"),
+            record("block", "inline-denied", "review"),
+            record("remember", "policy", "allow"),
+        ],
+    );
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    assert_eq!(count(&home, "runtime_receipts"), before + 2);
+    assert_eq!(count(&home, "guard_events"), 2);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn a_safe_alternative_block_lands_its_receipt_and_its_silent_row() {
+    let (receipts, inventory) = vectors();
+    let home = temp_home("relay-receipt-silent-row");
+    build_database(&home.join("guard.db"), &receipts, &inventory);
+    // The approval tables the receipt vectors leave out, from the queue
+    // write's own schema.
+    let store: Value = serde_json::from_str(include_str!(
+        "../testdata/guard_store/approval_request_write_vectors.json"
+    ))
+    .unwrap();
+    let connection = rusqlite::Connection::open(home.join("guard.db")).unwrap();
+    for statement in store["schema_sql"].as_array().unwrap() {
+        let sql = statement.as_str().unwrap();
+        if !sql.contains("TRIGGER guard_review_outbox_after_") {
+            let _ = connection.execute_batch(sql);
+        }
+    }
+    drop(connection);
+    let before = count(&home, "runtime_receipts");
+    let unwritten = write(
+        home.to_str().unwrap(),
+        vec![reviewed(record(
+            "block",
+            "policy-safe-alternative",
+            "review",
+        ))],
+    );
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    assert_eq!(count(&home, "runtime_receipts"), before + 1);
+    assert_eq!(count(&home, "approval_requests"), 1);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn a_receipt_committed_before_a_later_read_fails_is_not_handed_back() {
+    let (receipts, inventory) = vectors();
+    let home = temp_home("relay-receipt-post-commit");
+    build_database(&home.join("guard.db"), &receipts, &inventory);
+    // The outbox generation is read after the commit; a wake table without
+    // its column fails that read with the receipt already written.
+    rusqlite::Connection::open(home.join("guard.db"))
+        .unwrap()
+        .execute_batch(
+            "create table guard_review_outbox_wake_state (singleton integer primary key)",
+        )
+        .unwrap();
+    let before = count(&home, "runtime_receipts");
+    let unwritten = write(
+        home.to_str().unwrap(),
+        vec![record("forward", "policy", "allow")],
+    );
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    assert_eq!(count(&home, "runtime_receipts"), before + 1);
+    let _ = std::fs::remove_dir_all(&home);
+}

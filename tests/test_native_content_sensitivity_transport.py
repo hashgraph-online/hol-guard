@@ -166,60 +166,15 @@ def test_large_output_wire_encoding_is_lossless_and_keeps_the_callers_deadline(m
     assert json.loads(decoded) == body
 
 
-def test_unexpected_binding_recheck_logs_only_exception_class(monkeypatch, caplog):
-    from codex_plugin_scanner.guard.runtime import structured_output_mediation as mediation
+def test_harness_presentation_is_available_without_native_runtime(monkeypatch, tmp_path):
+    from codex_plugin_scanner.guard.hook_review import hook_worker_unavailable as structured
 
-    calls = []
-
-    def query(query, body, **kwargs):
-        calls.append((query, body.copy()))
-        return {"recheck_required": True} if query == "mediate_prepare" else None
-
-    def recheck():
-        raise LookupError("private payload must never be logged")
-
-    monkeypatch.setattr(mediation, "content_query", query)
-    mediation.mediate_native_post_tool_content(
-        harness="pi",
-        event_name="PostToolUse",
-        native_result={},
-        validated_receipt=None,
-        structured_output_json=None,
-        binding=None,
-        recheck_binding=recheck,
-    )
-    assert calls[-1][1]["recheck_error"] is True
-    assert "LookupError" in caplog.text
-    assert "private payload" not in caplog.text
-
-
-def test_harness_presentation_is_available_without_native_runtime(monkeypatch):
-    from codex_plugin_scanner.guard.runtime import structured_output_mediation as mediation
-
-    def unavailable(*args, **kwargs):
-        raise client.NativeContentSensitivityError("offline")
-
-    monkeypatch.setattr(mediation, "content_query", unavailable)
-    assert mediation.canonical_harness_name(" Pi_Coding_Agent ") == "pi"
-    assert mediation.canonical_harness_name("oh-my-pi") == "omp"
-
-
-def test_expired_mediation_projects_transport_failure_without_opening_a_client(monkeypatch):
-    from codex_plugin_scanner.guard.runtime import structured_output_mediation as mediation
-
-    calls = _resident(monkeypatch)
-    result = mediation.mediate_native_post_tool_content(
-        harness="pi",
-        event_name="PostToolUse",
-        native_result={"decision": "allow"},
-        validated_receipt=None,
-        structured_output_json="{}",
-        binding=None,
-        deadline_monotonic=0.0,
-    )
-    assert result.action == "withhold"
-    assert result.reason_code == "structured_review_deadline_exceeded"
-    assert not calls
+    monkeypatch.setattr(structured, "native_render_cli", lambda *_args, **_kwargs: None)
+    for harness in (" Pi_Coding_Agent ", "oh-my-pi"):
+        overlay = structured.structured_outage_overlay(
+            harness=harness, event_name="PostToolUse", guard_home=tmp_path, deadline=None, load_config=lambda: None
+        )
+        assert overlay == structured.withhold_structured_destination({})
 
 
 def test_status_probe_has_request_deadline_and_memo_expires_on_binary_or_manifest_change(monkeypatch, tmp_path):

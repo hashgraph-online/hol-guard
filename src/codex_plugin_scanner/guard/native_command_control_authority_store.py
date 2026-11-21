@@ -20,7 +20,6 @@ from .native_command_control_authority import (
     authority_binding,
     authority_key_id,
     decode_authority,
-    encode_authority,
     floor_link_digest,
     validate_control_floor,
 )
@@ -28,7 +27,6 @@ from .native_command_control_authority_io import (
     NativeCommandControlMutationRequiredError,
     read_private_state,
     require_command_control_mutation_lease,
-    write_private_state,
 )
 from .native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
@@ -65,14 +63,24 @@ def read_command_control_authority(store: GuardStore, verifier_key: bytes) -> di
 
 def _write(store: GuardStore, record: Mapping[str, object], verifier_key: bytes) -> dict[str, object]:
     from .catalog_delivery.active_security import marker
+    from .native_extension_control_authority import extension_control_authority
 
-    record = marker(store, record)
-    content = encode_authority(record, verifier_key)
-    write_private_state(store.guard_home, AUTHORITY_FILE_NAME, content, AUTHORITY_MAX_BYTES)
-    observed = read_private_state(store.guard_home, AUTHORITY_FILE_NAME, AUTHORITY_MAX_BYTES)
-    if content != observed:
-        raise NativePolicySnapshotError("native_command_control_authority_write_mismatch")
-    return decode_authority(content, verifier_key)
+    # The resident signs, writes and reads back the marker it then returns.
+    reply = extension_control_authority(
+        store_path=Path(store.path),
+        guard_home=Path(store.guard_home),
+        op="write_command_marker",
+        key=verifier_key,
+        store=store,
+        state=dict(marker(store, record)),
+    )
+    error = reply.get("error")
+    if error is not None:
+        raise NativePolicySnapshotError(str(error))
+    signed = reply.get("marker")
+    if not isinstance(signed, dict):
+        raise NativePolicySnapshotError("native_command_control_authority_invalid")
+    return cast("dict[str, object]", signed)
 
 
 def read_native_control_floor(store: GuardStore, verifier_key: bytes) -> Mapping[str, object] | None:

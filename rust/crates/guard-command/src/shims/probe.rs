@@ -145,6 +145,13 @@ struct ProbeRun {
 
 /// Reads a child pipe to EOF. `None` means the output passed the cap, so the
 /// kept prefix is not the whole stream and must not be parsed as evidence.
+///
+/// Passing the cap is answered before the rest of the stream is drained. A
+/// descendant holding that same pipe open would otherwise keep the verdict
+/// until the deadline, and a probe that produced more evidence than can be
+/// read whole would be reported as a busy host rather than the broken probe
+/// it is. The drain still runs afterwards so the child never blocks on a
+/// full pipe.
 fn spawn_reader<R: Read + Send + 'static>(mut stream: R) -> mpsc::Receiver<Option<Vec<u8>>> {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
@@ -153,9 +160,14 @@ fn spawn_reader<R: Read + Send + 'static>(mut stream: R) -> mpsc::Receiver<Optio
             .by_ref()
             .take(PROBE_OUTPUT_CAP + 1)
             .read_to_end(&mut kept);
-        let _ = std::io::copy(&mut stream, &mut std::io::sink());
         let within_cap = u64::try_from(kept.len()).is_ok_and(|len| len <= PROBE_OUTPUT_CAP);
-        let _ = sender.send(within_cap.then_some(kept));
+        if !within_cap {
+            let _ = sender.send(None);
+        }
+        let _ = std::io::copy(&mut stream, &mut std::io::sink());
+        if within_cap {
+            let _ = sender.send(Some(kept));
+        }
     });
     receiver
 }
@@ -190,15 +202,47 @@ fn exit_code(status: std::process::ExitStatus) -> i64 {
     status.code().map_or(-1, i64::from)
 }
 
-/// `subprocess.run([...], capture_output=True, timeout=...)`; `None` stands
-/// for `TimeoutExpired`/`OSError`.
+/// Why a probe child produced no evidence.
+///
+/// A child that merely outlived its share of the batch budget says the host was
+/// busy; one that could not be started, waited on, or read whole says the probe
+/// itself is broken. Reporting both as one reason sends a developer looking for
+/// a damaged shim when the machine was only loaded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProbeFailure {
+    TimedOut,
+    Failed,
+}
+
+impl ProbeFailure {
+    fn reason(self) -> &'static str {
+        match self {
+            Self::TimedOut => "probe_timed_out",
+            Self::Failed => "probe_failed",
+        }
+    }
+
+    /// The reason to report when both halves of a probe failed. A reader that
+    /// answered is definite; a drain that ran out of time only says the host
+    /// was busy, and it would send a developer looking at load when the probe
+    /// had already produced more evidence than can be read whole.
+    fn or_definite(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Failed, _) | (_, Self::Failed) => Self::Failed,
+            _ => Self::TimedOut,
+        }
+    }
+}
+
+/// `subprocess.run([...], capture_output=True, timeout=...)`; the error stands
+/// for `TimeoutExpired`/`OSError` and says which of the two it was.
 fn run_probe(
     program: &Path,
     args: &[String],
     cwd: &Path,
     env: &BTreeMap<String, String>,
     timeout: Duration,
-) -> Option<ProbeRun> {
+) -> Result<ProbeRun, ProbeFailure> {
     let mut command = Command::new(program);
     command
         .args(args)
@@ -213,9 +257,9 @@ fn run_probe(
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
-    let mut child = command.spawn().ok()?;
-    let stdout = spawn_reader(child.stdout.take()?);
-    let stderr = spawn_reader(child.stderr.take()?);
+    let mut child = command.spawn().map_err(|_| ProbeFailure::Failed)?;
+    let stdout = spawn_reader(child.stdout.take().ok_or(ProbeFailure::Failed)?);
+    let stderr = spawn_reader(child.stderr.take().ok_or(ProbeFailure::Failed)?);
     let deadline = Instant::now() + timeout;
     let status = loop {
         match child.try_wait() {
@@ -223,30 +267,43 @@ fn run_probe(
             Ok(None) if Instant::now() >= deadline => {
                 kill_tree(&mut child);
                 let _ = child.wait();
-                return None;
+                return Err(ProbeFailure::TimedOut);
             }
             Ok(None) => thread::sleep(Duration::from_millis(10)),
             Err(_) => {
                 kill_tree(&mut child);
                 let _ = child.wait();
-                return None;
+                return Err(ProbeFailure::Failed);
             }
         }
     };
     // `communicate()` waits for EOF on both pipes within the same timeout; a
     // descendant that keeps a pipe open past it is a timeout, and the whole
     // group is reaped so nothing lingers in the resident.
-    let drain = |receiver: &mpsc::Receiver<Option<Vec<u8>>>| {
-        receiver.recv_timeout(deadline.saturating_duration_since(Instant::now()))
+    // Evidence larger than the cap cannot be read whole, so a reader that
+    // reports the cap was passed fails the probe rather than let a truncated
+    // object be parsed as "no evaluator ran". Both pipes are classified before
+    // a reason is chosen: one half passing the cap while the other is still
+    // held open is a broken probe, not a busy host.
+    let drain = |receiver: &mpsc::Receiver<Option<Vec<u8>>>| match receiver
+        .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+    {
+        Ok(Some(kept)) => Ok(kept),
+        Ok(None) | Err(mpsc::RecvTimeoutError::Disconnected) => Err(ProbeFailure::Failed),
+        Err(mpsc::RecvTimeoutError::Timeout) => Err(ProbeFailure::TimedOut),
     };
-    let (Ok(stdout), Ok(_)) = (drain(&stdout), drain(&stderr)) else {
-        kill_tree(&mut child);
-        return None;
+    let stdout = match (drain(&stdout), drain(&stderr)) {
+        (Ok(stdout), Ok(_)) => stdout,
+        (Err(first), Err(second)) => {
+            kill_tree(&mut child);
+            return Err(first.or_definite(second));
+        }
+        (Err(failure), Ok(_)) | (Ok(_), Err(failure)) => {
+            kill_tree(&mut child);
+            return Err(failure);
+        }
     };
-    // Evidence larger than the cap cannot be read whole; report the probe as
-    // failed rather than parse a truncated object as "no evaluator ran".
-    let stdout = stdout?;
-    Some(ProbeRun {
+    Ok(ProbeRun {
         exit_code: exit_code(status),
         stdout,
     })
@@ -329,15 +386,18 @@ pub fn probe_package_shim_intercepts(
             continue;
         }
         let probe_args = package_shim_probe_args(manager);
-        let Some(run) = run_probe(
+        let run = match run_probe(
             &facts.fs_path(&shim_path),
             &probe_args,
             &facts.fs_path(&workspace),
             &probe_env,
             per_probe,
-        ) else {
-            results.push(skipped(manager, "probe_failed"));
-            continue;
+        ) {
+            Ok(run) => run,
+            Err(failure) => {
+                results.push(skipped(manager, failure.reason()));
+                continue;
+            }
         };
         let stdout = String::from_utf8(run.stdout)
             .map_err(|_| format!("probe output of {manager} is not valid UTF-8"))?;
@@ -396,14 +456,18 @@ pub fn probe_package_shim_intercepts(
 mod tests {
     use super::*;
 
-    fn sh(script: &str) -> Option<ProbeRun> {
+    fn run(script: &str, timeout: Duration) -> Result<ProbeRun, ProbeFailure> {
         run_probe(
             Path::new("/bin/sh"),
             &["-c".to_owned(), script.to_owned()],
             &std::env::temp_dir(),
             &BTreeMap::from([("PATH".to_owned(), "/usr/bin:/bin".to_owned())]),
-            Duration::from_secs(20),
+            timeout,
         )
+    }
+
+    fn sh(script: &str) -> Result<ProbeRun, ProbeFailure> {
+        run(script, Duration::from_secs(20))
     }
 
     #[test]
@@ -415,6 +479,54 @@ mod tests {
     #[test]
     fn output_past_the_cap_fails_the_probe() {
         let script = format!("head -c {} /dev/zero", PROBE_OUTPUT_CAP + 1);
-        assert!(sh(&script).is_none());
+        assert_eq!(sh(&script).err(), Some(ProbeFailure::Failed));
+    }
+
+    #[test]
+    fn a_child_that_outlives_its_budget_is_a_timeout_not_a_failure() {
+        assert_eq!(
+            run("sleep 30", Duration::from_millis(200)).err(),
+            Some(ProbeFailure::TimedOut),
+        );
+    }
+
+    #[test]
+    fn output_past_the_cap_outranks_a_pipe_held_open_past_the_budget() {
+        // stderr passes the cap and its reader answers once the shell exits,
+        // which is definite; a descendant keeps stdout open past the budget,
+        // which on its own would only say the host was busy.
+        let script = format!(
+            "head -c {} /dev/zero >&2; sleep 30 2>/dev/null & exit 0",
+            PROBE_OUTPUT_CAP + 1
+        );
+        assert_eq!(
+            run(&script, Duration::from_millis(500)).err(),
+            Some(ProbeFailure::Failed),
+        );
+    }
+
+    #[test]
+    fn a_pipe_that_passed_the_cap_is_definite_while_it_is_still_held_open() {
+        // The over-cap pipe is the held-open one, so nothing else can speak for
+        // it. Waiting for its EOF would report the busy-host reason for a probe
+        // that had already produced more evidence than can be read whole.
+        let script = format!(
+            "head -c {} /dev/zero; sleep 30 & exit 0",
+            PROBE_OUTPUT_CAP + 1
+        );
+        assert_eq!(
+            run(&script, Duration::from_millis(500)).err(),
+            Some(ProbeFailure::Failed),
+        );
+    }
+
+    #[test]
+    fn a_child_that_holds_a_pipe_open_past_the_budget_is_a_timeout() {
+        // The child exits, but a descendant keeps stdout open, so the drain is
+        // what runs out of time rather than the wait.
+        assert_eq!(
+            run("sleep 30 & exit 0", Duration::from_millis(200)).err(),
+            Some(ProbeFailure::TimedOut),
+        );
     }
 }

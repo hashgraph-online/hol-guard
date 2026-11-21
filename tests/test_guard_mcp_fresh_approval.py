@@ -12,11 +12,11 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_context
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError, ApprovalGateInput, require_approval_decision
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, bulk_allow_read_only_once
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.mcp_tool_calls import evaluate_tool_call
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
@@ -25,7 +25,6 @@ from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_bulk_allow_once import PASSWORD, _enable_gate
 from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context, _messages
-
 
 pytestmark = [pytest.mark.usefixtures("bundle_first_cloud")]
 
@@ -272,7 +271,9 @@ def test_fresh_opencode_reapproval_runs_exactly_once(
                 if proxy._child_output_queue is not None:
                     proxy._child_output_queue.put(
                         runtime._ChildOutputFrame(
-                            line=json.dumps({"jsonrpc": "2.0", "method": "notifications/tools/list_changed", "params": {}})
+                            line=json.dumps(
+                                {"jsonrpc": "2.0", "method": "notifications/tools/list_changed", "params": {}}
+                            )
                             + "\n"
                         )
                     )
@@ -377,7 +378,13 @@ def test_invalid_review_never_launches(
     tmp_path, monkeypatch, install_fake_system_keyring, native_context_digest, native_mcp_probe, mutation
 ):
     test_fresh_opencode_reapproval_runs_exactly_once(
-        tmp_path, monkeypatch, install_fake_system_keyring, native_context_digest, native_mcp_probe, "local-once", mutation
+        tmp_path,
+        monkeypatch,
+        install_fake_system_keyring,
+        native_context_digest,
+        native_mcp_probe,
+        "local-once",
+        mutation,
     )
 
 

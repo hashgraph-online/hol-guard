@@ -9,10 +9,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
-from codex_plugin_scanner.guard.daemon.extension_control_errors import ExtensionControlApiError
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
+from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard.extension_controls.extension_control_errors import ExtensionControlApiError
+from codex_plugin_scanner.guard.native_daemon_client import GuardDaemonRequestError, GuardSurfaceDaemonClient
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -48,10 +48,12 @@ def test_http_repair_converges_when_store_recovered_after_daemon_cached_failure(
         assert auth_token is not None
         client = GuardSurfaceDaemonClient(f"http://127.0.0.1:{daemon.port}", auth_token)
 
-        repaired = client.recover_extension_control_authority({"session_nonce": "nonce"})
-
-        assert repaired["health"] == AuthorityHealth.PROTECTED.value
+        # Each request reads the store afresh, so a failure seen at start is
+        # not kept: the recovered store is what the daemon serves, and there
+        # is nothing left to recover.
         assert client.effective_extension_controls()["health"] == AuthorityHealth.PROTECTED.value
+        with pytest.raises(GuardDaemonRequestError, match="authority_not_recoverable"):
+            client.recover_extension_control_authority({"session_nonce": "nonce"})
     finally:
         daemon.stop()
 
@@ -62,7 +64,7 @@ def test_http_routes_authenticate_before_reading_sensitive_post_body(
     # Keep this home unenrolled so the routes still prove how they answer a
     # missing authority; default enrollment has its own daemon tests.
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server._GuardDaemonHTTPServer._enroll_authority_by_default",
+        "codex_plugin_scanner.guard.extension_control_host.ExtensionControlHost._enroll_authority_by_default",
         lambda _server: None,
     )
     store = GuardStore(tmp_path / "guard-home")

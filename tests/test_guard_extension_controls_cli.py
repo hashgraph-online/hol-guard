@@ -9,13 +9,13 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser, main
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
 from codex_plugin_scanner.guard.cli import extension_controls_commands
 from codex_plugin_scanner.guard.cli.extension_controls_commands import (
     GuardDaemonRequestError,
     _mutation_payload,
     run_extension_controls_command,
 )
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 
 
 def _effective() -> dict[str, object]:
@@ -350,9 +350,7 @@ def test_recover_authority_accepts_the_home_the_block_names(tmp_path: Path) -> N
     guard_home = tmp_path / "elsewhere" / ".hol-guard"
     parser = _build_parser("hol-guard", program_mode="hol-guard")
 
-    parsed = parser.parse_args(
-        ["command", "--guard-home", str(guard_home), "controls", "recover-authority"]
-    )
+    parsed = parser.parse_args(["command", "--guard-home", str(guard_home), "controls", "recover-authority"])
 
     assert parsed.guard_home == str(guard_home)
     assert parsed.home is None

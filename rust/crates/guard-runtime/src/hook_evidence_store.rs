@@ -398,6 +398,32 @@ impl EvidenceStoreApi for NativeEvidenceStore {
         Ok(())
     }
 
+    fn record_guard_event(
+        &self,
+        event_name: &str,
+        payload: &Map<String, Value>,
+        occurred_at: &str,
+    ) -> Result<(), io::Error> {
+        // `GuardStore.add_event` stores the payload as `json.dumps` writes it.
+        let payload_json = crate::guard_store_json::dumps_default(&Value::Object(payload.clone()))
+            .ok_or_else(|| io::Error::other("guard event payload is not encodable"))?;
+        let mut args = Map::new();
+        args.insert(
+            "event_name".to_owned(),
+            Value::String(event_name.to_owned()),
+        );
+        args.insert("payload_json".to_owned(), Value::String(payload_json));
+        args.insert(
+            "occurred_at".to_owned(),
+            Value::String(occurred_at.to_owned()),
+        );
+        // The writer replays its journal after a crash, which can hold an
+        // event the store already saved.
+        args.insert("once".to_owned(), Value::Bool(true));
+        self.call("hook-evidence-guard-event", "add_event", args)?;
+        Ok(())
+    }
+
     fn record_native_decision_receipt(
         &self,
         receipt: &Map<String, Value>,
@@ -420,6 +446,10 @@ impl EvidenceStoreApi for NativeEvidenceStore {
             "record_native_decision_receipt",
             args,
         )?;
+        // Independent optional notification, after persistence and after the
+        // storage gate is released. It cannot change this writer's success,
+        // journal ordering, failure signal or acknowledgement behavior.
+        crate::context_assistance_notifications::persisted(&self.guard_home, receipt);
         // `store_native_decision_receipts.record_native_decision_receipt`
         // always answers True: an insert the store ignored as a duplicate is
         // still a receipt the writer has nothing left to do about.

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 # Hook payload normalization, ordered JSON/value compatibility and payload
 # preparation. Extracted from guard-command so edits to the payload domain

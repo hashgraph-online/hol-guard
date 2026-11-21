@@ -22,11 +22,8 @@ from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import Final
 from uuid import uuid4
-
-if TYPE_CHECKING:
-    from .native_runtime_values import NativeRuntimeStatus
 
 BINDING_CAPTURE_FEATURE: Final = "codex-binding-capture-v1"
 _REQUEST_SCHEMA: Final = "guard-codex-binding-capture-request.v1"
@@ -34,7 +31,6 @@ _RESULT_SCHEMA: Final = "guard-codex-binding-capture-result.v1"
 _MARKER_PARTS: Final = ("diagnostics", "codex-binding-capture.v2.json")
 _MAX_TEXT_BYTES: Final = 65536
 _TIMEOUT_SECONDS: Final = 2.0
-_BRIDGE_TIMEOUT_SECONDS: Final = 0.2
 _JOIN_PROBE_RECORDS: Final = 129
 # One join row may exceed the 64 KiB capture ceiling so the runtime can return
 # record_size. The row still has to fit inside the 256 KiB request cap.
@@ -82,14 +78,7 @@ def _marker_present(guard_home: Path) -> bool:
         return False
 
 
-def _exchange(
-    guard_home: Path,
-    command: dict[str, object],
-    *,
-    timeout_seconds: float = _TIMEOUT_SECONDS,
-    prepare: bool = True,
-    status: NativeRuntimeStatus | None = None,
-) -> object | None:
+def _exchange(guard_home: Path, command: dict[str, object]) -> object | None:
     digest_fn, prepare_fn, request_fn = _bind_runtime_imports()
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
@@ -101,17 +90,16 @@ def _exchange(
         digest = "sha256:" + digest_fn(request)
     except (TypeError, ValueError):
         return None
-    if prepare and not prepare_fn(guard_home):
+    if not prepare_fn(guard_home):
         return None
     response = request_fn(
         operation="codex_binding_capture",
         request=request,
         guard_home=guard_home,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=_TIMEOUT_SECONDS,
         required_feature=BINDING_CAPTURE_FEATURE,
         response_schema=_RESULT_SCHEMA,
         record_resilience=False,
-        status=status,
     )
     if (
         response is None
@@ -123,26 +111,6 @@ def _exchange(
     ):
         return None
     return response.get("payload")
-
-
-def _bounded_text(value: object) -> str | None:
-    """UTF-8 text within the runtime's payload ceiling, or ``None``."""
-
-    try:
-        if type(value) is bytes:
-            text = value.decode("utf-8")
-        elif type(value) is str:
-            text = value
-            _ = text.encode("utf-8")
-        else:
-            return None
-    except UnicodeError:
-        return None
-    return text if len(text) <= _MAX_TEXT_BYTES and len(text.encode("utf-8")) <= _MAX_TEXT_BYTES else None
-
-
-def _recorded(payload: object) -> bool:
-    return isinstance(payload, Mapping) and payload.get("recorded") is True
 
 
 def _contains_oversized_text(value: object, limit: int) -> bool:
@@ -174,86 +142,6 @@ def _bounded_json(value: object, limit: int = _MAX_TEXT_BYTES) -> str | None:
     except (TypeError, ValueError, RecursionError):
         return None
     return "".join(parts)
-
-
-def _bridge_resident_status(guard_home: Path) -> NativeRuntimeStatus | None:
-    """Status of an already-idle resident, with no store provisioning and no spawn."""
-
-    from .native_resident_client import native_resident_client_ready
-    from .native_runtime import native_runtime_status
-
-    status = native_runtime_status()
-    identity = getattr(status, "identity", None)
-    path = getattr(identity, "path", None)
-    if not isinstance(path, Path) or not native_resident_client_ready(path, guard_home):
-        return None
-    return status
-
-
-def record_bridge_ingress(
-    *,
-    guard_home: Path,
-    raw_payload: str | bytes,
-    event_name: str,
-    forwarded_payload: str | bytes | None = None,
-    harness: str = "codex",
-) -> bool:
-    """Record raw and forwarded ingress fingerprints when a marker enables it."""
-
-    if harness != "codex" or not _marker_present(guard_home):
-        return False
-    raw = _bounded_text(raw_payload)
-    forwarded = raw if forwarded_payload is None else _bounded_text(forwarded_payload)
-    if raw is None or forwarded is None or not isinstance(event_name, str):
-        return False
-    status = _bridge_resident_status(guard_home)
-    if status is None:
-        return False
-    return _recorded(
-        _exchange(
-            guard_home,
-            {
-                "kind": "bridge",
-                "raw_payload": raw,
-                "forwarded_payload": forwarded,
-                "event_name": event_name,
-                "harness": harness,
-            },
-            timeout_seconds=_BRIDGE_TIMEOUT_SECONDS,
-            prepare=False,
-            status=status,
-        )
-    )
-
-
-def record_native_worker(
-    *,
-    guard_home: Path,
-    payload: Mapping[str, object],
-    harness: str,
-    event_name: str,
-    receipt: object,
-) -> bool:
-    """Record the forwarded payload and a validated native-edge receipt."""
-
-    if harness != "codex" or not isinstance(event_name, str) or not _marker_present(guard_home):
-        return False
-    payload_text = _bounded_json(payload)
-    receipt_text = _bounded_json(receipt)
-    if payload_text is None or receipt_text is None:
-        return False
-    return _recorded(
-        _exchange(
-            guard_home,
-            {
-                "kind": "native",
-                "payload": payload_text,
-                "receipt": receipt_text,
-                "event_name": event_name,
-                "harness": harness,
-            },
-        )
-    )
 
 
 def initialize_capture_marker(

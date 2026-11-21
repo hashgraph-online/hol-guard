@@ -31,8 +31,6 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from codex_plugin_scanner.guard.inventory_agent_types import agent_type  # noqa: E402
 from codex_plugin_scanner.guard.inventory_contract_fingerprints import (  # noqa: E402
-    _inventory_snapshot_content_hash,
-    _stable_snapshot_value,
     fingerprint_mapping,
     fingerprint_text,
     inventory_item_id,
@@ -42,6 +40,7 @@ from codex_plugin_scanner.guard.inventory_contract_models import (  # noqa: E402
     GuardAgentInventoryItem,
     GuardInventorySource,
 )
+from codex_plugin_scanner.guard.native_inventory_snapshot_digest import native_inventory_snapshot_digest  # noqa: E402
 
 OUTPUT = REPO_ROOT / "rust/crates/guard-command/testdata/inventory_fingerprint_parity.json"
 
@@ -65,6 +64,7 @@ FLOATS: tuple[float, ...] = (
     5e-324,
     0.1,
     1 / 3,
+    1.2345678,
     123456789.123456789,
     2.5e-10,
 )
@@ -112,6 +112,7 @@ AGENT_TYPE_INPUTS: tuple[str, ...] = (
     "claude-code",
     "cline",
     "hermes",
+    "muse",
     "Codex",
     "claude_code",
     "",
@@ -119,6 +120,44 @@ AGENT_TYPE_INPUTS: tuple[str, ...] = (
     "CLAUDE-CODE",
     " codex ",
 )
+
+_VOLATILE_SNAPSHOT_KEYS = frozenset(
+    {
+        "attestation",
+        "attestationBindings",
+        "capturedAt",
+        "duration_ms",
+        "durationMs",
+        "elapsedMs",
+        "evidenceHash",
+        "generatedAt",
+        "lastSeenAt",
+        "observedAt",
+        "scanDurationMs",
+        "syncedAt",
+    }
+)
+
+
+def _stable_snapshot_value(value: object) -> object:
+    """The reference the native stable-snapshot rules are pinned against.
+
+    Drops volatile observation fields and orders nested lists, as the native
+    runtime does before it hashes an inventory snapshot.
+    """
+    if isinstance(value, dict):
+        return {
+            key: _stable_snapshot_value(item)
+            for key, item in sorted(value.items(), key=lambda entry: str(entry[0]))
+            if str(key) not in _VOLATILE_SNAPSHOT_KEYS
+        }
+    if isinstance(value, (list, tuple)):
+        return sorted(
+            (_stable_snapshot_value(item) for item in value),
+            key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=True),
+        )
+    return value
+
 
 STABLE_VALUES: tuple[object, ...] = (
     None,
@@ -293,7 +332,7 @@ def build_document() -> dict[str, object]:
                 "items": [_item_json(item) for item in snapshot["items"]],  # type: ignore[union-attr]
                 "findings": [_finding_json(finding) for finding in snapshot["findings"]],  # type: ignore[union-attr]
                 "sources": [_source_json(source) for source in snapshot["sources"]],  # type: ignore[union-attr]
-                "digest": _inventory_snapshot_content_hash(**snapshot),  # type: ignore[arg-type]
+                "digest": native_inventory_snapshot_digest(**snapshot),  # type: ignore[arg-type]
             }
             for snapshot in SNAPSHOTS
         ],

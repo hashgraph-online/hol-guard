@@ -1,6 +1,9 @@
 use super::*;
 use crate::catalog_read_model::{CatalogReadRequestV1, CATALOG_READ_REQUEST_SCHEMA};
 use std::{fs, time::Instant};
+#[path = "catalog_prepare_session_tests.rs"]
+mod session;
+use session::prepare;
 
 struct Fixture {
     _serial: std::sync::MutexGuard<'static, ()>,
@@ -187,63 +190,6 @@ fn authority(root: &Value, profile: Profile) -> VerifiedAuthority {
             None
         },
         profile,
-    }
-}
-fn prepare(fixture: &Fixture) -> std::result::Result<(Handle, usize), String> {
-    let home = fixture.home.path();
-    let profile = if fixture.root["schema"] == "guard.command-pack-bundle.v1" {
-        Profile::Installed
-    } else {
-        Profile::Remote
-    };
-    let mut result = evaluate(Request {
-        guard_home: home.into(),
-        action: Action::Begin {
-            authority: authority(&fixture.root, profile),
-        },
-    });
-    let mut fetches = 0;
-    loop {
-        match result["outcome"].as_str().unwrap() {
-            "continue" => {
-                result = evaluate(Request {
-                    guard_home: home.into(),
-                    action: Action::Resume {
-                        session: result["session"].as_str().unwrap().into(),
-                    },
-                });
-            }
-            "complete" => {
-                return Ok((
-                    serde_json::from_value(result["handle"].clone()).unwrap(),
-                    fetches,
-                ))
-            }
-            "fetch" => {
-                let target = &result["fetch"];
-                assert!(target["location"]["asset"]
-                    .as_str()
-                    .unwrap()
-                    .starts_with("object-"));
-                let bytes = fs::read(
-                    fixture
-                        .origin
-                        .path()
-                        .join(format!("{}.json", target["sha256"].as_str().unwrap())),
-                )
-                .unwrap();
-                assert!(bytes.len() <= OBJECT_BYTES);
-                fetches += 1;
-                result = evaluate(Request {
-                    guard_home: home.into(),
-                    action: Action::Advance {
-                        session: result["session"].as_str().unwrap().into(),
-                        data: bytes,
-                    },
-                });
-            }
-            _ => return Err(result.to_string()),
-        }
     }
 }
 fn read_request(home: &Path, handle: Handle) -> ReadRequest {

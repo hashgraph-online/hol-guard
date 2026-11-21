@@ -16,14 +16,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
-from codex_plugin_scanner.guard.harness_versions.manifest import (  # noqa: E402
+from codex_plugin_scanner.version import __version__  # noqa: E402
+from scripts.ci.harness_version_manifest import (  # noqa: E402
     MANIFEST_FILENAME,
     ManifestError,
     bundled_manifest_path,
     parse_manifest,
 )
-from codex_plugin_scanner.version import __version__  # noqa: E402
 
 WHEEL_MEMBER = f"codex_plugin_scanner/guard/schemas/{MANIFEST_FILENAME}"
 

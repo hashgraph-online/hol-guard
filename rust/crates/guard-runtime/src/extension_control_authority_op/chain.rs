@@ -16,7 +16,7 @@ use super::records::{
 };
 use super::Ctx;
 
-const MIGRATED_EVENT: &str = "extension_control_authority_catalog_migrated";
+pub(super) const MIGRATED_EVENT: &str = "extension_control_authority_catalog_migrated";
 
 impl Ctx<'_> {
     /// `_pending_transition`.

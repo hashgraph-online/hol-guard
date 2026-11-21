@@ -55,7 +55,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -100,7 +101,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -151,7 +153,8 @@
           "node_test": true,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -206,7 +209,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -266,7 +270,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -334,7 +339,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -397,7 +403,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -460,7 +467,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -514,7 +522,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -568,7 +577,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -624,7 +634,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -687,7 +698,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -910,7 +922,8 @@
           "node_test": true,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -1519,6 +1532,313 @@
         "value": [
           "run"
         ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "jest"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "npx",
+          "jest",
+          "--runInBand",
+          "suite.test.ts"
+        ]
+      },
+      "expected": {
+        "value": [
+          "--runInBand",
+          "suite.test.ts"
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "npx",
+          "--no-install",
+          "jest",
+          "-t",
+          "keeps the index"
+        ]
+      },
+      "expected": {
+        "value": [
+          "-t",
+          "keeps the index"
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "pnpm",
+          "exec",
+          "jest",
+          "--ci"
+        ]
+      },
+      "expected": {
+        "value": [
+          "--ci"
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "bun",
+          "x",
+          "jest",
+          "suite.test.ts"
+        ]
+      },
+      "expected": {
+        "value": [
+          "suite.test.ts"
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "node",
+          "$ROOT/project/node_modules/jest/bin/jest.js",
+          "--ci"
+        ]
+      },
+      "expected": {
+        "value": [
+          "--ci"
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "jest",
+          "--watch"
+        ]
+      },
+      "expected": {
+        "reason_code": "vitest_restricted_invalid_command",
+        "message": "Protected Jest requires a run that does not watch."
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "npx",
+          "jest",
+          "--watchAll=true"
+        ]
+      },
+      "expected": {
+        "reason_code": "vitest_restricted_invalid_command",
+        "message": "Protected Jest requires a run that does not watch."
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "jest",
+          "--ci",
+          ";"
+        ]
+      },
+      "expected": {
+        "reason_code": "vitest_restricted_invalid_command",
+        "message": "Protected Vitest requires direct run argv."
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "npx",
+          "jest",
+          "--testRunner",
+          "/tmp/outside-runner.js",
+          "suite.test.ts"
+        ]
+      },
+      "expected": {
+        "reason_code": "vitest_restricted_invalid_command",
+        "message": "Protected Jest reads its configuration and modules from this workspace."
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "npx",
+          "jest",
+          "--config=/tmp/jest.outside.config.js"
+        ]
+      },
+      "expected": {
+        "reason_code": "vitest_restricted_invalid_command",
+        "message": "Protected Jest reads its configuration and modules from this workspace."
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "jest",
+          "--setupFiles",
+          "../outside/setup.js"
+        ]
+      },
+      "expected": {
+        "reason_code": "vitest_restricted_invalid_command",
+        "message": "Protected Jest reads its configuration and modules from this workspace."
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "jest",
+          "--maxWorkers=2",
+          "suite.test.ts"
+        ]
+      },
+      "expected": {
+        "value": [
+          "--maxWorkers=2",
+          "suite.test.ts"
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "jest",
+          "-w",
+          "2",
+          "suite.test.ts"
+        ]
+      },
+      "expected": {
+        "value": [
+          "-w",
+          "2",
+          "suite.test.ts"
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "npx",
+          "jest",
+          "--watchman"
+        ]
+      },
+      "expected": {
+        "value": [
+          "--watchman"
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "npx",
+          "jest",
+          "--watch-all"
+        ]
+      },
+      "expected": {
+        "reason_code": "vitest_restricted_invalid_command",
+        "message": "Protected Jest requires a run that does not watch."
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "jest",
+          "--watch-all=false"
+        ]
+      },
+      "expected": {
+        "value": [
+          "--watch-all=false"
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "node",
+          "$ROOT/project/node_modules/jest/bin/jest.js"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "npx",
+          "jest",
+          "--ci"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": false,
+          "node_test": false,
+          "vitest": true,
+          "git": false,
+          "node_tool": false,
+          "package_test": false
+        }
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "node",
+          "$ROOT/project/node_modules/jest/bin/jest.js",
+          "--ci"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": false,
+          "node_test": false,
+          "vitest": true,
+          "git": false,
+          "node_tool": false,
+          "package_test": false
+        }
       }
     },
     {
@@ -2294,7 +2614,7 @@
         "private_root": "$ROOT/private"
       },
       "expected": {
-        "value": "(version 1)\n(deny default)\n(deny file-link)\n(allow process-fork)\n(allow process-exec (literal \"$ROOT/project/bin/node\") (literal \"/usr/bin/true\"))\n(allow signal (target self) (target children))\n(allow sysctl-read)\n(allow file-read-data (literal \"/\"))\n(allow file-read-metadata (literal \"/\") (literal \"$ROOT/project\") (literal \"$ROOT\") $FIXTURE_ANCESTORS (literal \"$ROOT/private\") (literal \"/System\") (literal \"/Library/Apple\") (literal \"/Library\") (literal \"/Library/Frameworks\") (literal \"/opt/homebrew/Cellar\") (literal \"/opt/homebrew\") (literal \"/opt\") (literal \"/opt/homebrew/opt\") (literal \"/usr/lib\") (literal \"/usr\") (literal \"/usr/share\") (literal \"$ROOT/project/bin/node\") (literal \"$ROOT/project/bin\") (literal \"/usr/bin/true\") (literal \"/usr/bin\"))\n(allow file-read* (subpath \"$ROOT/project\") (subpath \"$ROOT/private\") (subpath \"/System\") (subpath \"/Library/Apple\") (subpath \"/Library/Frameworks\") (subpath \"/opt/homebrew/Cellar\") (subpath \"/opt/homebrew/opt\") (subpath \"/usr/lib\") (subpath \"/usr/share\") (literal \"/dev/null\") (literal \"/dev/random\") (literal \"/dev/urandom\") (literal \"/private/etc/hosts\") (literal \"/private/etc/protocols\") (literal \"/private/etc/resolv.conf\") (literal \"/private/etc/services\"))\n(allow file-write* (subpath \"$ROOT/private\") (literal \"/dev/null\"))\n(deny file-write* (literal \"/usr/bin/true\"))\n(deny file-read-data (regex \"(^|/)\\\\.[eE][nN][vV]($|[./])\"))\n(deny file-read-data (regex \"(^|/)[^/]*\\\\.[kK][eE][yY]$\"))\n(deny file-read-data (regex \"(^|/)[kK][rR][bB]5[cC][cC]_[^/]*$\"))\n(deny file-read-data (regex \"(^|/)(\\\\.[eE][nN][vV][rR][cC]|\\\\.[aA][uU][tT][hH][rR][cC]|\\\\.[nN][pP][mM][rR][cC]|\\\\.[pP][yY][pP][iI][rR][cC]|\\\\.[nN][eE][tT][rR][cC]|\\\\.[gG][iI][tT]\\\\-[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS]|[tT][eE][rR][rR][aA][fF][oO][rR][mM]\\\\.[tT][fF][vV][aA][rR][sS]|[pP][rR][iI][vV][aA][tT][eE]\\\\.[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\.[kK][eE][yY])$\"))\n(deny file-read-data (regex \"(^|/)[^/]*([pP][rR][iI][vV][aA][tT][eE]\\\\-[kK][eE][yY]|[pP][rR][iI][vV][aA][tT][eE]_[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\-[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]_[kK][eE][yY])[^/]*$\"))\n(deny file-read-data (regex \"(^|/)(\\\\.[sS][sS][hH]|\\\\.[aA][wW][sS]|\\\\.[dD][oO][cC][kK][eE][rR]|\\\\.[kK][uU][bB][eE]|\\\\.[gG][nN][uU][pP][gG]|\\\\.[hH][oO][lL]\\\\-[gG][uU][aA][rR][dD])(/|$)\"))"
+        "value": "(version 1)\n(deny default)\n(deny file-link)\n(allow process-fork)\n(allow process-exec (literal \"$ROOT/project/bin/node\") (literal \"/usr/bin/true\"))\n(allow signal (target self) (target children))\n(allow sysctl-read)\n(allow file-read-data (literal \"/\"))\n(allow file-read-metadata (literal \"/\") (literal \"$ROOT/project\") (literal \"$ROOT\") $FIXTURE_ANCESTORS (literal \"$ROOT/private\") (literal \"/System\") (literal \"/Library/Apple\") (literal \"/Library\") (literal \"/Library/Frameworks\") (literal \"/opt/homebrew/Cellar\") (literal \"/opt/homebrew\") (literal \"/opt\") (literal \"/opt/homebrew/opt\") (literal \"/usr/lib\") (literal \"/usr\") (literal \"/usr/share\") (literal \"$ROOT/project/bin/node\") (literal \"$ROOT/project/bin\") (literal \"/usr/bin/true\") (literal \"/usr/bin\"))\n(allow file-read* (subpath \"$ROOT/project\") (subpath \"$ROOT/private\") (subpath \"/System\") (subpath \"/Library/Apple\") (subpath \"/Library/Frameworks\") (subpath \"/opt/homebrew/Cellar\") (subpath \"/opt/homebrew/opt\") (subpath \"/usr/lib\") (subpath \"/usr/share\") (literal \"/dev/null\") (literal \"/dev/random\") (literal \"/dev/urandom\") (literal \"/private/etc/hosts\") (literal \"/private/etc/protocols\") (literal \"/private/etc/resolv.conf\") (literal \"/private/etc/services\"))\n(allow file-write* (subpath \"$ROOT/private\") (literal \"/dev/null\"))\n(deny file-write* (literal \"/usr/bin/true\"))\n(allow network-bind (local ip \"localhost:*\"))\n(deny file-read-data (regex \"(^|/)\\\\.[eE][nN][vV]($|[./])\"))\n(deny file-read-data (regex \"(^|/)[^/]*\\\\.[kK][eE][yY]$\"))\n(deny file-read-data (regex \"(^|/)[kK][rR][bB]5[cC][cC]_[^/]*$\"))\n(deny file-read-data (regex \"(^|/)(\\\\.[eE][nN][vV][rR][cC]|\\\\.[aA][uU][tT][hH][rR][cC]|\\\\.[nN][pP][mM][rR][cC]|\\\\.[pP][yY][pP][iI][rR][cC]|\\\\.[nN][eE][tT][rR][cC]|\\\\.[gG][iI][tT]\\\\-[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS]|[tT][eE][rR][rR][aA][fF][oO][rR][mM]\\\\.[tT][fF][vV][aA][rR][sS]|[pP][rR][iI][vV][aA][tT][eE]\\\\.[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\.[kK][eE][yY])$\"))\n(deny file-read-data (regex \"(^|/)[^/]*([pP][rR][iI][vV][aA][tT][eE]\\\\-[kK][eE][yY]|[pP][rR][iI][vV][aA][tT][eE]_[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\-[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]_[kK][eE][yY])[^/]*$\"))\n(deny file-read-data (regex \"(^|/)(\\\\.[sS][sS][hH]|\\\\.[aA][wW][sS]|\\\\.[dD][oO][cC][kK][eE][rR]|\\\\.[kK][uU][bB][eE]|\\\\.[gG][nN][uU][pP][gG]|\\\\.[hH][oO][lL]\\\\-[gG][uU][aA][rR][dD])(/|$)\"))"
       },
       "system_grants": {
         "roots": [

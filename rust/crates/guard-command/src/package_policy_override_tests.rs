@@ -154,6 +154,7 @@ fn approval_reuse_reason_message_verbatim() {
         ("approval_reuse_integrity_failure", "Saved approval was rejected because its integrity could not be verified."),
         ("approval_reuse_identity_changed", "Saved approval was rejected because the current package identity or scope changed."),
         ("approval_reuse_content_changed", "Saved approval was rejected because the current package content or execution context changed."),
+        ("approval_reuse_expired", "Saved approval was rejected because it expired."),
         ("approval_reuse_claim_failed", "Saved approval was rejected because it changed, expired, or was already consumed."),
         ("approval_reuse_context_changed_after_claim", "Saved approval was rejected because retained authority changed after it was claimed."),
         ("approval_reuse_saved_action_unknown", "Saved approval was rejected because its action is unknown or malformed."),

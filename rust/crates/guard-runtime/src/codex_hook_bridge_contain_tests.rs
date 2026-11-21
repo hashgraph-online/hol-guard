@@ -18,6 +18,16 @@ fn parsed(text: &str) -> PyVal {
     parse_mapping_lone_surrogates(text).unwrap().value
 }
 
+/// A host whose runtime runs no sink itself.
+fn no_native(
+    _: &serde_json::Value,
+    _: &serde_json::Map<String, serde_json::Value>,
+    _: &str,
+    _: &str,
+) -> Option<String> {
+    None
+}
+
 fn fallback() -> Vec<String> {
     [
         PYTHON,
@@ -206,6 +216,7 @@ fn a_contained_call_is_rewritten_to_run_the_sink() {
         prefix: &installed,
         guard_home: "/g",
         home: "/h",
+        native: no_native,
     };
     let routed = routed(&parsed(WORKSPACE_DENY), &payload, false, &target).unwrap();
     assert_eq!(text(&routed, "policy_action"), Some("allow"));
@@ -239,6 +250,71 @@ fn a_contained_call_is_rewritten_to_run_the_sink() {
     );
 }
 
+/// A runtime that runs the sink for a workspace sandbox answered for a
+/// call carrying its own tool input.
+fn runtime_sink(
+    answer: &serde_json::Value,
+    original: &serde_json::Map<String, serde_json::Value>,
+    workspace: &str,
+    _home: &str,
+) -> Option<String> {
+    (answer["reason_code"] == "native_workspace_containment_required"
+        && answer["required_execution_profile"] == "workspace-contained-v1"
+        && original.contains_key("timeout")
+        && Path::new(workspace).is_absolute())
+    .then(|| "/opt/hol guard/runtime".to_owned())
+}
+
+#[test]
+fn a_call_the_runtime_reproduces_runs_its_own_sink() {
+    let workspace = tempfile::tempdir().unwrap();
+    let resolved = std::fs::canonicalize(workspace.path()).unwrap();
+    let resolved = resolved.to_str().unwrap();
+    let installed = fallback();
+    let target = Target {
+        prefix: &installed,
+        guard_home: "/g",
+        home: "/h",
+        native: runtime_sink,
+    };
+    let call = |command: &str| {
+        let payload = parsed(&format!(
+            r#"{{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"{command}","timeout":5}},"cwd":"{}","session_id":"s1","tool_use_id":"t1"}}"#,
+            workspace.path().display()
+        ));
+        let routed = routed(&parsed(WORKSPACE_DENY), &payload, false, &target).unwrap();
+        let output = routed.get("hookSpecificOutput").unwrap();
+        let updated = output.get("updatedInput").unwrap();
+        text(updated, "command").unwrap().to_owned()
+    };
+    let command = call("make test");
+    let (request, _) = take_request(&command);
+    let digest = hex::encode(Sha256::digest(&request));
+    let snapshot: serde_json::Value = serde_json::from_slice(&request).unwrap();
+    assert_eq!(snapshot["payload"]["tool_input"]["command"], "make test");
+    assert!(
+        command.starts_with(&format!(
+            "'/opt/hol guard/runtime' contained-workspace-sink --harness codex --guard-home /g --workspace {resolved} --request-file "
+        )),
+        "{command}"
+    );
+    assert!(
+        command.ends_with(&format!("--request-sha256 {digest} --home /h")),
+        "{command}"
+    );
+    // The verdict for a group was answered for the list inside it. The
+    // snapshot keeps the text Codex sent and the native sink projects it
+    // again before it plans the call.
+    let command = call("(make test)");
+    let (request, _) = take_request(&command);
+    let snapshot: serde_json::Value = serde_json::from_slice(&request).unwrap();
+    assert_eq!(snapshot["payload"]["tool_input"]["command"], "(make test)");
+    assert!(
+        command.starts_with("'/opt/hol guard/runtime' contained-workspace-sink --harness codex "),
+        "{command}"
+    );
+}
+
 #[test]
 fn calls_the_sink_cannot_run_keep_the_denial() {
     let workspace = tempfile::tempdir().unwrap();
@@ -248,6 +324,7 @@ fn calls_the_sink_cannot_run_keep_the_denial() {
         prefix: &installed,
         guard_home: "/g",
         home: "/h",
+        native: no_native,
     };
     let deny = parsed(WORKSPACE_DENY);
     for payload in [
@@ -289,10 +366,29 @@ fn calls_the_sink_cannot_run_keep_the_denial() {
             "{response}"
         );
     }
+    // The sink reads strict JSON, so a lone surrogate or a non-finite
+    // number in the call keeps the denial.
+    for payload in [
+        format!(
+            r#"{{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"x\udc80"}},"cwd":"{cwd}"}}"#
+        ),
+        format!(
+            r#"{{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"x","timeout":NaN}},"cwd":"{cwd}"}}"#
+        ),
+    ] {
+        let read = parse_mapping_lone_surrogates(&payload).unwrap();
+        assert!(read.mapped || !payload.contains("udc80"), "{payload}");
+        assert_eq!(
+            routed(&deny, &read.value, read.mapped, &target),
+            None,
+            "{payload}"
+        );
+    }
     let bare = Target {
         prefix: &installed[..4],
         guard_home: "/g",
         home: "/h",
+        native: no_native,
     };
     assert_eq!(routed(&deny, &payload, false, &bare), None);
 }
@@ -387,4 +483,142 @@ fn a_contained_denial_that_names_an_approval_still_waits() {
         deadline,
     );
     assert!(matches!(route, Route::AwaitApproval(..)), "{route:?}");
+}
+
+/// A Guard home whose store can hold the call witness.
+fn witness_home() -> std::path::PathBuf {
+    let home = crate::guard_store_cmd_vectors_tests::temp_home("contained-witness");
+    std::fs::write(home.join("storage-access.lock"), b"").unwrap();
+    rusqlite::Connection::open(home.join("guard.db"))
+        .unwrap()
+        .execute_batch(
+            "create table guard_review_outbox_events (
+                stream_sequence integer primary key,
+                payload_hash text not null default ''
+            );
+            create table guard_continuation_effects (
+                effect_key text primary key,
+                request_id text not null,
+                evidence_id text not null,
+                event_name text not null,
+                created_at text not null
+            )",
+        )
+        .unwrap();
+    home
+}
+
+fn codex_call(event: &str, cwd: &Path, call_id: &str) -> String {
+    format!(
+        r#"{{"hook_event_name":"{event}","tool_name":"Bash","tool_input":{{"command":"make test","timeout":5}},"cwd":"{}","session_id":"s1","tool_use_id":"{call_id}"}}"#,
+        cwd.display()
+    )
+}
+
+fn admitted(home: &Path, data: &str) -> bool {
+    let serde_json::Value::Object(payload) = serde_json::from_str(data).unwrap() else {
+        unreachable!()
+    };
+    crate::native_admitted_call::admitted_for_post(home.to_str().unwrap(), "codex", &payload)
+}
+
+#[test]
+fn a_contained_call_keeps_its_output_through_post_tool_use() {
+    let home = witness_home();
+    let workspace = tempfile::tempdir().unwrap();
+    let config = BridgeConfig {
+        state_path: home
+            .join("daemon-state.json")
+            .to_string_lossy()
+            .into_owned(),
+        ..bridge("harness=codex&home=%2Fh")
+    };
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(Some(true)));
+    let route = settle(
+        &config,
+        &prepared(&codex_call("PreToolUse", workspace.path(), "t1")),
+        parsed(WORKSPACE_DENY),
+        false,
+        Instant::now() + Duration::from_secs(5),
+    );
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(None));
+    let Route::Respond(rendered) = route else {
+        panic!("{route:?}")
+    };
+    let rendered: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+    let output = &rendered["hookSpecificOutput"];
+    assert_eq!(output["permissionDecision"], "allow");
+    take_request(output["updatedInput"]["command"].as_str().unwrap());
+
+    assert!(admitted(
+        &home,
+        &codex_call("PostToolUse", workspace.path(), "t1")
+    ));
+    assert!(!admitted(
+        &home,
+        &codex_call("PostToolUse", workspace.path(), "t2")
+    ));
+}
+
+#[test]
+fn a_lone_surrogate_elsewhere_still_leaves_the_witness() {
+    let home = witness_home();
+    let workspace = tempfile::tempdir().unwrap();
+    let config = BridgeConfig {
+        state_path: home
+            .join("daemon-state.json")
+            .to_string_lossy()
+            .into_owned(),
+        ..bridge("harness=codex&home=%2Fh")
+    };
+    let pre =
+        codex_call("PreToolUse", workspace.path(), "t1").replacen('{', r#"{"extra":"\ud800","#, 1);
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(Some(true)));
+    let route = settle(
+        &config,
+        &prepared(&pre),
+        parsed(WORKSPACE_DENY),
+        false,
+        Instant::now() + Duration::from_secs(5),
+    );
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(None));
+    let Route::Respond(rendered) = route else {
+        panic!("{route:?}")
+    };
+    let rendered: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+    let output = &rendered["hookSpecificOutput"];
+    assert_eq!(output["permissionDecision"], "allow");
+    take_request(output["updatedInput"]["command"].as_str().unwrap());
+    assert!(admitted(
+        &home,
+        &codex_call("PostToolUse", workspace.path(), "t1")
+    ));
+}
+
+#[test]
+fn a_denial_that_stands_leaves_no_witness() {
+    let home = witness_home();
+    let workspace = tempfile::tempdir().unwrap();
+    let config = BridgeConfig {
+        state_path: home
+            .join("daemon-state.json")
+            .to_string_lossy()
+            .into_owned(),
+        ..bridge("harness=codex&home=%2Fh")
+    };
+    // No launching Codex applies the rewrite, so the denial stands.
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(Some(false)));
+    let route = settle(
+        &config,
+        &prepared(&codex_call("PreToolUse", workspace.path(), "t1")),
+        parsed(WORKSPACE_DENY),
+        false,
+        Instant::now() + Duration::from_secs(5),
+    );
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(None));
+    assert!(matches!(route, Route::Respond(_)), "{route:?}");
+    assert!(!admitted(
+        &home,
+        &codex_call("PostToolUse", workspace.path(), "t1")
+    ));
 }

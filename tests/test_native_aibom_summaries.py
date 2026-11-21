@@ -167,10 +167,5 @@ def test_the_reporting_seams_fail_closed_when_the_resident_is_gone(monkeypatch) 
         raise native_aibom_summaries.NativeAibomSummariesError("native_aibom_report_summaries_unavailable")
 
     monkeypatch.setattr(native_aibom_summaries, "report_summaries", unavailable)
-    for call in (
-        lambda: aibom_reporting.summarize_aibom_layers((), generated_at="now"),
-        lambda: aibom_reporting.summarize_aibom_trust(()),
-        lambda: aibom_reporting.summarize_aibom_drift(()),
-    ):
-        with pytest.raises(native_aibom_summaries.NativeAibomSummariesError):
-            call()
+    with pytest.raises(native_aibom_summaries.NativeAibomSummariesError):
+        aibom_reporting.summarize_aibom_layers((), generated_at="now")
