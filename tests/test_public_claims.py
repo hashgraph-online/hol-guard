@@ -48,6 +48,16 @@ def test_a_limit_two_prose_paragraphs_later_bounds_a_headline_but_not_three():
     assert len(public_claims.check_markdown("synthetic.md", too_far)) == 1
 
 
+def test_an_html_badge_line_is_not_prose_but_html_with_trailing_text_is():
+    badge = '<a href="https://example.invalid"><img src="https://example.invalid/b.svg" alt="Badge" height="20"></a>'
+    limit = "See the [matrix](docs/guard/harness-support.md).\n"
+    bare = f"# Antivirus for agents\n\n{badge}\n\nFirst paragraph.\n\n{limit}"
+    with_text = f"# Antivirus for agents\n\n{badge} Trailing words.\n\nFirst paragraph.\n\n{limit}"
+
+    assert public_claims.check_markdown("synthetic.md", bare) == []
+    assert len(public_claims.check_markdown("synthetic.md", with_text)) == 1
+
+
 def test_a_limit_in_the_next_section_does_not_bound_a_claim():
     text = "## One\n\nGuard gives complete protection.\n\n## Two\n\nIt does not cover background sessions.\n"
 

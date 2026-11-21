@@ -102,7 +102,11 @@ class Block:
 
 _FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-_BADGE_OR_IMAGE = re.compile(r"^\s*(?:\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)|!\[[^\]]*\]\([^)]*\))\s*$")
+_BADGE_OR_IMAGE = re.compile(
+    r"^\s*(?:\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)"
+    r"|!\[[^\]]*\]\([^)]*\)"
+    r"|<a\s[^>]*>\s*<img\s[^>]*>\s*</a>)\s*$"
+)
 
 
 def _is_prose(lines: list[str]) -> bool:
