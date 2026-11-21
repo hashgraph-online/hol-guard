@@ -32,6 +32,8 @@ Run it locally without an account. Use the CLI and local dashboard to manage pro
 
 <p align="center">
 <a href="https://www.yanez.ai/"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/4783ec9c93e4aa9ee19b558bd1902157bcddae28/assets/yanez-sponsor-gold.svg" alt="Yanez" width="240" height="68" /></a>
+&nbsp;&nbsp;&nbsp;
+<a href="https://seltz.ai/?utm_source=hol-newsletter&amp;utm_medium=newsletter&amp;utm_campaign=the-stack-2026-11-09&amp;utm_content=banner"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/de9ab0eb38707c53ffb56ab7d8bf41a115584488/assets/seltz-sponsor-gold.svg" alt="Seltz" width="240" height="72" /></a>
 </p>
 
 #### Bronze sponsors
