@@ -84,6 +84,14 @@ _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = TRANSIENT_PUBLICATION_ERRORS | {"native
 # shows its own approval prompt. Each raises it only after its PreToolUse
 # hook reviewed the same call.
 _PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"codex", "copilot", "devin", "zcode", "muse"})
+# Notification fallback remains a bounded compatibility response while the
+# Rust direct lane cannot observe a Python-side storage fault injected by the
+# daemon tests. Permission and Stop lifecycle decisions are Rust-owned.
+_CLAUDE_LIFECYCLE_FIELDS = ("event_name", "session_id", "notification_type", "tool_name", "message", "title")
+_CLAUDE_COPY_UNAVAILABLE = (
+    "HOL Guard is holding this Claude request for review. The HOL Guard runtime could not render "
+    "the full notice, so nothing in this prompt should be read as HOL Guard allowing the action."
+)
 
 
 @final
@@ -338,6 +346,44 @@ class HookWorker(HookWorkerNativeMixin):
 
             if _settle_claude_guard_question(self.store, payload, deadline=deadline) is not None:
                 return {}
+        if (
+            event_name == "Notification"
+            and str(payload.get("notification_type") or "") == "permission_prompt"
+            and harness.strip().lower().replace("_", "-") == "claude-code"
+        ):
+            from ..cli._commands_shared import _now
+            from ..cli.commands_support_runtime_artifacts import _optional_string
+            from ..native_hook_authority_state import (
+                HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+                hook_authority_state,
+                object_field,
+            )
+
+            reply = hook_authority_state(
+                self.store,
+                "claude_lifecycle",
+                now=_now(),
+                required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+                session_id=_optional_string(payload.get("session_id")),
+                payload={
+                    "event_name": event_name,
+                    **{
+                        name: payload[name]
+                        for name in _CLAUDE_LIFECYCLE_FIELDS
+                        if name != "event_name" and name in payload
+                    },
+                },
+            )
+            answered = object_field(reply, "harness_response")
+            if answered is not None:
+                return answered
+            return {
+                "systemMessage": _CLAUDE_COPY_UNAVAILABLE,
+                "hookSpecificOutput": {
+                    "hookEventName": "Notification",
+                    "additionalContext": _CLAUDE_COPY_UNAVAILABLE,
+                },
+            }
         if (
             event_name in {"PermissionRequest", "copilotPermissionRequest"}
             and harness.strip().lower().replace("_", "-") in _PERMISSION_PASSTHROUGH_HARNESSES
