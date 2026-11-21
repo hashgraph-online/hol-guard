@@ -125,20 +125,11 @@ pub(super) fn with_writer<T>(
 ) -> Result<T, io::Error> {
     let slot = slot(guard_home);
     let mut held = slot.writer.lock().unwrap_or_else(|e| e.into_inner());
-    // A writer whose thread has exited drains nothing more, so anything
-    // queued onto it would sit there. It is replaced — but what it still
-    // holds is the two signals it exists to deliver, and dropping it would
-    // drop them silently. The replacement carries them instead.
-    let mut carried = None;
-    if held
-        .as_ref()
-        .is_some_and(|resident| resident.writer.has_exited())
-    {
-        carried = held.take();
-    }
     // A writer whose drain ran out of time has not left the journal yet. A
     // second writer for the same home would append to the file the first one
     // still owns, so this request is refused until that worker leaves.
+    // Check for an active drain first. While this slot is held, no new stop
+    // can start. If an old drain ends, the following exit check sees it.
     if held
         .as_ref()
         .is_some_and(|resident| resident.writer.is_stopping())
@@ -147,6 +138,14 @@ pub(super) fn with_writer<T>(
             io::ErrorKind::WouldBlock,
             "the hook evidence writer for this Guard home is still draining",
         ));
+    }
+    // A replacement carries any unreported signals from the exited writer.
+    let mut carried = None;
+    if held
+        .as_ref()
+        .is_some_and(|resident| resident.writer.has_exited())
+    {
+        carried = held.take();
     }
     if held.is_none() {
         let fresh = match build(guard_home, source) {
@@ -196,7 +195,7 @@ fn with_live<T>(guard_home: &Path, act: impl FnOnce(&ResidentWriter) -> T) -> Op
         Err(TryLockError::WouldBlock) => return None,
     };
     let resident = held.as_ref()?;
-    if resident.writer.has_exited() || resident.writer.is_stopping() {
+    if resident.writer.is_stopping() || resident.writer.has_exited() {
         return None;
     }
     Some(act(resident))
