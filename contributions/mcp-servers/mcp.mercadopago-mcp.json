@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.mercadopago-mcp",
+  "version": "1.0.0",
+  "name": "Mercado Pago MCP",
+  "description": "Read-only-by-default MCP server for Mercado Pago. Read tools (payments, merchant orders, preferences, payment methods, and local HMAC-SHA256 webhook verification) inherit Guard's handling; create_preference (--allow-writes) and refund_payment (--allow-refunds) stay on review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.devmodee",
+    "displayName": "DevModee",
+    "url": "https://github.com/DevModee"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCreditCard",
+    "background": "#009EE3"
+  },
+  "homepage": "https://github.com/DevModee/mercadopago-mcp",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "mercadopago-mcp"
+  },
+  "riskClasses": [
+    "financial-data-read",
+    "external-purchases-and-order-writes",
+    "external-payouts-and-refunds"
+  ],
+  "tools": [
+    { "name": "get_payment", "state": "inherit" },
+    { "name": "search_payments", "state": "inherit" },
+    { "name": "get_merchant_order", "state": "inherit" },
+    { "name": "get_preference", "state": "inherit" },
+    { "name": "list_payment_methods", "state": "inherit" },
+    { "name": "verify_webhook_signature", "state": "inherit" },
+    { "name": "create_preference", "state": "review" },
+    { "name": "refund_payment", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/DevModee/mercadopago-mcp",
+    "https://www.npmjs.com/package/mercadopago-mcp",
+    "https://glama.ai/mcp/servers/DevModee/mercadopago-mcp"
+  ],
+  "saferAlternatives": [
+    "Run with no flags (default) for strict read-only inspection and offline HMAC-SHA256 webhook signature verification; create_preference and refund_payment remain unregistered.",
+    "Pass --allow-writes (or MP_ALLOW_WRITES=true) to enable create_preference for Checkout Pro links while keeping refund_payment disabled unless --allow-refunds (or MP_ALLOW_REFUNDS=true) is explicitly set.",
+    "Always pass an explicit idempotency_key on write or refund calls and use a Mercado Pago test token during development."
+  ]
+}
