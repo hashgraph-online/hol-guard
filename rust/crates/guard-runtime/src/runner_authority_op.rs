@@ -321,6 +321,10 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
         "cloud_actions_status" => {
             crate::cloud_actions_status::dispatch(&request.args, &request.guard_home)
         }
+        // The usage meter keeps how far it read each record in that home.
+        "context_usage" => crate::context_usage_meter::dispatch(&request.args, &request.guard_home),
+        // The Codex config switches take the Codex install lock as that home's owner.
+        "codex_config" => crate::codex_config_switch::dispatch(&request.args, &request.guard_home),
         _ => dispatch(&request.kind, &request.args),
     }
 }

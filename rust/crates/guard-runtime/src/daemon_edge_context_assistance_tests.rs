@@ -407,19 +407,75 @@ fn the_edge_owns_only_the_engine_routes() {
         "/v1/context-assistance/workspace-access",
         "/v1/context-assistance/workspace-grant",
         "/v1/context-assistance/folders",
+        "/v1/context-assistance/codex-lean",
+        "/v1/context-assistance/codex-short-replies",
     ] {
         assert!(writes(path), "{path}");
     }
-    for path in [
-        "/v1/context-assistance/codex-lean",
-        "/v1/context-assistance/codex-short-replies",
-        "/v1/context-assistance/usage",
-        "/v1/context-assistance",
-    ] {
+    for path in ["/v1/context-assistance/usage", "/v1/context-assistance"] {
         assert!(!writes(path), "{path}");
     }
-    assert!(!reads("/v1/context-assistance/usage"));
-    assert!(!reads("/v1/context-assistance/codex-lean"));
+    for path in [
+        "/v1/context-assistance/usage",
+        "/v1/context-assistance/codex-lean",
+        "/v1/context-assistance/codex-short-replies",
+    ] {
+        assert!(reads(path), "{path}");
+    }
+}
+
+#[test]
+fn a_codex_switch_checks_its_input_before_the_approval_gate() {
+    for (path, name) in [
+        ("/v1/context-assistance/codex-lean", "codex_lean"),
+        (
+            "/v1/context-assistance/codex-short-replies",
+            "codex_short_replies",
+        ),
+    ] {
+        for payload in [json!({}), json!({"enabled": "yes"})] {
+            let reply = post_with(
+                path,
+                &body(payload),
+                &config(None),
+                Resident::new().answer(Err(UNAVAILABLE.to_owned())),
+            )
+            .unwrap();
+            assert_eq!(
+                reply,
+                (400, json!({"error": format!("invalid_{name}_input")}), true)
+            );
+        }
+    }
+    for (limit, code) in [
+        (json!(null), "codex_lean_limit_required"),
+        (json!(5), "codex_lean_limit_invalid"),
+    ] {
+        let reply = post_with(
+            "/v1/context-assistance/codex-lean",
+            &body(json!({"enabled": true, "limit": limit})),
+            &config(None),
+            Resident::new().answer(Err(UNAVAILABLE.to_owned())),
+        )
+        .unwrap();
+        assert_eq!(
+            reply,
+            (
+                400,
+                json!({"error": "invalid_codex_lean_input", "code": code}),
+                true
+            )
+        );
+    }
+    // A size Guard takes still needs the gate, which fails closed here.
+    let reply = post_with(
+        "/v1/context-assistance/codex-lean",
+        &body(json!({"enabled": true, "limit": 100_000})),
+        &config(None),
+        Resident::new().answer(Err(UNAVAILABLE.to_owned())),
+    )
+    .unwrap();
+    assert_eq!(reply.0, 503);
 }
 
 #[test]

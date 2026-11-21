@@ -136,12 +136,6 @@ pub(in crate::daemon_edge) fn extension_control_args(
     args
 }
 
-/// `/v1/context-assistance/...` writes the daemon still answers: Codex lean
-/// mode and short replies edit Codex config. The edge answers the engine's.
-const CONTEXT_ASSISTANCE_WRITES: [&str; 2] = [
-    "/v1/context-assistance/codex-lean",
-    "/v1/context-assistance/codex-short-replies",
-];
 const HARNESS_VERSION_WRITES: [&str; 3] = [
     "/v1/harness-versions/refresh",
     "/v1/harness-versions/acknowledge",
@@ -171,7 +165,6 @@ const PULSE_ACTIONS: [&str; 5] = ["enroll", "confirm", "poll", "disable", "recov
 
 fn runs_handler(path: &str) -> bool {
     if SWARM_WRITES.contains(&path)
-        || CONTEXT_ASSISTANCE_WRITES.contains(&path)
         || HARNESS_VERSION_WRITES.contains(&path)
         || WORKSPACE_ASSESSMENT_WRITES.contains(&path)
     {

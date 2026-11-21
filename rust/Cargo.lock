@@ -1261,6 +1261,7 @@ dependencies = [
  "capctl",
  "caseless",
  "cbc",
+ "chrono",
  "fancy-regex 0.19.2",
  "flate2",
  "fs2",

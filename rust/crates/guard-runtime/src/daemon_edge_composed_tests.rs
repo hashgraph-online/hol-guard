@@ -98,6 +98,7 @@ fn every_composed_cigar_read_is_open_to_the_dashboard_session() {
         "/v1/context-assistance",
         "/v1/context-assistance/installations",
         "/v1/context-assistance/jobs",
+        "/v1/context-assistance/usage",
     ];
     for path in engine_reads {
         assert!(super::super::writes::context_assistance::reads(path));
