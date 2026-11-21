@@ -333,6 +333,7 @@ def test_deferred_subdirectory_that_gains_an_overlay_queues_its_publish(
         publisher._publish_event.clear()
 
         (nested / ".hol-guard.toml").write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+        assert not publisher.workspace_admissible_without_overlay(nested)
         assert worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 0.1) is None
         assert publisher._publish_event.is_set(), "The new overlay must queue its own publish"
 

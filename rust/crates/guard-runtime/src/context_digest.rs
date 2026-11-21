@@ -505,6 +505,13 @@ fn evaluate_request(
             result.transition_hook_observation =
                 crate::transition_hook_observation::observe(payload, receipt);
         }
+        ContextDigestKindV1::WorkspaceOverlayReadiness { workspace } => {
+            result.workspace_overlay_readiness = Some(
+                crate::policy_store::policy_store_direct_lane::workspace_overlay_readiness(
+                    Path::new(workspace),
+                ),
+            );
+        }
         ContextDigestKindV1::PublicationInverseClaim {
             action,
             grant_id,
@@ -961,6 +968,7 @@ fn evaluate_context_digest_request_inner(
         guard_run_launch: None,
         package_runner_target: None,
         transition_hook_observation: None,
+        workspace_overlay_readiness: None,
         publication_inverse_claim: None,
     };
     if let Err(code) = evaluate_request(request, &mut result) {

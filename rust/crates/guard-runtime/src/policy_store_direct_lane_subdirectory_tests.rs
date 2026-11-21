@@ -1,5 +1,9 @@
 use super::super::tests::{binding, fixture, push, write_current_ack, Fixture};
 use super::super::{DirectLaneDefer, DIRECT_LANE_ACK_DIRECTORY, DIRECT_LANE_ACK_FILE_NAME};
+use super::workspace_overlay_readiness;
+use guard_contracts::WorkspaceOverlayReadinessV1::{
+    DirectoryAndAncestors, DirectoryOnly, Unproven,
+};
 use serde_json::json;
 use std::fs;
 use std::os::unix::fs::symlink;
@@ -52,6 +56,36 @@ impl Lane {
 }
 
 const UNKNOWN: Option<DirectLaneDefer> = Some(DirectLaneDefer::WorkspaceUnknown);
+
+#[test]
+fn publisher_overlay_readiness_checks_fresh_evidence_and_spelling() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = fs::canonicalize(directory.path()).unwrap();
+    let workspace = root.join("workspace");
+    let missing = workspace.join("missing");
+    fs::create_dir(&workspace).unwrap();
+    assert_eq!(workspace_overlay_readiness(&missing), DirectoryAndAncestors);
+
+    let root_overlay = root.join(OVERLAYS[0]);
+    symlink(root.join("absent"), &root_overlay).unwrap();
+    assert_eq!(workspace_overlay_readiness(&missing), DirectoryOnly);
+    fs::remove_file(root_overlay).unwrap();
+
+    symlink(root.join("absent"), workspace.join(OVERLAYS[1])).unwrap();
+    assert_eq!(workspace_overlay_readiness(&workspace), Unproven);
+
+    let linked = root.join("linked");
+    symlink(&workspace, &linked).unwrap();
+    assert_eq!(
+        workspace_overlay_readiness(&linked.join("missing")),
+        Unproven
+    );
+    assert_eq!(workspace_overlay_readiness(&linked.join("..")), Unproven);
+    assert_eq!(
+        workspace_overlay_readiness(Path::new("workspace")),
+        Unproven
+    );
+}
 
 #[test]
 fn a_bound_workspace_is_admitted_by_exact_match() {

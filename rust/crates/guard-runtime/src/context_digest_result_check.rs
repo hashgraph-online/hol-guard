@@ -38,6 +38,7 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
         Kind::NativeBashReplyValidation { .. } => "native_bash_reply_validation",
         Kind::NativeDecisionReceiptValidation { .. } => "native_decision_receipt_validation",
         Kind::TransitionHookObservation { .. } => "transition_hook_observation",
+        Kind::WorkspaceOverlayReadiness { .. } => "workspace_overlay_readiness",
         Kind::PublicationInverseClaim { .. } => "publication_inverse_claim",
         Kind::McpLaunchEnvironment { .. } => "mcp_launch_environment",
         Kind::PackageExecutionContextFromEvidence { .. } => {
@@ -85,6 +86,7 @@ fn required_output(kind: &str) -> Option<&'static str> {
         "browser_mcp" => "browser_mcp",
         "claude_guard_question" => "claude_guard_question",
         "memory_pattern" => "memory_pattern",
+        "workspace_overlay_readiness" => "workspace_overlay_readiness",
         _ => return None,
     })
 }
@@ -107,7 +109,7 @@ fn nullable_output(kind: &str) -> Option<&'static str> {
 }
 
 /// Fields that only make sense for exactly one request kind.
-const KIND_GATED_FIELDS: [(&str, &str); 14] = [
+const KIND_GATED_FIELDS: [(&str, &str); 15] = [
     ("native_bash_reply_valid", "native_bash_reply_validation"),
     (
         "native_decision_receipt_valid",
@@ -130,6 +132,7 @@ const KIND_GATED_FIELDS: [(&str, &str); 14] = [
     ("memory_pattern", "memory_pattern"),
     ("package_runner_target", "package_runner_target"),
     ("transition_hook_observation", "transition_hook_observation"),
+    ("workspace_overlay_readiness", "workspace_overlay_readiness"),
     ("publication_inverse_claim", "publication_inverse_claim"),
 ];
 

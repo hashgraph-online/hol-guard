@@ -269,6 +269,10 @@ pub enum ContextDigestKindV1 {
         #[serde(default)]
         receipt: Value,
     },
+    /// Check the on-disk workspace spelling and overlay entries for hook readiness.
+    WorkspaceOverlayReadiness {
+        workspace: String,
+    },
     /// Spend (`action = "claim"`) or confirm (`"check"`) the one-use claim on
     /// a publication-inverse approval grant. The registry is resident state.
     PublicationInverseClaim {
@@ -615,9 +619,21 @@ pub struct ContextDigestResultV1 {
     /// no valid probe.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transition_hook_observation: Option<Value>,
+    /// Fresh workspace overlay facts for the policy snapshot publisher.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_overlay_readiness: Option<WorkspaceOverlayReadinessV1>,
     /// `publication_inverse_claim` answer: `ok`, or the refusal code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub publication_inverse_claim: Option<String>,
+}
+
+/// Whether the workspace can reuse policy that has already been published.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceOverlayReadinessV1 {
+    Unproven,
+    DirectoryOnly,
+    DirectoryAndAncestors,
 }
 
 /// A remembered decision's behavior fingerprint and lookup candidates.

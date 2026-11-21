@@ -551,6 +551,7 @@ fn live_publisher_ack(ack: &DirectLaneAckV1) -> bool {
 
 #[path = "policy_store_direct_lane_subdirectory.rs"]
 mod subdirectory;
+pub(crate) use subdirectory::workspace_overlay_readiness;
 
 #[path = "policy_store_direct_lane_review.rs"]
 mod review;
