@@ -249,12 +249,7 @@ pub(crate) fn hook_review_evidence(
             token,
             once_only_reason,
         }) => {
-            // Exactly one of a token and a once-only reason.
-            let (token, once_only_reason) = match (token, once_only_reason) {
-                (Some(token), None) => (Some(token), None),
-                (None, Some(reason)) => (None, Some(reason)),
-                _ => (None, Some(reasons::UNPROVEN_LAUNCH.to_owned())),
-            };
+            let (token, once_only_reason) = reasons::review_identity(token, once_only_reason);
             GuardHookReviewEvidenceV1 {
                 policy_binding_valid,
                 binding,

@@ -3,8 +3,8 @@
 //! When no saved exact-action decision answers a review, the daemon spends a
 //! one-hour "allow once" the user gave the same request in the approval
 //! inbox: `native_review_settle` (`hook_native_review_binding.py`)
-//! with the review identity `native_review_binding`
-//! (`hook_native_exact_action.py`) derives and the launch target of
+//! with the review identity the edge proves in `native_exact_action_op`
+//! and the launch target of
 //! `_native_review_launch_target` (`hook_native_review_approval.py`). The
 //! resident runs the same `settle_native_review_reuse` store operation the
 //! daemon asks it for, under the same shared storage gate: a matching Keep
