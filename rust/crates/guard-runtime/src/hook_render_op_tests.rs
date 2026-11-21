@@ -4,6 +4,9 @@ use serde_json::json;
 #[path = "hook_render_availability_tests.rs"]
 mod availability;
 
+#[path = "hook_render_review_reuse_tests.rs"]
+mod review_reuse;
+
 fn request(kind: &str) -> HookRenderRequestV1 {
     HookRenderRequestV1 {
         schema: guard_contracts::HOOK_RENDER_REQUEST_SCHEMA.to_owned(),

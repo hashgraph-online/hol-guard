@@ -39,6 +39,7 @@ pub const HOOK_RENDER_DAEMON_REPLY_MAX_BYTES: usize = 4 * 1024 * 1024;
 #[must_use]
 pub fn hook_render_max_bytes(kind: &str) -> usize {
     match kind {
+        "review_reuse" => HOOK_RENDER_DAEMON_REPLY_MAX_BYTES,
         "cli_hook_emit" => HOOK_RENDER_CLI_EMIT_MAX_BYTES,
         "cursor_shell_route" | "binding_recording_only" => HOOK_RENDER_CURSOR_ROUTE_MAX_BYTES,
         "hermes_bridge" | "muse_bridge" | "saved_approval" | "package_review_settle" => {
