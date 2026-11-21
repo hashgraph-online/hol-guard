@@ -218,7 +218,8 @@ pub(crate) fn method(connection: &Connection, args: &Args<'_>) -> StoreResult<Va
         error: args.opt_str("error")?,
     };
     let step = step(args.str("transition")?, at, &detail)?;
-    let route = route_error(args.raw("route_error"))?;
+    // `Args::raw` reads null as missing; here null clears the route error.
+    let route = route_error(args.0.get("route_error"))?;
     // `load_command_queue_state` reads a row that is not an object as empty.
     let mut state = match read_payload(connection, state_key)? {
         Some(Value::Object(state)) => state,

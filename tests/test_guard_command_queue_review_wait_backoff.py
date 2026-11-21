@@ -104,3 +104,30 @@ def test_review_wait_activity_expires_after_the_recent_window() -> None:
     assert review_wait_activity.review_wait_recent(monotonic=lambda: clock[0])
     clock[0] += 0.5
     assert not review_wait_activity.review_wait_recent(monotonic=lambda: clock[0])
+
+
+def test_a_failure_that_cannot_be_recorded_still_backs_off_and_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = _Clock()
+    stop = _ClockStop(clock, 3)
+    monkeypatch.setattr(command_queue_loop, "time", SimpleNamespace(monotonic=clock))
+    monkeypatch.setattr(command_queue_loop, "review_wait_recent", lambda: False)
+
+    def failing_poll(_store: object, _context: object) -> dict[str, object]:
+        stop.poll_times.append(clock.now)
+        raise OSError("network is unreachable")
+
+    def unavailable(_store: object, _state: str, _error: str) -> None:
+        raise RuntimeError("native runtime unavailable")
+
+    command_queue_loop.run_command_queue_loop(
+        object(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        stop_event=stop,
+        enabled=lambda _store: True,
+        poll_once=failing_poll,
+        record_failure=unavailable,
+        format_error=str,
+    )
+
+    assert len(stop.poll_times) == 3
+    assert stop.poll_times[1] > stop.poll_times[0]

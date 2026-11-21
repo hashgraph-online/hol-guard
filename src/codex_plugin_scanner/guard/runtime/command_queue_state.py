@@ -144,11 +144,12 @@ def transition_command_queue_state(
     if carry_route_error:
         error = state.get("exact_review_route_error")
         error_at = state.get("exact_review_route_error_at")
-        detail["route_error"] = (
-            {"error": error, "at": error_at if isinstance(error_at, str) else command_queue_now()}
-            if isinstance(error, str)
-            else None
-        )
+        if isinstance(error, str):
+            if not isinstance(error_at, str):
+                error_at = command_queue_now()
+            detail["route_error"] = {"error": error, "at": error_at}
+        else:
+            detail["route_error"] = None
     merged = store.transition_command_queue_state(
         current_command_queue_lane().state_key,
         transition,
