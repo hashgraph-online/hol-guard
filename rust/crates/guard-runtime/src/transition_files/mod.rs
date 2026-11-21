@@ -106,7 +106,7 @@ pub(crate) use config_scope::{within as within_config_scope, HeldDirectory};
 pub(crate) use inspect::resolve_lenient;
 pub(crate) use lease::{hold_install_lock, hold_opencode_lock};
 pub(crate) use output::{managed_write, remove_no_follow, write_no_follow};
-pub(crate) use owned::{with_owned, Owner, Spec as OwnedSpec};
+pub(crate) use owned::{recover as recover_publication, with_owned, Owner, Spec as OwnedSpec};
 pub(crate) use owned_locks::Failure as OwnedFailure;
 pub(crate) use owned_ops::with_registered;
 pub(crate) use publication_short_replies::first_ask_due as short_replies_first_ask_due;

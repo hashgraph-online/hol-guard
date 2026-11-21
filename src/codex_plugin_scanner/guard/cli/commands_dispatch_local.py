@@ -754,6 +754,18 @@ def _run_guard_apps_command(
     store = _require_guard_store(store)
     return _run_apps_command(args, context, store, str(workspace) if workspace else None)
 
+def _report_install_failure(error: Exception, as_json: bool) -> None:
+    """Name a failed install on stderr, and on stdout as JSON when asked for it."""
+    message = str(error)
+    print(message, file=sys.stderr)
+    if as_json:
+        reason = getattr(error, "reason", None)
+        failure: dict[str, object] = {"status": "failed", "message": message}
+        if isinstance(reason, str) and reason:
+            failure["error"] = reason
+        print(json.dumps(failure, indent=2))
+
+
 def _run_guard_install_command(
     args: argparse.Namespace,
     *,
@@ -801,8 +813,14 @@ def _run_guard_install_command(
                 _now(),
             )
     except ValueError as error:
-        print(str(error), file=sys.stderr)
+        _report_install_failure(error, bool(getattr(args, "json", False)))
         return 2
+    except RuntimeError as error:
+        if not getattr(args, "json", False):
+            raise
+        # A JSON caller (Desktop's harness rebind) reads stdout only.
+        _report_install_failure(error, True)
+        return 1
     if native_repair is not None:
         payload["native_runtime_repair"] = native_repair
     if not bool(getattr(args, "dry_run", False)):

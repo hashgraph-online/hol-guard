@@ -647,18 +647,23 @@ def _run_guard_update_unlocked(
         ):
             payload["status"] = "skipped"
             payload["changed"] = False
+            published = "hol-guard update --alpha --force-pypi-reinstall" if include_alpha else (
+                "hol-guard update --force-pypi-reinstall"
+            )
             if bool(local_archive_install.get("path_exists")):
                 payload["error"] = (
                     "Automatic update is disabled for local wheel installs. "
                     f"Re-run `{_local_archive_update_hint(local_archive_install)}` "
-                    "or your local install workflow instead."
+                    f"or your local install workflow instead, or run `{published}` to move to the published release."
                 )
             else:
                 payload["error"] = (
                     "Automatic update is disabled for local wheel installs when the original wheel file is gone. "
-                    "Pass a new wheel with `hol-guard update --wheel <wheel-or-directory>` "
+                    "Pass a new wheel with `hol-guard update --wheel <wheel-or-directory>`, "
+                    f"run `{published}` to move to the published release, "
                     "or re-run your local install workflow instead."
                 )
+            payload["published_update_command"] = published
             return payload, 0
         if local_source_install is not None and not bool(local_source_install.get("path_exists")):
             payload["recovery_source_install"] = True

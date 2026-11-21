@@ -142,7 +142,7 @@ pub(super) fn pending(home: &Path) -> bool {
 }
 
 /// `recover_hook_publication`, journaled under this owner.
-pub(super) fn recover(owner: &mut Owner, budget: &Budget) -> Result<(), Failure> {
+pub(crate) fn recover(owner: &mut Owner, budget: &Budget) -> Result<(), Failure> {
     let mut args = serde_json::Map::new();
     args.insert(
         "home".to_owned(),

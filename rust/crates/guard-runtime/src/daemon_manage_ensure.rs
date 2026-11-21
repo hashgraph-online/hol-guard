@@ -306,8 +306,10 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         }
         match launch_once(context, *port) {
             Ok(Some(url)) => return Ok(url),
+            // The launched process exited without a handoff; the next port
+            // gets its own launch.
             Ok(None) => {}
-            // The launched process exited without a handoff. When another
+            // The launched process could not be proven gone. When another
             // program holds every port Guard can use, that is why.
             Err(Failure::Runtime(message))
                 if message == NOT_CONTAINED && super::failure::all_ports_in_use(&ports) =>
@@ -859,7 +861,15 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
         Ok(Handoff::StillStarting) => Err(still_starting(home)),
         Ok(Handoff::Missing) => {
             terminate(context.caller, &mut child);
-            Err(runtime(NOT_CONTAINED))
+            // A child that is gone launched nothing: a port bound after the
+            // free-port check, or one a retired daemon is still releasing, is
+            // the usual cause, so the caller tries its next candidate port.
+            // A child that outlived termination stays unproven.
+            if child_exited(&mut child) {
+                Ok(None)
+            } else {
+                Err(runtime(NOT_CONTAINED))
+            }
         }
         Err(failure) => {
             terminate(context.caller, &mut child);

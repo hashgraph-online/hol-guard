@@ -233,16 +233,39 @@ raise RuntimeError('conflict record boundary was not reached')
     import hashlib
 
     snapshots = json.loads((context.home_dir / "participant-digests.json").read_bytes())
-    snapshots[str(pending)] = hashlib.sha256(pending.read_bytes()).hexdigest()
     config_snapshot = config.read_bytes() if config.exists() else None
     with codex_install_transaction(context.guard_home, config, actor="recover-conflicted-owner"):
-        with pytest.raises(CodexHookIntegrityError) as failure:
-            recover_hook_publication(context.guard_home)
-        assert failure.value.reason == "codex_hook_recovery_config_conflict"
+        # The overtaken record is retired without restoring anything: the
+        # foreign config survives and the next install may publish again.
+        assert recover_hook_publication(context.guard_home) is False
     assert (config.read_bytes() if config.exists() else None) == config_snapshot
     assert config.is_symlink() is (substitution == "symlink")
     assert all(hashlib.sha256(Path(path).read_bytes()).hexdigest() == digest for path, digest in snapshots.items())
-    assert pending.exists()
+    assert not pending.exists()
+
+
+def test_conflict_record_with_competing_authority_generation_is_retained(installed):
+    context, config, manifest = installed
+    with codex_install_transaction(context.guard_home, config, actor="live-abort-owner"):
+        codex_hook_recovery.prepare_hook_publication(
+            context.guard_home,
+            config,
+            before_config=config.read_bytes(),
+            before_manifest=manifest.read_bytes(),
+            after_config=config.read_bytes() + b"\n",
+            after_manifest=manifest.read_bytes() + b"\n",
+            key_created=False,
+        )
+        config.write_bytes(b"# foreign configuration\n")
+        codex_hook_recovery.mark_owned_hook_publication_conflict(context.guard_home, config)
+    pending = context.guard_home / "managed/codex/pending-hook-publication.json"
+    manifest.write_bytes(b"competing authentication generation\n")
+    before = config.read_bytes(), manifest.read_bytes(), pending.read_bytes()
+    with codex_install_transaction(context.guard_home, config, actor="recover-competing-owner"):
+        with pytest.raises(CodexHookIntegrityError) as failure:
+            recover_hook_publication(context.guard_home)
+        assert failure.value.reason == "codex_hook_recovery_config_conflict"
+    assert (config.read_bytes(), manifest.read_bytes(), pending.read_bytes()) == before
 
 
 def test_new_owner_cannot_mark_config_conflict_for_old_preparation(installed):
