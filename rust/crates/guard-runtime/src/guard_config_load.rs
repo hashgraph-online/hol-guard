@@ -24,8 +24,11 @@ use crate::package_authority_config as base;
 pub(crate) mod cigar_updates;
 #[path = "context_assistance_config_snapshot.rs"]
 mod context_snapshot;
+#[path = "guard_config_python_view.rs"]
+mod python_view;
 #[cfg(all(test, unix))]
 pub(crate) use context_snapshot::with_changed_reads;
+use python_view::python_view;
 
 const SCHEMA: &str = "guard-config-load.v1";
 const MAX_REQUEST_BYTES: u64 = 4 * 1024 * 1024;
@@ -83,23 +86,6 @@ fn error_reason(error: guard_command::supply_chain_package_eval::EvalError) -> S
             .to_owned(),
         _ => "config_file_unavailable".to_owned(),
     }
-}
-
-/// Settings only the native runtime acts on. Python passes them through to the
-/// settings response untouched under `native_settings`, without naming them.
-const NATIVE_ONLY_KEYS: [&str; 1] = ["harness_cigar"];
-
-fn python_view(mut config: Value) -> Value {
-    let mut native = Map::new();
-    if let Some(fields) = config.as_object_mut() {
-        for key in NATIVE_ONLY_KEYS {
-            if let Some(value) = fields.remove(key) {
-                native.insert(key.to_owned(), value);
-            }
-        }
-        fields.insert("native_settings".to_owned(), Value::Object(native));
-    }
-    config
 }
 
 fn load(request: &LoadRequest) -> Result<Value, String> {
