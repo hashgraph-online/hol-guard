@@ -1,10 +1,4 @@
-"""Bounded transport poller for evidence already owned by the resident.
-
-The resident records receipts, activity, fence windows, captures, and notices
-while it serves a direct answer.  This module only asks for another page and
-acknowledges the cursor the resident returned.  It deliberately does not
-inspect or write evidence records in Python.
-"""
+"""Bounded transport poller for the resident's direct-evidence diagnostics."""
 
 from __future__ import annotations
 
@@ -13,20 +7,13 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
-_DRAIN_SCHEMA = "guard-hook-direct-evidence.v1"
+_DRAIN_SCHEMA = "guard-hook-direct-evidence-commit.v1"
 _DRAIN_INTERVAL_SECONDS = 0.25
 _DRAIN_TIMEOUT_SECONDS = 2.0
 _MAX_PAGES_PER_WAKE = 8
-
-
-@dataclass(frozen=True, slots=True)
-class _PageRecord:
-    value: object
-    key: str | None
 
 
 class _DrainHost(Protocol):
@@ -44,8 +31,8 @@ def _decode_page(
     output: bytes | None,
     counters: object | None = None,
     on_store_fatal: Callable[[], object] | None = None,
-) -> tuple[list[_PageRecord], int, tuple[str, int] | None] | None:
-    """Decode only the bounded page metadata needed to advance the cursor."""
+) -> tuple[int, int] | None:
+    """Read the diagnostics for a batch the resident has committed."""
 
     if not output:
         return None
@@ -55,25 +42,20 @@ def _decode_page(
         return None
     if not isinstance(page, dict) or page.get("schema") != _DRAIN_SCHEMA:
         return None
-    records = page.get("records")
-    sequences = page.get("sequences")
+    record_count = page.get("record_count")
     remaining = page.get("remaining")
-    through = page.get("through")
     epoch = page.get("epoch")
-    if not isinstance(records, list) or isinstance(remaining, bool) or not isinstance(remaining, int):
-        return None
-    if sequences is not None and (
-        not isinstance(sequences, list)
-        or len(sequences) != len(records)
+    if (
+        not isinstance(record_count, int)
+        or isinstance(record_count, bool)
+        or record_count < 0
+        or not isinstance(remaining, int)
+        or isinstance(remaining, bool)
+        or remaining < 0
         or not isinstance(epoch, str)
         or not epoch
-        or any(isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1 for sequence in sequences)
     ):
         return None
-    page_records = [
-        _PageRecord(value, f"{epoch}:{sequence}" if sequences is not None else None)
-        for value, sequence in zip(records, sequences or [None] * len(records), strict=True)
-    ]
     if counters is not None and "counters" in page:
         observe = getattr(counters, "observe_page", None)
         if callable(observe):
@@ -81,13 +63,7 @@ def _decode_page(
     if on_store_fatal is not None and isinstance(page.get("store_fatal"), dict):
         with suppress(Exception):
             on_store_fatal()
-    if through is None:
-        return page_records, remaining, None
-    if isinstance(through, bool) or not isinstance(through, int) or through < 1:
-        return None
-    if not isinstance(epoch, str) or not epoch:
-        return None
-    return page_records, remaining, (epoch, through)
+    return record_count, remaining
 
 
 class ResidentEvidenceDrain:
@@ -108,7 +84,6 @@ class ResidentEvidenceDrain:
         self.pages = 0
         self.records = 0
         self.failures = 0
-        self._ack: tuple[str, int] | None = None
         self._counters = getattr(host, "hook_counters", None)
 
     def start(self) -> None:
@@ -148,34 +123,20 @@ class ResidentEvidenceDrain:
             page = self._fetch_page(deadline_monotonic=deadline_monotonic)
             if page is None:
                 return False
-            records, remaining, through = page
-            count = len(records)
+            count, remaining = page
             self.pages += 1
             self.records += count
-            if through is not None:
-                self._ack = through
-            if remaining == 0 or through is None:
-                if deadline_monotonic is not None and through is not None:
-                    # Shutdown must deliver the final cursor before the
-                    # publisher closes. Background polling sends it on the
-                    # next wake instead.
-                    continue
+            if remaining == 0:
                 return False
         return True
 
-    def _fetch_page(
-        self, *, deadline_monotonic: float | None = None
-    ) -> tuple[list[_PageRecord], int, tuple[str, int] | None] | None:
+    def _fetch_page(self, *, deadline_monotonic: float | None = None) -> tuple[int, int] | None:
         from .native_runtime import _isolated_environment
 
         transport = self._transport()
         if transport is None:
             return None
         executable, client = transport
-        request: dict[str, object] = {"guard_home": str(self._host.guard_home)}
-        pending_ack = self._ack
-        if self._ack is not None:
-            request["ack_epoch"], request["ack_through"] = self._ack
         request_deadline = time.monotonic() + _DRAIN_TIMEOUT_SECONDS
         if deadline_monotonic is not None:
             request_deadline = min(request_deadline, deadline_monotonic)
@@ -184,9 +145,9 @@ class ResidentEvidenceDrain:
             return None
         payload = json.dumps(
             {
-                "operation": "hook_direct_evidence_drain",
+                "operation": "hook_direct_evidence_commit",
                 "deadline_budget_ms": max(1, int(remaining * 1_000)),
-                "request": request,
+                "request": {"guard_home": str(self._host.guard_home)},
             },
             separators=(",", ":"),
         ).encode("utf-8")
@@ -207,8 +168,6 @@ class ResidentEvidenceDrain:
         )
         if page is None:
             self.failures += 1
-        elif pending_ack is not None and self._ack == pending_ack:
-            self._ack = None
         return page
 
     def _recover_writer_store(self, deadline_monotonic: float | None = None) -> None:
