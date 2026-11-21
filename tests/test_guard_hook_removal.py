@@ -122,6 +122,19 @@ def test_remove_all_sweeps_unrecorded_hooks_with_backup(
     assert again["status"] == "nothing_to_remove"
 
 
+def test_native_report_refuses_to_verify_an_oversized_config(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    settings = context.home_dir / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    with settings.open("wb") as handle:
+        handle.truncate(8 * 1024 * 1024 + 1)
+
+    with pytest.raises(hook_removal_sweep.SweepUnavailableError):
+        hook_removal_sweep.removal_report(
+            context, [{"harness": "claude-code", "hook_count": 0, "adapter_uninstall": "ok"}]
+        )
+
+
 def test_remove_all_reports_hooks_behind_a_symlinked_config(tmp_path: Path) -> None:
     context = _context(tmp_path)
     dotfiles = context.home_dir / "dotfiles"

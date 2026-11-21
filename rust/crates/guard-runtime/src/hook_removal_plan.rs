@@ -4,7 +4,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::{
-    absolute, invalid, split_candidates, sweep_results, Candidates, HarnessScope, MAX_CANDIDATES,
+    absolute, inspect_symlinked, invalid, split_candidates, sweep_config_file, sweep_results,
+    Candidates, HarnessScope, MAX_CANDIDATES,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -130,7 +131,27 @@ pub(super) fn report(request: &ReportRequest) -> Result<Value, String> {
             .ok_or_else(invalid)?;
         affected_count += usize::from(matches!(outcome.adapter_uninstall, UninstallStatus::Ok));
         let (files, links) = discover(harness, &request.home, request.workspace.as_deref())?;
-        for item in sweep_results(&files, &links, true).filter(|item| item.removed > 0) {
+        let scans = files
+            .iter()
+            .map(|(text, path)| Ok(Some(sweep_config_file(text, path, true))))
+            .chain(
+                links
+                    .iter()
+                    .map(|(text, path)| inspect_symlinked(text, path, true)),
+            );
+        for scan in scans {
+            let Some(item) = scan.map_err(|_| unverified_scan())? else {
+                continue;
+            };
+            if item
+                .error
+                .is_some_and(|error| error != "symlink_not_followed")
+            {
+                return Err(unverified_scan());
+            }
+            if item.removed == 0 {
+                continue;
+            }
             remaining_count += item.removed as u64;
             let path: PathBuf = Path::new(item.path).components().collect();
             remaining.push(json!({
@@ -149,6 +170,10 @@ pub(super) fn report(request: &ReportRequest) -> Result<Value, String> {
         "removed_hook_count": initial_count.saturating_sub(remaining_count),
         "affected_harness_count": affected_count,
     }))
+}
+
+fn unverified_scan() -> String {
+    "hook_removal_report_scan_unavailable".to_owned()
 }
 
 #[cfg(test)]
@@ -233,11 +258,17 @@ mod tests {
         );
         assert_eq!(fs::read_to_string(&settings).unwrap(), original);
 
-        fs::write(settings, "{}").unwrap();
+        fs::write(&settings, "{}").unwrap();
         let partial = run(&request);
         assert_eq!(partial["status"], "partial");
         assert_eq!(partial["remaining"], json!([]));
         request["report"]["outcomes"][0]["adapter_uninstall"] = json!("ok");
         assert_eq!(run(&request)["status"], "removed");
+
+        fs::write(settings, "{ malformed").unwrap();
+        assert_eq!(
+            run_command(request.to_string().as_bytes()).unwrap_err(),
+            "hook_removal_report_scan_unavailable"
+        );
     }
 }
