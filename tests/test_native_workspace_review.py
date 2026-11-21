@@ -61,6 +61,12 @@ class _Store:
     def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
         return cast(dict[str, object] | list[object] | None, self.sync_payloads.get(state_key))
 
+    def exact_cloud_review_state(self) -> dict[str, object]:
+        return {
+            "capability": self.sync_payloads.get("guard_exact_cloud_review_capability"),
+            "revocation": self.sync_payloads.get(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY),
+        }
+
     def resolve_native_workspace_review_request(self, request_id: str, **kwargs: object) -> dict[str, object]:
         assert request_id == self.request["request_id"]
         expected = cast(dict[str, object], kwargs["expected_request"])

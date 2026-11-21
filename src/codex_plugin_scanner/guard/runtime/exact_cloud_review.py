@@ -164,6 +164,12 @@ def _oauth_state(store: GuardStore) -> dict[str, object]:
     return payload
 
 
+def _consent_row(store: GuardStore, name: str) -> object:
+    """The stored consent capability or revocation, as parsed JSON or None."""
+
+    return store.exact_cloud_review_state().get(name)
+
+
 def _audit(store: GuardStore, event_name: str, payload: dict[str, object], *, now: datetime) -> None:
     with suppress(OSError, RuntimeError, ValueError):
         store.add_event(event_name, payload, now.isoformat())
@@ -238,7 +244,7 @@ def disable_exact_cloud_review(
     revoked_at = _now(now)
     if not _text(issuer):
         raise ExactCloudReviewError("cloud_review_capability_issuer_required")
-    raw = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
+    raw = _consent_row(store, "capability")
     try:
         capability = _verify(store, raw)
     except ExactCloudReviewError:
@@ -274,7 +280,8 @@ def _verified_capability(
     now: str | None = None,
     revoke_binding_drift: bool = True,
 ) -> dict[str, object]:
-    raw = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
+    consent = store.exact_cloud_review_state()
+    raw = consent["capability"]
     binding: dict[str, object] | None = None
     binding_error: Exception | None = None
     if isinstance(raw, dict):
@@ -288,7 +295,7 @@ def _verified_capability(
             "op": "capability",
             **_signing_key(store, raw),
             "capability": raw,
-            "revocation": store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY),
+            "revocation": consent["revocation"],
             "binding": binding,
             "now": _clock(now),
         },
@@ -309,7 +316,7 @@ def _verified_capability(
 
 
 def _revoke_binding_drift(store: GuardStore, capability_digest: str, *, now: datetime) -> None:
-    raw_capability = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
+    raw_capability = _consent_row(store, "capability")
     if not isinstance(raw_capability, dict):
         return
     revocation = _sign(
@@ -333,14 +340,14 @@ def _revoke_binding_drift(store: GuardStore, capability_digest: str, *, now: dat
 
 
 def exact_cloud_review_operations(store: GuardStore, *, now: str | None = None) -> tuple[str, ...]:
-    if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+    if _consent_row(store, "revocation") is not None:
         return ()
     try:
         _verified_capability(store, now=now)
         return (EXACT_CLOUD_REVIEW_OPERATION,)
     except (AttributeError, ExactCloudReviewError):
         pass
-    if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+    if _consent_row(store, "revocation") is not None:
         return ()
     try:
         _oauth_metadata(store)
@@ -406,7 +413,7 @@ def authorize_exact_cloud_review_job(
         payload = job.get("payload")
         native_command = native_workspace_review_payload(payload)
         if native_command is not None:
-            if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+            if _consent_row(store, "revocation") is not None:
                 raise ExactCloudReviewError("cloud_review_capability_revoked")
             oauth = _oauth_metadata(store)
             if identity["deviceId"] != oauth.device_id:
@@ -423,7 +430,7 @@ def authorize_exact_cloud_review_job(
                 raise ExactCloudReviewError("remote_exact_job_invalid")
             approval = {str(key): value for key, value in remote_approval.items() if isinstance(key, str)}
             if remote_approval_uses_workspace_admin_mfa(approval):
-                if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+                if _consent_row(store, "revocation") is not None:
                     raise ExactCloudReviewError("cloud_review_capability_revoked")
                 oauth = _oauth_metadata(store)
                 if identity["deviceId"] != oauth.device_id:

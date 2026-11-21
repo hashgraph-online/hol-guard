@@ -30,9 +30,9 @@ use crate::local_once_store::EXACT_CLOUD_AUTHORITY_KIND;
 use crate::policy_bundle_time::micros_to_utc_isoformat;
 use crate::policy_store::PolicySnapshotStore;
 
-const CAPABILITY_KEY: &str = "guard_exact_cloud_review_capability";
+pub(crate) const CAPABILITY_KEY: &str = "guard_exact_cloud_review_capability";
 const OAUTH_KEY: &str = "oauth_local_credentials";
-const REVOCATION_KEY: &str = "guard_exact_cloud_review_revocation";
+pub(crate) const REVOCATION_KEY: &str = "guard_exact_cloud_review_revocation";
 
 /// The local integrity key is the policy integrity secret; keep the bound the
 /// policy upsert puts on it.
@@ -65,7 +65,7 @@ fn transaction_now() -> StoreResult<String> {
 
 /// `_load_exact_state`: the parsed `sync_state` payload, or null when the row
 /// is missing or its text is not JSON.
-fn exact_state(connection: &Connection, state_key: &str) -> StoreResult<Value> {
+pub(crate) fn exact_state(connection: &Connection, state_key: &str) -> StoreResult<Value> {
     let Some(row) = query_one(
         connection,
         "select payload_json from sync_state where state_key = ?",
@@ -82,7 +82,7 @@ fn exact_state(connection: &Connection, state_key: &str) -> StoreResult<Value> {
 }
 
 /// `_record_exact_event`.
-fn record_event(
+pub(crate) fn record_event(
     connection: &Connection,
     event_name: &str,
     payload: &Value,

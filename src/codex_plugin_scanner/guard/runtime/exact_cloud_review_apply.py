@@ -25,7 +25,6 @@ from ..review_contracts import (
 from ..review_exact_capability_advertisement import validate_exact_review_envelope_authority as validate_exact_authority
 from ..review_native_claim_bindings import native_binding_values_match
 from .exact_cloud_review import (
-    EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY,
     EXACT_CLOUD_REVIEW_OPERATION,
     ExactCloudReviewError,
     ExactCloudReviewResolution,
@@ -72,7 +71,7 @@ def apply_exact_cloud_review(
             verified_capability = _verified_capability(store, now=current.isoformat())
         except ExactCloudReviewError as error:
             raise _reject(store, error.code, now=current) from error
-        loaded_capability = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
+        loaded_capability = store.exact_cloud_review_state()["capability"]
         if not isinstance(loaded_capability, dict):
             raise _reject(store, "cloud_review_capability_missing", now=current)
         raw_capability = loaded_capability

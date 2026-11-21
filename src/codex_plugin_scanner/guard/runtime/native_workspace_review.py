@@ -21,7 +21,6 @@ from ..native_resident_client import (
 )
 from ..native_runtime import _isolated_environment, native_runtime_status
 from ..store_native_workspace_review import NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX
-from .exact_cloud_review import EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY
 
 _REQUEST_SCHEMA = "guard-native-workspace-review-request.v1"
 _REQUEST_VERSION = 1
@@ -61,6 +60,8 @@ class NativeWorkspaceReviewStore(Protocol):
     def get_approval_request(self, request_id: str) -> dict[str, object] | None: ...
 
     def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None: ...
+
+    def exact_cloud_review_state(self) -> dict[str, object]: ...
 
     def resolve_native_workspace_review_request(
         self,
@@ -402,7 +403,7 @@ def apply_native_workspace_review_decision(
     is never extended locally or accepted without native verification.
     """
 
-    if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+    if store.exact_cloud_review_state()["revocation"] is not None:
         raise NativeWorkspaceReviewError("native_workspace_review_cloud_review_disabled")
     if not isinstance(decision, Mapping):
         raise NativeWorkspaceReviewError("native_workspace_review_decision_invalid")
