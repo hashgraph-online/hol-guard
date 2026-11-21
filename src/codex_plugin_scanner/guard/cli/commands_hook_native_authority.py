@@ -125,6 +125,21 @@ def _record_native_hook_exception(guard_home: Path, *, harness: str, event_name:
             diagnostics.close(timeout_seconds=_DIAGNOSTIC_DRAIN_TIMEOUT_SECONDS)
 
 
+def _unavailable_cli_response(
+    harness: str, event_name: str, reason_code: str, *, worker_available: bool = False
+) -> dict[str, object]:
+    response = availability_harness_response(
+        harness=harness,
+        event_name=event_name,
+        reason_code=reason_code,
+        reason="HOL Guard could not complete the native hook decision safely.",
+    )
+    # Without a worker the managed destination cannot be resolved.
+    if not worker_available and withholds_structured_destination(harness=harness, event_name=event_name):
+        return withhold_structured_destination(response)
+    return response
+
+
 def try_native_hook_authority(
     *,
     payload: dict[str, object],
@@ -167,17 +182,10 @@ def try_native_hook_authority(
         )
         _log_worker_exception(error, harness=harness)
         event_name = event_name or canonical_hook_event_name(payload, guard_home=guard_home, deadline=deadline)
-        response = availability_harness_response(
-            harness=harness,
-            event_name=event_name,
-            reason_code="native_hook_worker_exception",
-            reason="HOL Guard could not complete the native hook decision safely.",
+        response = _unavailable_cli_response(
+            harness, event_name, "native_hook_worker_exception", worker_available=worker is not None
         )
         if worker is None:
-            # Without a worker the managed destination cannot be resolved, so a
-            # Pi or OMP post-tool result is withheld rather than passed through.
-            if withholds_structured_destination(harness=harness, event_name=event_name):
-                return withhold_structured_destination(response)
             return response
         # The worker withholds a managed structured destination on its own
         # unavailable answers; an answer it never returned stays withheld too.
@@ -331,12 +339,7 @@ def route_native_hook(
             event_name = event_name or canonical_hook_event_name(
                 payload, guard_home=context.guard_home, deadline=deadline
             )
-            response = availability_harness_response(
-                harness=args.harness,
-                event_name=event_name,
-                reason_code="native_hook_worker_unavailable",
-                reason="HOL Guard could not complete the native hook decision safely.",
-            )
+            response = _unavailable_cli_response(args.harness, event_name, "native_hook_worker_unavailable")
         event_name = event_name or canonical_hook_event_name(payload, guard_home=context.guard_home, deadline=deadline)
         return emit_hook_review(
             args.harness,
@@ -350,12 +353,7 @@ def route_native_hook(
         event_name = event_name or canonical_hook_event_name(payload, guard_home=context.guard_home, deadline=deadline)
         _record_native_hook_exception(context.guard_home, harness=args.harness, event_name=event_name)
         _log_worker_exception(error, harness=args.harness)
-        response = availability_harness_response(
-            harness=args.harness,
-            event_name=event_name,
-            reason_code="native_hook_worker_exception",
-            reason="HOL Guard could not complete the native hook decision safely.",
-        )
+        response = _unavailable_cli_response(args.harness, event_name, "native_hook_worker_exception")
         return emit_hook_review(
             args.harness,
             response,
