@@ -125,6 +125,62 @@ fn a_connector_notice_requires_the_matching_pending_grouped_row() {
     assert!(pending_connector_row(&row, "req-1", "Example CLI".to_owned()).is_none());
 }
 
+#[cfg(unix)]
+#[test]
+fn a_connector_review_notifies_only_once_per_pending_group() {
+    use super::{notify_with, Notice, TITLE};
+    use crate::guard_store_approval_reads::tests::seed;
+
+    let home = tempfile::tempdir().unwrap();
+    let guard_home = home.path().to_str().unwrap();
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../testdata/guard_store/approval_metadata_vectors.json"
+    ))
+    .unwrap();
+    let ids = ["connector-notice-first", "connector-notice-sibling"];
+    let rows: Vec<_> = ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| {
+            let mut row = fixture["scenarios"][0]["rows"][0].clone();
+            row["request_id"] = json!(id);
+            row["queue_group_id"] = json!(format!("connector:example:{index:016x}"));
+            row["harness"] = json!("codex");
+            row["workspace"] = Value::Null;
+            row["approval_url"] = json!(format!("http://127.0.0.1:4781/requests/{id}"));
+            row
+        })
+        .collect();
+    seed(
+        &home.path().join("guard.db"),
+        &fixture,
+        &json!({"rows": rows}),
+    );
+
+    let mut sent = Vec::new();
+    for request_id in ids {
+        notify_with(
+            guard_home,
+            "guard",
+            Notice::Connector {
+                request_id: request_id.to_owned(),
+                connector_name: "lanectl".to_owned(),
+            },
+            |id, title, text, url| {
+                assert_eq!(title, TITLE);
+                assert_eq!(
+                    text,
+                    "Codex is waiting on a connector Guard has not set up yet: lanectl"
+                );
+                assert_eq!(url, format!("http://127.0.0.1:4781/requests/{id}"));
+                sent.push(id.to_owned());
+                true
+            },
+        );
+    }
+    assert_eq!(sent, [ids[0]]);
+}
+
 #[test]
 fn the_drain_only_reconstructs_notices_from_the_matching_pending_row() {
     let pending = notice(json!({"status": "pending"}));

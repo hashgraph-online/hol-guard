@@ -314,6 +314,22 @@
    "status": "native_behavior_ported_requires_ci"
   },
   {
+   "old_node": "tests/test_approval_connector_setup_notice.py::test_a_queued_native_connector_review_raises_one_setup_notice",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_evidence_notice_tests.rs::a_connector_review_notifies_only_once_per_pending_group",
+    "rust/crates/guard-runtime/src/guard_store_native_review_queue_context_tests.rs::a_committed_connector_request_can_notify_without_a_returned_row"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_approval_connector_setup_notice.py::test_a_native_review_without_a_connector_raises_no_setup_notice",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/guard_store_native_review_queue_context_tests.rs::a_committed_connector_request_can_notify_without_a_returned_row",
+    "rust/crates/guard-runtime/src/hook_direct_evidence_notice_tests.rs::a_connector_notice_requires_the_matching_pending_grouped_row"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
    "old_node": "tests/test_hook_direct_counters.py::test_harness_slots_match_the_direct_harnesses",
    "replacement_nodes": [
     "rust/crates/guard-runtime/src/hook_direct_counters_tests.rs::every_harness_name_has_its_own_slot"
