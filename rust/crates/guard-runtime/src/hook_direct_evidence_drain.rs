@@ -1,5 +1,7 @@
 //! Native drain and acknowledgment of direct hook evidence.
 
+use std::time::{Duration, Instant};
+
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -7,12 +9,28 @@ use super::{record, DirectEvidenceQueue, HookDirectEvidenceDrainRequestV1, Paged
 use crate::mcp_relay_receipt;
 
 const DEFAULT_DRAIN_RECORDS: usize = 256;
+const PAGES_PER_WAKE: usize = 8;
+const MAX_BATCH_MS: u64 = 2_000;
 const UNHANDLED: &str = "direct_hook_evidence_unhandled";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HookDirectEvidenceCommitRequestV1 {
     pub(crate) guard_home: String,
+    batch: Option<Batch>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Batch {
+    budget_ms: u64,
+    shutdown: bool,
+}
+
+struct CommittedPage {
+    record_count: usize,
+    remaining: usize,
+    store_fatal: Option<Value>,
 }
 
 pub(crate) fn drain(
@@ -58,10 +76,67 @@ pub(crate) fn commit_page(
     request: &HookDirectEvidenceCommitRequestV1,
     store: &crate::policy_store::PolicySnapshotStore,
 ) -> Result<Vec<u8>, String> {
-    commit_queued_page(
-        &request.guard_home,
-        store.direct_evidence(),
-        store.direct_lane_writer_source().as_deref(),
+    let queue = store.direct_evidence();
+    let Some(batch) = &request.batch else {
+        return commit_queued_page(
+            &request.guard_home,
+            queue,
+            store.direct_lane_writer_source().as_deref(),
+        );
+    };
+    if !(1..=MAX_BATCH_MS).contains(&batch.budget_ms) {
+        return Err("direct_hook_evidence_batch_budget_invalid".to_owned());
+    }
+    let deadline = Instant::now() + Duration::from_millis(batch.budget_ms);
+    commit_batch(queue, batch.shutdown, deadline, || {
+        commit_queued(
+            &request.guard_home,
+            queue,
+            store.direct_lane_writer_source().as_deref(),
+        )
+    })
+}
+
+fn commit_batch(
+    queue: &DirectEvidenceQueue,
+    shutdown: bool,
+    deadline: Instant,
+    mut next: impl FnMut() -> Result<CommittedPage, String>,
+) -> Result<Vec<u8>, String> {
+    let mut pages = 0;
+    let mut record_count = 0usize;
+    let mut remaining = 0;
+    let mut failed = false;
+    let mut store_fatal = None;
+    while Instant::now() < deadline && (shutdown || pages < PAGES_PER_WAKE) {
+        match next() {
+            Ok(page) => {
+                pages += 1;
+                record_count = record_count.saturating_add(page.record_count);
+                remaining = page.remaining;
+                store_fatal = page.store_fatal;
+                if remaining == 0 || store_fatal.is_some() {
+                    break;
+                }
+            }
+            Err(error) if pages == 0 => return Err(error),
+            Err(_) => {
+                failed = true;
+                break;
+            }
+        }
+    }
+    encode(
+        json!({
+            "schema": "guard-hook-direct-evidence-batch.v1",
+            "epoch": queue.epoch,
+            "pages": pages,
+            "record_count": record_count,
+            "more": !shutdown && pages > 0 && remaining > 0 && !failed && store_fatal.is_none(),
+            "failed": failed,
+            "counters": queue.counters.snapshot(),
+        }),
+        store_fatal,
     )
 }
 
@@ -70,6 +145,24 @@ pub(crate) fn commit_queued_page(
     queue: &DirectEvidenceQueue,
     writer_source: Option<&str>,
 ) -> Result<Vec<u8>, String> {
+    let page = commit_queued(home, queue, writer_source)?;
+    encode(
+        json!({
+            "schema": "guard-hook-direct-evidence-commit.v1",
+            "epoch": queue.epoch,
+            "record_count": page.record_count,
+            "remaining": page.remaining,
+            "counters": queue.counters.snapshot(),
+        }),
+        page.store_fatal,
+    )
+}
+
+fn commit_queued(
+    home: &str,
+    queue: &DirectEvidenceQueue,
+    writer_source: Option<&str>,
+) -> Result<CommittedPage, String> {
     let recording = queue
         .recording
         .lock()
@@ -96,16 +189,11 @@ pub(crate) fn commit_queued_page(
     // queue. The client only receives aggregate diagnostics.
     mcp_relay_receipt::write_detached(home, settled, queue.unwritten());
     drop(recording);
-    encode(
-        json!({
-            "schema": "guard-hook-direct-evidence-commit.v1",
-            "epoch": queue.epoch,
-            "record_count": record_count,
-            "remaining": peeked.remaining,
-            "counters": queue.counters.snapshot(),
-        }),
+    Ok(CommittedPage {
+        record_count,
+        remaining: peeked.remaining,
         store_fatal,
-    )
+    })
 }
 
 fn record_page(
@@ -159,4 +247,88 @@ fn encode(mut page: Value, store_fatal: Option<Value>) -> Result<Vec<u8>, String
         page["store_fatal"] = fatal;
     }
     serde_json::to_vec(&page).map_err(|_| "direct_hook_evidence_encoding_failed".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_batch_acknowledges_the_queue_across_page_boundaries() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().to_str().unwrap();
+        let queue = DirectEvidenceQueue::default();
+        for sequence in 0..=DEFAULT_DRAIN_RECORDS {
+            assert!(queue.offer(json!({ "test_sequence": sequence })));
+        }
+        let bytes = commit_batch(
+            &queue,
+            false,
+            Instant::now() + Duration::from_secs(2),
+            || commit_queued(home, &queue, None),
+        )
+        .unwrap();
+        let batch: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(batch["pages"], 2);
+        assert_eq!(batch["record_count"], DEFAULT_DRAIN_RECORDS + 1);
+        assert_eq!(batch["more"], false);
+        assert_eq!(commit_queued(home, &queue, None).unwrap().record_count, 0);
+    }
+
+    #[test]
+    fn a_poll_stops_at_the_page_limit_and_shutdown_finishes_the_queue() {
+        let queue = DirectEvidenceQueue::default();
+        let mut remaining = 10;
+        let mut next = || {
+            remaining -= 1;
+            Ok(CommittedPage {
+                record_count: 2,
+                remaining,
+                store_fatal: None,
+            })
+        };
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let batch: Value =
+            serde_json::from_slice(&commit_batch(&queue, false, deadline, &mut next).unwrap())
+                .unwrap();
+        assert_eq!(batch["pages"], 8);
+        assert_eq!(batch["record_count"], 16);
+        assert_eq!(batch["more"], true);
+
+        let batch: Value =
+            serde_json::from_slice(&commit_batch(&queue, true, deadline, next).unwrap()).unwrap();
+        assert_eq!(batch["pages"], 2);
+        assert_eq!(batch["record_count"], 4);
+        assert_eq!(batch["more"], false);
+    }
+
+    #[test]
+    fn a_failed_page_preserves_the_diagnostics_of_earlier_commits() {
+        let queue = DirectEvidenceQueue::default();
+        let mut calls = 0;
+        let bytes = commit_batch(
+            &queue,
+            false,
+            Instant::now() + Duration::from_secs(1),
+            || {
+                calls += 1;
+                if calls == 1 {
+                    Ok(CommittedPage {
+                        record_count: 3,
+                        remaining: 1,
+                        store_fatal: None,
+                    })
+                } else {
+                    Err(UNHANDLED.to_owned())
+                }
+            },
+        )
+        .unwrap();
+        let batch: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(calls, 2);
+        assert_eq!(batch["record_count"], 3);
+        assert_eq!(batch["pages"], 1);
+        assert_eq!(batch["failed"], true);
+        assert_eq!(batch["more"], false);
+    }
 }

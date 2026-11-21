@@ -46,6 +46,7 @@ def _status() -> SimpleNamespace:
                 "native-command-program-v1",
                 "native-command-control-fence-v1",
                 "hook-direct-evidence-commit-v1",
+                "hook-direct-evidence-batch-v1",
             ),
         ),
     )

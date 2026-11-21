@@ -36,6 +36,7 @@ from .native_policy_snapshot_harness_postures import (
 )
 from .native_policy_snapshot_reconcile import reconcile_policy_inputs
 from .native_process_stop_scope import native_process_stop_scope
+from .resident_evidence_drain import EVIDENCE_BATCH_FEATURE
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -266,7 +267,7 @@ class NativePolicySnapshotPublicationMixin:
                 return
             identity, capabilities, master_key, config, command_extensions, client = context
             evidence_owned = (
-                publisher.direct_evidence_bound() and "hook-direct-evidence-commit-v1" in capabilities.features
+                publisher.direct_evidence_bound() and EVIDENCE_BATCH_FEATURE in capabilities.features
             )
             bound_postures = valid_harness_postures(config.get(HARNESS_POSTURES_BINDING_KEY))
             bound_watch_ends = signed_watch_ends(bound_postures, publisher._compiled_watch_ends)

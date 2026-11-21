@@ -2306,6 +2306,17 @@
    ]
   },
   {
+   "path": "src/codex_plugin_scanner/guard/resident_evidence_drain.py",
+   "source_sha256": "c9844d45bd472b0f79f581be5657953b451fc0797e6d5ae4de61f6a47abb15bf",
+   "forbidden_symbols": [
+    "_MAX_PAGES_PER_WAKE",
+    "_drain_pages"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/hook_direct_evidence_drain.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/runtime/command_model.py",
    "source_sha256": "11ab5a21f22eefd813957346a81606209bb78b85e0941f84a35c42af5ce5ee6a",
    "forbidden_symbols": [

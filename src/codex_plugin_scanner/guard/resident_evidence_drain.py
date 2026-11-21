@@ -10,10 +10,10 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Protocol, cast
 
-_DRAIN_SCHEMA = "guard-hook-direct-evidence-commit.v1"
+EVIDENCE_BATCH_FEATURE = "hook-direct-evidence-batch-v1"
+_DRAIN_SCHEMA = "guard-hook-direct-evidence-batch.v1"
 _DRAIN_INTERVAL_SECONDS = 0.25
 _DRAIN_TIMEOUT_SECONDS = 2.0
-_MAX_PAGES_PER_WAKE = 8
 
 
 class _DrainHost(Protocol):
@@ -27,12 +27,12 @@ class _DrainHost(Protocol):
     def activity_writer(self) -> object | None: ...
 
 
-def _decode_page(
+def _decode_batch(
     output: bytes | None,
     counters: object | None = None,
     on_store_fatal: Callable[[], object] | None = None,
-) -> tuple[int, int] | None:
-    """Read the diagnostics for a batch the resident has committed."""
+) -> tuple[int, int, bool, bool] | None:
+    """Read the resident's aggregate commit diagnostics."""
 
     if not output:
         return None
@@ -43,15 +43,19 @@ def _decode_page(
     if not isinstance(page, dict) or page.get("schema") != _DRAIN_SCHEMA:
         return None
     record_count = page.get("record_count")
-    remaining = page.get("remaining")
+    pages = page.get("pages")
+    more = page.get("more")
+    failed = page.get("failed")
     epoch = page.get("epoch")
     if (
         not isinstance(record_count, int)
         or isinstance(record_count, bool)
         or record_count < 0
-        or not isinstance(remaining, int)
-        or isinstance(remaining, bool)
-        or remaining < 0
+        or not isinstance(pages, int)
+        or isinstance(pages, bool)
+        or pages < 0
+        or not isinstance(more, bool)
+        or not isinstance(failed, bool)
         or not isinstance(epoch, str)
         or not epoch
     ):
@@ -63,7 +67,7 @@ def _decode_page(
     if on_store_fatal is not None and isinstance(page.get("store_fatal"), dict):
         with suppress(Exception):
             on_store_fatal()
-    return record_count, remaining
+    return pages, record_count, more, failed
 
 
 class ResidentEvidenceDrain:
@@ -105,7 +109,7 @@ class ResidentEvidenceDrain:
 
     def drain_once(self, *, deadline_monotonic: float | None = None) -> bool:
         try:
-            return self._drain_pages(deadline_monotonic=deadline_monotonic)
+            return self._drain_batch(deadline_monotonic=deadline_monotonic)
         finally:
             counters = self._counters
             if counters is not None:
@@ -114,40 +118,30 @@ class ResidentEvidenceDrain:
                     if callable(maybe_log):
                         maybe_log()
 
-    def _drain_pages(self, *, deadline_monotonic: float | None = None) -> bool:
-        pages = 0
-        while deadline_monotonic is not None or pages < _MAX_PAGES_PER_WAKE:
-            pages += 1
-            if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
-                return False
-            page = self._fetch_page(deadline_monotonic=deadline_monotonic)
-            if page is None:
-                return False
-            count, remaining = page
-            self.pages += 1
-            self.records += count
-            if remaining == 0:
-                return False
-        return True
-
-    def _fetch_page(self, *, deadline_monotonic: float | None = None) -> tuple[int, int] | None:
+    def _drain_batch(self, *, deadline_monotonic: float | None = None) -> bool:
         from .native_runtime import _isolated_environment
 
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            return False
         transport = self._transport()
         if transport is None:
-            return None
+            return False
         executable, client = transport
         request_deadline = time.monotonic() + _DRAIN_TIMEOUT_SECONDS
         if deadline_monotonic is not None:
             request_deadline = min(request_deadline, deadline_monotonic)
         remaining = request_deadline - time.monotonic()
         if remaining <= 0:
-            return None
+            return False
+        budget_ms = max(1, int(remaining * 1_000))
         payload = json.dumps(
             {
                 "operation": "hook_direct_evidence_commit",
-                "deadline_budget_ms": max(1, int(remaining * 1_000)),
-                "request": {"guard_home": str(self._host.guard_home)},
+                "deadline_budget_ms": budget_ms,
+                "request": {
+                    "guard_home": str(self._host.guard_home),
+                    "batch": {"budget_ms": budget_ms, "shutdown": deadline_monotonic is not None},
+                },
             },
             separators=(",", ":"),
         ).encode("utf-8")
@@ -161,14 +155,19 @@ class ResidentEvidenceDrain:
             )
         except Exception:
             output = None
-        page = _decode_page(
+        batch = _decode_batch(
             output,
             self._counters,
             lambda: self._recover_writer_store(deadline_monotonic),
         )
-        if page is None:
+        if batch is None:
             self.failures += 1
-        return page
+            return False
+        pages, count, more, failed = batch
+        self.pages += pages
+        self.records += count
+        self.failures += int(failed)
+        return more
 
     def _recover_writer_store(self, deadline_monotonic: float | None = None) -> None:
         if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
@@ -192,4 +191,4 @@ class ResidentEvidenceDrain:
                 self._stop.wait(self._interval_seconds)
 
 
-__all__ = ["ResidentEvidenceDrain", "_decode_page"]
+__all__ = ["EVIDENCE_BATCH_FEATURE", "ResidentEvidenceDrain"]
