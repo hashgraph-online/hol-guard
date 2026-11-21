@@ -490,3 +490,7 @@ impl Hook<'_> {
 #[cfg(test)]
 #[path = "daemon_edge_hook_review_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "daemon_edge_hook_policy_tests.rs"]
+mod policy_tests;
