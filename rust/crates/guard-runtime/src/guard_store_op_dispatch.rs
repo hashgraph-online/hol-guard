@@ -73,6 +73,7 @@ use crate::guard_store_sessions as sessions;
 use crate::guard_store_silent_review::add_silent_native_review_approval_request;
 use crate::guard_store_state_ops as state_ops;
 use crate::guard_store_storage_maintenance as storage_maintenance;
+use crate::guard_store_sync_state::fleet_posture_state as fleet_posture;
 use crate::guard_store_temporary_mcp::apply_temporary_mcp_grant;
 use crate::guard_store_tool_call_evidence as tool_call_evidence;
 use crate::guard_store_wfcap_wire as wfcap;
@@ -484,6 +485,7 @@ pub(crate) fn dispatch(
         "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
         _ if connect::handles(method) => connect::dispatch(connection, method, args),
         _ if state_ops::handles(method) => state_ops::dispatch(connection, method, args),
+        _ if fleet_posture::handles(method) => fleet_posture::dispatch(connection, method, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }

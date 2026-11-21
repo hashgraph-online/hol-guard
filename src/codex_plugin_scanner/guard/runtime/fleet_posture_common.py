@@ -16,8 +16,6 @@ CAPABILITY = "fleet-posture/v1"
 MAX_PAYLOAD_BYTES = 65536
 
 LAST_SENT_STATE_KEY = "fleet_posture_last"
-SETTINGS_STATE_KEY = "fleet_posture_settings"
-FORCE_FULL_STATE_KEY = "fleet_posture_force_full"
 FOLLOWUP_STATE_KEY = "fleet_posture_bundle_followup"
 HASH_KEY_STATE_KEY = "fleet_posture_hash_key"
 DIAGNOSTICS_STATE_KEY = "fleet_posture_diagnostics"
