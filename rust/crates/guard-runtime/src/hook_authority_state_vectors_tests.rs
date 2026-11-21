@@ -3,6 +3,7 @@
 //! is replayed against a SQLite store holding the same two tables; after every
 //! op the Claude and Cursor `sync_state` rows and the audit events must equal
 //! what the Python left behind.
+//! The historical Python recorder is available in Git at `a80601b1eb`.
 
 use std::collections::BTreeMap;
 

@@ -11168,11 +11168,10 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
     )
 
     # Hook authority state lives in the native resident, which reports a locked store as no reply.
-    for target in (
-        "codex_plugin_scanner.guard.cli.commands_support_hook_state.hook_authority_state",
+    monkeypatch.setattr(
         "codex_plugin_scanner.guard.native_hook_authority_state.hook_authority_state",
-    ):
-        monkeypatch.setattr(target, lambda *_args, **_kwargs: None)
+        lambda *_args, **_kwargs: None,
+    )
     pre_tool_event = {
         "session_id": "session-claude-4",
         "tool_name": "Read",

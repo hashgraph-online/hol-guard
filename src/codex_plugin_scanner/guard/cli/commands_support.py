@@ -13,7 +13,6 @@ from types import ModuleType
 from . import _commands_shared as __commands_shared
 from . import commands_support_workspace as _commands_support_workspace
 from . import commands_support_interaction as _commands_support_interaction
-from . import commands_support_hook_state as _commands_support_hook_state
 from . import commands_support_claude_approval as _commands_support_claude_approval
 from . import commands_support_runtime_policy as _commands_support_runtime_policy
 from . import commands_support_prompts as _commands_support_prompts
@@ -47,7 +46,6 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     __commands_shared,
     _commands_support_workspace,
     _commands_support_interaction,
-    _commands_support_hook_state,
     _commands_support_claude_approval,
     _commands_support_runtime_policy,
     _commands_support_prompts,
