@@ -377,6 +377,11 @@ fn a_metric_name_carrying_a_window_is_not_a_secret() {
         format!("const token = '{}';", joined(&["stage", "86249713055"])),
         format!("      apiKey: '{}',", joined(&["k7m2q9", "x4vb3n"])),
         format!("const token = '{}';", joined(&["qf4zr8", "wn2kd6"])),
+        // Single digits spread through a value whose tail is generated: the
+        // digits read like a count, so only the unreadable tail tells them
+        // apart from an identifier.
+        format!("      apiKey: '{}',", joined(&["sessionkey1x", "2y3z4w5v"])),
+        format!("const token = '{}';", joined(&["requestkey4", "h1t9p3qz"])),
     ] {
         assert!(holds_literal_secret(&text), "{text}");
     }

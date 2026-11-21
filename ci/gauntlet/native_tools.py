@@ -45,6 +45,18 @@ GITDIR_POINTER_CASE = "read-linked-worktree-gitdir-pointer"
 # checkout names the administrative pointer. ``_path`` folds the home alias, so
 # the absolute and ``~`` spellings both arrive here as one string.
 GITDIR_POINTER_FILES = ("{{home}}/project/.git/worktrees/project-feature/gitdir",)
+METRIC_WINDOW_WRITE_CASE = "native-metric-window-names-write"
+# The fixture's main checkout is the workspace, so the model may name the file
+# from the workspace root, which ``_path`` reduces to the bare relative
+# spelling, or absolutely, which it leaves under the fixture home.
+METRIC_WINDOW_WRITE_FILES = (
+    "src/connectors/metrics.ts",
+    "{{home}}/project/src/connectors/metrics.ts",
+)
+# The value under test is the window-carrying metric name. A write that leaves
+# it out does not reach the rule this case exists for.
+METRIC_WINDOW_WRITE_TEXT = ("metricKey", "downloads_30d")
+
 TMP_ALIAS_READ_CASE = "omp-native-read-tmp-alias-worktree-file"
 SCRATCH_READ_TARGET = "{{scratch}}/notes.md"
 # The checkout file a session opened in a plain folder reads and edits through its absolute path.
@@ -405,6 +417,36 @@ def _temp_write_error(calls: list[dict[str, Any]]) -> str | None:
         return "the model did not overwrite the scratch file"
     if any(".." in path.split("/") or posixpath.normpath(path) != target for path in writes):
         return "the model wrote outside the private temporary directory"
+    return None
+
+
+def _metric_window_write_error(calls: list[dict[str, Any]], *, require_write: bool = True) -> str | None:
+    """Hold the metric-name case to one write of the named file with the named value.
+
+    The ``native-tools`` oracle on its own only counts a ``write`` call, so a
+    write of any other file, or of this file without the metric literal, would
+    satisfy the scenario without exercising the rule. ``require_write`` also
+    demands the write, which only makes sense once Guard has not stopped it.
+    """
+    wrote = False
+    for call in calls:
+        name = call["name"]
+        if name not in {"read", "edit", "write"}:
+            continue
+        path = _edit_path(call["args"]) if name == "edit" else _path(call["args"])
+        # Evidence from a Windows lane spells the path with backslashes, which
+        # leaves the workspace prefix on it. Fold both here rather than in the
+        # shared helper, which other checks compare against unfolded spellings.
+        if isinstance(path, str):
+            path = path.replace("\\", "/").removeprefix("{{workspace}}/").removeprefix("./")
+        if name != "write" or path not in METRIC_WINDOW_WRITE_FILES:
+            return "the model used a file other than the metrics source"
+        content = call["args"].get("content")
+        if not isinstance(content, str) or any(part not in content for part in METRIC_WINDOW_WRITE_TEXT):
+            return "the write did not carry the metric name under test"
+        wrote = True
+    if require_write and not wrote:
+        return "the model did not write the metrics source"
     return None
 
 
@@ -819,12 +861,16 @@ def native_tools_scope_error(
     if scenario.id == ROUTE_SEGMENT_GLOB_CASE and (scope := _route_segment_glob_error(calls)):
         return scope
     if scenario.id == GITDIR_POINTER_CASE and (scope := _gitdir_pointer_error(calls, require_read=False)):
+    if scenario.id == METRIC_WINDOW_WRITE_CASE and (
+        scope := _metric_window_write_error(calls, require_write=False)
+    ):
         return scope
     if guard_denied:
         return None
     if scenario.id == GITHUB_LOOKUP_CASE and (scope := _github_lookup_error(calls)):
         return scope
     if scenario.id == GITDIR_POINTER_CASE and (scope := _gitdir_pointer_error(calls)):
+    if scenario.id == METRIC_WINDOW_WRITE_CASE and (scope := _metric_window_write_error(calls)):
         return scope
     if not set(scenario.required_tools) <= {call["name"] for call in calls}:
         return "the model did not use every tool the scenario names"
