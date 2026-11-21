@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 
 from ..approval_gate import input_from_mapping, public_config, require_high_risk
 from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
@@ -16,8 +17,6 @@ from ..runtime.exact_cloud_review import (
 )
 from ..store import GuardStore
 
-_RECOVERY_KEY = "guard_cloud_review_settings_recovery"
-
 
 class CloudReviewSettingsError(ValueError):
     def __init__(self, code: str, message: str) -> None:
@@ -25,33 +24,19 @@ class CloudReviewSettingsError(ValueError):
         self.code: str = code
 
 
-def cloud_review_reconnect_required(store: GuardStore, sync: dict[str, object] | None = None) -> bool:
+def cloud_review_reconnect_required(store: GuardStore, *, sync_reconnect_required: bool | None = None) -> bool:
+    """Whether Cloud Review needs a new sign-in on this device.
+
+    The native store decides whether the last sync error asks for one;
+    ``sync_reconnect_required`` passes a decision the caller already read.
+    """
+
     health = store.get_oauth_local_credential_health()
     if health.get("state") != "healthy":
         return True
-    if sync is None:
-        sync_key = "guard_cloud_review_sync_state"
-        if store.guard_source != "default":
-            sync_key += f":{store.guard_source}"
-        state = store.get_sync_payload(sync_key)
-        sync = state if isinstance(state, dict) else {}
-    if sync.get("state") != "error":
-        return False
-    error_code = sync.get("last_error_code")
-    if isinstance(error_code, str):
-        return error_code in {"cloud_auth_expired", "cloud_connect_required"}
-    if "last_error_code" in sync:
-        # A sync attempt clears the code once authentication succeeds. Outbox rows
-        # that still carry an older 401 text must not demand a second sign-in.
-        return False
-    error = sync.get("last_error")
-    return isinstance(error, str) and error.startswith(
-        (
-            "Guard authorization expired.",
-            "Guard Cloud sign-in on this device is no longer valid.",
-            "HTTP Error 401:",
-        )
-    )
+    if sync_reconnect_required is None:
+        sync_reconnect_required = store.cloud_review_settings_state(binding=None)["sync_reconnect_required"]
+    return sync_reconnect_required is True
 
 
 def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
@@ -71,18 +56,19 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
         outbox_unavailable = error.reason
         held_events = 0
     profile = store.get_cloud_sync_profile()
-    sync_key = "guard_cloud_review_sync_state"
-    if store.guard_source != "default":
-        sync_key += f":{store.guard_source}"
-    sync = store.get_sync_payload(sync_key)
-    sync = sync if isinstance(sync, dict) else {}
-    recovery = store.get_sync_payload(_RECOVERY_KEY)
-    recovery = recovery if isinstance(recovery, dict) and recovery.get("binding") == binding else {}
+    rows: dict[str, Any]
+    try:
+        rows = store.cloud_review_settings_state(binding=binding)
+    except NativeGuardStoreUnavailable as error:
+        rows = {"sync": {}, "sync_reconnect_required": False, "recovery_error": None}
+        outbox_unavailable = outbox_unavailable or error.reason
+    sync = rows["sync"]
     connected = profile is not None and binding is not None
     return {
         "enabled": status.get("enabled") is True,
         "connected": connected,
-        "reconnect_required": connected and cloud_review_reconnect_required(store, sync),
+        "reconnect_required": connected
+        and cloud_review_reconnect_required(store, sync_reconnect_required=rows["sync_reconnect_required"]),
         "reason": status.get("reason"),
         "expires_at": status.get("expires_at"),
         "workspace_id": binding["workspace_id"] if binding else None,
@@ -90,7 +76,7 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
         "pending_uploads": outbox.get("depth", 0) if binding else 0,
         "held_events": held_events,
         "isolated_events": outbox.get("quarantined_depth", 0),
-        "activation_error": recovery.get("error"),
+        "activation_error": rows["recovery_error"],
         "last_synced_at": (
             sync.get("last_delivery_at")
             if delivery_binding is not None and sync.get("last_delivery_binding") == delivery_binding
@@ -140,10 +126,8 @@ def change_cloud_review_settings(
                     "connection_changed", "The connected workspace changed. Refresh before confirming."
                 )
             _ = enable_exact_cloud_review(store, issuer="local-dashboard")
-            store.set_sync_payload(
-                _RECOVERY_KEY,
-                {"binding": binding, "error": "pending_request_requeue_failed"},
-                datetime.now(timezone.utc).isoformat(),
+            store.record_cloud_review_recovery(
+                binding=binding, error="pending_request_requeue_failed", now=datetime.now(timezone.utc).isoformat()
             )
             try:
                 if payload.get("include_held_requests") is True:
@@ -159,10 +143,10 @@ def change_cloud_review_settings(
                 activation_error = "pending_request_requeue_failed"
         else:
             _ = disable_exact_cloud_review(store, issuer="local-dashboard")
-        store.set_sync_payload(
-            _RECOVERY_KEY,
-            {"binding": binding, "error": activation_error or "worker_refresh_failed"},
-            datetime.now(timezone.utc).isoformat(),
+        store.record_cloud_review_recovery(
+            binding=binding,
+            error=activation_error or "worker_refresh_failed",
+            now=datetime.now(timezone.utc).isoformat(),
         )
         try:
             worker = refresh_workers()
@@ -171,8 +155,8 @@ def change_cloud_review_settings(
         except (OSError, RuntimeError, ValueError):
             worker = {"running": False, "sync_running": False}
             activation_error = activation_error or "worker_refresh_failed"
-        store.set_sync_payload(
-            _RECOVERY_KEY, {"binding": binding, "error": activation_error}, datetime.now(timezone.utc).isoformat()
+        store.record_cloud_review_recovery(
+            binding=binding, error=activation_error, now=datetime.now(timezone.utc).isoformat()
         )
     return {
         **cloud_review_settings_status(store),

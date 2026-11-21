@@ -83,8 +83,7 @@ def test_status_counts_only_current_binding_and_uses_source_sync_state(tmp_path:
     "error",
     [
         {"last_error_code": "cloud_auth_expired"},
-        {"last_error": "Guard authorization expired. Run `hol-guard connect` to sign in again."},
-        {"last_error": "HTTP Error 401: Unauthorized"},
+        {"last_error_code": "cloud_connect_required"},
     ],
 )
 def test_expired_cloud_sign_in_needs_reconnect_not_new_review_consent(tmp_path: Path, error: dict[str, str]) -> None:
