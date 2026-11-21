@@ -84,3 +84,19 @@ def test_a_refused_step_writes_nothing(tmp_path: Path, transition: str, detail: 
         store.transition_cloud_review_sync_state(CLOUD_REVIEW_SYNC_STATE_KEY, transition, now=_NOW, **detail)
 
     assert store.get_sync_payload(CLOUD_REVIEW_SYNC_STATE_KEY) is None
+
+
+def test_a_failed_run_record_that_cannot_be_written_does_not_replace_the_run_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    def contended(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(store, "transition_cloud_review_sync_state", contended)
+    state: dict[str, object] = {"state": "syncing"}
+
+    cloud_review_sync._record_run_failure(store, state, "HTTP 401: Unauthorized")
+
+    assert state == {"state": "syncing"}

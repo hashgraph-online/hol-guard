@@ -103,6 +103,19 @@ def _transition_sync_state(
     state.update(merged)
 
 
+def _record_run_failure(store: GuardStore, state: dict[str, object], error_message: str) -> None:
+    """Record a failed run without letting a store error replace the run's own error.
+
+    The caller re-raises the run's error, and the worker loop classifies it
+    (an HTTP 401 means sign-in is required) and records the failure again.
+    """
+
+    try:
+        _transition_sync_state(store, state, "failed", error=error_message)
+    except Exception as error:
+        _LOGGER.warning("Could not record the failed Cloud Review sync state: %s", type(error).__name__)
+
+
 def _batch_binding_key(binding: dict[str, str]) -> str:
     return json.dumps(
         [binding[key] for key in ("oauth_subject_hash", "workspace_id", "machine_id", "machine_installation_id")],
@@ -441,12 +454,12 @@ def sync_cloud_review_events_once(
         )
     except urllib.error.HTTPError as error:
         error_message = f"HTTP {error.code}: {error.reason}"
-        _transition_sync_state(store, state, "failed", error=error_message)
+        _record_run_failure(store, state, error_message)
         _LOGGER.warning("Cloud Review sync failed: %s", error_message)
         raise
     except Exception as error:
         error_message = _redacted_error(error)
-        _transition_sync_state(store, state, "failed", error=error_message)
+        _record_run_failure(store, state, error_message)
         _LOGGER.warning("Cloud Review sync failed: %s", error_message)
         raise
 
