@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 HOOK_AUTHORITY_STATE_FEATURE = "hook-authority-state-v1"
-HOOK_AUTHORITY_STATE_QUESTION_SETTLE_FEATURE = "hook-authority-state-question-settle-v1"
+HOOK_AUTHORITY_STATE_QUESTION_PAYLOAD_FEATURE = "hook-authority-state-question-payload-v1"
 HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE = "hook-authority-state-claude-lifecycle-v1"
 _REQUEST_SCHEMA = "guard-hook-authority-state-request.v1"
 _RESULT_SCHEMA = "guard-hook-authority-state-result.v1"
@@ -104,7 +104,7 @@ def hook_authority_state(
             timeout_seconds=_TIMEOUT_SECONDS,
             required_feature=required_feature,
             response_schema=_RESULT_SCHEMA,
-            max_request_bytes=_MAX_REQUEST_BYTES,
+            max_request_bytes=_MAX_REQUEST_BYTES * (2 if op == "claude_question_settle_hook" else 1),
             record_success=False,
         )
     except (TypeError, ValueError):
