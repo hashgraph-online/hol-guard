@@ -2,6 +2,31 @@ use serde_json::json;
 
 use super::*;
 
+#[test]
+fn a_malformed_coverage_reply_is_refused() {
+    let valid = json!({
+        "schema": COVERAGE_SCHEMA,
+        "catalog_digest": "catalog",
+        "compound": false,
+        "segments": [{"index": 0}],
+    });
+    assert_eq!(validated_coverage(valid.clone()), Some(valid.clone()));
+    for (field, wrong) in [
+        ("schema", json!("guard.approval-extension-coverage.v2")),
+        ("segments", json!([])),
+        ("compound", json!(1)),
+        ("extra", json!(true)),
+    ] {
+        let mut malformed = valid.clone();
+        malformed[field] = wrong;
+        assert_eq!(validated_coverage(malformed), None, "{field}");
+    }
+    let mut no_catalog = valid;
+    no_catalog.as_object_mut().unwrap().remove("catalog_digest");
+    assert_eq!(validated_coverage(no_catalog), None);
+    assert_eq!(validated_coverage(json!("coverage")), None);
+}
+
 fn pending(extra: Value) -> Map<String, Value> {
     let mut row = json!({"request_id": "r1", "status": "pending"});
     for (key, value) in extra.as_object().unwrap() {

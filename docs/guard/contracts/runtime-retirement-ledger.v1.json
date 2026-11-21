@@ -285,7 +285,7 @@
   {
    "old_node": "tests/test_native_approval_extension_recommendation.py::test_a_malformed_coverage_answer_is_refused",
    "replacement_nodes": [
-    "rust/crates/guard-runtime/src/approval_extension_coverage_tests.rs::a_malformed_or_absent_hint_has_no_coverage"
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_malformed_coverage_reply_is_refused"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
