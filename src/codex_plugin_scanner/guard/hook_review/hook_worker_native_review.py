@@ -281,6 +281,7 @@ def _review_native_edge_once(
                 event_name=event_name,
                 guard_home=guard_home,
                 workspace=workspace,
+                deadline=deadline,
             )
         deferred_receipt = deferred_receipts[0] if deferred_receipts else None
         if deferred_receipt is not None:
@@ -329,6 +330,7 @@ def _review_native_edge_once(
                             event_name=event_name,
                             guard_home=guard_home,
                             workspace=workspace,
+                            deadline=deadline,
                         )
                     response = _record_native_pre_activity(worker, harness, payload, response, deferred_receipt)
         if capture_receipts and worker.capture_writer is not None:
@@ -353,6 +355,7 @@ def _review_native_edge_once(
             event_name=event_name,
             guard_home=guard_home,
             workspace=workspace,
+            deadline=deadline,
         )
     except (OSError, NativePolicySnapshotError):
         if fenced is False:
@@ -370,4 +373,5 @@ def _review_native_edge_once(
             event_name=event_name,
             guard_home=guard_home,
             workspace=workspace,
+            deadline=deadline,
         )
