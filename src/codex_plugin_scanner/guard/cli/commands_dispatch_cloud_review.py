@@ -12,7 +12,6 @@ from typing import TextIO
 
 from ..native_daemon_client import GuardDaemonRequestError, load_guard_surface_daemon_client
 from ..runtime.exact_cloud_review import (
-    EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY,
     ExactCloudReviewError,
     disable_exact_cloud_review,
     enable_exact_cloud_review,
@@ -118,7 +117,7 @@ def _run_guard_cloud_review_command(
     if command == "native-apply":
         # A local explicit Cloud Review disable is a kill switch only. It is
         # never consulted as cryptographic authority for the native decision.
-        if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+        if store.exact_cloud_review_state()["revocation"] is not None:
             _emit(
                 "cloud-review",
                 {"status": "error", "error": "native_workspace_review_cloud_review_disabled"},
