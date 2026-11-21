@@ -15,8 +15,10 @@ pub struct RuntimeSelection {
     pub work_dir: PathBuf,
 }
 
-/// Identity of the engine a runtime runs. Loaded only from Guard's private
-/// installation records; public HTTP/MCP clients may not supply or replace it.
+/// Identity of the engine a runtime runs. Guard derives it from the engine
+/// compiled into it and the target platform (see `start_builtin`), so it needs
+/// no saved installation record; public HTTP/MCP clients may not supply or
+/// replace it.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BundleApproval {
