@@ -44,10 +44,8 @@ def run_command_queue_loop(
     stop_event: StopEvent,
     enabled: Callable[[GuardStore], bool],
     poll_once: Callable[[GuardStore, HarnessContext], dict[str, object]],
-    load_state: Callable[[GuardStore], dict[str, object]],
-    save_state: Callable[[GuardStore, dict[str, object]], None],
+    record_failure: Callable[[GuardStore, str, str], None],
     format_error: Callable[[BaseException], str],
-    now: Callable[[], str],
 ) -> None:
     if not enabled(store):
         return
@@ -86,18 +84,12 @@ def run_command_queue_loop(
             empty_streak = 0
             error_streak += 1
             state = "auth_expired" if isinstance(error, GuardSyncAuthorizationExpiredError) else "not_configured"
-            save_state(
-                store,
-                {**load_state(store), "state": state, "last_error": format_error(error), "last_poll_at": now()},
-            )
+            record_failure(store, state, format_error(error))
             wait_seconds = retry_wait_seconds(poll_interval, error_backoff, error_streak)
         except Exception as error:
             empty_streak = 0
             error_streak += 1
-            save_state(
-                store,
-                {**load_state(store), "state": "error", "last_error": format_error(error), "last_poll_at": now()},
-            )
+            record_failure(store, "error", format_error(error))
             wait_seconds = retry_wait_seconds(poll_interval, error_backoff, error_streak)
             error_wait = True
         if error_wait:

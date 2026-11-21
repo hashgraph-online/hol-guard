@@ -50,17 +50,14 @@ def _run_failing_loop(
         stop.poll_times.append(clock.now)
         raise OSError("network is unreachable")
 
-    state: dict[str, object] = {}
     command_queue_loop.run_command_queue_loop(
         object(),  # type: ignore[arg-type]
         object(),  # type: ignore[arg-type]
         stop_event=stop,
         enabled=lambda _store: True,
         poll_once=failing_poll,
-        load_state=lambda _store: dict(state),
-        save_state=lambda _store, value: state.update(value),
+        record_failure=lambda _store, _state, _error: None,
         format_error=str,
-        now=lambda: "2026-01-01T00:00:00Z",
     )
     return stop.poll_times
 

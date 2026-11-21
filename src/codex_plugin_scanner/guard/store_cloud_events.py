@@ -214,16 +214,19 @@ class StoreCloudEventsMixin:
         now: str,
         at: str | None = None,
         pending: dict[str, object] | None = None,
+        **detail: object,
     ) -> dict[str, object]:
         """Move a queue lane's stored row through one named job step.
 
         The native store owns which fields each step sets and removes, and
         merges them into the stored row so every other field keeps its stored
         value. ``at`` is the time the step records, ``now`` the row's write
-        time. Returns the merged row.
+        time. ``detail`` carries a step's other inputs (``job``,
+        ``failed_state``, ``error``) and ``route_error``, which is sent as
+        given: ``None`` clears the stored route error. Returns the merged row.
         """
 
-        args: dict[str, object] = {"state_key": state_key, "transition": transition, "now": now}
+        args: dict[str, object] = {"state_key": state_key, "transition": transition, "now": now, **detail}
         if at is not None:
             args["at"] = at
         if pending is not None:
