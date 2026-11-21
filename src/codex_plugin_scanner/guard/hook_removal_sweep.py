@@ -24,6 +24,7 @@ from .mdm.runtime_request import runtime_answer
 
 _FEATURE = "native-hook-removal-sweep-v1"
 _DISCOVERY_FEATURE = "native-hook-removal-discovery-v1"
+_PLAN_FEATURE = "native-hook-removal-plan-v1"
 _BACKUP_FEATURE = "native-hook-removal-backup-v1"
 _COMMAND = "hook-removal-sweep"
 _SCHEMA = "hook-removal-sweep.v1"
@@ -108,13 +109,24 @@ def sweep_config_file(path: Path, *, dry_run: bool) -> SweepFileResult:
     return _result(_answer({"op": "sweep-file", "path": str(path.absolute()), "dry_run": dry_run}, "file"))
 
 
-def _scope(harness: str, context: HarnessContext) -> dict[str, object]:
+def _roots(context: HarnessContext) -> dict[str, object]:
     workspace = context.workspace_dir
     return {
-        "harness": harness,
         "home": str(context.home_dir.absolute()),
         "workspace": str(workspace.absolute()) if workspace is not None else None,
     }
+
+
+def _scope(harness: str, context: HarnessContext) -> dict[str, object]:
+    return {"harness": harness, **_roots(context)}
+
+
+def removal_plans(context: HarnessContext, harnesses: tuple[str, ...], active: set[str]) -> list[object]:
+    plan = {**_roots(context), "harnesses": list(harnesses), "active": sorted(active)}
+    rows = _answer({"op": "plan", "plan": plan}, "plans", feature=_PLAN_FEATURE)
+    if not isinstance(rows, list):
+        raise SweepUnavailableError("native hook removal plan malformed")
+    return rows
 
 
 def harness_hook_files(harness: str, context: HarnessContext) -> tuple[Path, ...]:
@@ -209,6 +221,7 @@ __all__ = [
     "backup_harness_files",
     "finalize_backups",
     "harness_hook_files",
+    "removal_plans",
     "sweep_config_file",
     "sweep_harness",
 ]

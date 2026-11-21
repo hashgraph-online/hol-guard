@@ -177,7 +177,7 @@ def test_remove_all_skips_harness_when_backup_fails(tmp_path: Path) -> None:
     assert report["backup_dir"] is None
 
 
-def test_remove_all_without_the_native_sweep_edits_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_remove_all_without_a_native_plan_edits_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import hook_removal_sweep
 
     context = _context(tmp_path)
@@ -187,10 +187,11 @@ def test_remove_all_without_the_native_sweep_edits_nothing(tmp_path: Path, monke
     settings.write_text(json.dumps(_claude_settings()))
     original = settings.read_bytes()
 
-    def no_runtime(*_args: object, **_kwargs: object) -> None:
+    def no_plan(_feature: object, _command: object, request: dict, **_kwargs: object) -> None:
+        assert request["op"] == "plan", "an unavailable plan must stop before backup or sweep"
         return None
 
-    monkeypatch.setattr(hook_removal_sweep, "runtime_answer", no_runtime)
+    monkeypatch.setattr(hook_removal_sweep, "runtime_answer", no_plan)
     store = GuardStore(context.guard_home)
 
     planned = remove_all_guard_hooks(context=context, store=store, dry_run=True)

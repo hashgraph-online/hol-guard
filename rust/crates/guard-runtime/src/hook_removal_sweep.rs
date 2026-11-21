@@ -28,6 +28,7 @@ use crate::pyjson::{parse, parse_mapping_lone_surrogates, PyVal};
 
 const SCHEMA: &str = "hook-removal-sweep.v1";
 pub(crate) const DISCOVERY_FEATURE: &str = "native-hook-removal-discovery-v1";
+pub(crate) const PLAN_FEATURE: &str = "native-hook-removal-plan-v1";
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
 const MAX_CANDIDATES: usize = 512;
 const MAX_CONFIG_BYTES: u64 = 8 * 1024 * 1024;
@@ -42,6 +43,7 @@ struct Request {
     #[serde(default)]
     roots: Vec<String>,
     scope: Option<HarnessScope>,
+    plan: Option<plan::PlanRequest>,
     #[serde(default)]
     path: Option<String>,
     #[serde(default)]
@@ -158,6 +160,7 @@ fn absolute(value: &str) -> Result<PathBuf, String> {
 
 fn answer(request: &Request) -> Result<Value, String> {
     if request.schema != SCHEMA
+        || request.plan.is_some() != (request.op == "plan")
         || (request.scope.is_some()
             && (!matches!(request.op.as_str(), "files" | "sweep")
                 || !request.candidates.is_empty()
@@ -175,6 +178,14 @@ fn answer(request: &Request) -> Result<Value, String> {
             backup::finalize(request)
         }
         _ if request.has_backup_fields() => Err(invalid()),
+        "plan"
+            if request.path.is_none()
+                && request.candidates.is_empty()
+                && request.roots.is_empty()
+                && !request.dry_run =>
+        {
+            plan::answer(request.plan.as_ref().ok_or_else(invalid)?)
+        }
         "sweep-file" if request.candidates.is_empty() && request.roots.is_empty() => {
             let path = absolute(request.path.as_deref().ok_or_else(invalid)?)?;
             let text = request.path.clone().unwrap_or_default();
@@ -208,16 +219,9 @@ fn answer(request: &Request) -> Result<Value, String> {
                 let names: Vec<&str> = files.iter().map(|(text, _)| text.as_str()).collect();
                 return Ok(json!({ "files": names }));
             }
-            let mut results: Vec<Value> = files
-                .iter()
-                .map(|(text, path)| sweep_config_file(text, path, request.dry_run).to_json())
+            let results: Vec<Value> = sweep_results(&files, &links, request.dry_run)
+                .map(|result| result.to_json())
                 .collect();
-            results.extend(
-                links
-                    .iter()
-                    .filter_map(|(text, path)| inspect_symlinked(text, path, request.dry_run))
-                    .map(|result| result.to_json()),
-            );
             Ok(json!({ "files": results }))
         }
         _ => Err(invalid()),
@@ -226,6 +230,21 @@ fn answer(request: &Request) -> Result<Value, String> {
 
 /// Candidate paths, each with the text the request spelled it as.
 type Candidates = Vec<(String, PathBuf)>;
+
+fn sweep_results<'a>(
+    files: &'a Candidates,
+    links: &'a Candidates,
+    dry_run: bool,
+) -> impl Iterator<Item = SweepResult<'a>> {
+    files
+        .iter()
+        .map(move |(text, path)| sweep_config_file(text, path, dry_run))
+        .chain(
+            links
+                .iter()
+                .filter_map(move |(text, path)| inspect_symlinked(text, path, dry_run)),
+        )
+}
 
 /// Existing candidates with a sweepable suffix, split into regular files
 /// inside a root and symlinks, each kept once in request order.
@@ -461,6 +480,8 @@ fn write_temporary(
 
 #[path = "hook_removal_backup.rs"]
 mod backup;
+#[path = "hook_removal_plan.rs"]
+mod plan;
 
 #[cfg(test)]
 #[path = "hook_removal_sweep_tests.rs"]

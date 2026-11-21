@@ -304,6 +304,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-policy-file-io-v1",
     "native-hook-removal-sweep-v1",
     crate::hook_removal_sweep::DISCOVERY_FEATURE,
+    crate::hook_removal_sweep::PLAN_FEATURE,
     "native-harness-version-compatibility-v1",
     "native-hook-removal-backup-v1",
     "native-harness-version-discovery-v1",
