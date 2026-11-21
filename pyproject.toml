@@ -45,10 +45,10 @@ classifiers = [
 ]
 dependencies = [
     "rich>=14.0,<15",
-    "cryptography>=50.0.0",
+    "cryptography>=50.0.2",
     "sigstore>=4.5,<5",
     "keyring>=25.0",
-    "packaging>=24.0",
+    "packaging>=26.3",
     "jsonschema>=4.26.0",
     "pyyaml>=6.0.3",
     "requests>=2.32,<3",
@@ -59,16 +59,16 @@ dependencies = [
 
 [project.optional-dependencies]
 cisco = [
-    "cisco-ai-skill-scanner~=2.0.12",
+    "cisco-ai-skill-scanner~=2.0.14",
     "litellm==1.93.2; python_version < '3.15'",
 ]
 dev = [
     "basedpyright>=1.39.8",
     "build>=1.5.0",
-    "pytest>=9.0.3",
+    "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.15",
-    "tomlkit>=0.13.3,<1",
+    "tomlkit>=0.15.2,<1",
 ]
 mdm-build = [
     "pyinstaller>=6.16,<7",
@@ -80,13 +80,13 @@ publish = [
 [dependency-groups]
 ci-test = [
     "build>=1.5.0",
-    "idna==3.15",
-    "pytest>=9.0.3",
+    "idna==3.20",
+    "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
     "pytest-rerunfailures>=14.0",
     "ruff>=0.15.15",
-    "tomlkit>=0.13.3,<1",
+    "tomlkit>=0.15.2,<1",
 ]
 cisco-mcp = [
     "cisco-ai-mcp-scanner==4.8.1; python_full_version >= '3.11.4'",
