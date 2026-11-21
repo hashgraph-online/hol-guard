@@ -551,7 +551,6 @@
           "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
           "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
           "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
-          "src/codex_plugin_scanner/guard/muse_hook_render.py",
           "src/codex_plugin_scanner/guard/native_hook_bridge.py",
           "src/codex_plugin_scanner/guard/native_*.py",
           "src/codex_plugin_scanner/guard/proxy/*",

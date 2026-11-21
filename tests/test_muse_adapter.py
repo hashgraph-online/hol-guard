@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import hook_failure_bridge, muse_hook_render
+from codex_plugin_scanner.guard import hook_failure_bridge
 from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
 from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
-from codex_plugin_scanner.guard.muse_hook_render import muse_bridge_response
 from codex_plugin_scanner.guard.native_harness_client import ask
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 from tests import harness_ops_support as harness_support
@@ -322,11 +322,13 @@ class TestMuseHookRender:
     """
 
     def test_fails_closed_without_a_resident(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(muse_hook_render, "native_muse_bridge", lambda *_args, **_kwargs: None)
-        assert muse_bridge_response(
+        monkeypatch.setattr(cli, "native_cli_hook_emit", lambda *_args, **_kwargs: None)
+        assert cli._bridge_hook_output(
+            "muse",
             {"policy_action": "allow", "reason": "ok"},
             event_name="PreToolUse",
             guard_home=tmp_path / "guard-home",
+            deadline=None,
         ) == ("", "HOL Guard blocked this action.", 2)
 
     def test_render_stops_at_the_hook_deadline(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -336,7 +338,8 @@ class TestMuseHookRender:
             raise AssertionError("an expired hook budget must not reach the resident")
 
         monkeypatch.setattr(native_hook_render, "_resident_request", forbidden)
-        _stdout, _stderr, code = muse_bridge_response(
+        _stdout, _stderr, code = cli._bridge_hook_output(
+            "muse",
             {"policy_action": "allow", "reason": "ok"},
             event_name="PreToolUse",
             guard_home=tmp_path / "guard-home",
@@ -354,22 +357,26 @@ class TestMuseHookRender:
         nothing. Only a deciding event fails closed.
         """
 
-        monkeypatch.setattr(muse_hook_render, "native_muse_bridge", lambda *_args, **_kwargs: None)
-        assert muse_bridge_response(
+        monkeypatch.setattr(cli, "native_cli_hook_emit", lambda *_args, **_kwargs: None)
+        assert cli._bridge_hook_output(
+            "muse",
             {"policy_action": "allow", "reason": "ok"},
             event_name=event_name,
             guard_home=tmp_path / "guard-home",
+            deadline=None,
         ) == ("", "", 0)
 
     @pytest.mark.parametrize("event_name", ["PreToolUse", "PermissionRequest", "UserPromptSubmit"])
     def test_a_deciding_event_refuses_without_a_resident(
         self, event_name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(muse_hook_render, "native_muse_bridge", lambda *_args, **_kwargs: None)
-        assert muse_bridge_response(
+        monkeypatch.setattr(cli, "native_cli_hook_emit", lambda *_args, **_kwargs: None)
+        assert cli._bridge_hook_output(
+            "muse",
             {"policy_action": "allow", "reason": "ok"},
             event_name=event_name,
             guard_home=tmp_path / "guard-home",
+            deadline=None,
         ) == ("", "HOL Guard blocked this action.", 2)
 
     @pytest.mark.parametrize(
@@ -397,13 +404,15 @@ class TestMuseHookRender:
         def unavailable(*_args: object, **_kwargs: object) -> None:
             raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
-        monkeypatch.setattr(muse_hook_render, "native_muse_bridge", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(cli, "native_cli_hook_emit", lambda *_args, **_kwargs: None)
         monkeypatch.setattr(authority, "native_runner_authority", unavailable)
         assert (
-            muse_bridge_response(
+            cli._bridge_hook_output(
+                "muse",
                 {"policy_action": "allow", "reason": "ok"},
                 event_name=event_name,
                 guard_home=tmp_path / "guard-home",
+                deadline=None,
             )
             == expected
         )

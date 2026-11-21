@@ -1,6 +1,4 @@
-//! The Muse answer of the bounded hook bridge: `_rendered_bridge_answer`
-//! for Muse in `bounded_cli_hook_daemon.py`, with the approval wait of
-//! `muse_hook_render.py`.
+//! Muse's bounded hook bridge and CLI hook output.
 //!
 //! A `PreToolUse` review the daemon queued waits inside the hook for the
 //! approvals it names, read back from the daemon: an approval lets the
@@ -54,7 +52,16 @@ pub(super) fn muse_answer(
     let answer = daemon
         .and_then(|daemon| waited(&parsed, event_name, guard_home, daemon, deadline))
         .unwrap_or(parsed);
-    let (document, exit_code) = muse::bridge_response(&answer, event_name);
+    render_muse_document(&answer, event_name, unmap)
+}
+
+/// Serialize a resolved daemon answer for Muse without starting an approval wait.
+pub(crate) fn render_muse_document(
+    response: &Map<String, Value>,
+    event_name: &str,
+    unmap: bool,
+) -> Rendered {
+    let (document, exit_code) = muse::bridge_response(response, event_name);
     let exit_code = i32::try_from(exit_code).unwrap_or(2);
     let Some(document) = document else {
         return Rendered {
@@ -73,8 +80,7 @@ pub(super) fn muse_answer(
     }
 }
 
-/// `muse_bridge_response` when the answer cannot be read: a deciding call
-/// is refused with the reason on stderr, which Muse reads on exit 2.
+/// Refuse an unreadable answer to a deciding call with Muse's exit 2 and stderr.
 fn unavailable(event_name: &str) -> Rendered {
     let compact = muse::compact_event(event_name);
     if !DECIDING_EVENTS.contains(&compact.as_str()) {

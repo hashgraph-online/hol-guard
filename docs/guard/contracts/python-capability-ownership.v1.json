@@ -15,7 +15,6 @@
   "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
   "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
   "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
-  "src/codex_plugin_scanner/guard/muse_hook_render.py",
   "src/codex_plugin_scanner/guard/native_hook_bridge.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
@@ -37,7 +36,6 @@
     "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
     "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
     "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
-    "src/codex_plugin_scanner/guard/muse_hook_render.py",
     "src/codex_plugin_scanner/guard/native_hook_bridge.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_*.py",
@@ -80,6 +78,18 @@
  },
  "retirement_ledger": "docs/guard/contracts/runtime-retirement-ledger.v1.json",
  "retired_modules": [
+  {
+   "path": "src/codex_plugin_scanner/guard/muse_hook_render.py",
+   "module": "codex_plugin_scanner.guard.muse_hook_render",
+   "source_sha256": "97c15b98a3177a20b81b9c342ced9c2625d4947db2017f102ace0187d2bd6ed8",
+   "forbidden_symbols": [
+    "muse_bridge_response"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/bounded_hook_bridge_muse.rs",
+    "rust/crates/guard-runtime/src/hook_cli_emit.rs"
+   ]
+  },
   {
    "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
    "module": "codex_plugin_scanner.guard.hook_review.hook_native_package_review",
