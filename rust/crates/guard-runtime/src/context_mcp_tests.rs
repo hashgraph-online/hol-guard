@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use super::answer;
+use super::{answer, serve, Session};
 
 const CREDENTIAL: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -25,7 +25,7 @@ fn resident(
 #[test]
 fn catalog_lists_every_tool_with_strict_schemas() {
     let mut ask = |_: Value| -> Result<Value, String> { panic!("catalog asked the resident") };
-    let catalog = answer(&json!({"op": "catalog"}), &mut ask);
+    let catalog = answer(&json!({"op": "catalog"}), &mut Session::default(), &mut ask);
     let tools = catalog["tools"].as_array().unwrap();
     assert_eq!(tools.len(), 7);
     for tool in tools {
@@ -52,7 +52,8 @@ fn tools_pair_once_and_show_only_allowed_tools() {
         true,
         json!(["get_context_status", "get_guard_context"]),
     );
-    let first = answer(&json!({"op": "tools", "session": null}), &mut ask);
+    let mut session = Session::default();
+    let first = answer(&json!({"op": "tools"}), &mut session, &mut ask);
     let names: Vec<&str> = first["tools"]
         .as_array()
         .unwrap()
@@ -60,14 +61,8 @@ fn tools_pair_once_and_show_only_allowed_tools() {
         .map(|t| t["name"].as_str().unwrap())
         .collect();
     assert_eq!(names, ["get_context_status", "get_guard_context"]);
-    assert_eq!(
-        first["session"],
-        json!({"credential": CREDENTIAL, "started": true})
-    );
-    let again = answer(
-        &json!({"op": "tools", "session": first["session"]}),
-        &mut ask,
-    );
+    assert!(!first.to_string().contains(CREDENTIAL));
+    let again = answer(&json!({"op": "tools"}), &mut session, &mut ask);
     assert_eq!(again["tools"].as_array().unwrap().len(), 2);
     drop(ask);
     assert_eq!(log.iter().filter(|m| m["action"] == "begin").count(), 1);
@@ -75,28 +70,20 @@ fn tools_pair_once_and_show_only_allowed_tools() {
 
 #[test]
 fn a_failed_begin_is_not_retried() {
+    let mut began = 0;
     let mut ask = |message: Value| match message["action"].as_str() {
         Some("discover") => Ok(json!({"available": true})),
-        _ => Err("native_context_assistance_unavailable".to_owned()),
-    };
-    let first = answer(&json!({"op": "tools"}), &mut ask);
-    assert_eq!(first["tools"], json!([]));
-    assert_eq!(
-        first["session"],
-        json!({"credential": null, "started": true})
-    );
-    let mut began = 0;
-    let mut ask = |message: Value| {
-        if message["action"] == "begin" {
+        Some("begin") => {
             began += 1;
+            Err("native_context_assistance_unavailable".to_owned())
         }
-        Ok(json!({"available": true}))
+        _ => Ok(json!({"tools": []})),
     };
-    answer(
-        &json!({"op": "tools", "session": first["session"]}),
-        &mut ask,
-    );
-    assert_eq!(began, 0);
+    let mut session = Session::default();
+    let first = answer(&json!({"op": "tools"}), &mut session, &mut ask);
+    assert_eq!(first["tools"], json!([]));
+    answer(&json!({"op": "tools"}), &mut session, &mut ask);
+    assert_eq!(began, 1);
 }
 
 #[test]
@@ -104,7 +91,7 @@ fn unknown_tools_in_status_hide_every_tool() {
     let mut log = Vec::new();
     let mut ask = resident(&mut log, true, json!(["get_context_status", "run_shell"]));
     assert_eq!(
-        answer(&json!({"op": "tools"}), &mut ask)["tools"],
+        answer(&json!({"op": "tools"}), &mut Session::default(), &mut ask)["tools"],
         json!([])
     );
 }
@@ -113,9 +100,10 @@ fn unknown_tools_in_status_hide_every_tool() {
 fn calls_return_the_data_or_a_fixed_refusal() {
     let mut log = Vec::new();
     let mut ask = resident(&mut log, true, json!([]));
-    let session = json!({"credential": CREDENTIAL, "started": true});
+    let mut session = Session::default();
     let ok = answer(
-        &json!({"op": "call", "session": session, "name": "get_guard_context", "arguments": {"query": "q"}}),
+        &json!({"op": "call", "name": "get_guard_context", "arguments": {"query": "q"}}),
+        &mut session,
         &mut ask,
     );
     let text: Value = serde_json::from_str(ok["text"].as_str().unwrap()).unwrap();
@@ -124,7 +112,8 @@ fn calls_return_the_data_or_a_fixed_refusal() {
         json!({"ok": true, "data_role": true, "data": {"brief": "b"}})
     );
     let refused = answer(
-        &json!({"op": "call", "session": session, "name": "explain_guard_context", "arguments": {}}),
+        &json!({"op": "call", "name": "explain_guard_context", "arguments": {}}),
+        &mut session,
         &mut ask,
     );
     let text: Value = serde_json::from_str(refused["text"].as_str().unwrap()).unwrap();
@@ -134,7 +123,8 @@ fn calls_return_the_data_or_a_fixed_refusal() {
         "native_context_assistance_scope_denied"
     );
     let unknown = answer(
-        &json!({"op": "call", "session": session, "name": "search"}),
+        &json!({"op": "call", "name": "search"}),
+        &mut session,
         &mut ask,
     );
     assert_eq!(unknown["known"], false);
@@ -142,17 +132,50 @@ fn calls_return_the_data_or_a_fixed_refusal() {
     let compile = log.iter().find(|m| m["action"] == "compile").unwrap();
     assert_eq!(compile["credential"], CREDENTIAL);
     assert_eq!(compile["arguments"], json!({"query": "q"}));
+    assert_eq!(log.iter().filter(|m| m["action"] == "begin").count(), 1);
 }
 
 #[test]
-fn close_ends_the_pairing() {
+fn one_process_keeps_the_pairing_and_closes_it_at_the_end_of_input() {
+    let mut log = Vec::new();
+    let mut ask = resident(&mut log, true, json!(["get_context_status"]));
+    let input = concat!(
+        "{\"op\":\"tools\"}\n",
+        "\n",
+        "not json\n",
+        "{\"op\":\"call\",\"name\":\"get_guard_context\",\"arguments\":{}}\n",
+    );
+    let mut out = Vec::new();
+    assert_eq!(serve(&mut input.as_bytes(), &mut out, &mut ask), 0);
+    drop(ask);
+    let lines: Vec<Value> = String::from_utf8(out.clone())
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines[0]["tools"][0]["name"], "get_context_status");
+    assert_eq!(lines[1]["error"], "unknown_op");
+    assert_eq!(lines[2]["known"], true);
+    assert!(!String::from_utf8(out).unwrap().contains(CREDENTIAL));
+    assert_eq!(log.iter().filter(|m| m["action"] == "begin").count(), 1);
+    assert_eq!(
+        log.last().unwrap(),
+        &json!({"action": "close", "credential": CREDENTIAL})
+    );
+}
+
+#[test]
+fn close_ends_the_pairing_and_stops_reading() {
     let mut log = Vec::new();
     let mut ask = resident(&mut log, true, json!([]));
-    let closed = answer(
-        &json!({"op": "close", "session": {"credential": CREDENTIAL, "started": true}}),
-        &mut ask,
-    );
-    assert_eq!(closed["session"]["credential"], Value::Null);
+    let input = "{\"op\":\"tools\"}\n{\"op\":\"close\"}\n{\"op\":\"tools\"}\n";
+    let mut out = Vec::new();
+    assert_eq!(serve(&mut input.as_bytes(), &mut out, &mut ask), 0);
     drop(ask);
-    assert_eq!(log, [json!({"action": "close", "credential": CREDENTIAL})]);
+    let text = String::from_utf8(out).unwrap();
+    assert_eq!(text.lines().count(), 2);
+    assert!(text.lines().last().unwrap().contains("\"closed\":true"));
+    let closes = log.iter().filter(|m| m["action"] == "close").count();
+    assert_eq!(closes, 1);
 }

@@ -2,7 +2,7 @@
 //! request for the MCP context tools and a `runner_authority` request for the
 //! usage meter and the Codex config switches.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -12,6 +12,7 @@ use guard_contracts::{
 use serde_json::{json, Value};
 
 use super::{CODE_PREFIX, UNAVAILABLE};
+use crate::managed_resident::HeldLease;
 
 const AGENT_REQUEST_SCHEMA: &str = "guard-context-agent-request.v1";
 const AGENT_RESULT_SCHEMA: &str = "guard-context-agent-result.v1";
@@ -23,8 +24,20 @@ const RUNNER_UNAVAILABLE: &str = "native_runner_authority_unavailable";
 
 static CALL_IDS: AtomicU64 = AtomicU64::new(1);
 
+/// The resident state folder of `guard_home`, if the home exists.
+pub(crate) fn state_dir(guard_home: &str) -> Option<PathBuf> {
+    std::fs::canonicalize(Path::new(guard_home))
+        .ok()
+        .map(|home| home.join("native-runtime"))
+}
+
 /// One `context_agent` request: the `result` of the agent data, or the code.
-pub(crate) fn agent(guard_home: &str, input: Value) -> Result<Value, String> {
+/// `held` is the caller's lasting lease; without one the call takes its own.
+pub(crate) fn agent(
+    guard_home: &str,
+    input: Value,
+    held: Option<&HeldLease>,
+) -> Result<Value, String> {
     let request = json!({
         "schema": AGENT_REQUEST_SCHEMA,
         "request_id": call_id("context-agent"),
@@ -39,8 +52,11 @@ pub(crate) fn agent(guard_home: &str, input: Value) -> Result<Value, String> {
         &request,
         AGENT_RESULT_SCHEMA,
         &digest,
-        AGENT_TIMEOUT,
-        MAX_AGENT_REQUEST_BYTES,
+        Limits {
+            timeout: AGENT_TIMEOUT,
+            max_bytes: MAX_AGENT_REQUEST_BYTES,
+        },
+        held,
     )
     .map_err(|code| engine_code(code, UNAVAILABLE))?;
     let Value::Object(mut payload) = payload else {
@@ -92,10 +108,19 @@ pub(crate) fn runner_authority(
         &request,
         RUNNER_AUTHORITY_RESULT_SCHEMA,
         &digest,
-        timeout,
-        RUNNER_AUTHORITY_MAX_BYTES,
+        Limits {
+            timeout,
+            max_bytes: RUNNER_AUTHORITY_MAX_BYTES,
+        },
+        None,
     )
     .map_err(|code| code.unwrap_or_else(|| RUNNER_UNAVAILABLE.to_owned()))
+}
+
+/// How long a request may take and how large it may be.
+struct Limits {
+    timeout: Duration,
+    max_bytes: usize,
 }
 
 /// Send `request` as `operation` and return the payload of the reply bound
@@ -107,8 +132,8 @@ fn send(
     request: &Value,
     result_schema: &str,
     digest: &str,
-    timeout: Duration,
-    max_bytes: usize,
+    Limits { timeout, max_bytes }: Limits,
+    held: Option<&HeldLease>,
 ) -> Result<Value, Option<String>> {
     let deadline = Instant::now() + timeout;
     let encoded = serde_json::to_vec(&json!({
@@ -120,12 +145,13 @@ fn send(
     if encoded.len() > max_bytes {
         return Err(None);
     }
-    let state_dir = std::fs::canonicalize(Path::new(guard_home))
-        .map_err(|_| None)?
-        .join("native-runtime");
+    let state_dir = state_dir(guard_home).ok_or(None)?;
     let remaining = deadline.saturating_duration_since(Instant::now());
-    let output = crate::managed_resident::client_request(&state_dir, &encoded, remaining)
-        .map_err(|_| None)?;
+    let output = match held {
+        Some(lease) => lease.request(&encoded, remaining),
+        None => crate::managed_resident::client_request(&state_dir, &encoded, remaining),
+    }
+    .map_err(|_| None)?;
     let Value::Object(mut envelope) = serde_json::from_slice(&output).map_err(|_| None)? else {
         return Err(None);
     };

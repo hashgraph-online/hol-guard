@@ -120,9 +120,9 @@ class GuardMCPServer:
     def call_tool(self, name: str, arguments: dict[str, object]) -> Any:
         from mcp import types
 
-        if name in self._native.names():
-            return types.TextContent(type="text", text=self._native.call(name, arguments))
         td = get_tool_definition(name)
+        if td is None and name in self._native.names():
+            return types.TextContent(type="text", text=self._native.call(name, arguments))
         if td is None:
             from .tools import _envelope
 
@@ -201,7 +201,7 @@ class GuardMCPServer:
             async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
                 import asyncio
 
-                if name in await asyncio.to_thread(owner._native.names):
+                if get_tool_definition(name) is None and name in await asyncio.to_thread(owner._native.names):
                     from mcp import types
 
                     # The runtime validates every caller argument itself.

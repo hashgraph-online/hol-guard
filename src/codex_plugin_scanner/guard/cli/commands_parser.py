@@ -78,7 +78,12 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     configure_guard_cloud_actions_parser(guard_subparsers)
     from .runtime_forward import configure_forward
 
-    configure_forward(guard_subparsers, "context", "Inspect and control optional local CIGAR context assistance")
+    configure_forward(
+        guard_subparsers,
+        "context",
+        "Inspect and control optional local CIGAR context assistance",
+        aliases=("ctx",),
+    )
 
 __all__ = [
     "_add_aibom_cli_args",

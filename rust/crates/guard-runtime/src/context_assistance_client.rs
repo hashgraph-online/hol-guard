@@ -11,7 +11,7 @@ use serde_json::{json, Map, Value};
 
 #[path = "context_assistance_client_calls.rs"]
 mod calls;
-pub(crate) use calls::{agent, runner_authority};
+pub(crate) use calls::{agent, runner_authority, state_dir};
 
 pub(crate) const CODE_PREFIX: &str = "native_context_assistance_";
 pub(crate) const UNAVAILABLE: &str = "native_context_assistance_unavailable";

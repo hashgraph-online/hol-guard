@@ -1,22 +1,26 @@
 //! The Guard MCP server's CIGAR context tools.
 //!
-//! The Python MCP server keeps one opaque session per MCP process and sends
-//! each step here as one JSON line on stdin:
+//! The Python MCP server starts one `context-mcp` process per MCP connection
+//! and keeps it for the connection's life. Each step is one JSON line on
+//! stdin, answered by one JSON line on stdout:
 //!
 //! - `{"op":"catalog"}`: every context tool's definition.
-//! - `{"op":"tools","session":…}`: the tools this connection may use now.
-//! - `{"op":"call","session":…,"name":…,"arguments":{…}}`: one tool call's
-//!   text result.
-//! - `{"op":"close","session":…}`: end the connection's pairing.
+//! - `{"op":"tools"}`: the tools this connection may use now.
+//! - `{"op":"call","name":…,"arguments":{…}}`: one tool call's text result.
+//! - `{"op":"close"}`: end the connection's pairing and exit.
 //!
-//! Each answer carries the session back. The session holds the private
-//! credential the resident issued this MCP process; it is never a tool
-//! argument or result. A begin whose outcome is unknown is not retried: a lost
-//! pairing needs a fresh MCP process and a person to pair it again.
+//! The pairing session lives only in this process: the private credential the
+//! resident issues is never sent to Python, a tool argument or a result. The
+//! process holds a resident lease while it runs, so the resident and its
+//! memory-only pairing stay up between calls. A begin whose outcome is
+//! unknown is not retried: a lost pairing needs a fresh MCP process and a
+//! person to pair it again. End of input closes the pairing like `close`.
 
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 
 use serde_json::{json, Map, Value};
+
+use crate::managed_resident::HeldLease;
 
 #[path = "context_mcp_catalog.rs"]
 mod catalog;
@@ -26,7 +30,7 @@ mod tests;
 
 pub(crate) const COMMAND: &str = "context-mcp";
 
-const MAX_INPUT_BYTES: u64 = 256 * 1024;
+const MAX_LINE_BYTES: u64 = 256 * 1024;
 const UNAVAILABLE: &str = "native_context_assistance_unavailable";
 const INVALID: &str = "native_context_assistance_payload_invalid";
 const ERROR_MESSAGE: &str = "Context is unavailable or this connection needs current \
@@ -35,7 +39,8 @@ human-approved workspace access. Guard approvals remain independent.";
 /// The resident's `context_agent` request, replaceable in tests.
 pub(crate) type Ask<'a> = dyn FnMut(Value) -> Result<Value, String> + 'a;
 
-/// `context-mcp --guard-home HOME`, one request on stdin; the exit code.
+/// `context-mcp --guard-home HOME`: answer requests until `close` or the end
+/// of input; the exit code.
 pub(crate) fn run(argv: &[String]) -> i32 {
     let home = match argv {
         [flag, home] if flag == "--guard-home" => home.clone(),
@@ -44,24 +49,44 @@ pub(crate) fn run(argv: &[String]) -> i32 {
             return 2;
         }
     };
-    let mut input = Vec::new();
-    if std::io::stdin()
-        .take(MAX_INPUT_BYTES + 1)
-        .read_to_end(&mut input)
-        .is_err()
-        || input.len() as u64 > MAX_INPUT_BYTES
-    {
-        return 2;
-    }
-    let Ok(request) = serde_json::from_slice::<Value>(&input) else {
-        return 2;
+    let mut held: Option<HeldLease> = None;
+    let mut ask = |message: Value| {
+        if held.is_none() {
+            held = crate::context_assistance_client::state_dir(&home)
+                .and_then(|dir| HeldLease::acquire(&dir).ok());
+        }
+        crate::context_assistance_client::agent(&home, message, held.as_ref())
     };
-    let mut ask = |message: Value| crate::context_assistance_client::agent(&home, message);
-    let answer = answer(&request, &mut ask);
+    let stdin = std::io::stdin();
+    let mut input = stdin.lock();
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    let _ = writeln!(out, "{answer}");
-    let _ = out.flush();
+    // `held` outlives `serve`, so the lease is released only after the
+    // pairing is closed.
+    serve(&mut input, &mut out, &mut ask)
+}
+
+/// Answer each line of `input` on `out` with one session.
+pub(crate) fn serve(input: &mut dyn BufRead, out: &mut dyn Write, ask: &mut Ask<'_>) -> i32 {
+    let mut session = Session::default();
+    loop {
+        let mut line = Vec::new();
+        let read = Read::take(&mut *input, MAX_LINE_BYTES + 1).read_until(b'\n', &mut line);
+        let request = match read {
+            Ok(0) | Err(_) => break,
+            Ok(_) if line.len() as u64 > MAX_LINE_BYTES => break,
+            Ok(_) if line.iter().all(u8::is_ascii_whitespace) => continue,
+            Ok(_) => serde_json::from_slice::<Value>(&line).unwrap_or(Value::Null),
+        };
+        let reply = answer(&request, &mut session, ask);
+        if writeln!(out, "{reply}").and_then(|()| out.flush()).is_err() {
+            break;
+        }
+        if request.get("op").and_then(Value::as_str) == Some("close") {
+            return 0;
+        }
+    }
+    session.close(ask);
     0
 }
 
@@ -73,25 +98,6 @@ struct Session {
 }
 
 impl Session {
-    fn read(value: Option<&Value>) -> Self {
-        let credential = value
-            .and_then(|session| session.get("credential"))
-            .and_then(Value::as_str)
-            .map(str::to_owned);
-        let started = value
-            .and_then(|session| session.get("started"))
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        Self {
-            credential,
-            started,
-        }
-    }
-
-    fn value(&self) -> Value {
-        json!({"credential": self.credential, "started": self.started})
-    }
-
     /// Pair once when context is available: discover, then begin at most once.
     fn ensure(&mut self, ask: &mut Ask<'_>) -> Result<(), String> {
         let discovery = ask(json!({"action": "discover"}))?;
@@ -131,11 +137,18 @@ impl Session {
             })
             .collect()
     }
+
+    /// End the pairing, if any. Finite native leases still expire after
+    /// process loss.
+    fn close(&mut self, ask: &mut Ask<'_>) {
+        if let Some(credential) = self.credential.take() {
+            let _ = ask(json!({"action": "close", "credential": credential}));
+        }
+    }
 }
 
 /// The answer to one request.
-pub(crate) fn answer(request: &Value, ask: &mut Ask<'_>) -> Value {
-    let mut session = Session::read(request.get("session"));
+fn answer(request: &Value, session: &mut Session, ask: &mut Ask<'_>) -> Value {
     match request.get("op").and_then(Value::as_str) {
         Some("catalog") => json!({"tools": catalog::definitions()}),
         Some("tools") => {
@@ -148,12 +161,12 @@ pub(crate) fn answer(request: &Value, ask: &mut Ask<'_>) -> Value {
                         .is_some_and(|name| allowed.iter().any(|allowed| allowed == name))
                 })
                 .collect();
-            json!({"session": session.value(), "tools": tools})
+            json!({"tools": tools})
         }
         Some("call") => {
             let name = request.get("name").and_then(Value::as_str).unwrap_or("");
             let Some(action) = catalog::action(name) else {
-                return json!({"session": session.value(), "known": false});
+                return json!({"known": false});
             };
             let arguments = request
                 .get("arguments")
@@ -166,16 +179,13 @@ pub(crate) fn answer(request: &Value, ask: &mut Ask<'_>) -> Value {
                     "arguments": arguments,
                 }))
             });
-            json!({"session": session.value(), "known": true, "text": envelope(result)})
+            json!({"known": true, "text": envelope(result)})
         }
         Some("close") => {
-            if let Some(credential) = session.credential.take() {
-                // Finite native leases still expire after process loss.
-                let _ = ask(json!({"action": "close", "credential": credential}));
-            }
-            json!({"session": session.value()})
+            session.close(ask);
+            json!({"closed": true})
         }
-        _ => json!({"session": session.value(), "error": "unknown_op"}),
+        _ => json!({"error": "unknown_op"}),
     }
 }
 

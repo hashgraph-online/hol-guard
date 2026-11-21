@@ -210,7 +210,7 @@ def _dispatch_guard_command(
 ) -> int:
     "Route one Guard subcommand to its handler."
 
-    if args.guard_command == "context":
+    if getattr(args, "runtime_command", None) is not None:
         from .runtime_forward import run_forward
 
         return _invoke_guard_handler(run_forward, args, input_text=input_text, output_stream=output_stream)
