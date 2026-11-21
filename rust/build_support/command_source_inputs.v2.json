@@ -694,6 +694,7 @@
       "src/pretool/sed_edits.rs",
       "src/pretool/segment_proof.rs",
       "src/pretool/segment_proof_cwd.rs",
+      "src/pretool/segment_proof_fresh_checkout.rs",
       "src/pretool/shell_arithmetic.rs",
       "src/pretool/shell_flow.rs",
       "src/pretool/shell_literal.rs",

@@ -2158,6 +2158,18 @@
    ]
   },
   {
+   "path": "src/codex_plugin_scanner/guard/hook_review/native_review_connector.py",
+   "module": "codex_plugin_scanner.guard.hook_review.native_review_connector",
+   "source_sha256": "ecaae98db98686b438ee4af16a54bd381dc6e11b6160c01a32d25d4c141f7f90",
+   "forbidden_symbols": [
+    "raise_connector_setup_notice"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/guard_store_native_review_queue.rs",
+    "rust/crates/guard-runtime/src/hook_direct_evidence_notice.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/hook_review/native_review_allow_hint.py",
    "module": "codex_plugin_scanner.guard.hook_review.native_review_allow_hint",
    "source_sha256": "52a45de318f3dc607279132afd1dfdf65b71e5f8e7037fbf377a41ab8c0800b2",
@@ -2172,6 +2184,21 @@
     "rust/crates/guard-runtime/src/daemon_edge_recommend.rs",
     "rust/crates/guard-runtime/src/hook_direct_review_hint_op.rs",
     "rust/crates/guard-runtime/src/guard_store_native_review_queue.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/hook_review/approval_extension_recommendation.py",
+   "module": "codex_plugin_scanner.guard.hook_review.approval_extension_recommendation",
+   "source_sha256": "8e8175d3bb5cc22f5c70d7b1cc346b412e328cfbfa0ec714649508ae05a53f1a",
+   "forbidden_symbols": [
+    "build_approval_extension_recommendation",
+    "with_approval_extension_coverage",
+    "native_caution_risk_classes"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend.rs",
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op.rs",
+    "rust/crates/guard-runtime/src/approval_extension_coverage.rs"
    ]
   },
   {
@@ -2190,6 +2217,7 @@
   }
  ],
  "retired_test_paths": [
+  "tests/test_native_approval_extension_recommendation.py",
   "tests/test_native_review_allow_hint.py",
   "tests/test_hook_direct_saved_decision_vectors.py",
   "tests/test_mcp_relay_evidence_drain.py",
@@ -2236,6 +2264,16 @@
  ],
  "retired_bodies": [
   {
+   "path": "src/codex_plugin_scanner/guard/approvals.py",
+   "source_sha256": "5346be52329d926839cab70b1cb34838b0dde666e3acecf3346b66a6fdbbfa7d",
+   "forbidden_symbols": [
+    "notify_connector_setup"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/hook_direct_evidence_notice.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/runtime/effect_contract.py",
    "source_sha256": "9038e0b37af50bedc19d635fb3be92bfe0ec9cfc91771fcfbbf376271e71e8d3",
    "forbidden_symbols": [
@@ -2243,6 +2281,18 @@
    ],
    "native_replacements": [
     "rust/crates/guard-command/src/effect_decision.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/routes/hook_calls.py",
+   "source_sha256": "c68fcecf9a6076fb56de4fcca2a757cde193dbd06c65c2c91290a97619805b8b",
+   "forbidden_symbols": [
+    "hook_claude_question_save",
+    "hook_integrity_finalize_locked"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/daemon_edge_hook_lifecycle.rs",
+    "rust/crates/guard-runtime/src/hook_authority_state_op/question_settle.rs"
    ]
   },
   {
@@ -2430,21 +2480,6 @@
    "native_replacements": [
     "rust/crates/guard-contracts/src/extension_allow_hint.rs",
     "rust/crates/guard-runtime/src/extension_allow_hint_op.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/hook_review/approval_extension_recommendation.py",
-   "source_sha256": "3eca7867e90f6a70a18078b299443f253f65dae7cacc4fcceb7d71b6f3febd71",
-   "forbidden_symbols": [
-    "CAUTION_RISK_CLASSES",
-    "_bounded",
-    "_caution_reason",
-    "_hint_ids",
-    "_layer_states"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-contracts/src/approval_extension_recommendation.rs",
-    "rust/crates/guard-runtime/src/approval_extension_recommendation_op.rs"
    ]
   },
   {

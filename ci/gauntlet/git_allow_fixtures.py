@@ -15,9 +15,9 @@ with ``refs/remotes/origin/main`` one commit ahead, so a fast-forward merge
 runs without network. Chains that reach the network (``git fetch``/``git
 pull``) need a reachable origin and are not covered here.
 
-The unmodelled-read case is the exception: it builds its own origin as a
-bare repository beside the checkout, so ``git ls-remote`` answers from the
-filesystem with no network and no credential.
+The unmodelled-read and new-checkout cases are the exception: each builds its
+own origin as a bare repository beside the checkout, so ``git ls-remote`` and
+``git fetch`` answer from the filesystem with no network and no credential.
 """
 
 from __future__ import annotations
@@ -71,6 +71,11 @@ GIT_ALLOW_ROUTED_REFRESH_CASE = "git-allow-routed-refresh-then-reads"
 # its own protected destination and no git ALLOW could settle the ordinary
 # sibling worktree it started.
 GIT_ALLOW_RELATIVE_HOOKS_CASE = "git-allow-worktree-from-repo-relative-hooks-path"
+# A refresh whose origin the whole-command proof will not vouch for, an add,
+# and a read of the checkout the add creates. The add writes only into a
+# destination that does not exist yet, so the read opens what the repository
+# supplies at the ref the add named, and the user's ALLOW has to carry it.
+GIT_ALLOW_READ_NEW_CHECKOUT_CASE = "git-allow-worktree-add-then-read-new-checkout"
 GIT_ALLOW_CASES = frozenset(
     {
         GIT_ALLOW_MERGE_CASE,
@@ -88,6 +93,7 @@ GIT_ALLOW_CASES = frozenset(
         GIT_ALLOW_CONFIG_PATTERN_CASE,
         GIT_ALLOW_ROUTED_REFRESH_CASE,
         GIT_ALLOW_RELATIVE_HOOKS_CASE,
+        GIT_ALLOW_READ_NEW_CHECKOUT_CASE,
     }
 )
 GIT_EXTENSION_ID = "command.git"
@@ -109,6 +115,7 @@ MIXED_WORKTREE = "mixed-wt"
 CONFIG_WORKTREE = "cfg-wt"
 ROUTED_WORKTREE = "routed-wt"
 RELATIVE_HOOKS_WORKTREE = "relhooks-wt"
+READ_WORKTREE = "read-wt"
 # Repo-relative, like the value husky and lefthook write.
 RELATIVE_HOOKS_DIR = ".githooks"
 UNMODELLED_ORIGIN = "origin.git"
@@ -147,7 +154,12 @@ def add_git_allow_shape(workspace: Path, environment: dict[str, str], scenario_i
     if scenario_id == GIT_ALLOW_NAMED_CHECKOUT_CASE:
         _add_named_checkout(workspace, environment)
         return
-    if scenario_id == GIT_ALLOW_UNMODELLED_CASE:
+    if scenario_id in (GIT_ALLOW_UNMODELLED_CASE, GIT_ALLOW_READ_NEW_CHECKOUT_CASE):
+        # A bare origin beside the checkout, so `git ls-remote` and `git fetch`
+        # answer offline. Its URL is a filesystem path rather than a host the
+        # whole-command proof vouches for, which is what leaves the refresh in
+        # the new-checkout case to the user's ALLOW and makes the read after
+        # the add stand on its own.
         _add_local_origin(workspace, environment)
         return
     if scenario_id == GIT_ALLOW_STASH_CASE:
