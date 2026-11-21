@@ -12,7 +12,7 @@ from codex_plugin_scanner.guard.runtime import cloud_review_event_projection as 
 from codex_plugin_scanner.guard.runtime import native_workspace_review_replay as replay
 from codex_plugin_scanner.guard.runtime.cloud_review_event_projection import project_cloud_review_event
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.support.native_replay_store import ReplayStore
+from tests.support.native_replay_store import ReplayStore, scan_key
 from tests.test_guard_review_event_outbox import _all_events, _connect, _request
 
 
@@ -104,8 +104,7 @@ def test_replay_revisits_lower_ids_despite_continuous_full_batches(
 
 def test_legacy_unbounded_cursor_restarts_from_lower_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = ReplayStore(tmp_path, ["request-00", "request-99"])
-    replay_store = cast(replay._NativeWorkspaceReplayStore, cast(object, store))
-    store.payloads[replay._scan_key(replay_store)] = {"binding": store.binding, "cursor": "request-99"}
+    store.payloads[scan_key()] = {"binding": store.binding, "cursor": "request-99"}
 
     def context(_store: object, _home: Path, request_id: str) -> None:
         store.context_calls.append(request_id)
