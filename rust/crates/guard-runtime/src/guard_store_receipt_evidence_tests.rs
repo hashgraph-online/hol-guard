@@ -124,3 +124,50 @@ fn malformed_arguments_are_refused_and_the_method_is_a_write() {
         Some(Kind::Write)
     ));
 }
+
+#[test]
+fn a_missing_or_non_text_approval_source_is_refused() {
+    let connection = store();
+    add(&connection, "a", "allow", "[]");
+    let mut missing = request(0, false);
+    missing.as_object_mut().unwrap().remove("approval_source");
+    assert!(amend_with(&connection, missing).is_err());
+    for value in [json!(null), json!(7), json!(["saved"])] {
+        let mut bad = request(0, false);
+        bad["approval_source"] = value;
+        assert!(amend_with(&connection, bad).is_err());
+    }
+    assert_eq!(rows(&connection)[0].1, "policy");
+}
+
+#[test]
+fn artifact_ids_past_one_query_chunk_are_all_amended() {
+    let connection = store();
+    let ids: Vec<String> = (0..ID_CHUNK * 2 + 7).map(|n| format!("id-{n}")).collect();
+    for id in [&ids[0], &ids[ID_CHUNK + 1], &ids[ids.len() - 1]] {
+        add(&connection, id, "allow", "[]");
+    }
+    add(&connection, "other", "allow", "[]");
+    let mut args = request(0, false);
+    args["artifact_ids"] = json!(ids);
+    assert_eq!(amend_with(&connection, args).unwrap(), json!(3));
+    assert_eq!(rows(&connection)[3], ("[]".to_owned(), "policy".to_owned()));
+}
+
+#[test]
+fn rows_with_large_evidence_are_merged_in_several_batches() {
+    let connection = store();
+    let large =
+        json!([{"source": "scanner", "note": "x".repeat(MERGE_BATCH_BYTES / 2)}]).to_string();
+    for _ in 0..3 {
+        add(&connection, "a", "allow", &large);
+    }
+    assert_eq!(
+        amend_with(&connection, request(0, false)).unwrap(),
+        json!(3)
+    );
+    for (evidence, _) in rows(&connection) {
+        assert!(evidence.contains("\"runner\""));
+        assert!(evidence.len() > MERGE_BATCH_BYTES / 2);
+    }
+}
