@@ -25,6 +25,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "get_guard_session"
         | "list_guard_sessions"
         | "list_events_after"
+        | "list_events"
         | "get_managed_install"
         | "get_managed_install_revision"
         | "list_managed_installs"
