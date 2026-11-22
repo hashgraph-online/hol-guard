@@ -231,8 +231,8 @@ fn a_call_sent_to_the_package_policy_hands_its_server_to_the_proxy() {
     super::super::package_server::after_decide(&other, &call, &fixture.store);
     assert_eq!(servers.relayable(&server), relayable);
     // A package-lane defer hands the server to the proxy.
-    let prompt = Err(super::super::ask::PACKAGE_PROMPT);
-    super::super::package_server::after_decide(&prompt, &call, &fixture.store);
+    let deferred = Err(super::super::package_leg::EVALUATION_ABSENT);
+    super::super::package_server::after_decide(&deferred, &call, &fixture.store);
     assert_eq!(servers.relayable(&server), Err(SERVER_PROXY_TOOLS));
 }
 

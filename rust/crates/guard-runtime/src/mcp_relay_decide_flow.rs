@@ -1,7 +1,7 @@
 //! One decide request, from admission to its settled answer.
 
 use super::*;
-use guard_contracts::McpToolPolicyProxyInputV1;
+use guard_contracts::{McpInlineApprovalV1, McpToolPolicyProxyInputV1};
 use rusqlite::Connection;
 use std::time::Instant;
 
@@ -30,6 +30,23 @@ pub(super) fn evaluation_leg(
 pub(super) fn decide(
     request: &McpRelayDecideRequestV1,
     policy_store: &PolicySnapshotStore,
+) -> Result<Answer, &'static str> {
+    let mut again = None;
+    let answer = decide_once(request, policy_store, &mut again);
+    // An inline approval of a package call saved the tool allow; the call is
+    // decided once more, with the approval marked and every lease and
+    // snapshot of the first pass released.
+    match (answer, again) {
+        (Err(package_prompt::AGAIN), Some(marked)) => decide_once(&marked, policy_store, &mut None),
+        (Err(package_prompt::AGAIN), None) => Err(ROUTE_UNSUPPORTED),
+        (answer, _) => answer,
+    }
+}
+
+fn decide_once(
+    request: &McpRelayDecideRequestV1,
+    policy_store: &PolicySnapshotStore,
+    again: &mut Option<McpRelayDecideRequestV1>,
 ) -> Result<Answer, &'static str> {
     policy_store
         .require_guard_home(&request.guard_home)
@@ -70,22 +87,37 @@ pub(super) fn decide(
     let asks = admitted.blocked_request_mode() == Some(ASK_MODE);
     // A package call is answered by its own lane, under the package policy and
     // the tool authority together, so none of the tool-only route below runs
-    // for it. The inline elicitation that route raises first under `ask` is
-    // the proxy's.
+    // for it, except the inline elicitation that route raises first under
+    // `ask`. A saved package block skips it, and so does the second pass of an
+    // approval already acted on.
     if let Some(packaged) = legged.as_ref().and_then(Legged::decided) {
-        if asks
-            && ask::prompts_before_package(
-                &request.catalog_state,
-                &resolved.mode,
-                &request.build.tool_name,
-                &request.build.harness,
-                request.inline.available,
-                &resolved.decision,
-            )
-        {
-            return Err(ask::PACKAGE_PROMPT);
+        let prompted = asks
+            && request.inline.remembered.is_none()
+            && !packaged.saved_policy_blocks
+            && package_prompt::prompts(request, &resolved);
+        if !prompted {
+            return settle_package(request, &admitted, &resolved, packaged, policy_store);
         }
-        return settle_package(request, &admitted, &resolved, packaged, policy_store);
+        match request.inline.answer.map(inline::Reply::contract) {
+            None => {
+                return Ok(Answer::Elicit {
+                    params: inline::prompt(
+                        &request.build.server_name,
+                        &request.build.tool_name,
+                        &resolved.decision.summary,
+                    ),
+                })
+            }
+            Some(McpInlineApprovalV1::Fallthrough) => {
+                return settle_package(request, &admitted, &resolved, packaged, policy_store)
+            }
+            Some(McpInlineApprovalV1::Allow) => {
+                return package_prompt::approved(request, &admitted, &resolved, policy_store, again)
+            }
+            // A denied or invalid answer blocks the call as the tool route
+            // below answers a plain call's.
+            Some(McpInlineApprovalV1::Denied) => {}
+        }
     }
     let proxy = crate::mcp_tool_policy_proxy::proxy_payload(
         &McpToolPolicyProxyInputV1 {

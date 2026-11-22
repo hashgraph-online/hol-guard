@@ -129,6 +129,10 @@ pub(crate) struct Inline {
     /// The answer to the prompt the relay already raised for this call.
     #[serde(default)]
     pub(crate) answer: Option<inline::Reply>,
+    /// A package call's inline approval this resident already acted on, which
+    /// only its own second pass carries (`mcp_relay_decide_package_prompt.rs`).
+    #[serde(skip)]
+    pub(crate) remembered: Option<package_prompt::Remembered>,
 }
 
 /// What the relay does with the call; `Claim` spends the held saved approval
@@ -416,6 +420,8 @@ mod package_leg;
 mod package_observe;
 #[path = "mcp_relay_decide_package_policy.rs"]
 mod package_policy;
+#[path = "mcp_relay_decide_package_prompt.rs"]
+mod package_prompt;
 // The revalidation a claimed package call is decided again by.
 #[path = "mcp_relay_decide_package_postclaim.rs"]
 mod package_postclaim;

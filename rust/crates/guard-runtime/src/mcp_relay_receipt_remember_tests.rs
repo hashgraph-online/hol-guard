@@ -145,3 +145,51 @@ fn a_committed_write_without_a_reply_leaves_the_generation_pending() {
     assert_eq!(control["generation"], json!(0));
     assert_eq!(control["pending_generation"], json!(1), "{control}");
 }
+
+/// The forward a package call's inline approval led to, as the lane marks it.
+fn remembered_package(workspace: &Path) -> Value {
+    let mut record = crate::mcp_relay_receipt::package::tests::record(
+        workspace,
+        "forward",
+        "inline-approved",
+        "allow",
+    );
+    record["package"]["risk_categories"] = json!(["package_install"]);
+    record["remember"] = json!(true);
+    record
+}
+
+#[test]
+fn a_remembered_package_forward_saves_the_package_allow_for_its_workspace() {
+    let workspace = temp_home("relay-remember-package-workspace");
+    let record = remembered_package(&workspace);
+    assert!(is_plain(&record));
+    // Risk categories ride only on an inline-approved forward.
+    let mut policy = record.clone();
+    policy["decision_source"] = json!("policy-allow");
+    policy.as_object_mut().unwrap().remove("remember");
+    assert!(!is_plain(&policy));
+    let home = store_home("relay-remember-package", true);
+    let before = count(&home, "runtime_receipts");
+
+    let unwritten = write(home.to_str().unwrap(), vec![record]);
+
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    assert_eq!(count(&home, "runtime_receipts"), before + 1);
+    let expected = crate::mcp_relay_receipt::package::tests::artifact(&workspace);
+    let allows = saved_allows(&home);
+    assert_eq!(allows.len(), 1, "{allows:?}");
+    assert_eq!(allows[0].0, expected.artifact_id);
+    assert!(allows[0].3.is_some(), "the allow must be signed");
+    let bound: Option<String> = Connection::open(home.join("guard.db"))
+        .unwrap()
+        .query_row(
+            "select workspace from policy_decisions where scope = 'artifact'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(bound.as_deref(), Some("/work"));
+    let _ = std::fs::remove_dir_all(&home);
+    let _ = std::fs::remove_dir_all(&workspace);
+}
