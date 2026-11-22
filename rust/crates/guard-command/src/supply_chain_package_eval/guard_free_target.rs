@@ -13,8 +13,8 @@
 //! every other shape answers `false` and keeps the review. That includes
 //! `pip` and `python -m pip`, whose option parser accepts abbreviated and
 //! attached forms and whose launchers can run another environment's
-//! interpreter, any option this module does not know, a value the shell
-//! could still expand, a chained or redirected command, an interpreter
+//! interpreter, any option this module does not know, a word the shell
+//! could still expand or a `..` path, a chained or redirected command, an interpreter
 //! chosen by name or `PATH`, `--system`, an environment that already holds
 //! Guard, and one that contains the running Guard executable.
 //!
@@ -31,9 +31,9 @@ use super::source_identity::FIRST_PARTY_PYPI_PACKAGES;
 /// keeps `a.whl;` as one token, so tokens are searched, not compared.
 const SHELL_METACHARACTERS: &[char] = &[';', '&', '|', '`', '<', '>', '(', ')', '\n'];
 
-/// Characters a shell may still expand inside a path value, so the literal
-/// text is not the path the installer receives.
-const EXPANDABLE_PATH_CHARACTERS: &[char] = &['$', '`', '*', '?', '[', ']', '{', '}', '%', '!'];
+/// Characters a shell may still expand inside a word, so the literal text
+/// is not what the installer receives.
+const EXPANDABLE_CHARACTERS: &[char] = &['$', '`', '*', '?', '[', ']', '{', '}', '%', '!'];
 
 /// `uv pip install|sync` options that select nothing about where packages
 /// are written. Anything else, including `--directory`, `--project` and
@@ -101,9 +101,11 @@ fn target_environment_roots(
     tokens: &[String],
     base_dir: Option<&Path>,
 ) -> Option<Vec<(PathBuf, bool)>> {
+    // Any word, not only a path value, could expand into extra options
+    // (`$EXTRA`, `{--target=…,}`) after Guard has read the command.
     if tokens
         .iter()
-        .any(|t| t.contains(SHELL_METACHARACTERS) || t.contains("$("))
+        .any(|t| t.contains(SHELL_METACHARACTERS) || t.contains(EXPANDABLE_CHARACTERS))
     {
         return None;
     }
@@ -222,7 +224,7 @@ fn environment_of_interpreter(path: &Path) -> Option<PathBuf> {
 }
 
 fn resolve_path(value: &str, base_dir: Option<&Path>) -> Option<PathBuf> {
-    if value.is_empty() || value.contains(EXPANDABLE_PATH_CHARACTERS) {
+    if value.is_empty() || value.contains(EXPANDABLE_CHARACTERS) {
         return None;
     }
     if let Some(rest) = value
@@ -237,6 +239,14 @@ fn resolve_path(value: &str, base_dir: Option<&Path>) -> Option<PathBuf> {
         return None;
     }
     let path = PathBuf::from(value);
+    // `..` can step out of a directory that does not exist yet, which the
+    // checks below cannot follow.
+    if path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return None;
+    }
     if path.is_absolute() {
         return Some(path);
     }

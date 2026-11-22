@@ -56,7 +56,6 @@ fn trigger_key(code: &str) -> Option<&'static str> {
 pub(crate) struct ReviewTriggers {
     config: GuardConfig,
     harness: Option<String>,
-    workspace_dir: Option<PathBuf>,
 }
 
 impl ReviewTriggers {
@@ -73,11 +72,7 @@ impl ReviewTriggers {
             .load_guard_config(store.guard_home(), workspace_dir, false)
             .ok()?;
         let harness = Some(artifact.harness.clone()).filter(|harness| !harness.is_empty());
-        Some(Self {
-            config,
-            harness,
-            workspace_dir: workspace_dir.map(Path::to_path_buf),
-        })
+        Some(Self { config, harness })
     }
 
     #[cfg(test)]
@@ -85,7 +80,6 @@ impl ReviewTriggers {
         Self {
             config,
             harness: None,
-            workspace_dir: None,
         }
     }
 
@@ -233,10 +227,10 @@ fn is_guard_distribution_off_registry(package: &Map<String, Value>) -> bool {
 
 /// Whether the install writes only into Python environments that hold no
 /// Guard installation, so it cannot replace the Guard that is running.
-fn installs_into_guard_free_environment(
-    artifact: &GuardArtifact,
-    workspace_dir: Option<&Path>,
-) -> bool {
+/// Relative paths resolve only against the directory the command is known
+/// to run in; when that is unknown (an earlier `cd` Guard could not follow),
+/// they prove nothing.
+fn installs_into_guard_free_environment(artifact: &GuardArtifact) -> bool {
     let Some(command) = optional_string(artifact.metadata.get("redacted_command")) else {
         return false;
     };
@@ -244,7 +238,7 @@ fn installs_into_guard_free_environment(
     let running = std::env::current_exe().ok();
     super::guard_free_target::installs_into_guard_free_environment(
         &command,
-        cwd.as_deref().or(workspace_dir),
+        cwd.as_deref(),
         running.as_deref(),
     )
 }
@@ -349,8 +343,7 @@ pub(crate) fn apply_review_triggers(
     } else {
         original_top.clone()
     };
-    let guard_free_target =
-        installs_into_guard_free_environment(artifact, triggers.workspace_dir.as_deref());
+    let guard_free_target = installs_into_guard_free_environment(artifact);
     let mut changed = resolve_packages(triggers, &mut result, guard_free_target);
     // A package exception the user saved answers the opt-in triggers too.
     let opt_in = result.exception_id.is_none();

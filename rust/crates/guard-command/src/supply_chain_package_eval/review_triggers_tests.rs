@@ -240,30 +240,25 @@ fn guard_free_target_reads_the_redacted_command_and_its_working_directory() {
     };
     let absolute =
         crate::package_intent_common::redacted_command(&tokens(&python.display().to_string()));
-    assert!(installs_into_guard_free_environment(
-        &install_artifact(&absolute, None),
-        None
-    ));
+    assert!(installs_into_guard_free_environment(&install_artifact(
+        &absolute, None
+    )));
     let relative = crate::package_intent_common::redacted_command(&tokens(".venv/bin/python"));
-    assert!(installs_into_guard_free_environment(
-        &install_artifact(&relative, Some(&project)),
-        None
-    ));
-    assert!(installs_into_guard_free_environment(
-        &install_artifact(&relative, None),
+    assert!(installs_into_guard_free_environment(&install_artifact(
+        &relative,
         Some(&project)
-    ));
-    assert!(!installs_into_guard_free_environment(
-        &install_artifact(&relative, None),
-        None
-    ));
+    )));
+    // With no known working directory, such as after a `cd` Guard could not
+    // follow, a relative path proves nothing.
+    assert!(!installs_into_guard_free_environment(&install_artifact(
+        &relative, None
+    )));
 
     // Guard already installed there keeps the review.
     std::fs::write(project.join(".venv/bin/hol-guard"), b"").unwrap();
-    assert!(!installs_into_guard_free_environment(
-        &install_artifact(&absolute, None),
-        None
-    ));
+    assert!(!installs_into_guard_free_environment(&install_artifact(
+        &absolute, None
+    )));
 }
 
 #[test]

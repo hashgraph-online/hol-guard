@@ -241,6 +241,18 @@ fn shapes_that_do_not_name_the_environment_exactly_keep_their_review() {
         format!("uv pip install --python {python} --target ~other/site ./hol_guard.whl"),
         format!("uv pip install --python {python} --target /opt/*/site ./hol_guard.whl"),
         format!("uv pip install --python {python} --target %APPDATA%\\site ./hol_guard.whl"),
+        // Words that expand into extra options, and `..` through a missing
+        // directory.
+        format!("uv pip install --python {python} $EXTRA ./hol_guard.whl"),
+        format!(
+            "uv pip install --python {python} {{--target={},}} ./hol_guard.whl",
+            guard.display()
+        ),
+        format!(
+            "uv pip install --python {python} --target {}/fresh/../guard ./hol_guard.whl",
+            dir.path().display()
+        ),
+        "uv pip install --python .venv/../.venv/bin/python ./hol_guard.whl".to_string(),
         // Chained, redirected or incomplete commands.
         format!("uv pip install --python {python} ./a.whl && pip install ./hol_guard.whl"),
         format!("uv pip install --python {python} ./a.whl; uv tool install ./hol_guard.whl"),
