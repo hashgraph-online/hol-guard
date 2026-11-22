@@ -106,7 +106,7 @@ fn interface_arguments(arguments: &[String]) -> bool {
 
 /// `ip OBJECT [show|list|get]`, the reporting half of the tool.
 fn ip_arguments(arguments: &[String]) -> bool {
-    let mut remaining = arguments.as_ref();
+    let mut remaining = arguments;
     while let Some((word, rest)) = remaining.split_first() {
         if !word.starts_with('-') {
             break;
@@ -165,7 +165,7 @@ fn ip_arguments(arguments: &[String]) -> bool {
 
 /// `route get DESTINATION`, the one `route` spelling that reads.
 fn route_arguments(arguments: &[String]) -> bool {
-    let mut remaining = arguments.as_ref();
+    let mut remaining = arguments;
     while let Some((word, rest)) = remaining.split_first() {
         if !word.starts_with('-') {
             break;
