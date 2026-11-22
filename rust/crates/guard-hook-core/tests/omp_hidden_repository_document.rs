@@ -194,7 +194,7 @@ fn a_gitdir_pointer_is_still_scanned_and_screened() {
     let planted = format!("/{}\n", token());
     std::fs::write(&pointer, &planted).unwrap();
     let result = review_post_tool(&read_result(&layout, &layout.main, &pointer, &planted));
-    assert_ne!(result.model_output_action, "allow_original", "{result:?}");
+    assert_eq!(result.reason_code, "source_secret_match", "{result:?}");
     // More than one line is not a pointer, so the output stays withheld.
     let two_lines = format!("{}\nextra\n", layout.linked.join(".git").display());
     std::fs::write(&pointer, &two_lines).unwrap();
