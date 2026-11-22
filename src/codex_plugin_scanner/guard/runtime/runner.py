@@ -67,7 +67,6 @@ from ..policy_bundle_parser import (
     policy_bundle_rejection_payload as _policy_bundle_rejection_payload,
 )
 from ..policy_bundle_trusted_keys import (
-    MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
     PolicyBundleVerificationKey,
     policy_bundle_keyring_payload,
     validate_synced_policy_bundle,
@@ -564,10 +563,15 @@ def sync_receipts(
     failed_policy_bundle_reason: str | None = None
     trusted_policy_bundle_keys: tuple[PolicyBundleVerificationKey, ...] = ()
     update_last_good = False
-    existing_policy_bundle_payload = store.get_sync_payload("policy_bundle")
+    # One snapshot of the cached bundle and every row it is judged against,
+    # so a sync landing mid-cycle cannot pair this bundle with another sync's
+    # keyring, checkpoint or workspace.
+    trust_rows = store.policy_bundle_trust_rows()
+    existing_policy_bundle_payload = trust_rows.policy_bundle
     existing_policy_bundle, existing_policy_bundle_error = _validate_cached_policy_bundle(
         store,
         existing_policy_bundle_payload,
+        rows=trust_rows,
     )
     runtime_session_summary = store.get_sync_payload("runtime_session_summary")
     delivery_device_id = runtime_summary_device_id(runtime_session_summary, device_id)
@@ -580,13 +584,11 @@ def sync_receipts(
             validated_policy_bundle, policy_bundle_rejection_reason, trusted_policy_bundle_keys = (
                 validate_synced_policy_bundle(
                     policy_bundle_payload,
-                    stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
+                    stored_keyring=trust_rows.policy_bundle_keyring,
                     sync_payload=policy_bundle_sync_payload,
-                    supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
-                    managed_keyring_provenance=store.get_sync_payload(
-                        MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY
-                    ),
-                    expected_workspace_id=store.get_cloud_workspace_id(),
+                    supply_chain_keyring=trust_rows.supply_chain_keyring,
+                    managed_keyring_provenance=trust_rows.managed_keyring_provenance,
+                    expected_workspace_id=trust_rows.workspace_id,
                 )
             )
         if existing_policy_bundle_error == NATIVE_UNAVAILABLE_REJECTION:
@@ -598,7 +600,9 @@ def sync_receipts(
             admission_rejection = (
                 None
                 if validated_policy_bundle is None
-                else _policy_bundle_admission_rejection(store, existing_policy_bundle, validated_policy_bundle)
+                else _policy_bundle_admission_rejection(
+                    store, existing_policy_bundle, validated_policy_bundle, rows=trust_rows
+                )
             )
             if admission_rejection is not None:
                 validated_policy_bundle = None
@@ -688,31 +692,31 @@ def sync_receipts(
                 failed_policy_bundle_reason = rejection_reason
                 store.record_policy_bundle_rejection(activation_last_error, now=now)
         if not activation_last_error:
-            stored_last_error = store.get_sync_payload("policy_bundle_last_error")
+            stored_last_error = trust_rows.policy_bundle_last_error
             if isinstance(stored_last_error, dict):
                 activation_last_error = stored_last_error
     cloud_exception_items: list[dict[str, object]] = []
     remote_policies_stored = 0
     remote_policy_sync_blocked = False
     if effective_policy_bundle is not None:
-        activation_keyring = store.get_sync_payload("policy_bundle_keyring")
+        activation_keyring = trust_rows.policy_bundle_keyring
         if effective_policy_bundle is validated_policy_bundle and trusted_policy_bundle_keys:
             activation_keyring = policy_bundle_keyring_payload(
                 trusted_policy_bundle_keys,
-                workspace_id=store.get_cloud_workspace_id(),
+                workspace_id=trust_rows.workspace_id,
             )
         activation_bundle, activation_reason, activation_keys = validate_synced_policy_bundle(
             effective_policy_bundle,
             stored_keyring=activation_keyring,
-            supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
-            managed_keyring_provenance=store.get_sync_payload(MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY),
-            expected_workspace_id=store.get_cloud_workspace_id(),
+            supply_chain_keyring=trust_rows.supply_chain_keyring,
+            managed_keyring_provenance=trust_rows.managed_keyring_provenance,
+            expected_workspace_id=trust_rows.workspace_id,
         )
         try:
             if activation_bundle is not None and not policy_bundle_is_enforceable(activation_bundle):
                 activation_bundle = None
                 activation_reason = "inactive_rollout_state"
-            acceptance_checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
+            acceptance_checkpoint = trust_rows.acceptance_checkpoint
             if (
                 activation_bundle is not None
                 and isinstance(acceptance_checkpoint, dict)
@@ -839,7 +843,7 @@ def sync_receipts(
                     policy_bundle=effective_policy_bundle,
                     policy_bundle_keyring=policy_bundle_keyring_payload(
                         trusted_policy_bundle_keys,
-                        workspace_id=store.get_cloud_workspace_id(),
+                        workspace_id=trust_rows.workspace_id,
                     ),
                     cloud_exceptions=cloud_exception_items,
                     policy_bundle_ack=policy_bundle_ack,
