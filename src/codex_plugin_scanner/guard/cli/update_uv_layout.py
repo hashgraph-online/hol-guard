@@ -2,7 +2,9 @@
 
 uv writes ``uv-receipt.toml`` into every tool environment, wherever ``UV_TOOL_DIR`` puts it.
 The updater still needs the directory holding the ``hol-guard`` launcher, and it accepts one
-only when that launcher is a link back into this environment.
+only when that launcher is a link back into this environment. That directory is named by the
+environment, so it only receives the new launcher: ``uv`` itself is looked up in the account's
+own ``~/.local/bin`` and the fixed system directories, never there.
 """
 
 from __future__ import annotations
@@ -59,3 +61,11 @@ def _bin_dir_candidates() -> list[Path]:
         candidates.append(Path(data_home).parent / "bin")
     candidates.append(Path.home() / ".local" / "bin")
     return candidates
+
+
+def uv_user_bin_dir() -> Path:
+    """``~/.local/bin`` of the account running the updater, read from the password database."""
+
+    import pwd
+
+    return Path(pwd.getpwuid(os.geteuid()).pw_dir) / ".local" / "bin"

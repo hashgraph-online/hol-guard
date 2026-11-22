@@ -36,7 +36,7 @@ from ..windows_paths import (
     trusted_windows_system_executable,
     trusted_windows_user_profile,
 )
-from .update_uv_layout import custom_uv_tool_layout
+from .update_uv_layout import custom_uv_tool_layout, uv_user_bin_dir
 
 _DEFAULT_INDEX_URL = "https://pypi.org/simple"
 _PIP_NO_CACHE_ARG = "--no-cache-dir"
@@ -1191,8 +1191,7 @@ def _trusted_runtime_search_path(*, installer_kind: str) -> str:
 
     allowed: list[Path] = []
     if installer_kind in {"pipx", "uv"}:
-        _manager_home, manager_bin = _manager_home_from_prefix(installer_kind)
-        allowed.append(manager_bin)
+        allowed.append(_manager_executable_dir(installer_kind))
     if os.name != "nt":
         for raw_entry in os.defpath.split(os.pathsep):
             if raw_entry:
@@ -1411,6 +1410,15 @@ def _manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:
             if layout is not None:
                 return layout
         raise
+
+
+def _manager_executable_dir(installer_kind: str) -> Path:
+    try:
+        return _standard_manager_home_from_prefix(installer_kind)[1]
+    except UpdateSubprocessError:
+        _manager_home_from_prefix(installer_kind)
+        # A custom launcher directory comes from the environment, so it is never searched for uv itself.
+        return uv_user_bin_dir()
 
 
 def _standard_manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:

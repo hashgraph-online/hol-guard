@@ -110,3 +110,22 @@ def test_manager_home_uses_the_custom_uv_layout_and_keeps_pipx_strict(
     with pytest.raises(UpdateSubprocessError) as error:
         update_subprocess._manager_home_from_prefix("pipx")
     assert error.value.reason_code == "update_installer_untrusted"
+
+
+def test_uv_is_never_looked_up_in_a_custom_launcher_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prefix = _tool_environment(tmp_path)
+    bin_dir = _launcher_dir(tmp_path, prefix / "bin" / "hol-guard", monkeypatch)
+    planted = bin_dir / "uv"
+    planted.write_text("#!/bin/sh\n", encoding="utf-8")
+    planted.chmod(0o755)
+    user_bin = tmp_path / "account-home" / ".local" / "bin"
+    user_bin.mkdir(parents=True)
+    monkeypatch.setattr(update_subprocess.sys, "prefix", str(prefix))
+    monkeypatch.setattr(update_subprocess, "uv_user_bin_dir", lambda: user_bin)
+
+    entries = update_subprocess._trusted_runtime_search_path(installer_kind="uv").split(os.pathsep)
+
+    assert str(bin_dir.resolve()) not in entries
+    assert str(user_bin.resolve()) in entries
