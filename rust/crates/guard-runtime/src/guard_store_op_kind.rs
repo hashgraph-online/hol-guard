@@ -209,6 +209,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "set_receipt_action_envelope"
         | "update_receipt_policy_decision"
         | "update_receipt_approval_context"
+        | "amend_receipt_authority_evidence"
         | "list_receipts_for_command_detail_backfill"
         | "receipt_summary_between"
         | "receipt_analytics"
