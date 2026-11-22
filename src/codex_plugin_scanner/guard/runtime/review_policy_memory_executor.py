@@ -12,10 +12,9 @@ from ..review_decision_memory import (
 )
 from ..review_memory_ack import build_decision_memory_ack
 from ..store import GuardStore
+from ..store_review_policy_memory_rows import ReviewPolicyMemoryRows
 
 REVIEW_POLICY_MEMORY_OPERATION = "guard.review.syncPolicyMemory"
-_MEMORY_REGISTRY_KEY = "guard_review_memory_registry"
-_MEMORY_VERSION_KEY = "guard_review_memory_policy_version"
 _MEMORY_ACK_KEY = "guard_review_memory_last_ack"
 
 
@@ -34,12 +33,15 @@ def execute_review_policy_memory(
         raise ValueError("missing_decision_memory_bundle")
     oauth = guard_review_oauth_metadata(store)
     bundle = validated_decision_memory_bundle(bundle_payload, store=store)
+    # The version check and the plan read one stored cursor, so they cannot
+    # see two different memory applies.
+    memory_rows = store.review_policy_memory_rows()
     validate_decision_memory_bundle_target(
         bundle=bundle,
         oauth=oauth,
-        last_policy_version=_stored_policy_version(store),
+        last_policy_version=memory_rows.policy_version,
     )
-    rejected_rule_ids, plan = _memory_plan(bundle, store)
+    rejected_rule_ids, plan = _memory_plan(bundle, store, memory_rows)
     if rejected_rule_ids:
         ack = build_decision_memory_ack(
             bundle=bundle,
@@ -72,7 +74,11 @@ def execute_review_policy_memory(
     return _result(bundle, ack)
 
 
-def _memory_plan(bundle: dict[str, object], store: GuardStore) -> tuple[list[str], dict[str, object]]:
+def _memory_plan(
+    bundle: dict[str, object],
+    store: GuardStore,
+    memory_rows: ReviewPolicyMemoryRows,
+) -> tuple[list[str], dict[str, object]]:
     """Ask the native runtime which memory rules apply and what the store holds after them."""
 
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
@@ -81,7 +87,7 @@ def _memory_plan(bundle: dict[str, object], store: GuardStore) -> tuple[list[str
         "rules": bundle.get("memoryRules"),
         "revocations": bundle.get("revocations"),
         "workspace_id": bundle.get("workspaceId"),
-        "registry": store.get_sync_payload(_MEMORY_REGISTRY_KEY),
+        "registry": memory_rows.registry,
         "policies": [item for item in store.list_policy_decisions() if item.get("source") == "policy-bundle"],
     }
     try:
@@ -128,11 +134,6 @@ def _result(bundle: dict[str, object], ack: dict[str, object]) -> dict[str, obje
 
 def _mapping(value: object) -> dict[str, object]:
     return dict(value) if isinstance(value, dict) else {}
-
-
-def _stored_policy_version(store: GuardStore) -> str | None:
-    payload = store.get_sync_payload(_MEMORY_VERSION_KEY)
-    return _text(payload.get("policyVersion")) if isinstance(payload, dict) else None
 
 
 def _text(value: object) -> str | None:

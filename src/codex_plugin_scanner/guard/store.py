@@ -43,6 +43,7 @@ from .store_policy_document import StorePolicyDocumentMixin
 from .store_review_event_outbox import StoreReviewEventOutboxMixin
 from .store_review_event_sequence_recovery import StoreReviewEventSequenceRecoveryMixin
 from .store_review_policy_memory import StoreReviewPolicyMemoryMixin
+from .store_review_policy_memory_rows import StoreReviewPolicyMemoryRowsMixin
 from .store_native_decision_receipts import StoreNativeDecisionReceiptsMixin
 from .store_native_workspace_review import StoreNativeWorkspaceReviewMixin
 from .store_oauth import StoreOAuthConnectMixin
@@ -87,6 +88,7 @@ class GuardStore(
     StorePortableProjectMemoryMixin,
     StorePolicyMixin,
     StoreReviewPolicyMemoryMixin,
+    StoreReviewPolicyMemoryRowsMixin,
     StorePolicyIntegrityAdminMixin,
     StoreCloudEventsMixin,
     StoreFleetPostureStateMixin,
