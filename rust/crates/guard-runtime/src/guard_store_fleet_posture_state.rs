@@ -1,6 +1,6 @@
 //! `fleet_posture_state`, `set_fleet_posture_reporting`,
-//! `request_full_fleet_inventory`, `commit_fleet_posture_sent` and
-//! `fleet_posture_hash_key`: the
+//! `request_full_fleet_inventory`, `commit_fleet_posture_sent`,
+//! `fleet_posture_hash_key` and `stored_fleet_posture_hash_key`: the
 //! `sync_state` rows that steer the fleet posture report.
 //!
 //! Port of the settings, full-inventory request and "last sent" bookkeeping
@@ -35,6 +35,7 @@ pub(crate) fn handles(method: &str) -> bool {
             | "fleet_posture_cached_runtimes"
             | "record_fleet_posture_runtimes"
             | "fleet_posture_hash_key"
+            | "stored_fleet_posture_hash_key"
     )
 }
 
@@ -53,6 +54,7 @@ pub(crate) fn dispatch(
         "fleet_posture_cached_runtimes" => runtimes::cached_method(connection, args),
         "record_fleet_posture_runtimes" => runtimes::record_method(connection, args),
         "fleet_posture_hash_key" => hash_key::method(connection, args),
+        "stored_fleet_posture_hash_key" => hash_key::stored_method(connection),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }

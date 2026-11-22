@@ -7,6 +7,11 @@
 //! key and hash the same machine two ways. The store method runs in one write
 //! transaction: it returns the stored key, or creates, stores and returns a
 //! new one. The key never leaves the machine.
+//!
+//! `stored_fleet_posture_hash_key` is the read-only half: it returns the
+//! stored key, or `null`, without taking the write lock, so a busy writer
+//! cannot cost a sync cycle its posture report. Both methods apply the same
+//! usable-key rule.
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -23,14 +28,22 @@ const MIN_KEY_CHARS: usize = 32;
 /// Random bytes in a new key; hex-encoded, as `secrets.token_hex(32)` was.
 const NEW_KEY_BYTES: usize = 32;
 
-/// The stored key when it is a string of at least `MIN_KEY_CHARS` characters,
-/// else a new random key that replaces the row.
+/// The stored key when it is a string of at least `MIN_KEY_CHARS` characters.
+fn usable_stored_key(connection: &Connection) -> StoreResult<Option<String>> {
+    Ok(object_row(connection, HASH_KEY_STATE_KEY)?
+        .and_then(|row| row.get("key").and_then(Value::as_str).map(str::to_owned))
+        .filter(|key| key.chars().count() >= MIN_KEY_CHARS))
+}
+
+/// The usable stored key, or `null` when none is stored. Reads only.
+pub(super) fn stored_method(connection: &Connection) -> StoreResult<Value> {
+    Ok(json!({"key": usable_stored_key(connection)?}))
+}
+
+/// The usable stored key, else a new random key that replaces the row.
 pub(super) fn method(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
     let now = args.str("now")?;
-    let stored = object_row(connection, HASH_KEY_STATE_KEY)?
-        .and_then(|row| row.get("key").and_then(Value::as_str).map(str::to_owned))
-        .filter(|key| key.chars().count() >= MIN_KEY_CHARS);
-    if let Some(key) = stored {
+    if let Some(key) = usable_stored_key(connection)? {
         return Ok(json!({"key": key}));
     }
     let mut secret = [0_u8; NEW_KEY_BYTES];

@@ -129,3 +129,42 @@ fn the_time_is_required_and_the_method_is_a_write() {
         Some(Kind::Write)
     ));
 }
+
+#[test]
+fn the_read_only_method_returns_a_usable_key_and_writes_nothing() {
+    let connection = store();
+    assert_eq!(stored_method(&connection).unwrap(), json!({"key": null}));
+    assert_eq!(stored(&connection), None);
+    let existing = "k".repeat(40);
+    put(&connection, &json!({"key": existing}).to_string());
+    assert_eq!(
+        stored_method(&connection).unwrap(),
+        json!({"key": existing})
+    );
+    assert_eq!(
+        stored(&connection),
+        Some((json!({"key": existing}), BEFORE.to_owned()))
+    );
+}
+
+#[test]
+fn the_read_only_method_applies_the_same_usable_key_rule() {
+    for payload in [
+        json!({"key": "k".repeat(31)}).to_string(),
+        json!({"key": 12345}).to_string(),
+        json!(["k".repeat(40)]).to_string(),
+        "not json".to_owned(),
+    ] {
+        let connection = store();
+        put(&connection, &payload);
+        assert_eq!(
+            stored_method(&connection).unwrap(),
+            json!({"key": null}),
+            "{payload}"
+        );
+    }
+    assert!(matches!(
+        method_kind("stored_fleet_posture_hash_key"),
+        Some(Kind::Read)
+    ));
+}

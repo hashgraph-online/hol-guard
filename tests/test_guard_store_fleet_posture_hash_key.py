@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 import sqlite3
 import threading
+from collections.abc import Mapping
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.guard.runtime.fleet_posture_common import (
     HASH_KEY_STATE_KEY,
@@ -49,6 +52,23 @@ def test_an_unusable_stored_key_is_replaced(tmp_path: Path) -> None:
     assert key != b"short"
     assert re.fullmatch(rb"[0-9a-f]{64}", key) is not None
     assert store.get_sync_payload(HASH_KEY_STATE_KEY) == {"key": key.decode()}
+
+
+def test_a_stored_key_is_read_without_the_write_method(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path)
+    existing = "b" * 64
+    store.set_sync_payload(HASH_KEY_STATE_KEY, {"key": existing}, _NOW)
+    calls: list[str] = []
+    native_call = store._native_store_call  # pyright: ignore[reportPrivateUsage]
+
+    def recording(method: str, args: Mapping[str, object], **kwargs: object) -> object:
+        calls.append(method)
+        return native_call(method, args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(store, "_native_store_call", recording)
+
+    assert load_hash_key(store, _LATER) == existing.encode()
+    assert calls == ["stored_fleet_posture_hash_key"]
 
 
 def test_a_stored_row_that_is_not_json_is_replaced(tmp_path: Path) -> None:

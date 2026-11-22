@@ -25,8 +25,6 @@ class _NativeStore(Protocol):
         self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
     ) -> Any: ...
 
-    def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None: ...
-
 
 class StoreFleetPostureStateMixin:
     """Settings, full-inventory request and last-sent rows, kept by the native store."""
@@ -132,14 +130,12 @@ class StoreFleetPostureStateMixin:
         cannot cost a sync cycle its posture report. Only when no usable key is
         stored does the native store read the row again and write a new random
         key in one write transaction, so concurrent reports agree on one key.
+        The native store owns the rule for which stored key is usable.
         """
 
-        try:
-            stored = self.get_sync_payload("fleet_posture_hash_key")
-        except ValueError:
-            stored = None
+        stored = self._native_store_call("stored_fleet_posture_hash_key", {})
         stored_key = stored.get("key") if isinstance(stored, dict) else None
-        if isinstance(stored_key, str) and len(stored_key) >= 32:
+        if isinstance(stored_key, str) and stored_key:
             return stored_key
         answer = self._native_store_call("fleet_posture_hash_key", {"now": now})
         key = answer.get("key") if isinstance(answer, dict) else None
