@@ -1,4 +1,4 @@
-"""A Guard Cloud sync judges the policy bundle against one trust-row snapshot."""
+"""A Guard Cloud sync selects with one trust-row snapshot and activates with a fresh one."""
 
 from __future__ import annotations
 
@@ -20,6 +20,9 @@ _SNAPSHOT_KEYRING: dict[str, object] = {"snapshot": "keyring"}
 _SNAPSHOT_SUPPLY_CHAIN: dict[str, object] = {"snapshot": "supply-chain"}
 _SNAPSHOT_PROVENANCE: dict[str, object] = {"snapshot": "provenance"}
 _SNAPSHOT_WORKSPACE = "workspace-from-snapshot"
+_ACTIVATION_SUPPLY_CHAIN: dict[str, object] = {"activation": "supply-chain"}
+_ACTIVATION_PROVENANCE: dict[str, object] = {"activation": "provenance"}
+_ACTIVATION_WORKSPACE = "workspace-from-activation-snapshot"
 
 
 def test_the_synced_bundle_is_validated_with_the_snapshot_rows(
@@ -30,10 +33,20 @@ def test_the_synced_bundle_is_validated_with_the_snapshot_rows(
     policy_key = policy_bundle_test_verification_key(workspace_id=_WORKSPACE_ID)
     read_trust_rows = store.policy_bundle_trust_rows
     snapshots: list[PolicyBundleTrustRows] = []
+    activation_snapshots: list[PolicyBundleTrustRows] = []
 
     def snapshot(**kwargs: bool) -> PolicyBundleTrustRows:
         rows = read_trust_rows(**kwargs)
         if kwargs.get("keys_only"):
+            # The final trust check reads the rows again; a rotation that
+            # landed after selection must be what activation is judged by.
+            rows = replace(
+                rows,
+                supply_chain_keyring=_ACTIVATION_SUPPLY_CHAIN,
+                managed_keyring_provenance=_ACTIVATION_PROVENANCE,
+                workspace_id=_ACTIVATION_WORKSPACE,
+            )
+            activation_snapshots.append(rows)
             return rows
         rows = replace(
             rows,
@@ -89,6 +102,9 @@ def test_the_synced_bundle_is_validated_with_the_snapshot_rows(
     assert candidate["supply_chain_keyring"] is _SNAPSHOT_SUPPLY_CHAIN
     assert candidate["managed_keyring_provenance"] is _SNAPSHOT_PROVENANCE
     assert candidate["expected_workspace_id"] == _SNAPSHOT_WORKSPACE
-    for activation in validations[1:]:
-        assert activation["supply_chain_keyring"] is _SNAPSHOT_SUPPLY_CHAIN
-        assert activation["expected_workspace_id"] == _SNAPSHOT_WORKSPACE
+    assert len(activation_snapshots) == 1
+    assert len(validations) >= 2
+    activation = validations[-1]
+    assert activation["supply_chain_keyring"] is _ACTIVATION_SUPPLY_CHAIN
+    assert activation["managed_keyring_provenance"] is _ACTIVATION_PROVENANCE
+    assert activation["expected_workspace_id"] == _ACTIVATION_WORKSPACE

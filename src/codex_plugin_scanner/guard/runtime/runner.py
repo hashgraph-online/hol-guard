@@ -543,7 +543,12 @@ def sync_receipts(
     # The native upload already cached the advisories, stored the alert
     # preferences and recorded the advisory events.
     advisories_stored = upload_answer.advisories_stored
-    cloud_workspace_id = store.get_cloud_workspace_id()
+    # One snapshot of the cached bundle and every row it is judged against,
+    # so a sync landing mid-cycle cannot pair this bundle with another sync's
+    # keyring, checkpoint or workspace, and managed controls are checked
+    # against the same workspace.
+    trust_rows = store.policy_bundle_trust_rows()
+    cloud_workspace_id = trust_rows.workspace_id
     canonical_enforcement = _sync.canonical_policy_enforcement_enabled(
         device_id=device_id,
         workspace_id=cloud_workspace_id,
@@ -563,10 +568,6 @@ def sync_receipts(
     failed_policy_bundle_reason: str | None = None
     trusted_policy_bundle_keys: tuple[PolicyBundleVerificationKey, ...] = ()
     update_last_good = False
-    # One snapshot of the cached bundle and every row it is judged against,
-    # so a sync landing mid-cycle cannot pair this bundle with another sync's
-    # keyring, checkpoint or workspace.
-    trust_rows = store.policy_bundle_trust_rows()
     existing_policy_bundle_payload = trust_rows.policy_bundle
     existing_policy_bundle, existing_policy_bundle_error = _validate_cached_policy_bundle(
         store,
@@ -698,25 +699,30 @@ def sync_receipts(
     cloud_exception_items: list[dict[str, object]] = []
     remote_policies_stored = 0
     remote_policy_sync_blocked = False
+    activation_rows = trust_rows
     if effective_policy_bundle is not None:
-        activation_keyring = trust_rows.policy_bundle_keyring
+        # The final trust check reads the rows again, in one fresh snapshot,
+        # so a key rotation, revocation, checkpoint advance or workspace change
+        # that landed after selection is seen before anything is activated.
+        activation_rows = store.policy_bundle_trust_rows(keys_only=True)
+        activation_keyring = activation_rows.policy_bundle_keyring
         if effective_policy_bundle is validated_policy_bundle and trusted_policy_bundle_keys:
             activation_keyring = policy_bundle_keyring_payload(
                 trusted_policy_bundle_keys,
-                workspace_id=trust_rows.workspace_id,
+                workspace_id=activation_rows.workspace_id,
             )
         activation_bundle, activation_reason, activation_keys = validate_synced_policy_bundle(
             effective_policy_bundle,
             stored_keyring=activation_keyring,
-            supply_chain_keyring=trust_rows.supply_chain_keyring,
-            managed_keyring_provenance=trust_rows.managed_keyring_provenance,
-            expected_workspace_id=trust_rows.workspace_id,
+            supply_chain_keyring=activation_rows.supply_chain_keyring,
+            managed_keyring_provenance=activation_rows.managed_keyring_provenance,
+            expected_workspace_id=activation_rows.workspace_id,
         )
         try:
             if activation_bundle is not None and not policy_bundle_is_enforceable(activation_bundle):
                 activation_bundle = None
                 activation_reason = "inactive_rollout_state"
-            acceptance_checkpoint = trust_rows.acceptance_checkpoint
+            acceptance_checkpoint = activation_rows.acceptance_checkpoint
             if (
                 activation_bundle is not None
                 and isinstance(acceptance_checkpoint, dict)
@@ -843,7 +849,7 @@ def sync_receipts(
                     policy_bundle=effective_policy_bundle,
                     policy_bundle_keyring=policy_bundle_keyring_payload(
                         trusted_policy_bundle_keys,
-                        workspace_id=trust_rows.workspace_id,
+                        workspace_id=activation_rows.workspace_id,
                     ),
                     cloud_exceptions=cloud_exception_items,
                     policy_bundle_ack=policy_bundle_ack,
