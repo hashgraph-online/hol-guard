@@ -152,8 +152,10 @@ impl RelayAuthority for ResidentRelayAuthority {
             // for one cannot be taken either.
             Some(Reply::Claim { .. })
             | Some(Reply::Elicit { .. })
-            | Some(Reply::Evaluate { .. })
-            | None => no_decision,
+            | Some(Reply::Evaluate { .. }) => no_decision,
+            // A refused claim names its cause as a refused decision does, so
+            // a version skew asks for a restart or repair the same way.
+            None => ToolCallVerdict::Respond(refused_claim(&ticket.message, answered.as_deref())),
         }
     }
 
@@ -263,6 +265,18 @@ pub(super) enum Reply {
     },
 }
 
+/// The answer to a claim the authority refused, named by its cause.
+pub(super) fn refused_claim(message: &Value, answered: Option<&[u8]>) -> Value {
+    let cause = defer::reply_cause(answered);
+    defer::note(&cause);
+    let params = message
+        .get("params")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    undecided_response(message.get("id"), &params, &cause)
+}
+
 fn reply_of(output: Option<&[u8]>) -> Option<Reply> {
     output.and_then(reply)
 }
@@ -296,3 +310,7 @@ pub(super) fn reply(output: &[u8]) -> Option<Reply> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "mcp_relay_resident_claim_tests.rs"]
+mod claim_tests;

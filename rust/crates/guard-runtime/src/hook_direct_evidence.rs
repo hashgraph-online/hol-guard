@@ -148,6 +148,16 @@ impl QueueState {
         });
     }
 
+    /// Drop the queued record `seq`, which the resident already wrote in
+    /// full, so a page that fails behind it never writes it a second time.
+    fn forget(&mut self, seq: u64) {
+        if let Some(index) = self.records.iter().position(|queued| queued.seq == seq) {
+            if let Some(queued) = self.records.remove(index) {
+                self.bytes = self.bytes.saturating_sub(queued.bytes);
+            }
+        }
+    }
+
     /// Put `record` in place of the queued record `seq`, if it is still queued.
     fn replace(&mut self, seq: u64, record: Value) {
         let Some(queued) = self.records.iter_mut().find(|queued| queued.seq == seq) else {

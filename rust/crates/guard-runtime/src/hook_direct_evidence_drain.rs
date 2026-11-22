@@ -227,7 +227,10 @@ fn record_page(
 /// Keep the plain records the writer handed back, each in the form it came
 /// back in. A remembered record whose allow was saved returns without its
 /// flag, and its queued copy loses the flag too, so a later drain retries
-/// only the receipt and never saves the allow a second time.
+/// only the receipt and never saves the allow a second time. A record the
+/// writer finished leaves the queue now: a later record on the same page may
+/// still fail the page, and the retry must not save its allow or write its
+/// receipt again.
 fn keep_handed_back(queue: &DirectEvidenceQueue, paged: &mut Vec<Paged>, unwritten: &[Value]) {
     let mut state = queue.state.lock().ok();
     paged.retain_mut(|item| {
@@ -235,6 +238,9 @@ fn keep_handed_back(queue: &DirectEvidenceQueue, paged: &mut Vec<Paged>, unwritt
             return true;
         }
         let Some(record) = mcp_relay_receipt::remember::handed_back(&item.record, unwritten) else {
+            if let Some(state) = state.as_mut() {
+                state.forget(item.seq);
+            }
             return false;
         };
         if record != item.record {
@@ -288,6 +294,43 @@ mod tests {
         let mut written = again;
         keep_handed_back(&queue, &mut written, &[]);
         assert!(written.is_empty());
+        // The finished record left the queue, so no later page writes it.
+        let after = queue
+            .acknowledge_and_peek(None, None, DEFAULT_DRAIN_RECORDS)
+            .records;
+        assert!(after.is_empty());
+    }
+
+    /// One page holds two remembered records: the first is written in full,
+    /// the second comes back stripped. The page fails on the second, and the
+    /// retry sees only the second, without its flag.
+    #[test]
+    fn a_failed_page_retries_only_what_the_writer_handed_back() {
+        let queue = DirectEvidenceQueue::default();
+        let remembered = |tool: &str| {
+            let mut record =
+                crate::mcp_relay_receipt::tests::record("forward", "inline-approved", "allow");
+            record["tool_name"] = json!(tool);
+            record["remember"] = json!(true);
+            record
+        };
+        let (first, second) = (remembered("first"), remembered("second"));
+        queue
+            .unwritten()
+            .requeue(vec![first.clone(), second.clone()]);
+        let mut stripped = second.clone();
+        stripped.as_object_mut().unwrap().remove("remember");
+        let mut paged = queue
+            .acknowledge_and_peek(None, None, DEFAULT_DRAIN_RECORDS)
+            .records;
+        keep_handed_back(&queue, &mut paged, std::slice::from_ref(&stripped));
+        assert_eq!(paged.len(), 1);
+        assert!(has_unfinished_records(&paged, ""));
+        let retried = queue
+            .acknowledge_and_peek(None, None, DEFAULT_DRAIN_RECORDS)
+            .records;
+        assert_eq!(retried.len(), 1);
+        assert_eq!(retried[0].record, stripped);
     }
 
     #[test]

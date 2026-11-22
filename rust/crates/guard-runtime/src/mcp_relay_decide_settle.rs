@@ -149,6 +149,18 @@ pub(super) fn settle(
     }
 }
 
+/// A queued approval row is answered with a block whose receipt the direct
+/// evidence queue must take. The row is only written while that queue has
+/// room to spare, so a full queue defers before the row exists rather than
+/// leaving a pending request no receipt or answer names.
+pub(super) fn room_for_row(policy_store: &PolicySnapshotStore) -> Result<(), &'static str> {
+    if policy_store.direct_evidence().has_headroom() {
+        Ok(())
+    } else {
+        Err(EVIDENCE_FULL)
+    }
+}
+
 /// Answer one decided package call.
 ///
 /// A leg the package policy decided is answered here and queues the receipt
@@ -172,12 +184,14 @@ pub(super) fn settle_package(
         // The row the bound `ask` mode writes reads the store this holds, so
         // the answer is only completed here.
         package_lane::PackageOutcome::AskPackage(asked) => {
+            room_for_row(policy_store)?;
             queued = package_ask::queue(request, admitted, resolved, &packaged.artifact, asked)?;
             &queued
         }
         // So do the observed rows the forward is queued with, which the
         // answer carries the notices of once they are written.
         package_lane::PackageOutcome::ObservePackage { answer, observed } => {
+            room_for_row(policy_store)?;
             queued = package_observe::queue(
                 request,
                 admitted,
@@ -216,6 +230,7 @@ pub(super) fn settle_package(
                     let mode = admitted.blocked_request_mode();
                     match mode {
                         Some(ASK_MODE) => {
+                            room_for_row(policy_store)?;
                             ask::queue(request, admitted, resolved, policy_action.clone())?
                         }
                         _ => queue::safe_alternative(
@@ -262,3 +277,7 @@ pub(super) fn settle_package(
         Some(_) => Err(EVIDENCE_FULL),
     }
 }
+
+#[cfg(test)]
+#[path = "mcp_relay_decide_settle_tests.rs"]
+mod tests;

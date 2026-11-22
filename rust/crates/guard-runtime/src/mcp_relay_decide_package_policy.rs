@@ -187,7 +187,9 @@ pub(super) fn package_policy(
     let resolution = resolve_unclaimed_resolution(&request).map_err(|_| RESOLVE_FAILED)?;
     let reused_decision = match resolution.reused {
         // `reused` without the row it reused is not a resolution this records.
-        true => Some(request.decision.clone().ok_or(RESOLVE_FAILED)?),
+        // The row is the one the resolution read, which the daemon's
+        // authority may have resolved for an integrity-ignored lookup.
+        true => Some(resolution.decision.clone().ok_or(RESOLVE_FAILED)?),
         false => None,
     };
     let mut merged = evaluation.clone();

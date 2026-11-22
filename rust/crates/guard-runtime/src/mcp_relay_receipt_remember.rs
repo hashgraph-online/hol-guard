@@ -270,9 +270,9 @@ fn signed(
 }
 
 /// The trusted control state, written at generation 0 when the home has
-/// none. A control state that exists but does not load is never replaced: it
-/// may hold a generation above 0, and resetting it would make every row
-/// signed above 0 read as a rollback.
+/// none. A control state that exists but does not load or decrypt is never
+/// replaced: it may hold a generation above 0, and resetting it would make
+/// every row signed above 0 read as a rollback.
 fn control_state(
     secrets: &mut EncryptedFileSecretStore,
     home: &Path,
@@ -281,7 +281,9 @@ fn control_state(
     if let Some(current) = load_policy_integrity_control_state(secrets, home) {
         return Some(current);
     }
-    if secrets.get_secret(control_ref).is_some() {
+    // `get_secret` answers `None` for a file it cannot read or decrypt as
+    // well as for a missing one, so only a missing file is absent.
+    if std::fs::symlink_metadata(secrets.path_for(control_ref)).is_ok() {
         return None;
     }
     let initial = json!({

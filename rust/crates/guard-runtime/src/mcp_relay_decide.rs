@@ -452,7 +452,7 @@ mod session;
 mod session_config;
 #[path = "mcp_relay_decide_settle.rs"]
 mod settlement;
-use settlement::{settle, settle_package};
+use settlement::{room_for_row, settle, settle_package};
 #[path = "mcp_relay_decide_store.rs"]
 pub(crate) mod store;
 #[path = "mcp_relay_decide_subject.rs"]

@@ -36,9 +36,9 @@ use super::package_claim::{self, Settled};
 use super::package_route::ToolLeg;
 use super::store::{self, STORE_UNREADABLE};
 use super::{
-    admit, ask, package, package_lane, package_leg, package_postclaim, queue, settle,
-    settle_package, Answer, HeldClaim, Legged, PackageClaimContext, PackageLeg, Resolved, Routed,
-    ASK_MODE, EVIDENCE_FULL,
+    admit, ask, package, package_lane, package_leg, package_postclaim, queue, room_for_row, settle,
+    settle_package, Answer, HeldClaim, Legged, McpRelayDecideRequestV1, PackageClaimContext,
+    PackageLeg, Resolved, Routed, ASK_MODE, EVIDENCE_FULL,
 };
 use crate::claim_reuse::claim_approval_reuse_decisions_then;
 use crate::claim_reuse_binding::evidence_is_bound;
@@ -110,10 +110,23 @@ pub(super) fn spend_package(
     if rows.is_empty() {
         return Err(PACKAGE_CLAIM_EMPTY);
     }
-    let (state, key) = store::lookup_integrity(&admitted.binding)?;
+    let (published, key) = store::lookup_integrity(&admitted.binding)?;
+    // The bound check compares the published state with the persisted one,
+    // which the relay's own remembered write does not touch.
+    let bound = integrity_evidence(&rows, &published, key)?;
+    // The rows are verified at the generation the decision read them at:
+    // after the relay's own remembered allow re-signed every local row, that
+    // is the generation the write was finalized at.
+    let mut state = published.clone();
+    if let Some(generation) = own_write_generation(&context.request) {
+        store::after_own_write(&mut state, generation);
+    }
     let evidence = integrity_evidence(&rows, &state, key)?;
     // `claim_evidence_binding(connection, bundle=False)`.
     let binding = ClaimEvidenceBindingV1::default();
+    // A claim that commits may still queue an approval row, which needs room
+    // for the block's receipt; refuse before anything is claimed.
+    room_for_row(policy_store)?;
     let connection = open_for_claim(&request.guard_home)?;
     let now = store::utc_now().ok_or(PACKAGE_CLAIM_STORE)?;
     let decisions: Vec<Value> = rows
@@ -126,7 +139,7 @@ pub(super) fn spend_package(
         &decisions,
         &now,
         &evidence,
-        &|connection, members| evidence_is_bound(connection, members, &evidence, Some(&binding)),
+        &|connection, members| evidence_is_bound(connection, members, &bound, Some(&binding)),
         false,
         &mut |connection| match after_claim(connection, context, evaluation, policy_store, started)
         {
@@ -152,6 +165,7 @@ pub(super) fn spend_package(
                     policy_store,
                 ),
                 Write::Tool { prepared, append } => {
+                    room_for_row(policy_store)?;
                     let routed = prepared.write(&context.request)?;
                     settle(&context.request, &fresh, routed, Some(append), policy_store)
                 }
@@ -160,6 +174,16 @@ pub(super) fn spend_package(
         Ok(None) => Err(refused.unwrap_or(PACKAGE_CLAIM_DECLINED)),
         Err(_) => Err(PACKAGE_CLAIM_STORE),
     }
+}
+
+/// The generation the relay's own remembered allow was finalized at, when the
+/// decision this claim spends ran after it.
+fn own_write_generation(request: &McpRelayDecideRequestV1) -> Option<u64> {
+    request
+        .inline
+        .remembered
+        .as_ref()
+        .and_then(|remembered| remembered.generation)
 }
 
 /// What a committed package claim answers with.
@@ -336,3 +360,7 @@ fn spend_budget(started: Instant) -> Result<(), &'static str> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "mcp_relay_decide_package_spend_tests.rs"]
+mod tests;

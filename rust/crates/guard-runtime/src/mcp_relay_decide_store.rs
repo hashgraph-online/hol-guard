@@ -96,13 +96,17 @@ impl Saved<'_> {
     /// one would read them all as a rollback. A published generation already
     /// past it is kept: a later write re-signed the rows again.
     pub(super) fn read_after_own_write(&mut self, generation: u64) {
-        let published = self
-            .integrity_state
-            .get("generation")
-            .and_then(Value::as_u64);
-        if published.is_none_or(|published| published < generation) {
-            self.integrity_state["generation"] = Value::from(generation);
-        }
+        after_own_write(&mut self.integrity_state, generation);
+    }
+}
+
+/// Raise a published integrity state to the generation the relay's own
+/// remembered allow was finalized at, unless a later write already moved it
+/// past that generation.
+pub(super) fn after_own_write(state: &mut Value, generation: u64) {
+    let published = state.get("generation").and_then(Value::as_u64);
+    if published.is_none_or(|published| published < generation) {
+        state["generation"] = Value::from(generation);
     }
 }
 

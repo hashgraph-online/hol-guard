@@ -433,6 +433,9 @@ pub(crate) struct UnclaimedResolution {
     pub(crate) claim_disposition: Option<String>,
     /// A saved row was accepted without a claim being asked for.
     pub(crate) reused: bool,
+    /// The row the resolution read: the request's own, or the one the
+    /// daemon's authority resolved for an integrity-ignored request.
+    pub(crate) decision: Option<Value>,
 }
 
 /// The resolved evaluation for a read-only request: no claim is asked for, so
@@ -460,6 +463,7 @@ pub(crate) fn resolve_unclaimed_resolution(
         output: resolution.output,
         claim_disposition: resolution.claim_disposition,
         reused: resolution.reused,
+        decision: resolution.decision,
     })
 }
 

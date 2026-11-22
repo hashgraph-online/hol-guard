@@ -1,6 +1,7 @@
 //! One decide request, from admission to its settled answer.
 
 use super::*;
+use crate::mcp_relay_receipt::remember::{save_now, Allow};
 use guard_contracts::{McpInlineApprovalV1, McpToolPolicyProxyInputV1};
 use rusqlite::Connection;
 use std::time::Instant;
@@ -204,10 +205,14 @@ fn decide_once(
             // approval gate holds every allow to a decision while it is
             // enabled. `upsert_policy` raising `ApprovalGateError` is what
             // sends the proxy to the re-approval queue, so the resident asks
-            // the gate before it forwards and the drain performs the write.
+            // the gate before it forwards. The proxy wrote the allow before
+            // it forwarded, so the resident saves it now too and an identical
+            // repeat call reads it; when that write fails, the forward keeps
+            // its flag and the drain retries the write.
             let routed =
                 if ask::remembered_write_refused(&request.guard_home, &resolved.identity.artifact)?
                 {
+                    room_for_row(policy_store)?;
                     ask::queue(
                         request,
                         &admitted,
@@ -215,10 +220,11 @@ fn decide_once(
                         "require-reapproval".to_owned(),
                     )?
                 } else {
+                    let saved = remember_now(&request.guard_home, &resolved).is_some();
                     Routed::Forward {
                         source,
                         policy_action,
-                        remember: true,
+                        remember: !saved,
                     }
                 };
             settle(request, &resolved, routed, None, policy_store)
@@ -228,7 +234,10 @@ fn decide_once(
             let routed = match mode {
                 // The row is written before the block is answered, as the
                 // proxy queues it before it replies to the client.
-                Some(ASK_MODE) => ask::queue(request, &admitted, &resolved, policy_action)?,
+                Some(ASK_MODE) => {
+                    room_for_row(policy_store)?;
+                    ask::queue(request, &admitted, &resolved, policy_action)?
+                }
                 _ => queue::safe_alternative(
                     mode,
                     resolved.redaction_level.as_deref(),
@@ -240,4 +249,19 @@ fn decide_once(
         }
         routed => settle(request, &resolved, routed, None, policy_store),
     }
+}
+
+/// Save the artifact allow an inline approval remembers, before the call is
+/// answered. The generation it was finalized at, or `None` when it was not
+/// saved.
+fn remember_now(guard_home: &str, resolved: &Resolved) -> Option<u64> {
+    let artifact = &resolved.identity.artifact;
+    let allow = Allow {
+        harness: &artifact.harness,
+        artifact_id: &artifact.artifact_id,
+        artifact_hash: resolved.identity.artifact_hash.as_deref()?,
+        command: artifact.command.as_deref(),
+        workspace: None,
+    };
+    save_now(guard_home, &allow)
 }

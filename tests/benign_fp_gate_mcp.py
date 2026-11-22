@@ -19,6 +19,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -203,9 +204,15 @@ def _messages(case: McpCase) -> list[dict[str, Any]]:
 
 
 def _session(command: list[str], fixture: BenignFixture, messages: list[dict[str, Any]]) -> dict[int, Any]:
-    """Run one relay session and return its responses by id; stdin closes after the last answer."""
+    """Run one relay session and return its responses by id; stdin closes after the last answer.
+
+    A watchdog kills the relay once the session outlives ``_SESSION_SECONDS``,
+    so a relay that holds stdout open without answering fails the case instead
+    of hanging the gate.
+    """
     wanted = {int(message["id"]) for message in messages}
     responses: dict[int, Any] = {}
+    expired = threading.Event()
     with subprocess.Popen(
         command,
         cwd=fixture.worktree,
@@ -215,6 +222,13 @@ def _session(command: list[str], fixture: BenignFixture, messages: list[dict[str
         text=True,
     ) as session:
         assert session.stdin is not None and session.stdout is not None
+
+        def expire() -> None:
+            expired.set()
+            session.kill()
+
+        watchdog = threading.Timer(_SESSION_SECONDS, expire)
+        watchdog.start()
         try:
             for message in messages:
                 session.stdin.write(json.dumps(message) + "\n")
@@ -232,6 +246,10 @@ def _session(command: list[str], fixture: BenignFixture, messages: list[dict[str
         except BaseException:
             session.kill()
             raise
+        finally:
+            watchdog.cancel()
+    if expired.is_set():
+        raise TimeoutError(f"the MCP relay session did not finish within {_SESSION_SECONDS:.0f}s")
     return {key: value for key, value in responses.items() if key in wanted}
 
 

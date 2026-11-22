@@ -229,6 +229,38 @@ fn a_control_state_that_does_not_load_is_never_reset() {
     let _ = std::fs::remove_dir_all(&home);
 }
 
+/// A control file that does not decrypt reads as missing to `get_secret`,
+/// yet it may hold a generation above 0, so it is never reset either.
+#[test]
+fn a_control_state_that_does_not_decrypt_is_never_reset() {
+    let home = store_home("relay-remember-undecryptable-control", true);
+    let control_ref = build_scoped_secret_ref(POLICY_INTEGRITY_CONTROL_REF, &home);
+    let mut secrets = EncryptedFileSecretStore::new(&home);
+    secrets.set_secret(&control_ref, "{}").unwrap();
+    let path = secrets.path_for(&control_ref);
+    let garbled = r#"{"version":"fernet-v1","ciphertext":"not-a-token"}"#;
+    std::fs::write(&path, garbled).unwrap();
+    assert!(secrets.get_secret(&control_ref).is_none());
+    let held = super::lock(home.to_str().unwrap()).expect("generation lock");
+    let mut stored = false;
+    super::save(
+        home.to_str().unwrap(),
+        &remembered(),
+        "2026-01-01T00:00:00Z",
+        &held,
+        |_| {
+            stored = true;
+            (None, false)
+        },
+    );
+    assert!(
+        !stored,
+        "no allow is written over an undecryptable control state"
+    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), garbled);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
 #[test]
 fn a_record_handed_back_after_its_allow_was_saved_is_retried_without_the_flag() {
     let queued = remembered();

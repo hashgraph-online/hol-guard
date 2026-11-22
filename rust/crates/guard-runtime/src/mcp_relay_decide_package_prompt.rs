@@ -11,8 +11,8 @@
 //! saved row and records the forward as the proxy does.
 
 use super::{
-    ask, settle, Admitted, Answer, McpRelayDecideRequestV1, Resolved, IDENTITY_FAILED,
-    ROUTE_UNSUPPORTED,
+    ask, room_for_row, settle, Admitted, Answer, McpRelayDecideRequestV1, Resolved,
+    IDENTITY_FAILED, ROUTE_UNSUPPORTED,
 };
 use crate::local_mcp_grant_identity::composio_requires_action_review;
 use crate::mcp_relay_receipt::remember::{save_now, Allow};
@@ -72,6 +72,7 @@ pub(super) fn approved(
                 .as_str()
                 .ok_or(ROUTE_UNSUPPORTED)?
                 .to_owned();
+            room_for_row(policy_store)?;
             let routed = ask::queue(request, admitted, resolved, policy_action)?;
             return settle(request, resolved, routed, None, policy_store);
         }
