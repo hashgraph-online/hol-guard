@@ -25,6 +25,8 @@ pub(crate) fn handles(method: &str) -> bool {
             | "oauth_sources_list"
             | "managed_keyring_reconcile"
             | "upsert_runtime_state"
+            | "get_runtime_state"
+            | "clear_runtime_state"
             | "hook_approval_center_origin"
     )
 }
@@ -35,6 +37,8 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
         "oauth_sources_list" => oauth_sources(connection),
         "managed_keyring_reconcile" => reconcile_keyring(connection, args),
         "upsert_runtime_state" => upsert_runtime_state(connection, args),
+        "get_runtime_state" => runtime_state(connection),
+        "clear_runtime_state" => clear_runtime_state(connection, args),
         "hook_approval_center_origin" => hook_approval_center_origin(connection),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
@@ -126,6 +130,49 @@ fn upsert_runtime_state(connection: &Connection, args: &Args) -> StoreResult<Val
     Ok(Value::Null)
 }
 
+/// The serving daemon's recorded identity, or null before one is recorded.
+/// A row whose text fields are not text, or whose port is not a whole
+/// number, is refused rather than coerced.
+fn runtime_state(connection: &Connection) -> StoreResult<Value> {
+    let row = query_one(
+        connection,
+        "select session_id, daemon_host, daemon_port, started_at, last_heartbeat_at \
+         from guard_runtime_state where state_key = 'runtime'",
+        &[],
+    )?;
+    let Some(row) = row else {
+        return Ok(Value::Null);
+    };
+    let mut state = serde_json::Map::new();
+    for name in [
+        "session_id",
+        "daemon_host",
+        "started_at",
+        "last_heartbeat_at",
+    ] {
+        let Some(value) = row.get(name).and_then(Value::as_str) else {
+            return value_error("invalid runtime state row");
+        };
+        state.insert(name.to_owned(), Value::from(value));
+    }
+    let Some(port) = row.get("daemon_port").and_then(Value::as_i64) else {
+        return value_error("invalid runtime state row");
+    };
+    state.insert("daemon_port".to_owned(), Value::from(port));
+    Ok(Value::Object(state))
+}
+
+/// Removes the runtime row only while the named session still owns it, so a
+/// stopping daemon never clears the row a newer daemon has written.
+fn clear_runtime_state(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    exec(
+        connection,
+        "delete from guard_runtime_state where state_key = 'runtime' and session_id = ?",
+        &[Value::from(args.str("session_id")?)],
+    )?;
+    Ok(Value::Null)
+}
+
 /// The daemon's recorded listening origin. Before it publishes a binding,
 /// the hook can show a default inbox address but the direct lane stays unbound.
 fn hook_approval_center_origin(connection: &Connection) -> StoreResult<Value> {
@@ -193,3 +240,7 @@ fn reconcile_keyring(connection: &Connection, args: &Args) -> StoreResult<Value>
     }
     Ok(Value::Bool(true))
 }
+
+#[cfg(test)]
+#[path = "guard_store_runtime_state_tests.rs"]
+mod runtime_state_tests;
