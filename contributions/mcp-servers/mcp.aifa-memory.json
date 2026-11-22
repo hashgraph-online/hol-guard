@@ -3,7 +3,7 @@
   "id": "mcp.aifa-memory",
   "version": "1.9.8",
   "name": "AIfa Memory",
-  "description": "Hosted encrypted long-term memory for AI agents over Streamable HTTP at https://aifa.works/api/mcp with optional permanent Arweave anchoring (AES-256-GCM). Discovery, memory_about, plans and partner_kit keep Guard's usual handling; every tool that reads or modifies private memory, creates payment invoices, requests payouts or configures webhooks is gated on review. Off until you turn it on.",
+  "description": "Hosted encrypted long-term memory for AI agents over Streamable HTTP at https://aifa.works/api/mcp with optional permanent Arweave anchoring (AES-256-GCM). Discovery (initialize, tools/list) is public; every tool call requires a per-user Bearer key from https://aifa.works/mcp. Read-only info tools (memory_about, plans, partner_kit) keep Guard's usual handling; every tool that reads or modifies private memory, creates payment invoices, requests payouts or configures webhooks is gated on review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -108,7 +108,7 @@
     "https://aifa.works/terms"
   ],
   "saferAlternatives": [
-    "Use memory_about, plans and partner_kit for read-only metadata before supplying a per-user Bearer key.",
+    "Run discovery (initialize and tools/list) without credentials; once a per-user Bearer key is configured, use read-only info tools (memory_about, plans, partner_kit) that do not read or modify private memory.",
     "Keep memory_write, memory_export, buy_plan, request_payout and set_webhook on Review so private memory exports, invoices, payouts and webhooks require explicit approval."
   ]
 }
