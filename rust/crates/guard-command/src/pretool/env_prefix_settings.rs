@@ -68,9 +68,14 @@ pub(super) fn inert_assignment(name: &str, value: &str) -> bool {
 /// and a contained run of the projected command would repeat a cached test
 /// the caller asked to rerun. Keeping it on the proof side leaves the
 /// value screen in `env_prefix_values` free to say so.
-pub(super) fn ordinary_project_setting(name: &str, value: &str, context: PathContext<'_>) -> bool {
+pub(super) fn ordinary_project_setting(
+    name: &str,
+    value: &str,
+    context: PathContext<'_>,
+    first_command: bool,
+) -> bool {
     inert_tool_setting(name, value)
-        || (plain_project_value(value) || workspace_path_value(value, context))
+        || (plain_project_value(value) || workspace_path_value(value, context, first_command))
             && crate::command_compatibility::environment::ordinary_setting_name(name)
 }
 
@@ -87,8 +92,19 @@ pub(super) fn ordinary_project_setting(name: &str, value: &str, context: PathCon
 /// directory the command already runs in, which is what this screen checks:
 /// an absolute value only under the working directory, a relative one only
 /// while no component climbs out of it. A credential directory is refused
-/// wherever it sits, because a setting may name one inside a workspace too.
-fn workspace_path_value(value: &str, context: PathContext<'_>) -> bool {
+/// wherever it sits, because a setting may name one inside a workspace too;
+/// the screen reads the location the value resolves to rather than the value
+/// as written, so `DATA_DIR=.aws/credentials` is refused for the same reason
+/// `DATA_DIR=/work/site/.aws/credentials` is.
+///
+/// A relative value names a location only once the directory it is read from
+/// is known. The caller's working directory is the one the command line
+/// started in, so it answers for the first simple command alone: after
+/// `cd /etc &&` the shell has moved, and `ssl/private` no longer names
+/// anything inside the workspace. `first_command` carries that, and a
+/// relative value is read only while it holds. An absolute value needs no
+/// such care, because it names the same location wherever it is read.
+fn workspace_path_value(value: &str, context: PathContext<'_>, first_command: bool) -> bool {
     if value.len() > MAX_SCALAR_CHARS
         || value.starts_with('-')
         || !value.contains('/')
@@ -128,11 +144,22 @@ fn workspace_path_value(value: &str, context: PathContext<'_>) -> bool {
     } else {
         value
     };
-    (relative.is_empty()
+    if !(value.starts_with('/') || first_command) {
+        return false;
+    }
+    if !(relative.is_empty()
         || relative
             .split('/')
             .all(|component| !component.is_empty() && component != ".."))
-        && !crate::pretool::sensitive_location_text(value)
+    {
+        return false;
+    }
+    let resolved = if relative.is_empty() {
+        workspace.to_owned()
+    } else {
+        format!("{workspace}/{relative}")
+    };
+    !crate::pretool::sensitive_location_text(&resolved)
 }
 
 /// [`crate::pretool::generic::inert_tool_settings::inert_tool_setting`], reachable
