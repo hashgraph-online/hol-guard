@@ -42,6 +42,12 @@ class LocalCliSchemaError(ValueError):
         self.supported_version = supported_version
 
 
+def local_cli_schema_marker() -> tuple[int, str]:
+    """The ``(version, checksum)`` a fully migrated local CLI schema records."""
+
+    return LOCAL_CLI_SCHEMA_VERSION, _SCHEMA_CHECKSUM
+
+
 def ensure_local_cli_schema(connection: sqlite3.Connection, *, for_read: bool = False) -> None:
     if for_read:
         exists = connection.execute(

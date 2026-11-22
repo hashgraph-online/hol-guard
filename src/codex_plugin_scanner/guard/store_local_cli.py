@@ -195,7 +195,10 @@ class StoreLocalCliMixin:
         return grant
 
     def has_local_cli_block_rules(self) -> bool:
-        return self._native_store_call("has_local_cli_block_rules", {}) is True
+        present = self._native_store_call("has_local_cli_block_rules", {})
+        if type(present) is not bool:
+            raise sqlite3.DatabaseError("native_local_cli_block_rules_invalid")
+        return present
 
     def read_local_cli_revision(self) -> int:
         return _row_int(self._native_store_call("read_local_cli_revision", {}))
