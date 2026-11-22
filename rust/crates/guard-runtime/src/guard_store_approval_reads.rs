@@ -270,6 +270,9 @@ fn superseded_by(
     }
 }
 
+#[path = "guard_store_approval_raw_row.rs"]
+pub(crate) mod raw_row;
+
 #[cfg(all(test, unix))]
 #[path = "guard_store_approval_reads_tests.rs"]
 pub(crate) mod tests;
