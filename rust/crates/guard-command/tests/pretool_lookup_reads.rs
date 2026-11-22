@@ -209,6 +209,31 @@ fn zsh_definition_lookup_can_emit_synthetic_markers() {
         .unwrap();
     assert!(output.status.success());
     assert!(!String::from_utf8_lossy(&output.stdout).contains("SYNTHETIC_GUARD_CANARY_91"));
+
+    // PATH-only lookups must not reveal the synthetic function or alias.
+    // These names are not executables, so nonzero exit codes are expected.
+    for command in [
+        "whence -p hol_probe_func",
+        "whence -p hol_probe_alias",
+        "whence -ap hol_probe_func",
+        "whence -ap hol_probe_alias",
+        "whence -p -- hol_probe_func",
+        "whence -p -- hol_probe_alias",
+    ] {
+        let script = format!("{setup}{command}\n");
+        let output = Command::new("zsh")
+            .args(["-f", "-c", &script])
+            .output()
+            .unwrap();
+        assert!(
+            !String::from_utf8_lossy(&output.stdout).contains("SYNTHETIC_GUARD_CANARY_91"),
+            "{command}: PATH-only stdout exposed synthetic definition"
+        );
+        assert!(
+            !String::from_utf8_lossy(&output.stderr).contains("SYNTHETIC_GUARD_CANARY_91"),
+            "{command}: PATH-only stderr exposed synthetic definition"
+        );
+    }
 }
 
 #[test]
