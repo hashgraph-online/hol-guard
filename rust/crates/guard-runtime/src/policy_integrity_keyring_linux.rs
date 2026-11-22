@@ -14,10 +14,14 @@
 //! which may unlock it, runs instead. A Secret Service that asks to confirm
 //! the creation of an item gets the same prompt `secretstorage`'s
 //! `create_item` raises in Python's mint, which this write replaces, and the
-//! call still ends at the deadline. A write that ends that way may yet commit,
-//! so the mint then answers `busy` and Python mints nothing.
+//! call still ends at the deadline. A write that ends that way, or whose
+//! prompt lost its connection before answering, may yet commit, so the mint
+//! then answers `busy` and Python mints nothing. The write's thread keeps the
+//! mint lock until it settles, so no later mint, native or Python, can adopt a
+//! fresh key that this write would then replace.
 
 use std::collections::HashMap;
+use std::fs::File;
 use std::sync::mpsc;
 use std::time::Instant;
 
@@ -37,6 +41,10 @@ const CONTENT_TYPE: &str = "text/plain";
 pub(super) struct SecretServiceKeyring {
     pub(super) service_name: String,
     pub(super) deadline: Instant,
+    /// A descriptor of the held mint lock. Each write's thread carries its
+    /// own copy and closes it when the write settles, so a write that outlives
+    /// the mint keeps the lock held until then.
+    pub(super) mint_lock: Option<File>,
 }
 
 fn attributes<'a>(service_name: &'a str, secret_id: &'a str) -> HashMap<&'a str, &'a str> {
@@ -45,12 +53,13 @@ fn attributes<'a>(service_name: &'a str, secret_id: &'a str) -> HashMap<&'a str,
 
 impl SecretServiceKeyring {
     /// Run one D-Bus exchange on its own thread and give up at the deadline.
-    /// A stalled thread is left to finish on its own; it holds no lock. A call
-    /// that never started is [`WriteFailure::Refused`]; one that started and
-    /// gave no answer in time is [`WriteFailure::Unsettled`].
+    /// A stalled thread is left to finish on its own, holding `keep` until it
+    /// does. A call that never started is [`WriteFailure::Refused`]; one that
+    /// started and gave no answer in time is [`WriteFailure::Unsettled`].
     fn bounded<T: Send + 'static>(
         &self,
-        call: impl FnOnce() -> Result<T, ()> + Send + 'static,
+        keep: Option<File>,
+        call: impl FnOnce() -> Result<T, WriteFailure> + Send + 'static,
     ) -> Result<T, WriteFailure> {
         let wait = self
             .deadline
@@ -60,11 +69,13 @@ impl SecretServiceKeyring {
         std::thread::Builder::new()
             .name("hol-guard-keyring".to_owned())
             .spawn(move || {
-                let _ = sender.send(call());
+                let answer = call();
+                drop(keep);
+                let _ = sender.send(answer);
             })
             .map_err(|_| WriteFailure::Refused)?;
         match receiver.recv_timeout(wait) {
-            Ok(answer) => answer.map_err(|()| WriteFailure::Refused),
+            Ok(answer) => answer,
             Err(_) => Err(WriteFailure::Unsettled),
         }
     }
@@ -89,11 +100,26 @@ fn read(service_name: &str, secret_id: &str) -> Result<Option<String>, ()> {
     Ok((!value.is_empty()).then_some(value))
 }
 
-fn write(service_name: &str, secret_id: &str, value: &str) -> Result<(), ()> {
-    let service = SecretService::connect(EncryptionType::Dh).map_err(|_| ())?;
-    let collection = service.get_default_collection().map_err(|_| ())?;
-    if collection.is_locked().map_err(|_| ())? {
-        return Err(());
+/// A failure before the item is submitted, which nothing can commit.
+fn refused<E>(_: E) -> WriteFailure {
+    WriteFailure::Refused
+}
+
+/// How a submitted `CreateItem` failed. A prompt whose connection closed
+/// before it answered left the outcome unknown; a dismissed prompt, or any
+/// other error the service reports, created nothing.
+fn create_failure(error: &secret_service::Error) -> WriteFailure {
+    match error {
+        secret_service::Error::PromptDisconnected => WriteFailure::Unsettled,
+        _ => WriteFailure::Refused,
+    }
+}
+
+fn write(service_name: &str, secret_id: &str, value: &str) -> Result<(), WriteFailure> {
+    let service = SecretService::connect(EncryptionType::Dh).map_err(refused)?;
+    let collection = service.get_default_collection().map_err(refused)?;
+    if collection.is_locked().map_err(refused)? {
+        return Err(WriteFailure::Refused);
     }
     let label = format!("Password for '{secret_id}' on '{service_name}'");
     let mut item_attributes = attributes(service_name, secret_id);
@@ -107,19 +133,26 @@ fn write(service_name: &str, secret_id: &str, value: &str) -> Result<(), ()> {
             CONTENT_TYPE,
         )
         .map(|_| ())
-        .map_err(|_| ())
+        .map_err(|error| create_failure(&error))
 }
 
 impl Primary for SecretServiceKeyring {
     fn get(&self, secret_id: &str) -> Result<Option<String>, ()> {
         let (service_name, secret_id) = (self.service_name.clone(), secret_id.to_owned());
-        self.bounded(move || read(&service_name, &secret_id))
-            .map_err(|_| ())
+        self.bounded(None, move || {
+            read(&service_name, &secret_id).map_err(|()| WriteFailure::Refused)
+        })
+        .map_err(|_| ())
     }
 
     fn set(&self, secret_id: &str, value: &str) -> Result<(), WriteFailure> {
         let service_name = self.service_name.clone();
         let (secret_id, value) = (secret_id.to_owned(), value.to_owned());
-        self.bounded(move || write(&service_name, &secret_id, &value))
+        // A write never starts without a copy of the mint lock to outlive it.
+        let keep = match &self.mint_lock {
+            Some(lock) => Some(lock.try_clone().map_err(refused)?),
+            None => None,
+        };
+        self.bounded(keep, move || write(&service_name, &secret_id, &value))
     }
 }

@@ -85,6 +85,19 @@ fn a_held_mint_lock_answers_busy() {
 
 #[cfg(unix)]
 #[test]
+fn a_kept_lock_descriptor_holds_the_mint_lock_after_the_mint() {
+    let home = home("kept");
+    let path = home.0.join(MINT_LOCK_FILE_NAME);
+    let held = hold(&path, Instant::now() + MINT_LOCK_BUDGET).expect("first hold");
+    let kept = held.keep().expect("kept descriptor");
+    drop(held);
+    assert!(matches!(hold(&path, Instant::now()), Err(Minted::Busy)));
+    drop(kept);
+    assert!(hold(&path, Instant::now() + MINT_LOCK_BUDGET).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
 fn both_lock_waits_share_one_budget() {
     let home = home("budget");
     let resolved = fs::canonicalize(&home.0).expect("resolved");

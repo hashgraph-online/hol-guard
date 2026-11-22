@@ -169,12 +169,17 @@ fn lock_options() -> OpenOptions {
     options
 }
 
-/// An exclusive `flock` on a lock file, released when dropped.
-struct Held(File);
+/// An exclusive `flock` on a lock file. The lock belongs to the open file, so
+/// it is released when its last descriptor closes: dropping this one releases
+/// it unless a descriptor from `Held::keep` is still open.
+struct Held(#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))] File);
 
-impl Drop for Held {
-    fn drop(&mut self) {
-        let _ = fs2::FileExt::unlock(&self.0);
+impl Held {
+    /// A second descriptor of the held lock, which keeps it held after this
+    /// one is dropped and until the second one is too.
+    #[cfg(any(target_os = "linux", test))]
+    fn keep(&self) -> Option<File> {
+        self.0.try_clone().ok()
     }
 }
 
@@ -194,16 +199,17 @@ fn hold(path: &Path, deadline: Instant) -> Result<Held, Minted> {
 /// Read the key under the mint lock, minting one only when none is stored and
 /// native controls are not armed.
 pub(crate) fn mint_once(guard_home: &Path) -> Minted {
-    with_mint_lock(guard_home, locked_mint)
+    with_mint_lock(guard_home, |home, deadline, _| locked_mint(home, deadline))
 }
 
 /// The mint for the Linux store that mirrors the desktop keyring.
 #[cfg(target_os = "linux")]
 fn mint_once_mirrored(guard_home: &Path) -> Minted {
-    with_mint_lock(guard_home, |home, deadline| {
+    with_mint_lock(guard_home, |home, deadline, held| {
         let primary = keyring_linux::SecretServiceKeyring {
             service_name: KEYRING_SERVICE_NAME.to_owned(),
             deadline: Instant::now() + KEYRING_BUDGET,
+            mint_lock: held.keep(),
         };
         locked_mint_mirrored(home, deadline, &primary)
     })
@@ -214,7 +220,7 @@ fn mint_once_mirrored(_guard_home: &Path) -> Minted {
     Minted::Unavailable
 }
 
-fn with_mint_lock(guard_home: &Path, mint: impl FnOnce(&Path, Instant) -> Minted) -> Minted {
+fn with_mint_lock(guard_home: &Path, mint: impl FnOnce(&Path, Instant, &Held) -> Minted) -> Minted {
     if !cfg!(unix) {
         return Minted::Unavailable;
     }
@@ -223,7 +229,7 @@ fn with_mint_lock(guard_home: &Path, mint: impl FnOnce(&Path, Instant) -> Minted
     };
     let deadline = Instant::now() + MINT_LOCK_BUDGET;
     match hold(&home.join(MINT_LOCK_FILE_NAME), deadline) {
-        Ok(_mint) => mint(&home, deadline),
+        Ok(held) => mint(&home, deadline, &held),
         Err(state) => state,
     }
 }
