@@ -152,6 +152,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
+        // The hook table and then the prompt table, read from one view.
+        "get_native_decision_receipt" => Kind::Snapshot,
         // One consistent view of the request and the allow issued for it.
         "peek_waited_exact_cloud_package_allow" => Kind::Snapshot,
         "consume_waited_exact_cloud_package_allow" => Kind::Write,
