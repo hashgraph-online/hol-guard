@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import urllib.request
 from pathlib import Path
@@ -255,6 +256,13 @@ def test_sync_completes_when_review_keys_arrive_without_a_workspace(
 ) -> None:
     store = _connected_store(tmp_path)
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: None)
+    # The sync cycle takes its workspace from the trust-row snapshot.
+    read_trust_rows = store.policy_bundle_trust_rows
+    monkeypatch.setattr(
+        store,
+        "policy_bundle_trust_rows",
+        lambda **kwargs: dataclasses.replace(read_trust_rows(**kwargs), workspace_id=None),
+    )
 
     summary = _sync_with_review_keys(store, monkeypatch, [_unanchored_review_key()])
 
