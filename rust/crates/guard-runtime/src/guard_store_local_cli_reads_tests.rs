@@ -65,7 +65,7 @@ fn the_revision_is_the_authority_row() {
 }
 
 #[test]
-fn the_surface_is_text_or_null() {
+fn the_surface_is_the_stored_text_or_null() {
     let connection = store();
     connection
         .execute(
@@ -76,6 +76,10 @@ fn the_surface_is_text_or_null() {
     assert_eq!(read(&connection, "read_local_cli_surface"), json!("mcp"));
     connection
         .execute("update local_cli_observation set surface = 3", [])
+        .unwrap();
+    assert_eq!(read(&connection, "read_local_cli_surface"), json!("3"));
+    connection
+        .execute("update local_cli_observation set surface = null", [])
         .unwrap();
     assert_eq!(read(&connection, "read_local_cli_surface"), Value::Null);
 }
