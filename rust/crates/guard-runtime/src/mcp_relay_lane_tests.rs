@@ -176,8 +176,6 @@ fn only_an_unported_feature_or_a_newer_runtime_hands_the_session_to_the_proxy() 
     for code in [
         "mcp_relay_runtime_superseded",
         "mcp_relay_store_newer",
-        "mcp_relay_saved_remote_policy",
-        "mcp_relay_saved_policy_unverifiable",
         "mcp_relay_session_server_proxy_tools",
     ] {
         assert!(hands_off(code), "{code}");
@@ -207,6 +205,8 @@ fn only_an_unported_feature_or_a_newer_runtime_hands_the_session_to_the_proxy() 
     for code in [
         DAEMON_REFUSED,
         "mcp_relay_store_unreadable",
+        "mcp_relay_saved_remote_policy",
+        "mcp_relay_saved_policy_unverifiable",
         "mcp_relay_session_review_mode",
         "mcp_relay_session_redaction_unbound",
         "direct_lane_unsupported",

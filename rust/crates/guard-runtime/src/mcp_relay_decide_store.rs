@@ -31,7 +31,12 @@ pub(super) const STORE_UNREADABLE: &str = "mcp_relay_store_unreadable";
 /// A store schema newer than this runtime reads, which the proxy of the same
 /// release still serves.
 pub(super) const STORE_NEWER: &str = "mcp_relay_store_newer";
+/// The cached policy bundle's authority could not be read. The call is
+/// refused; the session stays native.
 pub(super) const SAVED_REMOTE: &str = "mcp_relay_saved_remote_policy";
+/// The daemon published no integrity evidence the saved rows can be read
+/// with, or the store holds another state. The call is refused; the session
+/// stays native and the next call reads what the daemon republishes.
 const SAVED_UNVERIFIABLE: &str = "mcp_relay_saved_policy_unverifiable";
 /// The audit events a lookup raised could not be written. The proxy's lookup
 /// fails the same way when its own audit write does.
@@ -183,8 +188,8 @@ pub(super) fn write_audit(guard_home: &str, events: &[AuditEvent]) -> Result<(),
 /// after the snapshot (`write_audit`). A claim procures the
 /// same evidence (`_claim_integrity_evidence`), so the claim and the package
 /// spend read with it too.
-/// Without a key, or with a state that names another key, the proxy would
-/// read a different key or mint one, so the session still defers.
+/// Without a key, or with a state that names another key, the saved rows
+/// cannot be verified, so the call is refused.
 pub(crate) fn lookup_integrity(
     binding: &DirectLaneBinding,
 ) -> Result<
