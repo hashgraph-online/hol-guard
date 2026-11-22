@@ -16,11 +16,11 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     evaluate_tool_call,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
-from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
 from codex_plugin_scanner.guard.runtime.mcp_protection import (
     build_mcp_server_identity,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.mcp_call_projection_support import McpCallProjection, McpCallProjector
 from tests.mcp_tool_identity_helper import build_mcp_tool_identity
 
 

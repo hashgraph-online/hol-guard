@@ -1,11 +1,11 @@
 """MCP connector-setup cases for the benign false-positive gate.
 
-The gate replays each MCP call through Guard's real stdio proxy, as a harness
-that wrapped the server would, against the synthetic ``echo-mcp`` servers
-``write_connectors`` installs. The proxy asks the native runtime for its
-decision with the real store and writes the approval rows and receipts a
-person would see. Remote ``url`` servers are not wrapped by the proxy, so no
-case can replay one.
+The gate replays each MCP call through Guard's native stdio relay
+(``hol-guard-runtime mcp-relay``), launched with the argv an installer writes,
+against the synthetic ``echo-mcp`` servers ``write_connectors`` installs. The
+relay asks the gate's resident for each decision with the real store, and the
+resident writes the approval rows and receipts a person would see. Remote
+``url`` servers are not wrapped by the relay, so no case can replay one.
 
 Nothing leaves the machine: the child is a short local script that answers
 ``initialize`` and ``tools/list``, and answers ``tools/call`` with a fixed
@@ -14,23 +14,26 @@ text result so a call that got past Guard shows up in the response.
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ci.gauntlet.approval_rows import CONNECTOR_GROUP_ID, approval_rows
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE
-from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.cli.commands_mcp_relay_launch import RELAY_COMMAND, relay_argv
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.mcp_tool_calls import RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
-from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
+from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
 
 if TYPE_CHECKING:
@@ -39,6 +42,10 @@ if TYPE_CHECKING:
 SERVERS = ("echo-mcp", "echo-ready")
 READY_SERVER = "echo-ready"
 READY_TOOL = "lookup"
+_SESSION_SECONDS = 30.0
+_WARM_SECONDS = 30.0
+# The answer to a call the relay could not decide yet (`mcp_relay_authority::NO_DECISION`).
+_NO_DECISION = "HOL Guard could not obtain a native decision for this tool call."
 # Default mode neither links to the review nor tells the agent to ask the user for anything.
 FORBIDDEN_WORDING = ("http", "inbox", "approv", "ask the user", "ask your", "ask them")
 _TOOLS = [
@@ -111,22 +118,47 @@ def write_server(home: Path) -> None:
     script.write_text(_SERVER, encoding="utf-8")
 
 
-def _proxy(case: McpCase, fixture: BenignFixture, store: GuardStore) -> CodexMcpGuardProxy:
-    context = HarnessContext(home_dir=fixture.home, workspace_dir=fixture.worktree, guard_home=fixture.guard_home)
-    return CodexMcpGuardProxy(
-        server_name=case.server,
-        command=server_command(fixture.home, case.server),
-        context=context,
-        store=store,
-        config=GuardConfig(guard_home=fixture.guard_home, workspace=fixture.worktree, default_action="review"),
-        source_scope="global",
-        config_path=str(fixture.home / ".codex" / "config.toml"),
+def _identity(case: McpCase, fixture: BenignFixture) -> McpServerIdentity:
+    command, *args = server_command(fixture.home, case.server)
+    return build_mcp_server_identity(
+        config_path=_config_path(fixture),
+        command=command,
+        args=tuple(args),
+        transport="stdio",
+        env={},
     )
 
 
-def allow_ready_server(store: GuardStore, proxy: CodexMcpGuardProxy) -> None:
+def _config_path(fixture: BenignFixture) -> str:
+    return str(fixture.home / ".codex" / "config.toml")
+
+
+def _relay_command(case: McpCase, fixture: BenignFixture) -> list[str]:
+    """The relay command an installer writes for ``case.server`` in the Codex config."""
+    command, *args = server_command(fixture.home, case.server)
+    options = argparse.Namespace(
+        home=str(fixture.home),
+        workspace=str(fixture.worktree),
+        server_name=case.server,
+        source_scope="global",
+        config_path=_config_path(fixture),
+        transport="stdio",
+    )
+    argv = relay_argv(
+        "codex-mcp-proxy",
+        options,
+        guard_home=fixture.guard_home,
+        server_command=command,
+        server_args=args,
+        server_id=None,
+        server_env_keys=(),
+    )
+    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY", "")
+    return [binary, RELAY_COMMAND, sys.executable, *argv]
+
+
+def allow_ready_server(store: GuardStore, identity: McpServerIdentity) -> None:
     """Record the local admin's allow for one tool of ``echo-ready`` through the store's grant API."""
-    identity = proxy.server_identity
     cli = UnlistedCliIdentity(
         cli_id=f"local-cli.mcp-{identity.identity_hash[:8]}",
         name=READY_SERVER,
@@ -170,18 +202,65 @@ def _messages(case: McpCase) -> list[dict[str, Any]]:
     ]
 
 
+def _session(command: list[str], fixture: BenignFixture, messages: list[dict[str, Any]]) -> dict[int, Any]:
+    """Run one relay session and return its responses by id; stdin closes after the last answer."""
+    wanted = {int(message["id"]) for message in messages}
+    responses: dict[int, Any] = {}
+    with subprocess.Popen(
+        command,
+        cwd=fixture.worktree,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    ) as session:
+        assert session.stdin is not None and session.stdout is not None
+        try:
+            for message in messages:
+                session.stdin.write(json.dumps(message) + "\n")
+                session.stdin.flush()
+                for line in session.stdout:
+                    answer = json.loads(line)
+                    if isinstance(answer.get("id"), int):
+                        responses[answer["id"]] = answer
+                    if message["id"] in responses:
+                        break
+                if message["id"] not in responses:
+                    break
+            session.stdin.close()
+            session.wait(timeout=_SESSION_SECONDS)
+        except BaseException:
+            session.kill()
+            raise
+    return {key: value for key, value in responses.items() if key in wanted}
+
+
+def _warming(response: dict[str, Any]) -> bool:
+    """Whether the relay refused the call only because its resident had no decision yet."""
+    error = response.get("error")
+    return isinstance(error, dict) and error.get("message") == _NO_DECISION
+
+
 def replay(
     case: McpCase, fixture: BenignFixture, store: GuardStore
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
-    """Run one call through the proxy: its answer, the approval rows it queued and the server's identity hash."""
+    """Run one call through the relay: its answer, the approval rows it queued and the server's identity hash."""
     provision_native_verifier_key_for_store(store)
-    proxy = _proxy(case, fixture, store)
+    identity = _identity(case, fixture)
     if case.server == READY_SERVER:
-        allow_ready_server(store, proxy)
+        allow_ready_server(store, identity)
+    command = _relay_command(case, fixture)
     known = {str(row.get("request_id")) for row in store.list_approval_requests(status=None, limit=500)}
-    result = proxy.run_session(_messages(case))
+    # The first session reports the server's catalog; a call refused while the
+    # resident still records it is sent again in a later session.
+    deadline = time.monotonic() + _WARM_SECONDS
+    while True:
+        response = _session(command, fixture, _messages(case)).get(3, {})
+        if not _warming(response) or time.monotonic() > deadline:
+            break
+        time.sleep(0.25)
     rows = approval_rows(store, known)
-    return result["responses"][2], rows, proxy.server_identity.identity_hash
+    return response, rows, identity.identity_hash
 
 
 def mcp_failure(case: McpCase, response: dict[str, Any], rows: list[dict[str, Any]], identity: str) -> str | None:
