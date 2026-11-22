@@ -169,6 +169,7 @@
       "src/hook_responses/claude.rs",
       "src/hook_responses/cli_documents.rs",
       "src/hook_responses/containment.rs",
+      "src/hook_responses/fail_closed.rs",
       "src/hook_responses/hermes.rs",
       "src/hook_responses/mod.rs",
       "src/hook_responses/muse.rs",
