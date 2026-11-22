@@ -167,7 +167,17 @@ class StoreCloudEventsMixin:
         )
 
     def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
-        payload = self._native_store_call("get_sync_payload", {"state_key": state_key})
+        # Read in Python on purpose: device identity and the Cloud sync profile
+        # are read before the native store is provisioned, and a malformed row
+        # must raise ValueError so status views report it instead of a blank.
+        with self._connect() as connection:
+            row = connection.execute(
+                "select payload_json from sync_state where state_key = ?",
+                (state_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        payload = json.loads(str(row["payload_json"]))
         if isinstance(payload, (dict, list)):
             return payload
         return None

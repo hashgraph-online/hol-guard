@@ -1,4 +1,4 @@
-"""The ``sync_state`` writes and reads run in the native store."""
+"""The ``sync_state`` writes run in the native store; reads stay in Python."""
 
 from __future__ import annotations
 

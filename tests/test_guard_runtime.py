@@ -9425,9 +9425,9 @@ def test_guard_hook_claude_ask_user_question_unsigned_legacy_pending_state_canno
 
     assert persisted is None
     assert policies == []
-    # The native authority refuses the unsigned row without mutating the
-    # caller-owned legacy index.
-    assert store.get_sync_payload(f"claude_pending_permissions:{session_id}") == [pending_key]
+    # The native store write provisions the local authority key, so the
+    # resident can check the unsigned index and drops it instead of trusting it.
+    assert store.get_sync_payload(f"claude_pending_permissions:{session_id}") is None
 
 
 def test_guard_hook_claude_ask_user_question_unsigned_bound_pending_cannot_persist_decision(tmp_path):
