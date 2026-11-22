@@ -9,6 +9,7 @@ from typing import Final, cast
 from .store_local_cli_capabilities import ensure_local_cli_capability_table
 from .store_local_cli_context import ensure_local_cli_context_columns
 from .store_local_cli_regroup import regroup_pending_connector_reviews
+from .store_mcp_catalog import rebuild_tool_authority
 
 LOCAL_CLI_SCHEMA_VERSION: Final = 14
 _V1_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v1").hexdigest()
@@ -132,8 +133,6 @@ def ensure_local_cli_schema(connection: sqlite3.Connection, *, for_read: bool = 
         if version == 10 and checksum == _V10_CHECKSUM:
             _ensure_mcp_tool_authority_table(connection)
             _ensure_workflow_proposal_table(connection)
-            from .store_mcp_catalog import rebuild_tool_authority
-
             for cli_id, identity_hash, raw, revision in connection.execute(
                 "select cli_id, identity_hash, catalog_json, revision from local_mcp_catalog"
             ).fetchall():
