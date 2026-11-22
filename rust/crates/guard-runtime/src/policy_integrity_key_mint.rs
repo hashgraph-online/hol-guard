@@ -155,15 +155,26 @@ fn resolved_home(guard_home: &Path) -> Option<PathBuf> {
 }
 
 /// Drop the `\\?\` prefix Windows canonical paths carry and Python's do not.
+/// Only a drive-letter or UNC path loses it: a path with no such spelling,
+/// such as a volume-GUID path, keeps the prefix, as Python's `resolve()` keeps
+/// it, rather than becoming a relative path.
 fn without_verbatim_prefix(path: PathBuf) -> PathBuf {
     let text = path.to_string_lossy().into_owned();
     if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
         return PathBuf::from(format!(r"\\{rest}"));
     }
     match text.strip_prefix(r"\\?\") {
-        Some(rest) => PathBuf::from(rest),
-        None => path,
+        Some(rest) if is_drive_absolute(rest) => PathBuf::from(rest),
+        _ => path,
     }
+}
+
+/// `C:\` and the like: a drive letter, a colon and a separator.
+fn is_drive_absolute(text: &str) -> bool {
+    matches!(
+        text.as_bytes(),
+        [letter, b':', b'\\' | b'/', ..] if letter.is_ascii_alphabetic()
+    )
 }
 
 fn armed(home: &Path) -> bool {

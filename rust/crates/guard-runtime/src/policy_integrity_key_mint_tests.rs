@@ -240,6 +240,14 @@ fn the_key_ref_uses_the_home_as_python_spells_it() {
         PathBuf::from(r"\\server\share\guard")
     );
     assert_eq!(
+        without_verbatim_prefix(PathBuf::from(r"\\?\Volume{0000}\guard")),
+        PathBuf::from(r"\\?\Volume{0000}\guard")
+    );
+    assert_eq!(
+        without_verbatim_prefix(PathBuf::from(r"\\?\C:")),
+        PathBuf::from(r"\\?\C:")
+    );
+    assert_eq!(
         without_verbatim_prefix(PathBuf::from("/home/example/.hol-guard")),
         PathBuf::from("/home/example/.hol-guard")
     );
