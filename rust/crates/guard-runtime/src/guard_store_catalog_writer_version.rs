@@ -9,6 +9,8 @@
 //! carries a writer version; a backfilled event names none and is skipped.
 //!
 //! The scan is bounded to the newest 512 migration events, one per revision.
+//! A payload stored as anything but text reads as null and is skipped, as the
+//! Python decoder skipped it.
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -28,7 +30,8 @@ pub(crate) fn dispatch(connection: &Connection, args: &Args<'_>) -> StoreResult<
     let catalog_digest = args.str("catalog_digest")?;
     let rows = query_all(
         connection,
-        "select payload_json from guard_events where event_name = ? order by event_id desc limit ?",
+        "select case when typeof(payload_json) = 'text' then payload_json end as payload_json \
+         from guard_events where event_name = ? order by event_id desc limit ?",
         &[
             Value::from(MIGRATED_EVENT),
             Value::from(WRITER_LOOKUP_LIMIT),

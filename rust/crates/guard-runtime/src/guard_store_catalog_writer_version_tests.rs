@@ -83,6 +83,24 @@ fn malformed_and_blank_events_are_skipped() {
 }
 
 #[test]
+fn a_blob_payload_is_skipped() {
+    let connection = store(&[
+        json!({"catalog_digest": "catalog-x", "provenance": {"writer_version": "3.41.0"}}),
+    ]);
+    let blob = json!({"catalog_digest": "catalog-x", "provenance": {"writer_version": "3.50.0"}})
+        .to_string()
+        .into_bytes();
+    connection
+        .execute(
+            "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, 't')",
+            (MIGRATED_EVENT, blob),
+        )
+        .unwrap();
+    assert_eq!(writer(&connection, "catalog-x"), json!("3.41.0"));
+    assert_eq!(writer(&connection, "catalog-y"), Value::Null);
+}
+
+#[test]
 fn other_event_names_are_ignored() {
     let connection = store(&[]);
     connection
