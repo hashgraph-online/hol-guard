@@ -207,6 +207,21 @@ def test_observation_triggers_only_on_a_change(tmp_path: Path) -> None:
     assert assessments.record_observation(store, KEYS, stat_digest=None) == ()
 
 
+def test_observing_a_change_queues_its_run_or_keeps_the_change(tmp_path: Path) -> None:
+    store = admitted(tmp_path)
+
+    def observe(stat: str, detectors: str = DETECTORS) -> int:
+        return assessments.observe(store, KEYS, detector_set_digest=detectors, now_ms=T0, stat_digest=digest(stat))
+
+    assert observe("a") == 0
+    # The run cannot be stored, so the observation is rolled back with it and
+    # the next poll still sees the change.
+    with pytest.raises(sqlite3.IntegrityError):
+        observe("b", detectors="short")
+    assert observe("b") == 1
+    assert observe("b") == 0
+
+
 def test_latest_assessed_runs_skip_failed_runs(tmp_path: Path) -> None:
     store = admitted(tmp_path)
     enqueue(store, "manual")

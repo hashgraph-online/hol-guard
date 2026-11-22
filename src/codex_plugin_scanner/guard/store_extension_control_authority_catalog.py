@@ -20,7 +20,6 @@ from .runtime.extension_control_authority import (
 )
 from .runtime.extension_control_contract import ExtensionControlLayer
 from .store_extension_control_authority_catalog_events import (
-    already_recorded,
     migration_provenance,
     recorded_writer_version,
 )
@@ -104,9 +103,8 @@ class ExtensionControlAuthorityCatalogMixin:
         layers: tuple[ExtensionControlLayer, ...],
         retired_targets: tuple[str, ...],
     ) -> None:
-        with self._connect() as connection:
-            if already_recorded(connection, revision):
-                return
+        # The resident reports only migrations whose event the store lacks, and
+        # rechecks inside the transaction that records one.
         described, downgraded_from = migration_provenance(
             None,
             catalog_digest,
@@ -148,8 +146,7 @@ class ExtensionControlAuthorityCatalogMixin:
         """
 
         catalog_digest = str(request["catalog_digest"])
-        with self._connect() as connection:
-            previous_writer_version = recorded_writer_version(connection, previous_catalog_digest)
+        previous_writer_version = recorded_writer_version(self, previous_catalog_digest)
         described, downgraded_from = migration_provenance(
             previous_writer_version,
             catalog_digest,

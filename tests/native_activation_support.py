@@ -126,3 +126,31 @@ def subset_store(previous):
         revocation=identity["revocation"],
     )
     return store
+
+
+def activation_slot_call(connect):
+    """Stand-in for the native ``read_command_pack_activation`` over a fixture connection.
+
+    Fixture stores keep their database in memory, out of the resident's reach,
+    so this answers the one slot read with the same states the native read uses.
+    """
+    from codex_plugin_scanner.guard.catalog_delivery.activation_store import _row
+    from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
+
+    def call(method, args):
+        assert method == "read_command_pack_activation" and args == {}
+        with connect() as connection:
+            if not connection.execute(
+                "select 1 from sqlite_master where type='table' and name='extension_control_schema_migration'"
+            ).fetchone():
+                return {"state": "absent"}
+            try:
+                row = _row(connection)
+            except NativePolicySnapshotError as error:
+                return {"state": "refused", "code": str(error)}
+        if row is None:
+            return {"state": "absent"}
+        fields = ("revision", "record_json", "record_digest", "record_mac", "recorded_at")
+        return {"state": "present", "row": {name: row[name] for name in fields}}
+
+    return call
