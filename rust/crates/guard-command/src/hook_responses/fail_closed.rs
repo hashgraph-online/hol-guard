@@ -89,7 +89,6 @@ pub fn response(
         .cloned()
         .ok_or("native_hook_render_invalid")
 }
-
 /// Render the fixed PreToolUse deny for a verdict whose native response could
 /// not be delivered. An allowed verdict is denied with the generic renderer
 /// reason because the action was blocked by the missing response itself.
