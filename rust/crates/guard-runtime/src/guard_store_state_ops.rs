@@ -11,6 +11,9 @@ use crate::guard_store_db::{
     exec, query_all, query_one, text, value_error, StoreError, StoreResult,
 };
 
+#[path = "guard_store_workspace_fix_proposals.rs"]
+mod workspace_fix_proposals;
+
 #[path = "guard_store_workspace_assessment_reads.rs"]
 mod workspace_assessment;
 
@@ -34,7 +37,8 @@ pub(crate) fn handles(method: &str) -> bool {
             | "get_runtime_state"
             | "clear_runtime_state"
             | "hook_approval_center_origin"
-    ) || workspace_assessment::handles(method)
+    ) || workspace_fix_proposals::handles(method)
+        || workspace_assessment::handles(method)
         || catalog_writer_version::handles(method)
 }
 
@@ -47,6 +51,9 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
         "get_runtime_state" => runtime_state(connection),
         "clear_runtime_state" => clear_runtime_state(connection, args),
         "hook_approval_center_origin" => hook_approval_center_origin(connection),
+        _ if workspace_fix_proposals::handles(method) => {
+            workspace_fix_proposals::dispatch(connection, method, args)
+        }
         _ if workspace_assessment::handles(method) => {
             workspace_assessment::dispatch(connection, method, args)
         }

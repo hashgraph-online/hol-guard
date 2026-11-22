@@ -15,24 +15,32 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   );
 }
 
-export function useFocusTrap(active: boolean, containerRef: React.RefObject<HTMLElement | null>) {
+export function useFocusTrap(
+  active: boolean,
+  containerRef: React.RefObject<HTMLElement | null>,
+  initialFocusRef?: React.RefObject<HTMLElement | null>,
+) {
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!active) return;
     const container = containerRef.current;
     if (!container) return;
+    const focusContainer = container;
 
     previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
 
-    const initial = getFocusableElements(container);
-    if (initial[0]) {
-      initial[0].focus();
+    const preferred = initialFocusRef?.current;
+    if (preferred && getFocusableElements(focusContainer).some((element) => element === preferred)) {
+      preferred.focus();
+    } else {
+      const initial = getFocusableElements(focusContainer);
+      if (initial[0]) initial[0].focus();
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== "Tab") return;
-      const focusable = getFocusableElements(container);
+      const focusable = getFocusableElements(focusContainer);
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (focusable.length === 0) {
@@ -50,12 +58,12 @@ export function useFocusTrap(active: boolean, containerRef: React.RefObject<HTML
       }
     }
 
-    container.addEventListener("keydown", handleKeyDown);
+    focusContainer.addEventListener("keydown", handleKeyDown);
     return () => {
-      container.removeEventListener("keydown", handleKeyDown);
+      focusContainer.removeEventListener("keydown", handleKeyDown);
       if (previouslyFocusedRef.current && previouslyFocusedRef.current.isConnected) {
         previouslyFocusedRef.current.focus();
       }
     };
-  }, [active, containerRef]);
+  }, [active, containerRef, initialFocusRef]);
 }
