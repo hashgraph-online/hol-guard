@@ -3513,23 +3513,6 @@
       "expect": "allow"
     },
     {
-      "id": "host-fact-bc-mathlib",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "bc -l"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
       "id": "host-fact-cal-month",
       "fix_area": "shell",
       "harnesses": [

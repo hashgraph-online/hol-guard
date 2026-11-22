@@ -31,7 +31,6 @@ fn a_fact_about_the_host_prints_and_runs_nothing() {
         ("seq", vec!["-w", "1", "2", "10"]),
         ("seq", vec!["-s", ",", "1", "5"]),
         ("expr", vec!["1", "+", "2"]),
-        ("bc", vec!["-l"]),
         ("col", vec!["-b"]),
         ("cal", vec![]),
         ("cal", vec!["2026"]),
@@ -71,6 +70,7 @@ fn a_spelling_that_assigns_execs_or_opens_a_file_stays_reviewed() {
         ("tput", vec!["init"]),
         ("tput", vec![]),
         // Opens a file operand.
+        ("bc", vec!["-l"]),
         ("bc", vec!["budget.bc"]),
         ("col", vec!["report.txt"]),
         // Operands that are paths rather than accounts or keywords.

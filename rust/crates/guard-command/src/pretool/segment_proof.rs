@@ -493,7 +493,13 @@ pub(super) fn exact_safe_segment_with_context(
     {
         return false;
     }
-    if super::host_facts::safe_host_fact(basename, &segment.arguments)
+    if (super::host_facts::safe_host_fact(basename, &segment.arguments)
+        // `expr` prints its operands, in the result or in the error naming
+        // the next one, and a `seq` separator is printed between the bounds,
+        // so an unquoted glob in either reaches the terminal the way `echo`'s
+        // does and is screened by the same listing proof.
+        && (!matches!(basename, "expr" | "seq")
+            || super::glob_words::printed_globs_listable(model, segment, context)))
         || super::version_probes::safe_version_probe(basename, &segment.arguments)
         || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
         || super::liveness_probes::safe_liveness_probe(basename, &segment.arguments)

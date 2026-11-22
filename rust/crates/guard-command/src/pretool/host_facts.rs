@@ -105,12 +105,12 @@ pub(super) fn safe_host_fact(basename: &str, arguments: &[String]) -> bool {
         // `expr` evaluates its operands and prints the result. It opens no
         // file and starts no process, whatever the expression says.
         "expr" => !arguments.is_empty(),
-        // `bc` and `col` read standard input. A `bc` file operand opens that
-        // file, so only the flag forms prove; `col` takes no operand at all.
-        "bc" => flags_only(
-            arguments,
-            &["-l", "--mathlib", "-q", "--quiet", "-s", "--standard"],
-        ),
+        // `col` reads standard input and takes no operand at all.
+        //
+        // `bc` is left out: GNU `bc` reads `BC_ENV_ARGS` from the inherited
+        // environment and treats its words as a command line, so a file named
+        // there is opened and run before standard input is read. The argument
+        // list alone cannot show that variable is absent.
         "col" => flags_only(arguments, &["-b", "-f", "-p", "-x", "-h"]),
         _ => false,
     }

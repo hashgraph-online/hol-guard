@@ -18,8 +18,9 @@ const GLOB: [char; 3] = ['*', '?', '['];
 const OPEN: [char; 5] = ['*', '?', '[', '$', '`'];
 
 /// Programs whose words reach the terminal, on success or in an error.
-const PRINTERS: [&str; 9] = [
-    "pwd", "true", "echo", "printf", "which", "whoami", "uname", "dirname", "basename",
+const PRINTERS: [&str; 11] = [
+    "pwd", "true", "echo", "printf", "which", "whoami", "uname", "dirname", "basename", "expr",
+    "seq",
 ];
 
 /// One shell word: its quote-removed value, whether an unquoted glob in it
