@@ -86,9 +86,6 @@ from .store_evidence import (
 )
 from .store_receipt_rollup_schema import receipt_rollup_index_statements, receipt_rollup_schema_statements
 from .store_resume import (
-    delete_request_resumes as purge_request_resumes,
-)
-from .store_resume import (
     resume_schema_statement,
 )
 from .store_supply_chain import (
