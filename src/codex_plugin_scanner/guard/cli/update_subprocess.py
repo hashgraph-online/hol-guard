@@ -36,6 +36,7 @@ from ..windows_paths import (
     trusted_windows_system_executable,
     trusted_windows_user_profile,
 )
+from .update_uv_layout import custom_uv_tool_layout, uv_user_bin_dir
 
 _DEFAULT_INDEX_URL = "https://pypi.org/simple"
 _PIP_NO_CACHE_ARG = "--no-cache-dir"
@@ -1190,8 +1191,9 @@ def _trusted_runtime_search_path(*, installer_kind: str) -> str:
 
     allowed: list[Path] = []
     if installer_kind in {"pipx", "uv"}:
-        _manager_home, manager_bin = _manager_home_from_prefix(installer_kind)
-        allowed.append(manager_bin)
+        manager_bin = _manager_executable_dir(installer_kind)
+        if manager_bin is not None:
+            allowed.append(manager_bin)
     if os.name != "nt":
         for raw_entry in os.defpath.split(os.pathsep):
             if raw_entry:
@@ -1401,6 +1403,27 @@ def _trusted_pipx_shared_import_identity(
 
 
 def _manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:
+    try:
+        return _standard_manager_home_from_prefix(installer_kind)
+    except UpdateSubprocessError:
+        if installer_kind == "uv":
+            # A uv tool directory moved with UV_TOOL_DIR has no fixed name to recognize.
+            layout = custom_uv_tool_layout(Path(sys.prefix).expanduser().resolve())
+            if layout is not None:
+                return layout
+        raise
+
+
+def _manager_executable_dir(installer_kind: str) -> Path | None:
+    try:
+        return _standard_manager_home_from_prefix(installer_kind)[1]
+    except UpdateSubprocessError:
+        _manager_home_from_prefix(installer_kind)
+        # A custom launcher directory comes from the environment, so it is never searched for uv itself.
+        return uv_user_bin_dir()
+
+
+def _standard_manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:
     prefix = Path(sys.prefix).expanduser().resolve()
     marker = "venvs" if installer_kind == "pipx" else "tools"
     marker_index = next(
@@ -1439,9 +1462,7 @@ def _manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:
         return manager_home, user_home / ".local" / "bin"
     if os.name != "nt" and _manager_path_matches(marker_root, Path("/opt/pipx/venvs")):
         return manager_home, Path("/usr/local/bin")
-    manager_root_matches = any(
-        _manager_component_matches(local_root, expected_name) for expected_name in ("pipx", "uv")
-    )
+    manager_root_matches = _manager_component_matches(local_root, installer_kind)
     if manager_root_matches and _manager_component_matches(local_root.parent, "share"):
         bin_dir = local_root.parent.parent / "bin"
     elif manager_root_matches:
