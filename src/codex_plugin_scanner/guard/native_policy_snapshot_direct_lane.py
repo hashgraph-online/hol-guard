@@ -345,7 +345,13 @@ class NativePolicySnapshotDirectLaneAck:
 
         if self._direct_lane_ack_target is None:
             return
-        if self._direct_lane_lease_expires_at_ms - _now_ms() > DIRECT_LANE_ACK_RENEW_REMAINING_MS:
+        # A one-shot hook's own publisher removes the shared ACK when it
+        # exits. Waiting for the lease to run down would keep the lane closed
+        # for seconds, longer than a routed hook waits for it to reopen.
+        if (
+            self._direct_lane_lease_expires_at_ms - _now_ms() > DIRECT_LANE_ACK_RENEW_REMAINING_MS
+            and self._direct_lane_ack_path().exists()
+        ):
             return
         with _ACK_LOCK:
             if self._direct_lane_evidence_bound and not self._direct_evidence_drain_enabled:

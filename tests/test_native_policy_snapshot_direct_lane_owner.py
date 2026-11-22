@@ -66,3 +66,21 @@ def test_a_missing_ack_is_rewritten_by_its_owner(tmp_path: Path, clock: list[int
     clock[0] += DIRECT_LANE_ACK_LEASE_MS
     live._renew_direct_lane_ack()
     assert _ack(live)["generation"] == 3
+
+
+def test_an_ack_removed_by_another_publisher_is_rewritten_before_the_lease_runs_down(
+    tmp_path: Path, clock: list[int]
+) -> None:
+    # A one-shot hook's publisher shares the ACK path and removes it on exit.
+    live = _Publisher(tmp_path, 3)
+    expires = _ack(live)["lease_expires_at_ms"]
+    live._direct_lane_ack_path().unlink()
+
+    clock[0] += 100
+    live._renew_direct_lane_ack()
+    assert _ack(live)["generation"] == 3
+
+    # A present ACK with lease to spare is left as it is.
+    live._renew_direct_lane_ack()
+    assert _ack(live)["lease_expires_at_ms"] == clock[0] + DIRECT_LANE_ACK_LEASE_MS
+    assert _ack(live)["lease_expires_at_ms"] != expires
