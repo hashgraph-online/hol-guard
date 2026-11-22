@@ -68,10 +68,106 @@ pub(super) fn inert_assignment(name: &str, value: &str) -> bool {
 /// and a contained run of the projected command would repeat a cached test
 /// the caller asked to rerun. Keeping it on the proof side leaves the
 /// value screen in `env_prefix_values` free to say so.
-pub(super) fn ordinary_project_setting(name: &str, value: &str) -> bool {
+pub(super) fn ordinary_project_setting(
+    name: &str,
+    value: &str,
+    context: PathContext<'_>,
+    first_command: bool,
+) -> bool {
     inert_tool_setting(name, value)
-        || plain_project_value(value)
+        || (plain_project_value(value) || workspace_path_value(value, context, first_command))
             && crate::command_compatibility::environment::ordinary_setting_name(name)
+}
+
+/// A value that spells a location inside the working directory, written in
+/// the characters [`plain_project_value`] already admits plus the separator
+/// that keeps it out of them.
+///
+/// The name screens above have already removed every family a program reads
+/// as a path of its own: program lookup, code loading, configuration, a home,
+/// a credential, the trust anchor and the endpoint. What is left is a name
+/// whose value the command reads for itself, and the separator alone said
+/// nothing about whether reading it reaches past the command's own work. It
+/// reaches nothing new while every file the value can name sits in the
+/// directory the command already runs in, which is what this screen checks:
+/// an absolute value only under the working directory, a relative one only
+/// while no component climbs out of it. A credential directory is refused
+/// wherever it sits, because a setting may name one inside a workspace too;
+/// the screen reads the location the value resolves to rather than the value
+/// as written, so `DATA_DIR=.aws/credentials` is refused for the same reason
+/// `DATA_DIR=/work/site/.aws/credentials` is.
+///
+/// A relative value names a location only once the directory it is read from
+/// is known. The caller's working directory is the one the command line
+/// started in, so it answers for the first simple command alone: after
+/// `cd /etc &&` the shell has moved, and `ssl/private` no longer names
+/// anything inside the workspace. `first_command` carries that, and a
+/// relative value is read only while it holds. An absolute value needs no
+/// such care, because it names the same location wherever it is read.
+fn workspace_path_value(value: &str, context: PathContext<'_>, first_command: bool) -> bool {
+    if value.len() > MAX_SCALAR_CHARS
+        || value.starts_with('-')
+        || !value.contains('/')
+        || !value.chars().all(|character| {
+            character == '/' || character.is_ascii_alphanumeric() || "._-".contains(character)
+        })
+        // A leading separator other than `/` is the program's own notation,
+        // not a path component: `TZ=:/zoneinfo/UTC` names a file through a
+        // colon the screens above never read.
+        || !value
+            .chars()
+            .next()
+            .is_some_and(|first| first == '/' || first == '.' || first == '_' || first.is_ascii_alphanumeric())
+    {
+        return false;
+    }
+    // Without a working directory there is nothing to measure the value
+    // against, so a literal or offline context reads no path value here.
+    let Some(workspace) = context
+        .cwd
+        .map(|cwd| cwd.trim_end_matches('/'))
+        .filter(|cwd| cwd.len() > 1 && cwd.starts_with('/'))
+    else {
+        return false;
+    };
+    let relative = if value.starts_with('/') {
+        let Some(rest) = value.strip_prefix(workspace) else {
+            return false;
+        };
+        // `/work/site` is not a path under `/work/sit`; only a separator or
+        // the end of the value says the prefix was a whole component.
+        match rest.strip_prefix('/') {
+            Some(rest) => rest,
+            None if rest.is_empty() => rest,
+            None => return false,
+        }
+    } else {
+        value
+    };
+    if !(value.starts_with('/') || first_command) {
+        return false;
+    }
+    if !(relative.is_empty()
+        || relative
+            .split('/')
+            .all(|component| !component.is_empty() && component != ".."))
+    {
+        return false;
+    }
+    let resolved = if relative.is_empty() {
+        workspace.to_owned()
+    } else {
+        format!("{workspace}/{relative}")
+    };
+    // `sensitive_location_text` looks for a credential's spelling inside the
+    // text, so it reads `vendor/.ssh/id_rsa` but not a value that stops at
+    // the store itself (`vendor/.ssh`, `vendor/.gnupg`) or names a key by a
+    // spelling its needles do not carry (`vendor/id_ecdsa`). A setting hands
+    // the program a location to read, so the resolved value faces the same
+    // screen a read argument does, which answers for the store and for the
+    // key file's own name.
+    !crate::pretool::sensitive_location_text(&resolved)
+        && !crate::pretool::sensitive_read_path_argument(&resolved)
 }
 
 /// [`crate::pretool::generic::inert_tool_settings::inert_tool_setting`], reachable
