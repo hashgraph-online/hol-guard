@@ -312,23 +312,21 @@ def fail_closed_response(
     """
 
     if guard_home is not None:
-        from ..hook_failure_bridge import native_hook_failure
+        from ..hook_failure_bridge import native_hook_failure_document
 
-        native = native_hook_failure(
+        decoded = native_hook_failure_document(
             canonical_harness(harness),
             event_name,
-            prompt_reason if _event_kind(event_name) == "prompt" and prompt_reason else reason,
+            (
+                prompt_reason or PROMPT_UNAVAILABLE_REASON
+                if _event_kind(event_name) == "prompt"
+                else reason
+            ),
             reason_code=reason_code,
             deadline=deadline,
         )
-        if native is not None:
-            document, _exit_code = native
-            try:
-                decoded = json.loads(document)
-            except (TypeError, ValueError):
-                decoded = None
-            if isinstance(decoded, dict):
-                return decoded
+        if decoded is not None:
+            return decoded
     kind = _event_kind(event_name)
     if kind == "prompt":
         reason = prompt_reason or PROMPT_UNAVAILABLE_REASON

@@ -206,6 +206,26 @@ def test_guard_home_uses_the_rust_hook_failure_renderer(monkeypatch: pytest.Monk
     assert seen["reason_code"] == "native_hook_render_unavailable"
 
 
+def test_guard_home_preserves_default_prompt_guidance_for_native_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    seen: dict[str, object] = {}
+
+    def native_failure(*args: object, **kwargs: object) -> tuple[str, int]:
+        seen["args"] = args
+        seen.update(kwargs)
+        return '{"behavior":"deny"}', 2
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.hook_failure_bridge.native_hook_failure",
+        native_failure,
+    )
+    assert hook_fail_closed.fail_closed_response(
+        "copilot", "userPromptSubmitted", guard_home=tmp_path
+    ) == {"behavior": "deny"}
+    assert seen["args"] == ("copilot", "userPromptSubmitted", hook_fail_closed.PROMPT_UNAVAILABLE_REASON)
+
+
 def test_review_render_failure_drops_a_raw_approval_url(monkeypatch: pytest.MonkeyPatch) -> None:
     """A fixed deny carries no signed link, so it carries no raw link either."""
 
