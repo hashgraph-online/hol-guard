@@ -80,6 +80,9 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "hook_approval_center_origin"
         | "workspace_assessment_watched_roots"
         | "is_manual_workspace_assessment_admission"
+        | "list_workspace_assessment_worktrees"
+        | "list_workspace_assessment_runs"
+        | "latest_workspace_assessment_run"
         | "get_runtime_state"
         | "read_local_cli_grant"
         | "read_local_cli_command_catalog"
@@ -137,6 +140,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "oldest_approval_request_created_at"
         | "cached_supply_chain_bundle"
         | "get_cached_supply_chain_bundle"
+        | "newest_supply_chain_bundle_workspace"
         | "hook_managed_install_admission"
         // Only a digest, or the shape, of the stored sign-in record leaves
         // the store.
@@ -161,6 +165,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
+        // The hook table and then the prompt table, read from one view.
+        "get_native_decision_receipt" => Kind::Snapshot,
         // One consistent view of the request and the allow issued for it.
         "peek_waited_exact_cloud_package_allow" => Kind::Snapshot,
         "consume_waited_exact_cloud_package_allow" => Kind::Write,

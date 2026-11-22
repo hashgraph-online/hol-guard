@@ -16,6 +16,9 @@ mod assessment_admissions;
 #[path = "guard_store_workspace_assessment_queue.rs"]
 mod assessment_queue;
 
+#[path = "guard_store_workspace_assessment_reads.rs"]
+mod workspace_assessment;
+
 const OAUTH_STATE_KEY: &str = "oauth_local_credentials";
 const MIRROR_STATE_KEYS: [&str; 3] = [
     "managed_policy_bundle_keyring_provenance",
@@ -35,6 +38,7 @@ pub(crate) fn handles(method: &str) -> bool {
             | "hook_approval_center_origin"
     ) || assessment_queue::handles(method)
         || assessment_admissions::handles(method)
+        || workspace_assessment::handles(method)
 }
 
 pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> StoreResult<Value> {
@@ -51,6 +55,9 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
         }
         _ if assessment_admissions::handles(method) => {
             assessment_admissions::dispatch(connection, method, args)
+        }
+        _ if workspace_assessment::handles(method) => {
+            workspace_assessment::dispatch(connection, method, args)
         }
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }

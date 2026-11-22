@@ -4,37 +4,101 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from threading import Lock
 
-# Native review covers tool events and supported prompt callbacks. Other
-# lifecycle events remain inventory-only: failing them closed freezes a turn
-# without adding enforcement. Unreviewable prompts pause protected hosts;
-# acknowledged Watch and monitor-only prompt callbacks continue without enforcement.
-_LIFECYCLE_OBSERVE_EVENTS = frozenset(
-    {
-        "SessionStart",
-        "SessionEnd",
-        "SubagentStart",
-        "SubagentStop",
-        "Stop",
-        "Notification",
-        "TaskStart",
-        "TaskError",
-        "SessionShutdown",
-        "PermissionDenied",
-    }
-)
-
-
-def _compact_hook_event_name(event_name: str) -> str:
-    return event_name.strip().lower().replace("_", "").replace("-", "")
-
-
-_LIFECYCLE_CANONICAL_BY_COMPACT = {
-    **{_compact_hook_event_name(name): name for name in _LIFECYCLE_OBSERVE_EVENTS},
+_CLI_AVAILABILITY_FEATURE = "native-hook-availability-v1"
+_CLI_AVAILABILITY_COMMAND = "hook-availability"
+_EVENT_FIELDS = ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
+_FALLBACK_EVENT_BY_COMPACT = {
+    "pretool": "PreToolUse",
+    "pretooluse": "PreToolUse",
+    "pretoolcall": "PreToolUse",
+    "beforeshellexecution": "PreToolUse",
+    "beforereadfile": "PreToolUse",
+    "beforewritefile": "PreToolUse",
+    "beforemcpexecution": "PreToolUse",
+    "posttool": "PostToolUse",
+    "posttooluse": "PostToolUse",
+    "posttoolcall": "PostToolUse",
+    "aftershellexecution": "PostToolUse",
+    "afterreadfile": "PostToolUse",
+    "afterwritefile": "PostToolUse",
+    "aftermcpexecution": "PostToolUse",
+    "permissionrequest": "PermissionRequest",
+    "permissionrequestv2": "PermissionRequest",
+    "copilotpermissionrequest": "PermissionRequest",
+    "prompt": "UserPromptSubmit",
     "userpromptsubmit": "UserPromptSubmit",
     "userpromptsubmitted": "UserPromptSubmit",
-    "subagentend": "SubagentStop",
 }
+_LIFECYCLE_OBSERVE_COMPACT = frozenset(
+    {
+        "sessionstart",
+        "sessionend",
+        "subagentstart",
+        "subagentstop",
+        "subagentend",
+        "stop",
+        "notification",
+        "taskstart",
+        "taskerror",
+        "sessionshutdown",
+        "permissiondenied",
+    }
+)
+_RUNTIME_AVAILABILITY_CACHE: dict[tuple[tuple[str, str], ...], dict[str, object]] = {}
+_RUNTIME_AVAILABILITY_LOCK = Lock()
+
+
+def _wire_event_name(payload: Mapping[str, object]) -> str:
+    for key in _EVENT_FIELDS:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            stripped = value.strip()
+            compact = stripped.lower().replace("_", "").replace("-", "")
+            return _FALLBACK_EVENT_BY_COMPACT.get(compact, stripped)
+    return "PreToolUse"
+
+
+def _fallback_pauses(event_name: str) -> bool:
+    compact = event_name.strip().lower().replace("_", "").replace("-", "")
+    return not (
+        compact in _LIFECYCLE_OBSERVE_COMPACT
+        or compact.startswith("after")
+        or compact in {"posttool", "posttooluse", "posttoolcall"}
+    )
+
+
+def _fallback_permission_request(event_name: str) -> bool:
+    compact = event_name.strip().lower().replace("_", "").replace("-", "")
+    return compact in {"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"}
+
+
+def _runtime_availability(payload: Mapping[str, object], *, deadline: float | None = None) -> dict[str, object] | None:
+    """Ask the standalone Rust hook command for outage posture."""
+
+    from ..mdm.runtime_request import runtime_answer
+
+    request = {key: payload[key] for key in _EVENT_FIELDS if key in payload}
+    cache_key = tuple((key, value) for key, value in request.items() if isinstance(value, str))
+    with _RUNTIME_AVAILABILITY_LOCK:
+        cached = _RUNTIME_AVAILABILITY_CACHE.get(cache_key)
+    if cached is not None:
+        return dict(cached)
+    answer = runtime_answer(
+        _CLI_AVAILABILITY_FEATURE,
+        _CLI_AVAILABILITY_COMMAND,
+        request,
+        output_limit=64 * 1024,
+        timeout_seconds=1.0,
+        deadline=deadline,
+    )
+    if not isinstance(answer, Mapping):
+        return None
+    result = dict(answer)
+    with _RUNTIME_AVAILABILITY_LOCK:
+        _RUNTIME_AVAILABILITY_CACHE[cache_key] = result
+    return result
 
 
 def canonical_hook_event_name(
@@ -42,9 +106,9 @@ def canonical_hook_event_name(
 ) -> str:
     """Recover only the wire event label for an outage response.
 
-    Normal hook semantics use the resident's normalized event fact. This
-    bounded alias lookup exists solely to preserve the harness response shape
-    when the resident cannot be reached.
+    Normal hook semantics use the resident's normalized event fact. The
+    standalone Rust command preserves the same normalized wire label when the
+    resident cannot be reached.
     """
 
     if guard_home is not None:
@@ -54,37 +118,11 @@ def canonical_hook_event_name(
         event = native.get("event_name") if isinstance(native, dict) else None
         if isinstance(event, str) and event:
             return event
-    for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
-        value = payload.get(key)
-        if not isinstance(value, str) or not value.strip():
-            continue
-        compact = _compact_hook_event_name(value)
-        if compact in {
-            "pretool",
-            "pretooluse",
-            "pretoolcall",
-            "beforeshellexecution",
-            "beforereadfile",
-            "beforewritefile",
-            "beforemcpexecution",
-        }:
-            return "PreToolUse"
-        if compact in {
-            "posttool",
-            "posttooluse",
-            "posttoolcall",
-            "aftershellexecution",
-            "afterreadfile",
-            "afterwritefile",
-            "aftermcpexecution",
-        }:
-            return "PostToolUse"
-        if compact in {"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"}:
-            return "PermissionRequest"
-        if compact in {"prompt", "userpromptsubmit", "userpromptsubmitted"}:
-            return "UserPromptSubmit"
-        return value.strip()
-    return "PreToolUse"
+    native = _runtime_availability(payload, deadline=deadline)
+    event = native.get("event_name") if native is not None else None
+    if isinstance(event, str) and event:
+        return event
+    return _wire_event_name(payload)
 
 
 def hook_event_pauses_when_unavailable(
@@ -92,8 +130,7 @@ def hook_event_pauses_when_unavailable(
 ) -> bool:
     """True when native miss must pause the harness instead of continuing the turn.
 
-    This answer cannot come from the resident: it is the policy for the turns
-    where the resident is the thing that could not be reached.
+    Rust owns this answer in both the resident and standalone outage paths.
     """
 
     if guard_home is not None:
@@ -103,16 +140,9 @@ def hook_event_pauses_when_unavailable(
         pauses = native.get("pauses") if isinstance(native, dict) else None
         if isinstance(pauses, bool):
             return pauses
-    compact = _compact_hook_event_name(event_name)
-    if compact in {"userpromptsubmit", "userpromptsubmitted"}:
-        return True
-    if compact in _LIFECYCLE_CANONICAL_BY_COMPACT:
-        return False
-    # The tool already ran, so pausing the turn protects nothing.
-    return compact not in {"posttooluse", "posttool"} and not compact.startswith("after")
-
-
-_PERMISSION_REQUEST_EVENTS = frozenset({"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"})
+    native = _runtime_availability({"event": event_name}, deadline=deadline)
+    pauses = native.get("pauses") if native is not None else None
+    return pauses if isinstance(pauses, bool) else _fallback_pauses(event_name)
 
 
 def hook_event_is_permission_request(
@@ -125,7 +155,9 @@ def hook_event_is_permission_request(
         permission_request = native.get("permission_request") if isinstance(native, dict) else None
         if isinstance(permission_request, bool):
             return permission_request
-    return _compact_hook_event_name(event_name) in _PERMISSION_REQUEST_EVENTS
+    native = _runtime_availability({"event": event_name}, deadline=deadline)
+    permission_request = native.get("permission_request") if native is not None else None
+    return permission_request if isinstance(permission_request, bool) else _fallback_permission_request(event_name)
 
 
 def availability_harness_response(
@@ -150,40 +182,8 @@ def availability_harness_response(
     )
 
 
-def cursor_fallback_permission(*, hook_event_name: str) -> tuple[dict[str, object], int]:
-    """Deny protected Cursor actions when no evaluator supplies a decision.
-
-    A hook script written by an older release still passes the payload and
-    mode keywords; the call fails, and that script denies with the same reply.
-    """
-
-    compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
-    if compact in {"aftershellexecution", "aftermcpexecution"}:
-        return {}, 0
-    reason = "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
-    return {
-        "permission": "deny",
-        "user_message": reason,
-        "agent_message": reason,
-    }, 2
-
-
-def cursor_unparseable_input_permission(hook_event_name: str) -> tuple[dict[str, object], int]:
-    """Deny unparsed actions: unparsed input carries no acknowledged mode authority."""
-
-    compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
-    if compact in {"aftershellexecution", "aftermcpexecution"}:
-        return {}, 0
-    return {
-        "permission": "deny",
-        "user_message": "Guard could not process this hook request safely. Retry or repair Guard from a terminal.",
-    }, 2
-
-
 __all__ = [
     "availability_harness_response",
-    "cursor_fallback_permission",
-    "cursor_unparseable_input_permission",
     "hook_event_is_permission_request",
     "hook_event_pauses_when_unavailable",
 ]

@@ -6,26 +6,23 @@ import json
 import re
 import sqlite3
 from collections.abc import Mapping
-from contextlib import AbstractContextManager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, Protocol
+from typing import TYPE_CHECKING, Any, Final
 
 from .native_decision_receipt import validate_native_decision_receipt
+from .native_guard_store import NativeGuardStoreUnavailable
 
 NATIVE_DECISION_RECEIPT_MIGRATION_VERSION: Final = 26
 NATIVE_COMMAND_RECEIPT_BINDING_MIGRATION_VERSION: Final = 28
 NATIVE_PROMPT_RECEIPT_MIGRATION_VERSION: Final = 29
 _MAX_COMMAND_BINDING_CHARACTERS: Final = 2048
 _MAX_PROMPT_RISK_CHARACTERS: Final = 256
+_CELL_INVALID: Final = "native_guard_store_cell_invalid"
 _COMMAND_BINDING_COLUMN: Final = (
     "command_extensions_json text check (command_extensions_json is null "
     f"or length(command_extensions_json) between 2 and {_MAX_COMMAND_BINDING_CHARACTERS})"
 )
-
-
-class _ConnectionOwner(Protocol):
-    def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
 
 def native_decision_receipt_schema_statement(*, prompt: bool = False) -> str:
@@ -133,23 +130,23 @@ class StoreNativeDecisionReceiptsMixin:
         )
         return True
 
-    def get_native_decision_receipt(self: _ConnectionOwner, decision_id: str) -> dict[str, object] | None:
+    def get_native_decision_receipt(self, decision_id: str) -> dict[str, object] | None:
         """Read one complete receipt and reject changed identity or binding data."""
         if re.fullmatch(r"[0-9a-f]{64}", decision_id) is None:
             return None
-        with self._connect() as connection:
-            row = connection.execute(
-                "select * from native_hook_decision_receipts where decision_id = ?",
-                (decision_id,),
-            ).fetchone()
-            if row is None:
-                row = connection.execute(
-                    "select * from native_prompt_decision_receipts where decision_id = ?",
-                    (decision_id,),
-                ).fetchone()
+        try:
+            row = self._native_store_call("get_native_decision_receipt", {"decision_id": decision_id})
+        except NativeGuardStoreUnavailable as error:
+            # A cell that is not text, a number or null cannot belong to a
+            # receipt, so the row reads as no receipt, as it did in Python.
+            if error.reason == _CELL_INVALID:
+                return None
+            raise
         if row is None:
             return None
-        return validate_stored_native_decision_receipt(dict(row), guard_home=getattr(self, "guard_home", None))
+        if not isinstance(row, dict) or not all(isinstance(key, str) for key in row):
+            raise RuntimeError("native decision receipt read returned no answer")
+        return validate_stored_native_decision_receipt(row, guard_home=getattr(self, "guard_home", None))
 
 
 def _receipt_wire(receipt: Mapping[str, object]) -> str:

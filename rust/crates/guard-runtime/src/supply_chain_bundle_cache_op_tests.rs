@@ -212,6 +212,7 @@ fn the_methods_are_routed_here() {
         "cached_supply_chain_bundle",
         "get_cached_supply_chain_bundle",
         "cache_supply_chain_bundle",
+        "newest_supply_chain_bundle_workspace",
     ] {
         assert!(handles(method), "{method}");
     }
@@ -272,4 +273,53 @@ fn a_negative_offset_or_a_missing_offset_is_refused() {
         serde_json::json!({"workspace_id": "ws-1"}),
     )
     .is_err());
+}
+
+#[test]
+fn the_newest_cached_workspace_is_read_as_stored() {
+    let connection = connection();
+    assert_eq!(
+        call(
+            &connection,
+            "newest_supply_chain_bundle_workspace",
+            json!({})
+        )
+        .unwrap(),
+        Value::Null
+    );
+    connection
+        .execute_batch(
+            "insert into guard_supply_chain_bundle_cache values (' ws-old ', '{}', '2026-01-01');
+             insert into guard_supply_chain_bundle_cache values (' ws-new ', '{}', '2026-02-01');",
+        )
+        .unwrap();
+    assert_eq!(
+        call(
+            &connection,
+            "newest_supply_chain_bundle_workspace",
+            json!({})
+        )
+        .unwrap(),
+        json!(" ws-new ")
+    );
+}
+
+#[test]
+fn a_newest_workspace_id_that_is_not_text_reads_null() {
+    let connection = connection();
+    connection
+        .execute_batch(
+            "insert into guard_supply_chain_bundle_cache values ('ws-old', '{}', '2026-01-01');
+             insert into guard_supply_chain_bundle_cache values (x'7773', '{}', '2026-02-01');",
+        )
+        .unwrap();
+    assert_eq!(
+        call(
+            &connection,
+            "newest_supply_chain_bundle_workspace",
+            json!({})
+        )
+        .unwrap(),
+        Value::Null
+    );
 }
