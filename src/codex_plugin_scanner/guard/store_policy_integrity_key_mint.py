@@ -74,7 +74,9 @@ def native_policy_integrity_key_mint(guard_home: Path, *, keyring_service: str |
 
     from .mdm.runtime_request import runtime_answer
 
-    request: dict[str, object] = {"guard_home": str(guard_home)}
+    # The runtime runs from its own directory, so a relative home would name
+    # another place there.
+    request: dict[str, object] = {"guard_home": str(guard_home.expanduser().resolve())}
     if keyring_service is not None:
         request["keyring"] = {"service_name": keyring_service}
     answer = runtime_answer(
