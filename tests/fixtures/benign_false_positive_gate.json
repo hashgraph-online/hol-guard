@@ -33251,6 +33251,40 @@
       "expect": "allow"
     },
     {
+      "id": "session-sqlite-select-count-local-database",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sqlite3 inventory.db \"select count(*) from items\""
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-sqlite-json-select-local-database",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sqlite3 -json inventory.db \"select id from items limit 5\""
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "session-neg-psql-drop-table",
       "fix_area": "negative",
       "harnesses": [
