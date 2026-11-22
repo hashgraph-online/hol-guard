@@ -1,7 +1,7 @@
 //! Resident daemon policy-authority client (RTM-030).
 //!
 //! Rust port of
-//! `src/codex_plugin_scanner/guard/hook_review/policy_authority_client.py`
+//! `src/codex_plugin_scanner/guard/native_package_policy_resolve.py`
 //! (:17-:57), `src/codex_plugin_scanner/guard/native_daemon_client.py`
 //! (`GuardSurfaceDaemonClient` :184-:343, `_post` :434-:455,
 //! `resolve_policy_decision` :337, `claim_policy_decision` :340,
@@ -74,9 +74,9 @@ const PROCESS_QUERY_MAX_BYTES: usize = 1024 * 1024;
 #[cfg(unix)]
 const PROCESS_QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 /// Health-request deadline (manager.py:1206 uses `health_timeout=1.0`;
-/// policy_authority_client.py:35 uses 2s for the policy socket).
+/// native_package_policy_resolve.py uses 2s for the policy socket).
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(1);
-/// Policy request socket timeout (policy_authority_client.py:35).
+/// Policy request socket timeout (native_package_policy_resolve.py).
 const POLICY_TIMEOUT: Duration = Duration::from_secs(2);
 /// Trusted `ps` locations.
 #[cfg(unix)]
@@ -131,7 +131,7 @@ impl ResidentPolicyAuthority {
         Self { guard_home }
     }
 
-    /// `resolve_package_policy` (policy_authority_client.py:17-:45). Each
+    /// `resolve_package_policy` (native_package_policy_resolve.py). Each
     /// workspace is tried in order; the first `decision` dict wins.
     fn resolve(
         &self,
@@ -173,7 +173,7 @@ impl ResidentPolicyAuthority {
         None
     }
 
-    /// `claim_package_policy` (policy_authority_client.py:48-:57) —
+    /// `claim_package_policy` (native_package_policy_resolve.py) —
     /// `claimed` is true only when the daemon returns `claimed == true`
     /// (client.py:340-:342).
     fn claim(&self, authority: &DaemonAuthority, decision: &Value) -> bool {
