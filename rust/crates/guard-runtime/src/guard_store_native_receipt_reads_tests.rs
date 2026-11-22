@@ -20,7 +20,7 @@ fn store() -> Connection {
 }
 
 fn id(digit: char) -> String {
-    std::iter::repeat(digit).take(64).collect()
+    std::iter::repeat_n(digit, 64).collect()
 }
 
 fn read(connection: &Connection, decision_id: Value) -> StoreResult<Value> {
