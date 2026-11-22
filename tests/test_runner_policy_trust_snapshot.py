@@ -134,8 +134,10 @@ def test_a_rejected_sync_judges_the_last_good_bundle_with_its_own_snapshot(
         _store: GuardStore,
         policy_bundle: object,
         *,
+        now: float | None = None,
         rows: PolicyBundleTrustRows | None = None,
     ) -> tuple[None, str]:
+        del now
         judged.append((policy_bundle, rows))
         return None, "invalid_policy_bundle"
 
