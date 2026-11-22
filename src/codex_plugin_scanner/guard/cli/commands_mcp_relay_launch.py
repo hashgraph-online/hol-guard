@@ -67,9 +67,13 @@ def run_relay(argv: list[str], *, guard_home: Path) -> int:
     launch = [str(runtime), RELAY_COMMAND, sys.executable, *argv]
     sys.stdout.flush()
     sys.stderr.flush()
-    if os.name == "nt":
-        return subprocess.call(launch)
-    os.execv(launch[0], launch)
+    try:
+        if os.name == "nt":
+            return subprocess.call(launch)
+        os.execv(launch[0], launch)
+    except OSError:
+        # The runtime found a moment ago is gone or cannot run.
+        print(UNAVAILABLE, file=sys.stderr)
     return 1
 
 

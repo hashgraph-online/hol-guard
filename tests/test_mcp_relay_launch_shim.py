@@ -87,6 +87,25 @@ def test_without_a_relaying_runtime_the_command_refuses_and_names_the_repair(
     assert "hol-guard repair" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("platform", ["posix", "nt"])
+def test_a_runtime_that_cannot_start_names_the_repair(
+    platform: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        launch, "native_hook_bridge_executable", lambda *_args, **_kwargs: Path("/opt/guard/hol-guard-runtime")
+    )
+
+    def missing(*_args: object) -> None:
+        raise FileNotFoundError("hol-guard-runtime")
+
+    monkeypatch.setattr(launch.os, "name", platform)
+    monkeypatch.setattr(launch.os, "execv", missing)
+    monkeypatch.setattr(launch.subprocess, "call", missing)
+
+    assert launch.run_relay(["-m", "codex_plugin_scanner.cli"], guard_home=Path("/guard/home")) == 1
+    assert "hol-guard repair" in capsys.readouterr().err
+
+
 def test_the_command_hands_its_argv_to_the_relay(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = Path("/opt/guard/hol-guard-runtime")
     asked: list[str] = []
