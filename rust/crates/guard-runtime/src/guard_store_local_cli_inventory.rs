@@ -264,7 +264,7 @@ fn grants(connection: &Connection) -> StoreResult<BTreeMap<String, Map<String, V
     Ok(grants)
 }
 
-fn authority_revision(connection: &Connection) -> StoreResult<i64> {
+pub(crate) fn authority_revision(connection: &Connection) -> StoreResult<i64> {
     if !table_exists(connection, "local_cli_authority")? {
         return Ok(0);
     }

@@ -78,6 +78,9 @@ use crate::guard_store_temporary_mcp::apply_temporary_mcp_grant;
 use crate::guard_store_tool_call_evidence as tool_call_evidence;
 use crate::guard_store_wfcap_wire as wfcap;
 
+#[path = "guard_store_local_cli_reads.rs"]
+mod local_cli_reads;
+
 pub(crate) fn dispatch(
     connection: &Connection,
     source: &str,
@@ -485,6 +488,9 @@ pub(crate) fn dispatch(
         "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
         _ if connect::handles(method) => connect::dispatch(connection, method, args),
         _ if state_ops::handles(method) => state_ops::dispatch(connection, method, args),
+        _ if local_cli_reads::handles(method) => {
+            local_cli_reads::dispatch(connection, method, args)
+        }
         _ if sync_state::handles_row_method(method) => {
             sync_state::dispatch_row_method(connection, method, args)
         }
