@@ -68,23 +68,6 @@ def clear_local_cli_capabilities(connection: sqlite3.Connection, cli_id: str) ->
     connection.execute("delete from local_cli_grant_capability where cli_id = ?", (cli_id,))
 
 
-def load_local_cli_capabilities(connection: sqlite3.Connection) -> dict[str, dict[str, LocalCliCapabilityState]]:
-    """Every CLI's full ``{name: on|off}`` map, unknown rows ignored."""
-
-    exists = connection.execute(
-        "select 1 from sqlite_master where type = 'table' and name = 'local_cli_grant_capability'"
-    ).fetchone()
-    if exists is None:
-        return {}
-    stored: dict[str, dict[str, LocalCliCapabilityState]] = {}
-    for cli_id, name, state in connection.execute(
-        "select cli_id, capability, state from local_cli_grant_capability"
-    ).fetchall():
-        if isinstance(cli_id, str) and name in LOCAL_CLI_CAPABILITIES and state == "on":
-            stored.setdefault(cli_id, {})[name] = "on"
-    return stored
-
-
 def capability_map(enabled: Mapping[str, str] | None) -> dict[str, LocalCliCapabilityState]:
     """The full map for one CLI, with absent capabilities ``off``."""
 
@@ -100,6 +83,5 @@ __all__ = [
     "capability_map",
     "clear_local_cli_capabilities",
     "ensure_local_cli_capability_table",
-    "load_local_cli_capabilities",
     "validated_capability_choices",
 ]
