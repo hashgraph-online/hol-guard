@@ -11,7 +11,8 @@ use crate::guard_store_tool_call_evidence_tests::{build_database, count, vectors
 use crate::mcp_relay_receipt::tests::record;
 use crate::mcp_relay_receipt::{is_plain, write};
 use crate::policy_integrity_resolver::{
-    build_scoped_secret_ref, load_policy_integrity_control_state, POLICY_INTEGRITY_KEY_REF,
+    build_scoped_secret_ref, load_policy_integrity_control_state, POLICY_INTEGRITY_CONTROL_REF,
+    POLICY_INTEGRITY_KEY_REF,
 };
 
 /// The record an inline-approved forward leaves when the relay remembers it.
@@ -119,10 +120,12 @@ fn a_home_without_a_store_hands_back_the_remembering_record() {
 
 fn control_after(tag: &str, committed: bool) -> Value {
     let home = store_home(tag, true);
+    let held = super::lock(home.to_str().unwrap()).expect("generation lock");
     super::save(
         home.to_str().unwrap(),
         &remembered(),
         "2026-01-01T00:00:00Z",
+        &held,
         |_| (None, committed),
     );
     let control =
@@ -192,4 +195,35 @@ fn a_remembered_package_forward_saves_the_package_allow_for_its_workspace() {
     assert_eq!(bound.as_deref(), Some("/work"));
     let _ = std::fs::remove_dir_all(&home);
     let _ = std::fs::remove_dir_all(&workspace);
+}
+
+#[test]
+fn a_control_state_that_does_not_load_is_never_reset() {
+    let home = store_home("relay-remember-malformed-control", true);
+    let control_ref = build_scoped_secret_ref(POLICY_INTEGRITY_CONTROL_REF, &home);
+    let mut secrets = EncryptedFileSecretStore::new(&home);
+    secrets.set_secret(&control_ref, "{not json").unwrap();
+    let held = super::lock(home.to_str().unwrap()).expect("generation lock");
+    let mut stored = false;
+    super::save(
+        home.to_str().unwrap(),
+        &remembered(),
+        "2026-01-01T00:00:00Z",
+        &held,
+        |_| {
+            stored = true;
+            (None, false)
+        },
+    );
+    assert!(
+        !stored,
+        "no allow is written over an unreadable control state"
+    );
+    assert_eq!(
+        EncryptedFileSecretStore::new(&home)
+            .get_secret(&control_ref)
+            .as_deref(),
+        Some("{not json")
+    );
+    let _ = std::fs::remove_dir_all(&home);
 }

@@ -11,6 +11,7 @@
 //! a key or control state that is unavailable, a store that refused the row --
 //! costs the memory, never the receipt.
 
+use std::fs::File;
 use std::path::Path;
 use std::sync::PoisonError;
 use std::time::Duration;
@@ -75,12 +76,21 @@ pub(crate) struct Allow<'a> {
     pub(crate) workspace: Option<&'a str>,
 }
 
-/// Save the allow of a composed remembered record; `store` runs one store
-/// operation and returns its reply. Every failure is swallowed.
+/// The policy-generation lock, taken before the storage gate as the daemon's
+/// policy writer takes it, so the two writers never wait on each other.
+pub(super) fn lock(guard_home: &str) -> Option<File> {
+    let home = Path::new(guard_home).canonicalize().ok()?;
+    policy_generation_lock::acquire(&home, LOCK_WAIT)
+}
+
+/// Save the allow of a composed remembered record while `_held`
+/// holds the generation lock (`lock`); `store` runs one store operation and
+/// returns its reply. Every failure is swallowed.
 pub(super) fn save(
     guard_home: &str,
     record: &Value,
     now: &str,
+    held: &File,
     store: impl FnOnce(Map<String, Value>) -> (Option<Value>, bool),
 ) {
     let allow = if record["kind"] == super::package::KIND {
@@ -117,13 +127,14 @@ pub(super) fn save(
             workspace: None,
         }
     };
-    save_allow(guard_home, &allow, now, store);
+    save_allow(guard_home, &allow, now, held, store);
 }
 
 /// Save one remembered allow now, as the package lane does before it decides
 /// the call again (`allow_tool_call(remember=True)` ahead of
-/// `_handle_package_request`). The writer lock and the storage gate are taken
-/// as the drain takes them. Whether the signed allow was finalized.
+/// `_handle_package_request`). The writer lock, the generation lock and the
+/// storage gate are taken in the drain's order. Whether the signed allow was
+/// finalized.
 pub(crate) fn save_now(guard_home: &str, allow: &Allow<'_>) -> bool {
     let home = Path::new(guard_home);
     if !home.join(STORE_FILE_NAME).is_file() {
@@ -134,11 +145,14 @@ pub(crate) fn save_now(guard_home: &str, allow: &Allow<'_>) -> bool {
     };
     let timeout_ms = sqlite_timeout_ms();
     let _writer = super::WRITER.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(held) = lock(guard_home) else {
+        return false;
+    };
     let Ok(_gate) = hold_storage_gate(home, Duration::from_millis(timeout_ms.into())) else {
         return false;
     };
     let busy_timeout_ms = u64::from(timeout_ms).clamp(1, MAX_BUSY_TIMEOUT_MS);
-    let saved = save_allow(guard_home, allow, &stamp.store_now, |args| {
+    let saved = save_allow(guard_home, allow, &stamp.store_now, &held, |args| {
         super::evaluate(guard_home, busy_timeout_ms, METHOD, args)
     });
     repair_store_permissions(home);
@@ -146,11 +160,13 @@ pub(crate) fn save_now(guard_home: &str, allow: &Allow<'_>) -> bool {
 }
 
 /// The approval gate and the provider-action check `allow_tool_call` and
-/// `upsert_policy` apply, then the signed write. Whether it was finalized.
+/// `upsert_policy` apply, then the signed write while `_held` holds the
+/// generation lock. Whether it was finalized.
 fn save_allow(
     guard_home: &str,
     allow: &Allow<'_>,
     now: &str,
+    _held: &File,
     store: impl FnOnce(Map<String, Value>) -> (Option<Value>, bool),
 ) -> bool {
     if composio_requires_action_review(allow.command.unwrap_or("")) {
@@ -194,7 +210,8 @@ fn save_allow(
     signed(&home, args, store)
 }
 
-/// `upsert_policy` under a protected integrity state: the pending generation
+/// `upsert_policy` under a protected integrity state, with the generation
+/// lock held by the caller: the pending generation
 /// lands before the row is signed and is finalized from the reply. The prior
 /// control state is put back only when the write did not commit. Without key material the allow is not
 /// saved, since an unsigned local row is ignored under either state.
@@ -208,9 +225,6 @@ fn signed(
         return false;
     };
     let control_ref = build_scoped_secret_ref(POLICY_INTEGRITY_CONTROL_REF, home);
-    let Some(_lock) = policy_generation_lock::acquire(home, LOCK_WAIT) else {
-        return false;
-    };
     let Some(current) = control_state(&mut secrets, home, &control_ref) else {
         return false;
     };
@@ -258,7 +272,10 @@ fn signed(
     false
 }
 
-/// The trusted control state, written at generation 0 when the home has none.
+/// The trusted control state, written at generation 0 when the home has
+/// none. A control state that exists but does not load is never replaced: it
+/// may hold a generation above 0, and resetting it would make every row
+/// signed above 0 read as a rollback.
 fn control_state(
     secrets: &mut EncryptedFileSecretStore,
     home: &Path,
@@ -266,6 +283,9 @@ fn control_state(
 ) -> Option<Value> {
     if let Some(current) = load_policy_integrity_control_state(secrets, home) {
         return Some(current);
+    }
+    if secrets.get_secret(control_ref).is_some() {
+        return None;
     }
     let initial = json!({
         "cutover_complete": true,
