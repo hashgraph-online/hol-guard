@@ -125,6 +125,16 @@ const AUTHORITY_INPUT_TABLES: [(&str, Option<&str>); 8] = [
     ),
 ];
 
+/// The first schema version with a command-pack activation slot.
+pub(crate) const FIRST_PACK_SCHEMA_VERSION: i64 = PACK_SCHEMA_VERSIONS[0];
+
+/// Whether a stored marker names a schema version this build knows and
+/// carries that version's checksum. The writer and the native slot read both
+/// ask this, so a schema bump changes one place.
+pub(crate) fn compatible_marker(version: i64, found: &str) -> bool {
+    (1..=PACK_SCHEMA_VERSIONS[1]).contains(&version) && found == checksum(version)
+}
+
 fn checksum(version: i64) -> String {
     hex::encode(Sha256::digest(
         format!("hol-guard.extension-control-authority.schema.v{version}").as_bytes(),
@@ -182,9 +192,7 @@ pub(super) fn ensure_schema(connection: &Connection, wanted: i64) -> Res<()> {
                 )
                 .map_err(store_fault)?;
         }
-        Some((Some(version), Some(found)))
-            if (1..=PACK_SCHEMA_VERSIONS[1]).contains(&version) && found == checksum(version) =>
-        {
+        Some((Some(version), Some(found))) if compatible_marker(version, &found) => {
             packs |= PACK_SCHEMA_VERSIONS.contains(&version);
             if version < wanted {
                 connection
