@@ -1,6 +1,9 @@
 //! Receipt authority writes. Every persisted receipt action is derived here in
 //! the resident; Python never recalculates a verdict.
 
+#[path = "guard_store_receipt_evidence.rs"]
+pub(crate) mod authority_evidence;
+
 use rusqlite::Connection;
 use serde_json::{Map, Value};
 

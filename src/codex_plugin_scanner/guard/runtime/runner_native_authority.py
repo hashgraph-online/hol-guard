@@ -410,37 +410,3 @@ def local_identity(observed_at: str) -> tuple[dict[str, object], dict[str, str]]
 
     payload = native_runner_authority("local_identity", {"observed_at": observed_at})
     return _typed(payload, "identity", dict), _typed(payload, "source", dict)
-
-
-def receipt_evidence_updates(
-    rows: Sequence[Mapping[str, object]],
-    *,
-    artifact_ids: Iterable[str],
-    evidence: Mapping[str, object],
-    approval_source: str,
-    source_actions: Iterable[str],
-    replace_existing_source: bool,
-) -> list[dict[str, Any]]:
-    """Per-row ``scanner_evidence``/``approval_source`` updates for receipts."""
-
-    payload = native_runner_authority(
-        "receipt_evidence_merge",
-        {
-            "rows": [
-                {
-                    "rowid": row["rowid"],
-                    "artifact_id": str(row["artifact_id"]),
-                    "policy_decision": str(row["policy_decision"]),
-                    "scanner_evidence_json": str(row["scanner_evidence_json"]),
-                    "approval_source": row["approval_source"],
-                }
-                for row in rows
-            ],
-            "artifact_ids": sorted(artifact_ids),
-            "evidence": dict(evidence),
-            "approval_source": approval_source,
-            "source_actions": sorted(source_actions),
-            "replace_existing_source": replace_existing_source,
-        },
-    )
-    return _typed(payload, "updates", list)
