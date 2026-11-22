@@ -1,4 +1,4 @@
-//! Process listing and launchctl argument screens.
+//! Process listing, launchctl and crontab argument screens.
 fn arguments(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
 }
@@ -90,5 +90,35 @@ fn ps_reads_a_bsd_style_column_list() {
         &["axo", "pid", "e"][..],
     ] {
         assert!(!super::safe_ps_arguments(&arguments(values)), "{values:?}");
+    }
+}
+
+#[test]
+fn crontab_lists_the_calling_users_table() {
+    assert!(super::safe_crontab_arguments(&arguments(&["-l"])));
+}
+
+#[test]
+fn crontab_refuses_every_spelling_that_writes_or_reads_another_user() {
+    for values in [
+        // An editor session on the table, and the removal of the whole table.
+        &["-e"][..],
+        &["-r"][..],
+        &["-i", "-r"][..],
+        // A file operand, and `-`, install a new table from their contents.
+        &["schedule.txt"][..],
+        &["-"][..],
+        // Another user's table, read or written.
+        &["-u", "operator", "-l"][..],
+        &["-l", "-u", "operator"][..],
+        // Combined short flags carry `-e` without spelling it alone.
+        &["-el"][..],
+        &["-le"][..],
+        &[][..],
+    ] {
+        assert!(
+            !super::safe_crontab_arguments(&arguments(values)),
+            "{values:?}"
+        );
     }
 }

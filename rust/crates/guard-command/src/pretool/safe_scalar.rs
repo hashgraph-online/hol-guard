@@ -178,6 +178,15 @@ pub(super) fn safe_launchctl_arguments(arguments: &[String]) -> bool {
     matches!(arguments, [subcommand] if subcommand == "list")
 }
 
+/// `crontab -l` prints the calling user's own crontab and changes nothing.
+/// Every other spelling writes: `-e` opens an editor on it, `-r` removes it,
+/// a file operand or `-` installs a new table, and `-u NAME` reads or writes
+/// another user's, so only the bare listing proves safe. A write through this
+/// command is persistence and stays at review for that reason.
+pub(super) fn safe_crontab_arguments(arguments: &[String]) -> bool {
+    matches!(arguments, [flag] if flag == "-l")
+}
+
 /// `ps` lists processes and their arguments, the same view `pgrep -f`
 /// already exposes. Environment display (BSD `e`, and `-e`/`-E` on macOS)
 /// stays out because it prints other processes' variables.
