@@ -677,6 +677,7 @@ pub(super) fn exact_safe_segment_with_context(
         "gem" => super::gem_reads::safe_gem_segment(model, segment, context),
         "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),
         "psql" => super::postgres_reads::safe_psql_arguments(&segment.arguments, context),
+        "sqlite3" => super::sqlite_reads::safe_sqlite3_arguments(&segment.arguments, context),
         "npm" => {
             super::npm_reads::read_only_neighbors(model, "npm")
                 && super::npm_reads::safe_npm_read(&segment.arguments, context)

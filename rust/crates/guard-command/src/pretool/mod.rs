@@ -211,6 +211,7 @@ mod postgres_reads;
 mod printf_words;
 mod process_stops;
 mod pytest_contained;
+mod sqlite_reads;
 mod status_facts;
 mod tool_bin_listing;
 mod trailing_group;
