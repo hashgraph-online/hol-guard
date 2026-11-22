@@ -36,6 +36,7 @@ from ..windows_paths import (
     trusted_windows_system_executable,
     trusted_windows_user_profile,
 )
+from .update_uv_layout import custom_uv_tool_layout
 
 _DEFAULT_INDEX_URL = "https://pypi.org/simple"
 _PIP_NO_CACHE_ARG = "--no-cache-dir"
@@ -1401,6 +1402,18 @@ def _trusted_pipx_shared_import_identity(
 
 
 def _manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:
+    try:
+        return _standard_manager_home_from_prefix(installer_kind)
+    except UpdateSubprocessError:
+        if installer_kind == "uv":
+            # A uv tool directory moved with UV_TOOL_DIR has no fixed name to recognize.
+            layout = custom_uv_tool_layout(Path(sys.prefix).expanduser().resolve())
+            if layout is not None:
+                return layout
+        raise
+
+
+def _standard_manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:
     prefix = Path(sys.prefix).expanduser().resolve()
     marker = "venvs" if installer_kind == "pipx" else "tools"
     marker_index = next(
