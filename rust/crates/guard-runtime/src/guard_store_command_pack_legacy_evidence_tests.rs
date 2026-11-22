@@ -244,6 +244,38 @@ fn a_history_page_stops_at_its_budget_and_names_the_next() {
 }
 
 #[test]
+fn the_budget_counts_escaped_bytes() {
+    let connection = store();
+    schema(&connection);
+    // Each record is a third of the budget raw, but two thirds once every
+    // quote is escaped, so only one fits on a page.
+    let quoted = "\"".repeat(HISTORY_PAGE_BYTES / 3);
+    for revision in 1..=3 {
+        transition(&connection, revision, &quoted);
+    }
+    let first = page(&connection, 10, Value::Null);
+    assert_eq!(first["items"].as_array().expect("items").len(), 1);
+    assert_eq!(first["next"], json!(3));
+    let encoded = serde_json::to_vec(&first).expect("encode").len();
+    assert!(encoded <= guard_contracts::MAX_NATIVE_RESPONSE_BYTES);
+}
+
+#[test]
+fn an_envelope_too_large_for_any_page_is_refused() {
+    let connection = store();
+    schema(&connection);
+    transition(&connection, 1, &"x".repeat(HISTORY_PAGE_BYTES));
+    let mut args = Map::new();
+    args.insert("below_revision".to_owned(), json!(5));
+    assert!(dispatch(
+        &connection,
+        "command_pack_legacy_history_page",
+        &Args(&args)
+    )
+    .is_err());
+}
+
+#[test]
 fn a_full_page_of_small_rows_names_the_next() {
     let connection = store();
     schema(&connection);
