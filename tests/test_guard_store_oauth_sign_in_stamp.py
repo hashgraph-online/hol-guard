@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_oauth_sign_in_stamp import oauth_sign_in_stamp_from_native
+from codex_plugin_scanner.guard.store_oauth_sign_in_stamp import OAuthSignInPresence, oauth_sign_in_stamp_from_native
 
 _NOW = "2026-11-22T00:00:00+00:00"
 
@@ -52,3 +52,32 @@ def test_a_damaged_record_has_no_stamp(tmp_path: Path) -> None:
 def test_a_malformed_answer_is_refused(answer: object) -> None:
     with pytest.raises(RuntimeError, match="no answer"):
         _ = oauth_sign_in_stamp_from_native(answer)
+
+
+def test_presence_follows_the_stored_record(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    key = store._oauth_local_credentials_state_key  # pyright: ignore[reportPrivateUsage]
+
+    assert store.oauth_sign_in_presence(key) == OAuthSignInPresence(present=False, device_bound=False)
+
+    _write_record(store, '{"device_id":"  "}')
+    assert store.oauth_sign_in_presence(key) == OAuthSignInPresence(present=True, device_bound=False)
+
+    _write_record(store, '{"device_id":"device-a"}')
+    assert store.oauth_sign_in_presence(key) == OAuthSignInPresence(present=True, device_bound=True)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        {},
+        {"present": True},
+        {"present": 1, "device_bound": False},
+        {"present": False, "device_bound": True},
+        {"present": True, "device_bound": True, "record": {}},
+    ],
+)
+def test_a_malformed_presence_answer_is_refused(answer: object) -> None:
+    with pytest.raises(RuntimeError, match="no answer"):
+        _ = OAuthSignInPresence.from_native(answer)

@@ -128,8 +128,10 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "oldest_approval_request_created_at"
         | "cached_supply_chain_bundle"
         | "hook_managed_install_admission"
-        // Only the digest of the stored sign-in record leaves the store.
+        // Only a digest, or the shape, of the stored sign-in record leaves
+        // the store.
         | "oauth_sign_in_stamp"
+        | "oauth_sign_in_presence"
         // The bundle and every row it is judged against, as one view.
         | "policy_bundle_trust_rows"
         // The Guard Cloud status rows, read as one view.

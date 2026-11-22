@@ -97,14 +97,76 @@ fn only_credential_rows_can_be_stamped() {
     }
 }
 
+fn presence(connection: &Connection, key: &str) -> StoreResult<Value> {
+    let map = json!({ "state_key": key }).as_object().cloned().unwrap();
+    dispatch(connection, "oauth_sign_in_presence", &Args(&map))
+}
+
 #[test]
-fn the_method_is_routed_and_read_as_a_snapshot() {
-    assert!(handles("oauth_sign_in_stamp"));
-    assert!(crate::guard_store_sync_state::handles_row_method(
-        "oauth_sign_in_stamp"
-    ));
+fn a_missing_record_is_not_present() {
+    assert_eq!(
+        presence(&store(), KEY).unwrap(),
+        json!({ "present": false, "device_bound": false })
+    );
+}
+
+#[test]
+fn a_record_naming_a_device_is_present_and_bound() {
+    let connection = store();
+    put(&connection, KEY, r#"{"device_id":" device-a "}"#);
+    assert_eq!(
+        presence(&connection, KEY).unwrap(),
+        json!({ "present": true, "device_bound": true })
+    );
+}
+
+#[test]
+fn a_record_without_a_usable_device_is_present_but_unbound() {
+    let connection = store();
+    for text in [
+        "{}",
+        r#"{"device_id":""}"#,
+        r#"{"device_id":" \u001f\t"}"#,
+        r#"{"device_id":7}"#,
+    ] {
+        put(&connection, KEY, text);
+        assert_eq!(
+            presence(&connection, KEY).unwrap(),
+            json!({ "present": true, "device_bound": false }),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn a_record_that_is_not_an_object_is_not_present() {
+    let connection = store();
+    for text in ["not-json", "[]", r#""device""#] {
+        put(&connection, KEY, text);
+        assert_eq!(
+            presence(&connection, KEY).unwrap(),
+            json!({ "present": false, "device_bound": false }),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn presence_reads_only_credential_rows() {
     assert!(matches!(
-        crate::guard_store_op_kind::method_kind("oauth_sign_in_stamp"),
-        Some(crate::guard_store_op_kind::Kind::Snapshot)
+        presence(&store(), "sync_summary"),
+        Err(StoreError::Value(_))
     ));
+}
+
+#[test]
+fn the_methods_are_routed_and_read_as_snapshots() {
+    for method in ["oauth_sign_in_stamp", "oauth_sign_in_presence"] {
+        assert!(handles(method));
+        assert!(crate::guard_store_sync_state::handles_row_method(method));
+        assert!(matches!(
+            crate::guard_store_op_kind::method_kind(method),
+            Some(crate::guard_store_op_kind::Kind::Snapshot)
+        ));
+    }
 }
