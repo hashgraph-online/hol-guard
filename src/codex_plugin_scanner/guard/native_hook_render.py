@@ -400,6 +400,27 @@ def native_render_recording_only_pre_tool(
     )
 
 
+def native_render_fail_closed_verdict(
+    harness: str,
+    verdict: Mapping[str, object],
+    *,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    """Render the fixed deny for a verdict whose native response was missed."""
+
+    rendered = native_render_cli(
+        "fail_closed_verdict",
+        harness,
+        {"verdict": dict(verdict)},
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    if rendered is None or rendered[0] != "document":
+        return None
+    return rendered[1]
+
+
 __all__ = [
     "HOOK_RENDER_FEATURE",
     "native_cli_hook_emit",
@@ -407,6 +428,7 @@ __all__ = [
     "native_hook_availability",
     "native_recording_only_for_binding",
     "native_render_cli",
+    "native_render_fail_closed_verdict",
     "native_render_pre_tool",
     "native_render_recording_only_pre_tool",
 ]

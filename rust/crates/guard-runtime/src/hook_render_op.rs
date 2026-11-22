@@ -160,6 +160,14 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
         .map_err(|_| "native_hook_render_invalid")?;
         return Ok(cli_payload(CliOutcome::Document(response)));
     }
+    if request.kind == "fail_closed_verdict" {
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let verdict = object_of(params.get("verdict")).ok_or("native_hook_render_invalid")?;
+        let response =
+            guard_command::hook_responses::fail_closed::verdict_response(harness, verdict)
+                .map_err(|_| "native_hook_render_invalid")?;
+        return Ok(cli_payload(CliOutcome::Document(response)));
+    }
     if request.kind == "claude_approval_copy" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
         let which = params

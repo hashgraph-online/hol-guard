@@ -69,6 +69,19 @@ def test_unavailable_resident_never_renders_an_allow(monkeypatch: pytest.MonkeyP
     assert render_recording_only_pre_tool("pi", reason_code="x", reason="y")["decision"] == "deny"
 
 
+def test_unavailable_verdict_uses_the_native_fail_closed_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(hook_fail_closed, "native_render_pre_tool", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        hook_fail_closed,
+        "native_render_fail_closed_verdict",
+        lambda *_a, **_k: {"decision": "deny", "from": "rust"},
+    )
+    assert render_pre_tool("pi", {"decision": "allow", "minimum_action": "allow"}, guard_home=_HOME) == {
+        "decision": "deny",
+        "from": "rust",
+    }
+
+
 def test_resident_response_is_returned_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, object] = {}
 
