@@ -30,14 +30,25 @@ pub(super) fn safe_status_fact(basename: &str, arguments: &[String]) -> bool {
         "w" => flags_only(arguments, &["-h", "-i", "-n", "-s", "-f", "-u", "-o"]),
         "who" => who_arguments(arguments),
         "last" | "lastb" => last_arguments(arguments),
-        "vm_stat" | "vmstat" => sampling_arguments(arguments, &["-c", "-a", "-d", "-s", "-n"]),
+        "vm_stat" | "vmstat" => sampling_arguments(
+            arguments,
+            &[
+                "-c", "-a", "-d", "-f", "-h", "-m", "-n", "-S", "-s", "-t", "-w",
+            ],
+        ),
         "iostat" => sampling_arguments(
             arguments,
             &[
-                "-c", "-C", "-d", "-I", "-K", "-k", "-m", "-n", "-o", "-t", "-U", "-w", "-x", "-z",
+                "-c", "-C", "-d", "-h", "-I", "-j", "-K", "-k", "-m", "-N", "-n", "-o", "-p", "-T",
+                "-t", "-U", "-w", "-x", "-y", "-z",
             ],
         ),
-        "mpstat" | "pidstat" => sampling_arguments(arguments, &["-P", "-u", "-p", "-A", "-I"]),
+        "mpstat" | "pidstat" => sampling_arguments(
+            arguments,
+            &[
+                "-A", "-d", "-h", "-I", "-P", "-p", "-r", "-s", "-T", "-t", "-u", "-V", "-w",
+            ],
+        ),
         "top" => top_arguments(arguments),
         _ => false,
     }
@@ -113,30 +124,19 @@ fn last_arguments(arguments: &[String]) -> bool {
     true
 }
 
-/// A sampler: its report flags, each with a numeric value where it takes one,
-/// and the interval and count operands.
-fn sampling_arguments(arguments: &[String], valued: &[&str]) -> bool {
-    let mut remaining = arguments;
-    while let Some((word, rest)) = remaining.split_first() {
-        if valued.contains(&word.as_str()) {
-            let Some((value, tail)) = rest.split_first() else {
-                return false;
-            };
-            if !keyword(value) {
-                return false;
-            }
-            remaining = tail;
-            continue;
-        }
-        if word.starts_with('-') {
-            return false;
-        }
-        if !number(word) {
-            return false;
-        }
-        remaining = rest;
-    }
-    true
+/// A sampler: its own report flags in any order, and plain-word operands.
+///
+/// Which of these flags take a value differs between the macOS and Linux
+/// spellings of the same name -- `vm_stat -c 3` and `iostat -w 1` take one,
+/// `vmstat -s`, `iostat -x` and `mpstat -A` take none -- so the screen does not
+/// try to tell them apart. Every word that is not one of the name's own flags
+/// has to be a plain keyword, which rules out a path separator, an assignment
+/// and another option, so an interval and an option value are screened the same
+/// way and neither can name a file.
+fn sampling_arguments(arguments: &[String], flags: &[&str]) -> bool {
+    arguments
+        .iter()
+        .all(|word| flags.contains(&word.as_str()) || keyword(word))
 }
 
 /// `top` in a logging mode, which prints its samples and exits.
