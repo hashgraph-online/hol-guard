@@ -148,6 +148,17 @@ impl QueueState {
         });
     }
 
+    /// Put `record` in place of the queued record `seq`, if it is still queued.
+    fn replace(&mut self, seq: u64, record: Value) {
+        let Some(queued) = self.records.iter_mut().find(|queued| queued.seq == seq) else {
+            return;
+        };
+        let bytes = serde_json::to_vec(&record).map_or(queued.bytes, |encoded| encoded.len());
+        queued.record = record;
+        self.bytes = (self.bytes - queued.bytes).saturating_add(bytes);
+        queued.bytes = bytes;
+    }
+
     /// Add `markers` to the queued record `seq`, if it is still queued.
     fn mark(&mut self, seq: u64, markers: &[&str]) {
         let Some(queued) = self.records.iter_mut().find(|queued| queued.seq == seq) else {

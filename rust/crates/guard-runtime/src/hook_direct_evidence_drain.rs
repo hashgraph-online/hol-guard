@@ -216,25 +216,35 @@ fn record_page(
         .collect();
     if !plain.is_empty() {
         let unwritten = mcp_relay_receipt::write(home, plain);
-        // A remembered record whose allow was saved comes back without its
-        // flag, and is retried in that form.
-        paged.retain_mut(|item| {
-            if !mcp_relay_receipt::is_plain(&item.record) {
-                return true;
-            }
-            match mcp_relay_receipt::remember::handed_back(&item.record, &unwritten) {
-                Some(record) => {
-                    item.record = record;
-                    true
-                }
-                None => false,
-            }
-        });
+        keep_handed_back(queue, paged, &unwritten);
     }
     if has_unfinished_records(paged, home) {
         return Err(UNHANDLED.to_owned());
     }
     Ok(fatal)
+}
+
+/// Keep the plain records the writer handed back, each in the form it came
+/// back in. A remembered record whose allow was saved returns without its
+/// flag, and its queued copy loses the flag too, so a later drain retries
+/// only the receipt and never saves the allow a second time.
+fn keep_handed_back(queue: &DirectEvidenceQueue, paged: &mut Vec<Paged>, unwritten: &[Value]) {
+    let mut state = queue.state.lock().ok();
+    paged.retain_mut(|item| {
+        if !mcp_relay_receipt::is_plain(&item.record) {
+            return true;
+        }
+        let Some(record) = mcp_relay_receipt::remember::handed_back(&item.record, unwritten) else {
+            return false;
+        };
+        if record != item.record {
+            if let Some(state) = state.as_mut() {
+                state.replace(item.seq, record.clone());
+            }
+            item.record = record;
+        }
+        true
+    });
 }
 
 fn has_unfinished_records(paged: &[Paged], home: &str) -> bool {
@@ -253,6 +263,32 @@ fn encode(mut page: Value, store_fatal: Option<Value>) -> Result<Vec<u8>, String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_queued_record_handed_back_without_its_flag_loses_the_flag_in_the_queue() {
+        let queue = DirectEvidenceQueue::default();
+        let mut queued =
+            crate::mcp_relay_receipt::tests::record("forward", "inline-approved", "allow");
+        queued["remember"] = json!(true);
+        assert!(queue.offer(queued.clone()));
+        let mut forward = queued.clone();
+        forward.as_object_mut().unwrap().remove("remember");
+        let mut paged = queue
+            .acknowledge_and_peek(None, None, DEFAULT_DRAIN_RECORDS)
+            .records;
+        keep_handed_back(&queue, &mut paged, std::slice::from_ref(&forward));
+        assert_eq!(paged.len(), 1);
+        assert_eq!(paged[0].record, forward);
+        let again = queue
+            .acknowledge_and_peek(None, None, DEFAULT_DRAIN_RECORDS)
+            .records;
+        assert_eq!(again.len(), 1);
+        assert_eq!(again[0].record, forward);
+
+        let mut written = again;
+        keep_handed_back(&queue, &mut written, &[]);
+        assert!(written.is_empty());
+    }
 
     #[test]
     fn a_batch_acknowledges_the_queue_across_page_boundaries() {
