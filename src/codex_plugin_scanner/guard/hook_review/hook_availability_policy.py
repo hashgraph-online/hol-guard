@@ -50,9 +50,7 @@ def _fallback_permission_request(event_name: str) -> bool:
     return compact in {"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"}
 
 
-def _runtime_availability(
-    payload: Mapping[str, object], *, deadline: float | None = None
-) -> dict[str, object] | None:
+def _runtime_availability(payload: Mapping[str, object], *, deadline: float | None = None) -> dict[str, object] | None:
     """Ask the standalone Rust hook command for outage posture."""
 
     from ..mdm.runtime_request import runtime_answer
