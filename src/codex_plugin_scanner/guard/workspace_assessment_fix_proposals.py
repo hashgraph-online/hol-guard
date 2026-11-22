@@ -14,7 +14,7 @@ three separate steps and never runs on its own:
 * verification marks the proposal fixed only after a later, complete
   supply-chain run, started after the apply, no longer reports the finding.
 
-Python keeps the request handling, the stored state and the state machine; the
+Python keeps the request handling and the state machine; the stored rows, the
 manifest scan, edit planning, diff, hashing and file replacement are native.
 Guard does not run a package manager or any project code, so the lockfile is
 left for the user to update with their own tooling.
@@ -22,6 +22,7 @@ left for the user to update with their own tooling.
 
 from __future__ import annotations
 
+import base64
 import json
 import threading
 import uuid
@@ -32,10 +33,16 @@ from . import native_workspace_fix as native
 from . import workspace_assessment_store as assessments
 from .store_workspace_assessment_schema import MAX_FIX_DIFF_BYTES
 from .workspace_assessment_worker import queue_manual_run
+from .workspace_fix_proposal_pages import native_pages as _pages
+from .workspace_fix_proposal_pages import native_row as _row
+from .workspace_fix_proposal_pages import native_text as _text
 
 MAX_LISTED_PROPOSALS: Final = 100
 MAX_PROPOSALS_PER_PREPARE: Final = 20
 _EDIT_KEYS: Final = ("section", "start", "end", "from_spec", "to_spec")
+# Room the stored proposals may take in the one native request that saves
+# them, under the store's 4 MiB request limit.
+_PREPARE_REQUEST_BYTES: Final = 3 * 1024 * 1024
 _ROOT_UNAVAILABLE: Final = frozenset(
     {
         "workspace_fix_root_not_absolute",
@@ -84,7 +91,7 @@ _COLUMNS: Final = (
     "verified_at_ms",
     "verification_run_id",
 )
-_SELECT: Final = ", ".join(_COLUMNS)
+_WORKTREE_KEYS: Final = frozenset({"root", "paused"})
 # One apply at a time, so two requests cannot both pass the hash check.
 _APPLY_LOCK: Final = threading.Lock()
 
@@ -205,17 +212,10 @@ def list_proposals(
     """Newest proposals of a worktree, after settling any that a later run decides."""
 
     verify_proposals(store, keys, now_ms=now_ms)
-    with store._connect() as connection:
-        rows = connection.execute(
-            f"""
-            select {_SELECT} from workspace_fix_proposals
-            where codebase_key = ? and worktree_key = ?
-            order by created_at_ms desc, proposal_id desc
-            limit ?
-            """,
-            (keys.codebase_key, keys.worktree_key, max(1, min(limit, MAX_LISTED_PROPOSALS))),
-        ).fetchall()
-    return [_payload(dict(zip(_COLUMNS, row, strict=True))) for row in rows]
+    wanted = max(1, min(limit, MAX_LISTED_PROPOSALS))
+    args: dict[str, object] = {**_key_args(keys), "limit": wanted}
+    rows = _pages(store, "list_workspace_fix_proposals", args, "before", frozenset(_COLUMNS), limit=wanted)
+    return [_payload(row) for row in rows]
 
 
 def verify_proposals(store: Any, keys: assessments.WorktreeKeys, *, now_ms: int) -> None:
@@ -239,21 +239,18 @@ def _settle_against_newest(store: Any, keys: assessments.WorktreeKeys, *, now_ms
     run = assessments.latest_assessed_run(store, keys)
     if run is None:
         return True
-    with store._connect() as connection:
-        rows = connection.execute(
-            """
-            select proposal_id, ecosystem, package_name, fix_version, advisory_ids_json, rule_ids_json,
-                   snapshot_digest, applied_at_ms, state, verification_run_id
-            from workspace_fix_proposals
-            where codebase_key = ? and worktree_key = ? and state in ('applied', 'still_present')
-            """,
-            (keys.codebase_key, keys.worktree_key),
-        ).fetchall()
-    if not rows:
+    method = "list_workspace_fix_proposals_to_verify"
+    proposals = _pages(store, method, _key_args(keys), "after", frozenset(_VERIFY_PROPOSAL_KEYS))
+    if not proposals:
         return True
-    proposals = [dict(zip(_VERIFY_PROPOSAL_KEYS, row, strict=True)) for row in rows]
     for item in proposals:
-        item["advisory_ids"], item["rule_ids"] = json.loads(item["advisory_ids"]), json.loads(item["rule_ids"])
+        prior_run = item["verification_run_id"]
+        if not isinstance(item["proposal_id"], str) or not isinstance(item["state"], str):
+            raise RuntimeError(f"native {method} returned no answer")
+        if prior_run is not None and not isinstance(prior_run, str):
+            raise RuntimeError(f"native {method} returned no answer")
+        item["advisory_ids"] = json.loads(_text(item["advisory_ids"], method))
+        item["rule_ids"] = json.loads(_text(item["rule_ids"], method))
     from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     try:
@@ -265,43 +262,29 @@ def _settle_against_newest(store: Any, keys: assessments.WorktreeKeys, *, now_ms
         return True
     updates = answer.get("updates")
     prior_by_id = {item["proposal_id"]: item for item in proposals}
-    with store._connect() as connection:
-        connection.execute("begin immediate")
-        # A run that finished while the native runtime answered decides instead.
-        newest = connection.execute(
-            """
-            select run_id from workspace_assessment_runs
-            where codebase_key = ? and worktree_key = ? and state in ('completed', 'partial')
-            order by finished_at_ms desc, rowid desc limit 1
-            """,
-            (keys.codebase_key, keys.worktree_key),
-        ).fetchone()
-        if newest is None or newest[0] != run["run_id"]:
-            return False
-        for update in updates if isinstance(updates, list) else []:
-            proposal = prior_by_id.get(update.get("proposal_id")) if isinstance(update, dict) else None
-            if proposal is None or update.get("state") not in ("still_present", "verified_fixed"):
-                continue
-            # Only a proposal still as it was read takes the verdict; a
-            # concurrent verification settles it otherwise.
-            connection.execute(
-                """
-                update workspace_fix_proposals set
-                  state = ?, verified_at_ms = ?, verification_run_id = ?,
-                  updated_at_ms = max(created_at_ms, ?)
-                where proposal_id = ? and state = ? and verification_run_id is ?
-                """,
-                (
-                    update["state"],
-                    now_ms,
-                    run["run_id"],
-                    now_ms,
-                    proposal["proposal_id"],
-                    proposal["state"],
-                    proposal["verification_run_id"],
-                ),
-            )
-    return True
+    verdicts: list[dict[str, object]] = []
+    for update in updates if isinstance(updates, list) else []:
+        proposal = prior_by_id.get(update.get("proposal_id")) if isinstance(update, dict) else None
+        if proposal is None or update.get("state") not in ("still_present", "verified_fixed"):
+            continue
+        # Only a proposal still as it was read takes the verdict; a
+        # concurrent verification settles it otherwise.
+        verdicts.append(
+            {
+                "proposal_id": proposal["proposal_id"],
+                "state": update["state"],
+                "prior_state": proposal["state"],
+                "prior_verification_run_id": proposal["verification_run_id"],
+            }
+        )
+    # A run that finished while the native runtime answered decides instead.
+    settled = store._native_store_call(
+        "settle_workspace_fix_proposals",
+        {**_key_args(keys), "run_id": run["run_id"], "now_ms": now_ms, "updates": verdicts},
+    )
+    if not isinstance(settled, bool):
+        raise RuntimeError("native settle_workspace_fix_proposals returned no answer")
+    return settled
 
 
 def _id_set(value: object) -> set[str]:
@@ -318,102 +301,86 @@ def _store_prepared(
     *,
     now_ms: int,
 ) -> list[dict[str, object]]:
-    ids: list[str] = []
-    with store._connect() as connection:
-        connection.execute("begin immediate")
-        for item in planned:
-            existing = connection.execute(
-                """
-                select proposal_id, base_sha256, new_sha256, snapshot_digest from workspace_fix_proposals
-                where codebase_key = ? and worktree_key = ? and finding_id = ? and manifest_path = ?
-                  and state = 'prepared'
-                """,
-                (keys.codebase_key, keys.worktree_key, finding_id, item["manifest_path"]),
-            ).fetchall()
-            same = next(
-                (
-                    row[0]
-                    for row in existing
-                    if (row[1], row[2], row[3]) == (item["base_sha256"], item["new_sha256"], run["snapshot_digest"])
-                ),
-                None,
-            )
-            for row in existing:
-                if row[0] != same:
-                    connection.execute(
-                        "update workspace_fix_proposals set state = 'stale', updated_at_ms = max(created_at_ms, ?)"
-                        " where proposal_id = ?",
-                        (now_ms, row[0]),
-                    )
-            if same is not None:
-                ids.append(str(same))
-                continue
-            proposal_id = uuid.uuid4().hex
-            raw_edits = item["edits"]
-            if not isinstance(raw_edits, list):
-                raise FixProposalError("workspace_fix_failed", 500)
-            edits: list[object] = raw_edits
-            connection.execute(
-                f"insert into workspace_fix_proposals ({_SELECT}) values ({', '.join('?' for _ in _COLUMNS)})",
-                (
-                    proposal_id,
-                    keys.codebase_key,
-                    keys.worktree_key,
-                    finding_id,
-                    identity["ecosystem"],
-                    identity["package_name"],
-                    identity["fix_version"],
-                    json.dumps(identity["advisory_ids"], separators=(",", ":")),
-                    json.dumps(identity["rule_ids"], separators=(",", ":")),
-                    run["run_id"],
-                    run["snapshot_digest"],
-                    item["manifest_path"],
-                    item["base_sha256"],
-                    item["new_sha256"],
-                    json.dumps([_edit_record(edit) for edit in edits], separators=(",", ":")),
-                    item["diff"],
-                    "prepared",
-                    now_ms,
-                    now_ms,
-                    None,
-                    None,
-                    None,
-                ),
-            )
-            ids.append(proposal_id)
+    items: list[dict[str, object]] = []
+    size = 0
+    for item in planned:
+        raw_edits = item["edits"]
+        if not isinstance(raw_edits, list):
+            raise FixProposalError("workspace_fix_failed", 500)
+        edits: list[object] = raw_edits
+        # Text goes over as base64, so characters canonical JSON would escape
+        # six bytes wide cannot outgrow the request.
+        edits_base64 = _base64(json.dumps([_edit_record(edit) for edit in edits], separators=(",", ":")))
+        diff_base64 = _base64(item["diff"])
+        size += len(edits_base64) + len(diff_base64)
+        items.append(
+            {
+                # The id a new proposal takes; a kept proposal keeps its own.
+                "proposal_id": uuid.uuid4().hex,
+                "manifest_path": item["manifest_path"],
+                "base_sha256": item["base_sha256"],
+                "new_sha256": item["new_sha256"],
+                "edits_base64": edits_base64,
+                "diff_base64": diff_base64,
+            }
+        )
+    if size > _PREPARE_REQUEST_BYTES:
+        raise FixProposalError("fix_unsupported", 422, reason="diff_too_large")
+    method = "store_prepared_workspace_fix_proposals"
+    ids = store._native_store_call(
+        method,
+        {
+            **_key_args(keys),
+            "finding_id": finding_id,
+            "source_run_id": run["run_id"],
+            "snapshot_digest": run["snapshot_digest"],
+            "now_ms": now_ms,
+            "ecosystem": identity["ecosystem"],
+            "package_name": identity["package_name"],
+            "fix_version": identity["fix_version"],
+            "advisory_ids_json": json.dumps(identity["advisory_ids"], separators=(",", ":")),
+            "rule_ids_json": json.dumps(identity["rule_ids"], separators=(",", ":")),
+            "items": items,
+        },
+    )
+    if not isinstance(ids, list) or len(ids) != len(items) or not all(isinstance(item, str) for item in ids):
+        raise RuntimeError(f"native {method} returned no answer")
     return [_payload(row) for proposal_id in ids if (row := _fetch(store, proposal_id)) is not None]
 
 
+def _base64(text: object) -> str:
+    if not isinstance(text, str):
+        raise FixProposalError("workspace_fix_failed", 500)
+    return base64.b64encode(text.encode("utf-8")).decode("ascii")
+
+
 def _worktree(store: Any, keys: assessments.WorktreeKeys) -> tuple[Path, bool]:
-    with store._connect() as connection:
-        row = connection.execute(
-            "select private_root, paused from workspace_assessment_state where codebase_key = ? and worktree_key = ?",
-            (keys.codebase_key, keys.worktree_key),
-        ).fetchone()
+    method = "workspace_assessment_worktree_root"
+    row = store._native_store_call(method, _key_args(keys))
     if row is None:
         raise FixProposalError("worktree_not_found", 404)
-    return Path(str(row[0])), bool(row[1])
+    checked = _row(row, _WORKTREE_KEYS, method)
+    paused = checked["paused"]
+    if isinstance(paused, bool) or not isinstance(paused, int):
+        raise RuntimeError(f"native {method} returned no answer")
+    return Path(_text(checked["root"], method)), bool(paused)
 
 
 def _fetch(store: Any, proposal_id: str) -> dict[str, Any] | None:
-    with store._connect() as connection:
-        row = connection.execute(
-            f"select {_SELECT} from workspace_fix_proposals where proposal_id = ?", (proposal_id,)
-        ).fetchone()
-    return dict(zip(_COLUMNS, row, strict=True)) if row is not None else None
+    method = "get_workspace_fix_proposal"
+    row = store._native_store_call(method, {"proposal_id": proposal_id})
+    if row is None:
+        return None
+    return _row(row, frozenset(_COLUMNS), method)
 
 
 def _set_state(store: Any, proposal_id: str, state: str, *, now_ms: int, applied: bool = False) -> None:
-    with store._connect() as connection:
-        connection.execute(
-            """
-            update workspace_fix_proposals set
-              state = ?, updated_at_ms = max(created_at_ms, ?),
-              applied_at_ms = case when ? then ? else applied_at_ms end
-            where proposal_id = ? and state = 'prepared'
-            """,
-            (state, now_ms, 1 if applied else 0, now_ms, proposal_id),
-        )
+    method = "set_workspace_fix_proposal_state"
+    answer = store._native_store_call(
+        method, {"proposal_id": proposal_id, "state": state, "now_ms": now_ms, "applied": applied}
+    )
+    if answer is not None:
+        raise RuntimeError(f"native {method} returned no answer")
 
 
 def _edit_record(edit: object) -> dict[str, object]:
@@ -472,6 +439,10 @@ def _payload(row: dict[str, Any]) -> dict[str, object]:
         "verified_at_ms": row["verified_at_ms"],
         "verification_run_id": row["verification_run_id"],
     }
+
+
+def _key_args(keys: assessments.WorktreeKeys) -> dict[str, object]:
+    return {"codebase_key": keys.codebase_key, "worktree_key": keys.worktree_key}
 
 
 def _skipped_payload(skipped: object) -> list[dict[str, str]]:

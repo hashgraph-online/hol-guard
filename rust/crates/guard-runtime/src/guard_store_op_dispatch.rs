@@ -313,8 +313,8 @@ pub(crate) fn dispatch(
         "record_tool_call_evidence" => {
             tool_call_evidence::record_tool_call_evidence(connection, args)
         }
-        "record_native_decision_receipt" => {
-            native_receipts::record_native_decision_receipt(connection, args)
+        _ if native_receipts::handles(method) => {
+            native_receipts::dispatch(connection, method, args)
         }
         "set_receipt_action_envelope" => receipt_writes::set_action_envelope(connection, args),
         "update_receipt_policy_decision" => {

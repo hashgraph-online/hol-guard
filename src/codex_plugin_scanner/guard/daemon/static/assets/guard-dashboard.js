@@ -24115,13 +24115,18 @@ function AlphaChannelDialog({
   onClose,
   onConfirm,
   onApprovalPasswordChange,
-  onApprovalTotpCodeChange
+  onApprovalTotpCodeChange,
+  confirmButtonRef
 }) {
   const title = useAlpha ? "Return to stable updates" : "Try alpha updates";
   const description = useAlpha ? "Stable updates receive the most thoroughly tested Guard releases. You can enable alpha updates again whenever you need early access." : "Alpha releases arrive before stable builds. They can include unfinished changes and may require a restart.";
   const confirmLabel = useAlpha ? "Use stable updates" : "Enable alpha updates";
   const confirmDisabled = pending || approvalGate?.enabled === true && isApprovalProofSubmitDisabled(approvalGate, { approvalPassword, approvalTotpCode }, false);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-white shadow-xl", children: [
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!confirmDisabled) onConfirm();
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { onSubmit: handleSubmit, className: "rounded-lg bg-white shadow-xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: title }),
@@ -24170,8 +24175,8 @@ function AlphaChannelDialog({
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
-          type: "button",
-          onClick: onConfirm,
+          ref: confirmButtonRef,
+          type: "submit",
           disabled: confirmDisabled,
           className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60",
           children: pending ? "Saving…" : confirmLabel
@@ -24397,20 +24402,24 @@ function getFocusableElements(container2) {
     (el) => el instanceof HTMLElement && el.offsetParent !== null
   );
 }
-function useFocusTrap(active, containerRef) {
+function useFocusTrap(active, containerRef, initialFocusRef) {
   const previouslyFocusedRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     if (!active) return;
     const container2 = containerRef.current;
     if (!container2) return;
+    const focusContainer = container2;
     previouslyFocusedRef.current = document.activeElement;
-    const initial = getFocusableElements(container2);
-    if (initial[0]) {
-      initial[0].focus();
+    const preferred = initialFocusRef?.current;
+    if (preferred && getFocusableElements(focusContainer).some((element) => element === preferred)) {
+      preferred.focus();
+    } else {
+      const initial = getFocusableElements(focusContainer);
+      if (initial[0]) initial[0].focus();
     }
     function handleKeyDown(event) {
       if (event.key !== "Tab") return;
-      const focusable = getFocusableElements(container2);
+      const focusable = getFocusableElements(focusContainer);
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (focusable.length === 0) {
@@ -24427,28 +24436,29 @@ function useFocusTrap(active, containerRef) {
         first?.focus();
       }
     }
-    container2.addEventListener("keydown", handleKeyDown);
+    focusContainer.addEventListener("keydown", handleKeyDown);
     return () => {
-      container2.removeEventListener("keydown", handleKeyDown);
+      focusContainer.removeEventListener("keydown", handleKeyDown);
       if (previouslyFocusedRef.current && previouslyFocusedRef.current.isConnected) {
         previouslyFocusedRef.current.focus();
       }
     };
-  }, [active, containerRef]);
+  }, [active, containerRef, initialFocusRef]);
 }
 function GuardModalLayer({
   ariaLabel,
   ariaDescribedBy,
   children,
   onClose,
-  panelClassName = "w-full max-w-2xl"
+  panelClassName = "w-full max-w-2xl",
+  initialFocusRef
 }) {
   const [overlayRoot, setOverlayRoot] = reactExports.useState(null);
   const panelRef = reactExports.useRef(null);
   const onCloseRef = reactExports.useRef(onClose);
   onCloseRef.current = onClose;
   const mounted = overlayRoot !== null;
-  useFocusTrap(mounted, panelRef);
+  useFocusTrap(mounted, panelRef, initialFocusRef);
   reactExports.useEffect(() => {
     setOverlayRoot(ensureGuardOverlayRoot());
   }, []);
@@ -24807,6 +24817,7 @@ function GuardUpdatePanel(props) {
   const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
   const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports.useState("");
   const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports.useState("");
+  const alphaConfirmButtonRef = reactExports.useRef(null);
   const [updateModeModalOpen, setUpdateModeModalOpen] = reactExports.useState(false);
   const [updateModeDraft, setUpdateModeDraft] = reactExports.useState(props.updateStatus?.update_mode ?? "automatic");
   const [updateModeSavePending, setUpdateModeSavePending] = reactExports.useState(false);
@@ -24947,21 +24958,31 @@ function GuardUpdatePanel(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
           phase === "updating" ? "Updating Guard…" : "Reconnecting…"
         ] }),
-        alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          AlphaChannelDialog,
+        alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          GuardModalLayer,
           {
-            useAlpha,
-            pending: alphaSavePending,
-            error: alphaSaveError,
-            approvalGate: props.approvalGate ?? null,
-            approvalPassword: alphaApprovalPassword,
-            approvalTotpCode: alphaApprovalTotpCode,
+            ariaLabel: modalTitle,
             onClose: handleCloseAlphaModal,
-            onConfirm: handleConfirmAlphaChannel,
-            onApprovalPasswordChange: handleApprovalPasswordChange,
-            onApprovalTotpCodeChange: handleApprovalTotpCodeChange
+            panelClassName: "w-full max-w-md",
+            initialFocusRef: props.approvalGate?.enabled ? void 0 : alphaConfirmButtonRef,
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              AlphaChannelDialog,
+              {
+                useAlpha,
+                pending: alphaSavePending,
+                error: alphaSaveError,
+                approvalGate: props.approvalGate ?? null,
+                approvalPassword: alphaApprovalPassword,
+                approvalTotpCode: alphaApprovalTotpCode,
+                onClose: handleCloseAlphaModal,
+                onConfirm: handleConfirmAlphaChannel,
+                onApprovalPasswordChange: handleApprovalPasswordChange,
+                onApprovalTotpCodeChange: handleApprovalTotpCodeChange,
+                confirmButtonRef: alphaConfirmButtonRef
+              }
+            )
           }
-        ) }) : null,
+        ) : null,
         updateModeModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Core update preferences", onClose: handleCloseUpdateModeModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           UpdateModeDialog,
           {

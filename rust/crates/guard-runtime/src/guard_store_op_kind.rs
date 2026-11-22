@@ -78,6 +78,13 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "artifact_latest_diff"
         | "oauth_sources_list"
         | "hook_approval_center_origin"
+        | "workspace_assessment_worktree_root"
+        | "list_workspace_fix_proposals"
+        | "get_workspace_fix_proposal"
+        | "list_workspace_fix_proposals_to_verify"
+        | "list_workspace_assessment_worktrees"
+        | "list_workspace_assessment_runs"
+        | "latest_workspace_assessment_run"
         | "get_runtime_state"
         | "read_local_cli_grant"
         | "read_local_cli_command_catalog"
@@ -162,6 +169,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
+        // The hook table and then the prompt table, read from one view.
+        "get_native_decision_receipt" => Kind::Snapshot,
         // One consistent view of the request and the allow issued for it.
         "peek_waited_exact_cloud_package_allow" => Kind::Snapshot,
         "consume_waited_exact_cloud_package_allow" => Kind::Write,
@@ -267,6 +276,9 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "record_aibom_inventory_daemon"
         | "record_repair_self_check"
         | "commit_workspace_assessment_sent"
+        | "settle_workspace_fix_proposals"
+        | "store_prepared_workspace_fix_proposals"
+        | "set_workspace_fix_proposal_state"
         | "record_policy_bundle_failure_ack"
         | "replace_exact_cloud_review_state"
         | "transition_native_workspace_review_replay_marker"
