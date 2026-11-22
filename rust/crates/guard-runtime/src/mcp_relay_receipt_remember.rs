@@ -11,6 +11,7 @@
 //! a key or control state that is unavailable, a store that refused the row --
 //! costs the memory, never the receipt.
 
+use std::fs::File;
 use std::path::Path;
 use std::time::Duration;
 
@@ -57,12 +58,21 @@ pub(super) fn restored(mut record: Value) -> Value {
     record
 }
 
-/// Save the artifact allow of a composed remembered record; `store` runs one
-/// store operation and returns its reply. Every failure is swallowed.
+/// The policy-generation lock, taken before the storage gate as the daemon's
+/// policy writer takes it, so the two writers never wait on each other.
+pub(super) fn lock(guard_home: &str) -> Option<File> {
+    let home = Path::new(guard_home).canonicalize().ok()?;
+    policy_generation_lock::acquire(&home, LOCK_WAIT)
+}
+
+/// Save the artifact allow of a composed remembered record while `_held`
+/// holds the generation lock (`lock`); `store` runs one store operation and
+/// returns its reply. Every failure is swallowed.
 pub(super) fn save(
     guard_home: &str,
     record: &Value,
     now: &str,
+    _held: &File,
     store: impl FnOnce(Map<String, Value>) -> (Option<Value>, bool),
 ) {
     let identity = &record["identity"];
@@ -115,7 +125,8 @@ pub(super) fn save(
     signed(&home, args, store);
 }
 
-/// `upsert_policy` under a protected integrity state: the pending generation
+/// `upsert_policy` under a protected integrity state, with the generation
+/// lock held by the caller: the pending generation
 /// lands before the row is signed and is finalized from the reply. The prior
 /// control state is put back only when the write did not commit. Without key material the allow is not
 /// saved, since an unsigned local row is ignored under either state.
@@ -129,9 +140,6 @@ fn signed(
         return;
     };
     let control_ref = build_scoped_secret_ref(POLICY_INTEGRITY_CONTROL_REF, home);
-    let Some(_lock) = policy_generation_lock::acquire(home, LOCK_WAIT) else {
-        return;
-    };
     let Some(current) = control_state(&mut secrets, home, &control_ref) else {
         return;
     };
@@ -178,7 +186,10 @@ fn signed(
     // state stays for the integrity reconcile, which decides the generation.
 }
 
-/// The trusted control state, written at generation 0 when the home has none.
+/// The trusted control state, written at generation 0 when the home has
+/// none. A control state that exists but does not load is never replaced: it
+/// may hold a generation above 0, and resetting it would make every row
+/// signed above 0 read as a rollback.
 fn control_state(
     secrets: &mut EncryptedFileSecretStore,
     home: &Path,
@@ -186,6 +197,9 @@ fn control_state(
 ) -> Option<Value> {
     if let Some(current) = load_policy_integrity_control_state(secrets, home) {
         return Some(current);
+    }
+    if secrets.get_secret(control_ref).is_some() {
+        return None;
     }
     let initial = json!({
         "cutover_complete": true,
