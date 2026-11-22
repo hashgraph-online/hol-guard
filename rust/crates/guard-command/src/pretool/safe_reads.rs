@@ -476,6 +476,7 @@ fn safe_head_tail_with_targets(
     let mut targets = 0usize;
     let mut expect_count = false;
     let mut after_options = false;
+    let mut following = false;
     for argument in arguments {
         if expect_count {
             if !head_tail_count(argument) {
@@ -500,6 +501,7 @@ fn safe_head_tail_with_targets(
             continue;
         }
         if follow && follow_option(argument) {
+            following = true;
             continue;
         }
         if let Some(value) = argument
@@ -530,6 +532,14 @@ fn safe_head_tail_with_targets(
             return false;
         }
         targets += 1;
+    }
+    // Following a named file prints what is appended to it and ends when the
+    // session ends. Following standard input is a different command: the
+    // producer's end closes nothing, so the pipeline never finishes and the
+    // session's shell is held open on a read nothing will complete. That
+    // spelling stays unproven, as it was before `tail` learned to follow here.
+    if following && targets == 0 {
+        return false;
     }
     targets <= MAX_PLAIN_FILE_TARGETS && (targets > 0 || piped_input) && !expect_count
 }

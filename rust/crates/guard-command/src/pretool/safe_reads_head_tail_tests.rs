@@ -131,6 +131,20 @@ fn following_proves_no_file_the_single_file_proof_refuses() {
             "{line}"
         );
     }
+    // Following standard input names no file: the producer's end closes
+    // nothing, so the pipeline never finishes.
+    assert!(!safe_head_tail_arguments(
+        &arguments("-f"),
+        true,
+        context(root),
+        true
+    ));
+    assert!(!safe_head_tail_arguments(
+        &arguments("-n 50 -f"),
+        true,
+        context(root),
+        true
+    ));
     // `head` takes no follow option, so the same words stay unproven there.
     assert!(!safe_head_tail_arguments(
         &arguments("-f Cargo.toml"),
