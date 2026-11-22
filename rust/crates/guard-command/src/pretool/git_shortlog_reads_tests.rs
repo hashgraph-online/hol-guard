@@ -15,7 +15,7 @@ fn a_shortlog_narrowed_by_date_is_a_read_form() {
         "--since=3 --no-merges",
         "--since=2026-01-01T00:00:00+00:00",
     ] {
-        assert!(read_form("shortlog", &args(rest)), "shortlog {rest}");
+        assert!(read_form(&args(rest)), "shortlog {rest}");
     }
 }
 
@@ -29,6 +29,6 @@ fn a_date_bound_outside_the_date_grammar_keeps_its_review() {
         "--until=--format=%GS",
         "--before=`id`",
     ] {
-        assert!(!read_form("shortlog", &args(rest)), "shortlog {rest}");
+        assert!(!read_form(&args(rest)), "shortlog {rest}");
     }
 }

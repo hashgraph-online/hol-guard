@@ -169,6 +169,7 @@ mod git_helper_context;
 mod git_history_reads;
 mod git_hook_files;
 pub(crate) mod git_listing_reads;
+pub(crate) mod git_shortlog_reads;
 mod git_local_writes;
 mod git_ls_remote;
 mod git_output_target;
