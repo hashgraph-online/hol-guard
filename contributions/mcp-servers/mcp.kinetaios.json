@@ -60,7 +60,7 @@
     "https://github.com/phinn/KinetAios/wiki/MCP-Server#security"
   ],
   "saferAlternatives": [
-    "Keep run_agent on Review; declare KINET_MCP_CWD roots so any requested cwd outside them errors before TaskManager dispatch and nothing runs. On case-sensitive hosts, treat case-distinct sibling paths as outside the roots until the server refuses them the same way.",
+    "Keep run_agent on Review; declare KINET_MCP_CWD roots so requested cwd outside them is refused before TaskManager dispatch and no tool runs. On case-sensitive hosts, treat case-distinct sibling paths as outside those roots until the server refuses them.",
     "Use export_session read-only handoff drafts when the remote side needs context, not execution.",
     "Treat import_session and sync_memories payloads as untrusted input; review merges that would overwrite local sessions or memory."
   ]
