@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 use serde_json::{json, Map, Value};
 
-use super::{dispatch, handles};
+use super::{dispatch, handles, NAMES_BYTES};
 use crate::guard_store_args::Args;
 use crate::guard_store_op_kind::{method_kind, Kind};
 
@@ -112,6 +112,36 @@ fn a_catalog_that_no_longer_decodes_contributes_nothing() {
         )
         .expect("text");
     assert_eq!(names(&connection, json!(["cli-a"])), json!({"names": []}));
+}
+
+#[test]
+fn names_past_the_reply_budget_are_refused_as_oversized() {
+    let connection = store();
+    // Two catalogs, each well inside its own bound, whose names together
+    // pass the reply budget.
+    let width = 1024;
+    let per_catalog = NAMES_BYTES / width / 2 + 8;
+    for (cli_id, mark) in [("cli-a", 'a'), ("cli-b", 'b')] {
+        let added: Vec<String> = (0..per_catalog)
+            .map(|index| format!("{mark}{index:06}{}", "x".repeat(width)))
+            .collect();
+        catalog(
+            &connection,
+            cli_id,
+            "one",
+            snapshot(json!({"added": added})),
+        );
+    }
+    assert_eq!(
+        names(&connection, json!(["cli-a"]))["names"]
+            .as_array()
+            .map(Vec::len),
+        Some(per_catalog)
+    );
+    assert_eq!(
+        names(&connection, json!(["cli-a", "cli-b"])),
+        json!({"oversized": true})
+    );
 }
 
 #[test]

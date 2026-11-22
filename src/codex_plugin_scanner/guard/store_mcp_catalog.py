@@ -38,13 +38,17 @@ def catalog_change_ids(store: Any, cli_ids: Iterable[str]) -> dict[str, str]:
 
     The native store reads the names listed as added or changed in every
     stored catalog of ``cli_ids``. The caller runs the schema check first.
+    An answer too large for one reply leaves every change flagged.
     """
 
     ids = list(cli_ids)
     if not ids:
         return {}
     answer = store._native_store_call("local_mcp_catalog_change_names", {"cli_ids": ids})
-    names = answer.get("names") if isinstance(answer, dict) else None
+    if answer == {"oversized": True}:
+        # Too many names for one reply: the changes stay flagged for review.
+        return {}
+    names = answer["names"] if isinstance(answer, dict) and set(answer) == {"names"} else None
     if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
         raise sqlite3.DatabaseError("native local_mcp_catalog_change_names returned no answer")
     ordered = sorted(set(names))

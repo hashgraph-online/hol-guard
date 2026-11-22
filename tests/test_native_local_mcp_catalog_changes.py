@@ -63,7 +63,25 @@ def test_unavailable_slugs_leave_the_changes_flagged(monkeypatch: pytest.MonkeyP
     assert catalog_change_ids(_Store({"names": ["a"]}), ("cli-a",)) == {}
 
 
-@pytest.mark.parametrize("answer", [None, [], {"names": None}, {"names": ["a", 1]}, {"other": []}])
+def test_an_oversized_answer_leaves_the_changes_flagged(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = _slugs(monkeypatch)
+    assert catalog_change_ids(_Store({"oversized": True}), ("cli-a",)) == {}
+    assert seen == []
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        [],
+        {"names": None},
+        {"names": ["a", 1]},
+        {"other": []},
+        {"names": [], "extra": 1},
+        {"oversized": False},
+        {"oversized": True, "names": []},
+    ],
+)
 def test_an_answer_outside_the_contract_is_refused(answer: object, monkeypatch: pytest.MonkeyPatch) -> None:
     _slugs(monkeypatch)
     with pytest.raises(sqlite3.DatabaseError, match="local_mcp_catalog_change_names"):

@@ -7,6 +7,11 @@
 //! given CLI ids. A catalog that no longer decodes as a bounded inventory
 //! contributes nothing, as does a store without the catalog table. The caller
 //! still turns the names into command ids.
+//!
+//! Each catalog is bounded, but the names of many catalogs together are not,
+//! so an answer that would pass half the response cap is `{"oversized": true}`
+//! instead. The caller then leaves the changes flagged, as it does when the
+//! command ids are unavailable.
 
 use std::collections::BTreeSet;
 
@@ -20,6 +25,8 @@ use crate::guard_store_local_cli_mcp_snapshot::decode_snapshot;
 
 const METHOD: &str = "local_mcp_catalog_change_names";
 const CHANGE_KEYS: [&str; 2] = ["added", "changed"];
+/// Encoded name bytes one answer may carry, leaving room for the reply.
+pub(crate) const NAMES_BYTES: usize = guard_contracts::MAX_NATIVE_RESPONSE_BYTES / 2;
 
 pub(crate) fn handles(method: &str) -> bool {
     method == METHOD
@@ -44,7 +51,15 @@ pub(crate) fn dispatch(connection: &Connection, args: &Args<'_>) -> StoreResult<
             }
         }
     }
-    Ok(json!({ "names": names.into_iter().collect::<Vec<_>>() }))
+    let names: Vec<String> = names.into_iter().collect();
+    if encoded_len(&names) > NAMES_BYTES {
+        return Ok(json!({ "oversized": true }));
+    }
+    Ok(json!({ "names": names }))
+}
+
+fn encoded_len(names: &[String]) -> usize {
+    serde_json::to_vec(names).map_or(usize::MAX, |bytes| bytes.len())
 }
 
 fn collect(snapshot: Option<Value>, names: &mut BTreeSet<String>) {
