@@ -89,3 +89,44 @@ pub fn response(
         .cloned()
         .ok_or("native_hook_render_invalid")
 }
+/// Render the fixed PreToolUse deny for a verdict whose native response could
+/// not be delivered. An allowed verdict is denied with the generic renderer
+/// reason because the action was blocked by the missing response itself.
+pub fn verdict_response(
+    harness: &str,
+    verdict: &Map<String, Value>,
+) -> Result<Map<String, Value>, &'static str> {
+    let document = contract();
+    let default_reason = document["defaults"]["reason"]
+        .as_str()
+        .ok_or("native_hook_render_invalid")?;
+    let default_code = document["defaults"]["reason_code"]
+        .as_str()
+        .ok_or("native_hook_render_invalid")?;
+    let allowed = verdict.get("decision").and_then(Value::as_str) == Some("allow")
+        && matches!(
+            verdict.get("minimum_action").and_then(Value::as_str),
+            Some("allow" | "warn")
+        );
+    let reason = if allowed {
+        default_reason
+    } else {
+        verdict
+            .get("reason")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(default_reason)
+    };
+    let reason_code = if allowed {
+        default_code
+    } else {
+        verdict
+            .get("reason_code")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(default_code)
+    };
+    response(harness, "PreToolUse", reason, reason_code, None)
+}

@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.catalog_delivery.installed_bundle import MANIFES
 from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import encoded
 from codex_plugin_scanner.guard.extension_builder import native_source_compiler as bridge
 from tests.extension_builder_support import use_installed_native_source_compiler
+from tests.native_activation_support import activation_slot_call
 from tests.offline_data_fixture import offline_data_owner as offline_data_owner
 from tests.offline_data_fixture import offline_data_path as offline_data_path
 
@@ -450,7 +451,10 @@ def test_production_cleanup_captures_sql_pins_and_rejects_sql_loss(complete, tmp
             yield connection
 
     store = SimpleNamespace(
-        guard_home=home, _connect=connect, _policy_integrity_secret_material=lambda **kwargs: (b"m" * 32, "fixture")
+        guard_home=home,
+        _connect=connect,
+        _native_store_call=activation_slot_call(connect),
+        _policy_integrity_secret_material=lambda **kwargs: (b"m" * 32, "fixture"),
     )
     cache = activation_store.prepare_directory_for_store(store)
     shutil.copytree(source, cache)

@@ -31,8 +31,8 @@ from codex_plugin_scanner.guard.store_extension_control_authority_schema import 
     ensure_extension_control_authority_schema,
 )
 from tests.delivery_scripts import script
+from tests.native_activation_support import activation_slot_call, seed
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
-from tests.native_activation_support import seed
 from tests.test_extension_pack_preparation import delivery as delivery
 
 revocation_key = script("extension_delivery_revocations").revocation_key
@@ -58,6 +58,7 @@ def device(delivery, monkeypatch):
         return connection
 
     store._connect = connect
+    store._native_store_call = activation_slot_call(connect)
     prepared = preparation.prepare(
         delivery.verified(),
         [],

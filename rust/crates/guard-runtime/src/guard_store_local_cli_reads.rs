@@ -17,16 +17,20 @@ use crate::guard_store_local_cli_inventory_capabilities::{
     capabilities, capability_map, CAPABILITY_BY_CAUSE,
 };
 
+#[path = "guard_store_command_pack_activation.rs"]
+mod command_pack_activation;
+
 /// Whether `method` is one of these reads or the cause note.
 pub(crate) fn handles(method: &str) -> bool {
-    matches!(
-        method,
-        "read_local_cli_revision"
-            | "read_local_cli_surface"
-            | "has_local_cli_block_rules"
-            | "read_local_cli_capabilities"
-            | "note_local_cli_capability_cause"
-    )
+    command_pack_activation::handles(method)
+        || matches!(
+            method,
+            "read_local_cli_revision"
+                | "read_local_cli_surface"
+                | "has_local_cli_block_rules"
+                | "read_local_cli_capabilities"
+                | "note_local_cli_capability_cause"
+        )
 }
 
 pub(crate) fn dispatch(
@@ -35,6 +39,9 @@ pub(crate) fn dispatch(
     args: &Args<'_>,
 ) -> StoreResult<Value> {
     match method {
+        _ if command_pack_activation::handles(method) => {
+            command_pack_activation::dispatch(connection, method)
+        }
         "read_local_cli_revision" => Ok(Value::from(authority_revision(connection)?)),
         "read_local_cli_surface" => read_surface(connection, args.str("cli_id")?),
         "has_local_cli_block_rules" => Ok(Value::from(has_block_rules(connection)?)),

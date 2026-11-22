@@ -142,8 +142,8 @@ pub(super) struct ReviewedProjection {
 
 /// The command with every inert environment prefix removed, or `None` when
 /// there is nothing to remove or any prefix might change execution.
-pub(super) fn project(command: &str) -> Option<String> {
-    project_with(command, None, PathContext::default())
+pub(super) fn project(command: &str, context: PathContext<'_>) -> Option<String> {
+    project_with(command, None, context)
 }
 
 /// The command with its literal environment prefixes removed when at least
@@ -162,6 +162,16 @@ pub(super) fn project_reviewed(
     })
 }
 
+/// Where a simple command's settings are read: the caller's path context,
+/// and whether this is the first simple command on the line. Only the first
+/// one still stands in the caller's working directory, so only there can a
+/// relative setting value be resolved against it.
+#[derive(Clone, Copy)]
+struct SettingSite<'a> {
+    context: PathContext<'a>,
+    first_command: bool,
+}
+
 fn project_with(
     command: &str,
     mut setting: Option<&mut reviewed::Reviewed>,
@@ -175,9 +185,20 @@ fn project_with(
     let mut removed = vec![false; tokens.len()];
     let mut index = 0usize;
     let mut command_start = true;
+    // The caller's working directory is the one this command line started in.
+    // A later simple command may run after a `cd`, so only the first one can
+    // read a relative setting value against it. The flag is cleared at the
+    // separator, not after a simple command is read: a leading redirection
+    // (`>/dev/null cd /etc && DATA_DIR=ssl/private ls`) keeps a command from
+    // being read here at all, and clearing it only on a read would leave the
+    // command after the `cd` holding the caller's working directory.
+    let mut first_command = true;
     while index < tokens.len() {
         if tokens[index].is_control {
             command_start = COMMAND_SEPARATORS.contains(&tokens[index].value.as_str());
+            if command_start {
+                first_command = false;
+            }
             index += 1;
             continue;
         }
@@ -192,7 +213,10 @@ fn project_with(
             index,
             &mut removed,
             setting.as_deref_mut(),
-            context,
+            SettingSite {
+                context,
+                first_command,
+            },
         )?;
     }
     if !removed.contains(&true) {
@@ -219,7 +243,7 @@ fn strip_prefixes(
     mut index: usize,
     removed: &mut [bool],
     mut setting: Option<&mut reviewed::Reviewed>,
-    context: PathContext<'_>,
+    site: SettingSite<'_>,
 ) -> Option<usize> {
     let mut stripped = false;
     let mut required = Vec::new();
@@ -258,9 +282,16 @@ fn strip_prefixes(
                 return None;
             }
             if !(inert_assignment(name, value)
-                || !reviewed && ordinary_project_setting(name, value))
+                || !reviewed
+                    && ordinary_project_setting(name, value, site.context, site.first_command))
             {
-                search_path::review(setting.as_deref_mut(), &mut required, name, value, context)?;
+                search_path::review(
+                    setting.as_deref_mut(),
+                    &mut required,
+                    name,
+                    value,
+                    site.context,
+                )?;
             }
         } else if token.value == "env" || token.value == "/usr/bin/env" {
             removed[index] = true;
@@ -271,7 +302,7 @@ fn strip_prefixes(
                 removed,
                 setting.as_deref_mut(),
                 &mut required,
-                context,
+                site,
             )?;
             stripped = true;
             continue;
@@ -320,7 +351,7 @@ fn strip_env_options(
     removed: &mut [bool],
     mut setting: Option<&mut reviewed::Reviewed>,
     required: &mut Vec<&'static [&'static str]>,
-    context: PathContext<'_>,
+    site: SettingSite<'_>,
 ) -> Option<usize> {
     while index < tokens.len() && !tokens[index].is_control {
         let token = &tokens[index];
@@ -358,9 +389,16 @@ fn strip_env_options(
             return None;
         } else if let Some((name, assigned)) = assignment(token) {
             if !(inert_assignment(name, assigned)
-                || setting.is_none() && ordinary_project_setting(name, assigned))
+                || setting.is_none()
+                    && ordinary_project_setting(name, assigned, site.context, site.first_command))
             {
-                search_path::review(setting.as_deref_mut(), required, name, assigned, context)?;
+                search_path::review(
+                    setting.as_deref_mut(),
+                    required,
+                    name,
+                    assigned,
+                    site.context,
+                )?;
             }
         } else {
             break;
@@ -385,6 +423,10 @@ mod tests;
 #[cfg(test)]
 #[path = "env_prefix_value_tests.rs"]
 mod value_tests;
+
+#[cfg(test)]
+#[path = "env_prefix_workspace_path_tests.rs"]
+mod workspace_path_tests;
 
 /// Settings that only remove Git configuration sources. Isolating the global
 /// and system files leaves a subset of the configuration the unexported

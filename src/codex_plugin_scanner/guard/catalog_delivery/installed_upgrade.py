@@ -32,10 +32,9 @@ def migrate_active(store, installed):
         key = store._authority_key(required=True)
         anchor = store._read_anchor(key=key)
         if anchor is not None and anchor.phase is AuthorityPhase.ANCHORED:
-            with store._connect() as connection:
-                # The native resume plan authenticates the already-admitted
-                # transition and its pack binding; no new approval is issued.
-                store._resume_transition(connection, anchor.revision, key=key)
+            # The native resume plan authenticates the already-admitted
+            # transition and its pack binding; no new approval is issued.
+            store._resume_transition(anchor.revision, key=key)
         # The upgrade below plans from the activation's catalog. A runtime on
         # another catalog, such as an older install still running, may have
         # moved the authority head off it; reading with the activation's
@@ -90,15 +89,14 @@ def migrate_active(store, installed):
             key = store._authority_key(required=True)
             # Validate/resume the authenticated head before advancing its anchor.
             store._read_extension_control_authority_locked(local.catalog_digest)
-            with store._connect() as connection:
-                row = activation_store._row(connection)
-                if row is None:
-                    raise ValueError("installed command pack activation missing before commit")
-                evidence["previous"] = {
-                    "record": row["record_json"],
-                    "digest": row["record_digest"],
-                    "mac": row["record_mac"],
-                }
+            row = activation_store.read_slot(store)
+            if row is None:
+                raise ValueError("installed command pack activation missing before commit")
+            evidence["previous"] = {
+                "record": row["record_json"],
+                "digest": row["record_digest"],
+                "mac": row["record_mac"],
+            }
             target = candidate.registry
             if store._load_catalog_manifest(target.catalog_digest, key=key) is None:
                 store._write_catalog_manifest(target, key=key, manifest=store._catalog_target_manifest(target))

@@ -1,4 +1,5 @@
 use super::{bindable_setting, code_loading_setting, project, project_reviewed};
+use crate::pretool::PathContext;
 
 #[test]
 fn inert_prefixes_are_removed_in_place() {
@@ -35,7 +36,7 @@ fn inert_prefixes_are_removed_in_place() {
         ("NODE_ENV=test node --test", "node --test"),
         ("env NODE_ENV=test ls", "ls"),
     ] {
-        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+        assert_eq!(project(command, PathContext::default()).as_deref(), Some(expected), "{command}");
     }
 }
 
@@ -49,7 +50,7 @@ fn commands_without_inert_prefix_are_not_projected() {
         // A name the shell itself reads is never ordinary, so it is reviewed.
         "REPORT_WINDOW=7d ls",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -99,7 +100,7 @@ fn execution_changing_prefixes_leave_the_command_untouched() {
         "API_KEY=abc tool run",
         "BASH_FUNC_ls%%='() { id; }' ls",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -121,7 +122,7 @@ fn settings_that_point_tools_at_files_or_code_are_never_inert() {
         "FEATURE=--evil ls",
         "WIDGET_MODULE=evil ls",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -133,7 +134,7 @@ fn guard_markers_cannot_be_unset() {
         "env -u CLAUDECODE git status",
         "env -u CODEX_SANDBOX git status",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -167,7 +168,7 @@ fn private_temp_settings_project_only_for_review() {
             project_reviewed(command, Default::default()).unwrap_or_else(|| panic!("{command}"));
         assert_eq!(reviewed.command, "bunx vitest run a.test.ts", "{command}");
         assert_eq!(reviewed.setting, "OUT_DIR", "{command}");
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
     for command in [
         r#"OUT_DIR="$HOME/report-test" bunx vitest run a.test.ts"#,
@@ -400,7 +401,7 @@ fn prefixes_before_guard_launchers_are_never_projected() {
         "env -u GH_TOKEN hol-guard pytest-contained -- pytest -q",
         "NO_COLOR=1 /usr/local/bin/hol-guard status",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -458,7 +459,11 @@ fn a_bare_exec_in_front_of_a_setting_is_read_past() {
             "git status && gh repo view o/r",
         ),
     ] {
-        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+        assert_eq!(
+            project(command, PathContext::default()).as_deref(),
+            Some(expected),
+            "{command}"
+        );
     }
 }
 
@@ -481,6 +486,6 @@ fn an_exec_the_projection_cannot_read_past_leaves_the_command_alone() {
         // same refusal the bare spelling reaches.
         "exec env -u PATH npm test",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }

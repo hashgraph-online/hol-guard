@@ -10,7 +10,6 @@ lease and supplies the protected pack state only this process reads.
 from __future__ import annotations
 
 import contextlib
-import sqlite3
 from typing import TYPE_CHECKING, cast
 
 from .native_extension_control_authority import view_to_wire
@@ -42,9 +41,7 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         reply = self._extension_control_authority_op(op, key=key, anchor_json=self._read_anchor_json(), **fields)
         return _plan(reply)
 
-    def _resume_transition(
-        self, connection: sqlite3.Connection, revision: int, *, key: bytes
-    ) -> ExtensionControlAuthorityView | None:
+    def _resume_transition(self, revision: int, *, key: bytes) -> ExtensionControlAuthorityView | None:
         """Resume the prepared transition at ``revision`` for its own request."""
 
         plan = self._authority_plan("resume_plan", key=key, revision=revision)

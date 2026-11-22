@@ -79,6 +79,9 @@ fn printed_and_bound_credential_globs_keep_review() {
             "P=*; echo ~/.config/gh/$P",
             "P=*; printf '%s\\n' ~/.aws/$P",
             "echo ${X:-~/.aws/*}",
+            "expr ~/.aws/*",
+            "expr length ~/.ssh/id_*",
+            "seq -s ~/.aws/* 1 3",
         ] {
             assert_ne!(
                 action(&home, harness, command),
@@ -102,6 +105,10 @@ fn project_globs_and_quoted_words_still_print() {
         "echo $?",
         "P=~/.ssh/id_rsa; echo $P",
         "echo ok # /tmp/*",
+        "expr src/*",
+        "expr 1 + 2",
+        "seq 1 10",
+        "seq -s , 1 5",
     ] {
         assert_eq!(action(&home, "codex", command), "allow", "{command}");
     }

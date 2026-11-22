@@ -86,22 +86,9 @@ fn lookups_and_help_proceed() {
             "type -t ls python3",
             "type -p git",
             "type -P git",
-            "type git",
-            "type -a node",
-            "type pr-approve-merge.sh 2>&1",
-            "command -v git",
-            "command -V git",
-            "command -pV git",
-            "whence git",
             "whence -p node",
-            "whence -v git",
-            "whence git; whence -p node; echo DONE",
-            "cd src && whence git",
-            "command -v hol-guard 2>/dev/null",
-            "command -v -- node",
-            "which hol-guard 2>/dev/null; type -p hol-guard 2>/dev/null; echo DONE",
-            "which hol-guard 2>/dev/null; type hol-guard 2>/dev/null; echo DONE",
-            "ls -la src/one.ts 2>&1; which pr-approve-merge.sh 2>&1; type pr-approve-merge.sh 2>&1",
+            "whence -ap node",
+            "whence -p -- node",
             "hol-guard risk-report --help",
             "hol-guard --help",
             "hol-guard -h",
@@ -119,7 +106,7 @@ fn lookups_and_help_proceed() {
 }
 
 #[test]
-fn executing_or_unproven_lookup_forms_still_ask() {
+fn definition_exposing_and_unproven_lookup_forms_still_ask() {
     let home = home();
     for harness in ["omp", "codex"] {
         for command in [
@@ -137,6 +124,20 @@ fn executing_or_unproven_lookup_forms_still_ask() {
             "type ~/.ssh/id_rsa",
             "type -x git",
             "type -a ~/.ssh/id_rsa",
+            "type git",
+            "type probe_func",
+            "type -a node",
+            "type -a probe_func",
+            "type -f probe_alias",
+            "type -ap git",
+            "command -v git",
+            "command -v probe_alias",
+            "command -v -- node",
+            "command -v hol-guard 2>/dev/null",
+            "command -V git",
+            "command -V probe_func",
+            "command -pV git",
+            "which hol-guard 2>/dev/null; type hol-guard 2>/dev/null; echo DONE",
             "type",
             "command -v",
             "hol-guard risk --help",
@@ -147,6 +148,128 @@ fn executing_or_unproven_lookup_forms_still_ask() {
             "hol-guard update 2>&1 | tail -8",
             "hol-guard settings set mode off --help x",
         ] {
+            let result = classify(&home, harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+        }
+    }
+}
+
+/// zsh builtins can print function/alias definitions, so none of the
+/// definition-printing lookups may silently bypass Guard's review boundary.
+#[test]
+fn zsh_definition_lookups_require_review() {
+    let home = home();
+    for harness in HARNESSES {
+        for command in [
+            "which hol_probe_func",
+            "which -a hol_probe_func",
+            "which -s hol_probe_func",
+            "which hol_probe_alias",
+            "whence hol_probe_alias",
+            "whence -v hol_probe_alias",
+            "whence -a hol_probe_func",
+            "whence -pv hol_probe_alias",
+            "which hol-guard 2>/dev/null; type -p hol-guard 2>/dev/null; echo DONE",
+        ] {
+            let result = classify(&home, harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+        }
+        for command in ["whence -p ls", "whence -ap ls", "whence -p -- ls"] {
+            let result = classify(&home, harness, command);
+            assert_eq!(result.decision, "allow", "{harness}: {command}");
+        }
+    }
+}
+
+#[test]
+fn zsh_definition_lookup_can_emit_synthetic_markers() {
+    if Command::new("zsh").arg("--version").output().is_err() {
+        return; // zsh is not installed on every CI host.
+    }
+    let setup = concat!(
+        "function hol_probe_func() { print SYNTHETIC_GUARD_CANARY_91; }\n",
+        "alias hol_probe_alias='print SYNTHETIC_GUARD_CANARY_91'\n",
+    );
+    for command in [
+        "which hol_probe_func",
+        "which -a hol_probe_func",
+        "which -s hol_probe_func",
+        "whence hol_probe_alias",
+        "whence -v hol_probe_alias",
+    ] {
+        let script = format!("{setup}{command}\n");
+        let output = Command::new("zsh")
+            .args(["-f", "-c", &script])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{command}");
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("SYNTHETIC_GUARD_CANARY_91"),
+            "{command}: expected synthetic definition marker"
+        );
+    }
+    let script = format!("{setup}whence -p ls\n");
+    let output = Command::new("zsh")
+        .args(["-f", "-c", &script])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("SYNTHETIC_GUARD_CANARY_91"));
+
+    // PATH-only lookups must not reveal the synthetic function or alias.
+    // These names are not executables, so nonzero exit codes are expected.
+    for command in [
+        "whence -p hol_probe_func",
+        "whence -p hol_probe_alias",
+        "whence -ap hol_probe_func",
+        "whence -ap hol_probe_alias",
+        "whence -p -- hol_probe_func",
+        "whence -p -- hol_probe_alias",
+    ] {
+        let script = format!("{setup}{command}\n");
+        let output = Command::new("zsh")
+            .args(["-f", "-c", &script])
+            .output()
+            .unwrap();
+        assert!(
+            !String::from_utf8_lossy(&output.stdout).contains("SYNTHETIC_GUARD_CANARY_91"),
+            "{command}: PATH-only stdout exposed synthetic definition"
+        );
+        assert!(
+            !String::from_utf8_lossy(&output.stderr).contains("SYNTHETIC_GUARD_CANARY_91"),
+            "{command}: PATH-only stderr exposed synthetic definition"
+        );
+    }
+}
+
+/// The output itself, not merely the lookup syntax, can contain a marker from
+/// an inherited Bash function or alias. Use inert, synthetic values only.
+#[test]
+fn shell_lookup_output_cannot_bypass_guard_review() {
+    let home = home();
+    let startup = home.join("synthetic-shell-init.sh");
+    std::fs::write(
+        &startup,
+        "shopt -s expand_aliases\nalias probe_alias='echo SYNTHETIC_ALIAS_MARKER_z81'\nprobe_func() { echo SYNTHETIC_FUNCTION_MARKER_z81; }\n",
+    )
+    .unwrap();
+    for (command, marker) in [
+        ("type probe_func", "SYNTHETIC_FUNCTION_MARKER_z81"),
+        ("type -a probe_func", "SYNTHETIC_FUNCTION_MARKER_z81"),
+        ("type -f probe_alias", "SYNTHETIC_ALIAS_MARKER_z81"),
+        ("command -V probe_func", "SYNTHETIC_FUNCTION_MARKER_z81"),
+        ("command -v probe_alias", "SYNTHETIC_ALIAS_MARKER_z81"),
+    ] {
+        let output = Command::new("bash")
+            .arg("-c")
+            .arg(command)
+            .env("BASH_ENV", &startup)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{command}: {output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(stdout.contains(marker), "{command}: {stdout:?}");
+        for harness in HARNESSES {
             let result = classify(&home, harness, command);
             assert_ne!(result.decision, "allow", "{harness}: {command}");
         }

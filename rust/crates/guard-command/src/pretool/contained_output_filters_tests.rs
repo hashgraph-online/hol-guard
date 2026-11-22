@@ -172,9 +172,36 @@ fn a_cut_that_only_reshapes_standard_input_is_a_matcher_stage() {
     }
 }
 
+/// Every text filter that reads standard input and nothing else is a stage
+/// the peel may apply in process, not only the matchers.
+#[test]
+fn a_text_filter_without_an_operand_is_a_matcher_stage() {
+    for (program, arguments) in [
+        ("wc", &[][..]),
+        ("wc", &["-l"]),
+        ("wc", &["-lw"]),
+        ("cat", &[][..]),
+        ("cat", &["-v"]),
+        ("cat", &["-vET"]),
+        ("sort", &[][..]),
+        ("sort", &["-u"]),
+        ("sort", &["-k2,2", "-t:"]),
+        ("uniq", &["-c"]),
+        ("uniq", &["-f", "2", "-w10"]),
+        ("tr", &["-d", "\\r"]),
+        ("sed", &["-n", "1,5p"]),
+        ("sed", &["-E", "s/[0-9]+/N/g"]),
+    ] {
+        assert!(
+            matcher_stage(program, &words(arguments)),
+            "{program} {arguments:?}"
+        );
+    }
+}
+
 /// The peel runs each stage itself, so it takes only the stages the
-/// runtime can run: a `cut` that opens a file is not one of them, and
-/// neither is a `sort` or a `uniq` the rejoin path admits.
+/// runtime can run: a stage that opens a file of its own is not one of them,
+/// whatever its program is called.
 #[test]
 fn a_stage_the_runtime_cannot_run_over_the_text_is_not_a_matcher_stage() {
     for (program, arguments) in [
@@ -184,14 +211,15 @@ fn a_stage_the_runtime_cannot_run_over_the_text_is_not_a_matcher_stage() {
         // A long option this grammar does not carry; `cut` in the system
         // image has none of them.
         ("cut", &["--fields=1"]),
-        ("sort", &["-u"]),
-        ("uniq", &["-c"]),
-        ("wc", &["-l"]),
-        ("tr", &["-d", "\\r"]),
-        // The peel runs a matcher itself over the captured text; it has no
-        // reading of `cat`, which is why a rejoined `cat` keeps the sibling
-        // route's own sink rather than the peel's.
-        ("cat", &["-v"]),
+        ("wc", &["-l", "build.log"]),
+        ("sort", &["-o", "sorted.txt"]),
+        ("sort", &["-T", "/tmp"]),
+        ("uniq", &["counted.txt"]),
+        ("cat", &["build.log"]),
+        ("cat", &["-"]),
+        ("sed", &["-i", "s/a/b/"]),
+        ("sed", &["-f", "script.sed"]),
+        ("sed", &["s/a/b/w out.txt"]),
         ("awk", &["{print $1}"]),
         ("head", &["-40"]),
     ] {

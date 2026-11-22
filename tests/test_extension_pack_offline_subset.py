@@ -20,8 +20,8 @@ from codex_plugin_scanner.guard.store_extension_control_authority_schema import 
     ensure_extension_control_authority_schema,
     extension_control_schema_marker_is_compatible,
 )
+from tests.native_activation_support import activation_slot_call, subset_store
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
-from tests.native_activation_support import subset_store
 from tests.pack_activation_writer_support import write_in_transaction
 from tests.test_extension_pack_preparation import delivery as delivery
 
@@ -83,6 +83,7 @@ def test_subset_writes_schema6_and_keeps_schema5_readable(delivery, monkeypatch)
     connection.execute("insert into extension_command_pack_activation values (1,1,?,?,?,?)", (*sealed, "unit"))
     connection.commit()
     store._connect = lambda: connection
+    store._native_store_call = activation_slot_call(lambda: connection)
     store._policy_integrity_secret_material = lambda **kwargs: (b"k" * 32, "test")
     monkeypatch.setattr("codex_plugin_scanner.guard.native_command_control_authority_store._key", lambda store: KEY)
     assert activation_store.read(store).record_digest == previous.record_digest

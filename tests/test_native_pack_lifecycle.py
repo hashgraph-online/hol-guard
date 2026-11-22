@@ -13,7 +13,7 @@ from codex_plugin_scanner.guard.catalog_delivery import lifecycle, lifecycle_sto
 from codex_plugin_scanner.guard.native_command_control_authority_io import hold_command_control_authority_lock
 from codex_plugin_scanner.guard.native_command_control_authority_store import _key
 from tests.extension_builder_support import use_installed_native_source_compiler
-from tests.native_activation_support import BINARY, native, seed
+from tests.native_activation_support import BINARY, activation_slot_call, native, seed
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.pack_activation_writer_support import write_in_transaction
 from tests.test_extension_pack_preparation import delivery as delivery
@@ -182,7 +182,7 @@ def test_sqlite_loss_recovery_retains_native_publication_floor(delivery, tmp_pat
         connection.row_factory = sqlite3.Row
         return connection
 
-    store = SimpleNamespace(guard_home=tmp_path, _connect=connect)
+    store = SimpleNamespace(guard_home=tmp_path, _connect=connect, _native_store_call=activation_slot_call(connect))
     seed(store)
     directory = activation_store.prepare_directory_for_store(store)
 
@@ -214,6 +214,7 @@ def test_db_loss_and_missing_release_cannot_fall_back_to_legacy_controls(protect
     from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
 
     protected._connect = lambda: sqlite3.connect(":memory:")
+    protected._native_store_call = activation_slot_call(protected._connect)
     monkeypatch.setattr(candidates, "load_installed_bundle", lambda: None)
     with pytest.raises(ValueError, match="pack_authority_unavailable"):
         candidates.prepare_candidate(protected, None, None, ())

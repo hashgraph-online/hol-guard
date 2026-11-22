@@ -1,9 +1,8 @@
 """Read models over the workspace assessment coordinator tables.
 
-The worktree list, run history and one worktree's newest assessed run are
-read by the native store; the stored coverage and findings JSON come back as
-text and are parsed here. ``latest_assessed_runs`` still reads its findings
-lists on its own connection.
+The worktree list, run history and the newest assessed runs are read by the
+native store; the stored coverage and findings JSON come back as text and are
+parsed here.
 """
 
 from __future__ import annotations
@@ -96,31 +95,16 @@ def latest_assessed_runs(store: Any, keys: Sequence[WorktreeKeys] | None = None)
 
     if keys is not None and not keys:
         return []
-    scope = ""
-    params: tuple[str, ...] = ()
+    method = "list_latest_assessed_workspace_runs"
+    args: dict[str, object] = {}
     if keys is not None:
-        scope = "and (" + " or ".join("(r.codebase_key = ? and r.worktree_key = ?)" for _ in keys) + ")"
-        params = tuple(value for item in keys for value in _key_tuple(item))
-    with store._connect() as connection:
-        rows = connection.execute(
-            f"""
-            select r.run_id, r.codebase_key, r.worktree_key, r.snapshot_digest, r.kind, r.trigger_kind, r.state,
-                   r.dirty_generation, r.coverage_json, r.findings_json, r.error_code,
-                   r.created_at_ms, r.started_at_ms, r.finished_at_ms
-            from workspace_assessment_runs r
-            where r.state in ('completed', 'partial')
-              and r.run_id = (
-                select latest.run_id from workspace_assessment_runs latest
-                where latest.codebase_key = r.codebase_key and latest.worktree_key = r.worktree_key
-                  and latest.state in ('completed', 'partial')
-                order by latest.finished_at_ms desc, latest.rowid desc
-                limit 1
-              )
-              {scope}
-            """,
-            params,
-        ).fetchall()
-    return [_run_payload(row) for row in rows]
+        args["keys"] = [list(_key_tuple(item)) for item in keys]
+    runs: list[dict[str, object]] = []
+    for row in _pages(store, method, args, "after", {**_RUN_FIELDS, "findings_json": _TEXT}):
+        run = _run_fields(row, method)
+        run["findings"] = json.loads(_text(row["findings_json"], method))
+        runs.append(run)
+    return runs
 
 
 def latest_assessed_run(store: Any, keys: WorktreeKeys) -> dict[str, object] | None:
@@ -227,25 +211,6 @@ def _run_fields(row: dict[str, object], method: str) -> dict[str, object]:
         "created_at_ms": row["created_at_ms"],
         "started_at_ms": row["started_at_ms"],
         "finished_at_ms": row["finished_at_ms"],
-    }
-
-
-def _run_payload(row: Sequence[object]) -> dict[str, object]:
-    return {
-        "run_id": row[0],
-        "codebase_key": row[1],
-        "worktree_key": row[2],
-        "snapshot_digest": row[3],
-        "kind": row[4],
-        "trigger_kind": row[5],
-        "state": row[6],
-        "dirty_generation": row[7],
-        "coverage": json.loads(str(row[8])),
-        "findings": json.loads(str(row[9])),
-        "error_code": row[10],
-        "created_at_ms": row[11],
-        "started_at_ms": row[12],
-        "finished_at_ms": row[13],
     }
 
 
