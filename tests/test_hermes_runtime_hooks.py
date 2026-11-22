@@ -200,6 +200,11 @@ def test_hermes_bridge_render_stops_at_the_hook_deadline(tmp_path: Path, monkeyp
     assert code == 2
 
 
+def test_bridge_failure_for_an_observing_event_stays_silent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(commands_hook_native_authority, "native_hook_failure", lambda *_args, **_kwargs: None)
+    assert commands_hook_native_authority._failure_output("hermes", "Stop", "unavailable") == ("", "", 0)
+
+
 @pytest.mark.usefixtures("native_hook_force")
 def test_pretool_call_records_runtime_receipt(
     tmp_path: Path,

@@ -9,7 +9,7 @@ RUNTIME_MISSING = "HOL Guard's native runtime is missing, so Guard blocked this 
 _DECIDING_EVENTS = frozenset({"pretooluse", "permissionrequest", "userpromptsubmit"})
 
 
-def _outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
+def outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
     """The runtime's stderr table for the moment it cannot be asked.
 
     A deciding event is refused with exit 2. An event that only reports on
@@ -72,7 +72,7 @@ def native_stderr_hook_failure(
             deadline_monotonic=deadline,
         )
     except Exception:
-        return _outage_stderr_failure(event_name)
+        return outage_stderr_failure(event_name)
     document, stderr, exit_code = answer.get("document"), answer.get("stderr"), answer.get("exit_code")
     if (
         isinstance(document, str)
@@ -81,4 +81,4 @@ def native_stderr_hook_failure(
         and not isinstance(exit_code, bool)
     ):
         return document, stderr, exit_code
-    return _outage_stderr_failure(event_name)
+    return outage_stderr_failure(event_name)
