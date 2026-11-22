@@ -4,10 +4,50 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from threading import Lock
 
 _CLI_AVAILABILITY_FEATURE = "native-hook-availability-v1"
 _CLI_AVAILABILITY_COMMAND = "hook-availability"
 _EVENT_FIELDS = ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
+_LIFECYCLE_OBSERVE_COMPACT = frozenset(
+    {
+        "sessionstart",
+        "sessionend",
+        "subagentstart",
+        "subagentstop",
+        "subagentend",
+        "stop",
+        "notification",
+        "taskstart",
+        "taskerror",
+        "sessionshutdown",
+        "permissiondenied",
+    }
+)
+_RUNTIME_AVAILABILITY_CACHE: dict[tuple[tuple[str, str], ...], dict[str, object]] = {}
+_RUNTIME_AVAILABILITY_LOCK = Lock()
+
+
+def _wire_event_name(payload: Mapping[str, object]) -> str:
+    for key in _EVENT_FIELDS:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "PreToolUse"
+
+
+def _fallback_pauses(event_name: str) -> bool:
+    compact = event_name.strip().lower().replace("_", "").replace("-", "")
+    return not (
+        compact in _LIFECYCLE_OBSERVE_COMPACT
+        or compact.startswith("after")
+        or compact in {"posttool", "posttooluse", "posttoolcall"}
+    )
+
+
+def _fallback_permission_request(event_name: str) -> bool:
+    compact = event_name.strip().lower().replace("_", "").replace("-", "")
+    return compact in {"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"}
 
 
 def _runtime_availability(
@@ -18,6 +58,11 @@ def _runtime_availability(
     from ..mdm.runtime_request import runtime_answer
 
     request = {key: payload[key] for key in _EVENT_FIELDS if key in payload}
+    cache_key = tuple((key, value) for key, value in request.items() if isinstance(value, str))
+    with _RUNTIME_AVAILABILITY_LOCK:
+        cached = _RUNTIME_AVAILABILITY_CACHE.get(cache_key)
+    if cached is not None:
+        return dict(cached)
     answer = runtime_answer(
         _CLI_AVAILABILITY_FEATURE,
         _CLI_AVAILABILITY_COMMAND,
@@ -26,7 +71,12 @@ def _runtime_availability(
         timeout_seconds=1.0,
         deadline=deadline,
     )
-    return dict(answer) if isinstance(answer, Mapping) else None
+    if not isinstance(answer, Mapping):
+        return None
+    result = dict(answer)
+    with _RUNTIME_AVAILABILITY_LOCK:
+        _RUNTIME_AVAILABILITY_CACHE[cache_key] = result
+    return result
 
 
 def canonical_hook_event_name(
@@ -50,9 +100,7 @@ def canonical_hook_event_name(
     event = native.get("event_name") if native is not None else None
     if isinstance(event, str) and event:
         return event
-    # A missing runtime cannot prove the wire event. Treat it as the protected
-    # pre-tool envelope so the caller never turns an unknown hook into an allow.
-    return "PreToolUse"
+    return _wire_event_name(payload)
 
 
 def hook_event_pauses_when_unavailable(
@@ -72,7 +120,7 @@ def hook_event_pauses_when_unavailable(
             return pauses
     native = _runtime_availability({"event": event_name}, deadline=deadline)
     pauses = native.get("pauses") if native is not None else None
-    return pauses if isinstance(pauses, bool) else True
+    return pauses if isinstance(pauses, bool) else _fallback_pauses(event_name)
 
 
 def hook_event_is_permission_request(
@@ -87,7 +135,7 @@ def hook_event_is_permission_request(
             return permission_request
     native = _runtime_availability({"event": event_name}, deadline=deadline)
     permission_request = native.get("permission_request") if native is not None else None
-    return permission_request if isinstance(permission_request, bool) else False
+    return permission_request if isinstance(permission_request, bool) else _fallback_permission_request(event_name)
 
 
 def availability_harness_response(

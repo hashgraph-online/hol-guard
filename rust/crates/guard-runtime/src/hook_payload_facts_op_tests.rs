@@ -43,13 +43,27 @@ fn cli_admission_uses_a_bounded_seconds_or_milliseconds_hint() {
 
 #[test]
 fn cli_availability_owns_event_posture_without_a_resident() {
+    for (event, pauses, permission_request) in [
+        ("UserPromptSubmit", true, false),
+        ("user_prompt_submitted", true, false),
+        ("PreToolUse", true, false),
+        ("beforeShellExecution", true, false),
+        ("PermissionRequestV2", true, true),
+        ("copilotPermissionRequest", true, true),
+        ("PostToolUse", false, false),
+        ("post_tool", false, false),
+        ("afterShellExecution", false, false),
+        ("SessionStart", false, false),
+        ("Stop", false, false),
+    ] {
+        let input = serde_json::json!({"hook_event_name": event}).to_string();
+        let output = cli_availability(input.as_bytes()).unwrap();
+        assert_eq!(output["pauses"], pauses, "{event}");
+        assert_eq!(output["permission_request"], permission_request, "{event}");
+    }
+
     let output = cli_availability(br#"{"hook_event_name":"copilotPermissionRequest"}"#).unwrap();
     assert_eq!(output["event_name"], "PermissionRequest");
-    assert_eq!(output["pauses"], true);
-    assert_eq!(output["permission_request"], true);
-
-    let output = cli_availability(br#"{"hook_event_name":"PostToolUse"}"#).unwrap();
-    assert_eq!(output["pauses"], false);
 }
 
 #[test]
