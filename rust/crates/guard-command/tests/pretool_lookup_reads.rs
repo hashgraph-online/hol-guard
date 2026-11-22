@@ -190,7 +190,10 @@ fn zsh_definition_lookup_can_emit_synthetic_markers() {
         "whence -v hol_probe_alias",
     ] {
         let script = format!("{setup}{command}\n");
-        let output = Command::new("zsh").args(["-f", "-c", &script]).output().unwrap();
+        let output = Command::new("zsh")
+            .args(["-f", "-c", &script])
+            .output()
+            .unwrap();
         assert!(output.status.success(), "{command}");
         assert!(
             String::from_utf8_lossy(&output.stdout).contains("SYNTHETIC_GUARD_CANARY_91"),
@@ -198,7 +201,10 @@ fn zsh_definition_lookup_can_emit_synthetic_markers() {
         );
     }
     let script = format!("{setup}whence -p ls\n");
-    let output = Command::new("zsh").args(["-f", "-c", &script]).output().unwrap();
+    let output = Command::new("zsh")
+            .args(["-f", "-c", &script])
+            .output()
+            .unwrap();
     assert!(output.status.success());
     assert!(!String::from_utf8_lossy(&output.stdout).contains("SYNTHETIC_GUARD_CANARY_91"));
 }
