@@ -76,13 +76,13 @@ fn page(connection: &Connection, below: i64, before: Value) -> Value {
 }
 
 #[test]
-fn both_reads_are_routed_as_reads() {
+fn both_reads_are_routed_as_snapshots() {
     for method in [
         "command_pack_legacy_evidence_rows",
         "command_pack_legacy_history_page",
     ] {
         assert!(handles(method));
-        assert!(matches!(method_kind(method), Some(Kind::Read)));
+        assert!(matches!(method_kind(method), Some(Kind::Snapshot)));
     }
     assert!(!handles("list_command_pack_pending_records"));
 }
