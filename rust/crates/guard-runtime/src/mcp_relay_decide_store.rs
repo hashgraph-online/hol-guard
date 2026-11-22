@@ -5,22 +5,25 @@
 //! none of them, each lookup misses and the diagnostic has nothing to explain.
 //! With saved rows the resident reads them itself, on one read-only snapshot,
 //! with the integrity evidence the proxy would ship: the key and state the
-//! daemon published, which the store must still hold, protected. Remote
+//! daemon published, which the store must still hold. Remote
 //! rows need no more evidence than the proxy ships: the lookup never serves a
 //! cloud-sync or team-policy row and verifies no remote row's integrity. A
 //! policy-bundle row this harness's lookups reach, an integrity state other
-//! than the published protected one, a newer or unknown schema, and a store it
-//! cannot read all defer the call.
+//! than the published one, a newer or unknown schema, and a store it cannot
+//! read all defer the call. The audit events a lookup raises on the snapshot
+//! are collected and written once the snapshot is released (`write_audit`).
 
 use crate::local_store_read::{
     open_read_only_cached, schema_version, table_exists, CachedConnection, STORE_FILE_NAME,
     SUPPORTED_SCHEMA_VERSION,
 };
 use crate::policy_bundle_store_identities::cached_bundle_authority;
+use crate::policy_decision_lookup_op::{write_audit_events, AuditEvent};
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use base64ct::{Base64UrlUnpadded, Encoding};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
+use std::cell::RefCell;
 use std::path::Path;
 use zeroize::Zeroizing;
 
@@ -30,6 +33,9 @@ pub(super) const STORE_UNREADABLE: &str = "mcp_relay_store_unreadable";
 pub(super) const STORE_NEWER: &str = "mcp_relay_store_newer";
 pub(super) const SAVED_REMOTE: &str = "mcp_relay_saved_remote_policy";
 const SAVED_UNVERIFIABLE: &str = "mcp_relay_saved_policy_unverifiable";
+/// The audit events a lookup raised could not be written. The proxy's lookup
+/// fails the same way when its own audit write does.
+pub(super) const AUDIT_UNWRITTEN: &str = "mcp_relay_saved_audit_unwritten";
 /// `REMOTE_POLICY_SOURCES` (`policy_integrity.py`).
 const REMOTE_SOURCES_SQL: &str = "('cloud-sync', 'team-policy', 'policy-bundle', \
      'policy-bundle-canonical', 'cloud-signed-memory')";
@@ -69,6 +75,16 @@ pub(crate) struct Saved<'c> {
     /// The validated bundle every lookup of this call matches Cloud
     /// exceptions against, read on the first lookup that needs it.
     pub(super) exception_bundle: guard_contracts::CloudExceptionBundle,
+    /// The audit events this call's lookups raised, which the snapshot cannot
+    /// take; the caller writes them once it holds a writable connection.
+    pub(super) audit: RefCell<Vec<AuditEvent>>,
+}
+
+impl Saved<'_> {
+    /// The audit events this call's lookups raised, in the order they ran.
+    pub(super) fn into_audit(self) -> Vec<AuditEvent> {
+        self.audit.into_inner()
+    }
 }
 
 /// `None` when the store holds no saved row, so every lookup misses; the
@@ -110,13 +126,6 @@ pub(crate) fn saved_at<'c>(
         return Ok(None);
     }
     let (integrity_state, key) = lookup_integrity(binding)?;
-    // Under a state that is not protected the lookup refuses a local row and
-    // follows the refusal with an audit write, which the read-only snapshot
-    // cannot make: the call would fail instead of being answered. Those
-    // stores stay with the proxy; a store of remote rows alone reads here.
-    if (has_local_policy || has_local_once) && published_integrity(binding).is_err() {
-        return Err(SAVED_UNVERIFIABLE);
-    }
     if shape.stored_integrity_state()?.as_ref() != Some(&integrity_state) {
         return Err(SAVED_UNVERIFIABLE);
     }
@@ -146,16 +155,32 @@ pub(crate) fn saved_at<'c>(
         key_id: key.key_id.clone(),
         bundle_identities,
         exception_bundle: Default::default(),
+        audit: RefCell::new(Vec::new()),
     }))
+}
+
+/// Write the audit events a call's lookups raised, in one transaction on the
+/// writable store, once the read snapshot is released. Under a degraded state
+/// these record each local row the lookup refused (`rule.ignored.local_integrity`),
+/// as the proxy's lookup records them.
+pub(super) fn write_audit(guard_home: &str, events: &[AuditEvent]) -> Result<(), &'static str> {
+    if events.is_empty() {
+        return Ok(());
+    }
+    let mut connection = super::claim::open_for_claim(guard_home)?;
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(|_| AUDIT_UNWRITTEN)?;
+    write_audit_events(&transaction, events).map_err(|_| AUDIT_UNWRITTEN)?;
+    transaction.commit().map_err(|_| AUDIT_UNWRITTEN)
 }
 
 /// The integrity state and key a saved lookup reads with, as the proxy's
 /// lookup evidence carries them (`policy_lookup_evidence`): the state the
 /// daemon refreshed, protected or degraded, and the key that state names.
 /// The lookup itself judges a degraded state, exactly as it does for the
-/// proxy. `saved_at` still hands a degraded store with local rows to the
-/// proxy, whose lookup can write the audit events those rows raise; a store
-/// of remote rows alone no longer leaves the session. A claim procures the
+/// proxy, and the audit events it raises for refused local rows are written
+/// after the snapshot (`write_audit`). A claim procures the
 /// same evidence (`_claim_integrity_evidence`), so the claim and the package
 /// spend read with it too.
 /// Without a key, or with a state that names another key, the proxy would

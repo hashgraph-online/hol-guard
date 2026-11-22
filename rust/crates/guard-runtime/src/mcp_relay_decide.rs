@@ -39,6 +39,7 @@
 use self::package_route::ToolLeg;
 use crate::approval_proof_op::Disposition;
 use crate::mcp_tool_policy_decision::Decision;
+use crate::policy_decision_lookup_op::AuditEvent;
 use crate::policy_enforcement::AdmittedPolicySnapshot;
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use crate::policy_store::PolicySnapshotStore;
@@ -433,7 +434,7 @@ fn decide(
         .map(Connection::unchecked_transaction)
         .transpose()
         .map_err(|_| store::STORE_UNREADABLE)?;
-    let (mut resolved, legged) = resolve(
+    let (mut resolved, legged, audit) = resolve(
         request,
         &admitted,
         connection.as_deref(),
@@ -441,6 +442,8 @@ fn decide(
         policy_store,
     )?;
     drop(snapshot);
+    // The proxy's lookups write these before the call is answered.
+    store::write_audit(&request.guard_home, &audit)?;
     let asks = admitted.binding.review.blocked_request_mode.as_deref() == Some(ASK_MODE);
     // A package call is answered by its own lane, under the package policy and
     // the tool authority together, so none of the tool-only route below runs
@@ -618,13 +621,15 @@ fn admit(
 /// second resolution reads the store again, so it belongs inside it. What
 /// that leg is depends on who asked — a route for the decide path, the policy
 /// alone for a claim that routes it by the post-claim revalidation instead.
+/// The audit events its lookups raised come back with it, for the caller to
+/// write once it can (`store::write_audit`).
 fn resolve(
     request: &McpRelayDecideRequestV1,
     admitted: &Admitted,
     connection: Option<&Connection>,
     leg: Option<PackageLeg<'_>>,
     policy_store: &PolicySnapshotStore,
-) -> Result<(Resolved, Option<Legged>), &'static str> {
+) -> Result<(Resolved, Option<Legged>, Vec<AuditEvent>), &'static str> {
     policy_store
         .require_guard_home(&request.guard_home)
         .map_err(|_| BINDING_INCOMPLETE)?;
@@ -690,6 +695,7 @@ fn resolve(
         ))),
         None => None,
     };
+    let audit = saved.map(store::Saved::into_audit).unwrap_or_default();
     Ok((
         Resolved {
             identity,
@@ -698,6 +704,7 @@ fn resolve(
             redaction_level: view.receipt_redaction_level,
         },
         packaged,
+        audit,
     ))
 }
 

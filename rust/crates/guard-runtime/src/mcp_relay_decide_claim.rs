@@ -63,6 +63,7 @@ use crate::claim_reuse::{claim_approval_reuse_decisions_then, ClaimEvidence};
 use crate::claim_reuse_binding::evidence_is_bound;
 use crate::local_store_read::{schema_version, STORE_FILE_NAME, SUPPORTED_SCHEMA_VERSION};
 use crate::mcp_relay_claims::McpRelayClaimRequestV1;
+use crate::policy_decision_lookup_op::write_audit_events;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::{ClaimEvidenceBindingV1, McpToolPostclaimQueryV1};
 use guard_policy_snapshot::policy_integrity::is_remote_policy_source;
@@ -279,7 +280,10 @@ fn after_claim(
     connection
         .execute_batch("PRAGMA query_only = OFF")
         .map_err(|_| STORE_UNREADABLE)?;
-    let (fresh, _) = fresh?;
+    let (fresh, _, audit) = fresh?;
+    // Written in the claim's transaction, as the proxy's re-read writes them
+    // in its own; a claim that rolls back takes them with it.
+    write_audit_events(connection, &audit).map_err(|_| store::AUDIT_UNWRITTEN)?;
     let (routed, append) = postclaim(&context.claimed, &fresh)?;
     let routed = match routed {
         // `_queue_approval_center_response`, straight to the queue: the

@@ -43,6 +43,7 @@ use super::{
 use crate::claim_reuse::claim_approval_reuse_decisions_then;
 use crate::claim_reuse_binding::evidence_is_bound;
 use crate::mcp_relay_claims::McpRelayClaimRequestV1;
+use crate::policy_decision_lookup_op::{write_audit_events, AuditEvent};
 use crate::policy_store::PolicySnapshotStore;
 use guard_command::package_intent_common::PackageIntent;
 use guard_contracts::ClaimEvidenceBindingV1;
@@ -207,7 +208,10 @@ fn after_claim(
     connection
         .execute_batch("PRAGMA query_only = OFF")
         .map_err(|_| STORE_UNREADABLE)?;
-    let (fresh, reresolved) = reread?;
+    let (fresh, reresolved, audit) = reread?;
+    // Written in the claim's transaction, as the proxy's re-read writes them
+    // in its own; a claim that rolls back takes them with it.
+    write_audit_events(connection, &audit).map_err(|_| store::AUDIT_UNWRITTEN)?;
     let package_leg::Reresolved {
         artifact,
         workspace,
@@ -311,8 +315,8 @@ fn resolve_claimed(
     intent: &PackageIntent,
     evaluation: &Map<String, Value>,
     policy_store: &PolicySnapshotStore,
-) -> Result<(Resolved, package_leg::Reresolved), &'static str> {
-    let (fresh, legged) = super::resolve(
+) -> Result<(Resolved, package_leg::Reresolved, Vec<AuditEvent>), &'static str> {
+    let (fresh, legged, audit) = super::resolve(
         &context.request,
         &context.admitted,
         Some(connection),
@@ -322,7 +326,7 @@ fn resolve_claimed(
     let reresolved = legged
         .and_then(Legged::reresolved)
         .ok_or(PACKAGE_CLAIM_RERESOLVE)?;
-    Ok((fresh, reresolved))
+    Ok((fresh, reresolved, audit))
 }
 
 /// Hold a queued answer for the commit to write, if the claim still commits

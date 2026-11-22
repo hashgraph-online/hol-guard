@@ -195,13 +195,10 @@ fn a_row_the_lookup_ignores_for_local_integrity_defers() {
             ..Row::default()
         },
     );
-    // The proxy records the integrity violation as it reads the row, which the
-    // read-only snapshot cannot write, so the lookup itself defers before the
-    // resolution could answer in the daemon authority's place.
-    assert_eq!(
-        resolve(&home, &evaluation()).err(),
-        Some("mcp_relay_saved_lookup_failed")
-    );
+    // The lookup now reads the row and collects the violation it records, so
+    // the resolution reaches the ignored row and defers to the daemon's policy
+    // authority rather than answering in its place.
+    assert_eq!(resolve(&home, &evaluation()).err(), Some(DAEMON_AUTHORITY));
 }
 
 #[cfg(unix)]
