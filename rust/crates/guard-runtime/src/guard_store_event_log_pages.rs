@@ -14,7 +14,7 @@
 use serde_json::{json, Value};
 
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{query_all, text, value_error, StoreResult};
+use crate::guard_store_db::{query_each, text, value_error, StoreResult};
 
 /// Encoded payload bytes one page carries before it stops: a quarter of the
 /// 2 MiB reply limit, leaving room for the other fields and the envelope. The
@@ -84,28 +84,32 @@ pub(crate) fn list_events(
         sql.push_str(" order by occurred_at desc, event_id desc limit ?");
     }
     params.push(Value::from(limit));
-    let rows = query_all(connection, &sql, &params)?;
+    // Rows are visited one at a time, so a page that fills its budget stops
+    // reading instead of loading every row the limit allows.
     let mut items = Vec::new();
     let mut payload_bytes = 0usize;
-    for row in &rows {
-        let mut payload_json = text(row, "payload_json");
+    let mut more = false;
+    query_each(connection, &sql, &params, |row| {
+        let mut payload_json = text(&row, "payload_json");
         let mut encoded = encoded_len(payload_json);
         if encoded > ROW_PAYLOAD_BYTES {
             payload_json = OVERSIZED_PAYLOAD;
             encoded = encoded_len(payload_json);
         }
         if !items.is_empty() && payload_bytes + encoded > PAGE_PAYLOAD_BYTES {
-            return Ok(json!({"items": items, "more": true}));
+            more = true;
+            return Ok(false);
         }
         payload_bytes += encoded;
         items.push(json!({
             "event_id": row.get("event_id").cloned().unwrap_or(Value::Null),
-            "event_name": text(row, "event_name"),
-            "occurred_at": text(row, "occurred_at"),
+            "event_name": text(&row, "event_name"),
+            "occurred_at": text(&row, "occurred_at"),
             "payload_json": payload_json,
         }));
-    }
-    Ok(json!({"items": items, "more": false}))
+        Ok(true)
+    })?;
+    Ok(json!({"items": items, "more": more}))
 }
 
 /// The length of `text` once encoded as a JSON string in the reply, where

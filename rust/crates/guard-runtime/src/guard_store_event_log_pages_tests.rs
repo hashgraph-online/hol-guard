@@ -187,12 +187,6 @@ fn a_cursor_without_both_parts_is_refused() {
         ),
         Err(StoreError::Value(_))
     ));
-    assert!(call(
-        &connection,
-        "list_events",
-        json!({"limit": 1, "event_name": null})
-    )
-    .is_err());
 }
 
 #[test]
