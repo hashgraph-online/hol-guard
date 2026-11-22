@@ -216,8 +216,19 @@ fn record_page(
         .collect();
     if !plain.is_empty() {
         let unwritten = mcp_relay_receipt::write(home, plain);
-        paged.retain(|item| {
-            !mcp_relay_receipt::is_plain(&item.record) || unwritten.contains(&item.record)
+        // A remembered record whose allow was saved comes back without its
+        // flag, and is retried in that form.
+        paged.retain_mut(|item| {
+            if !mcp_relay_receipt::is_plain(&item.record) {
+                return true;
+            }
+            match mcp_relay_receipt::remember::handed_back(&item.record, &unwritten) {
+                Some(record) => {
+                    item.record = record;
+                    true
+                }
+                None => false,
+            }
         });
     }
     if has_unfinished_records(paged, home) {

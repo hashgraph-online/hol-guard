@@ -8,6 +8,7 @@ use crate::encrypted_secret_store::EncryptedFileSecretStore;
 use crate::guard_store_cmd_vectors_tests::temp_home;
 use crate::guard_store_policy_upsert::tests::SCHEMA;
 use crate::guard_store_tool_call_evidence_tests::{build_database, count, vectors};
+use crate::mcp_relay_receipt::remember::handed_back;
 use crate::mcp_relay_receipt::tests::record;
 use crate::mcp_relay_receipt::{is_plain, write};
 use crate::policy_integrity_resolver::{
@@ -178,4 +179,21 @@ fn a_control_state_that_does_not_load_is_never_reset() {
         Some("{not json")
     );
     let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn a_record_handed_back_after_its_allow_was_saved_is_retried_without_the_flag() {
+    let queued = remembered();
+    let mut forward = queued.clone();
+    forward.as_object_mut().unwrap().remove("remember");
+    assert_eq!(
+        handed_back(&queued, std::slice::from_ref(&queued)),
+        Some(queued.clone())
+    );
+    assert_eq!(
+        handed_back(&queued, std::slice::from_ref(&forward)),
+        Some(forward.clone())
+    );
+    assert_eq!(handed_back(&queued, &[]), None);
+    assert_eq!(handed_back(&forward, std::slice::from_ref(&queued)), None);
 }

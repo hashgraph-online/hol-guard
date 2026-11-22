@@ -58,6 +58,17 @@ pub(super) fn restored(mut record: Value) -> Value {
     record
 }
 
+/// The form in which the writer handed a queued record back, when it did: as
+/// queued, or without its `remember` flag once its allow was saved, so the
+/// retry writes only the receipt and never saves the allow twice.
+pub(crate) fn handed_back(queued: &Value, unwritten: &[Value]) -> Option<Value> {
+    if unwritten.contains(queued) {
+        return Some(queued.clone());
+    }
+    let forward = stripped(queued)?;
+    unwritten.contains(&forward).then_some(forward)
+}
+
 /// The policy-generation lock, taken before the storage gate as the daemon's
 /// policy writer takes it, so the two writers never wait on each other.
 pub(super) fn lock(guard_home: &str) -> Option<File> {
