@@ -25,6 +25,8 @@ class _NativeStore(Protocol):
         self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
     ) -> Any: ...
 
+    def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None: ...
+
 
 class StoreFleetPostureStateMixin:
     """Settings, full-inventory request and last-sent rows, kept by the native store."""
@@ -126,11 +128,19 @@ class StoreFleetPostureStateMixin:
     def fleet_posture_hash_key(self: _NativeStore, *, now: str) -> str:
         """The per-install fleet posture hash key, created and stored on first use.
 
-        The native store reads the row and, when it holds no usable key,
-        writes a new random one in the same write transaction, so concurrent
-        reports agree on one key.
+        A stored key is read without taking the write lock, so a busy writer
+        cannot cost a sync cycle its posture report. Only when no usable key is
+        stored does the native store read the row again and write a new random
+        key in one write transaction, so concurrent reports agree on one key.
         """
 
+        try:
+            stored = self.get_sync_payload("fleet_posture_hash_key")
+        except ValueError:
+            stored = None
+        stored_key = stored.get("key") if isinstance(stored, dict) else None
+        if isinstance(stored_key, str) and len(stored_key) >= 32:
+            return stored_key
         answer = self._native_store_call("fleet_posture_hash_key", {"now": now})
         key = answer.get("key") if isinstance(answer, dict) else None
         if not isinstance(key, str) or len(key) < 32:

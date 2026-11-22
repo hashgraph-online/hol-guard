@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 import threading
 from pathlib import Path
 
@@ -46,6 +47,20 @@ def test_an_unusable_stored_key_is_replaced(tmp_path: Path) -> None:
     key = load_hash_key(store, _LATER)
 
     assert key != b"short"
+    assert re.fullmatch(rb"[0-9a-f]{64}", key) is not None
+    assert store.get_sync_payload(HASH_KEY_STATE_KEY) == {"key": key.decode()}
+
+
+def test_a_stored_row_that_is_not_json_is_replaced(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "insert into sync_state (state_key, payload_json, updated_at) values (?, 'not-json', ?)",
+            (HASH_KEY_STATE_KEY, _NOW),
+        )
+
+    key = load_hash_key(store, _LATER)
+
     assert re.fullmatch(rb"[0-9a-f]{64}", key) is not None
     assert store.get_sync_payload(HASH_KEY_STATE_KEY) == {"key": key.decode()}
 
