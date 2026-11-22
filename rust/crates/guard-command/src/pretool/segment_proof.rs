@@ -256,6 +256,10 @@ fn segment_proofs(
                         | "pr"
                         | "shuf"
                         | "iconv"
+                        // A property-list question names the document it reads,
+                        // so its coverage takes the same session proof `cat`
+                        // takes.
+                        | "plutil"
                 ))
                 // A file operand prints a source line on a syntax error, so it
                 // gets the same session proof as `cat`.

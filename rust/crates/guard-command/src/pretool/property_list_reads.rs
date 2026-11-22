@@ -12,9 +12,12 @@
 //! leaves the command under review rather than being taken for a read.
 //!
 //! `-o` names where the result is written, so it is admitted only as `-o -`,
-//! which is standard output. The files go through the same bounded,
-//! sensitive-path-aware read proof `cat` uses. A `-` operand reads standard
-//! input, whose contents nothing here can see, and keeps its review.
+//! which is standard output. `-extract` needs it for every format but `raw`:
+//! without `-o`, only `raw` prints the value, and the other formats write the
+//! extracted fragment back over the file they were read from. The files go
+//! through the same bounded, sensitive-path-aware read proof `cat` uses. A
+//! `-` operand reads standard input, whose contents nothing here can see, and
+//! keeps its review, whether or not `--` came first.
 
 use super::safe_reads::command_read_target;
 
@@ -46,6 +49,7 @@ struct Call<'a> {
 fn call(arguments: &[String]) -> Option<Call<'_>> {
     let (verb, rest) = arguments.split_first()?;
     let mut remaining = rest;
+    let mut extracted_format = None;
     match verb.as_str() {
         "-p" | "-lint" => {}
         "-extract" => {
@@ -54,6 +58,7 @@ fn call(arguments: &[String]) -> Option<Call<'_>> {
             if !key_path(path) || !FORMATS.contains(&format.as_str()) {
                 return None;
             }
+            extracted_format = Some(format.as_str());
             remaining = tail;
         }
         "-type" => {
@@ -68,8 +73,12 @@ fn call(arguments: &[String]) -> Option<Call<'_>> {
 
     let mut files = Vec::new();
     let mut operands_only = false;
+    let mut prints_to_standard_output = false;
     while let Some((word, tail)) = remaining.split_first() {
         remaining = tail;
+        if word == "-" {
+            return None;
+        }
         if operands_only {
             files.push(word.as_str());
             continue;
@@ -89,11 +98,16 @@ fn call(arguments: &[String]) -> Option<Call<'_>> {
                 if value != "-" {
                     return None;
                 }
+                prints_to_standard_output = true;
                 remaining = next;
             }
             other if other.starts_with('-') => return None,
             other => files.push(other),
         }
+    }
+
+    if extracted_format.is_some_and(|format| format != "raw") && !prints_to_standard_output {
+        return None;
     }
 
     (!files.is_empty() && files.len() <= MAX_FILES).then_some(Call { files })
