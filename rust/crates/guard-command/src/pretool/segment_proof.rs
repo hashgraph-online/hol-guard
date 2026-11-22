@@ -496,6 +496,11 @@ pub(super) fn exact_safe_segment_with_context(
     if super::version_probes::safe_version_probe(basename, &segment.arguments)
         || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
         || super::liveness_probes::safe_liveness_probe(basename, &segment.arguments)
+        || super::property_list_reads::safe_property_list_read(
+            basename,
+            &segment.arguments,
+            context,
+        )
         || super::manager_usage::safe_manager_segment(basename, model, segment, context)
     {
         return true;

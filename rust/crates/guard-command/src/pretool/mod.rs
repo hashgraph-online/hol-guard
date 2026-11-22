@@ -210,6 +210,7 @@ mod pnpm_reads;
 mod postgres_reads;
 mod printf_words;
 mod process_stops;
+mod property_list_reads;
 mod pytest_contained;
 mod tool_bin_listing;
 mod trailing_group;

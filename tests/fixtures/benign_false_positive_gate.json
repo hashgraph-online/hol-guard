@@ -20068,6 +20068,108 @@
       "expect": "allow"
     },
     {
+      "id": "plutil-print-plist",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "plutil -p ${HOME}/other-project/Info.plist"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plutil-lint-plist",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "plutil -lint -s ${HOME}/other-project/Info.plist"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plutil-extract-value",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "plutil -extract CFBundleVersion raw ${HOME}/other-project/Info.plist"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plutil-extract-json-to-stdout",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "plutil -extract items json -o - ${HOME}/other-project/Info.plist"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plutil-value-type",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "plutil -type CFBundleVersion ${HOME}/other-project/Info.plist"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plutil-print-two-plists",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "plutil -p ${HOME}/other-project/Info.plist ${HOME}/other-project/Settings.plist"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "jq-interpolated-string-stage",
       "fix_area": "read",
       "harnesses": [
