@@ -1,4 +1,4 @@
-import { useCallback, useState, type ChangeEvent, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { HiMiniArrowPath } from "react-icons/hi2";
 
 import { readRememberedGuardUpdateChannel, type GuardUpdateChannelProof, type GuardUpdateMode } from "./guard-api";
@@ -56,6 +56,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const [alphaSaveError, setAlphaSaveError] = useState<string | null>(null);
   const [alphaApprovalPassword, setAlphaApprovalPassword] = useState("");
   const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = useState("");
+  const alphaConfirmButtonRef = useRef<HTMLButtonElement | null>(null);
   const [updateModeModalOpen, setUpdateModeModalOpen] = useState(false);
   const [updateModeDraft, setUpdateModeDraft] = useState<GuardUpdateMode>(props.updateStatus?.update_mode ?? "automatic");
   const [updateModeSavePending, setUpdateModeSavePending] = useState(false);
@@ -215,7 +216,12 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
         </p>
       )}
       {alphaModalOpen ? (
-        <GuardModalLayer ariaLabel={modalTitle} onClose={handleCloseAlphaModal} panelClassName="w-full max-w-md">
+        <GuardModalLayer
+          ariaLabel={modalTitle}
+          onClose={handleCloseAlphaModal}
+          panelClassName="w-full max-w-md"
+          initialFocusRef={props.approvalGate?.enabled ? undefined : alphaConfirmButtonRef}
+        >
           <AlphaChannelDialog
             useAlpha={useAlpha}
             pending={alphaSavePending}
@@ -227,6 +233,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
             onConfirm={handleConfirmAlphaChannel}
             onApprovalPasswordChange={handleApprovalPasswordChange}
             onApprovalTotpCodeChange={handleApprovalTotpCodeChange}
+            confirmButtonRef={alphaConfirmButtonRef}
           />
         </GuardModalLayer>
       ) : null}

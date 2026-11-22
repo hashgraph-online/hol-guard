@@ -3,7 +3,12 @@
 Recovery asks two things of the snapshot before it touches the authority:
 whether a committed row is there, and which layers it holds so a reset can
 report the controls it drops. The resident answers both after the schema
-check; nothing here opens a connection.
+check; nothing here opens a connection of its own.
+
+An operation that already holds the store's shared connection scope (the
+MCP tool-call decision does) reads the snapshot on that connection instead,
+since a native call there would add a resident round trip to a hot path
+whose budget allows none.
 """
 
 from __future__ import annotations
@@ -12,8 +17,13 @@ import sqlite3
 from typing import Any, Final
 
 from .native_extension_control_schema import extension_control_schema_compatible
+from .store_connection_scope import owns_scope
 
 _METHOD: Final = "extension_control_snapshot_layers"
+_SNAPSHOT_SQL: Final = (
+    "select case when typeof(layers_json) = 'text' then layers_json end as layers_json "
+    "from extension_control_authority_snapshot where singleton = 1"
+)
 
 
 class SnapshotLayers:
@@ -34,6 +44,12 @@ def extension_control_snapshot_layers(store: Any) -> SnapshotLayers:
     """
 
     _ = extension_control_schema_compatible(store)
+    if owns_scope(store):
+        with store._connect() as connection:
+            row = connection.execute(_SNAPSHOT_SQL).fetchone()
+        if row is None:
+            return SnapshotLayers(present=False, layers_json=None)
+        return SnapshotLayers(present=True, layers_json=row[0])
     answer = store._native_store_call(_METHOD, {})
     if not isinstance(answer, dict) or set(answer) != {"snapshot"}:
         raise sqlite3.DatabaseError(f"native {_METHOD} returned no answer")

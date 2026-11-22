@@ -11,6 +11,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
+from ci.native_runtime.installed_extension_receipt_reads import (
+    persisted_native_receipt_ids as persisted_native_receipt_ids,
+)
+from ci.native_runtime.installed_extension_receipt_reads import readable_native_receipt as readable_native_receipt
 from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
     compile_source,
     find_packaged_source_compiler,
@@ -200,14 +204,6 @@ def prove_installed_data_only_authoring(package: Path) -> dict[str, object]:
     }
 
 
-def persisted_native_receipt_ids(store: GuardStore) -> set[str]:
-    """Return the durable receipt identities without exposing receipt contents."""
-
-    with store._connect() as connection:
-        rows = connection.execute("select decision_id from native_hook_decision_receipts").fetchall()
-    return {row["decision_id"] for row in rows if isinstance(row["decision_id"], str)}
-
-
 class _ReceiptProgressWriter(Protocol):
     def stats(self) -> Mapping[str, object]: ...
 
@@ -321,7 +317,7 @@ def await_persisted_native_receipt(
             if len(new_ids) > 1:
                 raise RuntimeError("installed_native_extensions_failed:receipt_persistence_ambiguous")
             if new_ids:
-                receipt = store.get_native_decision_receipt(next(iter(new_ids)))
+                receipt = readable_native_receipt(store, next(iter(new_ids)))
                 if receipt is not None:
                     return receipt
         time.sleep(0.02)

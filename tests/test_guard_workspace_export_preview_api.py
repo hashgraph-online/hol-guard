@@ -9,6 +9,7 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_workspace_export_preview as export_preview
+from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard.routes.workspace_assessment_api import handle_workspace_assessment_post
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.workspace_assessment_worker import admit_workspace
@@ -126,9 +127,13 @@ def test_native_refusals_and_unusable_replies_are_reported(
 def test_a_runtime_without_the_preview_is_reported_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import native_runtime
 
+    store = seeded_store(tmp_path, tmp_path / "work")
+    # The worktree list is read by the native store, so it is read before the
+    # runtime goes away; only the preview itself sees an unavailable runtime.
+    worktrees = assessments.list_worktrees(store)
+    monkeypatch.setattr(assessments, "list_worktrees", lambda _store: worktrees)
     unavailable = SimpleNamespace(available=False, compatible=False, identity=None, capabilities=None)
     monkeypatch.setattr(native_runtime, "native_runtime_status", lambda: unavailable)
-    store = seeded_store(tmp_path, tmp_path / "work")
     assert _post(store, BODY) == (503, {"error": "workspace_export_preview_native_unavailable"})
 
 

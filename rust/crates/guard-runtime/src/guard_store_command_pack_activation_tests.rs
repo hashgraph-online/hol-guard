@@ -150,6 +150,32 @@ fn a_filled_slot_comes_back_as_stored() {
     );
 }
 
+#[test]
+fn a_marker_cell_of_the_wrong_type_is_an_invalid_marker() {
+    for update in [
+        "update extension_control_schema_migration set version = x'05'",
+        "update extension_control_schema_migration set checksum = x'00'",
+    ] {
+        let connection = store();
+        mark(&connection, 5, &schema_checksum(5));
+        connection
+            .execute_batch("create table extension_control_authority_snapshot (singleton integer)")
+            .expect("snapshot table");
+        assert_eq!(schema_state(&connection), json!({"state": "compatible"}));
+        connection.execute_batch(update).expect("damage marker");
+        assert_eq!(
+            schema_state(&connection),
+            json!({"state": "incompatible"}),
+            "{update}"
+        );
+        assert_eq!(
+            read(&connection).expect("read"),
+            json!({"state": "refused", "code": "native_command_pack_schema_invalid"}),
+            "{update}"
+        );
+    }
+}
+
 /// The marker checksum the authority writer stores, spelled out so a change
 /// to its format fails here too.
 fn schema_checksum(version: i64) -> String {

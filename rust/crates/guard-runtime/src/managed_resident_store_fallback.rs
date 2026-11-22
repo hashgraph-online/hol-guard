@@ -9,19 +9,21 @@
 //! `native_guard_store_method_unknown`, and every command that needs one
 //! fails until the other install updates too.
 //!
-//! A snapshot method reads several rows inside one deferred transaction and
-//! always rolls it back, so it never writes and needs no resident state. This
-//! client runs those with its own runtime instead. Every other method stays
-//! with the resident: a plain read can still write (a pending rollup rebuild,
-//! an expired pairing, outbox finalization), and the resident owns the outbox
-//! wake-ups and write caches.
+//! This client answers those reads with its own runtime instead, inside a
+//! transaction that is always rolled back. A snapshot already runs that way.
+//! A plain read can write on the store connection (a pending rollup rebuild,
+//! an expired pairing, outbox finalization); here that work is discarded, so
+//! the read still returns what it would have and leaves the store unchanged,
+//! and the resident that predates it does the write once it learns the
+//! method. Writes, and the few reads that commit on a connection of their
+//! own, stay with the resident: it owns the outbox wake-ups and write caches.
 
 use std::time::Instant;
 
 use guard_contracts::GuardStoreRequestV1;
 use serde_json::Value;
 
-use crate::guard_store_op_kind::{method_kind, Kind};
+use crate::guard_store_op_kind::answerable_in_isolation;
 
 const STORE_OPERATION: &str = "guard_store";
 const STORE_RESULT_SCHEMA: &str = "guard-store-result.v1";
@@ -29,9 +31,9 @@ const INVALID_CODE: &str = "native_guard_store_invalid";
 const METHOD_UNKNOWN: &str = "native_guard_store_method_unknown";
 
 /// `response` from a resident of another runtime, or this runtime's answer
-/// when that resident did not know the snapshot read it was sent.
+/// when that resident did not know the read it was sent.
 pub(super) fn reply(payload: &[u8], response: Vec<u8>, deadline: Instant) -> Vec<u8> {
-    match answer_unknown_snapshot(payload, &response, deadline) {
+    match answer_unknown_read(payload, &response, deadline) {
         Some(answer) => {
             crate::resident_diagnostics::note("client_state_foreign_store_read_local", 1);
             answer
@@ -40,7 +42,7 @@ pub(super) fn reply(payload: &[u8], response: Vec<u8>, deadline: Instant) -> Vec
     }
 }
 
-fn answer_unknown_snapshot(payload: &[u8], response: &[u8], deadline: Instant) -> Option<Vec<u8>> {
+fn answer_unknown_read(payload: &[u8], response: &[u8], deadline: Instant) -> Option<Vec<u8>> {
     if !reports_unknown_method(response) {
         return None;
     }
@@ -50,7 +52,7 @@ fn answer_unknown_snapshot(payload: &[u8], response: &[u8], deadline: Instant) -
     }
     let request: GuardStoreRequestV1 =
         serde_json::from_value(envelope.get("request")?.clone()).ok()?;
-    if method_kind(&request.method) != Some(Kind::Snapshot) {
+    if !answerable_in_isolation(&request.method) {
         return None;
     }
     // The caller's digest covers the request as sent; the local busy wait
@@ -69,8 +71,7 @@ fn answer_unknown_snapshot(payload: &[u8], response: &[u8], deadline: Instant) -
         busy_timeout_ms: request.busy_timeout_ms.min(left_ms),
         ..request
     };
-    let answer =
-        crate::guard_store_op::evaluate_guard_store_request_with_owner(&bounded, None).ok()?;
+    let answer = crate::guard_store_op::evaluate_isolated_read(&bounded).ok()?;
     let mut answer = crate::strict_json_value(&answer).ok()?;
     answer
         .as_object_mut()?
