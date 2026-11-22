@@ -27,10 +27,11 @@ impl PolicySnapshotStore {
     /// The view comes from the requested generation and digest, or from a
     /// newer binding once its republish is acknowledged: that binding carries
     /// the daemon's current structured view, and the caller rechecks against
-    /// the same binding before it releases content. Only a lane that has
-    /// admitted a hook since it was bound is waited on; a lane that never
-    /// opened has nothing that will reopen it, so it answers at once. A lane
-    /// that is not back by `wait_until` answers `None`, which withholds.
+    /// the same binding before it releases content. Only a lane that last
+    /// admitted a hook at the requested generation and digest is waited on;
+    /// a lane that never opened there has nothing that will reopen it, so it
+    /// answers at once. A lane that is not back by `wait_until` answers
+    /// `None`, which withholds.
     pub(crate) fn structured_output_binding_awaiting(
         &self,
         generation: u64,
@@ -58,23 +59,40 @@ impl PolicySnapshotStore {
                 }
             }
             let now = Instant::now();
-            if bound.is_none() || !self.direct_lane_was_admitted() || now >= wait_until {
+            if bound.is_none()
+                || !self.direct_lane_was_admitted_at(generation, policy_digest)
+                || now >= wait_until
+            {
                 return None;
             }
             std::thread::sleep(REOPEN_POLL.min(wait_until - now));
         }
     }
 
-    pub(super) fn note_direct_lane_admitted(&self) {
-        self.direct_lane_admitted.store(true, Ordering::Release);
+    pub(super) fn note_direct_lane_admitted(&self, binding: &DirectLaneBinding) {
+        let Ok(mut admitted) = self.direct_lane_admitted.lock() else {
+            return;
+        };
+        let current = admitted.as_ref().is_some_and(|(generation, digest)| {
+            *generation == binding.generation && *digest == binding.policy_digest
+        });
+        if !current {
+            *admitted = Some((binding.generation, binding.policy_digest.clone()));
+        }
     }
 
     pub(super) fn forget_direct_lane_admission(&self) {
-        self.direct_lane_admitted.store(false, Ordering::Release);
+        if let Ok(mut admitted) = self.direct_lane_admitted.lock() {
+            *admitted = None;
+        }
     }
 
-    fn direct_lane_was_admitted(&self) -> bool {
-        self.direct_lane_admitted.load(Ordering::Acquire)
+    fn direct_lane_was_admitted_at(&self, generation: u64, policy_digest: &str) -> bool {
+        self.direct_lane_admitted.lock().is_ok_and(|admitted| {
+            admitted.as_ref().is_some_and(|(admitted, digest)| {
+                *admitted == generation && digest == policy_digest
+            })
+        })
     }
 
     fn bound_lane(&self) -> Option<(u64, String)> {

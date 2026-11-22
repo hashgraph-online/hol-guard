@@ -224,10 +224,10 @@ pub(crate) struct PolicySnapshotStore {
     authority_changed: Arc<AtomicBool>,
     state: Mutex<PolicyState>,
     direct_lane: Mutex<Option<Arc<policy_store_direct_lane::DirectLaneBinding>>>,
-    /// Whether the direct lane has admitted a hook since it was last bound,
-    /// so a lane closed to republish can be told apart from one that never
-    /// opened.
-    direct_lane_admitted: AtomicBool,
+    /// The generation and policy digest the direct lane last admitted a hook
+    /// under, so a lane closed to republish can be told apart from one that
+    /// never opened at the generation a routed hook names.
+    direct_lane_admitted: Mutex<Option<(u64, String)>>,
     direct_lane_ack_wait: policy_store_direct_lane::DirectLaneAckWait,
     direct_evidence: crate::hook_direct_evidence::DirectEvidenceQueue,
     mcp_relay_pending: crate::mcp_relay_pending::PendingRelayEvidence,
@@ -351,7 +351,7 @@ impl PolicySnapshotStore {
                 verified: None,
             }),
             direct_lane: Mutex::new(None),
-            direct_lane_admitted: AtomicBool::new(false),
+            direct_lane_admitted: Mutex::new(None),
             direct_lane_ack_wait: policy_store_direct_lane::DirectLaneAckWait::default(),
             direct_evidence: crate::hook_direct_evidence::DirectEvidenceQueue::default(),
             mcp_relay_pending: crate::mcp_relay_pending::PendingRelayEvidence::default(),

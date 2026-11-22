@@ -399,10 +399,10 @@ impl PolicySnapshotStore {
             {
                 return Err(DirectLaneDefer::Unbound);
             }
-            self.note_direct_lane_admitted();
+            self.note_direct_lane_admitted(binding);
             return Ok(current);
         }
-        self.note_direct_lane_admitted();
+        self.note_direct_lane_admitted(binding);
         Ok(snapshot)
     }
 

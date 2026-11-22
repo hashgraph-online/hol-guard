@@ -174,3 +174,43 @@ fn a_routed_post_tool_use_takes_the_view_a_republish_acknowledged() {
         })
     );
 }
+
+#[test]
+fn a_rebind_that_is_never_acknowledged_is_not_awaited() {
+    let view = json!({"managed_policy_status": "absent"});
+    let fixture = bound_fixture("reopen-never-acknowledged", &view);
+    let generation = fixture.snapshot.generation;
+    let digest = fixture.snapshot.policy_digest.clone();
+    ack(&fixture, generation, &digest);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    assert!(fixture
+        .store
+        .structured_output_binding(generation, &digest, Some(deadline))
+        .is_some());
+    fs::remove_file(ack_path(&fixture)).unwrap();
+
+    // The daemon binds the next generation and never acknowledges it. The
+    // lane admitted a hook at the old generation only, so a hook routed at
+    // the new one has nothing to wait for.
+    let key = install_test_key(&fixture.root, 9);
+    let next = signed_snapshot(generation + 1, &key, &fixture.root);
+    let next_digest = next.policy_digest.clone();
+    let mut lane = binding(&fixture, "/work/repo");
+    lane["structured_output_config"] = view;
+    fixture
+        .store
+        .push(&json!({
+            "schema": POLICY_SNAPSHOT_PUSH_SCHEMA,
+            "snapshot": next,
+            "direct_lane": lane,
+        }))
+        .unwrap();
+    let (awaited, elapsed) = await_view(
+        &fixture,
+        generation + 1,
+        &next_digest,
+        Duration::from_secs(4),
+    );
+    assert_eq!(awaited, None);
+    assert!(elapsed < Duration::from_secs(1));
+}
