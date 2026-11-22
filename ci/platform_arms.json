@@ -2379,14 +2379,6 @@
    "body": "0e244582f000"
   },
   {
-   "verdict": "windows-unsupported",
-   "note": "Windows answers `unavailable` and mints nothing: Python's mint lock there is an `msvcrt` byte-range lock this process does not share, so a native mint could race it. The caller keeps its own Python mint on that answer, so Windows behaviour is unchanged.",
-   "file": "rust/crates/guard-runtime/src/policy_integrity_key_mint.rs",
-   "item": "fn with_mint_lock -- cfg! expression",
-   "cfg": "unix",
-   "body": "49820e87b6c0"
-  },
-  {
    "verdict": "windows-equivalent",
    "note": "Windows writes the generation record through `persist_private_bytes`, the same owner-private, DACL-checked atomic replace the Windows snapshot cache uses; Unix writes it with a 0600 temp file, fsync and rename. Both commit the record only after the cache is durable, which `a_crashed_transaction_is_completed_at_every_boundary` pins.",
    "file": "rust/crates/guard-runtime/src/policy_snapshot_materialize.rs",

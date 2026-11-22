@@ -21,7 +21,7 @@ fn home(name: &str) -> Home {
 }
 
 fn stored(path: &Path) -> Option<String> {
-    let resolved = fs::canonicalize(path).expect("resolved");
+    let resolved = resolved_home(path).expect("resolved");
     let key_ref = build_scoped_secret_ref(POLICY_INTEGRITY_KEY_REF, &resolved);
     EncryptedFileSecretStore::new(&resolved).get_secret(&key_ref)
 }
@@ -31,7 +31,6 @@ fn answer(request: &str) -> Result<Value, String> {
         .map(|bytes| serde_json::from_slice(&bytes).expect("answer json"))
 }
 
-#[cfg(unix)]
 #[test]
 fn a_fresh_home_gets_one_32_byte_key() {
     let home = home("fresh");
@@ -42,7 +41,6 @@ fn a_fresh_home_gets_one_32_byte_key() {
     assert!(key.ends_with('='), "padded like urlsafe_b64encode");
 }
 
-#[cfg(unix)]
 #[test]
 fn a_stored_key_is_never_replaced() {
     let home = home("stored");
@@ -52,7 +50,6 @@ fn a_stored_key_is_never_replaced() {
     assert_eq!(stored(&home.0), first);
 }
 
-#[cfg(unix)]
 #[test]
 fn armed_controls_without_a_readable_key_mint_nothing() {
     for name in ARMED_FILES {
@@ -65,7 +62,6 @@ fn armed_controls_without_a_readable_key_mint_nothing() {
     }
 }
 
-#[cfg(unix)]
 #[test]
 fn a_held_mint_lock_answers_busy() {
     let home = home("busy");
@@ -83,7 +79,6 @@ fn a_held_mint_lock_answers_busy() {
     assert_eq!(stored(&home.0), None);
 }
 
-#[cfg(unix)]
 #[test]
 fn a_kept_lock_descriptor_holds_the_mint_lock_after_the_mint() {
     let home = home("kept");
@@ -117,7 +112,6 @@ fn both_lock_waits_share_one_budget() {
     assert!(!secrets.join(STORE_KEY_FILE_NAME).exists());
 }
 
-#[cfg(unix)]
 #[test]
 fn an_empty_store_key_is_never_replaced() {
     for contents in [&b""[..], &b"  \n"[..]] {
@@ -132,7 +126,6 @@ fn an_empty_store_key_is_never_replaced() {
     }
 }
 
-#[cfg(unix)]
 #[test]
 fn the_store_key_is_created_under_the_python_init_lock() {
     let home = home("init");
@@ -171,7 +164,6 @@ fn the_mint_lock_is_owner_only() {
     assert_eq!(mode & 0o077, 0);
 }
 
-#[cfg(unix)]
 #[test]
 fn concurrent_mints_agree_on_one_key() {
     let home = home("race");
@@ -189,7 +181,6 @@ fn concurrent_mints_agree_on_one_key() {
     assert_eq!(stored(&home.0), Some(key));
 }
 
-#[cfg(unix)]
 #[test]
 fn the_answer_names_a_state_and_never_the_key() {
     let home = home("answer");
@@ -249,4 +240,81 @@ fn a_keyring_request_off_linux_is_unavailable() {
     let state = answer(&request.to_string()).expect("answer");
     assert_eq!(state, serde_json::json!({"state": "unavailable"}));
     assert_eq!(stored(&home.0), None);
+}
+
+#[cfg(windows)]
+#[test]
+fn the_key_ref_uses_the_home_as_python_spells_it() {
+    assert_eq!(
+        strip_verbatim(PathBuf::from(r"\\?\C:\Users\example\.hol-guard")),
+        PathBuf::from(r"C:\Users\example\.hol-guard")
+    );
+    assert_eq!(
+        strip_verbatim(PathBuf::from(r"\\?\UNC\server\share\guard")),
+        PathBuf::from(r"\\server\share\guard")
+    );
+    assert_eq!(
+        strip_verbatim(PathBuf::from(r"\\?\Volume{0000}\guard")),
+        PathBuf::from(r"\\?\Volume{0000}\guard")
+    );
+    assert_eq!(
+        strip_verbatim(PathBuf::from(r"\\?\C:")),
+        PathBuf::from(r"\\?\C:")
+    );
+    assert_eq!(
+        strip_verbatim(PathBuf::from("/home/example/.hol-guard")),
+        PathBuf::from("/home/example/.hol-guard")
+    );
+    let home = home("spelling");
+    let resolved = resolved_home(&home.0).expect("resolved");
+    assert!(!resolved.to_string_lossy().starts_with(r"\\?\"));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn the_key_ref_uses_the_home_as_python_spells_it() {
+    let home = home("spelling");
+    let resolved = resolved_home(&home.0).expect("resolved");
+    assert_eq!(resolved, fs::canonicalize(&home.0).expect("canonical"));
+}
+
+/// Python's mint lock on Windows, `msvcrt.locking` on the first byte, keeps
+/// the native mint waiting until Python releases it.
+#[cfg(windows)]
+#[test]
+fn a_python_mint_lock_keeps_the_native_mint_waiting() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Command, Stdio};
+    let home = home("python-lock");
+    let lock = home.0.join(MINT_LOCK_FILE_NAME);
+    let script = "import msvcrt, sys\n\
+        handle = open(sys.argv[1], 'a+b')\n\
+        handle.seek(0)\n\
+        if not handle.read(1):\n    handle.write(b'0')\n    handle.flush()\n\
+        handle.seek(0)\n\
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)\n\
+        print('held', flush=True)\n\
+        sys.stdin.read()\n";
+    let mut python = Command::new("python")
+        .args(["-c", script])
+        .arg(&lock)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("python");
+    let mut line = String::new();
+    BufReader::new(python.stdout.take().expect("stdout"))
+        .read_line(&mut line)
+        .expect("held line");
+    assert_eq!(line.trim(), "held");
+    assert_eq!(mint_once(&home.0), Minted::Busy);
+    assert_eq!(stored(&home.0), None);
+    python
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(b"")
+        .expect("release");
+    assert!(python.wait().expect("python exit").success());
+    assert_eq!(mint_once(&home.0), Minted::Present);
 }
