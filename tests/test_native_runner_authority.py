@@ -19,7 +19,6 @@ from codex_plugin_scanner.guard import native_resident_decision as resident
 from codex_plugin_scanner.guard import native_runner_authority as module
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from codex_plugin_scanner.guard.runtime import guard_run_receipts as guard_run_receipts
-from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime import runner_native_authority as authority
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -371,18 +370,49 @@ def _append(store: GuardStore) -> None:
     )
 
 
-def test_receipt_projection_skips_unrelated_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_receipt_projection_skips_unrelated_rows(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_receipts(store, [("other", "[]")] * 1200 + [("wanted", "[]")] * 2 + [("other", "[]")] * 600)
-    sent: list[list[str]] = []
-
-    def record(rows: list[Any], **_kwargs: Any) -> list[dict[str, Any]]:
-        sent.append([row["artifact_id"] for row in rows])
-        return []
-
-    monkeypatch.setattr(guard_runner._authority, "receipt_evidence_updates", record)
     _append(store)
-    assert sent == [["wanted", "wanted"]]
+    with store._connect() as connection:
+        rows = connection.execute(
+            "select artifact_id, scanner_evidence_json, approval_source from runtime_receipts"
+        ).fetchall()
+    changed = [row for row in rows if row["scanner_evidence_json"] != "[]"]
+    assert [row["artifact_id"] for row in changed] == ["wanted", "wanted"]
+    assert all(row["approval_source"] == "approval-gate" for row in changed)
+    assert json.loads(changed[0]["scanner_evidence_json"]) == [_EVIDENCE]
+
+
+def test_receipt_projection_writes_python_compatible_json(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_receipts(store, [("wanted", "[]")])
+    _append(store)
+    with store._connect() as connection:
+        stored = connection.execute("select scanner_evidence_json from runtime_receipts").fetchone()[0]
+    assert stored == json.dumps([_EVIDENCE], sort_keys=True)
+
+
+def test_receipt_cursor_is_zero_on_an_empty_store_then_the_latest_rowid(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    assert guard_run_receipts._receipt_rowid_cursor(store) == 0
+    _seed_receipts(store, [("wanted", "[]")] * 3)
+    assert guard_run_receipts._receipt_rowid_cursor(store) == 3
+    _append_after(store, 3)
+    with store._connect() as connection:
+        untouched = connection.execute("select count(*) from runtime_receipts where scanner_evidence_json = '[]'")
+        assert untouched.fetchone()[0] == 3
+
+
+def _append_after(store: GuardStore, after_rowid: int) -> None:
+    guard_run_receipts._append_authority_evidence_to_receipts(
+        store,
+        after_rowid=after_rowid,
+        evaluation={"artifacts": [{"artifact_id": "wanted"}]},
+        evidence=_EVIDENCE,
+        approval_source="approval-gate",
+        source_actions=frozenset({"allow"}),
+    )
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")

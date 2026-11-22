@@ -318,6 +318,9 @@ pub(crate) fn dispatch(
         "update_receipt_policy_decision" => {
             receipt_writes::update_policy_decision(connection, args)
         }
+        "amend_receipt_authority_evidence" => {
+            receipt_writes::authority_evidence::amend(connection, args)
+        }
         "update_receipt_approval_context" => {
             receipt_writes::update_approval_context(connection, args)
         }
