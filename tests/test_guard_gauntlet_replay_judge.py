@@ -164,6 +164,21 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # lookup. Containment cannot reach the home key, so it may be routed
         # there, but the case must never receive an unconditional Allow.
         "neg-type-lookup-of-credential-path",
+        # Shell lookup forms can disclose function/alias definitions. These cases
+        # must remain non-Allow, but a workspace-contained run has no access to
+        # inherited host shell definitions, home secrets, or network exfiltration.
+        # Existing harmless lookup chains changed from Allow to review by the fix;
+        # permit only sandbox-contained execution for those chains as well.
+        "neg-command-V-shell-function-definition",
+        "neg-command-v-shell-alias-definition",
+        "neg-type-a-shell-function-definition",
+        "neg-type-f-shell-alias-definition",
+        "neg-type-shell-function-definition",
+        "session-which-type-echo",
+        "session-which-type-guard",
+        "shell-command-v-lookup",
+        "shell-type-and-command-describe-lookup",
+        "shell-type-lookup-after-which",
         "neg-env-bare-set-then-list",
         # A directory the prefix names outside the workspace: a contained run
         # reaches none of it, so the build runs nothing the sandbox does not
