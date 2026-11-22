@@ -3,12 +3,22 @@
 The native store answers which kinds of saved rows exist and names the head
 of the stored extension-control authority snapshot. Both answers are checked
 strictly here: a malformed answer raises instead of being read as "no rows".
+
+A native store call first provisions the resident's verifier key, and that
+mints policy-integrity key material. A lookup must not mint keys on a home that
+was never provisioned, so until the verifier key exists the row presence is
+read from SQLite here instead, without touching the keyring.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Final
+
+from .native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME, NativePolicySnapshotError
+from .native_policy_snapshot_windows_support import _runtime_state_directory
+from .policy_integrity import REMOTE_POLICY_SOURCES
 
 _PRESENCE_FIELDS: Final = frozenset({"any_saved", "local_policy", "remote_policy", "local_once", "policy_bundle"})
 
@@ -29,6 +39,8 @@ class PolicyRowPresence:
 def policy_row_presence(store: Any) -> PolicyRowPresence:
     """Which saved policy rows exist: local, remote, local-once and policy-bundle."""
 
+    if not _resident_provisioned(store):
+        return _unprovisioned_presence(store)
     method = "policy_row_presence"
     answer = store._native_store_call(method, {})
     if not isinstance(answer, dict) or set(answer) != _PRESENCE_FIELDS:
@@ -41,6 +53,40 @@ def policy_row_presence(store: Any) -> PolicyRowPresence:
         local_once=answer["local_once"],
         policy_bundle=answer["policy_bundle"],
         any_saved=answer["any_saved"],
+    )
+
+
+def _resident_provisioned(store: Any) -> bool:
+    try:
+        verifier = _runtime_state_directory(Path(store.guard_home)) / NATIVE_POLICY_VERIFIER_KEY_NAME
+    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError):
+        return False
+    return verifier.is_file()
+
+
+def _unprovisioned_presence(store: Any) -> PolicyRowPresence:
+    """The presence read for a home whose resident was never provisioned."""
+
+    remote = tuple(sorted(REMOTE_POLICY_SOURCES))
+    marks = ",".join("?" for _ in remote)
+    with store._connect() as connection:
+        row = connection.execute(
+            f"""
+            select
+              exists(select 1 from policy_decisions where source not in ({marks})),
+              exists(select 1 from policy_decisions where source in ({marks})),
+              exists(select 1 from guard_local_once_approvals),
+              exists(select 1 from policy_decisions where source = 'policy-bundle')
+            """,
+            (*remote, *remote),
+        ).fetchone()
+    local_policy, remote_policy, local_once, policy_bundle = (bool(value) for value in row)
+    return PolicyRowPresence(
+        local_policy=local_policy,
+        remote_policy=remote_policy,
+        local_once=local_once,
+        policy_bundle=policy_bundle,
+        any_saved=local_policy or remote_policy or local_once,
     )
 
 

@@ -1,16 +1,25 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+import sqlite3
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.guard import native_policy_presence
 from codex_plugin_scanner.guard.native_policy_presence import (
     NativePolicyPresenceError,
     PolicyRowPresence,
     extension_control_authority_base,
     policy_row_presence,
 )
+
+
+@pytest.fixture(autouse=True)
+def _provisioned(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
+    if "unprovisioned" not in request.node.name:
+        monkeypatch.setattr(native_policy_presence, "_resident_provisioned", lambda _store: True)
 
 
 class _Store:
@@ -97,3 +106,41 @@ def test_authority_base_names_the_stored_snapshot() -> None:
 def test_a_malformed_authority_head_is_refused(answer: object) -> None:
     with pytest.raises(NativePolicyPresenceError):
         extension_control_authority_base(_Store(answer))
+
+
+class _UnprovisionedStore:
+    """A home whose resident verifier key was never written."""
+
+    def __init__(self, tmp_path: Any) -> None:
+        self.guard_home = tmp_path / "guard-home"
+        self.connection = sqlite3.connect(":memory:")
+        self.connection.executescript(
+            "create table policy_decisions (source text);create table guard_local_once_approvals (id integer);"
+        )
+
+    def _native_store_call(self, method: str, args: Mapping[str, object]) -> object:
+        raise AssertionError(f"{method} would provision the resident and mint key material")
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        yield self.connection
+
+
+def test_an_unprovisioned_home_reads_presence_without_the_resident(tmp_path: Any) -> None:
+    store = _UnprovisionedStore(tmp_path)
+
+    assert policy_row_presence(store) == PolicyRowPresence(
+        local_policy=False, remote_policy=False, local_once=False, policy_bundle=False, any_saved=False
+    )
+
+    store.connection.execute("insert into policy_decisions (source) values ('policy-bundle')")
+    store.connection.execute("insert into guard_local_once_approvals (id) values (1)")
+    presence = policy_row_presence(store)
+    assert presence.remote_policy
+    assert presence.policy_bundle
+    assert presence.local_once
+    assert not presence.local_policy
+    assert presence.any_saved
+
+    store.connection.execute("insert into policy_decisions (source) values ('local')")
+    assert policy_row_presence(store).local_policy
