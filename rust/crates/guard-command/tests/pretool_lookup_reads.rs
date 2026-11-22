@@ -157,6 +157,40 @@ fn definition_exposing_and_unproven_lookup_forms_still_ask() {
     }
 }
 
+/// The output itself, not merely the lookup syntax, can contain a marker from
+/// an inherited Bash function or alias. Use inert, synthetic values only.
+#[test]
+fn shell_lookup_output_cannot_bypass_guard_review() {
+    let home = home();
+    let startup = home.join("synthetic-shell-init.sh");
+    std::fs::write(
+        &startup,
+        "shopt -s expand_aliases\nalias probe_alias='echo SYNTHETIC_ALIAS_MARKER_z81'\nprobe_func() { echo SYNTHETIC_FUNCTION_MARKER_z81; }\n",
+    )
+    .unwrap();
+    for (command, marker) in [
+        ("type probe_func", "SYNTHETIC_FUNCTION_MARKER_z81"),
+        ("type -a probe_func", "SYNTHETIC_FUNCTION_MARKER_z81"),
+        ("type -f probe_alias", "SYNTHETIC_ALIAS_MARKER_z81"),
+        ("command -V probe_func", "SYNTHETIC_FUNCTION_MARKER_z81"),
+        ("command -v probe_alias", "SYNTHETIC_ALIAS_MARKER_z81"),
+    ] {
+        let output = Command::new("bash")
+            .arg("-c")
+            .arg(command)
+            .env("BASH_ENV", &startup)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{command}: {output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(stdout.contains(marker), "{command}: {stdout:?}");
+        for harness in HARNESSES {
+            let result = classify(&home, harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+        }
+    }
+}
+
 #[test]
 fn merge_base_and_chained_git_reads_proceed() {
     let home = home();
