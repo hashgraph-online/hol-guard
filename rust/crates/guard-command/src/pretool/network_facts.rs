@@ -71,12 +71,65 @@ fn report_flag(word: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || character == '-')
 }
 
-/// `ss` reporting on sockets, never closing one.
+/// The `ss` short options that only select what the report covers.
+///
+/// Every letter here is a filter or a column choice. The letters left out
+/// either act (`K` closes the matching sockets) or take a value that names a
+/// file or a namespace (`D` writes the raw dump, `F` reads a filter file, `N`
+/// enters a network namespace, `A` and `f` narrow by a word of their own), and
+/// `ss` accepts that value glued to the letter, so the word alone cannot show
+/// which one it is.
+const SOCKET_REPORT_LETTERS: &str = "hVnraloempisbEZz460tudwxSMHOT";
+
+/// The `ss` long options that only select what the report covers.
+///
+/// `ss` resolves an unambiguous abbreviation, so `--ki` reaches `--kill`.
+/// Matching the whole name refuses every abbreviation along with it.
+const SOCKET_REPORT_OPTIONS: [&str; 27] = [
+    "--help",
+    "--version",
+    "--numeric",
+    "--resolve",
+    "--all",
+    "--listening",
+    "--options",
+    "--extended",
+    "--memory",
+    "--processes",
+    "--info",
+    "--summary",
+    "--bpf",
+    "--events",
+    "--context",
+    "--contexts",
+    "--ipv4",
+    "--ipv6",
+    "--packet",
+    "--tcp",
+    "--udp",
+    "--dccp",
+    "--raw",
+    "--unix",
+    "--sctp",
+    "--no-header",
+    "--oneline",
+];
+
+/// `ss` reporting on sockets, never closing one and never naming a file.
 fn socket_statistics_arguments(arguments: &[String]) -> bool {
     arguments.iter().all(|argument| {
-        !matches!(argument.as_str(), "-K" | "--kill")
-            && !argument.starts_with("-K")
-            && report_flag(argument)
+        if argument.starts_with("--") {
+            return SOCKET_REPORT_OPTIONS.contains(&argument.as_str());
+        }
+        match argument.strip_prefix('-') {
+            Some(letters) => {
+                !letters.is_empty()
+                    && letters
+                        .chars()
+                        .all(|letter| SOCKET_REPORT_LETTERS.contains(letter))
+            }
+            None => false,
+        }
     })
 }
 
