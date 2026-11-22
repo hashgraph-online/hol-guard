@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
+import sqlite3
 import time
 import uuid
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import overload
 
 from .native_execution import _resident_request
 from .native_runtime import native_runtime_status
@@ -159,3 +163,105 @@ def native_hook_review_policy_binding(
 
 
 __all__.append("native_hook_review_policy_binding")
+
+
+def native_review_policy_binding(
+    *,
+    harness: str,
+    native_result: Mapping[str, object],
+    verified_receipt: object,
+    guard_home: Path,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    """Validate the native review policy domain without a hook-review facade."""
+
+    receipt_bound = isinstance(verified_receipt, Mapping) and "command_extensions" in verified_receipt
+    if "command_extensions" not in native_result and not receipt_bound:
+        return None
+    binding = native_hook_review_policy_binding(
+        harness=harness,
+        native_result=native_result,
+        verified_receipt=verified_receipt if isinstance(verified_receipt, Mapping) else None,
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    if binding is None:
+        raise ValueError("native_review_policy_binding_invalid")
+    return binding
+
+
+def native_review_settle(
+    store: object,
+    *,
+    harness: str,
+    artifact_id: str,
+    tool_name: str,
+    launch_target: str,
+    workspace: Path | None,
+    identity: str | None,
+    spend: bool,
+    claimed_saved_allow_hash: str | None = None,
+    claimed_approval_request_id: str | None = None,
+) -> str | None:
+    """Settle a native review retry through the resident-owned store facade."""
+
+    claimed = claimed_saved_allow_hash is not None
+    method = "settle_claimed_native_review" if claimed else "settle_native_review_reuse"
+    settle = getattr(store, method, None)
+    if not callable(settle) or identity is None or not (launch_target or claimed):
+        return None
+    identity_args: dict[str, object] = {
+        "harness": harness,
+        "artifact_id": artifact_id,
+        "artifact_name": tool_name,
+        "launch_target": launch_target,
+        "workspace": str(workspace) if workspace is not None else None,
+        "now": datetime.now(tz=timezone.utc).isoformat(),
+    }
+    if claimed:
+        identity_args.update(
+            identity=identity,
+            claimed_saved_allow_hash=claimed_saved_allow_hash,
+            claimed_approval_request_id=claimed_approval_request_id,
+            claim_saved_approval=spend,
+        )
+    else:
+        identity_args.update(artifact_hash=identity, spend=spend)
+    try:
+        settled = settle(**identity_args)
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+        return None
+    return settled if settled in ("blocked", "allowed") else None
+
+
+@overload
+def admit_accepted_call(
+    store: object, *, harness: str, payload: Mapping[str, object], response: dict[str, object]
+) -> dict[str, object]: ...
+
+
+@overload
+def admit_accepted_call(
+    store: object, *, harness: str, payload: Mapping[str, object], response: dict[str, object] | None
+) -> dict[str, object] | None: ...
+
+
+def admit_accepted_call(
+    store: object,
+    *,
+    harness: str,
+    payload: Mapping[str, object],
+    response: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Record the witness for a call accepted through native review reuse."""
+
+    if response is None or response.get("approval_reuse_status") != "accepted":
+        return response
+    record = getattr(store, "record_native_admitted_call", None)
+    if callable(record):
+        with contextlib.suppress(OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+            record(harness=harness, payload=dict(payload), now=datetime.now(tz=timezone.utc).isoformat())
+    return response
+
+
+__all__ += ["admit_accepted_call", "native_review_policy_binding", "native_review_settle"]
