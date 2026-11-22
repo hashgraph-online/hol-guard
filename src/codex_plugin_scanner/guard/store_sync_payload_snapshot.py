@@ -28,13 +28,14 @@ def sync_payload_snapshot_rows(answer: object, keys: tuple[str, ...]) -> dict[st
     as ``get_sync_payload`` answers for it.
     """
 
-    if not isinstance(answer, dict):
+    if not isinstance(answer, dict) or set(answer) != {"rows", "unreadable"}:
         raise RuntimeError("native sync_payload_snapshot returned no answer")
-    unreadable = answer.get("unreadable")
+    unreadable = answer["unreadable"]
+    if not isinstance(unreadable, list) or not set(unreadable) <= set(keys):
+        raise RuntimeError("native sync_payload_snapshot returned no answer")
     if unreadable:
-        names = ",".join(str(key) for key in unreadable) if isinstance(unreadable, list) else "rows"
-        raise SyncPayloadRowUnreadableError(f"sync_payload_unreadable:{names}")
-    rows = answer.get("rows")
+        raise SyncPayloadRowUnreadableError(f"sync_payload_unreadable:{','.join(unreadable)}")
+    rows = answer["rows"]
     if not isinstance(rows, dict) or set(rows) != set(keys):
         raise RuntimeError("native sync_payload_snapshot returned no answer")
     result: dict[str, SyncPayload] = {}
