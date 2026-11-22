@@ -130,6 +130,8 @@ pub(crate) mod sync_payload_snapshot;
 #[path = "guard_store_policy_trust_rows.rs"]
 pub(crate) mod policy_trust_rows;
 
+#[path = "guard_store_continuity_rows.rs"]
+pub(crate) mod continuity_rows;
 #[path = "guard_store_sync_payload_rows.rs"]
 pub(crate) mod sync_payload_rows;
 
@@ -150,6 +152,7 @@ pub(crate) fn handles_row_method(method: &str) -> bool {
         || aibom_state::handles(method)
         || sync_payload_snapshot::handles(method)
         || policy_trust_rows::handles(method)
+        || continuity_rows::handles(method)
         || review_memory_rows::handles(method)
         || sync_payload_rows::handles(method)
         || queue_lane_rows::handles(method)
@@ -186,6 +189,9 @@ pub(crate) fn dispatch_row_method(
         }
         _ if policy_trust_rows::handles(method) => {
             policy_trust_rows::dispatch(connection, method, args)
+        }
+        _ if continuity_rows::handles(method) => {
+            continuity_rows::dispatch(connection, method, args)
         }
         _ if review_memory_rows::handles(method) => {
             review_memory_rows::dispatch(connection, method, args)

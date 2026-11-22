@@ -147,6 +147,9 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "command_queue_lane_rows"
         // Two rows read as one consent pair.
         | "exact_cloud_review_state" => Kind::Snapshot,
+        // The authority revision and the two continuity rows a commit is
+        // checked against, as one view.
+        "custom_extension_continuity_rows" => Kind::Snapshot,
         // The memory policy version and rule registry a signed memory
         // bundle is checked and planned against, as one view.
         "review_policy_memory_rows" => Kind::Snapshot,
