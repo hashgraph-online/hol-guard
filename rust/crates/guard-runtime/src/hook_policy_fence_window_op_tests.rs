@@ -13,6 +13,9 @@ fn request(home: &str, action: &str) -> HookPolicyFenceWindowRequestV1 {
         elapsed_ms: None,
         remaining_ms: None,
         persist_events: false,
+        bound: false,
+        event_name: None,
+        recording_only: false,
     }
 }
 
@@ -30,6 +33,20 @@ fn wait_plan_preserves_the_rebuild_cap_and_both_deadline_margins() {
     assert!(plan_wait(0, 599).is_none());
     assert!(plan_wait(u64::MAX, 20_000).is_none());
     assert!(plan_wait(0, 0).is_none());
+}
+
+#[test]
+fn review_fence_requires_a_bound_enforcing_hook() {
+    let mut call = request("/synthetic/review-fence", "review_enter");
+    call.bound = true;
+    call.event_name = Some("PostToolUse".to_owned());
+    let response: Value = serde_json::from_slice(&evaluate(&call).unwrap()).unwrap();
+    assert_eq!(response["result"]["fenced"], false);
+
+    call.event_name = Some("PreToolUse".to_owned());
+    call.recording_only = true;
+    let response: Value = serde_json::from_slice(&evaluate(&call).unwrap()).unwrap();
+    assert_eq!(response["result"]["fenced"], false);
 }
 
 #[test]

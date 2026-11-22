@@ -5,13 +5,23 @@ from __future__ import annotations
 import math
 import time
 import uuid
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import cast, final
 
+from .native_command_control_authority_io import (
+    NativeCommandControlAuthorityUnavailableError,
+    hold_command_control_authority_lock,
+)
 from .native_execution import _resident_request
+from .native_hook_review_binding import native_hook_review_binding
+
+LEASE_WAIT_SECONDS = 0.25
 
 _WRITE_FEATURE = "hook-policy-fence-window-write-v1"
 _WAIT_FEATURE = "hook-policy-fence-window-wait-v1"
+_REVIEW_FEATURE = "hook-review-fence-v1"
 _REQUEST_SCHEMA = "guard-hook-policy-fence-window-request.v1"
 _RESULT_SCHEMA = "guard-hook-policy-fence-window-result.v1"
 _TIMEOUT_SECONDS = 0.1
@@ -33,10 +43,7 @@ def _fence_request(
     deadline: float | None,
     **fields: object,
 ) -> dict[str, object] | None:
-    try:
-        canonical_home = guard_home.resolve(strict=False)
-    except (OSError, RuntimeError):
-        canonical_home = guard_home
+    canonical_home = guard_home
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": request_id,
@@ -54,12 +61,17 @@ def _fence_request(
             timeout_seconds = min(timeout_seconds, deadline - time.monotonic())
         if timeout_seconds <= 0:
             return None
+        required_feature = _WRITE_FEATURE
+        if action == "wait":
+            required_feature = _WAIT_FEATURE
+        elif action.startswith("review_"):
+            required_feature = _REVIEW_FEATURE
         reply = _resident_request(
             operation="hook_policy_fence_window",
             request=request,
             guard_home=canonical_home,
             timeout_seconds=timeout_seconds,
-            required_feature=_WAIT_FEATURE if action == "wait" else _WRITE_FEATURE,
+            required_feature=required_feature,
             response_schema=_RESULT_SCHEMA,
             record_resilience=False,
         )
@@ -133,3 +145,99 @@ class PolicySourceFenceWait:
         if self._started is not None:
             self._started = None
             _ = self._call("leave", admitted=not self._exhausted)
+
+
+def _reader(publisher: object, name: str) -> Callable[[], object] | None:
+    reader = getattr(publisher, name, None)
+    return reader if callable(reader) else None
+
+
+def published_binding_token(publisher: object, *, deadline: float | None = None) -> tuple[object, ...] | None:
+    """Read the committed policy binding used to compare an unleased review."""
+
+    authority = _reader(publisher, "_committed_control_authority")
+    business = _reader(publisher, "_compiled_business_source")
+    revision = _reader(publisher, "_current_local_cli_revision")
+    if authority is None or business is None or revision is None:
+        return None
+    try:
+        marker = authority() or {}
+        source = business()
+        cli_revision = revision()
+        identity = b"" if source is None else getattr(source, "retained_identity_bytes", None)
+        if not isinstance(marker, Mapping) or not isinstance(identity, bytes):
+            return None
+        guard_home = getattr(publisher, "guard_home", None)
+        if not isinstance(guard_home, Path):
+            return None
+        return native_hook_review_binding(marker, identity, cli_revision, guard_home, deadline=deadline)
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError, IndexError):
+        return None
+
+
+@contextmanager
+def native_review_fence(
+    *,
+    policy_snapshot: Mapping[str, object] | None,
+    event_name: str,
+    recording_only: bool,
+    guard_home: Path,
+    deadline: float | None,
+) -> Iterator[bool | None]:
+    """Ask the resident to hold the command-control lease during review."""
+
+    bound = policy_snapshot is not None and (
+        policy_snapshot.get("command_extensions_bound") is True
+        or isinstance(policy_snapshot.get("command_extensions"), Mapping)
+    )
+    if not bound or event_name not in {"PreToolUse", "UserPromptSubmit"} or recording_only:
+        yield False
+        return
+    remaining_ms = 0 if deadline is None else max(0, int((deadline - time.monotonic()) * 1000))
+    request_id = f"review-fence-{uuid.uuid4().hex}"
+    result = _fence_request(
+        guard_home,
+        action="review_enter",
+        request_id=request_id,
+        deadline=deadline,
+        bound=bound,
+        event_name=event_name,
+        recording_only=recording_only,
+        remaining_ms=remaining_ms,
+    )
+    if result is None:
+        # Compatibility transport for an older installation without the new
+        # resident operation. It carries no policy decision and is removed
+        # once the minimum resident version includes review fencing.
+        remaining = 0.0 if deadline is None else max(0.0, deadline - time.monotonic())
+        with ExitStack() as resources:
+            try:
+                resources.enter_context(
+                    hold_command_control_authority_lock(
+                        guard_home, timeout_seconds=min(LEASE_WAIT_SECONDS, remaining), shared=True
+                    )
+                )
+            except NativeCommandControlAuthorityUnavailableError:
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise TimeoutError("native_review_fence_deadline") from None
+                yield None
+                return
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError("native_review_fence_deadline")
+            yield True
+        return
+    fenced = result.get("fenced") if result is not None else None
+    if fenced is not True:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("native_review_fence_deadline")
+        yield None if fenced is None else False
+        return
+    try:
+        yield True
+    finally:
+        _ = _fence_request(
+            guard_home,
+            action="review_leave",
+            request_id=request_id,
+            deadline=None,
+        )
