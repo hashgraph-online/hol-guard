@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import threading
 import time
@@ -82,19 +80,16 @@ _auth_context_cache: dict[tuple[str, object], tuple[float, str, dict[str, object
 
 
 def _sign_in_stamp(store: GuardStore) -> str | None:
-    """A digest of the stored sign-in record, or None when it cannot be read."""
+    """A digest of the stored sign-in record, or None when it cannot be read.
 
-    state_key = getattr(store, "_oauth_local_credentials_state_key", None)
-    if not isinstance(state_key, str):
-        return None
+    The native store hashes the record, so the credentials never come back
+    to Python for this check.
+    """
+
     try:
-        record = store.get_sync_payload(state_key)
+        return store.oauth_sign_in_stamp()
     except Exception:
         return None
-    if record is None:
-        return None
-    encoded = json.dumps(record, sort_keys=True, separators=(",", ":"), default=str).encode()
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def reuse_command_queue_auth_context(

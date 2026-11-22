@@ -109,6 +109,9 @@ pub(crate) mod exact_cloud_state;
 #[path = "guard_store_worker_host.rs"]
 pub(crate) mod worker_host;
 
+#[path = "guard_store_oauth_sign_in_stamp.rs"]
+pub(crate) mod oauth_sign_in_stamp;
+
 #[path = "guard_store_aibom_state.rs"]
 pub(crate) mod aibom_state;
 
@@ -123,6 +126,7 @@ pub(crate) fn handles_row_method(method: &str) -> bool {
         || sync_delivery_rows::handles(method)
         || exact_cloud_state::handles(method)
         || worker_host::handles(method)
+        || oauth_sign_in_stamp::handles(method)
         || aibom_state::handles(method)
         || policy_trust_rows::handles(method)
 }
@@ -150,6 +154,9 @@ pub(crate) fn dispatch_row_method(
             exact_cloud_state::dispatch(connection, method, args)
         }
         _ if worker_host::handles(method) => worker_host::dispatch(connection, method, args),
+        _ if oauth_sign_in_stamp::handles(method) => {
+            oauth_sign_in_stamp::dispatch(connection, method, args)
+        }
         _ if policy_trust_rows::handles(method) => {
             policy_trust_rows::dispatch(connection, method, args)
         }
