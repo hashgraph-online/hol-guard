@@ -1,9 +1,12 @@
 use super::*;
 
+/// A virtual environment at `root` with an interpreter, `pyvenv.cfg` and an
+/// unrelated installed package. Returns the interpreter path.
 fn venv(root: &Path) -> PathBuf {
     let bin = root.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
-    std::fs::write(bin.join("python"), b"").unwrap();
+    std::fs::write(bin.join("python"), b"\x7fELF").unwrap();
+    std::fs::write(root.join("pyvenv.cfg"), b"home = /usr/bin\n").unwrap();
     std::fs::create_dir_all(root.join("lib/python3.12/site-packages/rich-14.2.0.dist-info"))
         .unwrap();
     bin.join("python")
@@ -16,7 +19,8 @@ fn guard_free(command: &str, base: Option<&Path>) -> bool {
 #[test]
 fn uv_pip_install_into_a_fresh_venv_is_guard_free() {
     let dir = tempfile::tempdir().unwrap();
-    let python = venv(&dir.path().join("candidate/.venv"));
+    let root = dir.path().join("candidate/.venv");
+    let python = venv(&root);
     let command = format!(
         "uv pip install --no-cache --python {} --no-deps /wheels/abc/hol_guard-3.61.0-py3-none-any.whl",
         python.display()
@@ -27,27 +31,18 @@ fn uv_pip_install_into_a_fresh_venv_is_guard_free() {
         python.display()
     );
     assert!(guard_free(&inline, None));
-    let venv_dir = format!(
-        "uv pip install -p {} ./hol_guard.whl",
-        dir.path().join("candidate/.venv").display()
-    );
+    let venv_dir = format!("uv pip install -p {} ./hol_guard.whl", root.display());
     assert!(guard_free(&venv_dir, None));
-}
-
-#[test]
-fn venv_pip_and_python_m_pip_are_guard_free() {
-    let dir = tempfile::tempdir().unwrap();
-    venv(&dir.path().join(".venv"));
-    assert!(guard_free(
-        ".venv/bin/pip install ./dist/hol_guard-3.61.0-py3-none-any.whl",
-        Some(dir.path())
-    ));
-    assert!(guard_free(
-        ".venv/bin/python -m pip install --no-deps ./hol_guard.whl",
-        Some(dir.path())
-    ));
-    // A relative path with no known working directory proves nothing.
-    assert!(!guard_free(".venv/bin/pip install ./hol_guard.whl", None));
+    let sync = format!(
+        "uv pip sync -q --python {} requirements.txt",
+        python.display()
+    );
+    assert!(guard_free(&sync, None));
+    // A relative interpreter resolves against the working directory, and
+    // proves nothing without one.
+    let relative = "uv pip install --python candidate/.venv/bin/python ./hol_guard.whl";
+    assert!(guard_free(relative, Some(dir.path())));
+    assert!(!guard_free(relative, None));
 }
 
 #[test]
@@ -83,13 +78,23 @@ fn an_environment_that_already_holds_guard_keeps_its_review() {
     assert!(!guard_free(&command, None));
 
     let editable = dir.path().join("editable-venv");
-    let python = venv(&editable);
+    venv(&editable);
     std::fs::write(
         editable.join("lib/python3.12/site-packages/__editable___plugin_scanner_1_0_finder.py"),
         b"",
     )
     .unwrap();
-    let command = format!("{} -m pip install ./hol_guard.whl", python.display());
+    let command = format!("uv pip install -p {} ./hol_guard.whl", editable.display());
+    assert!(!guard_free(&command, None));
+
+    let target = dir.path().join("target");
+    std::fs::create_dir_all(target.join("hol_guard-3.60.0.dist-info")).unwrap();
+    let command = format!(
+        "uv pip install --python {} --target {} ./hol_guard.whl",
+        dir.path().join("candidate/.venv").display(),
+        target.display()
+    );
+    venv(&dir.path().join("candidate/.venv"));
     assert!(!guard_free(&command, None));
 }
 
@@ -113,39 +118,93 @@ fn the_environment_running_guard_keeps_its_review() {
     ));
 }
 
+#[cfg(unix)]
 #[test]
-fn a_symlink_into_a_guard_environment_keeps_its_review() {
+fn a_linked_environment_or_interpreter_keeps_its_review() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("guard-venv");
-    venv(&root);
-    std::fs::write(root.join("bin/hol-guard"), b"").unwrap();
+    let guard = dir.path().join("guard-venv");
+    let guard_python = venv(&guard);
+    std::fs::write(guard.join("bin/hol-guard"), b"").unwrap();
+
+    // A directory link resolves to the Guard environment.
     let link = dir.path().join("innocent");
-    #[cfg(unix)]
-    std::os::unix::fs::symlink(&root, &link).unwrap();
-    #[cfg(unix)]
-    {
-        let command = format!(
-            "uv pip install --python {} ./hol_guard.whl",
-            link.join("bin/python").display()
-        );
-        assert!(!guard_free(&command, None));
-    }
+    std::os::unix::fs::symlink(&guard, &link).unwrap();
+    let command = format!(
+        "uv pip install --python {} ./hol_guard.whl",
+        link.join("bin/python").display()
+    );
+    assert!(!guard_free(&command, None));
+
+    // An interpreter linked from a directory that is not a virtual
+    // environment runs with the Guard environment's prefix.
+    let bare = dir.path().join("bare/bin");
+    std::fs::create_dir_all(&bare).unwrap();
+    std::os::unix::fs::symlink(&guard_python, bare.join("python")).unwrap();
+    let command = format!(
+        "uv pip install --python {} ./hol_guard.whl",
+        bare.join("python").display()
+    );
+    assert!(!guard_free(&command, None));
+
+    // A script standing in for the interpreter can start any Python.
+    let wrapper = dir.path().join("wrapper");
+    let wrapper_python = venv(&wrapper);
+    std::fs::write(
+        &wrapper_python,
+        format!("#!/bin/sh\nexec {} \"$@\"\n", guard_python.display()),
+    )
+    .unwrap();
+    let command = format!(
+        "uv pip install --python {} ./hol_guard.whl",
+        wrapper_python.display()
+    );
+    assert!(!guard_free(&command, None));
 }
 
 #[test]
-fn shapes_that_do_not_name_the_environment_keep_their_review() {
+fn shapes_that_do_not_name_the_environment_exactly_keep_their_review() {
     let dir = tempfile::tempdir().unwrap();
     let python = venv(&dir.path().join(".venv"));
     let python = python.display();
+    let guard = dir.path().join("guard");
     for command in [
+        // The environment comes from the shell, `PATH` or a version request.
         "uv pip install ./hol_guard.whl".to_string(),
         "uv pip install --python 3.12 ./hol_guard.whl".to_string(),
-        "pip install ./hol_guard.whl".to_string(),
-        "python -m pip install ./hol_guard.whl".to_string(),
+        "uv pip install --python python3 ./hol_guard.whl".to_string(),
         "uv tool install ./hol_guard.whl".to_string(),
         "pipx install ./hol_guard.whl".to_string(),
+        // pip and python -m pip are not accepted at all.
+        format!(
+            "{}/.venv/bin/pip install ./hol_guard.whl",
+            dir.path().display()
+        ),
+        format!("{python} -m pip install ./hol_guard.whl"),
+        "pip install ./hol_guard.whl".to_string(),
+        // Options that move the install or that this check does not know.
         format!("uv pip install --system --python {python} ./hol_guard.whl"),
-        format!("{python} -m pip install --user ./hol_guard.whl"),
+        format!("uv pip install --break-system-packages --python {python} ./hol_guard.whl"),
+        format!("uv pip install --python {python} --directory /other ./hol_guard.whl"),
+        format!("uv pip install --python {python} --project /other ./hol_guard.whl"),
+        format!("uv pip install --python {python} --config-file uv.toml ./hol_guard.whl"),
+        format!(
+            "uv pip install --python {python} -t{} ./hol_guard.whl",
+            guard.display()
+        ),
+        format!("uv pip install -p{python} ./hol_guard.whl"),
+        format!("uv pip install -p={python} ./hol_guard.whl"),
+        format!(
+            "uv pip install --python {python} --targ {} ./hol_guard.whl",
+            guard.display()
+        ),
+        format!("uv pip install --python {python} -- ./hol_guard.whl"),
+        // Values the shell could still expand.
+        "uv pip install --python $GUARD_ENV/bin/python ./hol_guard.whl".to_string(),
+        "uv pip install --python ${VIRTUAL_ENV}/bin/python ./hol_guard.whl".to_string(),
+        format!("uv pip install --python {python} --target ~other/site ./hol_guard.whl"),
+        format!("uv pip install --python {python} --target /opt/*/site ./hol_guard.whl"),
+        format!("uv pip install --python {python} --target %APPDATA%\\site ./hol_guard.whl"),
+        // Chained, redirected or incomplete commands.
         format!("uv pip install --python {python} ./a.whl && pip install ./hol_guard.whl"),
         format!("uv pip install --python {python} ./a.whl; uv tool install ./hol_guard.whl"),
         format!("uv pip install --python {python} --python"),

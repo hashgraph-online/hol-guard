@@ -1,19 +1,28 @@
-//! Whether a Python install writes only into an environment that holds no
+//! Whether a `uv pip` install writes only into an environment that holds no
 //! Guard installation.
 //!
 //! Guard's own distribution from a direct source normally keeps its review
 //! whatever the settings say, because such an install could replace the
-//! Guard that is running. An install that names a separate environment
-//! (`uv pip install --python <venv>`, `<venv>/bin/pip install`,
-//! `pip install --target <dir>`) and finds no Guard there cannot do that:
-//! it is the same as building a fresh checkout, so the user's ordinary
-//! package settings decide it instead.
+//! Guard that is running. An install that names a separate virtual
+//! environment (`uv pip install --python <venv>`) or a separate directory
+//! (`--target`, `--prefix`) and finds no Guard there cannot do that: it is
+//! the same as building a fresh checkout, so the user's ordinary package
+//! settings decide it instead.
 //!
-//! Every uncertain shape answers `false` and keeps the review: a chained or
-//! prefixed command, an interpreter chosen by name or `PATH`, `--user`,
-//! `--system`, an environment that already holds Guard, or one that contains
-//! the running Guard executable.
+//! Only `uv pip install|sync` is accepted, with a closed list of options;
+//! every other shape answers `false` and keeps the review. That includes
+//! `pip` and `python -m pip`, whose option parser accepts abbreviated and
+//! attached forms and whose launchers can run another environment's
+//! interpreter, any option this module does not know, a value the shell
+//! could still expand, a chained or redirected command, an interpreter
+//! chosen by name or `PATH`, `--system`, an environment that already holds
+//! Guard, and one that contains the running Guard executable.
+//!
+//! Settings that do not appear in the command, such as environment
+//! variables and `uv.toml`, are not read here. They come from the same shell
+//! that decides whether Guard's install wrapper runs at all.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use super::source_identity::FIRST_PARTY_PYPI_PACKAGES;
@@ -21,6 +30,32 @@ use super::source_identity::FIRST_PARTY_PYPI_PACKAGES;
 /// Characters that join, redirect or substitute another command. `shlex`
 /// keeps `a.whl;` as one token, so tokens are searched, not compared.
 const SHELL_METACHARACTERS: &[char] = &[';', '&', '|', '`', '<', '>', '(', ')', '\n'];
+
+/// Characters a shell may still expand inside a path value, so the literal
+/// text is not the path the installer receives.
+const EXPANDABLE_PATH_CHARACTERS: &[char] = &['$', '`', '*', '?', '[', ']', '{', '}', '%', '!'];
+
+/// `uv pip install|sync` options that select nothing about where packages
+/// are written. Anything else, including `--directory`, `--project` and
+/// `--config-file`, keeps the review.
+const NEUTRAL_OPTIONS: &[&str] = &[
+    "--no-deps",
+    "--no-cache",
+    "-n",
+    "-q",
+    "--quiet",
+    "-v",
+    "--verbose",
+    "-U",
+    "--upgrade",
+    "--reinstall",
+    "--force-reinstall",
+    "--no-index",
+    "--offline",
+    "--compile-bytecode",
+    "--strict",
+    "--exact",
+];
 
 /// Executables a Python environment holds when Guard is installed in it.
 const GUARD_EXECUTABLES: &[&str] = &[
@@ -49,7 +84,7 @@ pub(super) fn installs_into_guard_free_environment(
             .all(|root| environment_is_guard_free(root, running_executable))
 }
 
-/// The environments a single pip or `uv pip` install writes into, or `None`
+/// The directories a single `uv pip install|sync` writes into, or `None`
 /// when the command does not name them unambiguously.
 fn target_environment_roots(tokens: &[String], base_dir: Option<&Path>) -> Option<Vec<PathBuf>> {
     if tokens
@@ -58,71 +93,46 @@ fn target_environment_roots(tokens: &[String], base_dir: Option<&Path>) -> Optio
     {
         return None;
     }
-    let program = tokens.first()?;
-    let name = program_name(program);
-    let mut roots = Vec::new();
-    let options: &[String] = if name == "uv" {
-        if tokens.get(1).map(String::as_str) != Some("pip")
-            || !matches!(tokens.get(2).map(String::as_str), Some("install" | "sync"))
-        {
-            return None;
-        }
-        &tokens[3..]
-    } else if is_pip_name(&name) {
-        if tokens.get(1).map(String::as_str) != Some("install") {
-            return None;
-        }
-        roots.push(interpreter_environment(program, base_dir)?);
-        &tokens[2..]
-    } else if is_python_name(&name) {
-        if tokens.get(1).map(String::as_str) != Some("-m")
-            || tokens.get(2).map(String::as_str) != Some("pip")
-            || tokens.get(3).map(String::as_str) != Some("install")
-        {
-            return None;
-        }
-        roots.push(interpreter_environment(program, base_dir)?);
-        &tokens[4..]
-    } else {
+    if program_name(tokens.first()?) != "uv"
+        || tokens.get(1).map(String::as_str) != Some("pip")
+        || !matches!(tokens.get(2).map(String::as_str), Some("install" | "sync"))
+    {
         return None;
-    };
+    }
+    let options = &tokens[3..];
+    let mut roots = Vec::new();
     let mut index = 0;
     while index < options.len() {
         let token = options[index].as_str();
-        if matches!(token, "--user" | "--system" | "--break-system-packages") {
-            return None;
+        index += 1;
+        if !token.starts_with('-') || NEUTRAL_OPTIONS.contains(&token) {
+            continue;
         }
         let (flag, inline) = match token.split_once('=') {
-            Some((flag, value)) if flag.starts_with("--") => (flag, Some(value.to_string())),
+            Some((flag, value)) if flag.starts_with("--") => (flag, Some(value)),
             _ => (token, None),
         };
-        let takes_root = match flag {
-            "--python" | "-p" if name == "uv" => Some(true),
-            "--target" | "-t" | "--prefix" | "--root" => Some(false),
-            _ => None,
+        let is_interpreter = match flag {
+            "--python" | "-p" => true,
+            "--target" | "--prefix" => false,
+            _ => return None,
         };
-        if let Some(is_interpreter) = takes_root {
-            let value = match inline {
-                Some(value) => value,
-                None => {
-                    index += 1;
-                    options.get(index)?.clone()
-                }
-            };
-            let path = resolve_path(&value, base_dir)?;
-            roots.push(if is_interpreter {
-                interpreter_environment_path(&path)?
-            } else {
-                path
-            });
+        if inline.is_some() && flag == "-p" {
+            return None;
         }
-        index += 1;
-    }
-    // `uv pip install` with no `--python`, `--target` or `--prefix` picks its
-    // environment from the shell and working directory, which the command
-    // alone does not show.
-    if name == "uv" && roots.is_empty() {
-        return None;
+        let value = match inline {
+            Some(value) => value,
+            None => {
+                index += 1;
+                options.get(index - 1)?.as_str()
+            }
+        };
+        let path = resolve_path(value, base_dir)?;
+        roots.push(if is_interpreter {
+            interpreter_environment(&path)?
+        } else {
+            path
+        });
     }
     Some(roots)
 }
@@ -133,38 +143,49 @@ fn program_name(program: &str) -> String {
     lower.strip_suffix(".exe").unwrap_or(&lower).to_string()
 }
 
-fn is_pip_name(name: &str) -> bool {
-    name == "pip" || name.strip_prefix("pip3").is_some_and(version_suffix)
-}
-
 fn is_python_name(name: &str) -> bool {
-    name == "python" || name.strip_prefix("python3").is_some_and(version_suffix)
+    name == "python"
+        || name.strip_prefix("python3").is_some_and(|rest| {
+            rest.is_empty()
+                || rest.strip_prefix('.').is_some_and(|minor| {
+                    !minor.is_empty() && minor.chars().all(|c| c.is_ascii_digit())
+                })
+        })
 }
 
-fn version_suffix(rest: &str) -> bool {
-    rest.is_empty()
-        || rest
-            .strip_prefix('.')
-            .is_some_and(|minor| !minor.is_empty() && minor.chars().all(|c| c.is_ascii_digit()))
+/// The virtual environment an interpreter given to `uv pip --python` writes
+/// into. It must hold `pyvenv.cfg`: Python takes its prefix from that file
+/// beside the interpreter it was started as, not from wherever a linked
+/// interpreter points. A script standing in for the interpreter could start
+/// another environment's Python, so a `#!` file keeps the review.
+fn interpreter_environment(path: &Path) -> Option<PathBuf> {
+    let environment = if path.is_dir() {
+        path.to_path_buf()
+    } else {
+        if starts_with_shebang(path) {
+            return None;
+        }
+        environment_of_interpreter(path)?
+    };
+    environment
+        .join("pyvenv.cfg")
+        .is_file()
+        .then_some(environment)
 }
 
-/// The environment an interpreter or pip program spelled as a path lives in.
-/// A bare name is found on `PATH`, which the command does not show.
-fn interpreter_environment(program: &str, base_dir: Option<&Path>) -> Option<PathBuf> {
-    if !program.contains(['/', '\\']) {
-        return None;
+/// Whether `path` is a script rather than an interpreter. An unreadable
+/// file counts as a script.
+fn starts_with_shebang(path: &Path) -> bool {
+    let mut head = [0u8; 2];
+    match std::fs::File::open(path).and_then(|mut file| file.read(&mut head)) {
+        Ok(read) => read == 2 && &head == b"#!",
+        Err(error) => error.kind() != std::io::ErrorKind::NotFound,
     }
-    interpreter_environment_path(&resolve_path(program, base_dir)?)
 }
 
-/// `<env>/bin/python3` or `<env>\Scripts\python.exe` gives `<env>`; a
-/// directory names the environment itself, as `uv pip --python` accepts.
-fn interpreter_environment_path(path: &Path) -> Option<PathBuf> {
-    if path.is_dir() {
-        return Some(path.to_path_buf());
-    }
-    let name = program_name(&path.file_name()?.to_string_lossy());
-    if !is_python_name(&name) && !is_pip_name(&name) {
+/// `<env>/bin/python3` or `<env>\Scripts\python.exe` gives `<env>`.
+fn environment_of_interpreter(path: &Path) -> Option<PathBuf> {
+    if !is_python_name(&program_name(&path.file_name()?.to_string_lossy())) {
         return None;
     }
     let bin = path.parent()?;
@@ -176,7 +197,7 @@ fn interpreter_environment_path(path: &Path) -> Option<PathBuf> {
 }
 
 fn resolve_path(value: &str, base_dir: Option<&Path>) -> Option<PathBuf> {
-    if value.is_empty() {
+    if value.is_empty() || value.contains(EXPANDABLE_PATH_CHARACTERS) {
         return None;
     }
     if let Some(rest) = value
@@ -186,11 +207,16 @@ fn resolve_path(value: &str, base_dir: Option<&Path>) -> Option<PathBuf> {
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
         return Some(PathBuf::from(home).join(rest));
     }
+    // `~user` expands to another home directory.
+    if value.starts_with('~') {
+        return None;
+    }
     let path = PathBuf::from(value);
     if path.is_absolute() {
         return Some(path);
     }
-    // A bare interpreter request such as `3.12` is a version, not a path.
+    // A bare interpreter request such as `3.12` or `python3` is a version or
+    // a `PATH` lookup, not a path.
     if !value.contains(['/', '\\']) && !value.starts_with('.') {
         return None;
     }

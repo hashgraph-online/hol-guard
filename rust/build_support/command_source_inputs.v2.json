@@ -939,6 +939,7 @@
       "src/supply_chain_package_eval/fallbacks.rs",
       "src/supply_chain_package_eval/finalization.rs",
       "src/supply_chain_package_eval/go_sources.rs",
+      "src/supply_chain_package_eval/guard_free_target.rs",
       "src/supply_chain_package_eval/heuristics.rs",
       "src/supply_chain_package_eval/local_manifests.rs",
       "src/supply_chain_package_eval/local_projects.rs",

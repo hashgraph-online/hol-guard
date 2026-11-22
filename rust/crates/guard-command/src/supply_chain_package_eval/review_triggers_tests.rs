@@ -225,6 +225,7 @@ fn guard_free_target_reads_the_redacted_command_and_its_working_directory() {
     let python = project.join(".venv/bin/python");
     std::fs::create_dir_all(python.parent().unwrap()).unwrap();
     std::fs::write(&python, b"").unwrap();
+    std::fs::write(project.join(".venv/pyvenv.cfg"), b"home = /usr/bin\n").unwrap();
     let tokens = |interpreter: &str| {
         [
             "uv",
