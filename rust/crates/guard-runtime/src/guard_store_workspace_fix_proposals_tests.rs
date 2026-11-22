@@ -178,13 +178,21 @@ fn a_large_listing_pages_under_the_budget() {
         first["next"],
         json!([last["created_at_ms"], last["proposal_id"]])
     );
-    let second = call(
-        &connection,
-        "list_workspace_fix_proposals",
-        json!({"codebase_key": "c", "worktree_key": "w", "before": first["next"]}),
-    )
-    .expect("second");
-    let total = items.len() + second["items"].as_array().expect("items").len();
+    // Each later page is held to the same budget, so keep paging to the end.
+    let mut total = items.len();
+    let mut next = first["next"].clone();
+    while !next.is_null() {
+        let page = call(
+            &connection,
+            "list_workspace_fix_proposals",
+            json!({"codebase_key": "c", "worktree_key": "w", "limit": 100, "before": next}),
+        )
+        .expect("page");
+        let page_items = page["items"].as_array().expect("items");
+        assert!(!page_items.is_empty());
+        total += page_items.len();
+        next = page["next"].clone();
+    }
     assert_eq!(total, 40);
 }
 
