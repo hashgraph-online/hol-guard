@@ -13,6 +13,8 @@ from typing import cast, final
 from .native_execution import _resident_request
 from .native_hook_review_binding import native_hook_review_binding
 
+LEASE_WAIT_SECONDS = 0.25
+
 _WRITE_FEATURE = "hook-policy-fence-window-write-v1"
 _WAIT_FEATURE = "hook-policy-fence-window-wait-v1"
 _REQUEST_SCHEMA = "guard-hook-policy-fence-window-request.v1"
