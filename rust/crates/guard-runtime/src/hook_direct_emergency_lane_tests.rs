@@ -90,3 +90,28 @@ fn an_unbounded_harness_pauses() {
     let result = emergency(&lane, "codex", "hol-guard runtime status --json");
     assert_eq!(deferred(&result), "direct_hook_harness_unsupported");
 }
+
+#[test]
+fn an_emergency_claude_question_bypasses_normal_settlement() {
+    let lane = lane("emergency-claude-question", json!({}));
+    let request = HookDirectRequestV1 {
+        harness: "claude-code".to_owned(),
+        guard_home: lane.fixture.root.to_str().unwrap().to_owned(),
+        home_dir: Some(HOME.to_owned()),
+        workspace: None,
+        deadline_budget_ms: None,
+        emergency_safe_only: true,
+        lifecycle_only: false,
+        payload: json!({
+            "hook_event_name": "PostToolUse",
+            "session_id": "emergency-question-session",
+            "tool_name": "AskUserQuestion",
+            "tool_input": { "questions": [{ "question": "Allow?" }] },
+            "tool_response": { "answers": { "Allow?": "Allow once" } },
+            "cwd": lane.workspace,
+        }),
+    };
+    let result = serde_json::from_slice(&evaluate(request, &lane.fixture.store).unwrap()).unwrap();
+    assert_eq!(deferred(&result), "direct_hook_emergency_safe_profile");
+    assert!(drain(&lane, None)["records"].as_array().unwrap().is_empty());
+}

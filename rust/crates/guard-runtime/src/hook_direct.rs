@@ -245,7 +245,10 @@ fn answer(
         }
         return Err(HookDirectDefer::LifecycleUnsettled);
     }
-    if request.harness == CLAUDE_CODE && event == POST_TOOL_USE {
+    if !request.emergency_safe_only
+        && request.harness == CLAUDE_CODE
+        && event == POST_TOOL_USE
+    {
         if let Some(answer) = lifecycle::claude_question_answer(
             &request.guard_home,
             request.home_dir.as_deref(),
