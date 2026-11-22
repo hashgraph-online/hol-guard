@@ -15,7 +15,9 @@
 //! `command_pack_legacy_history_page` pages the snapshot envelopes of every
 //! transition below a revision, newest first. The control history grows by
 //! one transition per policy save, so one answer cannot hold it: each page
-//! stays inside a byte budget and names the cursor of the next page.
+//! stays inside a byte budget, measured on the encoded reply, and names the
+//! cursor of the next page. A single envelope too large for any page is
+//! refused rather than sent as a reply the resident would reject.
 //!
 //! A cell that is not text (or a revision that is not an integer) comes back
 //! `null`, so the caller refuses the answer instead of dropping the row.
@@ -24,7 +26,7 @@ use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{query_all, query_one, Row, StoreError, StoreResult};
+use crate::guard_store_db::{query_each, query_one, Row, StoreError, StoreResult};
 use crate::guard_store_local_cli_inventory::table_exists;
 
 const EVIDENCE: &str = "command_pack_legacy_evidence_rows";
@@ -32,8 +34,9 @@ const HISTORY: &str = "command_pack_legacy_history_page";
 const SNAPSHOT_TABLE: &str = "extension_control_authority_snapshot";
 const TRANSITION_TABLE: &str = "extension_control_authority_transition";
 const PENDING_TABLE: &str = "extension_command_pack_pending";
-/// Envelope bytes one history page may carry, under the 2 MiB response cap.
-pub(crate) const HISTORY_PAGE_BYTES: usize = 1536 * 1024;
+/// Encoded item bytes one history page may carry: half the response cap,
+/// leaving room for the reply envelope, as the outbox reads do.
+pub(crate) const HISTORY_PAGE_BYTES: usize = guard_contracts::MAX_NATIVE_RESPONSE_BYTES / 2;
 const HISTORY_PAGE_ROWS: usize = 256;
 /// One row past a full page, so a full page knows another one follows.
 const HISTORY_QUERY_ROWS: i64 = 257;
@@ -173,7 +176,13 @@ fn history_page(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> 
     if !table_exists(connection, TRANSITION_TABLE)? {
         return Ok(schema_missing());
     }
-    let rows = query_all(
+    let mut items = Vec::new();
+    let mut spent = 0usize;
+    let mut last = Value::Null;
+    let mut next = Value::Null;
+    // Rows are read one at a time and the walk stops at the first row the
+    // page has no room for, so a page never holds envelopes it then drops.
+    query_each(
         connection,
         &format!(
             "select revision, {} from {TRANSITION_TABLE} where revision < ? \
@@ -181,21 +190,25 @@ fn history_page(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> 
             envelope_columns("snapshot")
         ),
         &[Value::from(limit), Value::from(HISTORY_QUERY_ROWS)],
+        |row| {
+            let item = envelope(&row, "snapshot");
+            let size = item_bytes(&item);
+            if size > HISTORY_PAGE_BYTES {
+                return Err(StoreError::Invalid(
+                    "native_command_pack_history_item_too_large",
+                ));
+            }
+            let full = items.len() >= HISTORY_PAGE_ROWS;
+            if !items.is_empty() && (full || spent.saturating_add(size) > HISTORY_PAGE_BYTES) {
+                next = last.clone();
+                return Ok(false);
+            }
+            spent = spent.saturating_add(size);
+            last = items_cursor(&row);
+            items.push(item);
+            Ok(true)
+        },
     )?;
-    let mut items = Vec::new();
-    let mut spent = 0usize;
-    let mut next = Value::Null;
-    for row in &rows {
-        let item = envelope(row, "snapshot");
-        let size = item_bytes(&item);
-        let full = items.len() >= HISTORY_PAGE_ROWS;
-        if !items.is_empty() && (full || spent.saturating_add(size) > HISTORY_PAGE_BYTES) {
-            next = rows.get(items.len() - 1).map_or(Value::Null, items_cursor);
-            break;
-        }
-        spent = spent.saturating_add(size);
-        items.push(item);
-    }
     Ok(json!({"state": "present", "items": items, "next": next}))
 }
 
@@ -207,12 +220,10 @@ fn items_cursor(row: &Row) -> Value {
         .unwrap_or(Value::Null)
 }
 
+/// The item's encoded length plus its separating comma. The reply is JSON,
+/// so every quote and backslash in a record costs two bytes, not one.
 fn item_bytes(item: &Value) -> usize {
-    ["record", "digest", "mac"]
-        .iter()
-        .filter_map(|name| item.get(*name).and_then(Value::as_str))
-        .map(str::len)
-        .sum()
+    serde_json::to_vec(item).map_or(usize::MAX, |bytes| bytes.len().saturating_add(1))
 }
 
 #[cfg(test)]
