@@ -27267,7 +27267,15 @@ function refusal(code, action2, status) {
   }
   if (code.endsWith("context_stale") || code.endsWith("context_scope_denied")) return "The project or its files changed. Choose Read files again, or add the project again.";
   if (status === 403 || status === 401) return "Guard needs your approval password for this.";
-  return "CIGAR could not finish that. Refresh and try again.";
+  return `CIGAR could not finish that (${code}). Refresh and try again.`;
+}
+const refusalCode = (value) => text$2(value) && /^[a-z0-9_]{1,160}$/.test(value) ? value : null;
+function refusalFromBody(body, action2, status) {
+  const fields2 = object$2(body) ? body : {};
+  const engineCode = refusalCode(fields2.code);
+  const code = engineCode ?? refusalCode(fields2.error) ?? "context_request_refused";
+  const gateMessage = !engineCode && code.includes("approval_gate") && text$2(fields2.message) && fields2.message.trim() && fields2.message.length <= 300 ? fields2.message : null;
+  return { code, message: gateMessage ?? refusal(code, action2, status) };
 }
 async function ask(route, input, proof, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context sources require a local Guard installation.");
@@ -27285,8 +27293,7 @@ async function ask(route, input, proof, signal) {
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const code = object$2(body) && text$2(body.code) && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_request_refused";
-    const message = refusal(code, String(input.action), response.status);
+    const { code, message } = refusalFromBody(body, String(input.action), response.status);
     throw new ContextAssistanceApiError(code, message);
   }
   if (!object$2(body) || body.schema !== "guard-cigar-workspace-result.v1" || body.data_role !== true || !object$2(body.result)) invalid$3();

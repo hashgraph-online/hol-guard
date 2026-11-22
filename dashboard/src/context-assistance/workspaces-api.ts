@@ -91,7 +91,21 @@ function refusal(code: string, action: string, status: number): string {
   }
   if (code.endsWith("context_stale") || code.endsWith("context_scope_denied")) return "The project or its files changed. Choose Read files again, or add the project again.";
   if (status === 403 || status === 401) return "Guard needs your approval password for this.";
-  return "CIGAR could not finish that. Refresh and try again.";
+  return `CIGAR could not finish that (${code}). Refresh and try again.`;
+}
+
+const refusalCode = (value: unknown): string | null => text(value) && /^[a-z0-9_]{1,160}$/.test(value) ? value : null;
+
+/** CIGAR's own refusals carry `code`. The approval check's carry `error` and a
+ *  plain-language `message` (a locked gate, a wrong code, a gate that did not
+ *  answer), which is shown as is rather than replaced by a generic line. */
+function refusalFromBody(body: unknown, action: string, status: number): { code: string; message: string } {
+  const fields = object(body) ? body : {};
+  const engineCode = refusalCode(fields.code);
+  const code = engineCode ?? refusalCode(fields.error) ?? "context_request_refused";
+  const gateMessage = !engineCode && code.includes("approval_gate") && text(fields.message)
+    && fields.message.trim() && fields.message.length <= 300 ? fields.message : null;
+  return { code, message: gateMessage ?? refusal(code, action, status) };
 }
 
 async function ask(route: "workspace" | "workspace-access" | "workspace-grant", input: Record<string, unknown>, proof?: ContextProof, signal?: AbortSignal) {
@@ -105,14 +119,13 @@ async function ask(route: "workspace" | "workspace-access" | "workspace-grant", 
   });
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    const code = object(body) && text(body.code) && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_request_refused";
-    const message = refusal(code, String(input.action), response.status);
+    const { code, message } = refusalFromBody(body, String(input.action), response.status);
     throw new ContextAssistanceApiError(code, message);
   }
   if (!object(body) || body.schema !== "guard-cigar-workspace-result.v1" || body.data_role !== true || !object(body.result)) invalid();
   return body.result;
 }
-export { ask as requestContextWorkspace, refusal as contextRefusalMessage };
+export { ask as requestContextWorkspace, refusal as contextRefusalMessage, refusalFromBody as contextRefusalFromBody };
 
 export async function listContextWorkspaces(signal?: AbortSignal): Promise<ContextWorkspaceScope[]> {
   const result = await ask("workspace", { action: "list" }, undefined, signal);

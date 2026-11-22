@@ -21,6 +21,7 @@ use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
 use crate::extension_control_authority_op::{compatible_marker, FIRST_PACK_SCHEMA_VERSION};
+use crate::guard_store_args::Args;
 use crate::guard_store_db::{query_one, StoreResult};
 use crate::guard_store_local_cli_inventory::table_exists;
 
@@ -39,6 +40,8 @@ const MARKER_SQL: &str =
      case when typeof(checksum) = 'text' then checksum end as checksum \
      from extension_control_schema_migration where singleton = 1";
 
+#[path = "guard_store_command_pack_legacy_evidence.rs"]
+mod command_pack_legacy_evidence;
 #[path = "guard_store_command_pack_pending.rs"]
 mod command_pack_pending;
 #[path = "guard_store_extension_control_snapshot.rs"]
@@ -47,14 +50,22 @@ mod extension_control_snapshot;
 pub(crate) fn handles(method: &str) -> bool {
     extension_control_snapshot::handles(method)
         || command_pack_pending::handles(method)
+        || command_pack_legacy_evidence::handles(method)
         || matches!(
             method,
             "read_command_pack_activation" | "extension_control_schema_state"
         )
 }
 
-pub(crate) fn dispatch(connection: &Connection, method: &str) -> StoreResult<Value> {
+pub(crate) fn dispatch(
+    connection: &Connection,
+    method: &str,
+    args: &Args<'_>,
+) -> StoreResult<Value> {
     match method {
+        _ if command_pack_legacy_evidence::handles(method) => {
+            command_pack_legacy_evidence::dispatch(connection, method, args)
+        }
         _ if extension_control_snapshot::handles(method) => {
             extension_control_snapshot::dispatch(connection)
         }
