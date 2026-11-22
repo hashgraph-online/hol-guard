@@ -23,6 +23,7 @@ def runtime_answer(
     extra_features: tuple[str, ...] = (),
     stop_event: threading.Event | None = None,
     allow_windows_breakaway: bool = False,
+    environment_keys: tuple[str, ...] = (),
 ) -> dict[str, object] | None:
     """The runtime's JSON object answer to one request.
 
@@ -34,7 +35,8 @@ def runtime_answer(
     never takes longer than `status_timeout_seconds`. A callable request is
     built after the status check, so it can size itself to what is left of
     the deadline; it returns `None` to send nothing. Setting `stop_event`
-    kills the command and answers `None`.
+    kills the command and answers `None`. `environment_keys` names variables
+    the command inherits beyond the isolated environment.
     """
 
     from ..native_process_stop_scope import native_process_stop_requested
@@ -67,6 +69,8 @@ def runtime_answer(
     options: dict[str, Any] = {}
     if stop_event is not None:
         options["stop_event"] = stop_event
+    if environment_keys:
+        options["environment_keys"] = environment_keys
     if allow_windows_breakaway:
         # A daemon it launches must outlive the job that contains this call:
         # the job may let it break away, and closing it does not kill it.
