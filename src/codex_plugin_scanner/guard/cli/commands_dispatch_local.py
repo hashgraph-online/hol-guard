@@ -376,13 +376,10 @@ def _run_guard_update_command(
         )
         return 0
     dry_run = bool(getattr(args, "dry_run", False))
+    store: GuardStore | None = None
+    update_store_error: OSError | RuntimeError | sqlite3.Error | None = None
     if not dry_run:
         load_package_before_install()
-    store: GuardStore | None
-    update_store_error: OSError | RuntimeError | sqlite3.Error | None = None
-    if dry_run:
-        store = None
-    else:
         try:
             store = GuardStore(guard_home)
             _migrate_legacy_macos_secrets(store)
