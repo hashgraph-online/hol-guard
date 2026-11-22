@@ -229,31 +229,40 @@ fn a_keyring_request_off_linux_is_unavailable() {
     assert_eq!(stored(&home.0), None);
 }
 
+#[cfg(windows)]
 #[test]
 fn the_key_ref_uses_the_home_as_python_spells_it() {
     assert_eq!(
-        without_verbatim_prefix(PathBuf::from(r"\\?\C:\Users\example\.hol-guard")),
+        strip_verbatim(PathBuf::from(r"\\?\C:\Users\example\.hol-guard")),
         PathBuf::from(r"C:\Users\example\.hol-guard")
     );
     assert_eq!(
-        without_verbatim_prefix(PathBuf::from(r"\\?\UNC\server\share\guard")),
+        strip_verbatim(PathBuf::from(r"\\?\UNC\server\share\guard")),
         PathBuf::from(r"\\server\share\guard")
     );
     assert_eq!(
-        without_verbatim_prefix(PathBuf::from(r"\\?\Volume{0000}\guard")),
+        strip_verbatim(PathBuf::from(r"\\?\Volume{0000}\guard")),
         PathBuf::from(r"\\?\Volume{0000}\guard")
     );
     assert_eq!(
-        without_verbatim_prefix(PathBuf::from(r"\\?\C:")),
+        strip_verbatim(PathBuf::from(r"\\?\C:")),
         PathBuf::from(r"\\?\C:")
     );
     assert_eq!(
-        without_verbatim_prefix(PathBuf::from("/home/example/.hol-guard")),
+        strip_verbatim(PathBuf::from("/home/example/.hol-guard")),
         PathBuf::from("/home/example/.hol-guard")
     );
     let home = home("spelling");
     let resolved = resolved_home(&home.0).expect("resolved");
     assert!(!resolved.to_string_lossy().starts_with(r"\\?\"));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn the_key_ref_uses_the_home_as_python_spells_it() {
+    let home = home("spelling");
+    let resolved = resolved_home(&home.0).expect("resolved");
+    assert_eq!(resolved, fs::canonicalize(&home.0).expect("canonical"));
 }
 
 /// Python's mint lock on Windows, `msvcrt.locking` on the first byte, keeps

@@ -47,6 +47,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::encrypted_secret_store::{b64url_encode, EncryptedFileSecretStore};
+use crate::grok_executable_paths::strip_verbatim;
 use crate::policy_integrity_resolver::{build_scoped_secret_ref, POLICY_INTEGRITY_KEY_REF};
 
 pub(crate) const FEATURE: &str = "native-policy-integrity-key-mint-v1";
@@ -147,34 +148,7 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
 fn resolved_home(guard_home: &Path) -> Option<PathBuf> {
     fs::create_dir_all(guard_home).ok()?;
     let canonical = fs::canonicalize(guard_home).ok()?;
-    if cfg!(windows) {
-        Some(without_verbatim_prefix(canonical))
-    } else {
-        Some(canonical)
-    }
-}
-
-/// Drop the `\\?\` prefix Windows canonical paths carry and Python's do not.
-/// Only a drive-letter or UNC path loses it: a path with no such spelling,
-/// such as a volume-GUID path, keeps the prefix, as Python's `resolve()` keeps
-/// it, rather than becoming a relative path.
-fn without_verbatim_prefix(path: PathBuf) -> PathBuf {
-    let text = path.to_string_lossy().into_owned();
-    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
-        return PathBuf::from(format!(r"\\{rest}"));
-    }
-    match text.strip_prefix(r"\\?\") {
-        Some(rest) if is_drive_absolute(rest) => PathBuf::from(rest),
-        _ => path,
-    }
-}
-
-/// `C:\` and the like: a drive letter, a colon and a separator.
-fn is_drive_absolute(text: &str) -> bool {
-    matches!(
-        text.as_bytes(),
-        [letter, b':', b'\\' | b'/', ..] if letter.is_ascii_alphabetic()
-    )
+    Some(strip_verbatim(canonical))
 }
 
 fn armed(home: &Path) -> bool {

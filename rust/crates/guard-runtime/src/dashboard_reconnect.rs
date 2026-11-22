@@ -11,7 +11,7 @@
 //! The discovery key never leaves this process. The home is the one the
 //! resident verified for the request, never a path from the arguments.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -304,22 +304,9 @@ fn reconnect_proof(verifier: &str, context: &str, challenge: &Map<String, Value>
 /// resolved path, as Python's `Path.resolve` spells it.
 fn guard_home_id(home: &Path) -> String {
     let resolved = std::fs::canonicalize(home)
-        .map(without_verbatim_prefix)
+        .map(crate::grok_executable_paths::strip_verbatim)
         .unwrap_or_else(|_| home.to_path_buf());
     hex::encode(Sha256::digest(resolved.to_string_lossy().as_bytes()))
-}
-
-/// Drop the `\\?\` prefix Windows canonical paths carry and Python's do not.
-/// No other platform spells a path this way.
-fn without_verbatim_prefix(path: PathBuf) -> PathBuf {
-    let text = path.to_string_lossy().into_owned();
-    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
-        return PathBuf::from(format!(r"\\{rest}"));
-    }
-    match text.strip_prefix(r"\\?\") {
-        Some(rest) => PathBuf::from(rest),
-        None => path,
-    }
 }
 
 /// A 32-byte identifier as 64 hex digits, lowercased.
