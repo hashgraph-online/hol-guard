@@ -1,22 +1,24 @@
 //! Command lookups (`type`, `command -v`) that only report how names resolve.
 //!
-//! Neither builtin runs the program it names. `type` may print a shell
-//! function's body, which the agent's own shell defined. Operands are plain
-//! command names, so a path or expansion is never treated as a lookup.
+//! Neither builtin runs the program it names. Operands are plain command
+//! names, so a path or expansion is never treated as a lookup.
 
 /// Whether a `type` or `command` segment is a lookup of plain names.
 ///
-/// `type NAME` and `type -a NAME` print a shell function body. `command -V`
-/// does too. Those stay under review. `type -t`/`-p`/`-P` and `command -v`
-/// print a word or a path.
+/// Bash's `type NAME`, `type -a NAME` and `command -V NAME` print the body of a
+/// matching shell function. That body is a definition the agent's own shell
+/// already holds, and zsh's `which NAME` (`whence -c`) prints the same text, so
+/// these forms answer the same question as `which` and are proven the same way.
+/// `command` without `-v` or `-V` runs the named program and is not a lookup.
 pub(super) fn safe_lookup_arguments(executable: &str, arguments: &[String]) -> bool {
     let letters = match executable {
         "type" => "afpPt",
-        "command" => "pv",
+        "command" => "pvV",
         _ => return false,
     };
     let mut names = 0;
     let mut options = true;
+    let mut describes = false;
     for argument in arguments {
         if options && argument == "--" {
             options = false;
@@ -24,6 +26,7 @@ pub(super) fn safe_lookup_arguments(executable: &str, arguments: &[String]) -> b
             if !argument[1..].chars().all(|letter| letters.contains(letter)) {
                 return false;
             }
+            describes |= argument.contains(['v', 'V']);
         } else if plain_name(argument) {
             options = false;
             names += 1;
@@ -31,44 +34,16 @@ pub(super) fn safe_lookup_arguments(executable: &str, arguments: &[String]) -> b
             return false;
         }
     }
-    // `command` without `-v` runs the named program.
-    names > 0
-        && (executable != "type" || type_hides_definition(arguments))
-        && (executable == "type"
-            || crate::parser_wrappers::is_command_lookup(Some(executable), arguments))
-}
-
-/// `-t` prints only the type word, including with `-a`. `-p` and `-P` print a
-/// path, but `-a` alongside them still prints the function body.
-fn type_hides_definition(arguments: &[String]) -> bool {
-    let mut type_word = false;
-    let mut path_only = false;
-    let mut all = false;
-    for argument in arguments {
-        if argument == "--" {
-            break;
-        }
-        if argument.len() > 1 && argument.starts_with('-') {
-            for letter in argument[1..].chars() {
-                match letter {
-                    't' => type_word = true,
-                    'p' | 'P' => path_only = true,
-                    'a' => all = true,
-                    _ => {}
-                }
-            }
-        }
-    }
-    type_word || (path_only && !all)
+    names > 0 && (executable == "type" || describes)
 }
 
 /// A lookup that only prints where a name resolves: `which`, zsh's `whence`,
-/// plus the `type` and `command -v` forms above. None of them runs the program
-/// it names or binds a shell variable.
+/// plus the `type` and `command -v`/`-V` forms above. None of them runs the
+/// program it names or binds a shell variable.
 ///
-/// zsh's `where` is `whence -ca`, and the csh-style output prints the body of a
-/// matching shell function, so it is not modelled here at all. Every caller
-/// then gets the same answer for it, whatever its own question is.
+/// zsh's `where` is `whence -ca`, and `whence -f` prints a function in full.
+/// Neither is modelled here, so every caller gets the same answer for them,
+/// whatever its own question is.
 pub(super) fn safe_path_lookup(executable: &str, arguments: &[String]) -> bool {
     let letters = match executable {
         "which" => "as",

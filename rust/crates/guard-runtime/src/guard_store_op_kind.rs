@@ -132,6 +132,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "policy_bundle_trust_rows"
         // The Guard Cloud status rows, read as one view.
         | "cloud_status_rows"
+        // Every named command queue lane, read as one view.
+        | "command_queue_lane_rows"
         // Two rows read as one consent pair.
         | "exact_cloud_review_state" => Kind::Snapshot,
         // The memory policy version and rule registry a signed memory

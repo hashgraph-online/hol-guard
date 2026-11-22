@@ -115,6 +115,8 @@ pub(crate) mod aibom_state;
 #[path = "guard_store_policy_trust_rows.rs"]
 pub(crate) mod policy_trust_rows;
 
+#[path = "guard_store_queue_lane_rows.rs"]
+pub(crate) mod queue_lane_rows;
 #[path = "guard_store_review_memory_rows.rs"]
 pub(crate) mod review_memory_rows;
 
@@ -129,6 +131,7 @@ pub(crate) fn handles_row_method(method: &str) -> bool {
         || aibom_state::handles(method)
         || policy_trust_rows::handles(method)
         || review_memory_rows::handles(method)
+        || queue_lane_rows::handles(method)
 }
 
 /// Run `method` in the `sync_state` row module that owns it.
@@ -159,6 +162,9 @@ pub(crate) fn dispatch_row_method(
         }
         _ if review_memory_rows::handles(method) => {
             review_memory_rows::dispatch(connection, method, args)
+        }
+        _ if queue_lane_rows::handles(method) => {
+            queue_lane_rows::dispatch(connection, method, args)
         }
         _ => aibom_state::dispatch(connection, method, args),
     }
