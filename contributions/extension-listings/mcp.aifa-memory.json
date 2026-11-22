@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "mcp.aifa-memory",
+  "tagline": "Hosted Streamable HTTP memory for AI agents with per-user Bearer keys, secret masking, and optional AES-256-GCM Arweave anchoring.",
+  "summary": "Hosted Streamable HTTP memory at https://aifa.works/api/mcp for Claude, Cursor, VS Code, and other MCP clients. Discovery (initialize, tools/list) is public; every tools/call requires a per-user Bearer key (scoped memory-only keys supported). Read-only info tools keep Guard's usual handling; private memory, exports, billing, payouts, and webhooks stay on review.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "All tools/call invocations (including memory_about, plans, and partner_kit) require a per-user Bearer key from https://aifa.works/mcp.",
+    "The hosted backend at aifa.works is closed source; public verification is provided via scripts/conformance.py and HOSTED-POLICY.md.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "documentationUrl": "https://github.com/MaksimGalatin/aifa-memory-mcp/blob/main/HOSTED-POLICY.md",
+  "tags": [
+    "mcp",
+    "memory",
+    "remote-http",
+    "arweave"
+  ],
+  "contributors": [
+    {
+      "githubId": "276288387",
+      "githubLogin": "MaksimGalatin",
+      "roles": [
+        "author",
+        "maintainer"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/8324"
+    }
+  ],
+  "upstream": {
+    "name": "AIfa Memory",
+    "url": "https://github.com/MaksimGalatin/aifa-memory-mcp"
+  },
+  "maintainerGithubIds": [
+    "276288387"
+  ]
+}
