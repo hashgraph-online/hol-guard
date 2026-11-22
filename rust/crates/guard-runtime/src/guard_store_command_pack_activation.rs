@@ -32,11 +32,14 @@ const SLOT_FIELDS: [&str; 5] = [
     "recorded_at",
 ];
 
+#[path = "guard_store_command_pack_pending.rs"]
+mod command_pack_pending;
 #[path = "guard_store_extension_control_snapshot.rs"]
 mod extension_control_snapshot;
 
 pub(crate) fn handles(method: &str) -> bool {
     extension_control_snapshot::handles(method)
+        || command_pack_pending::handles(method)
         || matches!(
             method,
             "read_command_pack_activation" | "extension_control_schema_state"
@@ -48,6 +51,7 @@ pub(crate) fn dispatch(connection: &Connection, method: &str) -> StoreResult<Val
         _ if extension_control_snapshot::handles(method) => {
             extension_control_snapshot::dispatch(connection)
         }
+        _ if command_pack_pending::handles(method) => command_pack_pending::dispatch(connection),
         "extension_control_schema_state" => schema_state(connection),
         _ => read(connection),
     }

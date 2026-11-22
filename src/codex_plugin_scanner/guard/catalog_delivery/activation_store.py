@@ -55,6 +55,32 @@ def read_slot(store):
     return row
 
 
+_PENDING_FIELDS = frozenset({"record_json", "record_digest", "record_mac"})
+
+
+def pending_records(store):
+    """The pending activation records, read by the native store, in revision order.
+
+    Each record is returned unauthenticated for the lifecycle op to verify.
+    Any other answer shape, or a record field that is not text, is refused
+    rather than dropped, because a dropped record would let cleanup evict a
+    pack a pending activation still needs.
+    """
+    method = "list_command_pack_pending_records"
+    answer = store._native_store_call(method, {})
+    items = answer.get("items") if isinstance(answer, dict) and set(answer) == {"items"} else None
+    if not isinstance(items, list):
+        raise NativePolicySnapshotError(f"native {method} returned no answer")
+    for item in items:
+        if (
+            not isinstance(item, dict)
+            or set(item) != _PENDING_FIELDS
+            or not all(isinstance(item[name], str) for name in _PENDING_FIELDS)
+        ):
+            raise NativePolicySnapshotError(f"native {method} returned no answer")
+    return items
+
+
 def _slot_types(row):
     revision = row["revision"]
     if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
