@@ -62,6 +62,8 @@ def test_a_malformed_key_list_is_refused_before_the_native_call(tmp_path: Path, 
         {"rows": {"a": None}, "unreadable": []},
         {"rows": {"a": 7, "b": None}, "unreadable": []},
         {"rows": [], "unreadable": []},
+        {"rows": [], "unreadable": ["a"]},
+        {"rows": {"a": 7, "b": None}, "unreadable": ["b"]},
     ],
 )
 def test_a_malformed_answer_is_refused(answer: object) -> None:

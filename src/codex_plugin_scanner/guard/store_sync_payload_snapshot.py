@@ -37,8 +37,6 @@ def sync_payload_snapshot_rows(answer: object, keys: tuple[str, ...]) -> dict[st
         or not set(unreadable) <= set(keys)
     ):
         raise RuntimeError("native sync_payload_snapshot returned no answer")
-    if unreadable:
-        raise SyncPayloadRowUnreadableError(f"sync_payload_unreadable:{','.join(unreadable)}")
     rows = answer["rows"]
     if not isinstance(rows, dict) or set(rows) != set(keys):
         raise RuntimeError("native sync_payload_snapshot returned no answer")
@@ -48,6 +46,10 @@ def sync_payload_snapshot_rows(answer: object, keys: tuple[str, ...]) -> dict[st
         if value is not None and not isinstance(value, (dict, list)):
             raise RuntimeError("native sync_payload_snapshot returned no answer")
         result[key] = value
+    # Only a well-formed answer may report unreadable rows; anything else is
+    # no answer at all.
+    if unreadable:
+        raise SyncPayloadRowUnreadableError(f"sync_payload_unreadable:{','.join(unreadable)}")
     return result
 
 
