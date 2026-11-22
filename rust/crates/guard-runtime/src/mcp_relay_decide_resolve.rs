@@ -100,10 +100,12 @@ fn resolve_saved(
                 &subject,
                 &catalog,
                 // The queue route of the package lane is answered by the same
-                // bound mode and redaction level the tool lane's queue route is.
+                // mode and redaction level the tool lane's queue route is: the
+                // bound ones, else the session config's.
                 package_lane::QueueBinding {
-                    blocked_request_mode: binding.review.blocked_request_mode.as_deref(),
-                    redaction_level: view.receipt_redaction_level.as_deref(),
+                    blocked_request_mode: admitted.blocked_request_mode(),
+                    redaction_level: admitted
+                        .redaction_level(view.receipt_redaction_level.as_deref()),
                 },
             )?)))
         }
@@ -125,7 +127,9 @@ fn resolve_saved(
             identity,
             decision,
             mode: view.mode.clone(),
-            redaction_level: view.receipt_redaction_level.clone(),
+            redaction_level: admitted
+                .redaction_level(view.receipt_redaction_level.as_deref())
+                .map(str::to_owned),
         },
         packaged,
     ))

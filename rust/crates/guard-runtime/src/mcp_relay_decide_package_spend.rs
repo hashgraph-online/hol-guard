@@ -226,12 +226,7 @@ fn after_claim(
         || package_claim::package_facts(&context.claimed, &artifact, &policy, &fresh.decision),
     )?;
     let queue_binding = package_lane::QueueBinding {
-        blocked_request_mode: context
-            .admitted
-            .binding
-            .review
-            .blocked_request_mode
-            .as_deref(),
+        blocked_request_mode: context.admitted.blocked_request_mode(),
         redaction_level: fresh.redaction_level.as_deref(),
     };
     let settled = package_claim::settled(
@@ -271,12 +266,7 @@ fn after_claim(
                 // the proxy raises no native prompt or inline elicitation for
                 // a claimed call.
                 ToolLeg::Queue { policy_action } => {
-                    let mode = context
-                        .admitted
-                        .binding
-                        .review
-                        .blocked_request_mode
-                        .as_deref();
+                    let mode = context.admitted.blocked_request_mode();
                     if mode == Some(ASK_MODE) {
                         let prepared = ask::prepare(
                             &context.request,
