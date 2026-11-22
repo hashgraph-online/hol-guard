@@ -65,6 +65,17 @@ pub(super) fn restored(mut record: Value) -> Value {
     record
 }
 
+/// The form in which the writer handed a queued record back, when it did: as
+/// queued, or without its `remember` flag once its allow was saved, so the
+/// retry writes only the receipt and never saves the allow twice.
+pub(crate) fn handed_back(queued: &Value, unwritten: &[Value]) -> Option<Value> {
+    if unwritten.contains(queued) {
+        return Some(queued.clone());
+    }
+    let forward = stripped(queued)?;
+    unwritten.contains(&forward).then_some(forward)
+}
+
 /// The artifact-scoped allow one remembered approval saves.
 pub(crate) struct Allow<'a> {
     pub(crate) harness: &'a str,
