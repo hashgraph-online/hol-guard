@@ -41,6 +41,9 @@ def test_linux_cache_skips_only_compilation_and_always_verifies_current_sources(
         "'spec/**'",
         "'src/codex_plugin_scanner/guard/contracts/**'",
         "'.cargo/**'",
+        # The runtime reports the package version, and a release PR changes only
+        # version files: without this the release head reuses main's runtime.
+        "'src/codex_plugin_scanner/version.py'",
         "'scripts/ci/native_cache_environment.py'",
         "'scripts/refresh_extension_artifacts.py'",
         "'.github/actions/ci-job-native-command-build/action.yml'",
