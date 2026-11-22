@@ -11,7 +11,6 @@ import importlib.metadata
 import json
 import os
 import stat
-import sys
 import threading
 import time
 from pathlib import Path
@@ -19,6 +18,7 @@ from pathlib import Path
 from .codex_hook_launch_runtime import BoundedHookProcessResult, run_isolated_hook_process
 from .group_write_trust import trusted_owner_and_mode as _trusted_owner_and_mode
 from .native_binary_identity import validate_native_binary as _validate_binary
+from .native_runtime_environment import isolated_environment, windows_native_dll_directories
 from .native_runtime_process_cache import (
     forget_process_status,
     process_snapshot,
@@ -185,68 +185,19 @@ def _restore_bundled_runtime_execute_bit(path: Path) -> None:
 
 
 def _windows_native_dll_directories() -> list[str]:
-    """Trusted directories for the Windows native runtime's CRT search.
-
-    The published runtime links the Visual C++ CRT dynamically. Windows finds
-    those DLLs in System32 when the redistributable is installed machine-wide.
-    An x64 wheel on ARM, or a per-user Python install, often has the CRT only
-    beside the base interpreter. The isolated environment cannot inherit the
-    user PATH, so the loader otherwise fails with STATUS_DLL_NOT_FOUND.
-    """
-
-    roots: list[str] = []
-    system_root = os.environ.get("SYSTEMROOT") or os.environ.get("WINDIR")
-    if system_root:
-        roots.append(os.path.join(system_root, "System32"))
-    base_prefix = getattr(sys, "base_prefix", "")
-    if (
-        isinstance(base_prefix, str)
-        and base_prefix
-        and any(os.path.isfile(os.path.join(base_prefix, name)) for name in ("vcruntime140.dll", "vcruntime140_1.dll"))
-    ):
-        roots.append(base_prefix)
-    runtime_dir = _bundled_runtime_candidate().parent
-    if runtime_dir.is_dir():
-        roots.append(str(runtime_dir))
-    unique: list[str] = []
-    seen: set[str] = set()
-    for root in roots:
-        key = root.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(root)
-    return unique
+    return windows_native_dll_directories(_bundled_runtime_candidate().parent)
 
 
 def _isolated_environment() -> dict[str, str]:
-    allowed = {
-        "COMSPEC",
-        "HOME",
-        # The desktop-notice opt-out the resident drain honours.
-        "HOL_GUARD_DESKTOP_NOTIFICATIONS",
-        "HOL_GUARD_NATIVE_DIAGNOSTIC",
-        # Dedicated opt-in for the resident's supply-chain test seams; kept
-        # separate from diagnostics so diagnostics alone never enable them.
-        "HOL_GUARD_RESIDENT_TEST_SEAMS",
-        "LANG",
-        "PATHEXT",
-        "SYSTEMROOT",
-        "TEMP",
-        "TMP",
-        "TMPDIR",
-        "USERPROFILE",
-        "WINDIR",
-    }
-    environment = {}
-    for key in os.environ:
-        upper = key.upper()
-        if upper in allowed or upper.startswith("LC_"):
-            environment[key] = os.environ[key]
-    if os.name == "nt":
-        dll_path = os.pathsep.join(_windows_native_dll_directories())
-        if dll_path:
-            environment["PATH"] = dll_path
+    # Looked up by name at call time, so a patched directory list still applies.
+    return isolated_environment(lambda: _windows_native_dll_directories())
+
+
+def _isolated_environment_with(keys: tuple[str, ...]) -> dict[str, str]:
+    """The isolated environment plus the named variables a caller needs."""
+
+    environment = _isolated_environment()
+    environment.update({key: os.environ[key] for key in keys if key in os.environ})
     return environment
 
 
@@ -260,6 +211,7 @@ def _run_native_process_result(
     stop_event: threading.Event | None = None,
     allow_windows_breakaway: bool = False,
     windows_kill_on_job_close: bool = True,
+    environment_keys: tuple[str, ...] = (),
 ) -> BoundedHookProcessResult:
     """Run one bounded native invocation and keep its whole result.
 
@@ -274,7 +226,7 @@ def _run_native_process_result(
         (str(path), *args),
         input_text=input_text,
         cwd=path.parent,
-        environment=_isolated_environment(),
+        environment=_isolated_environment_with(environment_keys),
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
         stop_event=stop_event,
@@ -296,6 +248,7 @@ def _run_native_process(
     stop_event: threading.Event | None = None,
     allow_windows_breakaway: bool = False,
     windows_kill_on_job_close: bool = True,
+    environment_keys: tuple[str, ...] = (),
 ) -> str | None:
     result = _run_native_process_result(
         path,
@@ -306,6 +259,7 @@ def _run_native_process(
         allow_windows_breakaway=allow_windows_breakaway,
         windows_kill_on_job_close=windows_kill_on_job_close,
         stop_event=stop_event,
+        environment_keys=environment_keys,
     )
     if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
         return None
