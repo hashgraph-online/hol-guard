@@ -76,7 +76,16 @@ fn a_port_that_is_not_a_whole_number_is_refused() {
 
 #[test]
 fn a_text_field_that_is_not_text_is_refused() {
-    let connection = connection();
+    // A column with no declared type keeps the integer; a `text` column would
+    // store it as the string "7".
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "create table guard_runtime_state (state_key text primary key, session_id, \
+             daemon_host text not null, daemon_port integer not null, started_at text not null, \
+             last_heartbeat_at text not null);",
+        )
+        .unwrap();
     connection
         .execute(
             "insert into guard_runtime_state values ('runtime', 7, 'h', 1, 'a', 'b')",
