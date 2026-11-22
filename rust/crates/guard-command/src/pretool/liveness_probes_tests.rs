@@ -130,3 +130,47 @@ fn only_redis_cli_is_read_this_way() {
         assert!(!safe_liveness_probe(name, &arguments("ping")), "{name}");
     }
 }
+
+#[test]
+fn a_loopback_mysql_ping_is_admitted() {
+    for text in [
+        "-h 127.0.0.1 ping",
+        "-h ::1 ping",
+        "-s -h 127.0.0.1 ping",
+        "--silent --host localhost ping",
+        "-h localhost -P 3306 ping",
+        "-h 127.0.0.1 -u root --connect-timeout 2 ping",
+        "--protocol=TCP -h localhost ping",
+    ] {
+        assert!(
+            safe_liveness_probe("mysqladmin", &arguments(text)),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn a_mysql_verb_that_changes_the_server_or_reads_a_file_keeps_its_review() {
+    for text in [
+        "",
+        "shutdown",
+        "drop app_development",
+        "flush-logs",
+        "password newsecret",
+        "status",
+        "-h db.example.test ping",
+        "-p secret ping",
+        "--password=secret ping",
+        "--defaults-file=/tmp/my.cnf ping",
+        "-P three ping",
+        "-h ping",
+        "ping",
+        "-s ping",
+        "-u root --connect-timeout 2 ping",
+    ] {
+        assert!(
+            !safe_liveness_probe("mysqladmin", &arguments(text)),
+            "{text}"
+        );
+    }
+}
