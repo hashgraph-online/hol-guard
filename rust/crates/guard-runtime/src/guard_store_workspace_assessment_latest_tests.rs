@@ -4,6 +4,7 @@
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
+use super::super::PAGE_BYTES;
 use super::{dispatch, handles};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{StoreError, StoreResult};
@@ -141,6 +142,49 @@ fn the_after_cursor_continues_past_the_last_worktree() {
     .expect("list");
 
     assert_eq!(run_ids(&answer), ["b"]);
+}
+
+#[test]
+fn following_the_cursor_reads_every_worktree_once_across_pages() {
+    let connection = store();
+    let findings = format!("[\"{}\"]", "f".repeat(300 * 1024));
+    let worktrees: Vec<String> = (0..7).map(|index| format!("wt-{index}")).collect();
+    for worktree in &worktrees {
+        run(&connection, worktree, worktree, "completed", Some(1));
+        connection
+            .execute(
+                "update workspace_assessment_runs set findings_json = ?1 where run_id = ?2",
+                rusqlite::params![findings, worktree],
+            )
+            .expect("findings");
+    }
+
+    let mut seen = Vec::new();
+    let mut args = json!({});
+    let mut pages = 0;
+    loop {
+        let answer = call(
+            &connection,
+            "list_latest_assessed_workspace_runs",
+            args.clone(),
+        )
+        .expect("page");
+        pages += 1;
+        let items = answer["items"].as_array().expect("items");
+        assert!(!items.is_empty());
+        assert!(serde_json::to_string(items).expect("encode").len() < PAGE_BYTES + findings.len());
+        for item in items {
+            assert_eq!(item["findings_json"], findings.as_str());
+            seen.push(item["worktree_key"].as_str().expect("worktree").to_owned());
+        }
+        if answer["next"].is_null() {
+            break;
+        }
+        args = json!({"after": answer["next"]});
+    }
+
+    assert!(pages > 1);
+    assert_eq!(seen, worktrees);
 }
 
 #[test]
