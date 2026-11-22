@@ -584,7 +584,6 @@
       "src/pretool/port_probes.rs",
       "src/pretool/postgres_reads.rs",
       "src/pretool/sqlite_reads.rs",
-      "src/pretool/sqlite_reads_tests.rs",
       "src/pretool/printf_words.rs",
       "src/pretool/private_temporary_workspace.rs",
       "src/pretool/process_probes.rs",
