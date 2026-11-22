@@ -93,8 +93,8 @@ fn echo_report_syntax(source: &str) -> Option<(String, bool)> {
     } else {
         (argument, false)
     };
-    let (label, status) = match label.strip_suffix("$?") {
-        Some(label) => (label, true),
+    let (label, status) = match strip_status_expansion(label) {
+        Some((label, _)) => (label, true),
         // An `echo` with nothing to print is not a report.
         None if label.is_empty() => return None,
         None => (label, false),
@@ -112,4 +112,20 @@ fn echo_report_syntax(source: &str) -> Option<(String, bool)> {
                 || (quoted && byte == b' ')
         });
     printable.then(|| (label.to_owned(), status))
+}
+
+/// The status expansion a report label ends in, and whether it names the
+/// first stage of a pipeline rather than whatever the shell last ran.
+///
+/// `$?` is the shell's own status. `${PIPESTATUS[0]}` is bash's status of the
+/// first command in the pipeline it just ran, which is the core itself: an
+/// agent that pipes a run into `grep` and `head` writes it to read past those
+/// filters. The sink knows the core's status, so it prints that label too.
+pub(in crate::pretool) fn strip_status_expansion(label: &str) -> Option<(&str, bool)> {
+    if let Some(rest) = label.strip_suffix("$?") {
+        return Some((rest, false));
+    }
+    label
+        .strip_suffix("${PIPESTATUS[0]}")
+        .map(|rest| (rest, true))
 }
