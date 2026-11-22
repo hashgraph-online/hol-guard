@@ -1,3 +1,4 @@
+use super::resolve::provider_catalog_hash;
 use super::subject::{connection_hash, server_identity_hash, tool_name};
 use super::view::harness_view;
 use super::*;
