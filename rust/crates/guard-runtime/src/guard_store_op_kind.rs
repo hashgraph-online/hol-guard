@@ -132,6 +132,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "policy_bundle_trust_rows"
         // The Guard Cloud status rows, read as one view.
         | "cloud_status_rows"
+        // Several named rows a caller combines, read as one view.
+        | "sync_payload_snapshot"
         // Two rows read as one consent pair.
         | "exact_cloud_review_state" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the

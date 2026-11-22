@@ -2791,12 +2791,15 @@ def _cloud_package_manager_coverage(
         ),
         generated_at=generated_at,
     )
+    # The three summaries come from one snapshot so a sync committing in
+    # between cannot pair an old summary with a new one.
+    summaries = store.sync_payload_snapshot(
+        "sync_summary",
+        "runtime_session_summary",
+        "supply_chain_bundle_summary",
+    )
     coverage["staleIntel"] = _sync.stale_intel(
-        (
-            store.get_sync_payload("sync_summary"),
-            store.get_sync_payload("runtime_session_summary"),
-            store.get_sync_payload("supply_chain_bundle_summary"),
-        ),
+        tuple(summaries.values()),
         generated_at=generated_at,
         now=_now(),
     )
