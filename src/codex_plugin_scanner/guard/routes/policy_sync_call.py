@@ -74,7 +74,6 @@ def policy_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
     """Validate, activate and acknowledge a policy bundle, behind the approval gate."""
 
     from ..library_calls import LibraryCallError
-    from ..native_guard_store import NativeGuardStoreUnavailable
     from ..native_policy_bundle import (
         PolicyBundleNativeError,
         PolicyBundleNativeUnavailableError,
@@ -88,9 +87,6 @@ def policy_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
         return _policy_sync(store, payload)
     except _RejectedError as rejected:
         return rejected.reply
-    except NativeGuardStoreUnavailable:
-        # The store call did not run, so nothing was accepted or activated.
-        return _unavailable()
     except PolicyBundleNativeUnavailableError:
         # Without the resident's verdict nothing is accepted, activated, or
         # acknowledged; the caller gets a retryable outage.
@@ -101,6 +97,7 @@ def policy_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
 
 
 def _validated_bundle(store: GuardStore, payload: dict[str, object], policy_bundle: dict[str, object]) -> Any:
+    from ..native_guard_store import NativeGuardStoreUnavailable
     from ..native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION
     from ..policy_bundle_trusted_keys import validate_synced_policy_bundle
     from ..runtime.runner import (
@@ -108,7 +105,11 @@ def _validated_bundle(store: GuardStore, payload: dict[str, object], policy_bund
         _validate_cached_policy_bundle,
     )
 
-    rows = store.policy_bundle_trust_rows()
+    try:
+        rows = store.policy_bundle_trust_rows()
+    except NativeGuardStoreUnavailable as error:
+        # The snapshot read did not run, so nothing was accepted or activated.
+        raise _RejectedError(_unavailable()) from error
     validated, rejection_reason, trusted_keys = validate_synced_policy_bundle(
         policy_bundle,
         stored_keyring=rows.policy_bundle_keyring,
