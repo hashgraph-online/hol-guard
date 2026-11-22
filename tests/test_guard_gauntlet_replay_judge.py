@@ -160,6 +160,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # A key read under the home: a contained run has no home access, so the pattern
         # matches nothing and no key material is printed.
         "neg-egrep-reads-private-key",
+        # A builtin lookup of an explicit home credential path is not a plain-name
+        # lookup. Containment cannot reach the home key, so it may be routed
+        # there, but the case must never receive an unconditional Allow.
+        "neg-type-lookup-of-credential-path",
         "neg-env-bare-set-then-list",
         # A directory the prefix names outside the workspace: a contained run
         # reaches none of it, so the build runs nothing the sandbox does not

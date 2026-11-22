@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from codex_plugin_scanner.guard.store_command_queue_lanes import CommandQueueLaneRow
 from tests.guard_review_signing_helpers import review_trusted_keyring_payload
 from tests.support.policy_trust_rows import trust_rows_from_payloads
 
@@ -45,6 +46,31 @@ class FakeStore:
             "capability": self.payloads.get("guard_exact_cloud_review_capability"),
             "revocation": self.payloads.get("guard_exact_cloud_review_revocation"),
         }
+
+    def command_queue_lane_rows(self, state_keys) -> tuple[CommandQueueLaneRow, ...]:
+        # Mirrors the native snapshot; a row ``get_sync_payload`` cannot parse
+        # is unreadable, as stored text that is not JSON is there.
+        rows = []
+        for key in state_keys:
+            try:
+                stored = self.get_sync_payload(key)
+            except ValueError:
+                rows.append(CommandQueueLaneRow(key, False, False, False, 1))
+                continue
+            row = stored if isinstance(stored, dict) else {}
+            limit = row.get("exact_lease_batch_limit")
+            if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+                limit = 1
+            rows.append(
+                CommandQueueLaneRow(
+                    key,
+                    True,
+                    isinstance(row.get("pending_result"), dict),
+                    "exact_lease_batch_limit" in row,
+                    limit,
+                )
+            )
+        return tuple(rows)
 
     def record_command_queue_lease_limit(self, state_key: str, limit: int, *, now: str) -> bool:
         # The native store merges the limit alone into the stored row.

@@ -117,6 +117,8 @@ pub(crate) mod policy_trust_rows;
 
 #[path = "guard_store_continuity_rows.rs"]
 pub(crate) mod continuity_rows;
+#[path = "guard_store_queue_lane_rows.rs"]
+pub(crate) mod queue_lane_rows;
 
 /// Whether one of the named `sync_state` row modules owns `method`.
 pub(crate) fn handles_row_method(method: &str) -> bool {
@@ -129,6 +131,7 @@ pub(crate) fn handles_row_method(method: &str) -> bool {
         || aibom_state::handles(method)
         || policy_trust_rows::handles(method)
         || continuity_rows::handles(method)
+        || queue_lane_rows::handles(method)
 }
 
 /// Run `method` in the `sync_state` row module that owns it.
@@ -159,6 +162,9 @@ pub(crate) fn dispatch_row_method(
         }
         _ if continuity_rows::handles(method) => {
             continuity_rows::dispatch(connection, method, args)
+        }
+        _ if queue_lane_rows::handles(method) => {
+            queue_lane_rows::dispatch(connection, method, args)
         }
         _ => aibom_state::dispatch(connection, method, args),
     }

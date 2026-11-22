@@ -391,10 +391,10 @@ def test_a_lane_whose_state_cannot_be_read_keeps_the_handed_job_queued(tmp_path:
     pool = _recording_pool(tmp_path, [], threading.Lock())
     pool._handoff.jobs.append(_exact_job("job-2"))
 
-    def unreadable(_key: str) -> object:
+    def unreadable(_keys: object) -> object:
         raise OSError("locked")
 
-    pool._store.get_sync_payload = unreadable  # type: ignore[method-assign]
+    pool._store.command_queue_lane_rows = unreadable  # type: ignore[method-assign]
 
     # The worker polls instead, which sends any result it still holds first.
     assert pool._take_job(0) is None

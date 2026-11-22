@@ -42,11 +42,12 @@ fn rows(connection: &Connection) -> Value {
 fn an_empty_store_reads_every_row_as_null() {
     let view = rows(&store());
     let fields = view.as_object().unwrap();
-    assert_eq!(fields.len(), 12);
+    assert_eq!(fields.len(), 13);
     assert_eq!(view["policy_bundle_deferred"], json!(false));
+    assert_eq!(view["unreadable_rows"], json!([]));
     assert!(fields
         .iter()
-        .filter(|(name, _)| *name != "policy_bundle_deferred")
+        .filter(|(name, _)| !matches!(name.as_str(), "policy_bundle_deferred" | "unreadable_rows"))
         .all(|(_, value)| value.is_null()));
 }
 
@@ -86,6 +87,27 @@ fn arrays_pass_through_and_scalars_read_as_null() {
     );
     assert!(view["policy_bundle_keyring"].is_null());
     assert!(view["policy_bundle_ack"].is_null());
+    assert_eq!(view["unreadable_rows"], json!([]));
+}
+
+#[test]
+fn trust_rows_that_are_not_json_are_named() {
+    let connection = store();
+    for key in TRUST_KEYS {
+        put(&connection, key, "not json");
+    }
+    put(&connection, ACK_KEY, "not json");
+    put(&connection, BUNDLE_KEY, "not json");
+    let view = rows(&connection);
+    assert_eq!(view["unreadable_rows"], json!(TRUST_KEYS));
+    assert!(view["policy_bundle_keyring"].is_null());
+    let keys_only = call(
+        &connection,
+        "policy_bundle_trust_rows",
+        json!({"keys_only": true}),
+    )
+    .unwrap();
+    assert_eq!(keys_only["unreadable_rows"], json!(TRUST_KEYS));
 }
 
 #[test]

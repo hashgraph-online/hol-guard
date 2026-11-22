@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import secrets
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -89,12 +88,10 @@ def keyed_digest(key: bytes, text: str) -> str:
 
 
 def load_hash_key(store: GuardStore, now: str) -> bytes:
-    """Read (or create) the per-install secret. Call once per build, not per hash."""
+    """Read (or create) the per-install secret. Call once per build, not per hash.
 
-    raw = store.get_sync_payload(HASH_KEY_STATE_KEY)
-    existing = raw.get("key") if isinstance(raw, dict) else None
-    if isinstance(existing, str) and len(existing) >= 32:
-        return existing.encode("utf-8")
-    created = secrets.token_hex(32)
-    store.set_sync_payload(HASH_KEY_STATE_KEY, {"key": created}, now)
-    return created.encode("utf-8")
+    The native store creates a missing key in the same transaction that reads
+    it, so two builds starting together share one key.
+    """
+
+    return store.fleet_posture_hash_key(now=now).encode("utf-8")

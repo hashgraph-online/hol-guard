@@ -40,6 +40,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "fleet_posture_state"
         | "fleet_posture_cached_diagnostics"
         | "fleet_posture_cached_runtimes"
+        | "stored_fleet_posture_hash_key"
         | "cloud_review_settings_state"
         | "worker_refresh_status"
         | "repair_self_check_status"
@@ -131,6 +132,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "policy_bundle_trust_rows"
         // The Guard Cloud status rows, read as one view.
         | "cloud_status_rows"
+        // Every named command queue lane, read as one view.
+        | "command_queue_lane_rows"
         // Two rows read as one consent pair.
         | "exact_cloud_review_state" => Kind::Snapshot,
         // The authority revision and the two continuity rows a commit is
@@ -250,6 +253,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "commit_fleet_posture_sent"
         | "record_fleet_posture_diagnostics"
         | "record_fleet_posture_runtimes"
+        | "fleet_posture_hash_key"
         | "rotate_installation_id"
         | "add_event"
         | "set_managed_install"

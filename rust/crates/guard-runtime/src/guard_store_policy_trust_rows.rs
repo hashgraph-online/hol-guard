@@ -86,7 +86,36 @@ fn trust_rows(connection: &Connection, keys_only: bool) -> StoreResult<Value> {
         "sync_summary": row(SYNC_SUMMARY_KEY)?,
         "policy_bundle_last_error": row(LAST_ERROR_KEY)?,
         "workspace_id": workspace_id(connection)?,
+        "unreadable_rows": unreadable_rows(connection)?,
     }))
+}
+
+/// The rows a bundle's signature is checked against.
+const TRUST_KEYS: [&str; 5] = [
+    KEYRING_KEY,
+    CHECKPOINT_KEY,
+    PROVENANCE_KEY,
+    SUPPLY_CHAIN_KEYRING_KEY,
+    REVIEW_KEYRING_KEY,
+];
+
+/// The trust rows that are stored but are not JSON. `get_sync_payload`
+/// raised on such a row, and reading it as absent would drop a stored key
+/// restriction or provenance quarantine, so the caller refuses the snapshot.
+fn unreadable_rows(connection: &Connection) -> StoreResult<Value> {
+    let mut unreadable = Vec::new();
+    for key in TRUST_KEYS {
+        let row = query_one(
+            connection,
+            "select payload_json from sync_state where state_key = ?",
+            &[Value::from(key)],
+        )?;
+        if row.is_some_and(|row| serde_json::from_str::<Value>(text(&row, "payload_json")).is_err())
+        {
+            unreadable.push(Value::from(key));
+        }
+    }
+    Ok(Value::Array(unreadable))
 }
 
 /// The bundle, whether it was left out for size, and the stamp of its row
