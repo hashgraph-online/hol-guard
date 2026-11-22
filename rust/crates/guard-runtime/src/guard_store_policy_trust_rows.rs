@@ -9,12 +9,18 @@
 //! land between two reads, so a bundle could be judged against a keyring or
 //! workspace from a different sync. The Review verification keyring write
 //! lives here too.
+//!
+//! A reply is capped at 2 MiB, but a cached bundle may be up to 3 MiB. So a
+//! bundle larger than half the cap is left out of the reply and replaced by
+//! a stamp of its row; the caller reads it on its own and takes a second
+//! snapshot to confirm nothing changed in between. Readers that only need
+//! the keyrings ask for `keys_only` and never carry the bundle.
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{value_error, StoreError, StoreResult};
+use crate::guard_store_db::{query_one, text, value_error, StoreError, StoreResult};
 use crate::guard_store_sync_state::{read_payload, write_encoded};
 
 const BUNDLE_KEY: &str = "policy_bundle";
@@ -30,6 +36,9 @@ const SYNC_SUMMARY_KEY: &str = "sync_summary";
 const LAST_ERROR_KEY: &str = "policy_bundle_last_error";
 /// `_OAUTH_LOCAL_CREDENTIALS_STATE_KEY`. Only its workspace id is read.
 const OAUTH_CREDENTIALS_KEY: &str = "oauth_local_credentials";
+/// Half the 2 MiB response limit, which leaves room for the other rows and
+/// the envelope.
+const BUNDLE_INLINE_BYTES: usize = 1024 * 1024;
 
 /// Whether `method` is one of the policy trust row methods.
 pub(crate) fn handles(method: &str) -> bool {
@@ -45,7 +54,7 @@ pub(crate) fn dispatch(
     args: &Args<'_>,
 ) -> StoreResult<Value> {
     match method {
-        "policy_bundle_trust_rows" => trust_rows(connection),
+        "policy_bundle_trust_rows" => trust_rows(connection, args.flag("keys_only")?),
         "record_review_verification_keyring" => record_review_keyring(connection, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
@@ -53,12 +62,21 @@ pub(crate) fn dispatch(
 
 /// Every row a cached bundle is judged against, as `get_sync_payload` would
 /// return it (an object or array, else `null`), plus the bound workspace id.
-fn trust_rows(connection: &Connection) -> StoreResult<Value> {
+/// `keys_only` leaves the bundle out. A bundle too large for the reply is
+/// left out too, with `policy_bundle_deferred` set and its row stamp given.
+fn trust_rows(connection: &Connection, keys_only: bool) -> StoreResult<Value> {
     let row = |key: &str| -> StoreResult<Value> {
         Ok(read_payload(connection, key)?.unwrap_or(Value::Null))
     };
+    let (bundle, deferred, stamp) = if keys_only {
+        (Value::Null, false, Value::Null)
+    } else {
+        bundle_row(connection)?
+    };
     Ok(json!({
-        "policy_bundle": row(BUNDLE_KEY)?,
+        "policy_bundle": bundle,
+        "policy_bundle_deferred": deferred,
+        "policy_bundle_stamp": stamp,
         "policy_bundle_keyring": row(KEYRING_KEY)?,
         "acceptance_checkpoint": row(CHECKPOINT_KEY)?,
         "managed_keyring_provenance": row(PROVENANCE_KEY)?,
@@ -69,6 +87,29 @@ fn trust_rows(connection: &Connection) -> StoreResult<Value> {
         "policy_bundle_last_error": row(LAST_ERROR_KEY)?,
         "workspace_id": workspace_id(connection)?,
     }))
+}
+
+/// The bundle, whether it was left out for size, and the stamp of its row
+/// (the write time and stored length) when it was.
+fn bundle_row(connection: &Connection) -> StoreResult<(Value, bool, Value)> {
+    let Some(row) = query_one(
+        connection,
+        "select payload_json, updated_at from sync_state where state_key = ?",
+        &[Value::from(BUNDLE_KEY)],
+    )?
+    else {
+        return Ok((Value::Null, false, Value::Null));
+    };
+    let encoded = text(&row, "payload_json");
+    if encoded.len() > BUNDLE_INLINE_BYTES {
+        let stamp = json!({ "updated_at": text(&row, "updated_at"), "bytes": encoded.len() });
+        return Ok((Value::Null, true, stamp));
+    }
+    let bundle = serde_json::from_str::<Value>(encoded)
+        .ok()
+        .filter(|payload| payload.is_object() || payload.is_array())
+        .unwrap_or(Value::Null);
+    Ok((bundle, false, Value::Null))
 }
 
 /// `_cloud_workspace_id_from_connection`: the non-blank workspace id of the

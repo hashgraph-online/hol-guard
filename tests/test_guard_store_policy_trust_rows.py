@@ -53,3 +53,39 @@ def test_a_malformed_review_keyring_write_stores_nothing(tmp_path: Path) -> None
     with pytest.raises(ValueError):
         store.record_review_verification_keyring([], " ")
     assert store.policy_bundle_trust_rows().review_verification_keyring is None
+
+
+def test_keys_only_leaves_the_bundle_out(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    store.set_sync_payload("policy_bundle", {"bundleVersion": "7"}, _NOW)
+    store.set_sync_payload("policy_bundle_keyring", {"keys": []}, _NOW)
+    rows = store.policy_bundle_trust_rows(keys_only=True)
+    assert rows.policy_bundle is None
+    assert rows.policy_bundle_keyring == {"keys": []}
+    assert store.policy_bundle_trust_rows().policy_bundle == {"bundleVersion": "7"}
+
+
+def test_a_bundle_larger_than_one_reply_is_still_read(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    bundle = {"bundleVersion": "8", "rules": "x" * (1536 * 1024)}
+    store.set_sync_payload("policy_bundle", bundle, _NOW)
+    store.set_sync_payload("policy_bundle_keyring", {"keys": []}, _NOW)
+    rows = store.policy_bundle_trust_rows()
+    assert rows.policy_bundle == bundle
+    assert rows.policy_bundle_keyring == {"keys": []}
+
+
+def test_review_keyring_readiness_is_false_when_the_store_cannot_answer() -> None:
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
+    from codex_plugin_scanner.guard.review_verification_keyring import review_verification_keyring_ready
+
+    def unavailable(*, keys_only: bool = False) -> PolicyBundleTrustRows:
+        raise NativeGuardStoreUnavailable("resident unavailable")
+
+    store = SimpleNamespace(
+        get_cloud_sync_profile=lambda: {"workspace_id": "workspace-1"},
+        policy_bundle_trust_rows=unavailable,
+    )
+    assert review_verification_keyring_ready(store) is False  # pyright: ignore[reportArgumentType]

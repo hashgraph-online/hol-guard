@@ -80,6 +80,7 @@ from ..redaction import redact_sensitive_text
 from ..review_signature_verification import sync_review_verification_keys
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
+from ..store_policy_trust_rows import PolicyBundleTrustRows
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
 from . import runner_native_authority as _authority
 from . import runner_native_sync as _sync
@@ -261,10 +262,16 @@ def _policy_bundle_downgrade_reference(
 def _validate_cached_policy_bundle(
     store: GuardStore,
     policy_bundle: object,
+    *,
+    rows: PolicyBundleTrustRows | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
-    """Revalidate cached policy authority before any rule is made effective."""
+    """Revalidate cached policy authority before any rule is made effective.
 
-    return cached_policy_bundle_validation(store, policy_bundle)
+    ``rows`` is the trust-row snapshot ``policy_bundle`` came from, so the
+    bundle is judged with the keyrings and workspace of the same sync.
+    """
+
+    return cached_policy_bundle_validation(store, policy_bundle, rows=rows)
 
 
 def _build_canonical_policy_bundle_decisions(

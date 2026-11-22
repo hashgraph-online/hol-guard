@@ -62,7 +62,8 @@ class _Store:
     def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
         return cast(dict[str, object] | list[object] | None, self.sync_payloads.get(state_key))
 
-    def policy_bundle_trust_rows(self):
+    def policy_bundle_trust_rows(self, *, keys_only: bool = False):
+        del keys_only
         return trust_rows_from_payloads(self.get_sync_payload, None)
 
     def exact_cloud_review_state(self) -> dict[str, object]:

@@ -346,7 +346,7 @@ def test_signed_inactive_cached_bundle_cannot_enforce_defaults_or_rows(
     monkeypatch.setattr(
         store,
         "policy_bundle_trust_rows",
-        lambda: replace(read_trust_rows(), workspace_id=_WORKSPACE_ID),
+        lambda **kwargs: replace(read_trust_rows(**kwargs), workspace_id=_WORKSPACE_ID),
     )
     bundle = _signed_bundle(rollout_state=rollout_state)
     store.set_sync_payload(

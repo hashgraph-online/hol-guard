@@ -49,7 +49,8 @@ class FakeStore:
     def get_sync_payload(self, key: str) -> object:
         return self.payloads.get(key)
 
-    def policy_bundle_trust_rows(self):
+    def policy_bundle_trust_rows(self, *, keys_only: bool = False):
+        del keys_only
         return trust_rows_from_payloads(self.get_sync_payload, self.get_cloud_workspace_id())
 
     def get_cached_supply_chain_bundle(self, workspace_id: str) -> object:

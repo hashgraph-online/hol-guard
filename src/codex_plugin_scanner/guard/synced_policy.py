@@ -11,7 +11,7 @@ from .store_policy_trust_rows import PolicyBundleTrustRows
 class PolicyTrustRowsReader(Protocol):
     """Minimal persistence interface needed to read synced policy state."""
 
-    def policy_bundle_trust_rows(self) -> PolicyBundleTrustRows: ...
+    def policy_bundle_trust_rows(self, *, keys_only: bool = False) -> PolicyBundleTrustRows: ...
 
 
 def _optional_string(value: object | None) -> str | None:

@@ -56,7 +56,8 @@ class ReplayStore:
     def get_sync_payload(self, key: str) -> object | None:
         return self.payloads.get(key)
 
-    def policy_bundle_trust_rows(self):
+    def policy_bundle_trust_rows(self, *, keys_only: bool = False):
+        del keys_only
         return trust_rows_from_payloads(self.get_sync_payload, None)
 
     def record_review_verification_keyring(self, keys, now: str) -> None:

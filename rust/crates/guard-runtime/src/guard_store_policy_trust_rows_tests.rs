@@ -42,8 +42,12 @@ fn rows(connection: &Connection) -> Value {
 fn an_empty_store_reads_every_row_as_null() {
     let view = rows(&store());
     let fields = view.as_object().unwrap();
-    assert_eq!(fields.len(), 10);
-    assert!(fields.values().all(Value::is_null));
+    assert_eq!(fields.len(), 12);
+    assert_eq!(view["policy_bundle_deferred"], json!(false));
+    assert!(fields
+        .iter()
+        .filter(|(name, _)| *name != "policy_bundle_deferred")
+        .all(|(_, value)| value.is_null()));
 }
 
 #[test]
@@ -160,4 +164,41 @@ fn an_unknown_method_is_refused() {
     assert!(handles("policy_bundle_trust_rows"));
     assert!(handles("record_review_verification_keyring"));
     assert!(!handles("cached_policy_bundle"));
+}
+
+#[test]
+fn keys_only_leaves_the_bundle_out() {
+    let connection = store();
+    put(&connection, BUNDLE_KEY, r#"{"bundleVersion":"7"}"#);
+    put(&connection, KEYRING_KEY, r#"{"keys":[]}"#);
+    let view = call(
+        &connection,
+        "policy_bundle_trust_rows",
+        json!({ "keys_only": true }),
+    )
+    .unwrap();
+    assert!(view["policy_bundle"].is_null());
+    assert_eq!(view["policy_bundle_deferred"], json!(false));
+    assert_eq!(view["policy_bundle_keyring"], json!({ "keys": [] }));
+    assert_eq!(
+        rows(&connection)["policy_bundle"],
+        json!({ "bundleVersion": "7" })
+    );
+}
+
+#[test]
+fn a_bundle_too_large_for_the_reply_is_deferred_with_its_stamp() {
+    let connection = store();
+    let large = json!({ "rules": "x".repeat(BUNDLE_INLINE_BYTES) }).to_string();
+    put(&connection, BUNDLE_KEY, &large);
+    put(&connection, KEYRING_KEY, r#"{"keys":[]}"#);
+    let view = rows(&connection);
+    assert!(view["policy_bundle"].is_null());
+    assert_eq!(view["policy_bundle_deferred"], json!(true));
+    assert_eq!(
+        view["policy_bundle_stamp"],
+        json!({ "updated_at": NOW, "bytes": large.len() })
+    );
+    assert_eq!(view["policy_bundle_keyring"], json!({ "keys": [] }));
+    assert!(view.to_string().len() < BUNDLE_INLINE_BYTES);
 }

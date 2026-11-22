@@ -30,7 +30,8 @@ class _MemorySyncStore:
     def get_cloud_workspace_id(self) -> str | None:
         return self.workspace_id
 
-    def policy_bundle_trust_rows(self):
+    def policy_bundle_trust_rows(self, *, keys_only: bool = False):
+        del keys_only
         return trust_rows_from_payloads(self.get_sync_payload, self.get_cloud_workspace_id())
 
 

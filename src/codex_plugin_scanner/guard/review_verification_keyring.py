@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .native_guard_store import NativeGuardStoreUnavailable
 from .native_policy_bundle import PolicyBundleNativeUnavailableError
 from .policy_bundle_trusted_keys import (
     safe_load_policy_bundle_verification_keys,
@@ -24,7 +25,9 @@ def review_verification_keyring_ready(store: GuardStore) -> bool:
     if not isinstance(workspace_id, str) or not workspace_id.strip():
         return False
     try:
-        keys = safe_load_policy_bundle_verification_keys(store.policy_bundle_trust_rows().review_verification_keyring)
+        keys = safe_load_policy_bundle_verification_keys(
+            store.policy_bundle_trust_rows(keys_only=True).review_verification_keyring
+        )
         return any(
             key.purpose == _REMOTE_APPROVAL_KEY_PURPOSE
             and key.workspace_id == workspace_id
@@ -32,7 +35,7 @@ def review_verification_keyring_ready(store: GuardStore) -> bool:
             and signing_key_is_current(key)
             for key in keys
         )
-    except PolicyBundleNativeUnavailableError:
+    except (NativeGuardStoreUnavailable, PolicyBundleNativeUnavailableError):
         # Readiness cannot be proven without the resident. Never report ready.
         return False
 

@@ -12,6 +12,13 @@ class _NativeStore(Protocol):
         self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
     ) -> Any: ...
 
+    def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None: ...
+
+
+# A sync landing between the deferred bundle read and its confirming snapshot
+# is retried this many times before the read gives up.
+_DEFERRED_BUNDLE_ATTEMPTS = 3
+
 
 def _row(value: object) -> dict[str, object] | list[object] | None:
     if isinstance(value, (dict, list)):
@@ -45,11 +52,14 @@ class PolicyBundleTrustRows:
     workspace_id: str | None = None
 
     @classmethod
-    def from_native(cls, answer: object) -> PolicyBundleTrustRows:
+    def from_native(cls, answer: object, *, policy_bundle: object = None) -> PolicyBundleTrustRows:
+        """The view from a native answer; ``policy_bundle`` fills in a bundle the answer deferred."""
+
         if not isinstance(answer, dict):
             raise RuntimeError("native policy_bundle_trust_rows returned no answer")
+        bundle = policy_bundle if answer.get("policy_bundle_deferred") is True else answer.get("policy_bundle")
         return cls(
-            policy_bundle=_row(answer.get("policy_bundle")),
+            policy_bundle=_row(bundle),
             policy_bundle_keyring=_row(answer.get("policy_bundle_keyring")),
             acceptance_checkpoint=_row(answer.get("acceptance_checkpoint")),
             managed_keyring_provenance=_row(answer.get("managed_keyring_provenance")),
@@ -65,10 +75,27 @@ class PolicyBundleTrustRows:
 class StorePolicyTrustRowsMixin:
     """One consistent read of the policy bundle trust rows, and the Review keyring write."""
 
-    def policy_bundle_trust_rows(self: _NativeStore) -> PolicyBundleTrustRows:
-        """The bundle and every row it is judged against, read in one snapshot."""
+    def policy_bundle_trust_rows(self: _NativeStore, *, keys_only: bool = False) -> PolicyBundleTrustRows:
+        """The bundle and every row it is judged against, read in one snapshot.
 
-        return PolicyBundleTrustRows.from_native(self._native_store_call("policy_bundle_trust_rows", {}))
+        ``keys_only`` leaves the bundle out for readers that need only the
+        keyrings. A bundle too large for one native reply is read on its own;
+        a second snapshot must then match the first, so the bundle and its
+        keyrings, checkpoint and workspace still come from the same sync.
+        """
+
+        if keys_only:
+            return PolicyBundleTrustRows.from_native(
+                self._native_store_call("policy_bundle_trust_rows", {"keys_only": True})
+            )
+        for _attempt in range(_DEFERRED_BUNDLE_ATTEMPTS):
+            answer = self._native_store_call("policy_bundle_trust_rows", {})
+            if not isinstance(answer, dict) or answer.get("policy_bundle_deferred") is not True:
+                return PolicyBundleTrustRows.from_native(answer)
+            bundle = self.get_sync_payload("policy_bundle")
+            if self._native_store_call("policy_bundle_trust_rows", {}) == answer:
+                return PolicyBundleTrustRows.from_native(answer, policy_bundle=bundle)
+        raise RuntimeError("policy bundle trust rows kept changing while the bundle was read")
 
     def record_review_verification_keyring(self: _NativeStore, keys: Sequence[Mapping[str, object]], now: str) -> None:
         """Store the anchored Review verification keys; an empty list clears the keyring."""

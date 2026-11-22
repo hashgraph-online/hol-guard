@@ -45,7 +45,8 @@ class _Store:
     def get_sync_payload(self, name: str) -> object:
         return {"supply_chain_bundle_summary": {"status": "synced"}}.get(name)
 
-    def policy_bundle_trust_rows(self):
+    def policy_bundle_trust_rows(self, *, keys_only: bool = False):
+        del keys_only
         return trust_rows_from_payloads(self.get_sync_payload, self.get_cloud_workspace_id())
 
     def get_cached_supply_chain_bundle(self, _workspace_id: str) -> dict[str, object]:
