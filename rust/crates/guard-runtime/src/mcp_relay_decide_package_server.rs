@@ -2,11 +2,9 @@
 //!
 //! A package call the relay could not answer is refused, and its server is
 //! recorded so later sessions of it go to the proxy, which decides such calls
-//! (`mcp_relay_servers.rs`). A defer the proxy could not answer any better is
-//! refused in place instead: the next call asks again, and the server stays
-//! native.
+//! (`mcp_relay_servers.rs`).
 
-use super::{package_policy::DAEMON_AUTHORITY, Answer, McpRelayDecideRequestV1};
+use super::{Answer, McpRelayDecideRequestV1};
 use crate::policy_store::PolicySnapshotStore;
 
 /// Every defer the package lane answers with. The gate's workspace check is
@@ -14,18 +12,9 @@ use crate::policy_store::PolicySnapshotStore;
 /// carry no package request at all.
 pub(super) const PACKAGE_DEFER_PREFIX: &str = "mcp_relay_package";
 
-/// Package defers refused per call without handing the server off.
-///
-/// `DAEMON_AUTHORITY`: a saved row was ignored because the published integrity
-/// state is degraded. The proxy would ask the daemon's policy authority, and
-/// the daemon is the process that published that state: it holds no key the
-/// resident lacks, so it ignores the same row. A refused call reads the state
-/// again on the next call, after the daemon republishes it.
-const REFUSED_IN_PLACE: [&str; 1] = [DAEMON_AUTHORITY];
-
 /// Whether `reason` sends the call's server to the proxy.
 pub(super) fn hands_server_off(reason: &str) -> bool {
-    reason.starts_with(PACKAGE_DEFER_PREFIX) && !REFUSED_IN_PLACE.contains(&reason)
+    reason.starts_with(PACKAGE_DEFER_PREFIX)
 }
 
 /// Record the server of a decide the package lane deferred for the proxy.

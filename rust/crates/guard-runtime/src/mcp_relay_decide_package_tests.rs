@@ -226,11 +226,11 @@ fn a_call_sent_to_the_package_policy_hands_its_server_to_the_proxy() {
     servers.record(&server, false);
     let relayable = servers.relayable(&server);
     assert!(relayable.is_ok());
-    // A defer the proxy could not answer better refuses the call in place.
-    let ignored = Err(super::super::package_policy::DAEMON_AUTHORITY);
-    super::super::package_server::after_decide(&ignored, &call, &fixture.store);
+    // A decide outside the package lane leaves the server relayable.
+    let other = Err("mcp_relay_policy_need");
+    super::super::package_server::after_decide(&other, &call, &fixture.store);
     assert_eq!(servers.relayable(&server), relayable);
-    // Any other package-lane defer hands the server to the proxy.
+    // A package-lane defer hands the server to the proxy.
     let prompt = Err(super::super::ask::PACKAGE_PROMPT);
     super::super::package_server::after_decide(&prompt, &call, &fixture.store);
     assert_eq!(servers.relayable(&server), Err(SERVER_PROXY_TOOLS));

@@ -13,10 +13,11 @@
 //! authority. The relay has neither: it reads the saved rows on the
 //! integrity-verified read-only snapshot the rest of the decide path reads
 //! (`mcp_relay_decide_store.rs`, `mcp_relay_decide_saved.rs`), and it has no
-//! daemon authority at all. So a lookup that ignored a saved row for a local
-//! integrity failure and found no decision — the one leg where Python asks the
-//! daemon — defers the call rather than answering `require-reapproval` on the
-//! authority's behalf.
+//! daemon authority at all. The one leg where Python asks the daemon, a lookup
+//! that ignored a saved row for a local integrity failure and found no
+//! decision, needs none: the daemon's lookup reads the same store under the
+//! same published integrity state and ignores the same row, so the relay
+//! answers `require-reapproval` as Python does once the daemon finds nothing.
 //!
 //! Every other fact is read here rather than asked of the proxy: the policy
 //! view from the bound harness view (`mcp_relay_decide_package_config.rs`), the
@@ -65,9 +66,6 @@ const CONTEXT_UNBUILDABLE: &str = "mcp_relay_package_context_unbuildable";
 const HASH_FAILED: &str = "mcp_relay_package_hash_failed";
 /// The resident refused the stored-policy resolution.
 pub(super) const RESOLVE_FAILED: &str = "mcp_relay_package_policy_failed";
-/// A saved row was ignored for a local integrity failure and no decision was
-/// found. The call is refused in place; its server stays native.
-pub(super) const DAEMON_AUTHORITY: &str = "mcp_relay_package_policy_daemon_authority";
 
 /// The request id the in-process resolution carries. The byte path's id
 /// correlates a response with its request; nothing correlates here, but the op
@@ -168,8 +166,8 @@ pub(super) fn package_policy(
         decision: facts.decision,
         approval_request: facts.approval_request,
         ignored_integrity: facts.ignored_integrity,
-        // No daemon policy authority is reachable from the relay; the one leg
-        // that needs one deferred in `hydrate`.
+        // The daemon's authority only names the claim kind of a decision it
+        // returned, and it returns none the relay's lookup missed (`hydrate`).
         daemon_authority: false,
         diagnosed_reason: facts.diagnosed_reason,
         diagnosed_stored_hash: facts.diagnosed_stored_hash,
@@ -253,14 +251,11 @@ fn hydrate(
             decision = Some(found);
         }
     }
-    if decision.is_none() && ignored_integrity {
-        // Python asks the daemon's policy authority to resolve the row it
-        // ignored. Answering `require-reapproval` here would decide a call the
-        // authority may hold an allow for, so the call is refused, and the
-        // next call reads the integrity state the daemon republishes
-        // (`mcp_relay_decide_package_server.rs`).
-        return Err(DAEMON_AUTHORITY);
-    }
+    // Python asks the daemon's policy authority to resolve a row it ignored.
+    // The authority runs the same lookup over the same store and the same
+    // published integrity state, so it ignores the same row and returns no
+    // decision. Python then answers the miss as `require-reapproval`, which a
+    // replacement approval request can settle; the relay does the same.
     let mut facts = Facts {
         approval_request: match decision.as_ref() {
             Some(decision) => approval_request(saved, decision)?,
@@ -271,10 +266,9 @@ fn hydrate(
         diagnosed_reason: None,
         diagnosed_stored_hash: None,
     };
-    // The miss is explained over the same one identity the lookup read.
-    let diagnose = facts
-        .decision
-        .is_none()
+    // The miss is explained over the same one identity the lookup read. An
+    // ignored row is its own explanation, as in `_hydrate`.
+    let diagnose = (facts.decision.is_none() && !ignored_integrity)
         .then_some(policy_workspace)
         .flatten();
     if let Some(workspace) = diagnose {
