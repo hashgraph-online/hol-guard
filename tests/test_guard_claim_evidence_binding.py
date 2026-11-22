@@ -331,13 +331,21 @@ def test_diagnostic_fails_closed_with_a_typed_warning_when_the_resident_gives_no
     assert all(record.exc_info is None for record in caplog.records)
 
 
+@pytest.mark.parametrize(
+    "failure",
+    [
+        sqlite3.OperationalError("Guard store native runtime unavailable (test)."),
+        ValueError("native_guard_store_value_error"),
+        TimeoutError("native guard store deadline expired"),
+    ],
+)
 def test_diagnostic_fails_closed_when_saved_row_presence_is_unavailable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, failure: Exception
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
 
     def unavailable(_store: object) -> object:
-        raise sqlite3.OperationalError("Guard store native runtime unavailable (test).")
+        raise failure
 
     monkeypatch.setattr(store_policy, "policy_row_presence", unavailable)
 

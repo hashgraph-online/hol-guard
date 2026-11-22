@@ -1279,7 +1279,7 @@ class StorePolicyMixin:
         current_time = _canonical_utc_timestamp(now or _now())
         try:
             has_saved_rows = policy_row_presence(self).any_saved
-        except (NativePolicyPresenceError, sqlite3.Error) as error:
+        except (NativePolicyPresenceError, sqlite3.Error, ValueError, TimeoutError) as error:
             # Without an answer the store may hold saved rows, so the miss
             # fails closed like an unavailable diagnosis below.
             _LOGGER.warning(
