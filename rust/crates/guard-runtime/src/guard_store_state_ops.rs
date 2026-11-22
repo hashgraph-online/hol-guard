@@ -11,6 +11,11 @@ use crate::guard_store_db::{
     exec, query_all, query_one, text, value_error, StoreError, StoreResult,
 };
 
+#[path = "guard_store_workspace_assessment_admissions.rs"]
+mod assessment_admissions;
+#[path = "guard_store_workspace_assessment_queue.rs"]
+mod assessment_queue;
+
 const OAUTH_STATE_KEY: &str = "oauth_local_credentials";
 const MIRROR_STATE_KEYS: [&str; 3] = [
     "managed_policy_bundle_keyring_provenance",
@@ -28,7 +33,8 @@ pub(crate) fn handles(method: &str) -> bool {
             | "get_runtime_state"
             | "clear_runtime_state"
             | "hook_approval_center_origin"
-    )
+    ) || assessment_queue::handles(method)
+        || assessment_admissions::handles(method)
 }
 
 pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> StoreResult<Value> {
@@ -40,6 +46,12 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
         "get_runtime_state" => runtime_state(connection),
         "clear_runtime_state" => clear_runtime_state(connection, args),
         "hook_approval_center_origin" => hook_approval_center_origin(connection),
+        _ if assessment_queue::handles(method) => {
+            assessment_queue::dispatch(connection, method, args)
+        }
+        _ if assessment_admissions::handles(method) => {
+            assessment_admissions::dispatch(connection, method, args)
+        }
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }

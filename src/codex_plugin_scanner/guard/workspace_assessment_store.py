@@ -5,12 +5,15 @@ at most one queued run; a worker claims a run under a fenced lease, and only
 the holder of the current lease generation can record its outcome. A run
 whose snapshot changed while it ran is superseded and one successor is
 queued, so results are never attached to content they did not assess.
+
+The native store runs the queue: each call here is one store transaction.
+Python keeps the outcome's carry-over of earlier findings, which needs the
+advisory feed, and bounds the JSON it stores.
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -37,6 +40,17 @@ TRIGGERS: Final = frozenset({"workspace_open", "file_change", "feed_change", "ma
 # User-requested runs skip the debounce and interval: someone is waiting.
 USER_TRIGGERS: Final = ("manual", "fix_verification")
 _FINISHED_STATES: Final = frozenset({"completed", "partial", "failed", "superseded"})
+_OBSERVED_TRIGGERS: Final = ("file_change", "feed_change")
+_CLAIM_INTS: Final = frozenset({"dirty_generation", "lease_generation"})
+_CLAIM_FIELDS: Final = _CLAIM_INTS | {
+    "run_id",
+    "codebase_key",
+    "worktree_key",
+    "private_root",
+    "trigger_kind",
+    "kind",
+    "detector_set_digest",
+}
 
 
 @dataclass(frozen=True)
@@ -71,18 +85,8 @@ class RunOutcome:
 
 
 def set_paused(store: Any, keys: WorktreeKeys, *, paused: bool) -> bool:
-    with store._connect() as connection:
-        cursor = connection.execute(
-            "update workspace_assessment_state set paused = ? where codebase_key = ? and worktree_key = ?",
-            (1 if paused else 0, keys.codebase_key, keys.worktree_key),
-        )
-        if cursor.rowcount == 1 and not paused:
-            # Resuming is a person's choice to watch it, which supersedes an ended admission.
-            connection.execute(
-                "delete from workspace_assessment_ended_admissions where codebase_key = ? and worktree_key = ?",
-                (keys.codebase_key, keys.worktree_key),
-            )
-        return cursor.rowcount == 1
+    method = "set_workspace_assessment_paused"
+    return _flag(store._native_store_call(method, {**_key_args(keys), "paused": paused}), method)
 
 
 def enqueue(
@@ -98,87 +102,19 @@ def enqueue(
 
     if trigger_kind not in TRIGGERS:
         raise ValueError("unknown workspace assessment trigger")
-    with store._connect() as connection:
-        connection.execute("begin immediate")
-        return _enqueue_locked(
-            connection,
-            keys,
-            trigger_kind=trigger_kind,
-            detector_set_digest=detector_set_digest,
-            now_ms=now_ms,
-            kind=kind,
-        )
-
-
-def _enqueue_locked(
-    connection: sqlite3.Connection,
-    keys: WorktreeKeys,
-    *,
-    trigger_kind: str,
-    detector_set_digest: str,
-    now_ms: int,
-    kind: str,
-) -> str | None:
-    bumped = connection.execute(
-        """
-        update workspace_assessment_state set dirty_generation = dirty_generation + 1
-        where codebase_key = ? and worktree_key = ? and paused = 0
-        """,
-        (keys.codebase_key, keys.worktree_key),
+    method = "enqueue_workspace_assessment"
+    answer = store._native_store_call(
+        method,
+        {
+            **_key_args(keys),
+            "trigger_kind": trigger_kind,
+            "detector_set_digest": detector_set_digest,
+            "kind": kind,
+            "now_ms": now_ms,
+            "run_id": uuid.uuid4().hex,
+        },
     )
-    if bumped.rowcount != 1:
-        return None
-    generation = int(
-        connection.execute(
-            "select dirty_generation from workspace_assessment_state where codebase_key = ? and worktree_key = ?",
-            (keys.codebase_key, keys.worktree_key),
-        ).fetchone()[0]
-    )
-    queued = connection.execute(
-        """
-        select run_id, trigger_kind from workspace_assessment_runs
-        where codebase_key = ? and worktree_key = ? and state = 'queued'
-        """,
-        (keys.codebase_key, keys.worktree_key),
-    ).fetchone()
-    if queued is not None:
-        # Coalesce: the queued run now covers the newer generation and the
-        # debounce restarts from this trigger. A user request upgrades an
-        # automatic one so it is not held by the debounce. The run records the
-        # detector set of the daemon that now covers it, which is the set that
-        # will execute it.
-        upgraded = trigger_kind if trigger_kind in USER_TRIGGERS else str(queued[1])
-        connection.execute(
-            """
-            update workspace_assessment_runs set
-              dirty_generation = ?, trigger_kind = ?, triggered_at_ms = max(triggered_at_ms, ?),
-              detector_set_digest = ?
-            where run_id = ?
-            """,
-            (generation, upgraded, now_ms, detector_set_digest, queued[0]),
-        )
-        return str(queued[0])
-    run_id = uuid.uuid4().hex
-    connection.execute(
-        """
-        insert into workspace_assessment_runs (
-          run_id, codebase_key, worktree_key, detector_set_digest, kind, trigger_kind,
-          state, dirty_generation, created_at_ms, triggered_at_ms
-        ) values (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
-        """,
-        (
-            run_id,
-            keys.codebase_key,
-            keys.worktree_key,
-            detector_set_digest,
-            kind,
-            trigger_kind,
-            generation,
-            now_ms,
-            now_ms,
-        ),
-    )
-    return run_id
+    return _optional_text(answer, method)
 
 
 def claim_next(
@@ -197,101 +133,26 @@ def claim_next(
     ``user_only`` leaves automatic runs queued, for a host under pressure.
     """
 
-    with store._connect() as connection:
-        connection.execute("begin immediate")
-        _expire_leases_locked(connection, now_ms=now_ms)
-        running = connection.execute("select count(*) from workspace_assessment_runs where state = 'running'")
-        if int(running.fetchone()[0]) >= MAX_DEVICE_WORKERS:
-            return None
-        row = connection.execute(
-            f"""
-            select r.run_id, r.codebase_key, r.worktree_key, s.private_root, r.trigger_kind, r.kind,
-                   r.dirty_generation, r.lease_generation, r.detector_set_digest
-            from workspace_assessment_runs r
-            join workspace_assessment_state s
-              on s.codebase_key = r.codebase_key and s.worktree_key = r.worktree_key
-            where r.state = 'queued' and s.paused = 0
-              and not exists (
-                select 1 from workspace_assessment_runs active
-                where active.codebase_key = r.codebase_key and active.worktree_key = r.worktree_key
-                  and active.state = 'running'
-              )
-              and (
-                r.trigger_kind in ({", ".join("?" for _ in USER_TRIGGERS)})
-                or (? = 0
-                    and (r.triggered_at_ms <= ? or r.created_at_ms <= ?)
-                    and (s.last_scan_at_ms is null or s.last_scan_at_ms <= ?))
-              )
-            order by r.created_at_ms, r.run_id
-            limit 1
-            """,
-            (
-                *USER_TRIGGERS,
-                1 if user_only else 0,
-                now_ms - DEBOUNCE_MS,
-                now_ms - MAX_DEBOUNCE_WAIT_MS,
-                now_ms - MIN_INTERVAL_MS,
-            ),
-        ).fetchone()
-        if row is None:
-            return None
-        lease_generation = int(row[7]) + 1
-        claimed_digest = detector_set_digest if detector_set_digest is not None else str(row[8])
-        connection.execute(
-            """
-            update workspace_assessment_runs set
-              state = 'running', lease_generation = ?, lease_owner = ?, lease_until_ms = ?, started_at_ms = ?,
-              detector_set_digest = ?
-            where run_id = ? and state = 'queued'
-            """,
-            (lease_generation, owner, now_ms + LEASE_MS, now_ms, claimed_digest, row[0]),
-        )
-        return ClaimedRun(
-            run_id=str(row[0]),
-            keys=WorktreeKeys(codebase_key=str(row[1]), worktree_key=str(row[2])),
-            private_root=str(row[3]),
-            trigger_kind=str(row[4]),
-            kind=str(row[5]),
-            dirty_generation=int(row[6]),
-            lease_generation=lease_generation,
-            detector_set_digest=claimed_digest,
-        )
-
-
-def _expire_leases_locked(connection: sqlite3.Connection, *, now_ms: int) -> None:
-    expired = connection.execute(
-        """
-        select run_id, codebase_key, worktree_key, trigger_kind, detector_set_digest, kind, created_at_ms
-        from workspace_assessment_runs where state = 'running' and lease_until_ms < ?
-        """,
-        (now_ms,),
-    ).fetchall()
-    for run_id, codebase_key, worktree_key, trigger_kind, detector_set_digest, kind, created_at in expired:
-        # The runner renews its lease between stages, so an expired lease means
-        # the worker died or one stage hung. Retry once; a retry that also
-        # expires would repeat forever, so the worktree stays stale until its
-        # next change or request instead.
-        retry = _is_lease_retry_locked(connection, str(codebase_key), str(worktree_key), int(created_at))
-        error_code = "assessment_timed_out" if retry else "lease_expired"
-        connection.execute(
-            """
-            update workspace_assessment_runs set
-              state = 'failed', error_code = ?, finished_at_ms = ?,
-              lease_generation = lease_generation + 1
-            where run_id = ?
-            """,
-            (error_code, now_ms, run_id),
-        )
-        if error_code != "lease_expired":
-            continue
-        _enqueue_locked(
-            connection,
-            WorktreeKeys(str(codebase_key), str(worktree_key)),
-            trigger_kind=str(trigger_kind),
-            detector_set_digest=str(detector_set_digest),
-            now_ms=now_ms,
-            kind=str(kind),
-        )
+    method = "claim_workspace_assessment"
+    args: dict[str, object] = {"owner": owner, "now_ms": now_ms, "user_only": user_only}
+    if detector_set_digest is not None:
+        args["detector_set_digest"] = detector_set_digest
+    answer = store._native_store_call(method, args)
+    if answer is None:
+        return None
+    if not isinstance(answer, dict) or set(answer) != _CLAIM_FIELDS:
+        raise RuntimeError(f"native {method} returned no answer")
+    texts = {name: _text(answer[name], method) for name in _CLAIM_FIELDS - _CLAIM_INTS}
+    return ClaimedRun(
+        run_id=texts["run_id"],
+        keys=WorktreeKeys(codebase_key=texts["codebase_key"], worktree_key=texts["worktree_key"]),
+        private_root=texts["private_root"],
+        trigger_kind=texts["trigger_kind"],
+        kind=texts["kind"],
+        dirty_generation=_int(answer["dirty_generation"], method),
+        lease_generation=_int(answer["lease_generation"], method),
+        detector_set_digest=texts["detector_set_digest"],
+    )
 
 
 def finish(store: Any, run: ClaimedRun, outcome: RunOutcome, *, now_ms: int) -> bool:
@@ -306,108 +167,43 @@ def finish(store: Any, run: ClaimedRun, outcome: RunOutcome, *, now_ms: int) -> 
         outcome = carry_unchecked_findings(outcome, previous, settled)
     coverage_json = _bounded_json(dict(outcome.coverage or {}), MAX_COVERAGE_JSON_BYTES)
     findings_json = _bounded_json([dict(item) for item in outcome.findings], MAX_FINDINGS_JSON_BYTES)
-    with store._connect() as connection:
-        connection.execute("begin immediate")
-        cursor = connection.execute(
-            """
-            update workspace_assessment_runs set
-              state = ?, snapshot_digest = ?, input_manifest_digest = ?, feed_context_digest = ?,
-              coverage_json = ?, findings_json = ?, error_code = ?, finished_at_ms = ?,
-              lease_owner = null, lease_until_ms = null
-            where run_id = ? and state = 'running' and lease_generation = ? and lease_until_ms >= ?
-            """,
-            (
-                outcome.state,
-                outcome.snapshot_digest,
-                outcome.input_manifest_digest,
-                outcome.feed_context_digest,
-                coverage_json,
-                findings_json,
-                outcome.error_code,
-                now_ms,
-                run.run_id,
-                run.lease_generation,
-                now_ms,
-            ),
-        )
-        if cursor.rowcount != 1:
-            connection.rollback()
-            return False
-        if outcome.state in {"completed", "partial"}:
-            connection.execute(
-                """
-                update workspace_assessment_state set
-                  last_completed_generation = max(last_completed_generation, min(?, dirty_generation)),
-                  last_scan_at_ms = ?,
-                  observed_feed_digest = coalesce(?, observed_feed_digest)
-                where codebase_key = ? and worktree_key = ?
-                """,
-                (run.dirty_generation, now_ms, outcome.feed_context_digest, *_key_tuple(run.keys)),
-            )
-        else:
-            connection.execute(
-                "update workspace_assessment_state set last_scan_at_ms = ? where codebase_key = ? and worktree_key = ?",
-                (now_ms, *_key_tuple(run.keys)),
-            )
-        if outcome.state == "superseded":
-            # The successor keeps a user request's trigger so it is not held
-            # back by the debounce the user already bypassed.
-            _enqueue_locked(
-                connection,
-                run.keys,
-                trigger_kind=run.trigger_kind if run.trigger_kind in USER_TRIGGERS else "file_change",
-                detector_set_digest=run.detector_set_digest,
-                now_ms=now_ms,
-                kind=run.kind,
-            )
-        return True
-
-
-def _is_lease_retry_locked(
-    connection: sqlite3.Connection, codebase_key: str, worktree_key: str, created_at_ms: int
-) -> bool:
-    # A retry is inserted in the same transaction that expires the run before
-    # it, so it was created at that run's finish time. A run queued later (for
-    # example after a paused worktree resumes) gets its own retry.
-    row = connection.execute(
-        """
-        select 1 from workspace_assessment_runs
-        where codebase_key = ? and worktree_key = ? and error_code = 'lease_expired' and finished_at_ms = ?
-        limit 1
-        """,
-        (codebase_key, worktree_key, created_at_ms),
-    ).fetchone()
-    return row is not None
+    method = "finish_workspace_assessment"
+    answer = store._native_store_call(
+        method,
+        {
+            **_key_args(run.keys),
+            "run_id": run.run_id,
+            "lease_generation": run.lease_generation,
+            "dirty_generation": run.dirty_generation,
+            "trigger_kind": run.trigger_kind,
+            "kind": run.kind,
+            "detector_set_digest": run.detector_set_digest,
+            "state": outcome.state,
+            "snapshot_digest": outcome.snapshot_digest,
+            "input_manifest_digest": outcome.input_manifest_digest,
+            "feed_context_digest": outcome.feed_context_digest,
+            "coverage_json": coverage_json,
+            "findings_json": findings_json,
+            "error_code": outcome.error_code,
+            "now_ms": now_ms,
+        },
+    )
+    return _flag(answer, method)
 
 
 def renew_lease(store: Any, run: ClaimedRun, *, now_ms: int) -> bool:
     """Extend ``run``'s lease between stages; False once it is canceled, expired or fenced."""
 
-    with store._connect() as connection:
-        cursor = connection.execute(
-            """
-            update workspace_assessment_runs set lease_until_ms = ?
-            where run_id = ? and state = 'running' and lease_generation = ? and lease_until_ms >= ?
-            """,
-            (now_ms + LEASE_MS, run.run_id, run.lease_generation, now_ms),
-        )
-        return cursor.rowcount == 1
+    method = "renew_workspace_assessment_lease"
+    args = {"run_id": run.run_id, "lease_generation": run.lease_generation, "now_ms": now_ms}
+    return _flag(store._native_store_call(method, args), method)
 
 
 def cancel(store: Any, run_id: str, *, now_ms: int) -> bool:
     """Cancel a queued or running run; a running worker's lease is fenced off."""
 
-    with store._connect() as connection:
-        cursor = connection.execute(
-            """
-            update workspace_assessment_runs set
-              state = 'canceled', finished_at_ms = ?, lease_owner = null, lease_until_ms = null,
-              lease_generation = lease_generation + 1
-            where run_id = ? and state in ('queued', 'running')
-            """,
-            (now_ms, run_id),
-        )
-        return cursor.rowcount == 1
+    method = "cancel_workspace_assessment"
+    return _flag(store._native_store_call(method, {"run_id": run_id, "now_ms": now_ms}), method)
 
 
 def record_observation(
@@ -419,32 +215,15 @@ def record_observation(
 ) -> tuple[str, ...]:
     """Store observed digests and return which triggers they imply."""
 
-    with store._connect() as connection:
-        connection.execute("begin immediate")
-        row = connection.execute(
-            """
-            select observed_stat_digest, observed_feed_digest from workspace_assessment_state
-            where codebase_key = ? and worktree_key = ? and paused = 0
-            """,
-            _key_tuple(keys),
-        ).fetchone()
-        if row is None:
-            return ()
-        triggers: list[str] = []
-        if stat_digest is not None and row[0] is not None and row[0] != stat_digest:
-            triggers.append("file_change")
-        if feed_digest is not None and row[1] is not None and row[1] != feed_digest:
-            triggers.append("feed_change")
-        connection.execute(
-            """
-            update workspace_assessment_state set
-              observed_stat_digest = coalesce(?, observed_stat_digest),
-              observed_feed_digest = coalesce(?, observed_feed_digest)
-            where codebase_key = ? and worktree_key = ?
-            """,
-            (stat_digest, feed_digest, *_key_tuple(keys)),
-        )
-        return tuple(triggers)
+    method = "record_workspace_assessment_observation"
+    answer = store._native_store_call(
+        method, {**_key_args(keys), "stat_digest": stat_digest, "feed_digest": feed_digest}
+    )
+    if not isinstance(answer, list) or not all(item in _OBSERVED_TRIGGERS for item in answer):
+        raise RuntimeError(f"native {method} returned no answer")
+    if len(set(answer)) != len(answer):
+        raise RuntimeError(f"native {method} returned no answer")
+    return tuple(str(item) for item in answer)
 
 
 def _bounded_json(value: object, limit: int) -> str:
@@ -454,9 +233,30 @@ def _bounded_json(value: object, limit: int) -> str:
     return encoded
 
 
-def _key_tuple(keys: WorktreeKeys | None) -> tuple[str, str]:
-    assert keys is not None
-    return keys.codebase_key, keys.worktree_key
+def _key_args(keys: WorktreeKeys) -> dict[str, object]:
+    return {"codebase_key": keys.codebase_key, "worktree_key": keys.worktree_key}
+
+
+def _flag(value: object, method: str) -> bool:
+    if not isinstance(value, bool):
+        raise RuntimeError(f"native {method} returned no answer")
+    return value
+
+
+def _text(value: object, method: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise RuntimeError(f"native {method} returned no answer")
+    return value
+
+
+def _optional_text(value: object, method: str) -> str | None:
+    return None if value is None else _text(value, method)
+
+
+def _int(value: object, method: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise RuntimeError(f"native {method} returned no answer")
+    return value
 
 
 __all__ = [
