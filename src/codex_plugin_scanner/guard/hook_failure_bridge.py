@@ -43,9 +43,7 @@ def native_hook_failure(
         args: dict[str, Any] = {"harness": harness, "event_name": event_name, "reason": reason}
         if reason_code is not None:
             args["reason_code"] = reason_code
-        answer = native_runner_authority(
-            "hook_failure", args, deadline_monotonic=deadline
-        )
+        answer = native_runner_authority("hook_failure", args, deadline_monotonic=deadline)
     except Exception:
         return None
     document, exit_code = answer.get("document"), answer.get("exit_code")
