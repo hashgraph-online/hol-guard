@@ -115,6 +115,9 @@ pub(crate) mod aibom_state;
 #[path = "guard_store_policy_trust_rows.rs"]
 pub(crate) mod policy_trust_rows;
 
+#[path = "guard_store_queue_lane_rows.rs"]
+pub(crate) mod queue_lane_rows;
+
 /// Whether one of the named `sync_state` row modules owns `method`.
 pub(crate) fn handles_row_method(method: &str) -> bool {
     fleet_posture_state::handles(method)
@@ -125,6 +128,7 @@ pub(crate) fn handles_row_method(method: &str) -> bool {
         || worker_host::handles(method)
         || aibom_state::handles(method)
         || policy_trust_rows::handles(method)
+        || queue_lane_rows::handles(method)
 }
 
 /// Run `method` in the `sync_state` row module that owns it.
@@ -152,6 +156,9 @@ pub(crate) fn dispatch_row_method(
         _ if worker_host::handles(method) => worker_host::dispatch(connection, method, args),
         _ if policy_trust_rows::handles(method) => {
             policy_trust_rows::dispatch(connection, method, args)
+        }
+        _ if queue_lane_rows::handles(method) => {
+            queue_lane_rows::dispatch(connection, method, args)
         }
         _ => aibom_state::dispatch(connection, method, args),
     }
