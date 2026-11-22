@@ -4023,6 +4023,142 @@
       "expect": "allow"
     },
     {
+      "id": "network-fact-netstat-sockets",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "netstat -an"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-ss-listeners",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ss -tuln"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-ifconfig-interfaces",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ifconfig -a"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-ip-address-show",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ip -br addr show"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-route-get-default",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "route get default"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-arp-table",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "arp -a"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-scutil-resolver",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "scutil --dns"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-ipconfig-interface-address",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ipconfig getifaddr en0"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-psql-host-flag",
       "fix_area": "shell",
       "harnesses": [
