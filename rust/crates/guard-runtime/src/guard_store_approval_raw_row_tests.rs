@@ -48,11 +48,11 @@ fn a_missing_request_is_null() {
 }
 
 #[test]
-fn the_read_needs_a_request_id_and_is_a_read() {
+fn the_read_needs_a_request_id_and_is_a_snapshot_read() {
     let empty = serde_json::Map::new();
     assert!(get(&store(), &Args(&empty)).is_err());
     assert!(matches!(
         method_kind("get_raw_approval_request_snapshot"),
-        Some(Kind::Read)
+        Some(Kind::Snapshot)
     ));
 }
