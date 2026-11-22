@@ -38,10 +38,7 @@ def _fence_request(
     deadline: float | None,
     **fields: object,
 ) -> dict[str, object] | None:
-    try:
-        canonical_home = guard_home.resolve(strict=False)
-    except (OSError, RuntimeError):
-        canonical_home = guard_home
+    canonical_home = guard_home
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": request_id,
