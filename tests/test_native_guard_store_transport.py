@@ -73,7 +73,7 @@ def test_connect_status_does_not_guess_a_first_sync_it_cannot_read(
         sync_url="https://hol.org/api/guard/receipts/sync",
         connect_url="https://hol.org/guard/connect",
     )
-    assert payload["milestone"] == "sync_not_available"
+    assert payload["milestone"] == "sync_status_unavailable"
     assert payload["sync_summary"]["available"] is False  # type: ignore[index]
 
 

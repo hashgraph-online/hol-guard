@@ -1367,7 +1367,7 @@ def _connected_milestone(has_sync_summary: bool, unavailable_reason: str | None)
     """The first-sync milestone of a connected machine with no stored connect state."""
 
     if unavailable_reason is not None:
-        return "sync_not_available"
+        return "sync_status_unavailable"
     if has_sync_summary:
         return "first_sync_succeeded"
     return "first_sync_pending"

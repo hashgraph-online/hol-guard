@@ -410,6 +410,29 @@ def test_guard_connect_render_defaults_sync_not_available_to_upgrade_guidance(ca
     assert "First Guard Cloud proof is on the way" not in output
 
 
+def test_guard_connect_render_an_unreadable_sync_status_without_upgrade_guidance(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": True,
+            "browser_opened": True,
+            "status": "connected",
+            "milestone": "sync_status_unavailable",
+            "reason": "The native Guard runtime is unavailable.",
+            "completed_at": "2026-04-17T00:00:00Z",
+            "connect_url": "https://hol.org/guard/connect",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "This device is connected" in output
+    assert "Upgrade" not in output
+    milestone_text = render._connect_milestone_text({"milestone": "sync_status_unavailable"})
+    assert "cannot be read" in milestone_text
+
+
 def test_guard_connect_render_tolerates_non_numeric_sync_counts(capsys) -> None:
     emit_guard_payload(
         "connect",
