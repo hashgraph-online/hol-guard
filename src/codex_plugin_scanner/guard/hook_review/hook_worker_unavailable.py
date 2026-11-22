@@ -128,7 +128,6 @@ def unavailable_event_response(
         }.get(fallback_event, "native_hook_event_unavailable"),
         reason="HOL Guard could not identify this hook event safely.",
         guard_home=guard_home,
-        deadline=deadline,
     )
     return worker._apply_structured_unavailable_overlay(
         response,
