@@ -98,7 +98,7 @@ fn a_matcher_reads_the_captured_text() {
 
 #[test]
 fn a_cut_stage_reshapes_the_captured_text() {
-    if trusted_cut().is_none() {
+    if trusted_system("cut").is_none() {
         return;
     }
     let (kept, diagnostics, status) =
