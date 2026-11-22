@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Mapping, Sequence
-from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, Any
 
 from .local_cli_errors import LocalCliCatalogLimitError
@@ -21,8 +20,6 @@ from .store_custom_extension_continuity import _native_grant_write
 from .store_local_cli_capabilities import LocalCliCapabilityState, capability_map
 from .store_local_cli_retention import utc_now_iso
 from .store_local_cli_rows import _row_int, _row_values
-from .store_local_cli_schema import ensure_local_cli_schema
-from .store_mcp_catalog import catalog_change_ids
 
 # How many times one listing starts over because the inventory changed between
 # its pages. Each restart means a connector was observed or granted mid-walk;
@@ -79,8 +76,6 @@ def _catalog_payload(catalog: McpCatalogResult) -> dict[str, object]:
 
 class StoreLocalCliMixin:
     if TYPE_CHECKING:
-
-        def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
         def _native_store_call(
             self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
@@ -217,17 +212,12 @@ class StoreLocalCliMixin:
             raise ValueError("invalid local CLI grant state")
         if not is_local_cli_id(identity.cli_id):
             raise ValueError("invalid local CLI id")
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            reviewing = (identity.cli_id,) if reviewed_catalog_revision is not None else ()
-            change_ids = catalog_change_ids(connection, reviewing)
         args: dict[str, object] = {
             "cli_id": identity.cli_id,
             "identity_hash": identity.identity_hash,
             "state": state,
             "expected_revision": expected_revision,
             "updated_at": updated_at,
-            "catalog_change_ids": change_ids,
         }
         if command_states is not None:
             args["command_states"] = dict(command_states)
