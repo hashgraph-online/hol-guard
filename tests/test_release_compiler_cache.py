@@ -54,6 +54,7 @@ def test_release_compiler_cache_is_written_only_by_trusted_main_pushes(ref, even
 def test_fast_alpha_compiler_cache_warms_from_main_in_its_own_namespace(ref, event, mode):
     (_, prepare), _ = _release_compile_steps()
     env = prepare["env"]
+    assert "github.event_name == 'push'" in env["SCCACHE_GHA_RW_MODE"]
     assert _evaluate(env["SCCACHE_GHA_RW_MODE"], ref=ref, event=event, fast_codegen=True) == mode
     if ref == "refs/heads/main" and event == "workflow_dispatch":
         assert (
