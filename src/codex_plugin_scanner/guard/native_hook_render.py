@@ -41,6 +41,7 @@ _CURSOR_ROUTE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 # The bridge kinds carry the whole daemon reply they render, which may be as
 # large as a native response, so they ask for the same larger budget.
 _DAEMON_REPLY_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+_FAIL_CLOSED_RENDER_TIMEOUT_SECONDS = 0.25
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -130,6 +131,14 @@ def native_render_cli(
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES)
     elif kind in {"hermes_bridge", "muse_bridge", "saved_approval", "package_review_settle", "review_reuse"}:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_DAEMON_REPLY_MAX_REQUEST_BYTES)
+    elif kind in {"availability_response", "fail_closed_verdict"}:
+        payload = _render_payload(
+            wire,
+            guard_home,
+            deadline,
+            max_request_bytes=_MAX_REQUEST_BYTES,
+            timeout_seconds=_FAIL_CLOSED_RENDER_TIMEOUT_SECONDS,
+        )
     else:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_MAX_REQUEST_BYTES)
     outcome = payload.get("outcome") if payload is not None else None
@@ -388,6 +397,14 @@ def native_render_pre_tool(
     return _render({"kind": "pre_tool", "harness": harness, "verdict": dict(verdict)}, guard_home, deadline)
 
 
+def native_render_accepted_allow(
+    harness: str, verdict: Mapping[str, object], *, guard_home: Path | None = None, deadline: float | None = None
+) -> dict[str, object] | None:
+    """Render an accepted saved-approval allow with its reuse status in Rust."""
+
+    return _render({"kind": "accepted_allow", "harness": harness, "verdict": dict(verdict)}, guard_home, deadline)
+
+
 def native_render_recording_only_pre_tool(
     harness: str, *, reason_code: str, reason: str, guard_home: Path | None = None, deadline: float | None = None
 ) -> dict[str, object] | None:
@@ -400,13 +417,66 @@ def native_render_recording_only_pre_tool(
     )
 
 
+def native_render_fail_closed_verdict(
+    harness: str,
+    verdict: Mapping[str, object],
+    *,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    """Render the fixed deny for a verdict whose native response was missed."""
+
+    rendered = native_render_cli(
+        "fail_closed_verdict",
+        harness,
+        {"verdict": dict(verdict)},
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    if rendered is None or rendered[0] != "document":
+        return None
+    return rendered[1]
+
+
+def native_render_fail_closed_response(
+    harness: str,
+    event_name: str,
+    *,
+    reason: str,
+    reason_code: str,
+    prompt_reason: str | None = None,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    """Render a fixed outage response from the shared Rust contract."""
+
+    rendered = native_render_cli(
+        "availability_response",
+        harness,
+        {
+            "event_name": event_name,
+            "reason": reason,
+            "reason_code": reason_code,
+            "prompt_reason": prompt_reason,
+        },
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    if rendered is None or rendered[0] != "document":
+        return None
+    return rendered[1]
+
+
 __all__ = [
     "HOOK_RENDER_FEATURE",
     "native_cli_hook_emit",
     "native_evaluation_has_terminal_policy_action",
     "native_hook_availability",
     "native_recording_only_for_binding",
+    "native_render_accepted_allow",
     "native_render_cli",
+    "native_render_fail_closed_response",
+    "native_render_fail_closed_verdict",
     "native_render_pre_tool",
     "native_render_recording_only_pre_tool",
 ]
