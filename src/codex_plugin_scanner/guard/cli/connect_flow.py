@@ -1392,7 +1392,12 @@ def build_connect_status_payload(
     oauth_repair_required = (
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
     )
-    has_sync_summary = bool(store.cloud_status_rows().sync_summary)
+    try:
+        has_sync_summary = bool(store.cloud_status_rows().sync_summary)
+    except NativeGuardStoreUnavailable:
+        # The status reports the store outage through the outbox fields; it
+        # does not claim a receipt sync it cannot read.
+        has_sync_summary = False
     status = str(latest_state.get("status") or "not_paired") if latest_state is not None else "not_paired"
     milestone = str(latest_state.get("milestone") or "not_started") if latest_state is not None else "not_started"
     reason = latest_state.get("reason") if latest_state is not None else None
