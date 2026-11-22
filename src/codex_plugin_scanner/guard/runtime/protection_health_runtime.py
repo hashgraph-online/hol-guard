@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_protection_health import protection_health_report
 
 # The resident reads no longer harness name; see `protection_health_facts`.
@@ -39,7 +40,9 @@ def _decision_stream(store: ProtectionHealthStore) -> dict[str, int] | None:
             "active_error_count": int(health.active_error_count),
             "activity_count": int(store.count_command_activities()),
         }
-    except (AttributeError, RuntimeError, TypeError, ValueError):
+    except (AttributeError, NativeGuardStoreUnavailable, RuntimeError, TypeError, ValueError):
+        # The counters are read from the native store; an outage leaves the
+        # stream unknown rather than failing the whole report.
         return None
 
 

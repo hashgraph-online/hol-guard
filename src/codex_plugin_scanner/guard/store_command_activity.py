@@ -46,12 +46,10 @@ class StoreCommandActivityMixin:
         )
 
     def count_command_activities(self: _ConnectionOwner) -> int:
-        with self._connect() as connection:
-            row = cast(
-                tuple[int] | None,
-                connection.execute("select count(*) from command_activity").fetchone(),
-            )
-        return int(row[0]) if row is not None else 0
+        count = self._native_store_call("count_command_activities", {})
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise RuntimeError("native count_command_activities returned no answer")
+        return count
 
 
 def _validate_command_activity_write(

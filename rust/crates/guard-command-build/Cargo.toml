@@ -50,7 +50,7 @@ rsa = "0.9.8"
 base64ct = "1.6.0"
 caseless = "0.2.2"
 ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }
-url = "=2.5.8"
+url = "=2.5.9"
 unicode-normalization = "0.1.25"
 tree-sitter = "=0.25.10"
 tree-sitter-bash = "=0.25.1"

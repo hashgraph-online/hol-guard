@@ -20,6 +20,12 @@ pub(super) fn route(args: &[String]) -> Option<Result<(), String>> {
                 .and_then(|bytes| write_json(&hook_payload_facts_op::cli_admission(&bytes)?)),
         );
     }
+    if command == hook_payload_facts_op::CLI_AVAILABILITY_COMMAND {
+        return Some(
+            read_stdin_bounded()
+                .and_then(|bytes| write_json(&hook_payload_facts_op::cli_availability(&bytes)?)),
+        );
+    }
     let response = if codex_hook_trust::is_command(command) {
         codex_hook_trust::run_command(io::stdin().lock())
     } else if hook_launch_scan::is_command(command) {

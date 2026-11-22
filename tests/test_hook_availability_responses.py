@@ -4,7 +4,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
-    cursor_unparseable_input_permission,
+    canonical_hook_event_name,
     hook_event_pauses_when_unavailable,
 )
 
@@ -143,26 +143,23 @@ def test_availability_blocks_grok_prompt_and_tools_but_continues_passive_lifecyc
     assert alias["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_cursor_unparseable_input_denies_actions_and_preserves_known_observation() -> None:
-    allow, allow_code = cursor_unparseable_input_permission("beforeReadFile")
-    assert allow_code == 2
-    assert allow["permission"] == "deny"
-    deny, deny_code = cursor_unparseable_input_permission("beforeShellExecution")
-    assert deny_code == 2
-    assert deny["permission"] == "deny"
-    after, after_code = cursor_unparseable_input_permission("afterShellExecution")
-    assert after_code == 0
-    assert after == {}
-    empty, empty_code = cursor_unparseable_input_permission("")
-    assert empty_code == 2
-    assert empty["permission"] == "deny"
+def test_availability_wrapper_uses_the_native_posture(monkeypatch) -> None:
+    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+
+    monkeypatch.setattr(
+        policy,
+        "_runtime_availability",
+        lambda _payload, **_kwargs: {"pauses": False},
+    )
+    assert hook_event_pauses_when_unavailable("PreToolUse") is False
 
 
-def test_only_events_that_can_still_protect_pause_the_turn() -> None:
-    # The prompt and anything that gates a tool call pause: Guard can still
-    # keep the action from happening.
-    for event in ("UserPromptSubmit", "user_prompt_submitted", "PreToolUse", "beforeShellExecution"):
-        assert hook_event_pauses_when_unavailable(event) is True
-    # The tool already ran, and lifecycle events never gated one.
-    for event in ("PostToolUse", "post_tool", "afterShellExecution", "SessionStart", "Stop"):
-        assert hook_event_pauses_when_unavailable(event) is False
+def test_complete_native_outage_preserves_wire_event_and_safe_fallback(monkeypatch) -> None:
+    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+
+    monkeypatch.setattr(policy, "_runtime_availability", lambda *_args, **_kwargs: None)
+    assert canonical_hook_event_name({"hook_event_name": "PostToolUse"}) == "PostToolUse"
+    assert hook_event_pauses_when_unavailable("PostToolUse") is False
+    assert hook_event_pauses_when_unavailable("Stop") is False
+    assert hook_event_pauses_when_unavailable("PreToolUse") is True
+    assert canonical_hook_event_name({"hook_event_name": "post_toolcall"}) == "PostToolUse"
