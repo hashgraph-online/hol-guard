@@ -56,6 +56,7 @@ fn trigger_key(code: &str) -> Option<&'static str> {
 pub(crate) struct ReviewTriggers {
     config: GuardConfig,
     harness: Option<String>,
+    workspace_dir: Option<PathBuf>,
 }
 
 impl ReviewTriggers {
@@ -72,7 +73,11 @@ impl ReviewTriggers {
             .load_guard_config(store.guard_home(), workspace_dir, false)
             .ok()?;
         let harness = Some(artifact.harness.clone()).filter(|harness| !harness.is_empty());
-        Some(Self { config, harness })
+        Some(Self {
+            config,
+            harness,
+            workspace_dir: workspace_dir.map(Path::to_path_buf),
+        })
     }
 
     #[cfg(test)]
@@ -80,6 +85,7 @@ impl ReviewTriggers {
         Self {
             config,
             harness: None,
+            workspace_dir: None,
         }
     }
 
@@ -225,13 +231,38 @@ fn is_guard_distribution_off_registry(package: &Map<String, Value>) -> bool {
     })
 }
 
+/// Whether the install writes only into Python environments that hold no
+/// Guard installation, so it cannot replace the Guard that is running.
+fn installs_into_guard_free_environment(
+    artifact: &GuardArtifact,
+    workspace_dir: Option<&Path>,
+) -> bool {
+    let Some(command) = optional_string(artifact.metadata.get("redacted_command")) else {
+        return false;
+    };
+    let cwd = optional_string(artifact.metadata.get("effective_cwd")).map(PathBuf::from);
+    let running = std::env::current_exe().ok();
+    super::guard_free_target::installs_into_guard_free_environment(
+        &command,
+        cwd.as_deref().or(workspace_dir),
+        running.as_deref(),
+    )
+}
+
 /// Re-resolve every package whose review came only from tunable signals.
-/// Returns true when any package decision changed.
-fn resolve_packages(triggers: &ReviewTriggers, result: &mut PackageEvalResult) -> bool {
+/// Returns true when any package decision changed. `guard_free_target` says
+/// the install cannot replace an installed Guard, so Guard's own distribution
+/// follows the user's settings like any other package.
+fn resolve_packages(
+    triggers: &ReviewTriggers,
+    result: &mut PackageEvalResult,
+    guard_free_target: bool,
+) -> bool {
     let mut changed = false;
     for package in &mut result.packages {
-        let own_release = package.remove(OWN_PACKAGE_RELEASE_FIELD) == Some(Value::Bool(true))
-            || is_guard_distribution_off_registry(package);
+        let own_release = (package.remove(OWN_PACKAGE_RELEASE_FIELD) == Some(Value::Bool(true))
+            || is_guard_distribution_off_registry(package))
+            && !guard_free_target;
         let current = decision_of(package);
         if own_release || decision_rank(&current) < decision_rank("ask") {
             continue;
@@ -318,7 +349,9 @@ pub(crate) fn apply_review_triggers(
     } else {
         original_top.clone()
     };
-    let mut changed = resolve_packages(triggers, &mut result);
+    let guard_free_target =
+        installs_into_guard_free_environment(artifact, triggers.workspace_dir.as_deref());
+    let mut changed = resolve_packages(triggers, &mut result, guard_free_target);
     // A package exception the user saved answers the opt-in triggers too.
     let opt_in = result.exception_id.is_none();
     let install = triggers.decision(PACKAGE_INSTALL);
