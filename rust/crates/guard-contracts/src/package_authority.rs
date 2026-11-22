@@ -503,7 +503,13 @@ pub struct PackagePolicyResolveRequestV1 {
     pub harness: String,
     pub artifact_id: String,
     pub artifact_hash: String,
+    /// Publisher identity used by daemon-owned policy lookup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publisher: Option<String>,
     pub workspace_dir: String,
+    /// Ordered workspace candidates for daemon-owned package-policy lookup.
+    #[serde(default)]
+    pub policy_workspaces: Vec<String>,
     /// The saved policy row the store lookup (or the daemon) resolved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision: Option<Value>,

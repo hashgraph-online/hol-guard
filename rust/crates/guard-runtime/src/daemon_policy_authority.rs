@@ -133,14 +133,14 @@ impl ResidentPolicyAuthority {
 
     /// `resolve_package_policy` (native_package_policy_resolve.py). Each
     /// workspace is tried in order; the first `decision` dict wins.
-    fn resolve(
+    pub(crate) fn resolve_package_policy(
         &self,
         harness: &str,
         artifact_id: Option<&str>,
         artifact_hash: &str,
         workspaces: &[String],
         publisher: Option<&str>,
-    ) -> Option<(Value, DaemonAuthority)> {
+    ) -> Option<(Value, Value)> {
         let authority = self.load_authority()?;
         for workspace in workspaces {
             let mut payload = Map::new();
@@ -167,7 +167,7 @@ impl ResidentPolicyAuthority {
             let lookup = post_json(&authority, "/v1/policy/resolve", &Value::Object(payload))?;
             let decision = lookup.get("decision").filter(|d| d.is_object());
             if let Some(decision) = decision {
-                return Some((decision.clone(), authority));
+                return Some((decision.clone(), serialize_authority(&authority)));
             }
         }
         None
@@ -214,7 +214,7 @@ impl PolicyAuthorityApi for ResidentPolicyAuthority {
         // Fail-closed: any error returns an empty resolution.
         let _ = guard_home;
         let artifact_id_opt = (!artifact_id.is_empty()).then_some(artifact_id);
-        match self.resolve(
+        match self.resolve_package_policy(
             harness,
             artifact_id_opt,
             artifact_hash,
@@ -222,7 +222,7 @@ impl PolicyAuthorityApi for ResidentPolicyAuthority {
             publisher,
         ) {
             Some((decision, authority)) => DaemonPolicyResolution {
-                authority: Some(serialize_authority(&authority)),
+                authority: Some(authority),
                 decision: Some(decision),
             },
             None => DaemonPolicyResolution::default(),

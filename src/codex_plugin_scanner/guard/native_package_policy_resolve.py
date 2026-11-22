@@ -13,12 +13,11 @@ unavailable resident can never leave a saved approval applied.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
 from .native_context import _resolve_digest_home
-from .native_daemon_client import GuardSurfaceDaemonClient, load_running_guard_surface_daemon_client
+from .native_daemon_client import GuardSurfaceDaemonClient
 from .native_package_approval_hash import _evaluation_view, _transport
 from .native_package_evaluation_compose import NativePackageEvaluationComposeError, apply_package_evaluation_patch
 
@@ -39,57 +38,6 @@ _REREAD_CLAIMS = frozenset({"exact_cloud", "legacy_local", "store"})
 
 class NativePackagePolicyResolveError(NativePackageEvaluationComposeError):
     """No authoritative native stored-policy resolution was available."""
-
-
-@dataclass(frozen=True)
-class DaemonPolicyResolution:
-    """Transport result from the already-authenticated native daemon authority."""
-
-    decision: dict[str, object] | None
-    authority: GuardSurfaceDaemonClient | None
-
-
-def resolve_package_policy(
-    *,
-    guard_home: Path,
-    harness: str,
-    artifact_id: str | None,
-    artifact_hash: str,
-    workspaces: tuple[str, ...],
-    publisher: str | None,
-) -> DaemonPolicyResolution:
-    """Resolve a saved package decision without starting or repairing a daemon."""
-
-    try:
-        authority = load_running_guard_surface_daemon_client(guard_home)
-        for workspace in workspaces:
-            lookup = authority.resolve_policy_decision(
-                {
-                    "harness": harness,
-                    "artifact_id": artifact_id,
-                    "artifact_hash": artifact_hash,
-                    "workspace": workspace,
-                    "publisher": publisher,
-                }
-            )
-            decision = lookup.get("decision")
-            if isinstance(decision, dict):
-                return DaemonPolicyResolution(decision=dict(decision), authority=authority)
-        return DaemonPolicyResolution(decision=None, authority=authority)
-    except (OSError, RuntimeError, ValueError):
-        return DaemonPolicyResolution(decision=None, authority=None)
-
-
-def claim_package_policy(
-    authority: GuardSurfaceDaemonClient,
-    decision: dict[str, object],
-) -> bool:
-    """Claim reuse through the same native authority that resolved the decision."""
-
-    try:
-        return authority.claim_policy_decision({"decision": decision})
-    except (OSError, RuntimeError, ValueError):
-        return False
 
 
 def _text(value: object) -> str | None:
@@ -157,19 +105,6 @@ def _hydrate(
         if ignored_integrity is not None:
             break
     authority = None
-    if decision is None and ignored_integrity is not None:
-        resolution = resolve_package_policy(
-            guard_home=store.guard_home,
-            harness=artifact.harness,
-            artifact_id=artifact.artifact_id,
-            artifact_hash=artifact_hash,
-            workspaces=policy_workspaces,
-            publisher=artifact.publisher,
-        )
-        authority = resolution.authority
-        if resolution.decision is not None:
-            decision = resolution.decision
-            ignored_integrity = None
     if ignored_integrity is None and authority is None:
         # Only the install that waited on these requests names them. The
         # resident decides whether the exact Cloud allow it reads applies and
@@ -213,7 +148,17 @@ def _hydrate(
 
 def _run_claim(kind: str, store: Any, decision: dict[str, object], authority: Any, now: str) -> bool:
     if kind == "daemon" and authority is not None:
-        return claim_package_policy(authority, decision)
+        if isinstance(authority, Mapping):
+            base_url = authority.get("base_url")
+            auth_token = authority.get("auth_token")
+            if isinstance(base_url, str) and isinstance(auth_token, str):
+                authority = GuardSurfaceDaemonClient(base_url, auth_token)
+        if not isinstance(authority, GuardSurfaceDaemonClient):
+            return False
+        try:
+            return authority.claim_policy_decision({"decision": decision})
+        except (OSError, RuntimeError, ValueError):
+            return False
     if kind == "exact_cloud":
         return store.consume_waited_exact_cloud_package_allow(decision, now=now)
     if kind == "legacy_local":
@@ -312,12 +257,16 @@ def _call(
     claim = payload.get("claim")
     disposition = payload.get("claim_disposition")
     reused = payload.get("reused")
+    decision = payload.get("decision")
+    authority = payload.get("authority")
     if (
-        set(payload) != {"patch", "claim", "claim_disposition", "reused"}
+        set(payload) != {"patch", "claim", "claim_disposition", "reused", "decision", "authority"}
         or not isinstance(reused, bool)
         or not isinstance(patch, dict)
         or (claim is not None and claim not in _CLAIM_KINDS)
         or (disposition is not None and disposition not in _DISPOSITIONS)
+        or (decision is not None and not isinstance(decision, dict))
+        or (authority is not None and not isinstance(authority, dict))
     ):
         raise _invalid()
     if claim is not None and not claim_saved_approval:
@@ -388,13 +337,21 @@ def native_resolve_stored_package_policy(
             "harness": artifact.harness,
             "artifact_id": artifact.artifact_id,
             "artifact_hash": artifact_hash,
+            "publisher": artifact.publisher,
             "workspace_dir": str(workspace_dir),
+            "policy_workspaces": list(policy_workspaces),
             "claim_saved_approval": claim_saved_approval,
             **facts,
         }
         if current_action is not None:
             request["current_action"] = current_action
         payload = _call(request, guard_home, evaluation=evaluation, claim_saved_approval=claim_saved_approval)
+        if isinstance(payload.get("decision"), dict):
+            decision = dict(payload["decision"])
+            request["decision"] = decision
+        if isinstance(payload.get("authority"), dict):
+            authority = dict(payload["authority"])
+            request["daemon_authority"] = True
         claim = payload["claim"]
         if claim is None:
             break
