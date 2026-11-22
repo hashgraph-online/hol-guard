@@ -81,21 +81,18 @@ fn attach(
     // A lane the daemon closed to republish is awaited for at most three
     // quarters of the budget, which leaves the rest for the scan and reply.
     let wait_until = started + Duration::from_millis(budget.saturating_mul(3) / 4);
-    let resident_view = origin_store.map(|store| {
+    let resident = origin_store.map(|store| {
         let digest = envelope
             .policy_snapshot
             .get("policy_digest")
             .and_then(Value::as_str)?;
-        store.structured_output_binding_awaiting(
-            envelope.policy_generation,
-            digest,
-            deadline,
-            wait_until,
-        )
+        store.structured_output_binding_awaiting(envelope.policy_generation, digest, wait_until)
     });
-    let view = match resident_view {
-        Some(Some(Some(view))) => Some(view),
-        Some(Some(None)) => return,
+    let view = match &resident {
+        Some(Some(lane)) => match &lane.view {
+            Some(view) => Some(view.clone()),
+            None => return,
+        },
         Some(None) => Some(authority_unavailable()),
         None => envelope.structured_output_config.clone(),
     };
@@ -126,14 +123,20 @@ fn attach(
         let Some(store) = origin_store else {
             return pi::resolved_binding(&resolution);
         };
-        let Some(digest) = envelope
-            .policy_snapshot
-            .get("policy_digest")
-            .and_then(Value::as_str)
-        else {
-            return Value::Null;
+        // Recheck against the binding the view was read under, which may be
+        // a republish newer than the generation the daemon decided under.
+        let (generation, digest) = match &resident {
+            Some(Some(lane)) => (lane.generation, lane.policy_digest.as_str()),
+            _ => match envelope
+                .policy_snapshot
+                .get("policy_digest")
+                .and_then(Value::as_str)
+            {
+                Some(digest) => (envelope.policy_generation, digest),
+                None => return Value::Null,
+            },
         };
-        match store.structured_output_binding(envelope.policy_generation, digest, Some(deadline)) {
+        match store.structured_output_binding(generation, digest, Some(deadline)) {
             Some(Some(current_view)) => pi::resolution(&edge.harness, Some(&current_view))
                 .map(|current| pi::resolved_binding(&current))
                 .unwrap_or(Value::Null),

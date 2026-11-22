@@ -77,7 +77,7 @@ pub(crate) fn push(fixture: &Fixture, direct_lane: Option<Value>) -> Result<Vec<
     fixture.store.push(&request)
 }
 
-fn write_ack(
+pub(crate) fn write_ack(
     root: &Path,
     generation: u64,
     policy_digest: &str,
@@ -544,104 +544,4 @@ fn review_facts_bind_when_present_and_read_as_absent_otherwise() {
     assert_eq!(review.approval_center_origin, None);
     assert_eq!(review.blocked_request_mode, None);
     assert_eq!(review.review_oauth_source.as_deref(), Some("default"));
-}
-
-#[test]
-fn a_routed_post_tool_use_waits_for_a_lane_closed_to_republish() {
-    use std::time::{Duration, Instant};
-    let fixture = fixture("structured-reopen");
-    let mut lane = binding(&fixture, "/work/repo");
-    let view = json!({"managed_policy_status": "absent"});
-    lane["structured_output_config"] = view.clone();
-    push(&fixture, Some(lane)).unwrap();
-    let generation = fixture.snapshot.generation;
-    let digest = fixture.snapshot.policy_digest.clone();
-
-    let ack_path = fixture
-        .root
-        .join(DIRECT_LANE_ACK_DIRECTORY)
-        .join(DIRECT_LANE_ACK_FILE_NAME);
-
-    // A lane that never opened is not waited on: nothing will reopen it.
-    let started = Instant::now();
-    let never_opened = fixture.store.structured_output_binding_awaiting(
-        generation,
-        &digest,
-        started + Duration::from_secs(5),
-        started + Duration::from_secs(4),
-    );
-    assert_eq!(never_opened, None);
-    assert!(started.elapsed() < Duration::from_secs(1));
-
-    // The lane opens and a plain read resolves the view.
-    write_ack(
-        &fixture.root,
-        generation,
-        &digest,
-        now_ms().unwrap() + DIRECT_LANE_ACK_MAX_LEASE_MS,
-        0o600,
-    );
-    let deadline = Instant::now() + Duration::from_secs(5);
-    assert_eq!(
-        fixture
-            .store
-            .structured_output_binding(generation, &digest, Some(deadline)),
-        Some(Some(view.clone()))
-    );
-
-    // The daemon closes the lane to republish: no ACK, so a plain read of
-    // the binding is unavailable and the content would be withheld.
-    fs::remove_file(&ack_path).unwrap();
-    assert_eq!(
-        fixture
-            .store
-            .structured_output_binding(generation, &digest, Some(deadline)),
-        None
-    );
-
-    // The republish is acknowledged while the routed hook waits.
-    let root = fixture.root.clone();
-    let ack_digest = digest.clone();
-    let reopen = std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(50));
-        write_ack(
-            &root,
-            generation,
-            &ack_digest,
-            now_ms().unwrap() + DIRECT_LANE_ACK_MAX_LEASE_MS,
-            0o600,
-        );
-    });
-    let started = Instant::now();
-    let awaited = fixture.store.structured_output_binding_awaiting(
-        generation,
-        &digest,
-        started + Duration::from_secs(5),
-        started + Duration::from_secs(4),
-    );
-    reopen.join().unwrap();
-    assert_eq!(awaited, Some(Some(view)));
-
-    // A lane that stays closed is still unavailable once the wait ends.
-    fs::remove_file(&ack_path).unwrap();
-    let started = Instant::now();
-    let closed = fixture.store.structured_output_binding_awaiting(
-        generation,
-        &digest,
-        started + Duration::from_secs(5),
-        started + Duration::from_millis(60),
-    );
-    assert_eq!(closed, None);
-    assert!(started.elapsed() >= Duration::from_millis(60));
-
-    // A binding past the requested generation is not awaited.
-    let started = Instant::now();
-    let stale = fixture.store.structured_output_binding_awaiting(
-        generation - 1,
-        &digest,
-        started + Duration::from_secs(5),
-        started + Duration::from_secs(4),
-    );
-    assert_eq!(stale, None);
-    assert!(started.elapsed() < Duration::from_secs(1));
 }

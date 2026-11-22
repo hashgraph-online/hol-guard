@@ -53,8 +53,6 @@ const DIRECT_LANE_ACK_MAX_LEASE_MS: u64 = 120_000;
 /// push, so this covers one ACK write, not a publish.
 const DIRECT_LANE_ACK_SETTLE: Duration = Duration::from_millis(100);
 const DIRECT_LANE_ACK_SETTLE_POLL: Duration = Duration::from_millis(5);
-/// How often a routed `PostToolUse` looks for the lane to reopen.
-const STRUCTURED_BINDING_REOPEN_POLL: Duration = Duration::from_millis(10);
 
 pub(crate) struct DirectLaneBinding {
     generation: u64,
@@ -209,6 +207,9 @@ impl PolicySnapshotStore {
                 resident_activity: binding.resident_activity,
             })
         });
+        if next.is_none() {
+            self.forget_direct_lane_admission();
+        }
         match self.direct_lane.lock() {
             Ok(mut current) => *current = next,
             // A poisoned binding can never be read again, so the lane stays
@@ -360,52 +361,6 @@ impl PolicySnapshotStore {
         Some(binding.structured_output_config.clone())
     }
 
-    /// [`Self::structured_output_binding`] for a hook the daemon routed here,
-    /// waiting until `wait_until` for a lane the daemon closed to republish.
-    ///
-    /// The daemon closes the direct lane while it republishes a moved fact
-    /// (saved decisions, review facts, the structured view itself) and routes
-    /// its hooks through the edge meanwhile. A `PostToolUse` routed in that
-    /// window names the generation the daemon decided under, and the binding
-    /// for it is back once the republish is acknowledged. Withholding at once
-    /// hid ordinary output that happened to finish during the republish, such
-    /// as a contained run's. A binding
-    /// that does not come back in time, or that moved past the requested
-    /// generation, still answers `None`, so that content stays withheld. A
-    /// lane that never admitted a hook at this generation is not waited on:
-    /// nothing will reopen it, and every routed hook would stall.
-    pub(crate) fn structured_output_binding_awaiting(
-        &self,
-        generation: u64,
-        policy_digest: &str,
-        deadline: Instant,
-        wait_until: Instant,
-    ) -> Option<Option<Value>> {
-        loop {
-            let view = self.structured_output_binding(generation, policy_digest, Some(deadline));
-            if view.is_some()
-                || !self.direct_lane_was_open(generation, policy_digest)
-                || self
-                    .bound_generation()
-                    .is_some_and(|bound| bound > generation)
-            {
-                return view;
-            }
-            let now = Instant::now();
-            if now >= wait_until {
-                return None;
-            }
-            std::thread::sleep(STRUCTURED_BINDING_REOPEN_POLL.min(wait_until - now));
-        }
-    }
-
-    fn bound_generation(&self) -> Option<u64> {
-        self.direct_lane
-            .lock()
-            .ok()
-            .and_then(|binding| binding.as_ref().map(|binding| binding.generation))
-    }
-
     /// The admitted snapshot when `binding` matches it and the publisher's
     /// ACK lease for it is current.
     fn admit_binding_lease(
@@ -444,31 +399,11 @@ impl PolicySnapshotStore {
             {
                 return Err(DirectLaneDefer::Unbound);
             }
-            self.note_direct_lane_open(binding);
+            self.note_direct_lane_admitted();
             return Ok(current);
         }
-        self.note_direct_lane_open(binding);
+        self.note_direct_lane_admitted();
         Ok(snapshot)
-    }
-
-    fn note_direct_lane_open(&self, binding: &DirectLaneBinding) {
-        if let Ok(mut opened) = self.direct_lane_opened.lock() {
-            if opened.as_ref().is_none_or(|(generation, digest)| {
-                *generation != binding.generation || *digest != binding.policy_digest
-            }) {
-                *opened = Some((binding.generation, binding.policy_digest.clone()));
-            }
-        }
-    }
-
-    /// Whether the lane last admitted a hook at exactly this generation and
-    /// digest, which is what a lane closed to republish looks like.
-    fn direct_lane_was_open(&self, generation: u64, policy_digest: &str) -> bool {
-        self.direct_lane_opened.lock().ok().is_some_and(|opened| {
-            opened
-                .as_ref()
-                .is_some_and(|(open, digest)| *open == generation && digest == policy_digest)
-        })
     }
 
     /// The ACK file, re-read briefly while it still names a generation older
@@ -618,6 +553,9 @@ fn live_publisher_ack(ack: &DirectLaneAckV1) -> bool {
         && ack.lease_expires_at_ms > now
         && ack.lease_expires_at_ms <= now.saturating_add(DIRECT_LANE_ACK_MAX_LEASE_MS)
 }
+
+#[path = "policy_store_direct_lane_reopen.rs"]
+mod reopen;
 
 #[path = "policy_store_direct_lane_subdirectory.rs"]
 pub(crate) mod subdirectory;
