@@ -109,21 +109,39 @@ fn a_startup_file_in_either_home_keeps_the_read_reviewed() {
     std::fs::create_dir_all(&shell).unwrap();
     let home_text = home.to_str().unwrap();
     let absent = |shell: Option<&Path>| {
-        startup_file_absent(Some(home_text), shell.map(|shell| shell.as_os_str()))
+        startup_file_absent(Some(home_text), shell.map(|shell| shell.as_os_str()), None)
     };
+    let configured = root.join("config");
     let mut results = vec![
         absent(None),
         absent(Some(&shell)),
         absent(Some(Path::new(""))),
         !absent(Some(Path::new("relative"))),
-        !startup_file_absent(None, None),
-        !startup_file_absent(Some("relative"), None),
+        !startup_file_absent(None, None, None),
+        !startup_file_absent(Some("relative"), None, None),
+        startup_file_absent(Some(home_text), None, Some(configured.as_os_str())),
+        !startup_file_absent(Some(home_text), None, Some(OsStr::new("relative"))),
     ];
     for directory in [&shell, &home] {
         std::fs::write(directory.join(".sqliterc"), ".shell id\n").unwrap();
         results.push(!absent(Some(&shell)));
         std::fs::remove_file(directory.join(".sqliterc")).unwrap();
+        // The CLI prefers the XDG script, so it has to be checked as well.
+        let xdg = directory.join(".config/sqlite3");
+        std::fs::create_dir_all(&xdg).unwrap();
+        std::fs::write(xdg.join("sqliterc"), ".shell id\n").unwrap();
+        results.push(!absent(Some(&shell)));
+        std::fs::remove_file(xdg.join("sqliterc")).unwrap();
     }
+    let xdg = configured.join("sqlite3");
+    std::fs::create_dir_all(&xdg).unwrap();
+    std::fs::write(xdg.join("sqliterc"), ".shell id\n").unwrap();
+    results.push(!startup_file_absent(
+        Some(home_text),
+        None,
+        Some(configured.as_os_str()),
+    ));
+    std::fs::remove_file(xdg.join("sqliterc")).unwrap();
     // The real entry point reads the shell's own `HOME`.
     let arguments = ["inventory.db".to_owned(), "select 1".to_owned()];
     results.push(
@@ -138,6 +156,10 @@ fn a_startup_file_in_either_home_keeps_the_read_reviewed() {
             Some(home_text),
             std::env::var_os("HOME")
                 .or_else(|| std::env::var_os("USERPROFILE"))
+                .as_deref()
+                .filter(|value| !value.is_empty())
+                .map(OsStr::new),
+            std::env::var_os("XDG_CONFIG_HOME")
                 .as_deref()
                 .filter(|value| !value.is_empty())
                 .map(OsStr::new),
@@ -172,6 +194,14 @@ fn only_a_leading_select_reads() {
         "select edit(body) from notes",
         "select sqlite_dbpage(1)",
         "select replace into items values (1)",
+        "select fsdir('/etc')",
+        "select writefile/**/('out.txt', 'x')",
+        "select writefile /* gap */ ('out.txt', 'x')",
+        "select \"writefile\"('out.txt', 'x')",
+        "select [writefile]('out.txt', 'x')",
+        "select `writefile`('out.txt', 'x')",
+        "with x as (select 1) replace /* marker */ into items select * from x",
+        "select 1 -- and then\nreplace into items values (1)",
     ] {
         assert!(!read_only_statement(statement), "{statement}");
     }

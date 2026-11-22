@@ -11,8 +11,10 @@
 //! or run programs, and the harmless ones (`.tables`, `.schema`) have plain
 //! `sqlite_master` queries that this proof already covers.
 //!
-//! Without `-init`, the CLI runs `~/.sqliterc` at startup, and that file may
-//! hold any dot-command. The read is admitted only when no such file exists,
+//! Without `-init`, the CLI runs a startup script -- the XDG
+//! `sqlite3/sqliterc` when one is configured, `~/.sqliterc` otherwise -- and
+//! that file may hold any dot-command. The read is admitted only when no such
+//! file exists,
 //! as `psql` is admitted only when no `~/.psqlrc` can run. `-init` names a
 //! startup file of its own, so it stays reviewed rather than becoming a way to
 //! point the CLI at one.
@@ -57,6 +59,7 @@ const WRITE_WORDS: &[&str] = &[
 /// are ordinary words as well, so only a call is refused.
 const UNSAFE_FUNCTIONS: &[&str] = &[
     "edit",
+    "fsdir",
     "fts3_tokenizer",
     "load_extension",
     "readfile",
@@ -77,6 +80,7 @@ pub(super) fn safe_sqlite3_arguments(
             std::env::var_os("HOME")
                 .or_else(|| std::env::var_os("USERPROFILE"))
                 .as_deref(),
+            std::env::var_os("XDG_CONFIG_HOME").as_deref(),
         )
     })
 }
@@ -153,12 +157,27 @@ fn database_argument(value: &str, context: super::PathContext<'_>) -> bool {
         || super::safe_writes::creatable_target(value, context, false)
 }
 
+/// Characters that let a word in the statement mean something other than what
+/// the scanner read.
+///
+/// SQLite treats a comment as whitespace, so `writefile/**/(...)` and a
+/// `--` line between two keywords both hide the shape this screen matches on.
+/// A quoted, backticked or bracketed name is still an identifier that can be
+/// called, so `"writefile"(...)` reaches the same function with the quote
+/// standing between the name and its argument list. A read that only names
+/// plain identifiers and single-quoted text needs none of these, so their
+/// presence refuses the proof rather than being parsed.
+const OBSCURING: &[&str] = &["--", "/*", "*/", "\"", "`", "[", "]"];
+
 /// One `SELECT`, with nothing after it and no word that writes or reaches
 /// outside the database.
 fn read_only_statement(statement: &str) -> bool {
     let text = statement.trim();
     let text = text.strip_suffix(';').unwrap_or(text).trim_end();
     if text.is_empty() || text.contains(';') || text.contains('\0') {
+        return false;
+    }
+    if OBSCURING.iter().any(|marker| text.contains(marker)) {
         return false;
     }
     let lowered = text.to_ascii_lowercase();
@@ -202,14 +221,30 @@ fn words(lowered: &str) -> Vec<Word<'_>> {
     words
 }
 
-/// Whether the account has no `~/.sqliterc` for the CLI to run at startup.
+/// Whether the account has no startup script for the CLI to run.
+///
 /// The shell's own `HOME` is checked too, because the CLI resolves the file
-/// from the environment it is launched in rather than from the account.
-fn startup_file_absent(home_dir: Option<&str>, shell_home: Option<&std::ffi::OsStr>) -> bool {
+/// from the environment it is launched in rather than from the account. Since
+/// 3.41.0 the CLI prefers `$XDG_CONFIG_HOME/sqlite3/sqliterc`, falling back to
+/// `$HOME/.config/sqlite3/sqliterc`, and reads `~/.sqliterc` only when neither
+/// exists, so every one of those paths has to be absent.
+fn startup_file_absent(
+    home_dir: Option<&str>,
+    shell_home: Option<&std::ffi::OsStr>,
+    xdg_config_home: Option<&std::ffi::OsStr>,
+) -> bool {
     let Some(home) = home_dir.map(Path::new).filter(|home| home.is_absolute()) else {
         return false;
     };
-    absent(home)
+    let configured = match xdg_config_home.filter(|value| !value.is_empty()) {
+        Some(value) => {
+            let directory = Path::new(value);
+            directory.is_absolute() && absent_at(&directory.join("sqlite3").join("sqliterc"))
+        }
+        None => true,
+    };
+    configured
+        && absent(home)
         && shell_home
             .filter(|value| !value.is_empty())
             .is_none_or(|shell| {
@@ -219,8 +254,13 @@ fn startup_file_absent(home_dir: Option<&str>, shell_home: Option<&std::ffi::OsS
 }
 
 fn absent(home: &Path) -> bool {
+    absent_at(&home.join(".sqliterc"))
+        && absent_at(&home.join(".config").join("sqlite3").join("sqliterc"))
+}
+
+fn absent_at(path: &Path) -> bool {
     matches!(
-        std::fs::symlink_metadata(home.join(".sqliterc")),
+        std::fs::symlink_metadata(path),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound
     )
 }
