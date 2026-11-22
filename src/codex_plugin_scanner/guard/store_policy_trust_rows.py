@@ -72,6 +72,10 @@ class PolicyBundleTrustRows:
         )
 
 
+class PolicyTrustRowsUnstableError(RuntimeError):
+    """The trust rows kept changing while an oversized bundle was read; nothing was judged, so a retry is safe."""
+
+
 def _deferred_bundle(store: _NativeStore) -> object:
     """The bundle row read on its own; an unreadable row is absent, as the native reader treats it."""
 
@@ -104,7 +108,7 @@ class StorePolicyTrustRowsMixin:
             bundle = _deferred_bundle(self)
             if self._native_store_call("policy_bundle_trust_rows", {}) == answer:
                 return PolicyBundleTrustRows.from_native(answer, policy_bundle=bundle)
-        raise RuntimeError("policy bundle trust rows kept changing while the bundle was read")
+        raise PolicyTrustRowsUnstableError("policy bundle trust rows kept changing while the bundle was read")
 
     def record_review_verification_keyring(self: _NativeStore, keys: Sequence[Mapping[str, object]], now: str) -> None:
         """Store the anchored Review verification keys; an empty list clears the keyring."""
@@ -115,4 +119,4 @@ class StorePolicyTrustRowsMixin:
         )
 
 
-__all__ = ["PolicyBundleTrustRows", "StorePolicyTrustRowsMixin"]
+__all__ = ["PolicyBundleTrustRows", "PolicyTrustRowsUnstableError", "StorePolicyTrustRowsMixin"]

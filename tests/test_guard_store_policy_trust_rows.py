@@ -76,6 +76,21 @@ def test_a_bundle_larger_than_one_reply_is_still_read(tmp_path: Path) -> None:
     assert rows.policy_bundle_keyring == {"keys": []}
 
 
+def test_trust_rows_that_never_settle_raise_a_retryable_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.store_policy_trust_rows import PolicyTrustRowsUnstableError
+
+    store = GuardStore(tmp_path)
+    stamps = iter(range(100))
+
+    def moving(_method: str, _args: object, **_kwargs: object) -> dict[str, object]:
+        return {"policy_bundle_deferred": True, "policy_bundle_stamp": {"bytes": next(stamps)}}
+
+    monkeypatch.setattr(store, "_native_store_call", moving)
+    monkeypatch.setattr(store, "get_sync_payload", lambda _key: None)
+    with pytest.raises(PolicyTrustRowsUnstableError):
+        store.policy_bundle_trust_rows()
+
+
 def test_an_unreadable_bundle_too_large_for_one_reply_reads_as_absent(tmp_path: Path) -> None:
     store = GuardStore(tmp_path)
     store.set_sync_payload("policy_bundle", {"bundleVersion": "8"}, _NOW)

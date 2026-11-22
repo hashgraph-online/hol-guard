@@ -104,11 +104,12 @@ def _validated_bundle(store: GuardStore, payload: dict[str, object], policy_bund
         _policy_bundle_admission_rejection,
         _validate_cached_policy_bundle,
     )
+    from ..store_policy_trust_rows import PolicyTrustRowsUnstableError
 
     try:
         rows = store.policy_bundle_trust_rows()
-    except NativeGuardStoreUnavailable as error:
-        # The snapshot read did not run, so nothing was accepted or activated.
+    except (NativeGuardStoreUnavailable, PolicyTrustRowsUnstableError) as error:
+        # No stable snapshot was read, so nothing was accepted or activated.
         raise _RejectedError(_unavailable()) from error
     validated, rejection_reason, trusted_keys = validate_synced_policy_bundle(
         policy_bundle,
