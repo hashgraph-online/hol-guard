@@ -22,7 +22,12 @@ from typing import Any, Final
 
 from ..blocked_request_mode import BLOCKED_REASON, safe_alternative_reason
 from ..native_hook_decision import NativeHookDecisionError, native_review_response
-from ..native_hook_render import native_render_pre_tool, native_render_recording_only_pre_tool
+from ..native_hook_render import (
+    native_render_accepted_allow,
+    native_render_fail_closed_verdict,
+    native_render_pre_tool,
+    native_render_recording_only_pre_tool,
+)
 
 ENVELOPES_CONTRACT_PATH: Final = (
     Path(__file__).resolve().parent.parent / "contracts" / "hook-fail-closed-envelopes.v1.json"
@@ -104,7 +109,13 @@ def _verdict_text(verdict: Mapping[str, object], key: str) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def _verdict_deny(harness: str, verdict: Mapping[str, object]) -> dict[str, object]:
+def _verdict_deny(
+    harness: str,
+    verdict: Mapping[str, object],
+    *,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+) -> dict[str, object]:
     """Fixed deny for a verdict the resident reached but could not render.
 
     A blocking verdict keeps its own reason and reason code. An allow keeps the
@@ -113,6 +124,18 @@ def _verdict_deny(harness: str, verdict: Mapping[str, object]) -> dict[str, obje
     terms the renderer uses: an allow decision over an allow or warn floor.
     """
 
+    rendered = (
+        native_render_fail_closed_verdict(
+            harness,
+            verdict,
+            guard_home=guard_home,
+            deadline=deadline,
+        )
+        if guard_home is not None
+        else None
+    )
+    if rendered is not None:
+        return rendered
     if verdict.get("decision") == "allow" and verdict.get("minimum_action") in _ALLOW_FLOORS:
         return fail_closed_pre_tool(harness, reason=RENDER_UNAVAILABLE_REASON)
     return fail_closed_pre_tool(
@@ -160,7 +183,7 @@ def render_pre_tool(
     """Resident-rendered PreToolUse response, or a fixed deny when it cannot render."""
 
     rendered = native_render_pre_tool(harness, verdict, guard_home=guard_home, **_deadline_kwargs(deadline))
-    return rendered or _verdict_deny(harness, verdict)
+    return rendered or _verdict_deny(harness, verdict, guard_home=guard_home, deadline=deadline)
 
 
 def render_accepted_allow(
@@ -173,10 +196,9 @@ def render_accepted_allow(
     the activity record never says an approval was accepted for a blocked action.
     """
 
-    rendered = native_render_pre_tool(harness, allowed, guard_home=guard_home, **_deadline_kwargs(deadline))
+    rendered = native_render_accepted_allow(harness, allowed, guard_home=guard_home, **_deadline_kwargs(deadline))
     if rendered is None:
         return fail_closed_pre_tool(harness)
-    rendered["approval_reuse_status"] = "accepted"
     return rendered
 
 
@@ -205,7 +227,12 @@ def render_pre_tool_review(
     with suppress(NativeHookDecisionError):
         return native_review_response("paused_review", inputs, guard_home=guard_home, deadline=deadline)
     approval_url = None if approval is None else approval.get("approval_url")
-    return _verdict_deny(harness, _without_approval_url(verdict, approval_url))
+    return _verdict_deny(
+        harness,
+        _without_approval_url(verdict, approval_url),
+        guard_home=guard_home,
+        deadline=deadline,
+    )
 
 
 def _silent_block_reason(inputs: Mapping[str, Any]) -> str:
@@ -253,7 +280,12 @@ def render_silent_review_block(
         "policy_action": "block",
         "reason": _silent_block_reason(inputs),
     }
-    response = _verdict_deny(harness, _without_approval_url(blocked, inputs.get("approval_url")))
+    response = _verdict_deny(
+        harness,
+        _without_approval_url(blocked, inputs.get("approval_url")),
+        guard_home=guard_home,
+        deadline=deadline,
+    )
     response.update(prompted=False, blocked_request_mode="safe-alternative")
     request_id = inputs.get("request_id")
     if inputs.get("retry_reuses_approval") and isinstance(request_id, str) and request_id:
