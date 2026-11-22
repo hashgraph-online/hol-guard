@@ -507,7 +507,7 @@ pub(super) fn exact_safe_segment_with_context(
                 && super::directory_targets::drive_targets_quoted(segment)
         }
         // `printf -v NAME` and `%n` assign a shell variable rather than print.
-        "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => {
+        "pwd" | "true" | "echo" | "printf" | "whoami" | "uname" => {
             !super::printf_words::printf_sets_variable(segment)
                 && !super::control_flow_flatten::command_word_changes_shell_state(&segment.text)
                 && super::glob_words::printed_globs_listable(model, segment, context)
@@ -515,12 +515,11 @@ pub(super) fn exact_safe_segment_with_context(
         "exit" => super::shell_flow::safe_exit_arguments(&segment.arguments),
         "break" | "continue" => super::shell_flow::safe_loop_control_arguments(&segment.arguments),
         "unset" | "set" => super::inert_environment::safe_shell_setting(basename, segment),
-        // `whence` is zsh's spelling of `which`: it reports where a name
-        // resolves and runs nothing. Its proven flags are `-a`, `-p` and `-v`,
-        // none of which prints a function body. zsh's `where` is `whence -ca`,
-        // and the csh-style output prints the body of a matching function, so
-        // it stays under review next to `whence -f` and `type NAME`.
-        "type" | "command" | "whence" => {
+        // zsh's builtin `which` can print a function or alias definition.
+        // Unqualified `whence` and its `-a` / `-v` forms can do likewise;
+        // only explicit `whence -p` with bounded names proves a path lookup.
+        // Neither is eligible for the generic harmless-command fast path.
+        "type" | "command" | "whence" | "which" => {
             super::lookup_reads::safe_path_lookup(basename, &segment.arguments)
         }
         "cargo" => super::rust_toolchain::safe_cargo_probe(&segment.arguments, context),
