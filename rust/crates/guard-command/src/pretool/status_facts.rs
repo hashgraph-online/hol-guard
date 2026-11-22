@@ -139,13 +139,18 @@ fn sampling_arguments(arguments: &[String], flags: &[&str]) -> bool {
         .all(|word| flags.contains(&word.as_str()) || keyword(word))
 }
 
-/// `top` in a logging mode, which prints its samples and exits.
+/// `top` in a logging mode, which prints a bounded number of samples and exits.
 ///
 /// Without `-l` on macOS or `-b` on Linux the program takes over the terminal
 /// and its interactive keys renice and signal the processes it lists, so the
-/// batch flag has to be there before anything else is read.
+/// batch flag has to be there before anything else is read. The count has to
+/// be there too and has to be positive: `top -l 0` samples forever, and Linux
+/// `top -b` with no `-n` does the same, so either would hold the agent's shell
+/// step until it timed out.
 fn top_arguments(arguments: &[String]) -> bool {
-    let mut batch = false;
+    let mut logging = false;
+    let mut background = false;
+    let mut iterations = false;
     let mut remaining = arguments;
     while let Some((word, rest)) = remaining.split_first() {
         match word.as_str() {
@@ -157,22 +162,48 @@ fn top_arguments(arguments: &[String]) -> bool {
                 if !keyword(value) {
                     return false;
                 }
-                if word == "-l" {
-                    batch = true;
+                match word.as_str() {
+                    "-l" => {
+                        if !positive(value) {
+                            return false;
+                        }
+                        logging = true;
+                    }
+                    "-n" => {
+                        if !positive(value) {
+                            return false;
+                        }
+                        iterations = true;
+                    }
+                    _ => {}
                 }
                 remaining = tail;
             }
             "-b" | "-H" | "-i" | "-c" | "-S" | "-E" | "-e" | "-a" | "-r" | "-R" | "-F" | "-f"
-            | "-t" | "-q" | "-n1" => {
+            | "-t" | "-q" => {
                 if word == "-b" {
-                    batch = true;
+                    background = true;
                 }
                 remaining = rest;
             }
-            _ => return false,
+            _ => {
+                let Some(count) = word.strip_prefix("-n") else {
+                    return false;
+                };
+                if !positive(count) {
+                    return false;
+                }
+                iterations = true;
+                remaining = rest;
+            }
         }
     }
-    batch
+    logging || (background && iterations)
+}
+
+/// A count that bounds a sampling run: decimal and not zero.
+fn positive(word: &str) -> bool {
+    number(word) && word.chars().any(|character| character != '0')
 }
 
 /// A login name or terminal: no separator, so no path and no option.

@@ -36,6 +36,7 @@ fn a_status_reader_prints_counters_samples_or_login_sessions() {
         "top -l 1",
         "top -l 1 -o cpu",
         "top -b -n 1",
+        "top -b -n1",
     ] {
         assert!(admits(command), "{command} reads a host status counter");
     }
@@ -46,6 +47,9 @@ fn a_spelling_that_opens_a_file_takes_the_terminal_or_asks_about_a_unit_stays_re
     for command in [
         "top",
         "top -o cpu",
+        "top -l 0",
+        "top -b",
+        "top -b -n 0",
         "last -f /var/log/wtmp.1",
         "last -F",
         "last ../operator",
