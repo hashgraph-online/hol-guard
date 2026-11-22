@@ -26,7 +26,10 @@ pub(super) fn safe_lookup_arguments(executable: &str, arguments: &[String]) -> b
         if options && argument == "--" {
             options = false;
         } else if options && argument.len() > 1 && argument.starts_with('-') {
-            if !argument[1..].chars().all(|letter| matches!(letter, 't' | 'p' | 'P')) {
+            if !argument[1..]
+                .chars()
+                .all(|letter| matches!(letter, 't' | 'p' | 'P'))
+            {
                 return false;
             }
             bounded_output = true;
