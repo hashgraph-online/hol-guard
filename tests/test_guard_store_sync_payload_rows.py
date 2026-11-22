@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
@@ -78,3 +79,21 @@ def test_a_payload_wider_than_one_native_request_still_saves(tmp_path: Path) -> 
     store.set_sync_payload("aibom_inventory", {"rows": rows}, _NOW)
 
     assert store.get_sync_payload("aibom_inventory") == {"rows": rows}
+
+
+def test_an_oversized_payload_that_is_not_an_object_or_array_is_refused(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_payload("aibom_inventory", {"rows": []}, _NOW)
+
+    with pytest.raises(ValueError, match="invalid_payload"):
+        store.set_sync_payload("aibom_inventory", "x" * (4 * 1024 * 1024), _NOW)  # pyright: ignore[reportArgumentType]
+
+    assert store.get_sync_payload("aibom_inventory") == {"rows": []}
+
+
+def test_a_mapping_that_is_not_a_dict_is_saved(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    store.set_sync_payload("aibom_inventory", MappingProxyType({"rows": [1, 2]}), _NOW)
+
+    assert store.get_sync_payload("aibom_inventory") == {"rows": [1, 2]}

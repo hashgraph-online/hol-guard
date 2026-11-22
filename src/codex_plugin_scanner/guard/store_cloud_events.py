@@ -148,10 +148,15 @@ class StoreCloudEventsMixin:
 
     def set_sync_payload(self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str) -> None:
         oauth_changed = _is_oauth_credentials_key(state_key)
-        args = {"state_key": state_key, "payload": _payload_arg(payload), "now": now}
+        normalized = _payload_arg(payload)
+        args = {"state_key": state_key, "payload": normalized, "now": now}
         if not oauth_changed:
-            if not _fits_native_request(payload):
-                self._write_oversized_sync_payload(state_key, payload, now)
+            if not _fits_native_request(normalized):
+                if not isinstance(normalized, (dict, list)):
+                    # The native store refuses a payload that is neither an
+                    # object nor an array; the fallback keeps that rule.
+                    raise ValueError("invalid_payload")
+                self._write_oversized_sync_payload(state_key, normalized, now)
                 return
             self._native_store_call("set_sync_payload", args)
             return
@@ -162,7 +167,7 @@ class StoreCloudEventsMixin:
         review_event_wake_signal(self.path).notify()
 
     def _write_oversized_sync_payload(
-        self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str
+        self, state_key: str, payload: dict[str, object] | list[object], now: str
     ) -> None:
         # An AIBOM inventory may hold more rows than one native store request
         # accepts, so a payload past those limits is written here instead.
