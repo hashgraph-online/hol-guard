@@ -122,6 +122,20 @@ def test_only_a_known_state_is_taken_from_the_runtime(
         (
             "native-policy-integrity-key-mint-v1",
             "policy-integrity-key-mint",
-            {"guard_home": str(tmp_path)},
+            {"guard_home": str(tmp_path.resolve())},
         )
     ]
+
+
+def test_a_relative_home_is_sent_resolved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[object] = []
+
+    def fake_answer(_feature: str, _command: str, request: object, **_kwargs: object) -> dict[str, object]:
+        seen.append(request)
+        return {"state": "busy"}
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", fake_answer)
+    monkeypatch.chdir(tmp_path)
+
+    assert key_mint_module.native_policy_integrity_key_mint(Path("guard-home")) == "busy"
+    assert seen == [{"guard_home": str(tmp_path.resolve() / "guard-home")}]

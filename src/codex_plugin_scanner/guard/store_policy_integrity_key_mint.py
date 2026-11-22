@@ -35,7 +35,9 @@ def native_policy_integrity_key_mint(guard_home: Path) -> str | None:
     answer = runtime_answer(
         NATIVE_MINT_FEATURE,
         _NATIVE_MINT_COMMAND,
-        {"guard_home": str(guard_home)},
+        # The runtime runs from its own directory, so a relative home would
+        # name another place there.
+        {"guard_home": str(guard_home.expanduser().resolve())},
         output_limit=_NATIVE_MINT_OUTPUT_LIMIT,
         # One budget for the status check and the command together.
         deadline=time.monotonic() + _NATIVE_MINT_TIMEOUT_SECONDS,
