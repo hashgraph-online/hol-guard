@@ -61,13 +61,9 @@ def _registry(store, committed, catalog: type[GeneratedCommandCatalog]) -> Gener
 @lifecycle.one_runtime
 def require_current(store, verifier_key, expected_digest):
     """Reject a captured catalog if another process activated a different record."""
-    from .activation_store import _row
+    from .activation_store import read_slot
 
-    with store._connect() as connection:
-        exists = connection.execute(
-            "select 1 from sqlite_master where type='table' and name='extension_control_schema_migration'"
-        ).fetchone()
-        row = _row(connection) if exists else None
+    row = read_slot(store)
     if row is not None:
         from . import activation_baseline
 

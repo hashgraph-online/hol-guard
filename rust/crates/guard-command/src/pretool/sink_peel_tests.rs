@@ -154,6 +154,37 @@ fn a_trailing_report_leaves_the_core_alone_and_names_the_arm_it_prints() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// An agent that pipes a run into `grep` and `head` cannot read the run's own
+/// status from `$?`, which the filters have replaced, so it writes
+/// `${PIPESTATUS[0]}`. That is the same report, and the sink answers it with
+/// the core's own status rather than the one the chain left.
+#[test]
+fn a_report_reading_the_first_stage_status_is_read_as_a_report() {
+    let root = fixture("report-pipestatus");
+    let workspace = root.to_str().unwrap();
+    for command in [
+        "bun run build; echo \"exit=${PIPESTATUS[0]}\"",
+        "bun run build 2>&1 | grep error | head -5; echo \"exit=${PIPESTATUS[0]}\"",
+    ] {
+        let core = peel(command, workspace, None, None, false)
+            .unwrap()
+            .expect("the report wraps the command");
+        assert_eq!(core.core, "bun run build", "{command}");
+        let output = core.output.expect("a report describes the output");
+        assert_eq!(output.status_label.as_deref(), Some("exit="), "{command}");
+        assert!(output.status_from_core, "{command}");
+    }
+    // After `&&` or `||` the array the echo would read is its own run's, so
+    // the sequenced spelling is still the only report.
+    for command in [
+        "bun run build && echo \"exit=${PIPESTATUS[0]}\"",
+        "bun run build || echo \"exit=${PIPESTATUS[0]}\"",
+    ] {
+        assert_eq!(peel(command, workspace, None, None, false).unwrap(), None);
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 /// A newline after `;`, `&&` or `||` is ordinary shell whitespace before
 /// the report's echo, and must be read the same way as a horizontal blank.
 #[test]

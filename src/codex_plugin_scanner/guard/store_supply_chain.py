@@ -1,9 +1,10 @@
-"""Local storage helpers for HOL Guard supply-chain bundle caching."""
+"""Schema for the HOL Guard supply-chain caches.
+
+The native store reads and writes these tables; see
+``supply_chain_bundle_cache_op.rs`` in ``hol-guard-runtime``.
+"""
 
 from __future__ import annotations
-
-import json
-import sqlite3
 
 
 def supply_chain_bundle_schema_statement() -> str:
@@ -61,66 +62,3 @@ def supply_chain_index_statements() -> tuple[str, ...]:
         ),
         "CREATE INDEX IF NOT EXISTS idx_supply_chain_eval_updated_at ON guard_supply_chain_eval_cache(updated_at)",
     )
-
-
-def upsert_supply_chain_bundle(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    response: dict[str, object],
-    cached_at: str,
-) -> None:
-    """Insert or replace the latest cached supply-chain bundle for a workspace."""
-
-    bundle = response.get("bundle")
-    if not isinstance(bundle, dict):
-        raise ValueError("response must include a bundle object")
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO guard_supply_chain_bundle_cache (
-            workspace_id,
-            bundle_version,
-            key_id,
-            tier,
-            policy_hash,
-            feed_snapshot_hash,
-            scoring_version,
-            payload_hash,
-            response_json,
-            cached_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            workspace_id,
-            str(bundle["bundleVersion"]),
-            str(bundle["keyId"]),
-            str(bundle["tier"]),
-            str(bundle["policyHash"]),
-            str(bundle["feedSnapshotHash"]),
-            str(bundle["scoringVersion"]),
-            str(response["payloadHash"]),
-            json.dumps(response),
-            cached_at,
-        ),
-    )
-
-
-def get_supply_chain_bundle(conn: sqlite3.Connection, *, workspace_id: str) -> dict[str, object] | None:
-    """Return the cached supply-chain bundle payload for a workspace."""
-
-    row = conn.execute(
-        """
-        SELECT response_json, cached_at
-        FROM guard_supply_chain_bundle_cache
-        WHERE workspace_id = ?
-        """,
-        (workspace_id,),
-    ).fetchone()
-    if row is None:
-        return None
-    payload = json.loads(row["response_json"])
-    if not isinstance(payload, dict):
-        return None
-    payload["cached_at"] = row["cached_at"]
-    return payload

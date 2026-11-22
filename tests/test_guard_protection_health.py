@@ -18,6 +18,7 @@ import pytest
 
 from codex_plugin_scanner.guard import approvals as approvals_module
 from codex_plugin_scanner.guard.models import GuardRuntimeState
+from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.native_protection_health import NativeProtectionHealthError
 from codex_plugin_scanner.guard.runtime import protection_health_runtime
 from codex_plugin_scanner.guard.store import GuardStore
@@ -61,6 +62,13 @@ class _BrokenStore:
 
     def get_command_activity_persistence_health(self) -> _ActivityHealth:
         raise RuntimeError("store unavailable")
+
+
+class _UnavailableStore(_Store):
+    def count_command_activities(self) -> int:
+        error = NativeGuardStoreUnavailable("Guard store native runtime unavailable (native_guard_store_unavailable).")
+        error.reason = "native_guard_store_unavailable"
+        raise error
 
 
 @pytest.fixture
@@ -135,6 +143,13 @@ def test_absent_facts_are_sent_as_absent(collect: Callable[..., dict[str, object
     assert facts["remembered_rules"] is None
     assert facts["runtime_protection"] is None
     # A store that cannot report its counters is unavailable, never healthy.
+    assert facts["decision_stream"] is None
+
+
+def test_a_native_store_outage_leaves_the_decision_stream_unknown(
+    collect: Callable[..., dict[str, object]],
+) -> None:
+    facts = collect(store=_UnavailableStore())
     assert facts["decision_stream"] is None
 
 

@@ -78,6 +78,9 @@ use crate::guard_store_temporary_mcp::apply_temporary_mcp_grant;
 use crate::guard_store_tool_call_evidence as tool_call_evidence;
 use crate::guard_store_wfcap_wire as wfcap;
 
+#[path = "guard_store_local_cli_reads.rs"]
+mod local_cli_reads;
+
 pub(crate) fn dispatch(
     connection: &Connection,
     source: &str,
@@ -191,8 +194,7 @@ pub(crate) fn dispatch(
         }
         "list_command_activity_page" => api::list_page(connection, args),
         "command_activity_analytics" => api::analytics(connection, args),
-        "get_command_activity_persistence_health" => api::persistence_health(connection, args),
-        "list_table_names" => api::table_names(connection, args),
+        _ if api::reads::handles(method) => api::reads::dispatch(connection, method, args),
         "record_command_activity_feedback" => feedback::record_feedback(connection, args),
         "list_command_activity_invalidations" => feedback::list_invalidations(connection, args),
         "clear_command_activity_evidence" => privacy::clear_evidence(connection),
@@ -311,8 +313,8 @@ pub(crate) fn dispatch(
         "record_tool_call_evidence" => {
             tool_call_evidence::record_tool_call_evidence(connection, args)
         }
-        "record_native_decision_receipt" => {
-            native_receipts::record_native_decision_receipt(connection, args)
+        _ if native_receipts::handles(method) => {
+            native_receipts::dispatch(connection, method, args)
         }
         "set_receipt_action_envelope" => receipt_writes::set_action_envelope(connection, args),
         "update_receipt_policy_decision" => {
@@ -476,10 +478,10 @@ pub(crate) fn dispatch(
         "hook_managed_install_admission" => {
             crate::guard_store_managed_installs::hook_admission(connection, args)
         }
-        "list_events_after" => cloud_events::list_after(connection, args),
+        "list_events_after" | "list_events" => cloud_events::list_log(connection, method, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
-        "cached_supply_chain_bundle" => {
-            crate::supply_chain_bundle_cache_op::cached_bundle(connection)
+        _ if crate::supply_chain_bundle_cache_op::handles(method) => {
+            crate::supply_chain_bundle_cache_op::dispatch(connection, method, args)
         }
         "add_guard_event_v1" => cloud_events::add(connection, args),
         "list_guard_events_v1" => cloud_events::list(connection, args),
@@ -489,6 +491,9 @@ pub(crate) fn dispatch(
         "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
         _ if connect::handles(method) => connect::dispatch(connection, method, args),
         _ if state_ops::handles(method) => state_ops::dispatch(connection, method, args),
+        _ if local_cli_reads::handles(method) => {
+            local_cli_reads::dispatch(connection, method, args)
+        }
         _ if sync_state::handles_row_method(method) => {
             sync_state::dispatch_row_method(connection, method, args)
         }

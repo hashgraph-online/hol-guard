@@ -76,7 +76,7 @@ def apply_exact_cloud_review(
             raise _reject(store, "cloud_review_capability_missing", now=current)
         raw_capability = loaded_capability
     try:
-        _ = _oauth_state(store)
+        _oauth_state(store)
     except ExactCloudReviewError as error:
         raise _reject(store, error.code, now=current) from error
     receipt_expires_at = _text(envelope.get("expiresAt"))

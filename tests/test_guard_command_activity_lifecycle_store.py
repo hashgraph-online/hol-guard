@@ -238,14 +238,18 @@ def test_local_health_fallback_runs_only_before_the_request_is_sent(tmp_path: Pa
 
         return call
 
+    native = store._native_store_call
     store._native_store_call = fail("native_guard_store_unavailable")
     with pytest.raises(NativeGuardStoreUnavailable) as sent:
         store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
     assert sent.value.reason == "native_guard_store_unavailable"
+    # The health read itself goes through the native store.
+    store._native_store_call = native
     assert store.get_command_activity_persistence_health().dropped_event_count == 0
 
     store._native_store_call = fail("native_guard_store_prerequisite_unavailable")
     store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
+    store._native_store_call = native
     health = store.get_command_activity_persistence_health()
     assert health.dropped_event_count == 1
     assert health.persistence_error_count == 1

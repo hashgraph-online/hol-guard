@@ -16,7 +16,7 @@ use crate::guard_store_local_cli_inventory_rows::py_text;
 const CAPABILITIES: [&str; 3] = ["loopback-network", "state-dir-read", "state-dir-write"];
 
 /// `CAPABILITY_BY_CAUSE`: the capability a recorded blocked cause points at.
-const CAPABILITY_BY_CAUSE: [(&str, &str); 3] = [
+pub(crate) const CAPABILITY_BY_CAUSE: [(&str, &str); 3] = [
     ("connect_loopback", "loopback-network"),
     ("read_home_state", "state-dir-read"),
     ("write_home_state", "state-dir-write"),

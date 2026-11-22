@@ -310,8 +310,23 @@ class StoreInventoryMixin:
         }
 
     def get_cloud_workspace_id(self) -> str | None:
-        with self._connect() as connection:
-            return self._cloud_workspace_id_from_connection(connection)
+        """The connected Guard Cloud workspace, as the native store reads it.
+
+        Only the id leaves the store. A credential record that cannot be
+        decoded raises ``ValueError``, as decoding it here did.
+        """
+
+        answer = self._native_store_call("cloud_workspace_id", {})
+        if not isinstance(answer, dict):
+            raise sqlite3.DatabaseError("native_cloud_workspace_id_invalid")
+        if answer == {"state": "malformed"}:
+            raise ValueError("Guard Cloud credential record is not valid JSON.")
+        workspace_id = answer.get("workspace_id")
+        if set(answer) != {"state", "workspace_id"} or answer.get("state") != "present":
+            raise sqlite3.DatabaseError("native_cloud_workspace_id_invalid")
+        if workspace_id is not None and not isinstance(workspace_id, str):
+            raise sqlite3.DatabaseError("native_cloud_workspace_id_invalid")
+        return workspace_id
 
     def next_aibom_trust_attestation_sequence(self, now: str) -> int:
         return int(self._native_store_call("next_aibom_trust_attestation_sequence", {"now": now}))

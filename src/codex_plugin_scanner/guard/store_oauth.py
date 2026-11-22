@@ -569,19 +569,11 @@ class StoreOAuthConnectMixin:
                 if isinstance(recovered_entitlement, dict):
                     entitlement_fields.update(recovered_entitlement)
         if workspace_id is None:
-            with self._connect() as connection:
-                row = connection.execute(
-                    """
-                    select workspace_id
-                    from guard_supply_chain_bundle_cache
-                    order by cached_at desc
-                    limit 1
-                    """
-                ).fetchone()
-            if row is not None:
-                raw_workspace_id = row["workspace_id"]
-                if isinstance(raw_workspace_id, str) and raw_workspace_id.strip():
-                    workspace_id = raw_workspace_id.strip()
+            raw_workspace_id = self._native_store_call("newest_supply_chain_bundle_workspace", {})
+            if raw_workspace_id is not None and not isinstance(raw_workspace_id, str):
+                raise RuntimeError("native newest_supply_chain_bundle_workspace returned no answer")
+            if raw_workspace_id is not None and raw_workspace_id.strip():
+                workspace_id = raw_workspace_id.strip()
         metadata: dict[str, object] = {}
         if workspace_id is not None:
             metadata["workspace_id"] = workspace_id

@@ -37,14 +37,23 @@ pub(crate) fn set(connection: &Connection, args: &Args<'_>) -> StoreResult<Value
     if is_credential_key(state_key) {
         return value_error("sync_payload_key_reserved");
     }
+    write_encoded(
+        connection,
+        state_key,
+        &encoded_payload(args)?,
+        args.str("now")?,
+    )?;
+    Ok(Value::Null)
+}
+
+/// The `payload` argument as JSON text: an object or an array, else
+/// `invalid_payload`.
+fn encoded_payload(args: &Args<'_>) -> StoreResult<String> {
     let payload = args
         .raw("payload")
         .filter(|payload| payload.is_object() || payload.is_array())
         .map_or_else(|| value_error("invalid_payload"), Ok)?;
-    let encoded =
-        serde_json::to_string(payload).map_or_else(|_| value_error("invalid_payload"), Ok)?;
-    write_encoded(connection, state_key, &encoded, args.str("now")?)?;
-    Ok(Value::Null)
+    serde_json::to_string(payload).map_or_else(|_| value_error("invalid_payload"), Ok)
 }
 
 /// Upsert already-encoded payload text under `state_key`. Callers keep the
@@ -109,11 +118,27 @@ pub(crate) mod exact_cloud_state;
 #[path = "guard_store_worker_host.rs"]
 pub(crate) mod worker_host;
 
+#[path = "guard_store_oauth_sign_in_stamp.rs"]
+pub(crate) mod oauth_sign_in_stamp;
+
 #[path = "guard_store_aibom_state.rs"]
 pub(crate) mod aibom_state;
 
+#[path = "guard_store_sync_payload_snapshot.rs"]
+pub(crate) mod sync_payload_snapshot;
+
 #[path = "guard_store_policy_trust_rows.rs"]
 pub(crate) mod policy_trust_rows;
+
+#[path = "guard_store_continuity_rows.rs"]
+pub(crate) mod continuity_rows;
+#[path = "guard_store_sync_payload_rows.rs"]
+pub(crate) mod sync_payload_rows;
+
+#[path = "guard_store_queue_lane_rows.rs"]
+pub(crate) mod queue_lane_rows;
+#[path = "guard_store_review_memory_rows.rs"]
+pub(crate) mod review_memory_rows;
 
 /// Whether one of the named `sync_state` row modules owns `method`.
 pub(crate) fn handles_row_method(method: &str) -> bool {
@@ -123,8 +148,14 @@ pub(crate) fn handles_row_method(method: &str) -> bool {
         || sync_delivery_rows::handles(method)
         || exact_cloud_state::handles(method)
         || worker_host::handles(method)
+        || oauth_sign_in_stamp::handles(method)
         || aibom_state::handles(method)
+        || sync_payload_snapshot::handles(method)
         || policy_trust_rows::handles(method)
+        || continuity_rows::handles(method)
+        || review_memory_rows::handles(method)
+        || sync_payload_rows::handles(method)
+        || queue_lane_rows::handles(method)
 }
 
 /// Run `method` in the `sync_state` row module that owns it.
@@ -150,8 +181,26 @@ pub(crate) fn dispatch_row_method(
             exact_cloud_state::dispatch(connection, method, args)
         }
         _ if worker_host::handles(method) => worker_host::dispatch(connection, method, args),
+        _ if sync_payload_snapshot::handles(method) => {
+            sync_payload_snapshot::dispatch(connection, method, args)
+        }
+        _ if oauth_sign_in_stamp::handles(method) => {
+            oauth_sign_in_stamp::dispatch(connection, method, args)
+        }
         _ if policy_trust_rows::handles(method) => {
             policy_trust_rows::dispatch(connection, method, args)
+        }
+        _ if continuity_rows::handles(method) => {
+            continuity_rows::dispatch(connection, method, args)
+        }
+        _ if review_memory_rows::handles(method) => {
+            review_memory_rows::dispatch(connection, method, args)
+        }
+        _ if sync_payload_rows::handles(method) => {
+            sync_payload_rows::dispatch(connection, method, args)
+        }
+        _ if queue_lane_rows::handles(method) => {
+            queue_lane_rows::dispatch(connection, method, args)
         }
         _ => aibom_state::dispatch(connection, method, args),
     }

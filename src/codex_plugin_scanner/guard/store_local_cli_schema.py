@@ -9,6 +9,7 @@ from typing import Final, cast
 from .store_local_cli_capabilities import ensure_local_cli_capability_table
 from .store_local_cli_context import ensure_local_cli_context_columns
 from .store_local_cli_regroup import regroup_pending_connector_reviews
+from .store_mcp_catalog import rebuild_tool_authority
 
 LOCAL_CLI_SCHEMA_VERSION: Final = 14
 _V1_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v1").hexdigest()
@@ -40,6 +41,19 @@ class LocalCliSchemaError(ValueError):
         super().__init__(message)
         self.store_version = store_version
         self.supported_version = supported_version
+
+
+def local_cli_schema_is_current(connection: sqlite3.Connection) -> bool:
+    """Whether the store records this build's local CLI migration marker.
+
+    The native local CLI methods read columns only that migration adds, so an
+    older or missing marker sends the store through the initializer that runs it.
+    """
+
+    marker = connection.execute(
+        "select version, checksum from local_cli_schema_migration where singleton = 1"
+    ).fetchone()
+    return marker is not None and tuple(marker) == (LOCAL_CLI_SCHEMA_VERSION, _SCHEMA_CHECKSUM)
 
 
 def ensure_local_cli_schema(connection: sqlite3.Connection, *, for_read: bool = False) -> None:
@@ -119,8 +133,6 @@ def ensure_local_cli_schema(connection: sqlite3.Connection, *, for_read: bool = 
         if version == 10 and checksum == _V10_CHECKSUM:
             _ensure_mcp_tool_authority_table(connection)
             _ensure_workflow_proposal_table(connection)
-            from .store_mcp_catalog import rebuild_tool_authority
-
             for cli_id, identity_hash, raw, revision in connection.execute(
                 "select cli_id, identity_hash, catalog_json, revision from local_mcp_catalog"
             ).fetchall():

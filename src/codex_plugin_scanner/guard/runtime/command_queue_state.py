@@ -206,8 +206,12 @@ def lane_exact_lease_batch_limit(store: GuardStore, state: dict[str, object]) ->
 
     if EXACT_LEASE_BATCH_LIMIT_KEY in state or not current_command_queue_lane().is_drain:
         return exact_lease_batch_limit(state)
-    main = store.get_sync_payload(COMMAND_QUEUE_STATE_KEY)
-    return exact_lease_batch_limit(main if isinstance(main, dict) else {})
+    (main,) = store.command_queue_lane_rows((COMMAND_QUEUE_STATE_KEY,))
+    if not main.readable:
+        # ``get_sync_payload`` raised for a row that is not JSON; the poll that
+        # asked fails the same way rather than batching on a guess.
+        raise ValueError("command_queue_state_unreadable")
+    return main.exact_lease_batch_limit
 
 
 def record_exact_lease_batch_limit(store: GuardStore, state: dict[str, object], limit: int) -> None:

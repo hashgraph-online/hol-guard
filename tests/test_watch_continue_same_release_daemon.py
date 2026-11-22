@@ -12,7 +12,6 @@ import pytest
 from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
 from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
-    cursor_fallback_permission,
 )
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
@@ -226,14 +225,6 @@ def test_availability_without_acknowledged_watch_denies_git_and_network(tmp_path
         reason="native unavailable",
     )
     assert gh_cmd["decision"] == "deny"
-
-
-def test_cursor_fallback_without_mode_authority_denies_shell() -> None:
-    allow, code = cursor_fallback_permission(
-        hook_event_name="beforeShellExecution",
-    )
-    assert code == 2
-    assert allow["permission"] == "deny"
 
 
 def test_watch_unavailable_pretool_records_command_activity(

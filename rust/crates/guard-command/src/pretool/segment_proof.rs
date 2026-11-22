@@ -134,9 +134,12 @@ fn segment_proofs(
         .iter()
         .enumerate()
         .map(|(index, segment)| {
-            // `$((PATH=10))` assigns as it expands, which a later step sees.
-            let assigns = index + 1 < model.segments.len()
-                && super::shell_arithmetic::arithmetic_assigns(&segment.text);
+            // `$((PATH=10))` assigns while the shell expands this step's own
+            // words, before it looks the program up, so the assignment decides
+            // what this step runs as well as what the steps after it run.
+            // `defaults read $((PATH=1))` runs `1/defaults`, not the macOS
+            // program. Screen it on every step, the last one included.
+            let assigns = super::shell_arithmetic::arithmetic_assigns(&segment.text);
             (index == 0 && cwd.is_some())
                 || (!assigns
                     && exact_safe_segment_with_context(model, segment, false, proof_context))
@@ -493,9 +496,19 @@ pub(super) fn exact_safe_segment_with_context(
     {
         return false;
     }
-    if super::version_probes::safe_version_probe(basename, &segment.arguments)
+    if (super::host_facts::safe_host_fact(basename, &segment.arguments)
+        // `expr` prints its operands, in the result or in the error naming
+        // the next one, and a `seq` separator is printed between the bounds,
+        // so an unquoted glob in either reaches the terminal the way `echo`'s
+        // does and is screened by the same listing proof.
+        && (!matches!(basename, "expr" | "seq")
+            || super::glob_words::printed_globs_listable(model, segment, context)))
+        || super::version_probes::safe_version_probe(basename, &segment.arguments)
+        || super::network_facts::safe_network_fact(basename, &segment.arguments)
+        || super::status_facts::safe_status_fact(basename, &segment.arguments)
         || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
         || super::liveness_probes::safe_liveness_probe(basename, &segment.arguments)
+        || super::preference_reads::safe_preference_read(basename, &segment.arguments)
         || super::manager_usage::safe_manager_segment(basename, model, segment, context)
     {
         return true;
@@ -507,7 +520,7 @@ pub(super) fn exact_safe_segment_with_context(
                 && super::directory_targets::drive_targets_quoted(segment)
         }
         // `printf -v NAME` and `%n` assign a shell variable rather than print.
-        "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => {
+        "pwd" | "true" | "echo" | "printf" | "whoami" | "uname" => {
             !super::printf_words::printf_sets_variable(segment)
                 && !super::control_flow_flatten::command_word_changes_shell_state(&segment.text)
                 && super::glob_words::printed_globs_listable(model, segment, context)
@@ -515,12 +528,11 @@ pub(super) fn exact_safe_segment_with_context(
         "exit" => super::shell_flow::safe_exit_arguments(&segment.arguments),
         "break" | "continue" => super::shell_flow::safe_loop_control_arguments(&segment.arguments),
         "unset" | "set" => super::inert_environment::safe_shell_setting(basename, segment),
-        // `whence` is zsh's spelling of `which`: it reports where a name
-        // resolves and runs nothing. Its proven flags are `-a`, `-p` and `-v`,
-        // none of which prints a function body. zsh's `where` is `whence -ca`,
-        // and the csh-style output prints the body of a matching function, so
-        // it stays under review next to `whence -f` and `type NAME`.
-        "type" | "command" | "whence" => {
+        // zsh's builtin `which` can print a function or alias definition.
+        // Unqualified `whence` and its `-a` / `-v` forms can do likewise;
+        // only explicit `whence -p` with bounded names proves a path lookup.
+        // Neither is eligible for the generic harmless-command fast path.
+        "type" | "command" | "whence" | "which" => {
             super::lookup_reads::safe_path_lookup(basename, &segment.arguments)
         }
         "cargo" => super::rust_toolchain::safe_cargo_probe(&segment.arguments, context),
@@ -646,6 +658,7 @@ pub(super) fn exact_safe_segment_with_context(
             &segment.arguments,
             segment.pipeline_index > 0,
             context,
+            basename == "tail",
         ),
         "git" => {
             safe_git_arguments(&segment.arguments, allow_git_helper_context, context)
@@ -675,6 +688,7 @@ pub(super) fn exact_safe_segment_with_context(
         "gem" => super::gem_reads::safe_gem_segment(model, segment, context),
         "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),
         "psql" => super::postgres_reads::safe_psql_arguments(&segment.arguments, context),
+        "sqlite3" => super::sqlite_reads::safe_sqlite3_arguments(&segment.arguments, context),
         "npm" => {
             super::npm_reads::read_only_neighbors(model, "npm")
                 && super::npm_reads::safe_npm_read(&segment.arguments, context)

@@ -42,11 +42,12 @@ fn rows(connection: &Connection) -> Value {
 fn an_empty_store_reads_every_row_as_null() {
     let view = rows(&store());
     let fields = view.as_object().unwrap();
-    assert_eq!(fields.len(), 12);
+    assert_eq!(fields.len(), 13);
     assert_eq!(view["policy_bundle_deferred"], json!(false));
+    assert_eq!(view["unreadable_rows"], json!([]));
     assert!(fields
         .iter()
-        .filter(|(name, _)| *name != "policy_bundle_deferred")
+        .filter(|(name, _)| !matches!(name.as_str(), "policy_bundle_deferred" | "unreadable_rows"))
         .all(|(_, value)| value.is_null()));
 }
 
@@ -86,6 +87,27 @@ fn arrays_pass_through_and_scalars_read_as_null() {
     );
     assert!(view["policy_bundle_keyring"].is_null());
     assert!(view["policy_bundle_ack"].is_null());
+    assert_eq!(view["unreadable_rows"], json!([]));
+}
+
+#[test]
+fn trust_rows_that_are_not_json_are_named() {
+    let connection = store();
+    for key in TRUST_KEYS {
+        put(&connection, key, "not json");
+    }
+    put(&connection, ACK_KEY, "not json");
+    put(&connection, BUNDLE_KEY, "not json");
+    let view = rows(&connection);
+    assert_eq!(view["unreadable_rows"], json!(TRUST_KEYS));
+    assert!(view["policy_bundle_keyring"].is_null());
+    let keys_only = call(
+        &connection,
+        "policy_bundle_trust_rows",
+        json!({"keys_only": true}),
+    )
+    .unwrap();
+    assert_eq!(keys_only["unreadable_rows"], json!(TRUST_KEYS));
 }
 
 #[test]
@@ -201,4 +223,56 @@ fn a_bundle_too_large_for_the_reply_is_deferred_with_its_stamp() {
     );
     assert_eq!(view["policy_bundle_keyring"], json!({ "keys": [] }));
     assert!(view.to_string().len() < BUNDLE_INLINE_BYTES);
+}
+
+#[test]
+fn the_last_good_bundle_takes_the_bundle_place_when_asked() {
+    let connection = store();
+    put(&connection, BUNDLE_KEY, r#"{"bundleVersion":"9"}"#);
+    put(&connection, LAST_GOOD_KEY, r#"{"bundleVersion":"7"}"#);
+    put(&connection, KEYRING_KEY, r#"{"keys":[]}"#);
+    let view = call(
+        &connection,
+        "policy_bundle_trust_rows",
+        json!({ "bundle": "last_good" }),
+    )
+    .unwrap();
+    assert_eq!(view["policy_bundle"], json!({ "bundleVersion": "7" }));
+    assert_eq!(view["policy_bundle_keyring"], json!({ "keys": [] }));
+    let current = call(
+        &connection,
+        "policy_bundle_trust_rows",
+        json!({ "bundle": "current" }),
+    )
+    .unwrap();
+    assert_eq!(current["policy_bundle"], json!({ "bundleVersion": "9" }));
+}
+
+#[test]
+fn a_missing_or_large_last_good_bundle_reads_like_the_current_one() {
+    let connection = store();
+    let args = json!({ "bundle": "last_good" });
+    let empty = call(&connection, "policy_bundle_trust_rows", args.clone()).unwrap();
+    assert!(empty["policy_bundle"].is_null());
+    assert_eq!(empty["policy_bundle_deferred"], json!(false));
+    let large = json!({ "rules": "x".repeat(BUNDLE_INLINE_BYTES) }).to_string();
+    put(&connection, LAST_GOOD_KEY, &large);
+    let view = call(&connection, "policy_bundle_trust_rows", args).unwrap();
+    assert_eq!(view["policy_bundle_deferred"], json!(true));
+    assert_eq!(
+        view["policy_bundle_stamp"],
+        json!({ "updated_at": NOW, "bytes": large.len() })
+    );
+}
+
+#[test]
+fn an_unknown_bundle_role_is_refused() {
+    for role in [json!("previous"), json!(""), json!(7)] {
+        assert!(call(
+            &store(),
+            "policy_bundle_trust_rows",
+            json!({ "bundle": role }),
+        )
+        .is_err());
+    }
 }

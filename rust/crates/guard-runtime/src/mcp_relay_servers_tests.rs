@@ -60,26 +60,17 @@ fn a_server_past_the_bound_stays_unknown() {
 }
 
 #[test]
-fn only_tools_the_relay_cannot_send_are_decided_by_the_proxy() {
-    // The relay never sends a call to a missing or empty name.
-    for tool in [
-        json!({"description": "no name"}),
-        json!({"name": 7}),
-        json!({"name": ""}),
+fn only_a_non_empty_string_name_is_sent() {
+    // The relay never sends a call to a missing or empty name; it refuses it.
+    for name in [
+        "read_file",
+        "COMPOSIO_SEARCH_TOOLS",
+        "lire_\u{e9}t\u{e9}",
+        " ",
     ] {
-        assert!(proxy_tool(&tool), "{tool}");
+        assert!(sendable_name(name), "{name}");
     }
-    // The resident reads a Composio wrapper's provider catalog hash itself,
-    // and a non-ASCII name is sent like any other.
-    for tool in [
-        json!({"name": "COMPOSIO_SEARCH_TOOLS"}),
-        json!({"name": "github__composio_execute"}),
-        json!({"name": "composio_\u{e9}"}),
-        json!({"name": "compo\u{17f}io_multi_execute_tool"}),
-        json!({"name": "lire_\u{e9}t\u{e9}"}),
-    ] {
-        assert!(!proxy_tool(&tool), "{tool}");
-    }
+    assert!(!sendable_name(""));
 }
 
 #[test]
@@ -98,27 +89,51 @@ fn a_shell_or_command_tool_no_longer_holds_its_server_back() {
         json!({"name": "read_file", "inputSchema": {"properties": {"path": {}}}}),
         json!({"name": "read_file", "inputSchema": "object"}),
     ] {
-        assert!(!proxy_tool(&tool), "{tool}");
+        let servers = RelayServers::default();
+        let request = McpRelayServerReportRequestV1 {
+            guard_home: "/tmp/guard".to_owned(),
+            server: server("tools"),
+            _tools: vec![tool.clone()],
+        };
+        report(&request, &servers).unwrap();
+        assert_eq!(servers.relayable(&server("tools")), Ok(()), "{tool}");
     }
 }
 
 #[test]
-fn a_report_records_whether_any_tool_is_decided_by_the_proxy() {
+fn a_report_makes_a_server_known_whatever_its_catalog_holds() {
     let servers = RelayServers::default();
     let request = McpRelayServerReportRequestV1 {
         guard_home: "/tmp/guard".to_owned(),
         server: server("docs"),
-        tools: vec![json!({"name": "read_file"}), json!({"name": "search"})],
+        _tools: vec![json!({"name": "read_file"}), json!({"name": "search"})],
     };
     let answer: Value = serde_json::from_slice(&report(&request, &servers).unwrap()).unwrap();
     assert_eq!(answer, json!({"schema": REPORT_SCHEMA, "recorded": true}));
     assert_eq!(servers.relayable(&server("docs")), Ok(()));
+    // A definition with no usable name no longer holds its server back: the
+    // relay refuses a call to it and keeps relaying the named tools.
     let request = McpRelayServerReportRequestV1 {
-        tools: vec![
+        _tools: vec![
             json!({"name": "read_file"}),
             json!({"description": "nameless"}),
+            json!({"name": 7}),
+            json!({"name": ""}),
         ],
         ..request
+    };
+    report(&request, &servers).unwrap();
+    assert_eq!(servers.relayable(&server("docs")), Ok(()));
+}
+
+#[test]
+fn a_report_never_clears_a_deferred_call_mark() {
+    let servers = RelayServers::default();
+    servers.record(&server("docs"), true);
+    let request = McpRelayServerReportRequestV1 {
+        guard_home: "/tmp/guard".to_owned(),
+        server: server("docs"),
+        _tools: vec![json!({"name": "read_file"})],
     };
     report(&request, &servers).unwrap();
     assert_eq!(servers.relayable(&server("docs")), Err(SERVER_PROXY_TOOLS));

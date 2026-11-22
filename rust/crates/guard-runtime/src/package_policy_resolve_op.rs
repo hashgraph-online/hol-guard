@@ -18,24 +18,27 @@ use guard_command::effect_decision::GuardAction;
 use guard_command::package_intent_common::GuardArtifact;
 use guard_command::package_policy_override as policy;
 use guard_contracts::{
-    PackageEvaluationComposeRequestV1, PackagePolicyResolveRequestV1, SupplyChainEvalResultV1,
-    PACKAGE_AUTHORITY_REQUEST_SCHEMA, PACKAGE_AUTHORITY_RESULT_SCHEMA,
+    PackageEvaluationComposeRequestV1, PackagePolicyResolveRequestV1,
+    PACKAGE_AUTHORITY_REQUEST_SCHEMA,
 };
 use serde_json::{json, Map, Value};
 
 use crate::approval_proof_op::claim_disposition;
 use crate::context_digest::{parse_context_token, python_strip, validate_context_tokens};
-use crate::package_authority_op::{request_digest, ResidentPackageEval};
-use crate::package_evaluation_compose_op::{compose, parse_action, parse_evaluation, patch};
+use crate::package_authority_op::ResidentPackageEval;
+use crate::package_evaluation_compose_op::{compose, parse_action, parse_evaluation};
 
 #[path = "package_policy_resolve_approvals.rs"]
 mod approvals;
 #[path = "package_policy_resolve_daemon.rs"]
 mod daemon;
+#[path = "package_policy_resolve_wire.rs"]
+mod wire;
 use approvals::{
     is_durable_exact_artifact_approval, is_fresh_artifact_approval,
     is_legacy_package_local_approval, is_waited_exact_cloud_package_approval,
 };
+pub(crate) use wire::evaluate_package_policy_resolve;
 
 const LOCAL_HARNESS: &str = "guard-cli";
 const EVALUATION_KEYS: [&str; 3] = ["policy_action", "reasons", "packages"];
@@ -225,7 +228,10 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
     let mut ignored_integrity = request.ignored_integrity;
     let mut daemon_authority = request.daemon_authority;
     let mut resolved_authority = None;
-    let resolved_decision = if request.decision.is_none() && request.ignored_integrity {
+    let resolved_decision = if request.decision.is_none()
+        && request.ignored_integrity
+        && !request.policy_workspaces.is_empty()
+    {
         if let Some((decision, authority_value)) = daemon::resolve(request) {
             ignored_integrity = false;
             daemon_authority = true;
@@ -447,46 +453,6 @@ pub(crate) fn resolve_unclaimed_resolution(
         output: resolution.output,
         claim_disposition: resolution.claim_disposition,
         reused: resolution.reused,
-    })
-}
-
-pub(crate) fn evaluate_package_policy_resolve(
-    request: &PackagePolicyResolveRequestV1,
-) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest(request)?;
-    if request.schema != PACKAGE_AUTHORITY_REQUEST_SCHEMA {
-        return Err("native_package_policy_resolve_schema_mismatch".to_owned());
-    }
-    if malformed(request) {
-        return Err(invalid());
-    }
-    let resolution = resolve(request)?;
-    let mut payload = Map::new();
-    payload.insert(
-        "patch".to_owned(),
-        patch(&request.evaluation, resolution.output),
-    );
-    payload.insert("claim".to_owned(), json!(resolution.claim));
-    payload.insert(
-        "claim_disposition".to_owned(),
-        json!(resolution.claim_disposition),
-    );
-    payload.insert("reused".to_owned(), json!(resolution.reused));
-    payload.insert(
-        "decision".to_owned(),
-        resolution.decision.unwrap_or(Value::Null),
-    );
-    payload.insert(
-        "authority".to_owned(),
-        resolution.authority.unwrap_or(Value::Null),
-    );
-    crate::encode_response(&SupplyChainEvalResultV1 {
-        schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
-        request_id: request.request_id.clone(),
-        request_sha256,
-        status: "ok".to_owned(),
-        code: "ok".to_owned(),
-        payload: Some(Value::Object(payload)),
     })
 }
 

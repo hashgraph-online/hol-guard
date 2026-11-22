@@ -129,10 +129,18 @@ pub(crate) fn query_each(
     mut visit: impl FnMut(Row) -> StoreResult<bool>,
 ) -> StoreResult<()> {
     let mut statement = connection.prepare_cached(sql)?;
-    let names: Vec<String> = statement.column_names().map(str::to_owned).collect();
     let bound: Vec<rusqlite::types::Value> = params.iter().map(bind).collect();
     let mut rows = statement.query(rusqlite::params_from_iter(bound))?;
+    // Names come from the statement as it ran. A kept connection prepares
+    // against the schema it last loaded; when another connection changed the
+    // table since, SQLite re-prepares on the first step, and names read before
+    // it would label `select *` cells with the old column order.
+    let mut names: Option<Vec<String>> = None;
     while let Some(row) = rows.next()? {
+        let names = names.get_or_insert_with(|| {
+            let statement: &rusqlite::Statement<'_> = AsRef::as_ref(row);
+            statement.column_names().map(str::to_owned).collect()
+        });
         let mut map = Row::new();
         for (index, name) in names.iter().enumerate() {
             map.insert(name.clone(), cell(row.get_ref(index)?)?);
@@ -199,6 +207,29 @@ mod tests {
         assert_eq!(row["a"], Value::from(1));
         assert_eq!(row["b"], Value::from("x"));
         assert_eq!(row["c"], Value::Null);
+    }
+
+    #[test]
+    fn a_kept_connection_names_cells_by_the_current_schema() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("store.db");
+        let kept = Connection::open(&path).unwrap();
+        kept.execute_batch(
+            "create table t (a integer, b text, c text, d text); \
+             insert into t values (1, 'b', 'c', 'd');",
+        )
+        .unwrap();
+        let sql = "select * from t where a = ?";
+        let before = query_one(&kept, sql, &[Value::from(1)]).unwrap().unwrap();
+        assert_eq!(before["b"], Value::from("b"));
+        let other = Connection::open(&path).unwrap();
+        other
+            .execute_batch("alter table t drop column b; alter table t add column b text;")
+            .unwrap();
+        let after = query_one(&kept, sql, &[Value::from(1)]).unwrap().unwrap();
+        assert_eq!(after["b"], Value::Null);
+        assert_eq!(after["c"], Value::from("c"));
+        assert_eq!(after["d"], Value::from("d"));
     }
 
     #[test]

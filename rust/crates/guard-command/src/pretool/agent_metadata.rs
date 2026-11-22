@@ -66,8 +66,44 @@ fn host_envelope_only(root: &serde_json::Map<String, Value>) -> bool {
                 | "scratchpad_dir"
                 | "harness"
                 | "guard_execution_environment"
+                // Cursor names the conversation, the generation, its own
+                // client version, the signed-in account and the roots the
+                // window opened. None of them names a command or a target.
+                | "conversation_id"
+                | "generation_id"
+                | "cursor_version"
+                | "cursor_source_hook_event"
+                | "user_email"
+                | "workspace_roots"
+                | "workspaceRoots"
+                // The model the host picked for the turn, and who provides it.
+                | "model"
+                | "model_provider"
+                // The agent the call came from, as the host labels it.
+                | "agent_id"
+                | "agent_type"
+                | "subagent_type"
+                | "subagentType"
+                // camelCase spellings of host context already admitted above.
+                | "hookName"
+                | "permissionMode"
+                | "toolUseId"
+                | "taskId"
+                // Fields Guard's own hook adapters add to the envelope.
+                | "guard_remaining_ms"
+                | "guard_bound_bash_host"
+                | "guard_codex_browser_wait_process"
+                | "guard_codex_browser_wait_timeout_seconds"
+                | "guard_containment_receipt_only"
+                | "execution_environment"
+                | "home_dir"
+                | "config_path"
+                // Admitted only with its value checked below.
+                | "toolInputTruncated"
         )
-    })
+    }) && root
+        .get("toolInputTruncated")
+        .is_none_or(|truncated| truncated == &Value::Bool(false))
 }
 
 fn bounded_task_input(input: &serde_json::Map<String, Value>, tool_name: Option<&str>) -> bool {

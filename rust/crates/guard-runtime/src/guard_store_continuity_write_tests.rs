@@ -371,9 +371,17 @@ fn an_mcp_save_acknowledges_the_reviewed_changes_and_keeps_tombstones() {
             (
                 CLI,
                 IDENTITY,
-                r#"{"changes":{"added":["deploy","fresh"],"changed":["root"]},"complete":true,"tools":[]}"#,
+                r#"{"changes":{"added":["deploy","Read File","fresh"],"changed":["root"]},"complete":true,"tools":[]}"#,
                 NOW,
             ),
+        )
+        .unwrap();
+    // A tool name that is not a command path is reviewed by its slug.
+    let read_file = crate::local_mcp_probe::slug("Read File");
+    connection
+        .execute(
+            "insert into local_cli_command values (?, ?, 'Read File', '', '', null, 3)",
+            (CLI, &read_file),
         )
         .unwrap();
     let revision = call(
@@ -381,9 +389,8 @@ fn an_mcp_save_acknowledges_the_reviewed_changes_and_keeps_tombstones() {
         upsert_grant,
         json!({"cli_id": CLI, "identity_hash": IDENTITY, "state": "allowed",
             "expected_revision": 0, "updated_at": NOW,
-            "command_states": {"deploy": "review"},
-            "reviewed_catalog_revision": 4,
-            "catalog_change_ids": {"deploy": "deploy", "fresh": "fresh", "root": "root"}}),
+            "command_states": {"deploy": "review", &read_file: "allow"},
+            "reviewed_catalog_revision": 4}),
     )
     .unwrap();
     assert_eq!(revision, json!(1));
@@ -407,7 +414,11 @@ fn an_mcp_save_acknowledges_the_reviewed_changes_and_keeps_tombstones() {
     .iter()
     .map(|row| text(row, "row").to_owned())
     .collect();
-    assert_eq!(grants, ["deploy:review", "retired:block"]);
+    let read_file_grant = format!("{read_file}:allow");
+    assert_eq!(
+        grants,
+        ["deploy:review", read_file_grant.as_str(), "retired:block"]
+    );
 }
 
 #[test]

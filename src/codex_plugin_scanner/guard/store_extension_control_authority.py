@@ -10,6 +10,8 @@ import secrets
 import sqlite3
 from typing import cast
 
+from .native_extension_control_schema import extension_control_schema_compatible
+from .native_extension_control_snapshot import extension_control_snapshot_layers
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
     AuthorityAnchor,
@@ -96,7 +98,7 @@ class StoreExtensionControlAuthorityMixin(
                 ).fetchone()
                 if pending is not None:
                     try:
-                        resumed = self._resume_transition(connection, _row_int(pending, "revision"), key=key)
+                        resumed = self._resume_transition(_row_int(pending, "revision"), key=key)
                     except UnverifiablePackTransitionError:
                         # Only damaged pending authentication permits the existing
                         # explicit recovery reset; environmental failures propagate.
@@ -160,13 +162,7 @@ class StoreExtensionControlAuthorityMixin(
         catalog_digest: str,
         migration_registry: CommandSafetyExtensionRegistry | None,
     ) -> ExtensionControlAuthorityView | None:
-        with self._connect() as connection:
-            require_compatible_extension_control_schema(connection)
-            snapshot_missing = (
-                connection.execute("select 1 from extension_control_authority_snapshot where singleton = 1").fetchone()
-                is None
-            )
-        if not snapshot_missing:
+        if extension_control_snapshot_layers(self).present:
             return None
         try:
             restored = self._restore_last_good_authority(key=key)
@@ -185,12 +181,8 @@ class StoreExtensionControlAuthorityMixin(
         """Preserve and announce any control state that a reset cannot carry over."""
 
         warnings: list[str] = []
-        with self._connect() as connection:
-            require_compatible_extension_control_schema(connection)
-            row = connection.execute(
-                "select layers_json from extension_control_authority_snapshot where singleton = 1"
-            ).fetchone()
-        lost = _count_controls(str(row["layers_json"])) if row is not None else 0
+        layers_json = extension_control_snapshot_layers(self).layers_json
+        lost = _count_controls(layers_json) if layers_json is not None else 0
         if lost:
             warnings.append(
                 f"Authority reset ({reason}) dropped {lost} extension control(s); "
@@ -227,8 +219,7 @@ class StoreExtensionControlAuthorityMixin(
         begin_native_command_control_recovery(cast(GuardStore, self), new_authority_key=recovered_key)
         if key is None:
             self._secret_store().set_secret(self._key_ref(), base64.urlsafe_b64encode(recovered_key).decode())
-        with self._connect() as connection:
-            require_compatible_extension_control_schema(connection)
+        _ = extension_control_schema_compatible(self)
         # The resident archives every row whose chain cannot be verified and
         # empties the authority in one transaction. The catalog manifests the
         # lost key authenticated cannot be reused under the new one; managed

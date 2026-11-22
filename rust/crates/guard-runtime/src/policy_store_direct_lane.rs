@@ -207,6 +207,9 @@ impl PolicySnapshotStore {
                 resident_activity: binding.resident_activity,
             })
         });
+        if next.is_none() {
+            self.forget_direct_lane_admission();
+        }
         match self.direct_lane.lock() {
             Ok(mut current) => *current = next,
             // A poisoned binding can never be read again, so the lane stays
@@ -315,6 +318,7 @@ impl PolicySnapshotStore {
         {
             return Err(DirectLaneDefer::InputChanged);
         }
+        self.note_direct_lane_admitted(&binding);
         Ok((snapshot, binding))
     }
 
@@ -328,6 +332,7 @@ impl PolicySnapshotStore {
             .and_then(|binding| binding.clone())
             .ok_or(DirectLaneDefer::Unbound)?;
         self.admit_binding_lease(&binding, None)?;
+        self.note_direct_lane_admitted(&binding);
         Ok(binding)
     }
 
@@ -355,6 +360,7 @@ impl PolicySnapshotStore {
         {
             return None;
         }
+        self.note_direct_lane_admitted(&binding);
         Some(binding.structured_output_config.clone())
     }
 
@@ -548,6 +554,9 @@ fn live_publisher_ack(ack: &DirectLaneAckV1) -> bool {
         && ack.lease_expires_at_ms > now
         && ack.lease_expires_at_ms <= now.saturating_add(DIRECT_LANE_ACK_MAX_LEASE_MS)
 }
+
+#[path = "policy_store_direct_lane_reopen.rs"]
+mod reopen;
 
 #[path = "policy_store_direct_lane_subdirectory.rs"]
 pub(crate) mod subdirectory;

@@ -362,6 +362,24 @@ class HookWorker(HookWorkerNativeMixin):
             event_name in {"PermissionRequest", "copilotPermissionRequest"}
             and harness.strip().lower().replace("_", "-") in _PERMISSION_PASSTHROUGH_HARNESSES
         ):
+            # Rust owns the permission passthrough when its direct lane is
+            # available. The fixed response below remains only as the
+            # bounded outage adapter when the resident cannot answer.
+            from ..native_hook_direct import native_hook_direct
+
+            settled = native_hook_direct(
+                harness=harness,
+                guard_home=guard_home,
+                payload=payload,
+                workspace=workspace,
+                home_dir=home_dir,
+                deadline=deadline,
+                lifecycle_only=True,
+            )
+            if isinstance(settled, Mapping):
+                rendered = settled.get("harness_response")
+                if isinstance(rendered, Mapping):
+                    return {str(key): value for key, value in rendered.items()}
             # These harnesses ask this only for a call their PreToolUse hook
             # already sent to Guard. A deny here would refuse every approval
             # the harness asks for, so the decision stays with the harness's
@@ -435,11 +453,7 @@ class HookWorker(HookWorkerNativeMixin):
             return event
         from .hook_availability_policy import canonical_hook_event_name
 
-        for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
-            value = payload.get(key)
-            if isinstance(value, str) and value.strip():
-                return canonical_hook_event_name(payload)
-        return None
+        return canonical_hook_event_name(payload, guard_home=self.store.guard_home, deadline=deadline)
 
 
 __all__ = [

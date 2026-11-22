@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_policy_trust_rows import PolicyBundleTrustRows
+from codex_plugin_scanner.guard.store_policy_trust_rows import PolicyBundleTrustRows, PolicyTrustRowUnreadableError
 
 _NOW = "2026-11-21T12:00:00Z"
 
@@ -76,6 +76,26 @@ def test_a_bundle_larger_than_one_reply_is_still_read(tmp_path: Path) -> None:
     assert rows.policy_bundle_keyring == {"keys": []}
 
 
+def test_last_good_puts_the_last_good_bundle_beside_the_same_keyrings(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    store.set_sync_payload("policy_bundle", {"bundleVersion": "9"}, _NOW)
+    store.set_sync_payload("policy_bundle_last_good", {"bundleVersion": "7"}, _NOW)
+    store.set_sync_payload("policy_bundle_keyring", {"keys": []}, _NOW)
+    rows = store.policy_bundle_trust_rows(last_good=True)
+    assert rows.policy_bundle == {"bundleVersion": "7"}
+    assert rows.policy_bundle_keyring == {"keys": []}
+    assert store.policy_bundle_trust_rows().policy_bundle == {"bundleVersion": "9"}
+
+
+def test_a_last_good_bundle_larger_than_one_reply_is_read_from_its_own_row(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    last_good = {"bundleVersion": "7", "rules": "x" * (1536 * 1024)}
+    store.set_sync_payload("policy_bundle", {"bundleVersion": "9"}, _NOW)
+    store.set_sync_payload("policy_bundle_last_good", last_good, _NOW)
+    rows = store.policy_bundle_trust_rows(last_good=True)
+    assert rows.policy_bundle == last_good
+
+
 def test_trust_rows_that_never_settle_raise_a_retryable_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.store_policy_trust_rows import PolicyTrustRowsUnstableError
 
@@ -136,3 +156,34 @@ def test_review_keyring_readiness_is_false_when_the_store_cannot_answer() -> Non
         policy_bundle_trust_rows=unavailable,
     )
     assert review_verification_keyring_ready(store) is False  # pyright: ignore[reportArgumentType]
+
+
+@pytest.mark.parametrize(
+    "state_key",
+    [
+        "policy_bundle_keyring",
+        "policy_bundle_acceptance_checkpoint",
+        "managed_policy_bundle_keyring_provenance",
+        "supply_chain_bundle_keyring",
+        "guard_review_verification_keyring",
+    ],
+)
+def test_a_trust_row_that_is_not_json_refuses_the_snapshot(tmp_path: Path, state_key: str) -> None:
+    store = GuardStore(tmp_path)
+    store.set_sync_payload(state_key, {"keys": []}, _NOW)
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("update sync_state set payload_json = 'not-json' where state_key = ?", (state_key,))
+
+    with pytest.raises(PolicyTrustRowUnreadableError, match=state_key):
+        store.policy_bundle_trust_rows()
+    with pytest.raises(PolicyTrustRowUnreadableError, match=state_key):
+        store.policy_bundle_trust_rows(keys_only=True)
+
+
+def test_a_delivery_row_that_is_not_json_reads_as_absent(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    store.set_sync_payload("policy_bundle_ack", {"ok": True}, _NOW)
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("update sync_state set payload_json = 'not-json' where state_key = 'policy_bundle_ack'")
+
+    assert store.policy_bundle_trust_rows().policy_bundle_ack is None

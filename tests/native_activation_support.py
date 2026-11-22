@@ -126,3 +126,49 @@ def subset_store(previous):
         revocation=identity["revocation"],
     )
     return store
+
+
+def activation_slot_call(connect):
+    """Stand-in for the native activation slot and pending-record reads over a fixture connection.
+
+    Fixture stores keep their database in memory, out of the resident's reach,
+    so this answers the slot read and the pending-record list with the same
+    states and cell checks the native reads use.
+    """
+    from codex_plugin_scanner.guard.catalog_delivery.activation_store import _row
+    from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
+
+    def call(method, args):
+        if method == "list_command_pack_pending_records" and args == {}:
+            return {"items": _pending_items(connect)}
+        assert method == "read_command_pack_activation" and args == {}
+        with connect() as connection:
+            if not connection.execute(
+                "select 1 from sqlite_master where type='table' and name='extension_control_schema_migration'"
+            ).fetchone():
+                return {"state": "absent"}
+            try:
+                row = _row(connection)
+            except NativePolicySnapshotError as error:
+                return {"state": "refused", "code": str(error)}
+        if row is None:
+            return {"state": "absent"}
+        fields = ("revision", "record_json", "record_digest", "record_mac", "recorded_at")
+        return {"state": "present", "row": {name: row[name] for name in fields}}
+
+    return call
+
+
+def _pending_items(connect):
+    fields = ("record_json", "record_digest", "record_mac")
+    with connect() as connection:
+        if not connection.execute(
+            "select 1 from sqlite_master where type='table' and name='extension_command_pack_pending'"
+        ).fetchone():
+            return []
+        rows = connection.execute(
+            "select "
+            + ", ".join(f"case when typeof({name}) = 'text' then {name} end" for name in fields)
+            + " from extension_command_pack_pending order by control_revision"
+        ).fetchall()
+    return [dict(zip(fields, tuple(row), strict=True)) for row in rows]

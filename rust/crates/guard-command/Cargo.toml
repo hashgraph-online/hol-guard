@@ -42,7 +42,7 @@ ring.workspace = true
 rsa.workspace = true
 base64ct.workspace = true
 ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }
-url = "=2.5.8"
+url = "=2.5.9"
 unicode-normalization = "0.1.25"
 tree-sitter = "=0.25.10"
 tree-sitter-bash = "=0.25.1"

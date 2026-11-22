@@ -67,7 +67,6 @@ from ..policy_bundle_parser import (
     policy_bundle_rejection_payload as _policy_bundle_rejection_payload,
 )
 from ..policy_bundle_trusted_keys import (
-    MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
     PolicyBundleVerificationKey,
     policy_bundle_keyring_payload,
     validate_synced_policy_bundle,
@@ -78,10 +77,13 @@ from ..policy_bundle_v2 import (
 from ..policy_document_io import PolicyCompilationError, compile_policy_bundle_document
 from ..redaction import redact_sensitive_text
 from ..review_signature_verification import sync_review_verification_keys
-from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..store_policy_trust_rows import PolicyBundleTrustRows
-from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
+from ..synced_policy import (
+    cached_policy_bundle_validation,
+    last_good_policy_bundle_validation,
+    validated_synced_policy_bundle,
+)
 from . import runner_native_authority as _authority
 from . import runner_native_sync as _sync
 from . import runner_policy_shadow as _shadow
@@ -125,6 +127,7 @@ from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
 from .policy_bundle_failure_ack import cached_bundle_failure_acknowledgement, failed_acknowledgement
+from .runner_package_coverage import cloud_package_manager_coverage as _cloud_package_manager_coverage
 from .sync_retry_delay import parse_retry_after_value
 from .workspace_assessment_sync import (
     build_workspace_assessment_sync_safely,
@@ -544,7 +547,12 @@ def sync_receipts(
     # The native upload already cached the advisories, stored the alert
     # preferences and recorded the advisory events.
     advisories_stored = upload_answer.advisories_stored
-    cloud_workspace_id = store.get_cloud_workspace_id()
+    # One snapshot of the cached bundle and every row it is judged against,
+    # so a sync landing mid-cycle cannot pair this bundle with another sync's
+    # keyring, checkpoint or workspace, and managed controls are checked
+    # against the same workspace.
+    trust_rows = store.policy_bundle_trust_rows()
+    cloud_workspace_id = trust_rows.workspace_id
     canonical_enforcement = _sync.canonical_policy_enforcement_enabled(
         device_id=device_id,
         workspace_id=cloud_workspace_id,
@@ -564,10 +572,11 @@ def sync_receipts(
     failed_policy_bundle_reason: str | None = None
     trusted_policy_bundle_keys: tuple[PolicyBundleVerificationKey, ...] = ()
     update_last_good = False
-    existing_policy_bundle_payload = store.get_sync_payload("policy_bundle")
+    existing_policy_bundle_payload = trust_rows.policy_bundle
     existing_policy_bundle, existing_policy_bundle_error = _validate_cached_policy_bundle(
         store,
         existing_policy_bundle_payload,
+        rows=trust_rows,
     )
     runtime_session_summary = store.get_sync_payload("runtime_session_summary")
     delivery_device_id = runtime_summary_device_id(runtime_session_summary, device_id)
@@ -580,13 +589,11 @@ def sync_receipts(
             validated_policy_bundle, policy_bundle_rejection_reason, trusted_policy_bundle_keys = (
                 validate_synced_policy_bundle(
                     policy_bundle_payload,
-                    stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
+                    stored_keyring=trust_rows.policy_bundle_keyring,
                     sync_payload=policy_bundle_sync_payload,
-                    supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
-                    managed_keyring_provenance=store.get_sync_payload(
-                        MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY
-                    ),
-                    expected_workspace_id=store.get_cloud_workspace_id(),
+                    supply_chain_keyring=trust_rows.supply_chain_keyring,
+                    managed_keyring_provenance=trust_rows.managed_keyring_provenance,
+                    expected_workspace_id=trust_rows.workspace_id,
                 )
             )
         if existing_policy_bundle_error == NATIVE_UNAVAILABLE_REJECTION:
@@ -598,7 +605,9 @@ def sync_receipts(
             admission_rejection = (
                 None
                 if validated_policy_bundle is None
-                else _policy_bundle_admission_rejection(store, existing_policy_bundle, validated_policy_bundle)
+                else _policy_bundle_admission_rejection(
+                    store, existing_policy_bundle, validated_policy_bundle, rows=trust_rows
+                )
             )
             if admission_rejection is not None:
                 validated_policy_bundle = None
@@ -652,11 +661,7 @@ def sync_receipts(
             # same policy through unsigned sibling fields after verification
             # fails. Keep only a still-valid signed current/LKG bundle.
             remote_decisions.clear()
-            last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
-            last_good_bundle, _last_good_error = _validate_cached_policy_bundle(
-                store,
-                last_good_bundle_payload,
-            )
+            last_good_bundle, _last_good_error = last_good_policy_bundle_validation(store)
             # A valid current bundle may be newer than last-good when a prior
             # sync stopped after persisting current but before advancing the
             # checkpoint. Prefer current so a rejected refresh cannot roll
@@ -672,11 +677,7 @@ def sync_receipts(
     else:
         effective_policy_bundle = existing_policy_bundle
         if effective_policy_bundle is None:
-            last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
-            effective_policy_bundle, last_good_error = _validate_cached_policy_bundle(
-                store,
-                last_good_bundle_payload,
-            )
+            effective_policy_bundle, last_good_error = last_good_policy_bundle_validation(store)
             if (
                 effective_policy_bundle is None
                 and isinstance(existing_policy_bundle_payload, dict)
@@ -688,31 +689,36 @@ def sync_receipts(
                 failed_policy_bundle_reason = rejection_reason
                 store.record_policy_bundle_rejection(activation_last_error, now=now)
         if not activation_last_error:
-            stored_last_error = store.get_sync_payload("policy_bundle_last_error")
+            stored_last_error = trust_rows.policy_bundle_last_error
             if isinstance(stored_last_error, dict):
                 activation_last_error = stored_last_error
     cloud_exception_items: list[dict[str, object]] = []
     remote_policies_stored = 0
     remote_policy_sync_blocked = False
+    activation_rows = trust_rows
     if effective_policy_bundle is not None:
-        activation_keyring = store.get_sync_payload("policy_bundle_keyring")
+        # The final trust check reads the rows again, in one fresh snapshot,
+        # so a key rotation, revocation, checkpoint advance or workspace change
+        # that landed after selection is seen before anything is activated.
+        activation_rows = store.policy_bundle_trust_rows(keys_only=True)
+        activation_keyring = activation_rows.policy_bundle_keyring
         if effective_policy_bundle is validated_policy_bundle and trusted_policy_bundle_keys:
             activation_keyring = policy_bundle_keyring_payload(
                 trusted_policy_bundle_keys,
-                workspace_id=store.get_cloud_workspace_id(),
+                workspace_id=activation_rows.workspace_id,
             )
         activation_bundle, activation_reason, activation_keys = validate_synced_policy_bundle(
             effective_policy_bundle,
             stored_keyring=activation_keyring,
-            supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
-            managed_keyring_provenance=store.get_sync_payload(MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY),
-            expected_workspace_id=store.get_cloud_workspace_id(),
+            supply_chain_keyring=activation_rows.supply_chain_keyring,
+            managed_keyring_provenance=activation_rows.managed_keyring_provenance,
+            expected_workspace_id=activation_rows.workspace_id,
         )
         try:
             if activation_bundle is not None and not policy_bundle_is_enforceable(activation_bundle):
                 activation_bundle = None
                 activation_reason = "inactive_rollout_state"
-            acceptance_checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
+            acceptance_checkpoint = activation_rows.acceptance_checkpoint
             if (
                 activation_bundle is not None
                 and isinstance(acceptance_checkpoint, dict)
@@ -839,7 +845,7 @@ def sync_receipts(
                     policy_bundle=effective_policy_bundle,
                     policy_bundle_keyring=policy_bundle_keyring_payload(
                         trusted_policy_bundle_keys,
-                        workspace_id=store.get_cloud_workspace_id(),
+                        workspace_id=activation_rows.workspace_id,
                     ),
                     cloud_exceptions=cloud_exception_items,
                     policy_bundle_ack=policy_bundle_ack,
@@ -2775,32 +2781,6 @@ def _cloud_local_identity(*, observed_at: str) -> tuple[dict[str, object], dict[
             "daemonStatus": "local-guard",
             "relayState": "local-guard",
         }
-
-
-def _cloud_package_manager_coverage(
-    store: GuardStore,
-    *,
-    workspace: str,
-    generated_at: str,
-) -> dict[str, object]:
-    coverage = package_shim_cloud_coverage(
-        HarnessContext(
-            home_dir=Path.home(),
-            workspace_dir=Path(workspace),
-            guard_home=store.guard_home,
-        ),
-        generated_at=generated_at,
-    )
-    coverage["staleIntel"] = _sync.stale_intel(
-        (
-            store.get_sync_payload("sync_summary"),
-            store.get_sync_payload("runtime_session_summary"),
-            store.get_sync_payload("supply_chain_bundle_summary"),
-        ),
-        generated_at=generated_at,
-        now=_now(),
-    )
-    return coverage
 
 
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:

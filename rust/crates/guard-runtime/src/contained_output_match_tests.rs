@@ -24,7 +24,7 @@ fn requests_are_validated() {
     let mut cases = Vec::new();
     for (field, value) in [
         ("schema", json!("contained-output-match.v0")),
-        ("program", json!("sed")),
+        ("program", json!("awk")),
         ("program", json!("head")),
         ("arguments", json!("a")),
         ("input", json!("not base64!")),
@@ -60,7 +60,10 @@ fn arguments_outside_the_filter_grammar_are_refused() {
         ("grep", &[][..]),
         ("cut", &["-f1", "/etc/hosts"][..]),
         ("cut", &["-c1-20", "-"][..]),
-        ("sort", &["-u"][..]),
+        ("sort", &["-o", "out.txt"][..]),
+        ("wc", &["-l", "/etc/hosts"][..]),
+        ("cat", &["/etc/hosts"][..]),
+        ("sed", &["-i", "s/a/b/"][..]),
     ] {
         assert_eq!(
             run(&request(program, arguments, b"a\n")).expect_err("refused"),

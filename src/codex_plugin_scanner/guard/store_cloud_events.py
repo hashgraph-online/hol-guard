@@ -10,6 +10,7 @@ from typing import cast
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_supply_chain_bundle_pages import read_cached_bundle_text
 
 
 class StoreCloudEventsMixin:
@@ -134,24 +135,51 @@ class StoreCloudEventsMixin:
         response: dict[str, object],
         now: str,
     ) -> None:
-        with self._connect() as connection:
-            persist_supply_chain_bundle(
-                connection,
-                workspace_id=workspace_id,
-                response=response,
-                cached_at=now,
-            )
+        """Replace the workspace's cached supply-chain bundle response."""
+
+        self._native_store_call(
+            "cache_supply_chain_bundle",
+            {"workspace_id": workspace_id, "response": response, "cached_at": now},
+        )
 
     def get_cached_supply_chain_bundle(self, workspace_id: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            return load_supply_chain_bundle(connection, workspace_id=workspace_id)
+        """The workspace's cached response with its ``cached_at``, or ``None``."""
+
+        read = read_cached_bundle_text(self._native_store_call, workspace_id)
+        if read is None:
+            return None
+        response_json, cached_at = read
+        payload = json.loads(response_json)
+        if not isinstance(payload, dict):
+            return None
+        payload["cached_at"] = cached_at
+        return payload
 
     def set_sync_payload(self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str) -> None:
-        oauth_changed = state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY or state_key.startswith(
-            _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
-        )
-        if oauth_changed:
-            self._clear_oauth_secret_payload_cache()
+        oauth_changed = _is_oauth_credentials_key(state_key)
+        normalized = _payload_arg(payload)
+        args = {"state_key": state_key, "payload": normalized, "now": now}
+        if not oauth_changed:
+            if not _fits_native_request(normalized):
+                if not isinstance(normalized, (dict, list)):
+                    # The native store refuses a payload that is neither an
+                    # object nor an array; the fallback keeps that rule.
+                    raise ValueError("invalid_payload")
+                self._write_oversized_sync_payload(state_key, normalized, now)
+                return
+            self._native_store_call("set_sync_payload", args)
+            return
+        self._clear_oauth_secret_payload_cache()
+        self._native_store_call("write_credential_sync_payload", args)
+        from .review_event_wake import review_event_wake_signal
+
+        review_event_wake_signal(self.path).notify()
+
+    def _write_oversized_sync_payload(
+        self, state_key: str, payload: dict[str, object] | list[object], now: str
+    ) -> None:
+        # An AIBOM inventory may hold more rows than one native store request
+        # accepts, so a payload past those limits is written here instead.
         with self._connect() as connection:
             connection.execute(
                 """
@@ -163,25 +191,19 @@ class StoreCloudEventsMixin:
                 """,
                 (state_key, json.dumps(payload), now),
             )
-        if oauth_changed:
-            from .review_event_wake import review_event_wake_signal
-
-            review_event_wake_signal(self.path).notify()
 
     def insert_sync_payload_if_absent(self, state_key: str, payload: Mapping[str, object], now: str) -> None:
         """Store ``payload`` only when ``state_key`` has no row; an existing row always wins."""
 
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values (?, ?, ?)
-                on conflict(state_key) do nothing
-                """,
-                (state_key, json.dumps(payload), now),
-            )
+        self._native_store_call(
+            "insert_sync_payload_if_absent",
+            {"state_key": state_key, "payload": _payload_arg(payload), "now": now},
+        )
 
     def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
+        # Read in Python on purpose: device identity and the Cloud sync profile
+        # are read before the native store is provisioned, and a malformed row
+        # must raise ValueError so status views report it instead of a blank.
         with self._connect() as connection:
             row = connection.execute(
                 "select payload_json from sync_state where state_key = ?",
@@ -331,24 +353,19 @@ class StoreCloudEventsMixin:
             return []
 
     def delete_sync_payload(self, state_key: str) -> None:
-        if state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY:
+        if _is_oauth_credentials_key(state_key):
             self._clear_oauth_secret_payload_cache()
-        with self._connect() as connection:
-            connection.execute(
-                "delete from sync_state where state_key = ?",
-                (state_key,),
-            )
+        self._native_store_call("delete_sync_payload", {"state_key": state_key})
 
     def delete_sync_payloads(self, state_keys: list[str]) -> int:
         if not state_keys:
             return 0
-        placeholders = ",".join("?" for _ in state_keys)
-        with self._connect() as connection:
-            cursor = connection.execute(
-                f"delete from sync_state where state_key in ({placeholders})",
-                tuple(state_keys),
-            )
-            return int(cursor.rowcount if cursor.rowcount is not None else 0)
+        if any(_is_oauth_credentials_key(state_key) for state_key in state_keys):
+            self._clear_oauth_secret_payload_cache()
+        deleted = self._native_store_call("delete_sync_payloads", {"state_keys": list(state_keys)})
+        if not isinstance(deleted, int) or isinstance(deleted, bool):
+            raise RuntimeError("native delete_sync_payloads returned no count")
+        return deleted
 
     def add_guard_event_v1(self, event: GuardEventV1) -> None:
         self._native_store_call(
@@ -360,75 +377,6 @@ class StoreCloudEventsMixin:
             },
         )
 
-    def _add_guard_event_v1(self, connection: sqlite3.Connection, event: GuardEventV1) -> None:
-        payload = event.to_dict()
-        existing = connection.execute(
-            "select event_id from guard_cloud_events where idempotency_key = ?",
-            (event.idempotency_key,),
-        ).fetchone()
-        if existing is None:
-            pending_count = self._count_guard_events_v1_in_connection(connection, uploaded=False)
-            if pending_count >= self._guard_event_queue_limit:
-                capacity_row = connection.execute(
-                    "select payload_json from sync_state where state_key = ?",
-                    ("guard_event_queue_capacity",),
-                ).fetchone()
-                capacity_payload: dict[str, object] = {}
-                if capacity_row is not None:
-                    try:
-                        parsed_capacity_payload = json.loads(capacity_row["payload_json"])
-                    except (json.JSONDecodeError, TypeError, ValueError):
-                        parsed_capacity_payload = {}
-                    if isinstance(parsed_capacity_payload, dict):
-                        capacity_payload = parsed_capacity_payload
-                rejected_count_value = capacity_payload.get("rejectedCount", 0)
-                rejected_count = (
-                    rejected_count_value
-                    if isinstance(rejected_count_value, int) and not isinstance(rejected_count_value, bool)
-                    else 0
-                ) + 1
-                connection.execute(
-                    """
-                    insert into sync_state (state_key, payload_json, updated_at)
-                    values (?, ?, ?)
-                    on conflict(state_key) do update set
-                      payload_json = excluded.payload_json,
-                      updated_at = excluded.updated_at
-                    """,
-                    (
-                        "guard_event_queue_capacity",
-                        json.dumps(
-                            {
-                                "exhausted": True,
-                                "firstRejectedAt": capacity_payload.get("firstRejectedAt", event.occurred_at),
-                                "lastRejectedAt": event.occurred_at,
-                                "limit": self._guard_event_queue_limit,
-                                "pendingCount": pending_count,
-                                "rejectedCount": rejected_count,
-                                "rejectedEventType": event.event_type,
-                            },
-                            sort_keys=True,
-                        ),
-                        datetime.now(timezone.utc).isoformat(),
-                    ),
-                )
-                return
-        connection.execute(
-            """
-            insert or ignore into guard_cloud_events (
-              event_id, idempotency_key, event_type, payload_json, occurred_at, uploaded_at
-            )
-            values (?, ?, ?, ?, ?, null)
-            """,
-            (
-                event.event_id,
-                event.idempotency_key,
-                event.event_type,
-                json.dumps(payload, sort_keys=True),
-                event.occurred_at,
-            ),
-        )
-
     def list_guard_events_v1(self, *, uploaded: bool | None = None, limit: int = 200) -> list[dict[str, object]]:
         return self._native_store_call(
             "list_guard_events_v1",
@@ -437,16 +385,6 @@ class StoreCloudEventsMixin:
 
     def count_guard_events_v1(self, *, uploaded: bool | None = None) -> int:
         return int(self._native_store_call("count_guard_events_v1", {"uploaded": uploaded}))
-
-    @staticmethod
-    def _count_guard_events_v1_in_connection(connection: sqlite3.Connection, *, uploaded: bool | None = None) -> int:
-        query = "select count(*) as count from guard_cloud_events"
-        if uploaded is True:
-            query += " where uploaded_at is not null"
-        elif uploaded is False:
-            query += " where uploaded_at is null"
-        row = connection.execute(query).fetchone()
-        return int(row["count"]) if row is not None else 0
 
     def mark_guard_events_v1_uploaded(self, event_ids: list[str], uploaded_at: str) -> int:
         return int(
@@ -476,3 +414,47 @@ def _managed_install_row(row: dict[str, object]) -> dict[str, object]:
         "manifest": json.loads(str(row["manifest_json"])),
         "updated_at": str(row["updated_at"]),
     }
+
+
+def _is_oauth_credentials_key(state_key: str) -> bool:
+    """The OAuth credential row, or one scoped to a credential namespace."""
+
+    return state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY or state_key.startswith(
+        _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
+    )
+
+
+# The native store request parser refuses a JSON collection wider than this
+# and a request larger than 4 MiB; the byte bound leaves room for the envelope.
+_NATIVE_COLLECTION_WIDTH = 4096
+_NATIVE_PAYLOAD_BYTES = 3 * 1024 * 1024
+
+
+def _fits_native_request(payload: object) -> bool:
+    """Whether one native store request can carry ``payload``."""
+
+    if len(json.dumps(payload, separators=(",", ":")).encode("utf-8")) > _NATIVE_PAYLOAD_BYTES:
+        return False
+    pending: list[object] = [payload]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, Mapping):
+            children = list(value.values())
+        elif isinstance(value, (list, tuple)):
+            children = list(value)
+        else:
+            continue
+        if len(children) > _NATIVE_COLLECTION_WIDTH:
+            return False
+        pending.extend(children)
+    return True
+
+
+def _payload_arg(payload: Mapping[str, object] | Sequence[object]) -> object:
+    """A mapping as a plain dict and a sequence as a list; the native store refuses anything else."""
+
+    if isinstance(payload, Mapping):
+        return dict(payload)
+    if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes)):
+        return list(payload)
+    return payload

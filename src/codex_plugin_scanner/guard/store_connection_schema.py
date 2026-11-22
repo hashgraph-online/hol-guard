@@ -60,7 +60,7 @@ from .store_command_activity_maintenance_schema import ensure_command_activity_m
 from .store_command_activity_schema import ensure_command_activity_schema
 from .store_command_shadow_schema import ensure_command_shadow_schema
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
-from .store_local_cli_schema import ensure_local_cli_schema
+from .store_local_cli_schema import ensure_local_cli_schema, local_cli_schema_is_current
 from .store_receipt_rollup_schema import request_receipt_rollup_rebuild
 from .store_resume import ensure_resume_schema
 from .store_review_event_outbox_schema import ensure_review_event_outbox_schema
@@ -1352,6 +1352,7 @@ class StoreConnectionSchemaMixin:
                         and storage_row is not None
                         and "oauth_source" in approval_columns
                         and required_approval_columns <= approval_columns
+                        and local_cli_schema_is_current(connection)
                     )
                 finally:
                     connection.close()
@@ -1534,9 +1535,10 @@ class StoreConnectionSchemaMixin:
         )
 
     def list_table_names(self) -> list[str]:
-        with self._connect() as connection:
-            rows = connection.execute("select name from sqlite_master where type = 'table'").fetchall()
-        return sorted(str(row["name"]) for row in rows)
+        names = self._native_store_call("list_table_names", {})
+        if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+            raise RuntimeError("native list_table_names returned no answer")
+        return sorted(cast("list[str]", names))
 
 
 forget_in_child(StoreConnectionSchemaMixin._schema_initialization_states)

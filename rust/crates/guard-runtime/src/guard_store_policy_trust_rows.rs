@@ -15,6 +15,10 @@
 //! a stamp of its row; the caller reads it on its own and takes a second
 //! snapshot to confirm nothing changed in between. Readers that only need
 //! the keyrings ask for `keys_only` and never carry the bundle.
+//!
+//! `bundle: "last_good"` puts the last good bundle in the bundle's place, so
+//! the fallback a rejected sync keeps is judged against the keyrings of the
+//! same snapshot it was read in.
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -24,6 +28,7 @@ use crate::guard_store_db::{query_one, text, value_error, StoreError, StoreResul
 use crate::guard_store_sync_state::{read_payload, write_encoded};
 
 const BUNDLE_KEY: &str = "policy_bundle";
+const LAST_GOOD_KEY: &str = "policy_bundle_last_good";
 const KEYRING_KEY: &str = "policy_bundle_keyring";
 const CHECKPOINT_KEY: &str = "policy_bundle_acceptance_checkpoint";
 /// `MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY`.
@@ -54,9 +59,23 @@ pub(crate) fn dispatch(
     args: &Args<'_>,
 ) -> StoreResult<Value> {
     match method {
-        "policy_bundle_trust_rows" => trust_rows(connection, args.flag("keys_only")?),
+        "policy_bundle_trust_rows" => trust_rows(
+            connection,
+            args.flag("keys_only")?,
+            bundle_key(args.opt_str("bundle")?)?,
+        ),
         "record_review_verification_keyring" => record_review_keyring(connection, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
+    }
+}
+
+/// The row the named bundle is stored under: the current bundle unless the
+/// caller asks for the last good one. Any other name is refused.
+fn bundle_key(role: Option<&str>) -> StoreResult<&'static str> {
+    match role {
+        None | Some("current") => Ok(BUNDLE_KEY),
+        Some("last_good") => Ok(LAST_GOOD_KEY),
+        Some(_) => value_error("policy_bundle_role_invalid"),
     }
 }
 
@@ -64,14 +83,14 @@ pub(crate) fn dispatch(
 /// return it (an object or array, else `null`), plus the bound workspace id.
 /// `keys_only` leaves the bundle out. A bundle too large for the reply is
 /// left out too, with `policy_bundle_deferred` set and its row stamp given.
-fn trust_rows(connection: &Connection, keys_only: bool) -> StoreResult<Value> {
+fn trust_rows(connection: &Connection, keys_only: bool, bundle: &str) -> StoreResult<Value> {
     let row = |key: &str| -> StoreResult<Value> {
         Ok(read_payload(connection, key)?.unwrap_or(Value::Null))
     };
     let (bundle, deferred, stamp) = if keys_only {
         (Value::Null, false, Value::Null)
     } else {
-        bundle_row(connection)?
+        bundle_row(connection, bundle)?
     };
     Ok(json!({
         "policy_bundle": bundle,
@@ -86,16 +105,45 @@ fn trust_rows(connection: &Connection, keys_only: bool) -> StoreResult<Value> {
         "sync_summary": row(SYNC_SUMMARY_KEY)?,
         "policy_bundle_last_error": row(LAST_ERROR_KEY)?,
         "workspace_id": workspace_id(connection)?,
+        "unreadable_rows": unreadable_rows(connection)?,
     }))
+}
+
+/// The rows a bundle's signature is checked against.
+const TRUST_KEYS: [&str; 5] = [
+    KEYRING_KEY,
+    CHECKPOINT_KEY,
+    PROVENANCE_KEY,
+    SUPPLY_CHAIN_KEYRING_KEY,
+    REVIEW_KEYRING_KEY,
+];
+
+/// The trust rows that are stored but are not JSON. `get_sync_payload`
+/// raised on such a row, and reading it as absent would drop a stored key
+/// restriction or provenance quarantine, so the caller refuses the snapshot.
+fn unreadable_rows(connection: &Connection) -> StoreResult<Value> {
+    let mut unreadable = Vec::new();
+    for key in TRUST_KEYS {
+        let row = query_one(
+            connection,
+            "select payload_json from sync_state where state_key = ?",
+            &[Value::from(key)],
+        )?;
+        if row.is_some_and(|row| serde_json::from_str::<Value>(text(&row, "payload_json")).is_err())
+        {
+            unreadable.push(Value::from(key));
+        }
+    }
+    Ok(Value::Array(unreadable))
 }
 
 /// The bundle, whether it was left out for size, and the stamp of its row
 /// (the write time and stored length) when it was.
-fn bundle_row(connection: &Connection) -> StoreResult<(Value, bool, Value)> {
+fn bundle_row(connection: &Connection, key: &str) -> StoreResult<(Value, bool, Value)> {
     let Some(row) = query_one(
         connection,
         "select payload_json, updated_at from sync_state where state_key = ?",
-        &[Value::from(BUNDLE_KEY)],
+        &[Value::from(key)],
     )?
     else {
         return Ok((Value::Null, false, Value::Null));

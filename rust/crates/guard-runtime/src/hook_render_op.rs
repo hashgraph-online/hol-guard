@@ -131,41 +131,42 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
     if request.kind == "availability" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
         let payload = object_of(params.get("payload")).ok_or("native_hook_render_invalid")?;
-        let event_name = availability_event_name(payload);
-        let compact = event_name
-            .to_lowercase()
-            .chars()
-            .filter(|character| *character != '_' && *character != '-')
-            .collect::<String>();
-        let pauses = if matches!(compact.as_str(), "userpromptsubmit" | "userpromptsubmitted") {
-            true
-        } else if matches!(
-            compact.as_str(),
-            "sessionstart"
-                | "sessionend"
-                | "subagentstart"
-                | "subagentstop"
-                | "subagentend"
-                | "stop"
-                | "notification"
-                | "taskstart"
-                | "taskerror"
-                | "sessionshutdown"
-                | "permissiondenied"
-        ) {
-            false
-        } else {
-            !matches!(compact.as_str(), "posttooluse" | "posttool") && !compact.starts_with("after")
-        };
-        let permission_request = matches!(
-            compact.as_str(),
-            "permissionrequest" | "permissionrequestv2" | "copilotpermissionrequest"
-        );
-        let mut response = Object::new();
-        response.insert("event_name".into(), Value::String(event_name));
-        response.insert("pauses".into(), Value::Bool(pauses));
-        response.insert("permission_request".into(), Value::Bool(permission_request));
-        return Ok(json!({ "response": Value::Object(response) }));
+        return Ok(json!({
+            "response": crate::hook_payload_facts_op::availability_response(payload)
+        }));
+    }
+    if request.kind == "availability_response" {
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let event = params
+            .get("event_name")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let reason = params
+            .get("reason")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let reason_code = params
+            .get("reason_code")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let prompt_reason = params.get("prompt_reason").and_then(Value::as_str);
+        let response = guard_command::hook_responses::fail_closed::response(
+            harness,
+            event,
+            reason,
+            reason_code,
+            prompt_reason,
+        )
+        .map_err(|_| "native_hook_render_invalid")?;
+        return Ok(cli_payload(CliOutcome::Document(response)));
+    }
+    if request.kind == "fail_closed_verdict" {
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let verdict = object_of(params.get("verdict")).ok_or("native_hook_render_invalid")?;
+        let response =
+            guard_command::hook_responses::fail_closed::verdict_response(harness, verdict)
+                .map_err(|_| "native_hook_render_invalid")?;
+        return Ok(cli_payload(CliOutcome::Document(response)));
     }
     if request.kind == "claude_approval_copy" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
@@ -414,17 +415,16 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
     render_edge(request).map(|response| json!({ "response": Value::Object(response) }))
 }
 
-fn availability_event_name(payload: &Object) -> String {
-    let mut event = crate::hook_payload_facts_op::runtime_event(payload);
-    if event == "copilotPermissionRequest" {
-        event = "PermissionRequest".to_owned();
-    }
-    event
-}
-
 fn render_edge(request: &HookRenderRequestV1) -> Result<Object, &'static str> {
     let harness = request.harness.as_str();
     match request.kind.as_str() {
+        "accepted_allow" => {
+            let verdict =
+                object_of(request.verdict.as_ref()).ok_or("native_hook_render_invalid")?;
+            let mut response = pre_tool(harness, verdict);
+            response.insert("approval_reuse_status".into(), json!("accepted"));
+            Ok(response)
+        }
         "pre_tool" => {
             let verdict =
                 object_of(request.verdict.as_ref()).ok_or("native_hook_render_invalid")?;

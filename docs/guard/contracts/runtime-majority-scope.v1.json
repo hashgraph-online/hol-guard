@@ -751,6 +751,10 @@
         "reason": "Reviewed and retained in runtime scope: cli/render.py imports it at module load so the status and doctor panels report whether the configured protection posture is actually in effect. It reads the harness rows the adapters already produced and decides what the panel says; no admission, authority or enforcement decision reads it."
       },
       {
+        "path": "src/codex_plugin_scanner/guard/cli/older_release_modules.py",
+        "reason": "Reviewed and retained in runtime scope: cli/render.py imports it first at module load. When the process loaded an older release than the one on disk (a pre-3.60 CLI printing the result of its own update), it drops that release's plain modules from sys.modules so the renderer's imports load the installed files. It manages the Python interpreter's own module cache, so it has no Rust counterpart; it makes no admission, authority or enforcement decision."
+      },
+      {
         "path": [
           "src/codex_plugin_scanner/guard/consumer/low_trust.py",
           "src/codex_plugin_scanner/guard/registry_trust.py"

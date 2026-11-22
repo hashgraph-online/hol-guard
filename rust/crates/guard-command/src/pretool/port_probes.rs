@@ -14,7 +14,8 @@
 //! - `ncat` and `socat`, whose option sets differ.
 //!
 //! DNS lookups with `dig`, `nslookup` and `host` are proven here too, in
-//! [`dns_lookups`].
+//! [`dns_lookups`], and the reachability probes `ping`, `traceroute`, `whois`
+//! and `getent hosts` in [`reachability_probes`].
 
 /// Single-letter flags that may be clustered with `-z` (`-zv`, `-vz`).
 const SHORT_FLAGS: &str = "zvn46";
@@ -26,10 +27,15 @@ const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "localhost", "::1"];
 #[path = "dns_lookups.rs"]
 mod dns_lookups;
 
-/// Whether `program` is a probe this module proves: a loopback `nc -z`, or a
-/// `dig`, `nslookup` or `host` lookup of a fixed name ([`dns_lookups`]).
+#[path = "reachability_probes.rs"]
+mod reachability_probes;
+
+/// Whether `program` is a probe this module proves: a loopback `nc -z`, a
+/// `dig`, `nslookup` or `host` lookup of a fixed name ([`dns_lookups`]), or a
+/// reachability probe of one ([`reachability_probes`]).
 pub(super) fn proves(program: &str) -> bool {
     matches!(program, "nc" | "netcat" | "dig" | "nslookup" | "host")
+        || reachability_probes::proves(program)
 }
 
 /// The probe `program` runs, read from the start of its pipeline so that no
@@ -51,6 +57,12 @@ pub(super) fn safe(
                     &segment.arguments,
                     no_digrc(context),
                 )
+        }
+        name if reachability_probes::proves(name) => {
+            model.dialect == "posix"
+                && segment.pipeline_index == 0
+                && !segment.text.contains(['$', '`'])
+                && reachability_probes::safe_probe_arguments(name, &segment.arguments)
         }
         _ => safe_nc_segment(model, segment),
     }

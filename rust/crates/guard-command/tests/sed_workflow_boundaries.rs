@@ -73,6 +73,8 @@ fn line_range_reads_of_a_copy_are_allowed_in_every_spelling() {
         r"grep -n const src/example.py | sed -E 's/(const)/\1/'",
         r"sed 's/\(const\)/\1/' src/example.py",
         "sed -n '36,39'p src/example.py | cat -A 2>/dev/null || sed -n '36,39'p src/example.py",
+        "tail -f src/example.py",
+        "tail -n 50 -f src/example.py",
     ] {
         assert_eq!(action(command), "allow", "{command}");
     }
@@ -81,7 +83,12 @@ fn line_range_reads_of_a_copy_are_allowed_in_every_spelling() {
 #[test]
 fn line_range_read_spellings_do_not_admit_writes_or_other_files() {
     for command in [
-        "tail -f src/example.py",
+        // Following a file prints what is appended to the file the
+        // single-file proof already admits; it widens no path and ends
+        // no differently for one the proof refuses.
+        "tail -f .env",
+        "tail -f ~/.ssh/id_rsa",
+        "grep -n const src/example.py | tail -f",
         "tail +31 src/example.py",
         "tail -n +31 .env",
         "tail +31 ~/.ssh/id_rsa",

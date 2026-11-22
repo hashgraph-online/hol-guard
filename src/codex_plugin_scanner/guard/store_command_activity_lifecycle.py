@@ -93,33 +93,54 @@ class StoreCommandActivityLifecycleMixin:
     def get_command_activity_persistence_health(
         self: _ConnectionOwner,
     ) -> CommandActivityPersistenceHealth:
-        with self._connect() as connection:
-            row = cast(
-                sqlite3.Row | None,
-                connection.execute("select * from command_activity_health where singleton = 1").fetchone(),
-            )
-            active = cast(
-                sqlite3.Row | None,
-                connection.execute("select * from command_activity_health_active where singleton = 1").fetchone(),
-            )
-        if row is None or active is None:
-            raise RuntimeError("command activity persistence health is unavailable")
-        last_error_at = str(row["last_error_at"]) if row["last_error_at"] is not None else None
-        return CommandActivityPersistenceHealth(
-            dropped_event_count=int(row["dropped_event_count"]),
-            persistence_error_count=int(row["persistence_error_count"]),
-            active_error_count=sum(
-                int(active[column])
-                for column in (
-                    "command_error_active",
-                    "shadow_error_active",
-                    "maintenance_error_active",
-                )
-            ),
-            last_error_code=str(row["last_error_code"]) if row["last_error_code"] is not None else None,
-            last_error_at=datetime.fromisoformat(last_error_at) if last_error_at is not None else None,
-            schema_version=str(row["schema_version"]),
-        )
+        # Missing health rows come back from the native store as a
+        # RuntimeError, which the protection-health report already handles.
+        answer = self._native_store_call("get_command_activity_persistence_health", {})
+        return _health_from_answer(answer)
+
+
+_HEALTH_KEYS: Final = frozenset(
+    {
+        "dropped_event_count",
+        "persistence_error_count",
+        "active_error_count",
+        "last_error_code",
+        "last_error_at",
+        "schema_version",
+    }
+)
+
+
+def _whole(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RuntimeError("native get_command_activity_persistence_health returned no answer")
+    return value
+
+
+def _optional_text(value: object) -> str | None:
+    if value is not None and not isinstance(value, str):
+        raise RuntimeError("native get_command_activity_persistence_health returned no answer")
+    return value
+
+
+def _health_from_answer(answer: object) -> CommandActivityPersistenceHealth:
+    """Check the native health answer strictly and shape it into the DTO."""
+
+    if not isinstance(answer, dict) or set(answer) != _HEALTH_KEYS:
+        raise RuntimeError("native get_command_activity_persistence_health returned no answer")
+    health = cast("dict[str, object]", answer)
+    schema_version = health["schema_version"]
+    if not isinstance(schema_version, str):
+        raise RuntimeError("native get_command_activity_persistence_health returned no answer")
+    last_error_at = _optional_text(health["last_error_at"])
+    return CommandActivityPersistenceHealth(
+        dropped_event_count=_whole(health["dropped_event_count"]),
+        persistence_error_count=_whole(health["persistence_error_count"]),
+        active_error_count=_whole(health["active_error_count"]),
+        last_error_code=_optional_text(health["last_error_code"]),
+        last_error_at=datetime.fromisoformat(last_error_at) if last_error_at is not None else None,
+        schema_version=schema_version,
+    )
 
 
 def _require_error_code(value: str) -> None:

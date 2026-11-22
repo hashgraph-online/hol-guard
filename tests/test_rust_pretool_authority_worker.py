@@ -385,3 +385,39 @@ def test_hook_worker_leaves_permission_requests_to_the_harness_prompt(
         )
         # No decision: the harness shows its normal approval prompt.
         assert result == {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
+
+
+def test_hook_worker_uses_rust_for_permission_lifecycle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def native_lifecycle(**kwargs: object) -> dict[str, object]:
+        calls.append(kwargs)
+        return {"harness_response": {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}}
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_hook_direct.native_hook_direct",
+        native_lifecycle,
+    )
+
+    def unexpected_edge(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("permission lifecycle reached the edge")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
+        unexpected_edge,
+    )
+    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    result = worker.review_http_payload(
+        payload={"hook_event_name": "PermissionRequest", "tool_name": "Bash"},
+        params={},
+        default_harness="codex",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+        event_name="PermissionRequest",
+    )
+    assert result == {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
+    assert calls and calls[0]["lifecycle_only"] is True

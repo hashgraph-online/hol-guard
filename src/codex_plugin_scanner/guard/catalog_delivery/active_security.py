@@ -59,11 +59,7 @@ def read(store):
 
 
 def _activation(store):
-    with store._connect() as connection:
-        exists = connection.execute(
-            "select 1 from sqlite_master where type='table' and name='extension_control_schema_migration'"
-        ).fetchone()
-        row = activation_store._row(connection) if exists else None
+    row = activation_store.read_slot(store)
     if row is None:
         return None
     from .activation_baseline import is_baseline

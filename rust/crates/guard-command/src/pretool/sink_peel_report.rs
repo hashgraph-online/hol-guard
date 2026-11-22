@@ -12,6 +12,9 @@ use super::{literal, require_blanks, skip_blanks, STATUS_LABEL_LIMIT};
 pub(super) struct TrailingReport {
     /// A `; echo "<label>$?"`, which prints the label and the status itself.
     pub(super) status: Option<String>,
+    /// The status label came from `${PIPESTATUS[0]}`, so it names the core's
+    /// own status rather than whatever the shell last ran.
+    pub(super) status_from_core: bool,
     /// What the report prints when the command the shell tested succeeded.
     pub(super) success: Option<String>,
     /// What it prints when that command failed.
@@ -22,6 +25,7 @@ pub(super) struct TrailingReport {
 /// and what it prints. One of
 ///
 /// - `; echo "<label>$?"`, the status the sink has always printed itself;
+/// - `; echo "<label>${PIPESTATUS[0]}"`, the core's own status;
 /// - `; echo <label>`, printed however the run ends;
 /// - `&& echo <label>`, printed only after a run that succeeded;
 /// - `|| echo <label>`, printed only after one that failed;
@@ -72,14 +76,16 @@ fn report_separator(characters: &[char], index: usize) -> Option<&'static str> {
 
 /// The report that runs after `separator`, when the rest of the text is one.
 fn report_at(characters: &[char], start: usize, separator: &str) -> Option<TrailingReport> {
-    let (index, label, status) = echo_clause(characters, start)?;
+    let (index, label, status, from_core) = echo_clause(characters, start)?;
     if status {
         // `$?` reads the status of whatever the shell last ran, which is the
-        // echo itself after `&&` or `||`. Only the sequenced spelling names
-        // the command's own status.
+        // echo itself after `&&` or `||`, and `${PIPESTATUS[0]}` reads the
+        // array the echo's own run replaces. Only the sequenced spelling
+        // names the command's own status.
         return (separator == ";" && skip_blanks(characters, index) == characters.len()).then(
             || TrailingReport {
                 status: Some(label),
+                status_from_core: from_core,
                 ..TrailingReport::default()
             },
         );
@@ -90,12 +96,13 @@ fn report_at(characters: &[char], start: usize, separator: &str) -> Option<Trail
         if separator != "&&" || report_separator(characters, after) != Some("||") {
             return None;
         }
-        let (index, failure, status) = echo_clause(characters, after + 2)?;
+        let (index, failure, status, _) = echo_clause(characters, after + 2)?;
         if status || skip_blanks(characters, index) != characters.len() {
             return None;
         }
         return Some(TrailingReport {
             status: None,
+            status_from_core: false,
             success: Some(label),
             failure: Some(failure),
         });
@@ -104,16 +111,19 @@ fn report_at(characters: &[char], start: usize, separator: &str) -> Option<Trail
         // A sequenced report prints however the command ended.
         ";" => TrailingReport {
             status: None,
+            status_from_core: false,
             success: Some(label.clone()),
             failure: Some(label),
         },
         "&&" => TrailingReport {
             status: None,
+            status_from_core: false,
             success: Some(label),
             failure: None,
         },
         _ => TrailingReport {
             status: None,
+            status_from_core: false,
             failure: Some(label),
             success: None,
         },
@@ -129,9 +139,10 @@ fn skip_report_gap(characters: &[char], mut index: usize) -> usize {
     index
 }
 
-/// One `echo <label>` clause: where it ends, the label, and whether the label
-/// ended in the `$?` the shell expands to a status.
-fn echo_clause(characters: &[char], start: usize) -> Option<(usize, String, bool)> {
+/// One `echo <label>` clause: where it ends, the label, whether the label
+/// ended in a status expansion, and whether that expansion was the
+/// `${PIPESTATUS[0]}` naming the first stage rather than the shell's `$?`.
+fn echo_clause(characters: &[char], start: usize) -> Option<(usize, String, bool, bool)> {
     let mut index = skip_report_gap(characters, start);
     index = literal(characters, index, "echo")?;
     index = require_blanks(characters, index)?;
@@ -150,12 +161,18 @@ fn echo_clause(characters: &[char], start: usize) -> Option<(usize, String, bool
         label.push(characters[index]);
         index += 1;
     }
-    let status = match literal(characters, index, "$?") {
+    let (status, from_core) = match literal(characters, index, "$?") {
         Some(past) => {
             index = past;
-            true
+            (true, false)
         }
-        None => false,
+        None => match literal(characters, index, "${PIPESTATUS[0]}") {
+            Some(past) => {
+                index = past;
+                (true, true)
+            }
+            None => (false, false),
+        },
     };
     if quoted {
         if characters.get(index) != Some(&'"') {
@@ -169,5 +186,5 @@ fn echo_clause(characters: &[char], start: usize) -> Option<(usize, String, bool
     if label.starts_with('-') {
         return None;
     }
-    (status || !label.is_empty()).then_some((index, label, status))
+    (status || !label.is_empty()).then_some((index, label, status, from_core))
 }

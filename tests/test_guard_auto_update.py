@@ -146,7 +146,13 @@ def test_a_failed_status_fetch_is_recorded(tmp_path: Path) -> None:
 
 def test_malformed_state_is_treated_as_empty(tmp_path: Path) -> None:
     store, context = _setup(tmp_path)
-    _save(store, "not valid json{{")
+    # The store only writes objects and arrays, so the malformed row is
+    # written straight into the table.
+    with store._connect() as connection:
+        connection.execute(
+            "insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)",
+            (auto_update.AUTO_UPDATE_STATE_KEY, "not valid json{{", datetime.now(timezone.utc).isoformat()),
+        )
     _check, update = _run(store, context, {**AVAILABLE, "update_available": False})
     update.assert_not_called()
     assert _state(store)["last_status"]["update_available"] is False

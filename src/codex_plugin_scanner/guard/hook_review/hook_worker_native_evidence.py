@@ -75,6 +75,8 @@ def _record_unavailable_native(
             "HOL Guard could not complete the native hook decision safely.",
         ),
         prompt_reason=reason or native_unavailable_reason(failure_code, "") or None,
+        guard_home=guard_home,
+        deadline=deadline,
     )
     if watch_continue and event_name == "PreToolUse":
         # Only a superseded Watch snapshot (resident reachable) keeps recording,
