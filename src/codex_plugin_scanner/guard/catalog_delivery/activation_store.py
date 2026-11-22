@@ -38,6 +38,9 @@ def read_slot(store):
     """The stored activation slot, read by the native store, or None before the pack schema.
 
     The row is returned unauthenticated; callers verify it with their key.
+    The native read decides the state. This only turns its four states into
+    the errors the Python callers already raise and refuses any other answer
+    shape, because the record it hands on gates which command packs run.
     """
     method = "read_command_pack_activation"
     answer = store._native_store_call(method, {})

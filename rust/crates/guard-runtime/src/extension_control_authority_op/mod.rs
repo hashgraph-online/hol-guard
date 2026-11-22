@@ -64,6 +64,8 @@ mod tests;
 mod view;
 mod writes;
 
+pub(crate) use schema::{compatible_marker, FIRST_PACK_SCHEMA_VERSION};
+
 use std::cell::RefCell;
 
 use base64ct::{Base64UrlUnpadded, Encoding};

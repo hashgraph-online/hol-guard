@@ -14,15 +14,11 @@
 
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 
+use crate::extension_control_authority_op::{compatible_marker, FIRST_PACK_SCHEMA_VERSION};
 use crate::guard_store_db::{query_one, StoreResult};
 use crate::guard_store_local_cli_inventory::table_exists;
 
-/// The first schema version with an activation slot.
-const PACK_ACTIVATION_SCHEMA_VERSION: i64 = 5;
-/// Every schema version a marker may name.
-const KNOWN_VERSIONS: std::ops::RangeInclusive<i64> = 1..=6;
 const SLOT_FIELDS: [&str; 5] = [
     "revision",
     "record_json",
@@ -47,7 +43,7 @@ pub(crate) fn read(connection: &Connection) -> StoreResult<Value> {
     let Some(version) = marker.as_ref().and_then(compatible_version) else {
         return Ok(state("schema_invalid"));
     };
-    if version < PACK_ACTIVATION_SCHEMA_VERSION {
+    if version < FIRST_PACK_SCHEMA_VERSION {
         return Ok(state("absent"));
     }
     let slot = query_one(
@@ -78,21 +74,11 @@ fn state(name: &str) -> Value {
 }
 
 /// The marker's version when it carries an integer version and the checksum
-/// of that version's schema, as `extension_control_schema_marker_is_compatible`
-/// required.
+/// of that version's schema, the same test the authority writer applies.
 fn compatible_version(marker: &crate::guard_store_db::Row) -> Option<i64> {
     let version = marker.get("version").and_then(Value::as_i64)?;
     let checksum = marker.get("checksum").and_then(Value::as_str)?;
-    if !KNOWN_VERSIONS.contains(&version) || checksum != schema_checksum(version) {
-        return None;
-    }
-    Some(version)
-}
-
-fn schema_checksum(version: i64) -> String {
-    hex::encode(Sha256::digest(
-        format!("hol-guard.extension-control-authority.schema.v{version}").as_bytes(),
-    ))
+    compatible_marker(version, checksum).then_some(version)
 }
 
 #[cfg(test)]

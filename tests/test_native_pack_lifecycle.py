@@ -214,6 +214,7 @@ def test_db_loss_and_missing_release_cannot_fall_back_to_legacy_controls(protect
     from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
 
     protected._connect = lambda: sqlite3.connect(":memory:")
+    protected._native_store_call = activation_slot_call(protected._connect)
     monkeypatch.setattr(candidates, "load_installed_bundle", lambda: None)
     with pytest.raises(ValueError, match="pack_authority_unavailable"):
         candidates.prepare_candidate(protected, None, None, ())

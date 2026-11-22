@@ -1,7 +1,9 @@
 use rusqlite::{params, Connection};
 use serde_json::json;
 
-use super::{handles, read, schema_checksum};
+use sha2::{Digest, Sha256};
+
+use super::{handles, read};
 use crate::guard_store_op_kind::{method_kind, Kind};
 
 fn store() -> Connection {
@@ -111,4 +113,12 @@ fn a_filled_slot_comes_back_as_stored() {
             "recorded_at": "now",
         }})
     );
+}
+
+/// The marker checksum the authority writer stores, spelled out so a change
+/// to its format fails here too.
+fn schema_checksum(version: i64) -> String {
+    hex::encode(Sha256::digest(
+        format!("hol-guard.extension-control-authority.schema.v{version}").as_bytes(),
+    ))
 }
