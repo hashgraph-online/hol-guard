@@ -3,30 +3,28 @@
 //! A session that is about to build something looks at the host first: how
 //! much memory is free, which processes are hot, whether the service it needs
 //! came up, who else is logged in. `uptime`, `df` and `ps` already read past
-//! review; `w`, `who`, `last`, `vm_stat`, `iostat`, `top` and `systemctl
-//! status` ask the same kind of question and did not, so a status check
-//! stopped the session.
+//! review; `w`, `who`, `last`, `vm_stat`, `iostat` and `top` ask the same kind
+//! of question and did not, so a status check stopped the session.
 //!
-//! Every name here prints a counter, a table or a unit's state. None of them
-//! opens a file the caller names, writes one, or starts another program --
-//! with three exceptions, which is why each screen is written per name rather
-//! than as one list:
+//! Every name here prints a counter or a table. None of them opens a file the
+//! caller names, writes one, or starts another program -- with two exceptions,
+//! which is why each screen is written per name rather than as one list:
 //!
 //! * `last -f FILE` reads an alternate accounting file, so the file-bearing
 //!   options refuse the proof and only the record-count limits are admitted.
 //! * `top` is an interactive program by default, and the interactive screen
 //!   renices and signals the processes it lists. Only the logging modes are
 //!   admitted: macOS `-l N` and Linux `-b`, which print the samples and exit.
-//! * `systemctl` starts, stops, enables and masks units. Only the verbs that
-//!   report a unit's state are admitted, and the unit operands are screened
-//!   as plain names, because a path operand is a unit file `systemctl` will
-//!   link into the system.
+//!
+//! `systemctl` is deliberately absent. Reporting on a unit is a privileged
+//! system read rather than a workspace one, and the command corpus authors it
+//! that way, so it keeps its review.
 //!
 //! Values are read as the word after their option, and an option this screen
 //! does not know refuses the whole line rather than being skipped, so a value
 //! can never be read as a file name.
 
-/// A status reader that prints counters, sessions or unit state.
+/// A status reader that prints counters, samples or login sessions.
 pub(super) fn safe_status_fact(basename: &str, arguments: &[String]) -> bool {
     match basename {
         "w" => flags_only(arguments, &["-h", "-i", "-n", "-s", "-f", "-u", "-o"]),
@@ -41,7 +39,6 @@ pub(super) fn safe_status_fact(basename: &str, arguments: &[String]) -> bool {
         ),
         "mpstat" | "pidstat" => sampling_arguments(arguments, &["-P", "-u", "-p", "-A", "-I"]),
         "top" => top_arguments(arguments),
-        "systemctl" => systemctl_arguments(arguments),
         _ => false,
     }
 }
@@ -178,57 +175,6 @@ fn top_arguments(arguments: &[String]) -> bool {
     batch
 }
 
-/// `systemctl` reporting on units, never changing one.
-fn systemctl_arguments(arguments: &[String]) -> bool {
-    let mut remaining = arguments;
-    while let Some((word, rest)) = remaining.split_first() {
-        if !word.starts_with('-') {
-            break;
-        }
-        if !matches!(
-            word.as_str(),
-            "--user"
-                | "--system"
-                | "--no-pager"
-                | "--no-legend"
-                | "--all"
-                | "-a"
-                | "--full"
-                | "-l"
-                | "--quiet"
-                | "-q"
-                | "--plain"
-                | "--failed"
-                | "--recursive"
-                | "-r"
-        ) {
-            return false;
-        }
-        remaining = rest;
-    }
-    let Some((verb, units)) = remaining.split_first() else {
-        return false;
-    };
-    if !matches!(
-        verb.as_str(),
-        "status"
-            | "show"
-            | "cat"
-            | "is-active"
-            | "is-enabled"
-            | "is-failed"
-            | "list-units"
-            | "list-unit-files"
-            | "list-timers"
-            | "list-sockets"
-            | "list-dependencies"
-            | "get-default"
-    ) {
-        return false;
-    }
-    units.iter().all(|unit| unit_name(unit))
-}
-
 /// A login name or terminal: no separator, so no path and no option.
 fn account_name(word: &str) -> bool {
     !word.is_empty()
@@ -236,15 +182,6 @@ fn account_name(word: &str) -> bool {
         && word
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
-}
-
-/// A unit name or a `-p` property: a plain word, never a path.
-fn unit_name(word: &str) -> bool {
-    !word.is_empty()
-        && word.len() <= 128
-        && word.chars().all(|character| {
-            character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.' | '@' | ',')
-        })
 }
 
 /// A decimal count or interval.

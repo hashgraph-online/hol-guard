@@ -12,7 +12,7 @@ fn admits(command: &str) -> bool {
 }
 
 #[test]
-fn a_status_reader_prints_counters_sessions_or_unit_state() {
+fn a_status_reader_prints_counters_samples_or_login_sessions() {
     for command in [
         "w",
         "w -h",
@@ -32,18 +32,13 @@ fn a_status_reader_prints_counters_sessions_or_unit_state() {
         "top -l 1",
         "top -l 1 -o cpu",
         "top -b -n 1",
-        "systemctl status",
-        "systemctl status web-api.service",
-        "systemctl --user is-active timer-sync.timer",
-        "systemctl list-units --all",
-        "systemctl cat web-api.service",
     ] {
         assert!(admits(command), "{command} reads a host status counter");
     }
 }
 
 #[test]
-fn a_spelling_that_changes_a_unit_opens_a_file_or_takes_the_terminal_stays_reviewed() {
+fn a_spelling_that_opens_a_file_takes_the_terminal_or_asks_about_a_unit_stays_reviewed() {
     for command in [
         "top",
         "top -o cpu",
@@ -54,18 +49,13 @@ fn a_spelling_that_changes_a_unit_opens_a_file_or_takes_the_terminal_stays_revie
         "w --output report.txt",
         "vm_stat -o counters.txt",
         "iostat -o /var/log/io.out",
+        "systemctl status web-api.service",
+        "systemctl is-active web-api.service",
         "systemctl start web-api.service",
-        "systemctl restart web-api.service",
-        "systemctl enable web-api.service",
-        "systemctl mask web-api.service",
-        "systemctl daemon-reload",
-        "systemctl link /srv/units/web-api.service",
-        "systemctl status /srv/units/web-api.service",
-        "systemctl --force status web-api.service",
     ] {
         assert!(
             !admits(command),
-            "{command} changes a unit, opens a file or holds the terminal"
+            "{command} opens a file, holds the terminal or reports on a unit"
         );
     }
 }
