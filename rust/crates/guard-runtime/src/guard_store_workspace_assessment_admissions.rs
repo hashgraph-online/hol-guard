@@ -254,7 +254,11 @@ fn watched_roots(connection: &Connection, args: &Args) -> StoreResult<Value> {
     let mut next = Value::Null;
     query_each(connection, &sql, &params, |row: Row| {
         let root = text(&row, "private_root").to_owned();
-        let size = root.len().saturating_add(4);
+        // The bytes JSON sends for the root, quotes and escapes included,
+        // plus its separator, so escaped paths cannot outgrow the reply.
+        let size = serde_json::to_string(&root)
+            .map_or(usize::MAX, |encoded| encoded.len())
+            .saturating_add(1);
         if let Some((codebase, worktree)) = &last {
             if bytes.saturating_add(size) > PAGE_BYTES {
                 next = json!([codebase, worktree]);

@@ -9,57 +9,92 @@ use crate::guard_store_args::Args;
 use crate::guard_store_db::{StoreError, StoreResult};
 use crate::guard_store_op_kind::{method_kind, Kind};
 
+/// `store_workspace_assessment_schema.py`'s statements, copied verbatim so
+/// the production checks, foreign keys and generation trigger apply here.
 pub(crate) const SCHEMA: &str = "
-create table workspace_assessment_state (
-    codebase_key text not null check (length(codebase_key) = 64),
-    worktree_key text not null check (length(worktree_key) = 64),
-    private_root text not null,
-    observed_stat_digest text, observed_feed_digest text,
-    dirty_generation integer not null default 0 check (dirty_generation >= 0),
-    last_completed_generation integer not null default 0,
-    last_scan_at_ms integer,
-    paused integer not null default 0 check (paused in (0, 1)),
-    admitted_at_ms integer not null,
-    primary key (codebase_key, worktree_key),
-    check (last_completed_generation >= 0 and last_completed_generation <= dirty_generation)
+CREATE TABLE IF NOT EXISTS workspace_assessment_state (
+    codebase_key TEXT NOT NULL CHECK (length(codebase_key) = 64),
+    worktree_key TEXT NOT NULL CHECK (length(worktree_key) = 64),
+    private_root TEXT NOT NULL CHECK (length(private_root) <= 4096),
+    observed_stat_digest TEXT CHECK (observed_stat_digest IS NULL OR length(observed_stat_digest) = 64),
+    observed_feed_digest TEXT CHECK (observed_feed_digest IS NULL OR length(observed_feed_digest) = 64),
+    dirty_generation INTEGER NOT NULL DEFAULT 0 CHECK (dirty_generation >= 0),
+    last_completed_generation INTEGER NOT NULL DEFAULT 0,
+    last_scan_at_ms INTEGER,
+    paused INTEGER NOT NULL DEFAULT 0 CHECK (paused IN (0, 1)),
+    admitted_at_ms INTEGER NOT NULL CHECK (admitted_at_ms >= 0),
+    PRIMARY KEY (codebase_key, worktree_key),
+    CHECK (last_completed_generation >= 0 AND last_completed_generation <= dirty_generation)
 );
-create table workspace_assessment_install_admissions (
-    codebase_key text not null, worktree_key text not null,
-    primary key (codebase_key, worktree_key)
+CREATE TABLE IF NOT EXISTS workspace_assessment_install_admissions (
+    codebase_key TEXT NOT NULL,
+    worktree_key TEXT NOT NULL,
+    PRIMARY KEY (codebase_key, worktree_key),
+    FOREIGN KEY (codebase_key, worktree_key)
+        REFERENCES workspace_assessment_state(codebase_key, worktree_key) ON DELETE CASCADE
 );
-create table workspace_assessment_ended_admissions (
-    codebase_key text not null, worktree_key text not null, ended_at_ms integer not null,
-    primary key (codebase_key, worktree_key)
+CREATE TABLE IF NOT EXISTS workspace_assessment_ended_admissions (
+    codebase_key TEXT NOT NULL,
+    worktree_key TEXT NOT NULL,
+    ended_at_ms INTEGER NOT NULL CHECK (ended_at_ms >= 0),
+    PRIMARY KEY (codebase_key, worktree_key),
+    FOREIGN KEY (codebase_key, worktree_key)
+        REFERENCES workspace_assessment_state(codebase_key, worktree_key) ON DELETE CASCADE
 );
-create table workspace_assessment_runs (
-    run_id text not null primary key check (length(run_id) <= 64),
-    codebase_key text not null, worktree_key text not null,
-    snapshot_digest text, input_manifest_digest text,
-    detector_set_digest text not null check (length(detector_set_digest) = 64),
-    feed_context_digest text,
-    kind text not null check (kind in ('deterministic', 'verification')),
-    trigger_kind text not null check (trigger_kind in
+CREATE TRIGGER IF NOT EXISTS workspace_assessment_generation_monotonic
+BEFORE UPDATE OF dirty_generation, last_completed_generation ON workspace_assessment_state
+WHEN NEW.dirty_generation < OLD.dirty_generation
+    OR NEW.last_completed_generation < OLD.last_completed_generation
+BEGIN SELECT RAISE(ABORT, 'assessment generations cannot move backward'); END;
+CREATE TABLE IF NOT EXISTS workspace_assessment_runs (
+    run_id TEXT NOT NULL PRIMARY KEY CHECK (length(run_id) <= 64),
+    codebase_key TEXT NOT NULL,
+    worktree_key TEXT NOT NULL,
+    snapshot_digest TEXT CHECK (snapshot_digest IS NULL OR length(snapshot_digest) = 64),
+    input_manifest_digest TEXT CHECK (input_manifest_digest IS NULL OR length(input_manifest_digest) = 64),
+    detector_set_digest TEXT NOT NULL CHECK (length(detector_set_digest) = 64),
+    feed_context_digest TEXT CHECK (feed_context_digest IS NULL OR length(feed_context_digest) = 64),
+    kind TEXT NOT NULL CHECK (kind IN ('deterministic', 'verification')),
+    trigger_kind TEXT NOT NULL CHECK (trigger_kind IN
         ('workspace_open', 'file_change', 'feed_change', 'manual', 'fix_verification')),
-    state text not null check (state in
+    state TEXT NOT NULL CHECK (state IN
         ('queued', 'running', 'completed', 'partial', 'failed', 'canceled', 'superseded')),
-    dirty_generation integer not null,
-    lease_generation integer not null default 0,
-    lease_owner text, lease_until_ms integer,
-    coverage_json text not null default '{}', findings_json text not null default '[]',
-    error_code text,
-    created_at_ms integer not null,
-    triggered_at_ms integer not null check (triggered_at_ms >= created_at_ms),
-    started_at_ms integer, finished_at_ms integer,
-    check (state != 'running' or (lease_owner is not null and lease_until_ms is not null))
+    dirty_generation INTEGER NOT NULL CHECK (dirty_generation >= 0),
+    lease_generation INTEGER NOT NULL DEFAULT 0 CHECK (lease_generation >= 0),
+    lease_owner TEXT,
+    lease_until_ms INTEGER,
+    coverage_json TEXT NOT NULL DEFAULT '{}'
+        CHECK (json_valid(coverage_json) AND json_type(coverage_json) = 'object'
+            AND length(coverage_json) <= 16384),
+    findings_json TEXT NOT NULL DEFAULT '[]'
+        CHECK (json_valid(findings_json) AND json_type(findings_json) = 'array'
+            AND length(findings_json) <= 262144),
+    error_code TEXT CHECK (error_code IS NULL OR length(error_code) <= 128),
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+    triggered_at_ms INTEGER NOT NULL CHECK (triggered_at_ms >= created_at_ms),
+    started_at_ms INTEGER,
+    finished_at_ms INTEGER,
+    FOREIGN KEY (codebase_key, worktree_key)
+        REFERENCES workspace_assessment_state(codebase_key, worktree_key) ON DELETE CASCADE,
+    CHECK (state NOT IN ('completed', 'partial', 'superseded') OR snapshot_digest IS NOT NULL),
+    CHECK (state != 'running' OR (lease_owner IS NOT NULL AND lease_until_ms IS NOT NULL)),
+    CHECK (state NOT IN ('completed', 'partial', 'failed', 'canceled', 'superseded')
+        OR finished_at_ms IS NOT NULL),
+    CHECK (finished_at_ms IS NULL OR finished_at_ms >= created_at_ms)
 );
-create unique index workspace_assessment_one_active
-on workspace_assessment_runs (codebase_key, worktree_key) where state = 'running';
-create unique index workspace_assessment_one_queued
-on workspace_assessment_runs (codebase_key, worktree_key) where state = 'queued';
+CREATE UNIQUE INDEX IF NOT EXISTS workspace_assessment_one_active
+ON workspace_assessment_runs (codebase_key, worktree_key) WHERE state = 'running';
+CREATE UNIQUE INDEX IF NOT EXISTS workspace_assessment_one_queued
+ON workspace_assessment_runs (codebase_key, worktree_key) WHERE state = 'queued';
+CREATE INDEX IF NOT EXISTS workspace_assessment_recent
+ON workspace_assessment_runs (codebase_key, worktree_key, created_at_ms DESC);
 ";
 
 pub(crate) fn store() -> Connection {
     let connection = Connection::open_in_memory().expect("memory store");
+    connection
+        .execute_batch("pragma foreign_keys = on")
+        .expect("foreign keys");
     connection.execute_batch(SCHEMA).expect("schema");
     connection
 }
