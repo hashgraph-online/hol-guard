@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -341,6 +342,12 @@ def test_signed_inactive_cached_bundle_cannot_enforce_defaults_or_rows(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: _WORKSPACE_ID)
+    read_trust_rows = store.policy_bundle_trust_rows
+    monkeypatch.setattr(
+        store,
+        "policy_bundle_trust_rows",
+        lambda: replace(read_trust_rows(), workspace_id=_WORKSPACE_ID),
+    )
     bundle = _signed_bundle(rollout_state=rollout_state)
     store.set_sync_payload(
         "policy_bundle_keyring",
