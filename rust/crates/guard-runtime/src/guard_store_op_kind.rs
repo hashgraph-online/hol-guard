@@ -25,6 +25,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "get_guard_session"
         | "list_guard_sessions"
         | "list_events_after"
+        | "list_events"
         | "get_managed_install"
         | "get_managed_install_revision"
         | "list_managed_installs"
@@ -80,6 +81,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "list_workspace_assessment_worktrees"
         | "list_workspace_assessment_runs"
         | "latest_workspace_assessment_run"
+        | "get_runtime_state"
         | "read_local_cli_grant"
         | "read_local_cli_command_catalog"
         | "read_local_cli_command_states"
@@ -110,6 +112,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "command_activity_analytics"
         | "get_command_activity_persistence_health"
         | "list_table_names"
+        | "count_command_activities"
         | "list_command_activity_invalidations"
         | "command_activity_diagnostics"
         | "list_evidence"
@@ -134,6 +137,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "approval_desktop_notified_at"
         | "oldest_approval_request_created_at"
         | "cached_supply_chain_bundle"
+        | "get_cached_supply_chain_bundle"
+        | "newest_supply_chain_bundle_workspace"
         | "hook_managed_install_admission"
         // Only a digest, or the shape, of the stored sign-in record leaves
         // the store.
@@ -149,6 +154,9 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "command_queue_lane_rows"
         // Two rows read as one consent pair.
         | "exact_cloud_review_state" => Kind::Snapshot,
+        // The authority revision and the two continuity rows a commit is
+        // checked against, as one view.
+        "custom_extension_continuity_rows" => Kind::Snapshot,
         // The memory policy version and rule registry a signed memory
         // bundle is checked and planned against, as one view.
         "review_policy_memory_rows" => Kind::Snapshot,
@@ -276,11 +284,13 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "set_managed_install"
         | "bump_managed_install_revision"
         | "add_guard_event_v1"
+        | "cache_supply_chain_bundle"
         | "list_guard_events_v1"
         | "mark_guard_events_v1_uploaded"
         | "maintain_storage"
         | "managed_keyring_reconcile"
         | "upsert_runtime_state"
+        | "clear_runtime_state"
         | "record_local_cli_observation"
         | "replace_local_cli_commands"
         | "apply_custom_extension_continuity"

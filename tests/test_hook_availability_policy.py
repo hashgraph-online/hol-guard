@@ -6,7 +6,6 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
-    cursor_fallback_permission,
 )
 
 
@@ -33,14 +32,26 @@ def test_availability_denies_inspection_and_high_impact_without_review(tmp_path:
     assert output["permissionDecision"] == "deny"
 
 
-def test_cursor_fallback_denies_read_and_shell_when_review_cannot_finish() -> None:
-    allow, allow_code = cursor_fallback_permission(
-        hook_event_name="beforeReadFile",
-    )
-    assert allow_code == 2
-    assert allow["permission"] == "deny"
-    shell, shell_code = cursor_fallback_permission(
-        hook_event_name="beforeShellExecution",
-    )
-    assert shell_code == 2
-    assert shell["permission"] == "deny"
+def test_runtime_availability_reuses_the_rust_answer(monkeypatch) -> None:
+    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+
+    calls: list[object] = []
+
+    def answer(*_args: object, **_kwargs: object) -> dict[str, object]:
+        calls.append(None)
+        return {"event_name": "CacheProbe", "pauses": False, "permission_request": False}
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", answer)
+    policy._RUNTIME_AVAILABILITY_CACHE.clear()
+    assert policy._runtime_availability({"event": "CacheProbe"}) == {
+        "event_name": "CacheProbe",
+        "pauses": False,
+        "permission_request": False,
+    }
+    assert policy._runtime_availability({"event": "CacheProbe"}) == {
+        "event_name": "CacheProbe",
+        "pauses": False,
+        "permission_request": False,
+    }
+    assert len(calls) == 1
+    policy._RUNTIME_AVAILABILITY_CACHE.clear()

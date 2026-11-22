@@ -1535,9 +1535,10 @@ class StoreConnectionSchemaMixin:
         )
 
     def list_table_names(self) -> list[str]:
-        with self._connect() as connection:
-            rows = connection.execute("select name from sqlite_master where type = 'table'").fetchall()
-        return sorted(str(row["name"]) for row in rows)
+        names = self._native_store_call("list_table_names", {})
+        if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+            raise RuntimeError("native list_table_names returned no answer")
+        return sorted(cast("list[str]", names))
 
 
 forget_in_child(StoreConnectionSchemaMixin._schema_initialization_states)

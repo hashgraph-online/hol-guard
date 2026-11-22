@@ -194,8 +194,7 @@ pub(crate) fn dispatch(
         }
         "list_command_activity_page" => api::list_page(connection, args),
         "command_activity_analytics" => api::analytics(connection, args),
-        "get_command_activity_persistence_health" => api::persistence_health(connection, args),
-        "list_table_names" => api::table_names(connection, args),
+        _ if api::reads::handles(method) => api::reads::dispatch(connection, method, args),
         "record_command_activity_feedback" => feedback::record_feedback(connection, args),
         "list_command_activity_invalidations" => feedback::list_invalidations(connection, args),
         "clear_command_activity_evidence" => privacy::clear_evidence(connection),
@@ -479,10 +478,10 @@ pub(crate) fn dispatch(
         "hook_managed_install_admission" => {
             crate::guard_store_managed_installs::hook_admission(connection, args)
         }
-        "list_events_after" => cloud_events::list_after(connection, args),
+        "list_events_after" | "list_events" => cloud_events::list_log(connection, method, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
-        "cached_supply_chain_bundle" => {
-            crate::supply_chain_bundle_cache_op::cached_bundle(connection)
+        _ if crate::supply_chain_bundle_cache_op::handles(method) => {
+            crate::supply_chain_bundle_cache_op::dispatch(connection, method, args)
         }
         "add_guard_event_v1" => cloud_events::add(connection, args),
         "list_guard_events_v1" => cloud_events::list(connection, args),

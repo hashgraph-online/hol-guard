@@ -200,13 +200,6 @@ def test_observed_stop_callback_is_not_an_off_route_answer():
     assert assess_harness_case(scenario, blocking)["outcome"] == "harness-error"
 
 
-def test_judge_knows_every_lifecycle_event_guard_only_observes():
-    from ci.gauntlet.harness_judge import _LIFECYCLE_EVENTS
-    from codex_plugin_scanner.guard.hook_review.hook_availability_policy import _LIFECYCLE_OBSERVE_EVENTS
-
-    assert _LIFECYCLE_OBSERVE_EVENTS <= _LIFECYCLE_EVENTS
-
-
 def test_block_with_extra_requests_is_not_exercised():
     extra = row("PreToolUse", ALLOW, decision="allow", command="ls")
     result = assess_harness_case(

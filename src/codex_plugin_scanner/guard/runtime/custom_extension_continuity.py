@@ -66,12 +66,17 @@ def prepare_verified_custom_extension_continuity(
     if not isinstance(payload, Mapping):
         raise CustomExtensionContinuityError("verified policy bundle payload is missing")
     if payload.get(CUSTOM_EXTENSION_CONTINUITY_FIELD) is None:
+        # Only the state is handed back here, so a damaged removals row or
+        # revision must not refuse a bundle that carries no continuity.
         previous = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
         return None, dict(previous) if isinstance(previous, dict) else {}
-    authority_revision = store.read_local_cli_revision()
-    previous = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
+    # The revision and both rows come from one snapshot, so the commit's
+    # preconditions describe a single moment of the store.
+    rows = store.custom_extension_continuity_rows()
+    previous = rows.state
+    authority_revision = rows.revision
+    removals = rows.removals
     locals_ = [item for item in store.list_local_cli_items() if isinstance(item.get("cli_id"), str)]
-    removals = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY)
     request: dict[str, object] = {
         "operation": "plan",
         "continuity": payload[CUSTOM_EXTENSION_CONTINUITY_FIELD],
@@ -115,6 +120,8 @@ def prepare_verified_custom_extension_continuity(
 def continuity_state_for_local_items(store: GuardStore, *, now: str) -> dict[str, dict[str, object]]:
     """Return path-free continuity state, becoming stale without a network request."""
 
+    # The public listing reads only the state row; the removals row and the
+    # revision play no part in it, so their damage must not hide this state.
     stored = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
     if not isinstance(stored, dict):
         return {}
@@ -149,8 +156,9 @@ def record_local_custom_extension_mutation(
     authority apply; signed continuity never carries them.
     """
 
-    raw = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY)
-    active = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
+    rows = store.custom_extension_continuity_rows()
+    raw = rows.removals
+    active = rows.state
     local = next(
         (item for item in store.list_local_cli_items() if item.get("cli_id") == identity.cli_id),
         None,

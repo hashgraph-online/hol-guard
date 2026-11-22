@@ -740,3 +740,5 @@ def test_every_confirmed_false_positive_class_has_a_gate_case() -> None:
         "neg-doctl-auth-token-head",
         "gauntlet-cat-credential-placeholder-docs",
     } <= ids
+    # A subagent brief under a host envelope other than Claude Code's.
+    assert {"subagent-brief-under-a-host-envelope"} <= ids

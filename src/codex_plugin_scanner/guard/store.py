@@ -23,6 +23,7 @@ from .store_command_activity_privacy import StoreCommandActivityPrivacyMixin
 from .store_connection_schema import StoreConnectionSchemaMixin
 from .store_continuation import StoreContinuationMixin
 from .store_custom_extension_continuity import StoreCustomExtensionContinuityMixin
+from .store_custom_extension_continuity_rows import StoreCustomExtensionContinuityRowsMixin
 from .store_event_receipts import StoreEventReceiptsMixin
 from .store_exact_cloud_local_once import StoreExactCloudLocalOnceMixin
 from .store_extension_control_authority import StoreExtensionControlAuthorityMixin
@@ -102,6 +103,7 @@ class GuardStore(
     StoreWorkerHostMixin,
     StoreAibomStateMixin,
     StorePolicyTrustRowsMixin,
+    StoreCustomExtensionContinuityRowsMixin,
     StoreSyncPayloadSnapshotMixin,
     StoreSyncDeliveryRowsMixin,
     StoreAdvisoryCacheMixin,
