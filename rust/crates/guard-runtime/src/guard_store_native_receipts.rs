@@ -37,6 +37,20 @@ const COLUMNS: &str = "decision_id, schema, version, authority, request_id, \
                        reviewed_output_sha256, observe_mode, deadline_budget_ms, \
                        command_extensions_json, recorded_at";
 
+#[path = "guard_store_native_receipt_reads.rs"]
+mod reads;
+
+pub(crate) fn handles(method: &str) -> bool {
+    method == "record_native_decision_receipt" || reads::handles(method)
+}
+
+pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> StoreResult<Value> {
+    if method == "record_native_decision_receipt" {
+        return record_native_decision_receipt(connection, args);
+    }
+    reads::dispatch(connection, args)
+}
+
 pub(crate) fn record_native_decision_receipt(
     connection: &Connection,
     args: &Args<'_>,

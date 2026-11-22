@@ -68,3 +68,20 @@ def test_a_malformed_answer_fails_closed(answer: object) -> None:
     with pytest.raises(sqlite3.DatabaseError, match="extension_control_schema_state"):
         extension_control_schema_compatible(store, require_compatible=False)
     assert store.connections == 0
+
+
+def test_an_open_connection_scope_checks_the_schema_on_the_shared_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import native_extension_control_schema
+
+    monkeypatch.setattr(native_extension_control_schema, "owns_scope", lambda _store: True)
+    store = _Store({"state": "compatible"})
+
+    assert extension_control_schema_compatible(store)
+    assert store.calls == []
+    assert store.connections == 1
+    tables = {
+        row[0] for row in store.connection.execute("select name from sqlite_master where type = 'table'").fetchall()
+    }
+    assert "extension_control_schema_migration" in tables

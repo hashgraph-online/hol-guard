@@ -191,13 +191,15 @@ def test_failed_enqueue_leaves_no_admission_behind(tmp_path: Path, monkeypatch) 
     snapshots(monkeypatch, worker, STAT)
     register(store, "claude-code", str(tmp_path))
 
-    def broken(*_: object, **__: object) -> str:
-        raise sqlite3.OperationalError("disk I/O error")
+    class _OverlongId:
+        # The first run's insert breaks the run id bound after the state row,
+        # observation and install mark are already written in the transaction.
+        hex = "f" * 65
 
     # Scoped, so the native store wiring the session fixtures patch in stays put.
     with monkeypatch.context() as scoped:
-        scoped.setattr(admissions, "_enqueue_locked", broken)
-        with pytest.raises(sqlite3.OperationalError):
+        scoped.setattr(admissions.uuid, "uuid4", _OverlongId)
+        with pytest.raises(sqlite3.IntegrityError):
             worker.admit_registered_workspaces(store, clock=lambda: T0)
     assert assessments.list_worktrees(store) == []
 

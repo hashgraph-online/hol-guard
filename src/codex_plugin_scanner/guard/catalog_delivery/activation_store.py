@@ -43,7 +43,7 @@ def read_slot(store):
     if state == "absent" and set(answer) == {"state"}:
         return None
     code = answer.get("code") if state == "refused" and set(answer) == {"state", "code"} else None
-    if code in _SLOT_REFUSALS:
+    if isinstance(code, str) and code in _SLOT_REFUSALS:
         raise NativePolicySnapshotError(code)
     row = answer.get("row") if state == "present" and set(answer) == {"state", "row"} else None
     if not isinstance(row, dict) or set(row) != set(_SLOT_FIELDS) or not _slot_types(row):

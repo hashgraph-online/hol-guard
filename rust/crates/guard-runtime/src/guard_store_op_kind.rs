@@ -10,6 +10,28 @@ pub(crate) enum Kind {
     Write,
 }
 
+/// Reads that commit, or take the write lock, on a connection of their own,
+/// or that checkpoint the store; a rolled-back transaction cannot contain them.
+pub(crate) const SELF_COMMITTING_READS: &[&str] = &[
+    "settle_claimed_native_allow",
+    "settle_claimed_native_review",
+    "codex_live_allow_authority",
+    "complete_codex_live_decision",
+    "record_codex_live_completion",
+    "run_storage_housekeeping",
+];
+
+/// Whether a call can run inside a transaction that is always rolled back
+/// and still give the answer the resident would: every snapshot, and every
+/// read whose writes all go through the store connection.
+pub(crate) fn answerable_in_isolation(method: &str) -> bool {
+    match method_kind(method) {
+        Some(Kind::Snapshot) => true,
+        Some(Kind::Read) => !SELF_COMMITTING_READS.contains(&method),
+        _ => false,
+    }
+}
+
 pub(crate) fn method_kind(method: &str) -> Option<Kind> {
     Some(match method {
         "review_event_outbox_status"
@@ -76,8 +98,20 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "run_storage_housekeeping"
         | "count_receipts"
         | "artifact_latest_diff"
+        | "catalog_recorded_writer_version"
         | "oauth_sources_list"
         | "hook_approval_center_origin"
+        | "workspace_assessment_watched_roots"
+        | "is_manual_workspace_assessment_admission"
+        | "workspace_assessment_worktree_root"
+        | "list_workspace_fix_proposals"
+        | "get_workspace_fix_proposal"
+        | "list_workspace_fix_proposals_to_verify"
+        | "list_workspace_assessment_worktrees"
+        | "list_workspace_assessment_runs"
+        | "latest_workspace_assessment_run"
+        | "list_latest_assessed_workspace_runs"
+        | "workspace_assessment_feed_digest"
         | "get_runtime_state"
         | "read_local_cli_grant"
         | "read_local_cli_command_catalog"
@@ -169,6 +203,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
+        // The hook table and then the prompt table, read from one view.
+        "get_native_decision_receipt" => Kind::Snapshot,
         // One consistent view of the request and the allow issued for it.
         "peek_waited_exact_cloud_package_allow" => Kind::Snapshot,
         "consume_waited_exact_cloud_package_allow" => Kind::Write,
@@ -274,6 +310,9 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "record_aibom_inventory_daemon"
         | "record_repair_self_check"
         | "commit_workspace_assessment_sent"
+        | "settle_workspace_fix_proposals"
+        | "store_prepared_workspace_fix_proposals"
+        | "set_workspace_fix_proposal_state"
         | "record_policy_bundle_failure_ack"
         | "replace_exact_cloud_review_state"
         | "transition_native_workspace_review_replay_marker"
@@ -296,6 +335,16 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "maintain_storage"
         | "managed_keyring_reconcile"
         | "upsert_runtime_state"
+        | "set_workspace_assessment_paused"
+        | "enqueue_workspace_assessment"
+        | "claim_workspace_assessment"
+        | "finish_workspace_assessment"
+        | "renew_workspace_assessment_lease"
+        | "cancel_workspace_assessment"
+        | "record_workspace_assessment_observation"
+        | "observe_workspace_assessment"
+        | "admit_workspace_assessment"
+        | "end_unregistered_workspace_assessment_admissions"
         | "clear_runtime_state"
         | "record_local_cli_observation"
         | "replace_local_cli_commands"
@@ -317,6 +366,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "decline_mcp_policy_request"
         | "fail_mcp_policy_request" => Kind::Write,
         "list_pending_mcp_policy_requests" | "policy_rows_fingerprint" => Kind::Snapshot,
+        "policy_row_presence" | "extension_control_authority_head" => Kind::Snapshot,
         "find_local_mcp_observation" => Kind::Read,
         "ensure_local_mcp_observation"
         | "reconcile_remote_mcp_declarations"

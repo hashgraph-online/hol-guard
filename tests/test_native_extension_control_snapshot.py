@@ -77,3 +77,35 @@ def test_an_unknown_schema_marker_stops_before_the_snapshot_read() -> None:
 def test_a_malformed_answer_fails_closed(answer: object) -> None:
     with pytest.raises(sqlite3.DatabaseError, match="extension_control_snapshot_layers"):
         extension_control_snapshot_layers(_Store(answer))
+
+
+def test_an_open_connection_scope_reads_the_snapshot_on_the_shared_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import native_extension_control_schema, native_extension_control_snapshot
+
+    connection = sqlite3.connect(":memory:")
+    connection.execute("create table extension_control_authority_snapshot (singleton integer, layers_json)")
+
+    class _ScopedStore(_Store):
+        def _connect(self) -> sqlite3.Connection:
+            return connection
+
+    monkeypatch.setattr(native_extension_control_schema, "owns_scope", lambda _store: True)
+    monkeypatch.setattr(native_extension_control_snapshot, "owns_scope", lambda _store: True)
+    monkeypatch.setattr(
+        native_extension_control_schema,
+        "require_compatible_extension_control_schema",
+        lambda _connection, *, require_compatible: True,
+    )
+    store = _ScopedStore(None)
+
+    missing = extension_control_snapshot_layers(store)
+    assert (missing.present, missing.layers_json) == (False, None)
+    connection.execute("insert into extension_control_authority_snapshot values (1, ?)", (b"[]",))
+    unreadable = extension_control_snapshot_layers(store)
+    assert (unreadable.present, unreadable.layers_json) == (True, None)
+    connection.execute("update extension_control_authority_snapshot set layers_json = '[]'")
+    present = extension_control_snapshot_layers(store)
+    assert (present.present, present.layers_json) == (True, "[]")
+    assert store.calls == []
