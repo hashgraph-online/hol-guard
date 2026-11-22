@@ -63,10 +63,10 @@ fn committed(connection: &Connection, revision: i64) -> Value {
 }
 
 #[test]
-fn every_read_is_routed_as_a_read() {
+fn every_read_is_routed_as_a_snapshot() {
     for method in METHODS {
         assert!(handles(method));
-        assert!(matches!(method_kind(method), Some(Kind::Read)));
+        assert!(matches!(method_kind(method), Some(Kind::Snapshot)));
     }
     assert!(!handles("extension_control_snapshot_layers"));
 }
