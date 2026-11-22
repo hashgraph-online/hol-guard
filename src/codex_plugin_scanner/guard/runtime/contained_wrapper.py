@@ -28,28 +28,50 @@ from .contained_output_filters import Stage, apply_filters, keep_lines
 
 @dataclass(frozen=True)
 class OutputFilter:
-    """A trailing `2>&1`, output filter chain or `; echo "<label>$?"`.
+    """A trailing `2>&1`, output filter chain or report the run ends with.
 
     `kind` is "head" or "tail" for one bounded filter, "pipe" for any other
     chain in `stages` (see `contained_output_filters`), else "all".
+
+    The report is `; echo "<label>$?"` in `status_label`, which prints the
+    label and the status itself, or the arms of `; echo <label>`,
+    `&& echo <label>`, `|| echo <label>` and `&& echo <label> || echo <label>`
+    in `success_label` and `failure_label`, of which the shell reaches the one
+    that matches how the run ended.
     """
 
     kind: str
     count: int
     merge_stderr: bool
     status_label: str | None = None
+    success_label: str | None = None
+    failure_label: str | None = None
     stages: tuple[Stage, ...] = ()
     pipe_status: list[int] = field(default_factory=list, init=False, compare=False, repr=False)
 
-    def status_line(self, exit_code: int) -> str | None:
-        """The echo's output; after a pipe, `$?` is the last filter's own status."""
-        if self.status_label is None:
-            return None
+    def ended(self, exit_code: int) -> int:
+        """What the shell's `$?` reads after the run: a chain's own status."""
         if self.kind == "pipe":
-            exit_code = self.pipe_status[-1] if self.pipe_status else 0
-        elif self.kind in {"head", "tail"}:
-            exit_code = 0
-        return f"{self.status_label}{exit_code}\n"
+            return self.pipe_status[-1] if self.pipe_status else 0
+        if self.kind in {"head", "tail"}:
+            return 0
+        return exit_code
+
+    def status_line(self, exit_code: int) -> str | None:
+        """The report's output, or `None` when the shell would run no echo.
+
+        The labels and the shape behind them are decided natively, in
+        `guard-command`'s peel and `guard-runtime`'s `bounded`. This picks the
+        arm for the status the plan already describes and writes the line, and
+        has to print what `bounded` prints for the same plan;
+        `tests/test_guard_contained_wrapper.py` is what holds the two to the
+        same answers.
+        """
+        ended = self.ended(exit_code)
+        if self.status_label is not None:
+            return f"{self.status_label}{ended}\n"
+        label = self.success_label if ended == 0 else self.failure_label
+        return None if label is None else f"{label}\n"
 
 
 def _answer(
@@ -87,11 +109,15 @@ def _output_filter(encoded: object) -> OutputFilter | None:
     if not isinstance(count, int) or not isinstance(stages, Sequence):
         raise ValueError("unsupported wrapper shape")
     label = fields.get("status_label")
+    success = fields.get("success_label")
+    failure = fields.get("failure_label")
     return OutputFilter(
         str(fields["kind"]),
         count,
         bool(fields["merge_stderr"]),
         status_label=None if label is None else str(label),
+        success_label=None if success is None else str(success),
+        failure_label=None if failure is None else str(failure),
         stages=tuple(tuple(str(word) for word in _words(stage)) for stage in stages),
     )
 

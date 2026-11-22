@@ -32,6 +32,12 @@ pub struct ContainedOutput {
     pub merge_stderr: bool,
     /// The label a trailing `; echo "label$?"` prints before the status.
     pub status_label: Option<String>,
+    /// The label a trailing report prints when the core succeeds, from
+    /// `; echo <label>` or `&& echo <label>`.
+    pub success_label: Option<String>,
+    /// The label a trailing report prints when the core fails, from
+    /// `; echo <label>` or `|| echo <label>`.
+    pub failure_label: Option<String>,
     /// Each stage of a `pipe` chain, as its program followed by arguments.
     pub stages: Vec<Vec<String>>,
 }
