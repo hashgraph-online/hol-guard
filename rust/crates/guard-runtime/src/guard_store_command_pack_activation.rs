@@ -33,6 +33,13 @@ const SLOT_FIELDS: [&str; 5] = [
     "recorded_at",
 ];
 
+/// The schema marker, with a cell of the wrong storage type (a BLOB, say) read
+/// as null so the marker is classified as invalid instead of failing the read.
+const MARKER_SQL: &str =
+    "select case when typeof(version) = 'integer' then version end as version, \
+     case when typeof(checksum) = 'text' then checksum end as checksum \
+     from extension_control_schema_migration where singleton = 1";
+
 #[path = "guard_store_command_pack_legacy_evidence.rs"]
 mod command_pack_legacy_evidence;
 #[path = "guard_store_command_pack_pending.rs"]
@@ -79,11 +86,7 @@ fn schema_state(connection: &Connection) -> StoreResult<Value> {
             return Ok(state("missing"));
         }
     }
-    let marker = query_one(
-        connection,
-        "select version, checksum from extension_control_schema_migration where singleton = 1",
-        &[],
-    )?;
+    let marker = query_one(connection, MARKER_SQL, &[])?;
     Ok(match marker {
         None => state("missing"),
         Some(marker) if compatible_version(&marker).is_some() => state("compatible"),
@@ -95,11 +98,7 @@ fn read(connection: &Connection) -> StoreResult<Value> {
     if !table_exists(connection, "extension_control_schema_migration")? {
         return Ok(state("absent"));
     }
-    let marker = query_one(
-        connection,
-        "select version, checksum from extension_control_schema_migration where singleton = 1",
-        &[],
-    )?;
+    let marker = query_one(connection, MARKER_SQL, &[])?;
     let Some(version) = marker.as_ref().and_then(compatible_version) else {
         return Ok(refused("native_command_pack_schema_invalid"));
     };

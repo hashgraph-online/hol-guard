@@ -51,6 +51,11 @@ from .artifact_identity import scoped_policy_artifact_key
 from .native_approval_proof import approval_reuse_claim_disposition as native_claim_disposition
 from .native_execution import _resident_request
 from .native_memory_pattern import memory_pattern_verdict
+from .native_policy_presence import (
+    NativePolicyPresenceError,
+    extension_control_authority_base,
+    policy_row_presence,
+)
 from .native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME, NativePolicySnapshotError
 from .native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 from .native_policy_snapshot_windows_support import _runtime_state_directory
@@ -702,18 +707,7 @@ class StorePolicyMixin:
         }
         payloads = {state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()}
         managed_base_authority = self.read_persisted_extension_control_authority()
-        with self._connect() as authority_connection:
-            authority_row = authority_connection.execute(
-                "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
-            ).fetchone()
-        base: dict[str, object] = (
-            {}
-            if authority_row is None
-            else {
-                "base_revision": int(authority_row["revision"]),
-                "base_snapshot_digest": str(authority_row["snapshot_digest"]),
-            }
-        )
+        base = extension_control_authority_base(self)
         key = self._authority_key(required=False)
         with self._extension_control_authority_lock():
             self._invalidate_native_extension_control_policy()
@@ -985,57 +979,38 @@ class StorePolicyMixin:
         # Procure the integrity evidence *before* dispatch. `_refresh_policy_integrity_state`
         # mutates `sync_state` and may mint a key (generation advance), so it stays
         # on the Python side; the resulting snapshot is shipped to Rust.
-        with self._connect() as connection:
-            has_local_policy = (
-                connection.execute(
-                    f"select 1 from policy_decisions where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS} limit 1",
-                    _REMOTE_POLICY_SOURCE_PARAMS,
-                ).fetchone()
-                is not None
-            )
-            has_remote_policy = (
-                connection.execute(
-                    f"select 1 from policy_decisions where source in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS} limit 1",
-                    _REMOTE_POLICY_SOURCE_PARAMS,
-                ).fetchone()
-                is not None
-            )
-            has_local_once_approvals = (
-                connection.execute("select 1 from guard_local_once_approvals limit 1").fetchone() is not None
-            )
-            has_saved_rows = has_local_policy or has_remote_policy or has_local_once_approvals
-            if local_once_only:
-                # The exact peek is read-only: it never refreshes the policy
-                # integrity state or mints key material.
-                has_local_policy = False
-                has_remote_policy = False
-            integrity_state = (
-                self._refresh_policy_integrity_state(
-                    connection,
-                    now=current_time,
-                    create_key=True,
-                )
-                or {}
-                if has_local_policy
-                else {}
-            )
-            # The claim a composing lookup may take re-reads these sources under
-            # its write lock. Name them here, before the resident derives the
-            # bundle identities, so a source that moves afterwards makes it
-            # refuse the claim instead of honouring stale evidence.
-            evidence_binding: dict[str, Any] | None = None
-            if claim_binding:
-                needs_bundle = (
-                    connection.execute(
-                        "select 1 from policy_decisions where source = 'policy-bundle' limit 1"
-                    ).fetchone()
-                    is not None
-                )
-                evidence_binding = claim_evidence_binding(
-                    connection,
-                    bundle=needs_bundle,
-                    cloud_workspace_id=(self._cloud_workspace_id_from_connection(connection) if needs_bundle else None),
-                )
+        presence = policy_row_presence(self)
+        has_local_policy = presence.local_policy
+        has_remote_policy = presence.remote_policy
+        has_local_once_approvals = presence.local_once
+        has_saved_rows = presence.any_saved
+        if local_once_only:
+            # The exact peek is read-only: it never refreshes the policy
+            # integrity state or mints key material.
+            has_local_policy = False
+            has_remote_policy = False
+        integrity_state: dict[str, Any] = {}
+        evidence_binding: dict[str, Any] | None = None
+        if has_local_policy or claim_binding:
+            with self._connect() as connection:
+                if has_local_policy:
+                    integrity_state = (
+                        self._refresh_policy_integrity_state(connection, now=current_time, create_key=True) or {}
+                    )
+                # The claim a composing lookup may take re-reads these sources
+                # under its write lock. Name them here, before the resident
+                # derives the bundle identities, so a source that moves
+                # afterwards makes it refuse the claim instead of honouring
+                # stale evidence.
+                if claim_binding:
+                    needs_bundle = presence.policy_bundle
+                    evidence_binding = claim_evidence_binding(
+                        connection,
+                        bundle=needs_bundle,
+                        cloud_workspace_id=(
+                            self._cloud_workspace_id_from_connection(connection) if needs_bundle else None
+                        ),
+                    )
 
         # The resident refuses to serve until the owner-private verifier key
         # exists under this guard home (consume_for_spawn gate). Publishers
@@ -1302,15 +1277,18 @@ class StorePolicyMixin:
         if artifact_id is None:
             return None, None
         current_time = _canonical_utc_timestamp(now or _now())
-        with self._connect() as connection:
-            has_rows = (
-                connection.execute(
-                    "select 1 where exists (select 1 from policy_decisions) "
-                    "or exists (select 1 from guard_local_once_approvals)"
-                ).fetchone()
-                is not None
+        try:
+            has_saved_rows = policy_row_presence(self).any_saved
+        except (NativePolicyPresenceError, sqlite3.Error, ValueError, TimeoutError) as error:
+            # Without an answer the store may hold saved rows, so the miss
+            # fails closed like an unavailable diagnosis below.
+            _LOGGER.warning(
+                "%s: saved-row presence unavailable; treating the saved allow as rejected (%s)",
+                error,
+                APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON,
             )
-        if not has_rows:
+            return APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON, None
+        if not has_saved_rows:
             return None, None
         self._provision_resident_verifier()
 
