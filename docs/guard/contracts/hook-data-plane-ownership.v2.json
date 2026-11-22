@@ -366,6 +366,7 @@
     "src/codex_plugin_scanner/guard/native_policy_integrity_finalize.py",
     "src/codex_plugin_scanner/guard/native_policy_integrity_rows.py",
     "src/codex_plugin_scanner/guard/native_extension_control_schema.py",
+    "src/codex_plugin_scanner/guard/native_extension_control_snapshot.py",
     "src/codex_plugin_scanner/guard/native_policy_presence.py",
     "src/codex_plugin_scanner/guard/native_approval_resolution.py",
     "src/codex_plugin_scanner/guard/native_approval_queue_identity.py",

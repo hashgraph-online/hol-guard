@@ -494,6 +494,7 @@ pub(super) fn exact_safe_segment_with_context(
         return false;
     }
     if super::version_probes::safe_version_probe(basename, &segment.arguments)
+        || super::network_facts::safe_network_fact(basename, &segment.arguments)
         || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
         || super::liveness_probes::safe_liveness_probe(basename, &segment.arguments)
         || super::property_list_reads::safe_property_list_read(
@@ -681,6 +682,7 @@ pub(super) fn exact_safe_segment_with_context(
         "gem" => super::gem_reads::safe_gem_segment(model, segment, context),
         "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),
         "psql" => super::postgres_reads::safe_psql_arguments(&segment.arguments, context),
+        "sqlite3" => super::sqlite_reads::safe_sqlite3_arguments(&segment.arguments, context),
         "npm" => {
             super::npm_reads::read_only_neighbors(model, "npm")
                 && super::npm_reads::safe_npm_read(&segment.arguments, context)
