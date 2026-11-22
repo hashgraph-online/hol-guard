@@ -48,9 +48,15 @@ def test_a_row_that_is_not_json_refuses_the_snapshot(tmp_path: Path, key: str) -
         store.custom_extension_continuity_rows()
 
 
-def test_public_state_reads_the_snapshot_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_public_state_survives_a_damaged_removals_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path)
     store.set_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY, {"items": {"cli-a": {}}}, _NOW)
+    store.set_sync_payload(CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY, {"cli-b": {}}, _NOW)
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "update sync_state set payload_json = 'not-json' where state_key = ?",
+            (CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY,),
+        )
     seen: list[dict[str, object]] = []
 
     def answer(_store: GuardStore, request: dict[str, object], _keys: frozenset[str]) -> dict[str, object]:

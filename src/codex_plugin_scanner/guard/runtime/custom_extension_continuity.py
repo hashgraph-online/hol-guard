@@ -65,12 +65,15 @@ def prepare_verified_custom_extension_continuity(
     payload = validated_policy_bundle.get("payload")
     if not isinstance(payload, Mapping):
         raise CustomExtensionContinuityError("verified policy bundle payload is missing")
+    if payload.get(CUSTOM_EXTENSION_CONTINUITY_FIELD) is None:
+        # Only the state is handed back here, so a damaged removals row or
+        # revision must not refuse a bundle that carries no continuity.
+        previous = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
+        return None, dict(previous) if isinstance(previous, dict) else {}
     # The revision and both rows come from one snapshot, so the commit's
     # preconditions describe a single moment of the store.
     rows = store.custom_extension_continuity_rows()
     previous = rows.state
-    if payload.get(CUSTOM_EXTENSION_CONTINUITY_FIELD) is None:
-        return None, dict(previous) if isinstance(previous, dict) else {}
     authority_revision = rows.revision
     removals = rows.removals
     locals_ = [item for item in store.list_local_cli_items() if isinstance(item.get("cli_id"), str)]
@@ -117,7 +120,9 @@ def prepare_verified_custom_extension_continuity(
 def continuity_state_for_local_items(store: GuardStore, *, now: str) -> dict[str, dict[str, object]]:
     """Return path-free continuity state, becoming stale without a network request."""
 
-    stored = store.custom_extension_continuity_rows().state
+    # The public listing reads only the state row; the removals row and the
+    # revision play no part in it, so their damage must not hide this state.
+    stored = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
     if not isinstance(stored, dict):
         return {}
     try:

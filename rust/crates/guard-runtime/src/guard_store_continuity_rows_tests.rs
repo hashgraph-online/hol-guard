@@ -124,3 +124,23 @@ fn the_method_routes_here_and_reads_in_one_snapshot() {
         Some(Kind::Snapshot)
     ));
 }
+
+#[test]
+fn stored_item_order_comes_back_unchanged() {
+    // A local mutation writes the item order it read back to the store, so
+    // the snapshot must not sort object keys.
+    let connection = store();
+    put(
+        &connection,
+        STATE_KEY,
+        r#"{"items":{"cli-b":{},"cli-a":{},"cli-c":{}}}"#,
+    );
+    let state = read(&connection).unwrap()["state"]["items"].clone();
+    let order: Vec<&str> = state
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(order, ["cli-b", "cli-a", "cli-c"]);
+}
