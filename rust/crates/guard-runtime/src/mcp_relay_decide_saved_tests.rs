@@ -357,17 +357,25 @@ fn an_unpublished_mismatched_or_moved_integrity_state_defers() {
 }
 
 /// The proxy's lookup evidence carries a degraded state as it is, and the
-/// lookup judges it: the resident reads the saved rows under it as well,
-/// as long as the store still holds the state the daemon published.
+/// lookup judges it. A store of remote rows reads natively under it, as long
+/// as the store still holds the state the daemon published; a local row,
+/// whose refusal the lookup would audit through a write, stays with the proxy.
 #[test]
-fn a_degraded_integrity_state_the_store_holds_answers_the_lookups() {
+fn a_degraded_integrity_state_reads_remote_rows_and_hands_off_local_ones() {
     let (home, connection) = guard_home("degraded");
-    decide(&connection, "artifact", "block", None, "approval-gate");
+    decide(
+        &connection,
+        "artifact",
+        "block",
+        None,
+        "cloud-signed-memory",
+    );
     let mut state = integrity_state();
     state.degraded_reasons.push("keyring".to_owned());
     state.mode = "degraded".to_owned();
     let mut degraded = binding();
     degraded.policy_integrity_state = Some(state.clone());
+    assert!(store::published_integrity(&degraded).is_err());
     assert_eq!(
         read(&home, &degraded, |_| ()).err(),
         Some("mcp_relay_saved_policy_unverifiable"),
@@ -379,14 +387,17 @@ fn a_degraded_integrity_state_the_store_holds_answers_the_lookups() {
         &serde_json::to_string(&state).unwrap(),
     );
     let policy = read(&home, &degraded, |saved| {
-        saved
-            .expect("saved rows")
-            .answer(&policy_need(ARTIFACT, None))
-            .unwrap()
+        let saved = saved.expect("saved rows");
+        assert!(!saved.has_local_policy);
+        saved.answer(&policy_need(ARTIFACT, None)).unwrap()
     })
     .unwrap();
     assert_eq!(policy["decision"]["action"], "block");
-    assert!(store::published_integrity(&degraded).is_err());
+    decide(&connection, "artifact", "block", None, "approval-gate");
+    assert_eq!(
+        read(&home, &degraded, |_| ()).err(),
+        Some("mcp_relay_saved_policy_unverifiable")
+    );
 }
 
 #[test]

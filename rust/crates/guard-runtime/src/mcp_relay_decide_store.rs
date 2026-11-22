@@ -110,6 +110,13 @@ pub(crate) fn saved_at<'c>(
         return Ok(None);
     }
     let (integrity_state, key) = lookup_integrity(binding)?;
+    // Under a state that is not protected the lookup refuses a local row and
+    // follows the refusal with an audit write, which the read-only snapshot
+    // cannot make: the call would fail instead of being answered. Those
+    // stores stay with the proxy; a store of remote rows alone reads here.
+    if (has_local_policy || has_local_once) && published_integrity(binding).is_err() {
+        return Err(SAVED_UNVERIFIABLE);
+    }
     if shape.stored_integrity_state()?.as_ref() != Some(&integrity_state) {
         return Err(SAVED_UNVERIFIABLE);
     }
@@ -146,9 +153,11 @@ pub(crate) fn saved_at<'c>(
 /// lookup evidence carries them (`policy_lookup_evidence`): the state the
 /// daemon refreshed, protected or degraded, and the key that state names.
 /// The lookup itself judges a degraded state, exactly as it does for the
-/// proxy, so a degraded store no longer leaves the session to the proxy. A
-/// claim procures the same evidence (`_claim_integrity_evidence`), so the
-/// claim and the package spend read with it too.
+/// proxy. `saved_at` still hands a degraded store with local rows to the
+/// proxy, whose lookup can write the audit events those rows raise; a store
+/// of remote rows alone no longer leaves the session. A claim procures the
+/// same evidence (`_claim_integrity_evidence`), so the claim and the package
+/// spend read with it too.
 /// Without a key, or with a state that names another key, the proxy would
 /// read a different key or mint one, so the session still defers.
 pub(crate) fn lookup_integrity(
