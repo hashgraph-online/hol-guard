@@ -431,6 +431,21 @@ def test_cleanup_candidate_requires_dead_duplicate_class(cleanup_repository: Pat
         )
 
 
+def test_renamed_transport_facades_remain_in_capability_scope() -> None:
+    contract = json.loads(
+        (ROOT / "docs/guard/contracts/python-capability-ownership.v1.json").read_text(encoding="utf-8")
+    )
+    capability = next(
+        item for item in contract["capabilities"] if item["id"] == "hook_control_and_transport"
+    )
+    renamed = {
+        "src/codex_plugin_scanner/guard/resident_evidence_client.py",
+        "src/codex_plugin_scanner/guard/route_metrics.py",
+    }
+    assert renamed <= set(contract["scope_globs"])
+    assert renamed <= set(capability["patterns"])
+
+
 def test_parity_fixture_stays_language_neutral() -> None:
     fixture = GATE._validate_fixture(ROOT, "tests/fixtures/native-hook-parity/cases.v1.json")
 
