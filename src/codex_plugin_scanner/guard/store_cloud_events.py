@@ -147,49 +147,27 @@ class StoreCloudEventsMixin:
             return load_supply_chain_bundle(connection, workspace_id=workspace_id)
 
     def set_sync_payload(self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str) -> None:
-        oauth_changed = state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY or state_key.startswith(
-            _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
-        )
-        if oauth_changed:
-            self._clear_oauth_secret_payload_cache()
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values (?, ?, ?)
-                on conflict(state_key) do update set
-                  payload_json = excluded.payload_json,
-                  updated_at = excluded.updated_at
-                """,
-                (state_key, json.dumps(payload), now),
-            )
-        if oauth_changed:
-            from .review_event_wake import review_event_wake_signal
+        oauth_changed = _is_oauth_credentials_key(state_key)
+        args = {"state_key": state_key, "payload": _payload_arg(payload), "now": now}
+        if not oauth_changed:
+            self._native_store_call("set_sync_payload", args)
+            return
+        self._clear_oauth_secret_payload_cache()
+        self._native_store_call("write_credential_sync_payload", args)
+        from .review_event_wake import review_event_wake_signal
 
-            review_event_wake_signal(self.path).notify()
+        review_event_wake_signal(self.path).notify()
 
     def insert_sync_payload_if_absent(self, state_key: str, payload: Mapping[str, object], now: str) -> None:
         """Store ``payload`` only when ``state_key`` has no row; an existing row always wins."""
 
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values (?, ?, ?)
-                on conflict(state_key) do nothing
-                """,
-                (state_key, json.dumps(payload), now),
-            )
+        self._native_store_call(
+            "insert_sync_payload_if_absent",
+            {"state_key": state_key, "payload": _payload_arg(payload), "now": now},
+        )
 
     def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                "select payload_json from sync_state where state_key = ?",
-                (state_key,),
-            ).fetchone()
-        if row is None:
-            return None
-        payload = json.loads(str(row["payload_json"]))
+        payload = self._native_store_call("get_sync_payload", {"state_key": state_key})
         if isinstance(payload, (dict, list)):
             return payload
         return None
@@ -331,24 +309,19 @@ class StoreCloudEventsMixin:
             return []
 
     def delete_sync_payload(self, state_key: str) -> None:
-        if state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY:
+        if _is_oauth_credentials_key(state_key):
             self._clear_oauth_secret_payload_cache()
-        with self._connect() as connection:
-            connection.execute(
-                "delete from sync_state where state_key = ?",
-                (state_key,),
-            )
+        self._native_store_call("delete_sync_payload", {"state_key": state_key})
 
     def delete_sync_payloads(self, state_keys: list[str]) -> int:
         if not state_keys:
             return 0
-        placeholders = ",".join("?" for _ in state_keys)
-        with self._connect() as connection:
-            cursor = connection.execute(
-                f"delete from sync_state where state_key in ({placeholders})",
-                tuple(state_keys),
-            )
-            return int(cursor.rowcount if cursor.rowcount is not None else 0)
+        if any(_is_oauth_credentials_key(state_key) for state_key in state_keys):
+            self._clear_oauth_secret_payload_cache()
+        deleted = self._native_store_call("delete_sync_payloads", {"state_keys": list(state_keys)})
+        if not isinstance(deleted, int) or isinstance(deleted, bool):
+            raise RuntimeError("native delete_sync_payloads returned no count")
+        return deleted
 
     def add_guard_event_v1(self, event: GuardEventV1) -> None:
         self._native_store_call(
@@ -476,3 +449,21 @@ def _managed_install_row(row: dict[str, object]) -> dict[str, object]:
         "manifest": json.loads(str(row["manifest_json"])),
         "updated_at": str(row["updated_at"]),
     }
+
+
+def _is_oauth_credentials_key(state_key: str) -> bool:
+    """The OAuth credential row, or one scoped to a credential namespace."""
+
+    return state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY or state_key.startswith(
+        _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
+    )
+
+
+def _payload_arg(payload: Mapping[str, object] | Sequence[object]) -> object:
+    """A mapping as a plain dict and a sequence as a list; the native store refuses anything else."""
+
+    if isinstance(payload, Mapping):
+        return dict(payload)
+    if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes)):
+        return list(payload)
+    return payload

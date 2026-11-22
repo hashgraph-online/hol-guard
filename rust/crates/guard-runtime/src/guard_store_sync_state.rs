@@ -37,14 +37,23 @@ pub(crate) fn set(connection: &Connection, args: &Args<'_>) -> StoreResult<Value
     if is_credential_key(state_key) {
         return value_error("sync_payload_key_reserved");
     }
+    write_encoded(
+        connection,
+        state_key,
+        &encoded_payload(args)?,
+        args.str("now")?,
+    )?;
+    Ok(Value::Null)
+}
+
+/// The `payload` argument as JSON text: an object or an array, else
+/// `invalid_payload`.
+fn encoded_payload(args: &Args<'_>) -> StoreResult<String> {
     let payload = args
         .raw("payload")
         .filter(|payload| payload.is_object() || payload.is_array())
         .map_or_else(|| value_error("invalid_payload"), Ok)?;
-    let encoded =
-        serde_json::to_string(payload).map_or_else(|_| value_error("invalid_payload"), Ok)?;
-    write_encoded(connection, state_key, &encoded, args.str("now")?)?;
-    Ok(Value::Null)
+    serde_json::to_string(payload).map_or_else(|_| value_error("invalid_payload"), Ok)
 }
 
 /// Upsert already-encoded payload text under `state_key`. Callers keep the
@@ -115,6 +124,9 @@ pub(crate) mod aibom_state;
 #[path = "guard_store_policy_trust_rows.rs"]
 pub(crate) mod policy_trust_rows;
 
+#[path = "guard_store_sync_payload_rows.rs"]
+pub(crate) mod sync_payload_rows;
+
 /// Whether one of the named `sync_state` row modules owns `method`.
 pub(crate) fn handles_row_method(method: &str) -> bool {
     fleet_posture_state::handles(method)
@@ -125,6 +137,7 @@ pub(crate) fn handles_row_method(method: &str) -> bool {
         || worker_host::handles(method)
         || aibom_state::handles(method)
         || policy_trust_rows::handles(method)
+        || sync_payload_rows::handles(method)
 }
 
 /// Run `method` in the `sync_state` row module that owns it.
@@ -152,6 +165,9 @@ pub(crate) fn dispatch_row_method(
         _ if worker_host::handles(method) => worker_host::dispatch(connection, method, args),
         _ if policy_trust_rows::handles(method) => {
             policy_trust_rows::dispatch(connection, method, args)
+        }
+        _ if sync_payload_rows::handles(method) => {
+            sync_payload_rows::dispatch(connection, method, args)
         }
         _ => aibom_state::dispatch(connection, method, args),
     }
