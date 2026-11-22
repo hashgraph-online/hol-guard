@@ -40,9 +40,12 @@ pub(super) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
 /// `latest_assessed_runs(store, keys)`: per worktree, the newest completed or
 /// partial run. Runs finished in the same millisecond keep the order they
 /// were queued in. `after` is the `[codebase_key, worktree_key]` of the last
-/// row read plus the highest run rowid the first page saw, so every page
-/// reads the same set of runs: a run finished between pages cannot replace a
-/// worktree's newest run on a later page or move a worktree already read.
+/// row read plus the highest run rowid and the latest finish time the first
+/// page saw, so every page reads the same set of runs. The rowid bound keeps
+/// out runs queued after page one; a run is queued long before it finishes,
+/// so the finish bound keeps out runs that were already queued and finished
+/// between pages. Neither can replace a worktree's newest run on a later
+/// page or move a worktree already read.
 fn latest_assessed_runs(connection: &Connection, args: &Args) -> StoreResult<Value> {
     let mut source = String::from("workspace_assessment_runs r");
     let mut params = Vec::new();
@@ -60,29 +63,34 @@ fn latest_assessed_runs(connection: &Connection, args: &Args) -> StoreResult<Val
         );
         params.push(Value::from(keys.to_string()));
     }
-    let (saw, after) = match args.raw("after") {
+    let (saw, finished, after) = match args.raw("after") {
         None => {
-            let saw = connection.query_row(
-                "select coalesce(max(rowid), 0) from workspace_assessment_runs",
+            let (saw, finished) = connection.query_row(
+                "select coalesce(max(rowid), 0), \
+                   coalesce(max(case when state in ('completed', 'partial') \
+                     then finished_at_ms end), 0) \
+                 from workspace_assessment_runs",
                 [],
-                |row| row.get::<_, i64>(0),
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
             )?;
-            (saw, None)
+            (saw, finished, None)
         }
         Some(cursor) => {
-            let [Some(codebase), Some(worktree), Some(saw)] = cursor_parts::<3>(cursor) else {
+            let [Some(codebase), Some(worktree), Some(saw), Some(finished)] =
+                cursor_parts::<4>(cursor)
+            else {
                 return value_error("after must name the last worktree read");
             };
             if !codebase.is_string() || !worktree.is_string() {
                 return value_error("after must name the last worktree read");
             }
-            let Some(saw) = saw.as_i64() else {
+            let (Some(saw), Some(finished)) = (saw.as_i64(), finished.as_i64()) else {
                 return value_error("after must name the last worktree read");
             };
-            (saw, Some([codebase.clone(), worktree.clone()]))
+            (saw, finished, Some([codebase.clone(), worktree.clone()]))
         }
     };
-    params.extend([Value::from(saw), Value::from(saw)]);
+    params.extend([saw, finished, saw, finished].map(Value::from));
     let after = match after {
         None => "",
         Some(cursor) => {
@@ -92,16 +100,17 @@ fn latest_assessed_runs(connection: &Connection, args: &Args) -> StoreResult<Val
     };
     let sql = format!(
         "select {RUN_COLUMNS}, r.findings_json from {source} \
-         where r.state in ('completed', 'partial') and r.rowid <= ? \
+         where r.state in ('completed', 'partial') and r.rowid <= ? and r.finished_at_ms <= ? \
            and r.run_id = (select latest.run_id from workspace_assessment_runs latest \
              where latest.codebase_key = r.codebase_key \
                and latest.worktree_key = r.worktree_key \
-               and latest.state in ('completed', 'partial') and latest.rowid <= ? \
+               and latest.state in ('completed', 'partial') \
+               and latest.rowid <= ? and latest.finished_at_ms <= ? \
              order by latest.finished_at_ms desc, latest.rowid desc limit 1){after} \
          order by r.codebase_key, r.worktree_key"
     );
     page(connection, &sql, &params, |row| {
-        json!([row["codebase_key"], row["worktree_key"], saw])
+        json!([row["codebase_key"], row["worktree_key"], saw, finished])
     })
 }
 

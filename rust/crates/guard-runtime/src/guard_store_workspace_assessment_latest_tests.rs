@@ -137,7 +137,7 @@ fn the_after_cursor_continues_past_the_last_worktree() {
     let answer = call(
         &connection,
         "list_latest_assessed_workspace_runs",
-        json!({"after": ["cb", "wt-a", 2]}),
+        json!({"after": ["cb", "wt-a", 2, 1]}),
     )
     .expect("list");
 
@@ -200,6 +200,9 @@ fn later_pages_read_the_runs_the_first_page_saw() {
             )
             .expect("findings");
     }
+    // Queued before the first page, so its rowid is inside the first page's
+    // bound; it finishes between pages.
+    run(&connection, "wt-4-queued", "wt-4", "queued", None);
     let first = call(
         &connection,
         "list_latest_assessed_workspace_runs",
@@ -207,9 +210,17 @@ fn later_pages_read_the_runs_the_first_page_saw() {
     )
     .expect("page");
     let next = first["next"].clone();
-    assert_eq!(next[2], 6);
+    assert_eq!(next[2], 7);
+    assert_eq!(next[3], 1);
     // A newer run of a worktree not yet read, and of a new worktree, finish
-    // between pages.
+    // between pages, and so does the run queued before page one.
+    connection
+        .execute(
+            "update workspace_assessment_runs set state = 'completed', finished_at_ms = 2 \
+             where run_id = 'wt-4-queued'",
+            [],
+        )
+        .expect("finish");
     run(&connection, "wt-5-newer", "wt-5", "completed", Some(2));
     run(&connection, "wt-9", "wt-9", "completed", Some(2));
 
@@ -229,7 +240,8 @@ fn later_pages_read_the_runs_the_first_page_saw() {
         if answer["next"].is_null() {
             break;
         }
-        assert_eq!(answer["next"][2], 6);
+        assert_eq!(answer["next"][2], 7);
+        assert_eq!(answer["next"][3], 1);
         args = json!({"after": answer["next"]});
     }
 
@@ -241,6 +253,7 @@ fn later_pages_read_the_runs_the_first_page_saw() {
     )
     .expect("list");
     assert!(run_ids(&fresh).contains(&"wt-5-newer"));
+    assert!(run_ids(&fresh).contains(&"wt-4-queued"));
 }
 
 #[test]
@@ -254,8 +267,10 @@ fn malformed_keys_and_cursors_are_refused() {
         json!({"after": ["cb"]}),
         json!({"after": ["cb", 2]}),
         json!({"after": ["cb", "wt-a"]}),
-        json!({"after": ["cb", "wt-a", "2"]}),
-        json!({"after": [1, "wt-a", 2]}),
+        json!({"after": ["cb", "wt-a", 2]}),
+        json!({"after": ["cb", "wt-a", "2", 1]}),
+        json!({"after": ["cb", "wt-a", 2, "1"]}),
+        json!({"after": [1, "wt-a", 2, 1]}),
     ] {
         let result = call(&connection, "list_latest_assessed_workspace_runs", args);
         assert!(matches!(result, Err(StoreError::Value(_))));
