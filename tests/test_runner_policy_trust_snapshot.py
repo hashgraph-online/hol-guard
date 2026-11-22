@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import synced_policy
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import PolicyBundleVerificationKey
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.store import GuardStore
@@ -160,7 +161,7 @@ def test_a_rejected_sync_judges_the_last_good_bundle_with_its_own_snapshot(
 
     monkeypatch.setattr(store, "policy_bundle_trust_rows", snapshot)
     monkeypatch.setattr(runner, "validate_synced_policy_bundle", reject_policy_bundle)
-    monkeypatch.setattr(runner, "_validate_cached_policy_bundle", validate_cached)
+    monkeypatch.setattr(synced_policy, "cached_policy_bundle_validation", validate_cached)
     stub_authenticated_urlopen(monkeypatch, open_sync)
     monkeypatch.setattr(runner, "sync_pain_signals", no_auxiliary_sync)
     monkeypatch.setattr(runner, "sync_guard_events", no_auxiliary_sync)

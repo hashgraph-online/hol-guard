@@ -80,7 +80,11 @@ from ..review_signature_verification import sync_review_verification_keys
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..store_policy_trust_rows import PolicyBundleTrustRows
-from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
+from ..synced_policy import (
+    cached_policy_bundle_validation,
+    last_good_policy_bundle_validation,
+    validated_synced_policy_bundle,
+)
 from . import runner_native_authority as _authority
 from . import runner_native_sync as _sync
 from . import runner_policy_shadow as _shadow
@@ -657,12 +661,7 @@ def sync_receipts(
             # same policy through unsigned sibling fields after verification
             # fails. Keep only a still-valid signed current/LKG bundle.
             remote_decisions.clear()
-            last_good_rows = store.policy_bundle_trust_rows(last_good=True)
-            last_good_bundle, _last_good_error = _validate_cached_policy_bundle(
-                store,
-                last_good_rows.policy_bundle,
-                rows=last_good_rows,
-            )
+            last_good_bundle, _last_good_error = last_good_policy_bundle_validation(store)
             # A valid current bundle may be newer than last-good when a prior
             # sync stopped after persisting current but before advancing the
             # checkpoint. Prefer current so a rejected refresh cannot roll
@@ -678,14 +677,7 @@ def sync_receipts(
     else:
         effective_policy_bundle = existing_policy_bundle
         if effective_policy_bundle is None:
-            # The last good bundle is judged against the keyrings, checkpoint
-            # and workspace read in the same snapshot as it.
-            last_good_rows = store.policy_bundle_trust_rows(last_good=True)
-            effective_policy_bundle, last_good_error = _validate_cached_policy_bundle(
-                store,
-                last_good_rows.policy_bundle,
-                rows=last_good_rows,
-            )
+            effective_policy_bundle, last_good_error = last_good_policy_bundle_validation(store)
             if (
                 effective_policy_bundle is None
                 and isinstance(existing_policy_bundle_payload, dict)
