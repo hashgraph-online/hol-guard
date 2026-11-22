@@ -1,96 +1,93 @@
-"""Read models over the workspace assessment coordinator tables."""
+"""Read models over the workspace assessment coordinator tables.
+
+The worktree list, run history and one worktree's newest assessed run are
+read by the native store; the stored coverage and findings JSON come back as
+text and are parsed here. ``latest_assessed_runs`` still reads its findings
+lists on its own connection.
+"""
 
 from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
     from .workspace_assessment_store import WorktreeKeys
 
 
+_WORKTREE_FIELDS: Final = frozenset(
+    {
+        "codebase_key",
+        "worktree_key",
+        "root",
+        "dirty_generation",
+        "last_completed_generation",
+        "last_scan_at_ms",
+        "paused",
+        "admitted_at_ms",
+        "ended",
+    }
+)
+_RUN_FIELDS: Final = frozenset(
+    {
+        "run_id",
+        "codebase_key",
+        "worktree_key",
+        "snapshot_digest",
+        "kind",
+        "trigger_kind",
+        "state",
+        "dirty_generation",
+        "coverage_json",
+        "error_code",
+        "created_at_ms",
+        "started_at_ms",
+        "finished_at_ms",
+    }
+)
+# A runaway store cannot keep a listing loop going forever.
+_MAX_PAGES: Final = 4096
+
+
 def list_worktrees(store: Any, *, include_paused: bool = True) -> list[dict[str, object]]:
-    with store._connect() as connection:
-        rows = connection.execute(
-            """
-            select codebase_key, worktree_key, private_root, dirty_generation, last_completed_generation,
-                   last_scan_at_ms, paused, admitted_at_ms,
-                   exists (
-                     select 1 from workspace_assessment_ended_admissions e
-                     where e.codebase_key = s.codebase_key and e.worktree_key = s.worktree_key
-                   )
-            from workspace_assessment_state s
-            where ? or paused = 0
-            order by admitted_at_ms, worktree_key
-            """,
-            (1 if include_paused else 0,),
-        ).fetchall()
-    return [
-        {
-            "codebase_key": row[0],
-            "worktree_key": row[1],
-            "root": row[2],
-            "dirty_generation": int(row[3]),
-            "last_completed_generation": int(row[4]),
-            "stale": int(row[4]) < int(row[3]),
-            "last_scan_at_ms": row[5],
-            "paused": bool(row[6]),
-            "admitted_at_ms": int(row[7]),
-            # The install that admitted it is gone: paused, and kept for its records.
-            "ended": bool(row[8]),
-        }
-        for row in rows
-    ]
+    method = "list_workspace_assessment_worktrees"
+    rows = _pages(store, method, {"include_paused": include_paused}, "after", _WORKTREE_FIELDS)
+    worktrees: list[dict[str, object]] = []
+    for row in rows:
+        dirty = _int(row["dirty_generation"], method)
+        completed = _int(row["last_completed_generation"], method)
+        worktrees.append(
+            {
+                "codebase_key": row["codebase_key"],
+                "worktree_key": row["worktree_key"],
+                "root": row["root"],
+                "dirty_generation": dirty,
+                "last_completed_generation": completed,
+                "stale": completed < dirty,
+                "last_scan_at_ms": row["last_scan_at_ms"],
+                "paused": bool(row["paused"]),
+                "admitted_at_ms": _int(row["admitted_at_ms"], method),
+                # The install that admitted it is gone: paused, and kept for its records.
+                "ended": bool(row["ended"]),
+            }
+        )
+    return worktrees
 
 
 def recent_runs(store: Any, keys: WorktreeKeys | None = None, *, limit: int = 20) -> list[dict[str, object]]:
-    clause, params = ("where codebase_key = ? and worktree_key = ?", _key_tuple(keys)) if keys else ("", ())
-    with store._connect() as connection:
-        rows = connection.execute(
-            f"""
-            select run_id, codebase_key, worktree_key, snapshot_digest, kind, trigger_kind, state,
-                   dirty_generation, coverage_json, findings_json, error_code,
-                   created_at_ms, started_at_ms, finished_at_ms
-            from workspace_assessment_runs {clause}
-            order by created_at_ms desc, run_id desc
-            limit ?
-            """,
-            (*params, max(1, min(limit, 200))),
-        ).fetchall()
     # Run history carries a count; findings are read from the latest assessed
     # run, so a long history never multiplies the stored finding lists.
-    runs = [_run_payload(row) for row in rows]
-    for run in runs:
-        findings = run.pop("findings")
-        run["finding_count"] = len(findings) if isinstance(findings, list) else 0
-    return runs
+    args: dict[str, object] = {"mode": "recent", "limit": max(1, min(limit, 200))}
+    if keys is not None:
+        args["codebase_key"], args["worktree_key"] = _key_tuple(keys)
+    return _run_history(store, args)
 
 
 def latest_runs(store: Any) -> list[dict[str, object]]:
     """The newest run of every worktree in any state, independent of history limits."""
 
-    with store._connect() as connection:
-        rows = connection.execute(
-            """
-            select run_id, codebase_key, worktree_key, snapshot_digest, kind, trigger_kind, state,
-                   dirty_generation, coverage_json, findings_json, error_code,
-                   created_at_ms, started_at_ms, finished_at_ms
-            from workspace_assessment_runs r
-            where r.run_id = (
-              select newest.run_id from workspace_assessment_runs newest
-              where newest.codebase_key = r.codebase_key and newest.worktree_key = r.worktree_key
-              order by newest.created_at_ms desc, newest.run_id desc
-              limit 1
-            )
-            order by created_at_ms desc, run_id desc
-            """
-        ).fetchall()
-    runs = [_run_payload(row) for row in rows]
-    for run in runs:
-        findings = run.pop("findings")
-        run["finding_count"] = len(findings) if isinstance(findings, list) else 0
-    return runs
+    return _run_history(store, {"mode": "latest"})
 
 
 def latest_assessed_runs(store: Any, keys: Sequence[WorktreeKeys] | None = None) -> list[dict[str, object]]:
@@ -134,20 +131,91 @@ def latest_assessed_run(store: Any, keys: WorktreeKeys) -> dict[str, object] | N
     Runs finished in the same millisecond keep the order they were queued in.
     """
 
-    with store._connect() as connection:
-        row = connection.execute(
-            """
-            select run_id, codebase_key, worktree_key, snapshot_digest, kind, trigger_kind, state,
-                   dirty_generation, coverage_json, findings_json, error_code,
-                   created_at_ms, started_at_ms, finished_at_ms
-            from workspace_assessment_runs
-            where codebase_key = ? and worktree_key = ? and state in ('completed', 'partial')
-            order by finished_at_ms desc, rowid desc
-            limit 1
-            """,
-            _key_tuple(keys),
-        ).fetchone()
-    return _run_payload(row) if row is not None else None
+    method = "latest_workspace_assessment_run"
+    codebase_key, worktree_key = _key_tuple(keys)
+    answer = store._native_store_call(method, {"codebase_key": codebase_key, "worktree_key": worktree_key})
+    if answer is None:
+        return None
+    row = _row(answer, _RUN_FIELDS | {"findings_json"}, method)
+    run = _run_fields(row, method)
+    run["findings"] = json.loads(_text(row["findings_json"], method))
+    return run
+
+
+def _run_history(store: Any, args: dict[str, object]) -> list[dict[str, object]]:
+    method = "list_workspace_assessment_runs"
+    limit = args.get("limit")
+    runs: list[dict[str, object]] = []
+    for row in _pages(store, method, args, "before", _RUN_FIELDS | {"finding_count"}):
+        run = _run_fields(row, method)
+        run["finding_count"] = _int(row["finding_count"], method)
+        runs.append(run)
+        if isinstance(limit, int) and len(runs) >= limit:
+            break
+    return runs
+
+
+def _pages(
+    store: Any, method: str, args: dict[str, object], cursor_name: str, fields: frozenset[str]
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    cursor: object = None
+    for _ in range(_MAX_PAGES):
+        page_args = dict(args)
+        if cursor is not None:
+            page_args[cursor_name] = cursor
+        answer = store._native_store_call(method, page_args)
+        if not isinstance(answer, dict) or set(answer) != {"items", "next"}:
+            raise RuntimeError(f"native {method} returned no answer")
+        items = answer["items"]
+        cursor = answer["next"]
+        if not isinstance(items, list) or not (cursor is None or isinstance(cursor, list)):
+            raise RuntimeError(f"native {method} returned no answer")
+        if cursor is not None and not items:
+            raise RuntimeError(f"native {method} returned no answer")
+        rows.extend(_row(item, fields, method) for item in items)
+        if cursor is None:
+            return rows
+        limit = args.get("limit")
+        if isinstance(limit, int) and len(rows) >= limit:
+            return rows
+    raise RuntimeError(f"native {method} kept paging")
+
+
+def _row(value: object, fields: frozenset[str], method: str) -> dict[str, object]:
+    if not isinstance(value, dict) or set(value) != fields:
+        raise RuntimeError(f"native {method} returned no answer")
+    return {str(key): item for key, item in value.items()}
+
+
+def _int(value: object, method: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RuntimeError(f"native {method} returned no answer")
+    return value
+
+
+def _text(value: object, method: str) -> str:
+    if not isinstance(value, str):
+        raise RuntimeError(f"native {method} returned no answer")
+    return value
+
+
+def _run_fields(row: dict[str, object], method: str) -> dict[str, object]:
+    return {
+        "run_id": row["run_id"],
+        "codebase_key": row["codebase_key"],
+        "worktree_key": row["worktree_key"],
+        "snapshot_digest": row["snapshot_digest"],
+        "kind": row["kind"],
+        "trigger_kind": row["trigger_kind"],
+        "state": row["state"],
+        "dirty_generation": row["dirty_generation"],
+        "coverage": json.loads(_text(row["coverage_json"], method)),
+        "error_code": row["error_code"],
+        "created_at_ms": row["created_at_ms"],
+        "started_at_ms": row["started_at_ms"],
+        "finished_at_ms": row["finished_at_ms"],
+    }
 
 
 def _run_payload(row: Sequence[object]) -> dict[str, object]:
