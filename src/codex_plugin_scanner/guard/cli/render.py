@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+# First: an older CLI that just installed this release may hold stale copies
+# of the modules imported below (see `older_release_modules`).
+from . import older_release_modules  # noqa: F401
+
+# isort: split
+
 import json
 import re
 import shlex
