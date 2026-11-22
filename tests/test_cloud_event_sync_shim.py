@@ -117,9 +117,13 @@ def test_runtime_session_posts_through_the_native_command(tmp_path: Path, monkey
     # Queueing the session event writes through the native store, which this
     # stubbed runtime does not offer; the queue has its own tests.
     monkeypatch.setattr(store, "add_guard_event_v1", lambda *_args, **_kwargs: None)
+    # The summary row is written through the native store too.
+    written: dict[str, object] = {}
+    monkeypatch.setattr(store, "set_sync_payload", lambda key, payload, _now: written.__setitem__(key, payload))
 
     summary = runner.sync_runtime_session(store, session=dict(_SESSION), auth_context=dict(_AUTH))
 
+    assert written["runtime_session_summary"] == summary
     assert sent[0]["action"] == "runtime_session"
     assert sent[0]["session"]["sessionId"] == "session-live"
     assert summary["runtime_session_id"] == "session-live"

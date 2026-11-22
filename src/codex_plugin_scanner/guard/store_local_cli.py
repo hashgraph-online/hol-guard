@@ -18,10 +18,9 @@ from .runtime.local_cli_commands import (
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .runtime.local_mcp_stdio import McpCatalogResult
 from .store_custom_extension_continuity import _native_grant_write
-from .store_local_cli_capabilities import LocalCliCapabilityState, capability_map, load_local_cli_capabilities
-from .store_local_cli_context import note_capability_cause
+from .store_local_cli_capabilities import LocalCliCapabilityState, capability_map
 from .store_local_cli_retention import utc_now_iso
-from .store_local_cli_rows import _row_int, _row_values, local_cli_rules_exist
+from .store_local_cli_rows import _row_int, _row_values
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_catalog import catalog_change_ids
 
@@ -167,24 +166,27 @@ class StoreLocalCliMixin:
     def read_local_cli_surface(self, cli_id: str) -> str | None:
         """The observed surface of ``cli_id``, or ``None`` when never observed."""
 
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            row = connection.execute("select surface from local_cli_observation where cli_id = ?", (cli_id,)).fetchone()
-        return None if row is None or not isinstance(row[0], str) else row[0]
+        surface = self._native_store_call("read_local_cli_surface", {"cli_id": cli_id})
+        return surface if isinstance(surface, str) else None
 
     def note_local_cli_capability_cause(self, *, cli_id: str, identity_hash: str, cause: str) -> int:
         """Keep the capability cause a contained run of an allowed CLI was denied."""
 
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            return note_capability_cause(connection, cli_id=cli_id, identity_hash=identity_hash, cause=cause)
+        changed = self._native_store_call(
+            "note_local_cli_capability_cause",
+            {"cli_id": cli_id, "identity_hash": identity_hash, "cause": cause},
+        )
+        if type(changed) is not int:
+            raise sqlite3.DatabaseError("native_local_cli_capability_cause_invalid")
+        return changed
 
     def read_local_cli_capabilities(self, cli_id: str) -> dict[str, LocalCliCapabilityState]:
         """The full ``{name: on|off}`` map stored for ``cli_id``."""
 
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            return capability_map(load_local_cli_capabilities(connection).get(cli_id))
+        stored = self._native_store_call("read_local_cli_capabilities", {"cli_id": cli_id})
+        if not isinstance(stored, dict):
+            raise sqlite3.DatabaseError("native_local_cli_capabilities_invalid")
+        return capability_map(stored)
 
     def read_local_cli_grant(self, cli_id: str) -> dict[str, object] | None:
         grant = self._native_store_call("read_local_cli_grant", {"cli_id": cli_id})
@@ -193,15 +195,13 @@ class StoreLocalCliMixin:
         return grant
 
     def has_local_cli_block_rules(self) -> bool:
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            return local_cli_rules_exist(connection, blocks_only=True)
+        present = self._native_store_call("has_local_cli_block_rules", {})
+        if type(present) is not bool:
+            raise sqlite3.DatabaseError("native_local_cli_block_rules_invalid")
+        return present
 
     def read_local_cli_revision(self) -> int:
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            row = connection.execute("select revision from local_cli_authority where singleton = 1").fetchone()
-        return 0 if row is None else _row_int(row[0])
+        return _row_int(self._native_store_call("read_local_cli_revision", {}))
 
     def upsert_local_cli_grant(
         self,
