@@ -21,6 +21,8 @@
   "src/codex_plugin_scanner/guard/native_hook_edge.py",
   "src/codex_plugin_scanner/guard/native_route_receipt.py",
   "src/codex_plugin_scanner/guard/native_resident_client.py",
+  "src/codex_plugin_scanner/guard/resident_evidence_client.py",
+  "src/codex_plugin_scanner/guard/route_metrics.py",
   "src/codex_plugin_scanner/guard/native_runtime*.py",
   "src/codex_plugin_scanner/guard/native_mode.py",
   "src/codex_plugin_scanner/guard/runtime/hook_*.py"
@@ -40,6 +42,8 @@
     "src/codex_plugin_scanner/guard/native_hook_edge.py",
     "src/codex_plugin_scanner/guard/native_route_receipt.py",
     "src/codex_plugin_scanner/guard/native_resident_client.py",
+    "src/codex_plugin_scanner/guard/resident_evidence_client.py",
+    "src/codex_plugin_scanner/guard/route_metrics.py",
     "src/codex_plugin_scanner/guard/native_runtime.py",
     "src/codex_plugin_scanner/guard/native_runtime_request_scope.py",
     "src/codex_plugin_scanner/guard/native_runtime_process_cache.py",
