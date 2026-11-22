@@ -133,6 +133,9 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "cloud_status_rows"
         // Two rows read as one consent pair.
         | "exact_cloud_review_state" => Kind::Snapshot,
+        // The authority revision and the two continuity rows a commit is
+        // checked against, as one view.
+        "custom_extension_continuity_rows" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
