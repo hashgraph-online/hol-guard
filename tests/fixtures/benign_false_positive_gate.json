@@ -33076,6 +33076,142 @@
       "expect": "not_allow"
     },
     {
+      "id": "reach-ping-count-loopback",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ping -c 1 localhost"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-ping-count-wait-named-host",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ping -c 2 -W 2 example.com"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-ping-numeric-quiet-piped-to-tail",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ping -n -q -c 2 127.0.0.1 2>&1 | tail -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-traceroute-hop-limit",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "traceroute -n -m 5 example.com"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-traceroute-query-and-wait-limits",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "traceroute -q 1 -w 2 example.com"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-whois-fixed-name",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "whois example.com"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-getent-hosts-fixed-name",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "getent hosts example.com"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-getent-services-port",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "getent services 5432"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-user-tmp-sibling-manifest-sed-expanded-variable",
       "fix_area": "git-sibling-worktree",
       "harnesses": [

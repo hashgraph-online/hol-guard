@@ -604,6 +604,7 @@
       "src/pretool/read_path_harness_notes.rs",
       "src/pretool/read_path_missing.rs",
       "src/pretool/read_paths.rs",
+      "src/pretool/reachability_probes.rs",
       "src/pretool/recoverable_removal.rs",
       "src/pretool/recursive_copy.rs",
       "src/pretool/redirect_git_chain.rs",
