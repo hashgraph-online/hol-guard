@@ -199,6 +199,7 @@ mod liveness_probes;
 mod lookup_reads;
 mod manager_usage;
 mod metadata_reads;
+mod network_facts;
 mod npm_environment;
 mod npm_reads;
 mod npmrc_keys;
