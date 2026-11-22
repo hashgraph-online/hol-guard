@@ -387,14 +387,12 @@ fn read_compound_with_null_redirects_and_tail_is_a_read() {
     write(home, ".ssh/id_rsa");
     write(home, "other/readme.md");
     let other = format!("{}/other", fixture.home);
+    let command = "ls ~/Library/Application\\ Support/Example\\ App/logs 2>/dev/null | tail -3";
+    assert!(allowed_in(&fixture, &other, command), "{command}");
+    // A `which` prefix may print caller-defined functions or aliases.
     for command in [
         "which example-tool other-tool 2>/dev/null; ls ~/Library/\"Application Support\"/\"Example App\"/logs 2>/dev/null | tail -3",
         "which example-tool 2>/dev/null; ls \"~/Library/Application Support/Example App/logs\" 2>/dev/null | tail -3",
-        "ls ~/Library/Application\\ Support/Example\\ App/logs 2>/dev/null | tail -3",
-    ] {
-        assert!(allowed_in(&fixture, &other, command), "{command}");
-    }
-    for command in [
         "which example-tool 2>/dev/null; ls ~/.ssh 2>/dev/null",
         "which example-tool; ls ~/Library/Application\\ Support/Example\\ App/logs > out.txt",
         "which example-tool; ls ~/Library | sh",

@@ -190,11 +190,11 @@ fn environment_settled(
             })
 }
 
-/// A step that names Python without being able to bind a variable for the
-/// shell: a lookup such as `which python3`, `command -v python3` or
-/// `type python3`, or a version probe such as `python3 --version`. A lookup
-/// only prints where a name resolves and a probe runs as its own process, so
-/// neither can set `PYTHONPATH` for the filter that follows. The step must
+/// A step that names Python without binding a shell variable: a proven
+/// path-only lookup such as `type -p python3` or `whence -p python3`, or a
+/// version probe such as `python3 --version`. Unqualified zsh `which` can
+/// print function/alias definitions and is not a proven lookup. The safe
+/// forms cannot set `PYTHONPATH` for the filter that follows. The step must
 /// carry no prefix assignment, wrapper, `=`, `$` or backtick, so
 /// `export PYTHONPATH=...` and `echo $PYTHONPATH` still count.
 fn names_python_inertly(other: &crate::CommandSegmentV1) -> bool {
