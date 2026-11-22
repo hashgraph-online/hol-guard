@@ -358,10 +358,10 @@ fn an_unpublished_mismatched_or_moved_integrity_state_defers() {
 
 /// The proxy's lookup evidence carries a degraded state as it is, and the
 /// lookup judges it. A store of remote rows reads natively under it, as long
-/// as the store still holds the state the daemon published. A local row is
-/// refused, and its refusal audited on the lookup's own store connection.
+/// as the store still holds the state the daemon published; a local row,
+/// whose refusal the lookup would audit through a write, stays with the proxy.
 #[test]
-fn a_degraded_integrity_state_answers_and_audits_refused_local_rows() {
+fn a_degraded_integrity_state_reads_remote_rows_and_hands_off_local_ones() {
     let (home, connection) = guard_home("degraded");
     decide(
         &connection,
@@ -393,23 +393,11 @@ fn a_degraded_integrity_state_answers_and_audits_refused_local_rows() {
     })
     .unwrap();
     assert_eq!(policy["decision"]["action"], "block");
-    let events = || -> i64 {
-        connection
-            .query_row("select count(*) from guard_events", [], |row| row.get(0))
-            .unwrap()
-    };
-    let before = events();
     decide(&connection, "artifact", "block", None, "approval-gate");
-    let local = read(&home, &degraded, |saved| {
-        let saved = saved.expect("saved rows");
-        assert!(saved.audits_refusals);
-        saved.answer(&policy_need(ARTIFACT, None)).unwrap()
-    })
-    .unwrap();
-    // The degraded lookup refuses the local row as the proxy's does, and the
-    // refusal's audit is written on the lookup's own connection.
-    assert_eq!(local["ignored_local_integrity"], true);
-    assert!(events() > before, "the refusal is audited");
+    assert_eq!(
+        read(&home, &degraded, |_| ()).err(),
+        Some("mcp_relay_saved_policy_unverifiable")
+    );
 }
 
 #[test]

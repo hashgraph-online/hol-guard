@@ -60,10 +60,6 @@ pub(crate) struct Saved<'c> {
     /// A row from a local source: only then does the proxy ship the policy
     /// key and the refreshed integrity state.
     pub(super) has_local_policy: bool,
-    /// The integrity state is not the protected one and a local row can be
-    /// reached: a lookup may refuse that row and audit the refusal, so it runs
-    /// on its own writable store connection instead of the snapshot.
-    pub(super) audits_refusals: bool,
     pub(super) integrity_state: Value,
     pub(super) key_b64: Zeroizing<String>,
     pub(super) key_id: String,
@@ -116,10 +112,11 @@ pub(crate) fn saved_at<'c>(
     let (integrity_state, key) = lookup_integrity(binding)?;
     // Under a state that is not protected the lookup refuses a local row and
     // follows the refusal with an audit write, which the read-only snapshot
-    // cannot make. Those lookups run on a store connection of their own, as
-    // the proxy's resident lookup does.
-    let audits_refusals =
-        (has_local_policy || has_local_once) && published_integrity(binding).is_err();
+    // cannot make: the call would fail instead of being answered. Those
+    // stores stay with the proxy; a store of remote rows alone reads here.
+    if (has_local_policy || has_local_once) && published_integrity(binding).is_err() {
+        return Err(SAVED_UNVERIFIABLE);
+    }
     if shape.stored_integrity_state()?.as_ref() != Some(&integrity_state) {
         return Err(SAVED_UNVERIFIABLE);
     }
@@ -144,7 +141,6 @@ pub(crate) fn saved_at<'c>(
         guard_home: guard_home.to_owned(),
         now,
         has_local_policy,
-        audits_refusals,
         integrity_state,
         key_b64: Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key)),
         key_id: key.key_id.clone(),
@@ -157,8 +153,9 @@ pub(crate) fn saved_at<'c>(
 /// lookup evidence carries them (`policy_lookup_evidence`): the state the
 /// daemon refreshed, protected or degraded, and the key that state names.
 /// The lookup itself judges a degraded state, exactly as it does for the
-/// proxy, and a lookup that may audit a refused local row writes that audit
-/// on a connection of its own (`Saved::audits_refusals`). A claim procures the
+/// proxy. `saved_at` still hands a degraded store with local rows to the
+/// proxy, whose lookup can write the audit events those rows raise; a store
+/// of remote rows alone no longer leaves the session. A claim procures the
 /// same evidence (`_claim_integrity_evidence`), so the claim and the package
 /// spend read with it too.
 /// Without a key, or with a state that names another key, the proxy would
