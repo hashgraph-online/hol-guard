@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import importlib
 import io
 import json
@@ -12,13 +13,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import commands_dispatch_local as dispatch
-from codex_plugin_scanner.guard.cli.update_preload import emit_update_result, load_package_before_install
+from codex_plugin_scanner.guard.cli.update_preload import RENDER_MODULE, emit_update_result
 
 OLD_RELEASE = {
     "__init__.py": "",
     "output.py": "def old_link():\n    return 'old'\n",
     "render.py": "from .output import old_link\n\ndef emit():\n    return old_link()\n",
-    "optional.py": "import a_dependency_this_machine_does_not_have\n",
 }
 NEW_RELEASE = {
     "output.py": "def new_link():\n    return 'new'\n",
@@ -59,15 +59,28 @@ def test_a_module_first_imported_after_the_install_breaks_without_the_preload(re
         importlib.import_module(f"{name}.render")
 
 
-def test_the_preload_keeps_the_run_on_the_release_that_started_it(release) -> None:
+def test_a_module_imported_before_the_install_keeps_the_old_release(release) -> None:
     name, root = release
-    assert load_package_before_install(name) == 1  # the optional module
+    importlib.import_module(f"{name}.render")
     _install_new_release(root)
     assert importlib.import_module(f"{name}.render").emit() == "old"
 
 
-def test_a_missing_package_counts_as_one_failure() -> None:
-    assert load_package_before_install("guard_release_that_is_not_installed") == 1
+def _module_level_imports(path: Path) -> set[tuple[str, str]]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return {
+        ("." * node.level + (node.module or ""), alias.name)
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+
+
+def test_the_renderer_loads_when_the_cli_starts_not_after_the_install() -> None:
+    cli = Path(dispatch.__file__).parent
+    assert (".", "render") in _module_level_imports(cli / "update_preload.py")
+    assert (".update_preload", "emit_update_result") in _module_level_imports(cli / "commands_dispatch_local.py")
+    assert RENDER_MODULE in sys.modules
 
 
 def _broken_emit(_command: str, _payload: dict[str, object], _as_json: bool) -> None:
@@ -95,7 +108,6 @@ def test_a_working_renderer_is_used() -> None:
 
 def _run_update(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, dry_run: bool) -> list[str]:
     calls: list[str] = []
-    monkeypatch.setattr(dispatch, "load_package_before_install", lambda: calls.append("preload") or 0)
     monkeypatch.setattr(dispatch, "_migrate_legacy_macos_secrets", lambda _store: None, raising=False)
 
     def update(**_kwargs: object) -> tuple[dict[str, object], int]:
@@ -109,9 +121,8 @@ def _run_update(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, dry_run: boo
     return calls
 
 
-def test_an_update_loads_the_package_before_it_installs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    assert _run_update(tmp_path, monkeypatch, dry_run=False) == ["preload", "install", "emit"]
-
-
-def test_a_dry_run_installs_nothing_and_skips_the_preload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    assert _run_update(tmp_path, monkeypatch, dry_run=True) == ["install", "emit"]
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_an_update_prints_its_result_through_the_fallback_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    assert _run_update(tmp_path, monkeypatch, dry_run=dry_run) == ["install", "emit"]
