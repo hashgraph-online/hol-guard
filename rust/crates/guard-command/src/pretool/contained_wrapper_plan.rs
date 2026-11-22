@@ -32,6 +32,9 @@ pub struct ContainedOutput {
     pub merge_stderr: bool,
     /// The label a trailing `; echo "label$?"` prints before the status.
     pub status_label: Option<String>,
+    /// The status label was written `${PIPESTATUS[0]}`, so it asks for the
+    /// core's own status instead of the one the shell would have last read.
+    pub status_from_core: bool,
     /// The label a trailing report prints when the core succeeds, from
     /// `; echo <label>` or `&& echo <label>`.
     pub success_label: Option<String>,

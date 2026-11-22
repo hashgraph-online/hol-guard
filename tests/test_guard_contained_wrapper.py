@@ -95,6 +95,11 @@ def test_peels_verified_cd_and_bounded_filters(tmp_path: Path) -> None:
             "pytest -q",
             OutputFilter("tail", 5, True, success_label="PASS", failure_label="FAIL"),
         ),
+        (
+            'pytest -q 2>&1 | tail -5; echo "exit=${PIPESTATUS[0]}"',
+            "pytest -q",
+            OutputFilter("tail", 5, True, "exit=", status_from_core=True),
+        ),
     ],
 )
 def test_peels_merged_stderr_and_final_status_echo(
@@ -107,6 +112,8 @@ def test_status_echo_reports_the_shell_status() -> None:
     assert OutputFilter("all", 0, True, "exit=").status_line(3) == "exit=3\n"
     # After a pipe, `$?` is the filter's status, not the producer's.
     assert OutputFilter("tail", 5, True, "exit=").status_line(3) == "exit=0\n"
+    # `${PIPESTATUS[0]}` asks past the filter for the producer's own status.
+    assert OutputFilter("tail", 5, True, "exit=", status_from_core=True).status_line(3) == "exit=3\n"
     assert OutputFilter("all", 0, True).status_line(3) is None
 
 
