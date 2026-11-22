@@ -2076,6 +2076,8 @@ def _connect_status_text(payload: dict[str, object]) -> str:
     milestone = str(payload.get("milestone") or "")
     if status == "connected" and milestone == "sync_not_available":
         return "Guard is running locally"
+    if status == "connected" and milestone == "sync_status_unavailable":
+        return "This device is connected"
     if status == "connected" and milestone == "first_sync_pending":
         reason = _connect_reason_text(payload)
         if _connect_reason_requires_login(reason) or _connect_reason_requires_paid_plan(reason):
@@ -2098,6 +2100,8 @@ def _connect_milestone_text(payload: dict[str, object]) -> str:
         return "Waiting for browser approval"
     if milestone == "sync_not_available":
         return "Upgrade to sync this device to Guard Cloud"
+    if milestone == "sync_status_unavailable":
+        return "The last Guard Cloud sync cannot be read while the native Guard runtime is unavailable"
     if milestone == "first_sync_pending":
         reason = _connect_reason_text(payload)
         if _connect_reason_requires_login(reason):

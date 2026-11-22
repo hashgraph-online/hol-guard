@@ -1358,6 +1358,21 @@ def run_guard_browser_connect_command(
     return payload
 
 
+_SYNC_SUMMARY_UNAVAILABLE_REASON = (
+    "The native Guard runtime is unavailable, so the last Guard Cloud sync cannot be read."
+)
+
+
+def _connected_milestone(has_sync_summary: bool, unavailable_reason: str | None) -> str:
+    """The first-sync milestone of a connected machine with no stored connect state."""
+
+    if unavailable_reason is not None:
+        return "sync_status_unavailable"
+    if has_sync_summary:
+        return "first_sync_succeeded"
+    return "first_sync_pending"
+
+
 def build_connect_status_payload(
     *,
     store: GuardStore,
@@ -1392,14 +1407,22 @@ def build_connect_status_payload(
     oauth_repair_required = (
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
     )
-    has_sync_summary = bool(store.get_sync_payload("sync_summary"))
+    sync_summary_unavailable: str | None = None
+    try:
+        has_sync_summary = bool(store.cloud_status_rows().sync_summary)
+    except NativeGuardStoreUnavailable as error:
+        # The receipt sync summary is unknown: report that, never a guessed milestone.
+        has_sync_summary = False
+        sync_summary_unavailable = error.reason
     status = str(latest_state.get("status") or "not_paired") if latest_state is not None else "not_paired"
     milestone = str(latest_state.get("milestone") or "not_started") if latest_state is not None else "not_started"
     reason = latest_state.get("reason") if latest_state is not None else None
     stored_sync_url = latest_state.get("sync_url") if latest_state is not None else None
     if latest_state is None and cloud_profile is not None:
         status = "connected"
-        milestone = "first_sync_succeeded" if has_sync_summary else "first_sync_pending"
+        milestone = _connected_milestone(has_sync_summary, sync_summary_unavailable)
+        if sync_summary_unavailable is not None:
+            reason = _SYNC_SUMMARY_UNAVAILABLE_REASON
     recovery_command = connect_recovery_command(latest_state)
     if latest_state is None and cloud_profile is not None and has_sync_summary:
         recovery_command = "hol-guard sync"
@@ -1430,6 +1453,11 @@ def build_connect_status_payload(
         "connect_status_command": CONNECT_STATUS_COMMAND,
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
         "review_event_outbox": review_event_status,
+        "sync_summary": (
+            {"available": True}
+            if sync_summary_unavailable is None
+            else {"available": False, "unavailable_reason": sync_summary_unavailable}
+        ),
         "cloud_actions": connect_status_cloud_actions(store, oauth_storage_health=oauth_storage_health),
     }
     if review_event_status.get("binding_state") == "quarantined" and review_event_binding is not None:

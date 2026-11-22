@@ -97,6 +97,9 @@ pub(crate) mod fleet_posture_state;
 #[path = "guard_store_cloud_review_settings.rs"]
 pub(crate) mod cloud_review_settings;
 
+#[path = "guard_store_cloud_status_rows.rs"]
+pub(crate) mod cloud_status_rows;
+
 #[path = "guard_store_sync_delivery_rows.rs"]
 pub(crate) mod sync_delivery_rows;
 
@@ -116,6 +119,7 @@ pub(crate) mod policy_trust_rows;
 pub(crate) fn handles_row_method(method: &str) -> bool {
     fleet_posture_state::handles(method)
         || cloud_review_settings::handles(method)
+        || cloud_status_rows::handles(method)
         || sync_delivery_rows::handles(method)
         || exact_cloud_state::handles(method)
         || worker_host::handles(method)
@@ -135,6 +139,9 @@ pub(crate) fn dispatch_row_method(
         }
         _ if cloud_review_settings::handles(method) => {
             cloud_review_settings::dispatch(connection, method, args)
+        }
+        _ if cloud_status_rows::handles(method) => {
+            cloud_status_rows::dispatch(connection, method, args)
         }
         _ if sync_delivery_rows::handles(method) => {
             sync_delivery_rows::dispatch(connection, method, args)
