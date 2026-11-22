@@ -162,6 +162,16 @@ pub(super) fn project_reviewed(
     })
 }
 
+/// Where a simple command's settings are read: the caller's path context,
+/// and whether this is the first simple command on the line. Only the first
+/// one still stands in the caller's working directory, so only there can a
+/// relative setting value be resolved against it.
+#[derive(Clone, Copy)]
+struct SettingSite<'a> {
+    context: PathContext<'a>,
+    first_command: bool,
+}
+
 fn project_with(
     command: &str,
     mut setting: Option<&mut reviewed::Reviewed>,
@@ -196,8 +206,10 @@ fn project_with(
             index,
             &mut removed,
             setting.as_deref_mut(),
-            context,
-            first_command,
+            SettingSite {
+                context,
+                first_command,
+            },
         )?;
         first_command = false;
     }
@@ -225,8 +237,7 @@ fn strip_prefixes(
     mut index: usize,
     removed: &mut [bool],
     mut setting: Option<&mut reviewed::Reviewed>,
-    context: PathContext<'_>,
-    first_command: bool,
+    site: SettingSite<'_>,
 ) -> Option<usize> {
     let mut stripped = false;
     let mut required = Vec::new();
@@ -265,9 +276,16 @@ fn strip_prefixes(
                 return None;
             }
             if !(inert_assignment(name, value)
-                || !reviewed && ordinary_project_setting(name, value, context, first_command))
+                || !reviewed
+                    && ordinary_project_setting(name, value, site.context, site.first_command))
             {
-                search_path::review(setting.as_deref_mut(), &mut required, name, value, context)?;
+                search_path::review(
+                    setting.as_deref_mut(),
+                    &mut required,
+                    name,
+                    value,
+                    site.context,
+                )?;
             }
         } else if token.value == "env" || token.value == "/usr/bin/env" {
             removed[index] = true;
@@ -278,8 +296,7 @@ fn strip_prefixes(
                 removed,
                 setting.as_deref_mut(),
                 &mut required,
-                context,
-                first_command,
+                site,
             )?;
             stripped = true;
             continue;
@@ -328,8 +345,7 @@ fn strip_env_options(
     removed: &mut [bool],
     mut setting: Option<&mut reviewed::Reviewed>,
     required: &mut Vec<&'static [&'static str]>,
-    context: PathContext<'_>,
-    first_command: bool,
+    site: SettingSite<'_>,
 ) -> Option<usize> {
     while index < tokens.len() && !tokens[index].is_control {
         let token = &tokens[index];
@@ -368,9 +384,15 @@ fn strip_env_options(
         } else if let Some((name, assigned)) = assignment(token) {
             if !(inert_assignment(name, assigned)
                 || setting.is_none()
-                    && ordinary_project_setting(name, assigned, context, first_command))
+                    && ordinary_project_setting(name, assigned, site.context, site.first_command))
             {
-                search_path::review(setting.as_deref_mut(), required, name, assigned, context)?;
+                search_path::review(
+                    setting.as_deref_mut(),
+                    required,
+                    name,
+                    assigned,
+                    site.context,
+                )?;
             }
         } else {
             break;
