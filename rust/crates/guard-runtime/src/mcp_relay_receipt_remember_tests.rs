@@ -116,3 +116,32 @@ fn a_home_without_a_store_hands_back_the_remembering_record() {
     assert_eq!(unwritten, [remembered()]);
     let _ = std::fs::remove_dir_all(&home);
 }
+
+fn control_after(tag: &str, committed: bool) -> Value {
+    let home = store_home(tag, true);
+    super::save(
+        home.to_str().unwrap(),
+        &remembered(),
+        "2026-01-01T00:00:00Z",
+        |_| (None, committed),
+    );
+    let control =
+        load_policy_integrity_control_state(&mut EncryptedFileSecretStore::new(&home), &home)
+            .expect("control state");
+    let _ = std::fs::remove_dir_all(&home);
+    control
+}
+
+#[test]
+fn a_write_that_never_committed_puts_the_earlier_state_back() {
+    let control = control_after("relay-remember-uncommitted", false);
+    assert_eq!(control["generation"], json!(0));
+    assert!(control["pending_generation"].is_null(), "{control}");
+}
+
+#[test]
+fn a_committed_write_without_a_reply_leaves_the_generation_pending() {
+    let control = control_after("relay-remember-committed-silent", true);
+    assert_eq!(control["generation"], json!(0));
+    assert_eq!(control["pending_generation"], json!(1), "{control}");
+}

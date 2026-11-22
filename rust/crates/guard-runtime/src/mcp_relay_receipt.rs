@@ -195,7 +195,7 @@ fn write_with_notices(
                 // a retry never saves the allow twice.
                 if let Some(now) = remembered {
                     remember::save(guard_home, &record, &now, |args| {
-                        evaluate(guard_home, busy_timeout_ms, remember::METHOD, args).0
+                        evaluate(guard_home, busy_timeout_ms, remember::METHOD, args)
                     });
                 }
                 if !store(guard_home, busy_timeout_ms, RECEIPT_METHOD, receipt) {

@@ -63,7 +63,7 @@ pub(super) fn save(
     guard_home: &str,
     record: &Value,
     now: &str,
-    store: impl FnOnce(Map<String, Value>) -> Option<Value>,
+    store: impl FnOnce(Map<String, Value>) -> (Option<Value>, bool),
 ) {
     let identity = &record["identity"];
     let artifact = &identity["artifact"];
@@ -116,13 +116,13 @@ pub(super) fn save(
 }
 
 /// `upsert_policy` under a protected integrity state: the pending generation
-/// lands before the row is signed and is finalized from the reply, or the
-/// prior control state is put back. Without key material the allow is not
+/// lands before the row is signed and is finalized from the reply. The prior
+/// control state is put back only when the write did not commit. Without key material the allow is not
 /// saved, since an unsigned local row is ignored under either state.
 fn signed(
     home: &Path,
     mut args: Map<String, Value>,
-    store: impl FnOnce(Map<String, Value>) -> Option<Value>,
+    store: impl FnOnce(Map<String, Value>) -> (Option<Value>, bool),
 ) {
     let mut secrets = EncryptedFileSecretStore::new(home);
     let Some(material) = policy_integrity_secret_material(&mut secrets, home) else {
@@ -163,15 +163,19 @@ fn signed(
     );
     args.insert("integrity_key_id".to_owned(), json!(material.key_id));
     args.insert("current_generation".to_owned(), json!(generation));
-    let finalized = store(args)
+    let (reply, committed) = store(args);
+    let finalized = reply
         .and_then(|reply| reply.get("next_control_state").cloned())
         .and_then(|proposed| finalization_state(Some(&pending), &proposed));
-    match finalized {
-        Some(finalized) if put(&mut secrets, &control_ref, &finalized) => {}
-        _ => {
-            put(&mut secrets, &control_ref, &current);
-        }
+    if finalized.is_some_and(|finalized| put(&mut secrets, &control_ref, &finalized)) {
+        return;
     }
+    if !committed {
+        put(&mut secrets, &control_ref, &current);
+    }
+    // A committed write re-signed every local row at the next generation, so
+    // the earlier state would reject them all as a rollback. The pending
+    // state stays for the integrity reconcile, which decides the generation.
 }
 
 /// The trusted control state, written at generation 0 when the home has none.
