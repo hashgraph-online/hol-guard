@@ -96,3 +96,35 @@ def test_a_malformed_committed_answer_is_refused(answer):
     store, _ = answered(answer)
     with pytest.raises(sqlite3.DatabaseError, match="extension_control_transition_committed"):
         extension_control_transition_committed(store, 4)
+
+
+def test_an_open_connection_scope_reads_on_the_shared_connection(monkeypatch):
+    from codex_plugin_scanner.guard import native_extension_control_head
+
+    connection = sqlite3.connect(":memory:")
+    connection.executescript(
+        "create table extension_control_authority_snapshot ("
+        "  singleton integer primary key, revision, catalog_digest, snapshot_digest);"
+        "create table extension_control_authority_transition (revision integer primary key, phase text not null);"
+    )
+
+    def refuse(method, args):
+        raise AssertionError("an owned scope must not call the resident")
+
+    store = SimpleNamespace(_native_store_call=refuse, _connect=lambda: connection)
+    monkeypatch.setattr(native_extension_control_head, "owns_scope", lambda _store: True)
+
+    assert extension_control_snapshot_head(store) is None
+    assert extension_control_recovery_transition(store, 4) is None
+    assert extension_control_transition_committed(store, 4) is False
+    connection.execute("insert into extension_control_authority_snapshot values (1, 4, 'c', 's')")
+    connection.execute("insert into extension_control_authority_transition values (4, 'committed')")
+    connection.execute("insert into extension_control_authority_transition values (5, 'prepared')")
+    assert extension_control_snapshot_head(store) == SnapshotHead(4, "s", "c")
+    assert extension_control_recovery_transition(store, 4) == 5
+    assert extension_control_recovery_transition(store, 5) == 5
+    assert extension_control_transition_committed(store, 4) is True
+    assert extension_control_transition_committed(store, 5) is False
+    connection.execute("update extension_control_authority_snapshot set revision = '4'")
+    with pytest.raises(ExtensionControlAuthorityError):
+        extension_control_snapshot_head(store)
