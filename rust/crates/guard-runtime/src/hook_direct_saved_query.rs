@@ -2,7 +2,7 @@
 //!
 //! The direct lane supplies the inputs needed to prove the token:
 //! `native_review_policy_binding`
-//! (`hook_native_review_binding.py`) on the edge's own receipt, the request
+//! (`native_hook_review_binding.py`) on the edge's own receipt, the request
 //! fields as `hook_request_parsing.py` reads them, and the environment and
 //! extension-control digest the daemon published. Every other shape defers.
 

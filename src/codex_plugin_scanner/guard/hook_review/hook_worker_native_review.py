@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..native_hook_render import native_recording_only_for_binding
+from ..native_hook_review_binding import native_review_settle
 from ..native_payload_facts import native_hook_facts
 from ..native_policy_fence_window import (
     POLICY_SOURCE_FENCE_ERROR,
@@ -21,7 +22,6 @@ from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_resident_client import native_resident_client_failure_code
 from ..resident_evidence_dispatch import run_resident_evidence
 from .hook_native_review_approval import _native_review_artifact_id
-from .hook_native_review_binding import native_review_settle
 from .hook_native_review_fence import native_review_fence, published_binding_token
 
 if TYPE_CHECKING:

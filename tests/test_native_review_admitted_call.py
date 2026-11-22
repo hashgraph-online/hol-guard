@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from codex_plugin_scanner.guard.hook_review.hook_native_review_binding import admit_accepted_call
+from codex_plugin_scanner.guard.native_hook_review_binding import admit_accepted_call
 
 PAYLOAD = {"tool_call_id": "call-1", "tool_name": "bash", "tool_input": {"command": "ls -la"}}
 

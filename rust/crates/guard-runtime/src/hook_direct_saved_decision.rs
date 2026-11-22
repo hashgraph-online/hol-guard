@@ -8,7 +8,7 @@
 //! (`hook_native_saved_approval.py`) for the stores where those steps read
 //! only local decisions that the bound integrity key verifies:
 //!
-//! - `native_review_policy_binding` (`hook_native_review_binding.py`) on the
+//! - `native_review_policy_binding` (`native_hook_review_binding.py`) on the
 //!   edge's own receipt;
 //! - `native_exact_action_op` with the process
 //!   environment and extension-control digest the daemon published;
