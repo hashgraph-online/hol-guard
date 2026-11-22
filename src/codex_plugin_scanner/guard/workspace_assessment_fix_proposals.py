@@ -22,6 +22,7 @@ left for the user to update with their own tooling.
 
 from __future__ import annotations
 
+import base64
 import json
 import threading
 import uuid
@@ -36,6 +37,9 @@ from .workspace_assessment_worker import queue_manual_run
 MAX_LISTED_PROPOSALS: Final = 100
 MAX_PROPOSALS_PER_PREPARE: Final = 20
 _EDIT_KEYS: Final = ("section", "start", "end", "from_spec", "to_spec")
+# Room the stored proposals may take in the one native request that saves
+# them, under the store's 4 MiB request limit.
+_PREPARE_REQUEST_BYTES: Final = 3 * 1024 * 1024
 _ROOT_UNAVAILABLE: Final = frozenset(
     {
         "workspace_fix_root_not_absolute",
@@ -297,11 +301,17 @@ def _store_prepared(
     now_ms: int,
 ) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
+    size = 0
     for item in planned:
         raw_edits = item["edits"]
         if not isinstance(raw_edits, list):
             raise FixProposalError("workspace_fix_failed", 500)
         edits: list[object] = raw_edits
+        # Text goes over as base64, so characters canonical JSON would escape
+        # six bytes wide cannot outgrow the request.
+        edits_base64 = _base64(json.dumps([_edit_record(edit) for edit in edits], separators=(",", ":")))
+        diff_base64 = _base64(item["diff"])
+        size += len(edits_base64) + len(diff_base64)
         items.append(
             {
                 # The id a new proposal takes; a kept proposal keeps its own.
@@ -309,10 +319,12 @@ def _store_prepared(
                 "manifest_path": item["manifest_path"],
                 "base_sha256": item["base_sha256"],
                 "new_sha256": item["new_sha256"],
-                "edits_json": json.dumps([_edit_record(edit) for edit in edits], separators=(",", ":")),
-                "diff": item["diff"],
+                "edits_base64": edits_base64,
+                "diff_base64": diff_base64,
             }
         )
+    if size > _PREPARE_REQUEST_BYTES:
+        raise FixProposalError("fix_unsupported", 422, reason="diff_too_large")
     method = "store_prepared_workspace_fix_proposals"
     ids = store._native_store_call(
         method,
@@ -333,6 +345,12 @@ def _store_prepared(
     if not isinstance(ids, list) or len(ids) != len(items) or not all(isinstance(item, str) for item in ids):
         raise RuntimeError(f"native {method} returned no answer")
     return [_payload(row) for proposal_id in ids if (row := _fetch(store, proposal_id)) is not None]
+
+
+def _base64(text: object) -> str:
+    if not isinstance(text, str):
+        raise FixProposalError("workspace_fix_failed", 500)
+    return base64.b64encode(text.encode("utf-8")).decode("ascii")
 
 
 def _worktree(store: Any, keys: assessments.WorktreeKeys) -> tuple[Path, bool]:

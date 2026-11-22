@@ -7,6 +7,7 @@
 //! spacing survive, and a proposal's diff only leaves the store while it is
 //! still waiting for review.
 
+use base64::{engine::general_purpose::STANDARD, Engine};
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
@@ -273,8 +274,8 @@ fn store_prepared(connection: &Connection, args: &Args) -> StoreResult<Value> {
             manifest,
             Value::from(base),
             Value::from(new),
-            Value::from(item.str("edits_json")?),
-            Value::from(item.str("diff")?),
+            Value::from(decoded_text(&item, "edits_base64")?),
+            Value::from(decoded_text(&item, "diff_base64")?),
             Value::from(now),
             Value::from(now),
         ]);
@@ -291,6 +292,15 @@ fn store_prepared(connection: &Connection, args: &Args) -> StoreResult<Value> {
         ids.push(proposal);
     }
     Ok(Value::Array(ids))
+}
+
+/// Proposal text arrives as base64 so escaped characters cannot outgrow the
+/// request; it must decode to UTF-8.
+fn decoded_text(item: &Args, key: &str) -> StoreResult<String> {
+    let bytes = STANDARD
+        .decode(item.str(key)?)
+        .or_else(|_| value_error(&format!("{key} must be base64")))?;
+    String::from_utf8(bytes).or_else(|_| value_error(&format!("{key} must be UTF-8")))
 }
 
 /// Moves a prepared proposal to `state`; `applied` also stamps its apply time.

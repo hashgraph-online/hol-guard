@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 from pathlib import Path
 from typing import Any
@@ -162,14 +163,48 @@ def test_preparing_sends_each_planned_edit_with_a_fresh_id() -> None:
     item = items[0]
     assert isinstance(item, dict)
     assert len(str(item["proposal_id"])) == 32
-    assert item["edits_json"] == (
+    assert base64.b64decode(str(item["edits_base64"])).decode() == (
         '[{"section":"dependencies","start":1,"end":2,"from_spec":"1.0.0","to_spec":"1.3.0"}]'
     )
+    assert base64.b64decode(str(item["diff_base64"])).decode() == "diff"
     with pytest.raises(RuntimeError, match="store_prepared_workspace_fix_proposals"):
         fixes._store_prepared(_Store([[]]), KEYS, "f" * 32, run, planned, identity, now_ms=11)
     broken = [{**planned[0], "edits": "x"}]
     with pytest.raises(fixes.FixProposalError):
         fixes._store_prepared(_Store([]), KEYS, "f" * 32, run, broken, identity, now_ms=11)
+
+
+def test_preparing_refuses_diffs_too_large_for_one_request() -> None:
+    # Twenty diffs at the size limit, each all DEL characters: canonical JSON
+    # would escape them six bytes wide, base64 keeps them at four thirds.
+    diff = "\x7f" * fixes.MAX_FIX_DIFF_BYTES
+    planned: list[dict[str, object]] = [
+        {
+            "manifest_path": f"p{index}/package.json",
+            "base_sha256": "b" * 64,
+            "new_sha256": "n" * 64,
+            "edits": [],
+            "diff": diff,
+        }
+        for index in range(fixes.MAX_PROPOSALS_PER_PREPARE)
+    ]
+    identity: dict[str, object] = {
+        "ecosystem": "npm",
+        "package_name": "left-pad",
+        "fix_version": "1.3.0",
+        "advisory_ids": [],
+        "rule_ids": [],
+    }
+    run: dict[str, object] = {"run_id": "r1", "snapshot_digest": "d" * 64}
+    ids = [f"id{index}" for index in range(len(planned))]
+    store = _Store([ids, *[None] * len(planned)])
+    assert fixes._store_prepared(store, KEYS, "f" * 32, run, planned, identity, now_ms=11) == []
+    sent = store.calls[0][1]["items"]
+    assert isinstance(sent, list)
+    assert sum(len(str(item["diff_base64"])) for item in sent) < 3 * 1024 * 1024
+    oversized = [*planned, *planned, *planned]
+    with pytest.raises(fixes.FixProposalError):
+        fixes._store_prepared(_Store([]), KEYS, "f" * 32, run, oversized, identity, now_ms=11)
 
 
 def test_verdicts_are_settled_by_the_native_store(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -342,9 +342,9 @@ fn preparing_keeps_a_matching_proposal_and_stales_the_rest() {
         "store_prepared_workspace_fix_proposals",
         prepare_args(json!([
             {"proposal_id": "fresh1", "manifest_path": "package.json", "base_sha256": "b",
-             "new_sha256": "n", "edits_json": "[]", "diff": "d"},
+             "new_sha256": "n", "edits_base64": "W10=", "diff_base64": "ZA=="},
             {"proposal_id": "fresh2", "manifest_path": "app/package.json", "base_sha256": "b",
-             "new_sha256": "n", "edits_json": "[]", "diff": "d2"},
+             "new_sha256": "n", "edits_base64": "W10=", "diff_base64": "ZDI="},
         ])),
     )
     .expect("stored");
@@ -360,6 +360,41 @@ fn preparing_keeps_a_matching_proposal_and_stales_the_rest() {
     assert_eq!(row["diff_text"], "d2");
     assert_eq!(row["source_run_id"], "r9");
     assert_eq!(row["created_at_ms"], 50);
+}
+
+#[test]
+fn proposal_text_arrives_as_base64_and_must_decode_to_utf8() {
+    let connection = store();
+    // "\u{7f}\u{7f}" would take twelve bytes as canonical JSON escapes.
+    let ids = call(
+        &connection,
+        "store_prepared_workspace_fix_proposals",
+        prepare_args(json!([{"proposal_id": "p", "manifest_path": "package.json",
+            "base_sha256": "b", "new_sha256": "n", "edits_base64": "W10=",
+            "diff_base64": "f38="}])),
+    )
+    .expect("stored");
+    assert_eq!(ids, json!(["p"]));
+    let row = call(
+        &connection,
+        "get_workspace_fix_proposal",
+        json!({"proposal_id": "p"}),
+    )
+    .expect("row");
+    assert_eq!(row["diff_text"], "\u{7f}\u{7f}");
+    for diff in ["not base64!", "/w=="] {
+        let error = call(
+            &connection,
+            "store_prepared_workspace_fix_proposals",
+            prepare_args(
+                json!([{"proposal_id": "q", "manifest_path": "app/package.json",
+                "base_sha256": "b", "new_sha256": "n", "edits_base64": "W10=",
+                "diff_base64": diff}]),
+            ),
+        )
+        .expect_err("refused");
+        assert!(matches!(error, StoreError::Value(_)));
+    }
 }
 
 #[test]
