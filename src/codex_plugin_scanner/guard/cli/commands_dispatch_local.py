@@ -28,6 +28,7 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 from .install_failure import report_install_failure
 from .network_status_command import load_network_status_payload
+from .update_preload import emit_update_result, load_package_before_install
 
 _EPHEMERAL_SIGNED_APPROVAL_PLACEHOLDER = _protect_output._EPHEMERAL_SIGNED_APPROVAL_PLACEHOLDER
 _protect_payload_for_human_output = _protect_output._protect_payload_for_human_output
@@ -375,6 +376,8 @@ def _run_guard_update_command(
         )
         return 0
     dry_run = bool(getattr(args, "dry_run", False))
+    if not dry_run:
+        load_package_before_install()
     store: GuardStore | None
     update_store_error: OSError | RuntimeError | sqlite3.Error | None = None
     if dry_run:
@@ -409,7 +412,7 @@ def _run_guard_update_command(
         notes = [str(item) for item in (notes_value if isinstance(notes_value, list) else []) if isinstance(item, str)]
         notes.append(f"Skipped local Guard repair during update: {update_store_error}")
         payload["notes"] = notes
-    _emit("update", payload, getattr(args, "json", False))
+    emit_update_result(_emit, payload, getattr(args, "json", False))
     return exit_code
 
 def _run_guard_protect_command(
