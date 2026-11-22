@@ -20,6 +20,7 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import native_wheel_sources as sources
 from codex_plugin_scanner.guard.cli import update_commands
+from codex_plugin_scanner.guard.cli import update_native_marker as marker
 from codex_plugin_scanner.guard.cli import update_native_wheel as native
 from codex_plugin_scanner.guard.cli.native_wheel_sources import NativeWheelError, parse_provenance_subjects
 from codex_plugin_scanner.guard.cli.update_native_wheel import (
@@ -252,11 +253,44 @@ def test_bundled_runtime_detection(tmp_path: Path) -> None:
 
 
 def test_marker_binds_only_the_recorded_digest(tmp_path: Path) -> None:
-    assert native.native_wheel_install_recorded(tmp_path, archive_sha256="a" * 64) is False
-    native.record_native_wheel_install(tmp_path, version=VERSION, sha256="a" * 64)
-    assert native.native_wheel_install_recorded(tmp_path, archive_sha256="a" * 64) is True
-    assert native.native_wheel_install_recorded(tmp_path, archive_sha256="b" * 64) is False
-    assert native.native_wheel_install_recorded(tmp_path, archive_sha256=None) is False
+    assert marker.native_wheel_install_recorded(tmp_path, archive_sha256="a" * 64) is False
+    marker.record_native_wheel_install(tmp_path, version=VERSION, sha256="a" * 64)
+    assert marker.native_wheel_install_recorded(tmp_path, archive_sha256="a" * 64) is True
+    assert marker.native_wheel_install_recorded(tmp_path, archive_sha256="b" * 64) is False
+    assert marker.native_wheel_install_recorded(tmp_path, archive_sha256=None) is False
+
+
+def test_marker_binds_a_uv_install_by_staged_path_and_version(tmp_path: Path) -> None:
+    staged = tmp_path / "update-runtime" / "wheels" / "artifact-1-ab" / f"hol_guard-{VERSION}-py3-none-any.whl"
+    marker.record_native_wheel_install(tmp_path, version=VERSION, sha256="a" * 64, staged_path=staged)
+
+    def recorded(path: Path, version: str = VERSION) -> bool:
+        return marker.native_wheel_install_recorded(
+            tmp_path, archive_sha256=None, archive_path=str(path), installed_version=version
+        )
+
+    assert recorded(staged) is True
+    assert recorded(staged, "3.0.0") is False
+    assert recorded(staged.with_name("other.whl")) is False
+    assert marker.native_wheel_install_recorded(tmp_path, archive_sha256="b" * 64, archive_path=str(staged)) is False
+
+
+def test_legacy_marker_binds_a_uv_install_inside_the_update_staging_directory(tmp_path: Path) -> None:
+    marker.record_native_wheel_install(tmp_path, version=VERSION, sha256="a" * 64)
+    wheels = tmp_path / "update-runtime" / "wheels"
+    name = f"hol_guard-{VERSION}-py3-none-macosx_11_0_arm64.whl"
+
+    def recorded(path: Path, version: str = VERSION) -> bool:
+        return marker.native_wheel_install_recorded(
+            tmp_path, archive_sha256=None, archive_path=str(path), installed_version=version
+        )
+
+    assert recorded(wheels / "artifact-7-cd" / name) is True
+    assert recorded(wheels / "artifact-7-cd" / name, "3.0.0") is False
+    assert recorded(wheels / "artifact-7-cd" / "hol_guard-3.0.0-py3-none-any.whl") is False
+    assert recorded(wheels / "elsewhere" / name) is False
+    assert recorded(tmp_path / "Downloads" / "artifact-7-cd" / name) is False
+    assert recorded(wheels / "artifact-7-cd" / "nested" / name) is False
 
 
 class UpdateHarness:
@@ -388,7 +422,7 @@ def test_alpha_update_installs_verified_native_wheel_not_the_pypi_pin(
     assert not any(part.startswith("hol-guard==") for part in command)
     assert harness.installed_wheel_bytes == WHEEL_BYTES[LINUX]
     assert list(harness.scratch.iterdir()) == []
-    assert native.native_wheel_install_recorded(harness.guard_home, archive_sha256=_sha(WHEEL_BYTES[LINUX]))
+    assert marker.native_wheel_install_recorded(harness.guard_home, archive_sha256=_sha(WHEEL_BYTES[LINUX]))
 
 
 def test_alpha_update_self_heals_pure_wheel_at_the_target_version(
@@ -556,7 +590,7 @@ def test_native_wheel_install_stays_updatable_only_when_this_updater_recorded_it
         },
     )
     if recorded:
-        native.record_native_wheel_install(harness.guard_home, version=VERSION, sha256=digest)
+        marker.record_native_wheel_install(harness.guard_home, version=VERSION, sha256=digest)
 
     payload, exit_code = harness.run()
 
@@ -569,11 +603,49 @@ def test_native_wheel_install_stays_updatable_only_when_this_updater_recorded_it
         assert harness.commands == []
 
 
+@pytest.mark.parametrize("marker_shape", ["staged_path", "legacy", "absent"])
+def test_uv_native_install_without_an_archive_hash_stays_updatable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, marker_shape: str
+) -> None:
+    release = FakeRelease(_release_files("3.43.0a2"))
+    harness = UpdateHarness(
+        monkeypatch, tmp_path, current="3.43.0a1", latest_alpha="3.43.0a2", runtime_missing=False, release=release
+    )
+    staged = (
+        harness.guard_home.resolve()
+        / "update-runtime"
+        / "wheels"
+        / "artifact-9-ef"
+        / f"hol_guard-3.43.0a1-py3-none-{LINUX}.whl"
+    )
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: {"url": staged.as_uri(), "archive_info": {}})
+    if marker_shape != "absent":
+        marker.record_native_wheel_install(
+            harness.guard_home,
+            version="3.43.0a1",
+            sha256="a" * 64,
+            staged_path=staged if marker_shape == "staged_path" else None,
+        )
+
+    payload, exit_code = harness.run()
+
+    assert exit_code == 0
+    if marker_shape == "absent":
+        assert payload["status"] == "skipped"
+        assert harness.commands == []
+    else:
+        assert payload["status"] == "updated", payload
+        assert payload["upgrade_source"] == "github_alpha_release"
+        recorded = json.loads((harness.guard_home / "alpha-native-wheel.json").read_text(encoding="utf-8"))
+        assert recorded["version"] == "3.43.0a2"
+        assert Path(recorded["staged_path"]).name == f"hol_guard-3.43.0a2-py3-none-{LINUX}.whl"
+
+
 def _recorded_native_install(
     monkeypatch: pytest.MonkeyPatch, harness: UpdateHarness, version: str = VERSION, *, runtime_missing: bool = False
 ) -> None:
     digest = _sha(WHEEL_BYTES[LINUX])
-    native.record_native_wheel_install(harness.guard_home, version=version, sha256=digest)
+    marker.record_native_wheel_install(harness.guard_home, version=version, sha256=digest)
     monkeypatch.setattr(
         update_commands,
         "_direct_url_payload",
@@ -991,7 +1063,7 @@ def test_runtime_repair_helper_reinstalls_a_native_wheel_this_updater_recorded(
     monkeypatch.setattr(update_commands, "bundled_native_runtime_missing", lambda: True)
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: {"url": "file:///tmp/hol_guard.whl"})
     monkeypatch.setattr(update_commands, "_direct_url_archive_sha256", lambda _payload: "a" * 64)
-    native.record_native_wheel_install(tmp_path, version=STABLE, sha256="a" * 64)
+    marker.record_native_wheel_install(tmp_path, version=STABLE, sha256="a" * 64)
 
     result = update_commands.repair_native_runtime_if_missing(
         context=None, store=None, workspace=None, now=None, guard_home=tmp_path
@@ -1277,3 +1349,65 @@ def test_native_payload_rolls_back_when_a_later_file_cannot_move(
 
     assert list((package_root / "_native").iterdir()) == []
     assert (site / "hol_guard-3.41.0.dist-info" / "RECORD").read_text(encoding="utf-8") == ""
+
+
+def test_marker_is_forgotten_and_a_missing_marker_is_fine(tmp_path: Path) -> None:
+    marker.forget_native_wheel_install(tmp_path)
+    marker.record_native_wheel_install(tmp_path, version=VERSION, sha256="a" * 64)
+    marker.forget_native_wheel_install(tmp_path)
+
+    assert not (tmp_path / "alpha-native-wheel.json").exists()
+
+
+def _uv_staged_install(monkeypatch: pytest.MonkeyPatch, guard_home: Path, *, recorded: bool) -> None:
+    staged = (
+        guard_home.resolve()
+        / "update-runtime"
+        / "wheels"
+        / "artifact-9-ef"
+        / f"hol_guard-{VERSION}-py3-none-{LINUX}.whl"
+    )
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: {"url": staged.as_uri(), "archive_info": {}})
+    monkeypatch.setattr(update_commands, "_current_version", lambda: VERSION)
+    if recorded:
+        marker.record_native_wheel_install(guard_home, version=VERSION, sha256="a" * 64, staged_path=staged)
+
+
+@pytest.mark.parametrize("recorded", [True, False])
+def test_status_does_not_block_a_recorded_uv_native_install(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, recorded: bool
+) -> None:
+    harness = UpdateHarness(
+        monkeypatch, tmp_path, current=VERSION, latest_alpha=VERSION, runtime_missing=False, release=FakeRelease({})
+    )
+    _uv_staged_install(monkeypatch, harness.guard_home, recorded=recorded)
+    monkeypatch.setattr(update_commands, "load_guard_config", lambda _home: SimpleNamespace(update_channel="alpha"))
+
+    status = update_commands.build_guard_update_status_payload(guard_home=harness.guard_home)
+
+    assert status["auto_updatable"] is recorded
+    if recorded:
+        assert status["blocked_reason"] is None
+
+
+@pytest.mark.parametrize("recorded", [True, False])
+def test_runtime_repair_helper_reinstalls_a_recorded_uv_native_install(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, recorded: bool
+) -> None:
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(update_commands, "run_guard_update", lambda **kwargs: calls.append(kwargs) or ({}, 0))
+    monkeypatch.setattr(native, "_platform_tags", lambda: [LINUX])
+    monkeypatch.setattr(update_commands, "_is_desktop_managed_runtime", lambda: False)
+    monkeypatch.setattr(update_commands, "bundled_native_runtime_missing", lambda: True)
+    _uv_staged_install(monkeypatch, tmp_path, recorded=recorded)
+
+    result = update_commands.repair_native_runtime_if_missing(
+        context=None, store=None, workspace=None, now=None, guard_home=tmp_path
+    )
+
+    if recorded:
+        assert result == ({}, 0)
+        assert calls[0]["native_repair_only"] is True
+    else:
+        assert result is None
+        assert calls == []

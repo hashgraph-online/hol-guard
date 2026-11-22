@@ -25,7 +25,6 @@ import base64
 import csv
 import hashlib
 import io
-import json
 import os
 import shutil
 import stat
@@ -69,9 +68,6 @@ PUBLISHED_PLATFORM_TAGS = frozenset(
 )
 # Stable native wheels for these platforms are attached to the GitHub release and never uploaded to PyPI.
 GITHUB_ONLY_PLATFORM_TAGS = frozenset({"macosx_13_0_x86_64", "manylinux_2_17_aarch64", "win_arm64"})
-# The marker keeps its alpha-era name so installs recorded by earlier updaters stay managed.
-_MARKER_NAME = "alpha-native-wheel.json"
-_MARKER_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -374,21 +370,6 @@ def download_native_wheel(
     return NativeWheelDownload(path=target, directory=directory, sha256=expected_sha256, version=version)
 
 
-def record_native_wheel_install(guard_home: Path, *, version: str, sha256: str) -> None:
-    """Remember the verified native wheel so later updates keep managing this install."""
-
-    payload = json.dumps(
-        {"schema_version": _MARKER_SCHEMA_VERSION, "version": version, "wheel_sha256": sha256},
-        sort_keys=True,
-    )
-    temporary = guard_home / f".{_MARKER_NAME}.{os.getpid()}.tmp"
-    try:
-        temporary.write_text(payload, encoding="utf-8")
-        os.replace(temporary, guard_home / _MARKER_NAME)
-    except OSError:
-        temporary.unlink(missing_ok=True)
-
-
 _NATIVE_PAYLOAD_PREFIX = "codex_plugin_scanner/_native/"
 
 
@@ -494,22 +475,6 @@ def _write_record(record: Path, existing: str, rows: list[list[str]]) -> None:
         os.replace(temporary, record)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-def native_wheel_install_recorded(guard_home: Path, *, archive_sha256: str | None) -> bool:
-    """True when the installed wheel's digest matches a native wheel this updater installed."""
-
-    if not archive_sha256:
-        return False
-    try:
-        payload = json.loads((guard_home / _MARKER_NAME).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False
-    return (
-        isinstance(payload, dict)
-        and payload.get("schema_version") == _MARKER_SCHEMA_VERSION
-        and payload.get("wheel_sha256") == archive_sha256
-    )
 
 
 def _platform_tags() -> list[str]:
