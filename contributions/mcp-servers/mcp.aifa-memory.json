@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.aifa-memory",
+  "version": "1.9.8",
+  "name": "AIfa Memory",
+  "description": "Encrypted long-term memory for AI agents via Streamable HTTP at https://aifa.works/api/mcp with optional permanent Arweave anchoring (AES-256-GCM). Discovery (initialize, tools/list) is public; every tool call requires a per-user Bearer key from https://aifa.works/mcp. Read-only info tools (memory_about, plans, partner_kit) inherit Guard defaults; every tool that reads or modifies private memory, creates payment invoices, requests payouts or configures webhooks is gated on review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "maksimgalatin",
+    "displayName": "Maksim Galatin",
+    "url": "https://github.com/MaksimGalatin"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCloud",
+    "background": "#0B1020"
+  },
+  "homepage": "https://aifa.works/mcp",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://aifa.works/api/mcp",
+    "serverNames": [
+      "aifa-memory",
+      "aifa-memory-mcp"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-account-read",
+    "external-shared-state-write",
+    "external-payment-request",
+    "external-payouts-and-refunds",
+    "external-webhook-registration"
+  ],
+  "tools": [
+    {
+      "name": "memory_about",
+      "state": "inherit"
+    },
+    {
+      "name": "plans",
+      "state": "inherit"
+    },
+    {
+      "name": "partner_kit",
+      "state": "inherit"
+    },
+    {
+      "name": "memory_search",
+      "state": "review"
+    },
+    {
+      "name": "memory_recent",
+      "state": "review"
+    },
+    {
+      "name": "memory_write",
+      "state": "review"
+    },
+    {
+      "name": "memory_export",
+      "state": "review"
+    },
+    {
+      "name": "account_status",
+      "state": "review"
+    },
+    {
+      "name": "buy_plan",
+      "state": "review"
+    },
+    {
+      "name": "request_payout",
+      "state": "review"
+    },
+    {
+      "name": "client_link",
+      "state": "review"
+    },
+    {
+      "name": "client_report",
+      "state": "review"
+    },
+    {
+      "name": "find_clients",
+      "state": "review"
+    },
+    {
+      "name": "my_deals",
+      "state": "review"
+    },
+    {
+      "name": "set_webhook",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://aifa.works/mcp",
+    "https://github.com/MaksimGalatin/aifa-memory-mcp",
+    "https://aifa.works/llms.txt",
+    "https://aifa.works/privacy",
+    "https://aifa.works/terms"
+  ],
+  "saferAlternatives": [
+    "Run discovery (initialize and tools/list) without credentials; once a per-user Bearer key is configured, use read-only info tools (memory_about, plans, partner_kit) that do not read or modify private memory.",
+    "Keep memory_write, memory_export, buy_plan, request_payout and set_webhook on Review so private memory exports, invoices, payouts and webhooks require explicit approval."
+  ]
+}
