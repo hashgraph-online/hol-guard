@@ -31,7 +31,11 @@ def sync_payload_snapshot_rows(answer: object, keys: tuple[str, ...]) -> dict[st
     if not isinstance(answer, dict) or set(answer) != {"rows", "unreadable"}:
         raise RuntimeError("native sync_payload_snapshot returned no answer")
     unreadable = answer["unreadable"]
-    if not isinstance(unreadable, list) or not set(unreadable) <= set(keys):
+    if (
+        not isinstance(unreadable, list)
+        or not all(isinstance(key, str) for key in unreadable)
+        or not set(unreadable) <= set(keys)
+    ):
         raise RuntimeError("native sync_payload_snapshot returned no answer")
     if unreadable:
         raise SyncPayloadRowUnreadableError(f"sync_payload_unreadable:{','.join(unreadable)}")
