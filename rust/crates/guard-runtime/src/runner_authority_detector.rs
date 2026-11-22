@@ -12,6 +12,10 @@ use super::context_digest::parse_context_token;
 use super::context_digest_json::write_canonical_json_with_limit;
 use super::runner_authority_op::{KindResult, ERR_INVALID, ERR_TOO_LARGE};
 
+/// The opt-in detector debug trace writer.
+#[path = "runner_detector_trace.rs"]
+pub(crate) mod trace;
+
 pub(crate) const RUNTIME_DETECTOR_WARN_REASON: &str = "runtime_detector_warn";
 pub(crate) const RUNTIME_DETECTOR_REVIEW_REASON: &str = "runtime_detector_review";
 const INTERACTIVE_ALLOW_LABELS: [&str; 4] = [
