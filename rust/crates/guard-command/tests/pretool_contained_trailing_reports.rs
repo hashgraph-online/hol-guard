@@ -48,6 +48,48 @@ fn a_trailing_report_rides_into_containment_with_the_run_it_describes() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// A run piped through a filter cannot report its own status with `$?`, which
+/// by then belongs to the last stage of the pipeline. An agent that wants the
+/// run's status writes `${PIPESTATUS[0]}`, the first stage, which is the run
+/// itself. That is the same report, and it rides into containment too.
+#[test]
+fn a_report_reading_the_first_stage_status_rides_into_containment() {
+    let root = fixture();
+    let project = root.join("project");
+    let project = project.to_str().unwrap();
+    for harness in ["omp", "zcode", "claude-code", "codex"] {
+        for (command, reason) in [
+            (
+                format!(
+                    "cd {project} && bunx vitest run x 2>&1 | tail -20; echo \"exit=${{PIPESTATUS[0]}}\""
+                ),
+                "native_vitest_readonly_containment_required",
+            ),
+            (
+                format!("cd {project} && bunx vitest run x; echo \"exit=${{PIPESTATUS[0]}}\""),
+                "native_vitest_readonly_containment_required",
+            ),
+            (
+                format!(
+                    "cd {project} && bun run typecheck 2>&1 | grep \"error TS\" | head -5; echo \"tsc-exit=${{PIPESTATUS[0]}}\""
+                ),
+                "native_node_tool_readonly_containment_required",
+            ),
+        ] {
+            let result = classify(&root, harness, &command);
+            assert_eq!(result.decision, "deny", "{harness}: {command}");
+            if cfg!(target_os = "macos") {
+                assert_eq!(
+                    (result.minimum_action.as_str(), result.reason_code.as_str()),
+                    ("sandbox-required", reason),
+                    "{harness}: {command}"
+                );
+            }
+        }
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 /// A report is one `echo` of one printable label and nothing else. A step
 /// that reads a file, a second label behind the first, an empty `echo`, or a
 /// status the shell would read off the echo rather than off the run are all
@@ -62,6 +104,10 @@ fn a_step_that_is_not_a_report_keeps_the_review() {
             // `$?` after `&&` or `||` is the echo's own status, not the run's.
             format!("cd {project} && bunx vitest run x && echo \"exit=$?\""),
             format!("cd {project} && bunx vitest run x || echo \"exit=$?\""),
+            // After `&&` or `||` the status array the echo would read is its
+            // own run's, not the one the report claims to describe.
+            format!("cd {project} && bunx vitest run x && echo \"exit=${{PIPESTATUS[0]}}\""),
+            format!("cd {project} && bunx vitest run x || echo \"exit=${{PIPESTATUS[0]}}\""),
             // A second label behind the first is a list, not one report.
             format!("cd {project} && bunx vitest run x && echo PASS && echo AGAIN"),
             format!("cd {project} && bunx vitest run x; echo done; echo again"),
