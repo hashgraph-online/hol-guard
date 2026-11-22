@@ -126,3 +126,69 @@ def test_an_update_prints_its_result_through_the_fallback_guard(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
 ) -> None:
     assert _run_update(tmp_path, monkeypatch, dry_run=dry_run) == ["install", "emit"]
+
+
+GUARD_MODULE = "older_release_modules.py"
+
+
+def _skewed_release(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, new_version: str) -> tuple[str, Path]:
+    """An older release whose CLI imports the renderer only after the install."""
+    name = f"guard_skew_{tmp_path.name.replace('-', '_')}"
+    root = tmp_path / name
+    root.mkdir()
+    _write(root, {**OLD_RELEASE, "version.py": '__version__ = "1.0.0"\n'})
+    monkeypatch.syspath_prepend(str(tmp_path))
+    importlib.import_module(name)
+    importlib.import_module(f"{name}.version")
+    importlib.import_module(f"{name}.output")
+    guard = (Path(dispatch.__file__).parent / GUARD_MODULE).read_text(encoding="utf-8")
+    new_render = "from . import older_release_modules  # noqa: F401\n" + NEW_RELEASE["render.py"]
+    _write(
+        root,
+        {
+            **NEW_RELEASE,
+            "render.py": new_render,
+            "version.py": f'__version__ = "{new_version}"\n',
+            GUARD_MODULE: guard,
+        },
+    )
+    for cache in root.glob("__pycache__/*"):
+        cache.unlink()
+    importlib.invalidate_caches()
+    return name, root
+
+
+@pytest.fixture
+def cleanup_skew(tmp_path: Path):
+    yield
+    prefix = f"guard_skew_{tmp_path.name.replace('-', '_')}"
+    for module in [key for key in sys.modules if key == prefix or key.startswith(f"{prefix}.")]:
+        del sys.modules[module]
+
+
+def test_an_older_cli_prints_through_the_new_renderer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cleanup_skew: None
+) -> None:
+    name, _root = _skewed_release(tmp_path, monkeypatch, new_version="2.0.0")
+    render = importlib.import_module(f"{name}.render")
+    assert render.emit() == "new"
+    dropped = importlib.import_module(f"{name}.older_release_modules").DROPPED
+    assert set(dropped) == {f"{name}.version", f"{name}.output"}
+
+
+def test_a_cli_running_the_release_on_disk_drops_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cleanup_skew: None
+) -> None:
+    name, _root = _skewed_release(tmp_path, monkeypatch, new_version="1.0.0")
+    old_output = sys.modules[f"{name}.output"]
+    with pytest.raises(ImportError):
+        importlib.import_module(f"{name}.render")
+    assert sys.modules[f"{name}.output"] is old_output
+
+
+def test_the_renderer_checks_for_an_older_release_before_its_other_imports() -> None:
+    tree = ast.parse((Path(dispatch.__file__).parent / "render.py").read_text(encoding="utf-8"))
+    imports = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
+    first = next(node for node in imports if not (isinstance(node, ast.ImportFrom) and node.module == "__future__"))
+    assert isinstance(first, ast.ImportFrom)
+    assert (first.level, first.module, [alias.name for alias in first.names]) == (1, None, ["older_release_modules"])

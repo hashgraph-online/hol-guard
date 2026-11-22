@@ -10,11 +10,14 @@ use crate::guard_store_db::{exec, query_all, query_one, text, value_error, Store
 use crate::guard_store_json::dumps_sorted;
 use crate::guard_store_local_cli_mcp_snapshot::decode_snapshot;
 use crate::guard_store_observed_mcp::marker_source;
+use crate::local_mcp_probe::slug;
 
 impl Writer<'_> {
     /// `store_mcp_catalog.acknowledge_catalog_changes`: a saved choice for a
     /// new or changed tool reviews that change, but only on the catalog
-    /// revision the choices were made against.
+    /// revision the choices were made against. A tool name is matched by its
+    /// command id, slugged as the catalog probe slugs it, so a saved
+    /// Other-tools choice reviews the tools folded into it.
     pub(super) fn acknowledge_catalog_changes(
         &self,
         update: &Update<'_>,
@@ -44,8 +47,7 @@ impl Writer<'_> {
         };
         let is_reviewed = |name: &Value| {
             name.as_str()
-                .and_then(|name| self.change_ids?.get(name)?.as_str())
-                .is_some_and(|command_id| reviewed.contains_key(command_id))
+                .is_some_and(|name| reviewed.contains_key(&slug(name)))
         };
         let mut updated = changes.clone();
         for key in ["added", "changed"] {

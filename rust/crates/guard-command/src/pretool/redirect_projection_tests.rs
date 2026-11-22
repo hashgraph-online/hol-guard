@@ -442,12 +442,19 @@ fn array_and_json_encoded_command_copies_project_consistently() {
 }
 
 #[test]
-fn a_redirect_inside_shell_control_flow_keeps_the_allow_the_flat_list_earns() {
+fn a_redirect_inside_shell_control_flow_preserves_the_flat_list_safety_floor() {
+    // A shell-name lookup may print an alias or function definition. Redirection
+    // does not make the lookup itself proven metadata-only; neither shell form
+    // may silently regain unconditional Allow through redirect projection.
+    for command in [
+        "command -v rg >/dev/null; echo yes",
+        "if command -v rg >/dev/null; then echo yes; fi",
+    ] {
+        assert_ne!(evaluate(command).minimum_action, "allow", "{command}");
+    }
+
+    // Unrelated bounded, harmless shell-control-flow projections remain Allow.
     for (construct, flat) in [
-        (
-            "if command -v rg >/dev/null; then echo yes; fi",
-            "command -v rg >/dev/null; echo yes",
-        ),
         (
             "if true; then echo yes; fi >/dev/null",
             "true; echo yes >/dev/null",

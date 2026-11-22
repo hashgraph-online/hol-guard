@@ -4023,6 +4023,142 @@
       "expect": "allow"
     },
     {
+      "id": "network-fact-netstat-sockets",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "netstat -an"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-ss-listeners",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ss -tuln"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-ifconfig-interfaces",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ifconfig -a"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-ip-address-show",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ip -br addr show"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-route-get-default",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "route get default"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-arp-table",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "arp -a"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-scutil-resolver",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "scutil --dns"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "network-fact-ipconfig-interface-address",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ipconfig getifaddr en0"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-psql-host-flag",
       "fix_area": "shell",
       "harnesses": [
@@ -19096,7 +19232,8 @@
         "command": "command -v git 2>/dev/null"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "shell-type-lookup-after-which",
@@ -19113,7 +19250,8 @@
         "command": "which deploy-helper.sh 2>&1; type deploy-helper.sh 2>&1"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "shell-type-and-command-describe-lookup",
@@ -19130,7 +19268,8 @@
         "command": "type -a git; command -V git"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-type-lookup-of-credential-path",
@@ -21219,7 +21358,8 @@
         "command": "which vitest 2>/dev/null; type vitest 2>/dev/null; echo DONE"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "session-tool-help-head",
@@ -26771,7 +26911,8 @@
         "command": "which guard 2>/dev/null; type guard 2>/dev/null; echo DONE"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "session-bash-workspace-script-tail",
@@ -33246,6 +33387,40 @@
       "tool": "shell",
       "tool_input": {
         "command": "psql -h ${PRIVATE_TMP}/pg-run -U postgres -l"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-sqlite-select-count-local-database",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sqlite3 inventory.db \"select count(*) from items\""
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-sqlite-json-select-local-database",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sqlite3 -json inventory.db \"select id from items limit 5\""
       },
       "cwd": "org_app",
       "expect": "allow"
@@ -54637,7 +54812,8 @@
         "command": "if command -v rg >/dev/null 2>&1; then echo found; fi"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "shell-if-trailing-discarded-output",
@@ -65458,6 +65634,96 @@
       "tool": "shell",
       "tool_input": {
         "command": "jq -n --arg x * '.'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-type-shell-function-definition",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "type probe_func"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-type-a-shell-function-definition",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "type -a probe_func"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-type-f-shell-alias-definition",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "type -f probe_alias"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-command-V-shell-function-definition",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "command -V probe_func"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-command-v-shell-alias-definition",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "command -v probe_alias"
       },
       "cwd": "worktree",
       "expect": "not_allow",
