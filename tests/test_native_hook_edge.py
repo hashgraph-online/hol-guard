@@ -159,7 +159,10 @@ def _edge_result() -> dict[str, object]:
 
 
 @pytest.mark.parametrize("alias", ("UserPromptSubmit", "userPromptSubmitted", "user_prompt_submit", "prompt"))
-def test_prompt_event_aliases_enter_one_native_authority_route(alias: str) -> None:
+def test_prompt_event_aliases_enter_one_native_authority_route(alias: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+
+    monkeypatch.setattr(policy, "_runtime_availability", lambda *_args, **_kwargs: {"event_name": "UserPromptSubmit"})
     assert canonical_hook_event_name({"hook_event_name": alias}) == "UserPromptSubmit"
 
 

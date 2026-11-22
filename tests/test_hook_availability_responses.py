@@ -4,7 +4,6 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
-    cursor_unparseable_input_permission,
     hook_event_pauses_when_unavailable,
 )
 
@@ -143,22 +142,25 @@ def test_availability_blocks_grok_prompt_and_tools_but_continues_passive_lifecyc
     assert alias["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_cursor_unparseable_input_denies_actions_and_preserves_known_observation() -> None:
-    allow, allow_code = cursor_unparseable_input_permission("beforeReadFile")
-    assert allow_code == 2
-    assert allow["permission"] == "deny"
-    deny, deny_code = cursor_unparseable_input_permission("beforeShellExecution")
-    assert deny_code == 2
-    assert deny["permission"] == "deny"
-    after, after_code = cursor_unparseable_input_permission("afterShellExecution")
-    assert after_code == 0
-    assert after == {}
-    empty, empty_code = cursor_unparseable_input_permission("")
-    assert empty_code == 2
-    assert empty["permission"] == "deny"
+def test_only_events_that_can_still_protect_pause_the_turn(monkeypatch) -> None:
+    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
 
-
-def test_only_events_that_can_still_protect_pause_the_turn() -> None:
+    posture = {
+        "UserPromptSubmit": True,
+        "user_prompt_submitted": True,
+        "PreToolUse": True,
+        "beforeShellExecution": True,
+        "PostToolUse": False,
+        "post_tool": False,
+        "afterShellExecution": False,
+        "SessionStart": False,
+        "Stop": False,
+    }
+    monkeypatch.setattr(
+        policy,
+        "_runtime_availability",
+        lambda payload, **_kwargs: {"pauses": posture[payload["event"]]},
+    )
     # The prompt and anything that gates a tool call pause: Guard can still
     # keep the action from happening.
     for event in ("UserPromptSubmit", "user_prompt_submitted", "PreToolUse", "beforeShellExecution"):

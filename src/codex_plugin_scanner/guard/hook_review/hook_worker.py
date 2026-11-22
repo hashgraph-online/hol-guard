@@ -435,11 +435,7 @@ class HookWorker(HookWorkerNativeMixin):
             return event
         from .hook_availability_policy import canonical_hook_event_name
 
-        for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
-            value = payload.get(key)
-            if isinstance(value, str) and value.strip():
-                return canonical_hook_event_name(payload)
-        return None
+        return canonical_hook_event_name(payload, guard_home=self.store.guard_home, deadline=deadline)
 
 
 __all__ = [

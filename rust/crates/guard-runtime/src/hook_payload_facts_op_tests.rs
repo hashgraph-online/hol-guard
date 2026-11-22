@@ -42,6 +42,17 @@ fn cli_admission_uses_a_bounded_seconds_or_milliseconds_hint() {
 }
 
 #[test]
+fn cli_availability_owns_event_posture_without_a_resident() {
+    let output = cli_availability(br#"{"hook_event_name":"copilotPermissionRequest"}"#).unwrap();
+    assert_eq!(output["event_name"], "PermissionRequest");
+    assert_eq!(output["pauses"], true);
+    assert_eq!(output["permission_request"], true);
+
+    let output = cli_availability(br#"{"hook_event_name":"PostToolUse"}"#).unwrap();
+    assert_eq!(output["pauses"], false);
+}
+
+#[test]
 fn copilot_permission_alias_preserves_the_raw_event_name() {
     let request = HookPayloadFactsRequestV1 {
         schema: "guard-hook-payload-facts-request.v1".to_owned(),

@@ -9,6 +9,8 @@ use crate::resident_protocol::encode_response;
 pub(crate) const HOOK_PAYLOAD_FACTS_FEATURE: &str = "hook-payload-facts-v1";
 pub(crate) const CLI_ADMISSION_FEATURE: &str = "native-hook-cli-admission-v1";
 pub(crate) const CLI_ADMISSION_COMMAND: &str = "hook-cli-admission";
+pub(crate) const CLI_AVAILABILITY_FEATURE: &str = "native-hook-availability-v1";
+pub(crate) const CLI_AVAILABILITY_COMMAND: &str = "hook-availability";
 const REQUEST_SCHEMA: &str = "guard-hook-payload-facts-request.v1";
 const RESULT_SCHEMA: &str = "guard-hook-payload-facts-result.v1";
 const COMMAND_ONLY_KEYS: [&str; 14] = [
@@ -76,6 +78,62 @@ pub(crate) fn cli_admission(input: &[u8]) -> Result<Value, String> {
     let maximum = MAX_CLI_HOOK_BUDGET_SECONDS;
     let budget = hook_budget_seconds(remaining_hint(&payload, false).unwrap_or(maximum), maximum);
     Ok(json!({"event_name": runtime_event(&payload), "budget_seconds": budget}))
+}
+
+pub(crate) fn cli_availability(input: &[u8]) -> Result<Value, String> {
+    const MAX_INPUT_BYTES: usize = 64 * 1024;
+    if input.len() > MAX_INPUT_BYTES {
+        return Err("hook_availability_request_too_large".to_owned());
+    }
+    let payload: Map<String, Value> = serde_json::from_slice(input)
+        .map_err(|_| "hook_availability_request_invalid".to_owned())?;
+    Ok(availability_response(&payload))
+}
+
+pub(crate) fn availability_response(payload: &Map<String, Value>) -> Value {
+    let event_name = availability_event(payload);
+    let compact: String = event_name
+        .to_lowercase()
+        .chars()
+        .filter(|character| *character != '_' && *character != '-')
+        .collect();
+    let pauses = if matches!(compact.as_str(), "userpromptsubmit" | "userpromptsubmitted") {
+        true
+    } else if matches!(
+        compact.as_str(),
+        "sessionstart"
+            | "sessionend"
+            | "subagentstart"
+            | "subagentstop"
+            | "subagentend"
+            | "stop"
+            | "notification"
+            | "taskstart"
+            | "taskerror"
+            | "sessionshutdown"
+            | "permissiondenied"
+    ) {
+        false
+    } else {
+        !matches!(compact.as_str(), "posttooluse" | "posttool") && !compact.starts_with("after")
+    };
+    let permission_request = matches!(
+        compact.as_str(),
+        "permissionrequest" | "permissionrequestv2" | "copilotpermissionrequest"
+    );
+    json!({
+        "event_name": event_name,
+        "pauses": pauses,
+        "permission_request": permission_request,
+    })
+}
+
+fn availability_event(payload: &Map<String, Value>) -> String {
+    let mut event = runtime_event(payload);
+    if event == "copilotPermissionRequest" {
+        event = "PermissionRequest".to_owned();
+    }
+    event
 }
 
 pub(crate) fn runtime_event(payload: &Map<String, Value>) -> String {
