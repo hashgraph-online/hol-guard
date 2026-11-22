@@ -9,6 +9,21 @@ from threading import Lock
 _CLI_AVAILABILITY_FEATURE = "native-hook-availability-v1"
 _CLI_AVAILABILITY_COMMAND = "hook-availability"
 _EVENT_FIELDS = ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
+_PASSIVE_EVENT_COMPACT = frozenset(
+    {
+        "sessionstart",
+        "sessionend",
+        "subagentstart",
+        "subagentstop",
+        "subagentend",
+        "stop",
+        "notification",
+        "taskstart",
+        "taskerror",
+        "sessionshutdown",
+        "permissiondenied",
+    }
+)
 _RUNTIME_AVAILABILITY_CACHE: dict[tuple[tuple[str, str], ...], dict[str, object]] = {}
 _RUNTIME_AVAILABILITY_LOCK = Lock()
 
@@ -91,9 +106,12 @@ def hook_event_pauses_when_unavailable(
     pauses = native.get("pauses") if native is not None else None
     if isinstance(pauses, bool):
         return pauses
-    from .hook_fail_closed import _event_kind
-
-    return _event_kind(event_name) != "lifecycle"
+    compact = event_name.strip().lower().replace("_", "").replace("-", "")
+    return not (
+        compact in _PASSIVE_EVENT_COMPACT
+        or compact.startswith("after")
+        or compact in {"posttool", "posttooluse", "posttoolcall"}
+    )
 
 
 def hook_event_is_permission_request(

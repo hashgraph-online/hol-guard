@@ -165,6 +165,8 @@ def test_complete_native_outage_preserves_wire_event_and_safe_fallback(monkeypat
     assert hook_event_pauses_when_unavailable("Stop") is False
     assert hook_event_pauses_when_unavailable("PreToolUse") is True
     assert canonical_hook_event_name({"hook_event_name": "post_toolcall"}) == "post_toolcall"
+    assert hook_event_pauses_when_unavailable("tool.execute.before") is True
+    assert hook_event_pauses_when_unavailable("unknownEvent") is True
 
 
 def test_prompt_alias_stays_blocked_when_rust_is_unavailable(monkeypatch) -> None:
