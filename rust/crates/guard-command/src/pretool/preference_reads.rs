@@ -12,12 +12,19 @@
 //! and `domains` are, and a verb this screen does not know refuses the line
 //! rather than being treated as a read.
 //!
-//! A domain is screened as a plain name. `defaults` also accepts a path to a
-//! plist in place of one, and that spelling reads a file rather than the
-//! preference store, so it keeps its review: the path never reaches the read
-//! target check this module would have to repeat, and a reader that opens an
-//! arbitrary file is a different question from one that reads the user's own
-//! settings.
+//! A domain is screened as a plain name, and only the machine's own settings
+//! are read this way: the global domain and Apple's own `com.apple.` domains.
+//! An application keeps whatever it likes in its domain, API tokens and
+//! account identifiers included, and `defaults domains` lists every one of
+//! them, so admitting any name would turn a settings question into a sweep of
+//! every application's stored state. A third-party domain keeps its review.
+//! A domain or key that reads like a credential keeps its review as well.
+//!
+//! `defaults` also accepts a path to a plist in place of a domain, and that
+//! spelling reads a file rather than the preference store, so it keeps its
+//! review: the path never reaches the read target check this module would
+//! have to repeat, and a reader that opens an arbitrary file is a different
+//! question from one that reads the user's own settings.
 //!
 //! `defaults read` with no domain at all dumps every domain the user has,
 //! which is the whole preference store rather than an answer about one thing.
@@ -58,10 +65,19 @@ fn global_domain(value: &str) -> bool {
     matches!(value, "-g" | "-globalDomain" | "NSGlobalDomain")
 }
 
-/// A domain: the global one, or a plain name such as `com.apple.dock`.
+/// A domain this screen reads: the global one, or one of Apple's own, such as
+/// `com.apple.dock`. Those hold the machine's settings. Another publisher's
+/// domain holds whatever that application chose to store, so it is not read
+/// this way.
 fn domain(value: &str) -> bool {
-    global_domain(value) || plain_word(value)
+    global_domain(value)
+        || (plain_word(value)
+            && value.len() > APPLE_PREFIX.len()
+            && value.starts_with(APPLE_PREFIX))
 }
+
+/// Apple's own preference domains, which hold the machine's settings.
+const APPLE_PREFIX: &str = "com.apple.";
 
 /// `defaults [-currentHost | -host NAME] read|read-type DOMAIN [KEY]` reads
 /// what one domain holds, and `defaults [...] domains` lists the names of the
@@ -79,8 +95,13 @@ pub(super) fn safe_preference_read(basename: &str, arguments: &[String]) -> bool
     match verb {
         "domains" => rest.is_empty(),
         "read" | "read-type" => match rest {
-            [name] => domain(name),
-            [name, key] => domain(name) && plain_word(key),
+            [name] => domain(name) && !super::sensitive_command(name),
+            [name, key] => {
+                domain(name)
+                    && plain_word(key)
+                    && !super::sensitive_command(name)
+                    && !super::sensitive_command(key)
+            }
             _ => false,
         },
         _ => false,

@@ -38,6 +38,30 @@ fn a_verb_that_changes_the_store_or_writes_a_file_keeps_its_review() {
     }
 }
 
+/// Another publisher's domain holds whatever that application stored, which
+/// may be an API token or an account identifier, so it is not the machine's
+/// settings and keeps its review. A credential-sounding domain or key keeps
+/// its review whoever publishes it.
+#[test]
+fn a_domain_outside_the_machines_own_settings_keeps_its_review() {
+    for text in [
+        "read com.example.editor",
+        "read com.example.editor recentDocuments",
+        "read-type com.example.editor token",
+        "read org.mozilla.firefox",
+        "read com.apple",
+        "read com.apple.",
+        "read com.apple.dock api_key",
+        "read com.apple.passwordmanager",
+        "-currentHost read com.example.editor",
+    ] {
+        assert!(
+            !safe_preference_read("defaults", &arguments(text)),
+            "{text}"
+        );
+    }
+}
+
 #[test]
 fn a_plist_path_or_a_whole_store_dump_keeps_its_review() {
     for text in [
@@ -80,4 +104,36 @@ fn only_defaults_is_read_this_way() {
         "defaults.sh",
         &arguments("read com.apple.dock")
     ));
+}
+
+/// `$((PATH=1))` assigns while the shell expands the step's own words, before
+/// it looks the program up, so a step carrying one decides which `defaults`
+/// runs. Coverage screens that on every step, not only on the steps another
+/// one follows.
+mod coverage {
+    fn covered(command: &str) -> Vec<usize> {
+        let model = crate::parse_command(&crate::CommandModelRequestV1 {
+            command: command.to_owned(),
+            dialect: "posix".to_owned(),
+            transport: "shell_string".to_owned(),
+            extraction_provenance: "guard-shell".to_owned(),
+        })
+        .unwrap();
+        crate::pretool::segments_safe_alone(&model, crate::pretool::PathContext::default(), None)
+    }
+
+    #[test]
+    fn a_settings_question_is_covered() {
+        assert!(covered("defaults read com.apple.dock orientation").contains(&0));
+    }
+
+    #[test]
+    fn an_arithmetic_assignment_in_the_only_step_is_not_covered() {
+        for command in [
+            "defaults read $((PATH=1))",
+            "defaults read com.apple.dock $((PATH=1))",
+        ] {
+            assert!(!covered(command).contains(&0), "{command}");
+        }
+    }
 }
