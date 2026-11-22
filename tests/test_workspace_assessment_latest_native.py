@@ -54,7 +54,7 @@ def test_a_malformed_feed_digest_is_refused(answer: object) -> None:
 
 def test_latest_assessed_runs_pages_and_decodes_findings() -> None:
     store = _Store(
-        {"items": [_run("wt-a")], "next": ["cb", "wt-a"]},
+        {"items": [_run("wt-a")], "next": ["cb", "wt-a", 2]},
         {"items": [_run("wt-b")], "next": None},
     )
 
@@ -65,7 +65,7 @@ def test_latest_assessed_runs_pages_and_decodes_findings() -> None:
     assert runs[0]["coverage"] == {"secrets": "complete"}
     assert store.calls == [
         ("list_latest_assessed_workspace_runs", {}),
-        ("list_latest_assessed_workspace_runs", {"after": ["cb", "wt-a"]}),
+        ("list_latest_assessed_workspace_runs", {"after": ["cb", "wt-a", 2]}),
     ]
 
 

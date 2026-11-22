@@ -114,7 +114,7 @@ fn keys_limit_the_listing_to_the_named_worktrees() {
     let answer = call(
         &connection,
         "list_latest_assessed_workspace_runs",
-        json!({"keys": [["cb", "wt-c"], ["cb", "wt-a"], ["other", "wt-b"]]}),
+        json!({"keys": [["cb", "wt-c"], ["cb", "wt-a"], ["cb", "wt-a"], ["other", "wt-b"]]}),
     )
     .expect("list");
     assert_eq!(run_ids(&answer), ["a", "c"]);
@@ -137,7 +137,7 @@ fn the_after_cursor_continues_past_the_last_worktree() {
     let answer = call(
         &connection,
         "list_latest_assessed_workspace_runs",
-        json!({"after": ["cb", "wt-a"]}),
+        json!({"after": ["cb", "wt-a", 2]}),
     )
     .expect("list");
 
@@ -188,6 +188,62 @@ fn following_the_cursor_reads_every_worktree_once_across_pages() {
 }
 
 #[test]
+fn later_pages_read_the_runs_the_first_page_saw() {
+    let connection = store();
+    let findings = format!("[\"{}\"]", "f".repeat(300 * 1024));
+    for worktree in ["wt-0", "wt-1", "wt-2", "wt-3", "wt-4", "wt-5"] {
+        run(&connection, worktree, worktree, "completed", Some(1));
+        connection
+            .execute(
+                "update workspace_assessment_runs set findings_json = ?1 where run_id = ?2",
+                rusqlite::params![findings, worktree],
+            )
+            .expect("findings");
+    }
+    let first = call(
+        &connection,
+        "list_latest_assessed_workspace_runs",
+        json!({}),
+    )
+    .expect("page");
+    let next = first["next"].clone();
+    assert_eq!(next[2], 6);
+    // A newer run of a worktree not yet read, and of a new worktree, finish
+    // between pages.
+    run(&connection, "wt-5-newer", "wt-5", "completed", Some(2));
+    run(&connection, "wt-9", "wt-9", "completed", Some(2));
+
+    let mut seen = run_ids(&first)
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let mut args = json!({"after": next});
+    loop {
+        let answer = call(
+            &connection,
+            "list_latest_assessed_workspace_runs",
+            args.clone(),
+        )
+        .expect("page");
+        seen.extend(run_ids(&answer).into_iter().map(str::to_owned));
+        if answer["next"].is_null() {
+            break;
+        }
+        assert_eq!(answer["next"][2], 6);
+        args = json!({"after": answer["next"]});
+    }
+
+    assert_eq!(seen, ["wt-0", "wt-1", "wt-2", "wt-3", "wt-4", "wt-5"]);
+    let fresh = call(
+        &connection,
+        "list_latest_assessed_workspace_runs",
+        json!({}),
+    )
+    .expect("list");
+    assert!(run_ids(&fresh).contains(&"wt-5-newer"));
+}
+
+#[test]
 fn malformed_keys_and_cursors_are_refused() {
     let connection = store();
     for args in [
@@ -197,6 +253,9 @@ fn malformed_keys_and_cursors_are_refused() {
         json!({"keys": [["cb", "wt", "extra"]]}),
         json!({"after": ["cb"]}),
         json!({"after": ["cb", 2]}),
+        json!({"after": ["cb", "wt-a"]}),
+        json!({"after": ["cb", "wt-a", "2"]}),
+        json!({"after": [1, "wt-a", 2]}),
     ] {
         let result = call(&connection, "list_latest_assessed_workspace_runs", args);
         assert!(matches!(result, Err(StoreError::Value(_))));
