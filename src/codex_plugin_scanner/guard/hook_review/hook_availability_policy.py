@@ -9,6 +9,28 @@ from threading import Lock
 _CLI_AVAILABILITY_FEATURE = "native-hook-availability-v1"
 _CLI_AVAILABILITY_COMMAND = "hook-availability"
 _EVENT_FIELDS = ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
+_FALLBACK_EVENT_BY_COMPACT = {
+    "pretool": "PreToolUse",
+    "pretooluse": "PreToolUse",
+    "pretoolcall": "PreToolUse",
+    "beforeshellexecution": "PreToolUse",
+    "beforereadfile": "PreToolUse",
+    "beforewritefile": "PreToolUse",
+    "beforemcpexecution": "PreToolUse",
+    "posttool": "PostToolUse",
+    "posttooluse": "PostToolUse",
+    "posttoolcall": "PostToolUse",
+    "aftershellexecution": "PostToolUse",
+    "afterreadfile": "PostToolUse",
+    "afterwritefile": "PostToolUse",
+    "aftermcpexecution": "PostToolUse",
+    "permissionrequest": "PermissionRequest",
+    "permissionrequestv2": "PermissionRequest",
+    "copilotpermissionrequest": "PermissionRequest",
+    "prompt": "UserPromptSubmit",
+    "userpromptsubmit": "UserPromptSubmit",
+    "userpromptsubmitted": "UserPromptSubmit",
+}
 _LIFECYCLE_OBSERVE_COMPACT = frozenset(
     {
         "sessionstart",
@@ -32,7 +54,9 @@ def _wire_event_name(payload: Mapping[str, object]) -> str:
     for key in _EVENT_FIELDS:
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            stripped = value.strip()
+            compact = stripped.lower().replace("_", "").replace("-", "")
+            return _FALLBACK_EVENT_BY_COMPACT.get(compact, stripped)
     return "PreToolUse"
 
 

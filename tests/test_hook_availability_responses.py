@@ -162,3 +162,4 @@ def test_complete_native_outage_preserves_wire_event_and_safe_fallback(monkeypat
     assert hook_event_pauses_when_unavailable("PostToolUse") is False
     assert hook_event_pauses_when_unavailable("Stop") is False
     assert hook_event_pauses_when_unavailable("PreToolUse") is True
+    assert canonical_hook_event_name({"hook_event_name": "post_toolcall"}) == "PostToolUse"
