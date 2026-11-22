@@ -89,3 +89,24 @@ fn fail_closed_verdict_uses_the_rust_contract_envelope() {
         "native_hook_render_unavailable"
     );
 }
+
+#[test]
+fn fail_closed_verdict_trims_reason_fields_like_the_python_adapter() {
+    let mut req = request("fail_closed_verdict");
+    req.harness = "cursor".into();
+    req.cli = Some(json!({
+        "verdict": {
+            "decision": "deny",
+            "minimum_action": "block",
+            "reason": "  blocked  ",
+            "reason_code": " native_block ",
+        }
+    }));
+    let response = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    let response = response.payload.expect("payload")["response"].clone();
+    assert_eq!(
+        response["hookSpecificOutput"]["permissionDecisionReason"],
+        "blocked"
+    );
+    assert_eq!(response["reason_code"], "native_block");
+}

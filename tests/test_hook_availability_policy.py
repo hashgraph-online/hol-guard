@@ -71,6 +71,7 @@ def test_availability_response_uses_the_native_renderer(monkeypatch, tmp_path: P
         reason_code="native_pre_tool_unavailable",
         reason="Native review unavailable.",
         guard_home=tmp_path,
+        deadline=12.0,
     )
     assert response["policy_action"] == "block"
     assert calls == [
@@ -84,6 +85,6 @@ def test_availability_response_uses_the_native_renderer(monkeypatch, tmp_path: P
                 "prompt_reason": None,
             },
             "guard_home": tmp_path,
-            "deadline": None,
+            "deadline": 12.0,
         }
     ]

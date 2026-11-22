@@ -115,6 +115,7 @@ pub fn verdict_response(
         verdict
             .get("reason")
             .and_then(Value::as_str)
+            .map(str::trim)
             .filter(|value| !value.trim().is_empty())
             .unwrap_or(default_reason)
     };
@@ -124,6 +125,7 @@ pub fn verdict_response(
         verdict
             .get("reason_code")
             .and_then(Value::as_str)
+            .map(str::trim)
             .filter(|value| !value.trim().is_empty())
             .unwrap_or(default_code)
     };

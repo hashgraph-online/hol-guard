@@ -126,13 +126,21 @@ def _record_native_hook_exception(guard_home: Path, *, harness: str, event_name:
 
 
 def _unavailable_cli_response(
-    harness: str, event_name: str, reason_code: str, *, worker_available: bool = False
+    harness: str,
+    event_name: str,
+    reason_code: str,
+    *,
+    worker_available: bool = False,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
 ) -> dict[str, object]:
     response = availability_harness_response(
         harness=harness,
         event_name=event_name,
         reason_code=reason_code,
         reason="HOL Guard could not complete the native hook decision safely.",
+        guard_home=guard_home,
+        deadline=deadline,
     )
     # Without a worker the managed destination cannot be resolved.
     if not worker_available and withholds_structured_destination(harness=harness, event_name=event_name):
@@ -183,7 +191,12 @@ def try_native_hook_authority(
         _log_worker_exception(error, harness=harness)
         event_name = event_name or canonical_hook_event_name(payload, guard_home=guard_home, deadline=deadline)
         response = _unavailable_cli_response(
-            harness, event_name, "native_hook_worker_exception", worker_available=worker is not None
+            harness,
+            event_name,
+            "native_hook_worker_exception",
+            worker_available=worker is not None,
+            guard_home=guard_home,
+            deadline=deadline,
         )
         if worker is None:
             return response
@@ -339,7 +352,13 @@ def route_native_hook(
             event_name = event_name or canonical_hook_event_name(
                 payload, guard_home=context.guard_home, deadline=deadline
             )
-            response = _unavailable_cli_response(args.harness, event_name, "native_hook_worker_unavailable")
+            response = _unavailable_cli_response(
+                args.harness,
+                event_name,
+                "native_hook_worker_unavailable",
+                guard_home=context.guard_home,
+                deadline=deadline,
+            )
         event_name = event_name or canonical_hook_event_name(payload, guard_home=context.guard_home, deadline=deadline)
         return emit_hook_review(
             args.harness,
@@ -353,7 +372,13 @@ def route_native_hook(
         event_name = event_name or canonical_hook_event_name(payload, guard_home=context.guard_home, deadline=deadline)
         _record_native_hook_exception(context.guard_home, harness=args.harness, event_name=event_name)
         _log_worker_exception(error, harness=args.harness)
-        response = _unavailable_cli_response(args.harness, event_name, "native_hook_worker_exception")
+        response = _unavailable_cli_response(
+            args.harness,
+            event_name,
+            "native_hook_worker_exception",
+            guard_home=context.guard_home,
+            deadline=deadline,
+        )
         return emit_hook_review(
             args.harness,
             response,

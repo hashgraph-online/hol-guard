@@ -41,6 +41,7 @@ _CURSOR_ROUTE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 # The bridge kinds carry the whole daemon reply they render, which may be as
 # large as a native response, so they ask for the same larger budget.
 _DAEMON_REPLY_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+_FAIL_CLOSED_RENDER_TIMEOUT_SECONDS = 0.25
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -130,6 +131,14 @@ def native_render_cli(
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES)
     elif kind in {"hermes_bridge", "muse_bridge", "saved_approval", "package_review_settle", "review_reuse"}:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_DAEMON_REPLY_MAX_REQUEST_BYTES)
+    elif kind in {"availability_response", "fail_closed_verdict"}:
+        payload = _render_payload(
+            wire,
+            guard_home,
+            deadline,
+            max_request_bytes=_MAX_REQUEST_BYTES,
+            timeout_seconds=_FAIL_CLOSED_RENDER_TIMEOUT_SECONDS,
+        )
     else:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_MAX_REQUEST_BYTES)
     outcome = payload.get("outcome") if payload is not None else None
