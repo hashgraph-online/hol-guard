@@ -53,6 +53,11 @@ def test_a_row_that_is_not_json_refuses_the_snapshot(tmp_path: Path, key: str) -
     "answer",
     [
         None,
+        {},
+        {"registry": None, "policy_version": None},
+        {"registry": None, "policy_version": None, "unreadable": False},
+        {"registry": None, "policy_version": None, "unreadable": ["other"]},
+        {"registry": None, "policy_version": None, "unreadable": [], "extra": 1},
         {"registry": "rules", "policy_version": None, "unreadable": []},
         {"registry": None, "policy_version": 7, "unreadable": []},
         {"registry": None, "policy_version": "", "unreadable": []},

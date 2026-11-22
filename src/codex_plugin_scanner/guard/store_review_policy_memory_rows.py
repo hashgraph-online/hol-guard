@@ -13,6 +13,10 @@ class _NativeStore(Protocol):
     ) -> Any: ...
 
 
+_ANSWER_FIELDS = frozenset({"registry", "policy_version", "unreadable"})
+_ROLES = frozenset({"registry", "policy_version"})
+
+
 class ReviewPolicyMemoryRowUnreadableError(ValueError):
     """A policy-memory row holds text that is not JSON, so no bundle may be planned on it."""
 
@@ -31,14 +35,17 @@ class ReviewPolicyMemoryRows:
 
     @classmethod
     def from_native(cls, answer: object) -> ReviewPolicyMemoryRows:
-        if not isinstance(answer, dict):
+        # Every field must be present: a reply that drops one must not read as
+        # a first apply and skip the stored-version check.
+        if not isinstance(answer, dict) or set(answer) != _ANSWER_FIELDS:
             raise RuntimeError("native review_policy_memory_rows returned no answer")
-        unreadable = answer.get("unreadable")
+        unreadable = answer["unreadable"]
+        if not isinstance(unreadable, list) or not set(unreadable) <= _ROLES:
+            raise RuntimeError("native review_policy_memory_rows returned no answer")
         if unreadable:
-            roles = ",".join(str(role) for role in unreadable) if isinstance(unreadable, list) else "rows"
-            raise ReviewPolicyMemoryRowUnreadableError(f"review_policy_memory_unreadable:{roles}")
-        registry = answer.get("registry")
-        policy_version = answer.get("policy_version")
+            raise ReviewPolicyMemoryRowUnreadableError(f"review_policy_memory_unreadable:{','.join(unreadable)}")
+        registry = answer["registry"]
+        policy_version = answer["policy_version"]
         if registry is not None and not isinstance(registry, (dict, list)):
             raise RuntimeError("native review_policy_memory_rows returned no answer")
         if policy_version is not None and (not isinstance(policy_version, str) or not policy_version):
