@@ -1,0 +1,134 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.forgeloopbridge",
+  "version": "1.0.0",
+  "name": "ForgeLoopBridge",
+  "description": "Local-first multi-agent coordination hub and MCP server for orders, execution reports, channels, direct chats, count-only signal hooks, and SHA-256 verified out-of-band file transfers (prepare_transfer -> stream upload verify -> complete_transfer -> fetch_transfer). Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.cassiomc1",
+    "displayName": "cassiomc1",
+    "url": "https://github.com/cassiomc1/ForgeLoopBridge"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/cassiomc1/ForgeLoopBridge",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "forgeloopbridge-mcp"
+  },
+  "riskClasses": [
+    "agent-coordination",
+    "local-file-write",
+    "remote-state-mutation"
+  ],
+  "tools": [
+    {
+      "name": "get_context",
+      "state": "inherit"
+    },
+    {
+      "name": "register_participant",
+      "state": "review"
+    },
+    {
+      "name": "rename_participant",
+      "state": "review"
+    },
+    {
+      "name": "get_updates",
+      "state": "review"
+    },
+    {
+      "name": "read_messages",
+      "state": "inherit"
+    },
+    {
+      "name": "send_message",
+      "state": "review"
+    },
+    {
+      "name": "list_pending_orders",
+      "state": "inherit"
+    },
+    {
+      "name": "post_order",
+      "state": "review"
+    },
+    {
+      "name": "report_execution",
+      "state": "review"
+    },
+    {
+      "name": "create_channel",
+      "state": "review"
+    },
+    {
+      "name": "set_channel_archived",
+      "state": "review"
+    },
+    {
+      "name": "get_pack_command",
+      "state": "inherit"
+    },
+    {
+      "name": "prepare_transfer",
+      "state": "review"
+    },
+    {
+      "name": "complete_transfer",
+      "state": "review"
+    },
+    {
+      "name": "fetch_transfer",
+      "state": "review"
+    },
+    {
+      "name": "read_transfer",
+      "state": "inherit"
+    },
+    {
+      "name": "create_signal",
+      "state": "review"
+    },
+    {
+      "name": "revoke_signal",
+      "state": "review"
+    },
+    {
+      "name": "list_wakes",
+      "state": "inherit"
+    },
+    {
+      "name": "revoke_wake",
+      "state": "review"
+    },
+    {
+      "name": "record_improvement",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/cassiomc1/ForgeLoopBridge",
+    "https://github.com/cassiomc1/ForgeLoopBridge/blob/5161d2d90fb9e41a47f80ed253aff44f84195be5/README.md",
+    "https://github.com/cassiomc1/ForgeLoopBridge/blob/5161d2d90fb9e41a47f80ed253aff44f84195be5/pyproject.toml",
+    "https://github.com/cassiomc1/ForgeLoopBridge/blob/5161d2d90fb9e41a47f80ed253aff44f84195be5/bridge_hub/mcp_server.py",
+    "https://github.com/cassiomc1/ForgeLoopBridge/blob/5161d2d90fb9e41a47f80ed253aff44f84195be5/bridge_hub/transfers.py",
+    "https://github.com/cassiomc1/ForgeLoopBridge/blob/5161d2d90fb9e41a47f80ed253aff44f84195be5/bridge_hub/stdio_proxy.py"
+  ],
+  "saferAlternatives": [
+    "Start with get_context, read_messages, list_pending_orders, read_transfer, and list_wakes for read-only inspection; note that get_updates with participant_id advances that participant's signal cursor.",
+    "prepare_transfer declares size_bytes and sha256 upfront; the hub streams the PUT upload to a temporary file and rejects size or SHA-256 mismatches before complete_transfer can publish the offer to recipients.",
+    "Inspect transfer metadata and sha256 with read_transfer before calling fetch_transfer, which records a download receipt and issues a short-lived download ticket plus a local SHA-256 verification command.",
+    "Install ForgeLoopBridge in a dedicated Python environment and configure the installed forgeloopbridge-mcp console script over stdio; python or uv wrappers remain on Guard's ordinary policy."
+  ]
+}
