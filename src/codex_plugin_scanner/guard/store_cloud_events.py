@@ -134,17 +134,30 @@ class StoreCloudEventsMixin:
         response: dict[str, object],
         now: str,
     ) -> None:
-        with self._connect() as connection:
-            persist_supply_chain_bundle(
-                connection,
-                workspace_id=workspace_id,
-                response=response,
-                cached_at=now,
-            )
+        """Replace the workspace's cached supply-chain bundle response."""
+
+        self._native_store_call(
+            "cache_supply_chain_bundle",
+            {"workspace_id": workspace_id, "response": response, "cached_at": now},
+        )
 
     def get_cached_supply_chain_bundle(self, workspace_id: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            return load_supply_chain_bundle(connection, workspace_id=workspace_id)
+        """The workspace's cached response with its ``cached_at``, or ``None``."""
+
+        answer = self._native_store_call("get_cached_supply_chain_bundle", {"workspace_id": workspace_id})
+        if answer is None:
+            return None
+        if not isinstance(answer, dict) or set(answer) != {"response_json", "cached_at"}:
+            raise RuntimeError("native get_cached_supply_chain_bundle returned no answer")
+        response_json = answer["response_json"]
+        cached_at = answer["cached_at"]
+        if not isinstance(response_json, str) or not isinstance(cached_at, str):
+            raise RuntimeError("native get_cached_supply_chain_bundle returned no answer")
+        payload = json.loads(response_json)
+        if not isinstance(payload, dict):
+            return None
+        payload["cached_at"] = cached_at
+        return payload
 
     def set_sync_payload(self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str) -> None:
         oauth_changed = _is_oauth_credentials_key(state_key)
@@ -368,75 +381,6 @@ class StoreCloudEventsMixin:
             },
         )
 
-    def _add_guard_event_v1(self, connection: sqlite3.Connection, event: GuardEventV1) -> None:
-        payload = event.to_dict()
-        existing = connection.execute(
-            "select event_id from guard_cloud_events where idempotency_key = ?",
-            (event.idempotency_key,),
-        ).fetchone()
-        if existing is None:
-            pending_count = self._count_guard_events_v1_in_connection(connection, uploaded=False)
-            if pending_count >= self._guard_event_queue_limit:
-                capacity_row = connection.execute(
-                    "select payload_json from sync_state where state_key = ?",
-                    ("guard_event_queue_capacity",),
-                ).fetchone()
-                capacity_payload: dict[str, object] = {}
-                if capacity_row is not None:
-                    try:
-                        parsed_capacity_payload = json.loads(capacity_row["payload_json"])
-                    except (json.JSONDecodeError, TypeError, ValueError):
-                        parsed_capacity_payload = {}
-                    if isinstance(parsed_capacity_payload, dict):
-                        capacity_payload = parsed_capacity_payload
-                rejected_count_value = capacity_payload.get("rejectedCount", 0)
-                rejected_count = (
-                    rejected_count_value
-                    if isinstance(rejected_count_value, int) and not isinstance(rejected_count_value, bool)
-                    else 0
-                ) + 1
-                connection.execute(
-                    """
-                    insert into sync_state (state_key, payload_json, updated_at)
-                    values (?, ?, ?)
-                    on conflict(state_key) do update set
-                      payload_json = excluded.payload_json,
-                      updated_at = excluded.updated_at
-                    """,
-                    (
-                        "guard_event_queue_capacity",
-                        json.dumps(
-                            {
-                                "exhausted": True,
-                                "firstRejectedAt": capacity_payload.get("firstRejectedAt", event.occurred_at),
-                                "lastRejectedAt": event.occurred_at,
-                                "limit": self._guard_event_queue_limit,
-                                "pendingCount": pending_count,
-                                "rejectedCount": rejected_count,
-                                "rejectedEventType": event.event_type,
-                            },
-                            sort_keys=True,
-                        ),
-                        datetime.now(timezone.utc).isoformat(),
-                    ),
-                )
-                return
-        connection.execute(
-            """
-            insert or ignore into guard_cloud_events (
-              event_id, idempotency_key, event_type, payload_json, occurred_at, uploaded_at
-            )
-            values (?, ?, ?, ?, ?, null)
-            """,
-            (
-                event.event_id,
-                event.idempotency_key,
-                event.event_type,
-                json.dumps(payload, sort_keys=True),
-                event.occurred_at,
-            ),
-        )
-
     def list_guard_events_v1(self, *, uploaded: bool | None = None, limit: int = 200) -> list[dict[str, object]]:
         return self._native_store_call(
             "list_guard_events_v1",
@@ -445,16 +389,6 @@ class StoreCloudEventsMixin:
 
     def count_guard_events_v1(self, *, uploaded: bool | None = None) -> int:
         return int(self._native_store_call("count_guard_events_v1", {"uploaded": uploaded}))
-
-    @staticmethod
-    def _count_guard_events_v1_in_connection(connection: sqlite3.Connection, *, uploaded: bool | None = None) -> int:
-        query = "select count(*) as count from guard_cloud_events"
-        if uploaded is True:
-            query += " where uploaded_at is not null"
-        elif uploaded is False:
-            query += " where uploaded_at is null"
-        row = connection.execute(query).fetchone()
-        return int(row["count"]) if row is not None else 0
 
     def mark_guard_events_v1_uploaded(self, event_ids: list[str], uploaded_at: str) -> int:
         return int(
