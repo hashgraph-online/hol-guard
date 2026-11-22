@@ -84,3 +84,35 @@ def test_an_ack_removed_by_another_publisher_is_rewritten_before_the_lease_runs_
     live._renew_direct_lane_ack()
     assert _ack(live)["lease_expires_at_ms"] == clock[0] + DIRECT_LANE_ACK_LEASE_MS
     assert _ack(live)["lease_expires_at_ms"] != expires
+
+
+def test_restoring_a_removed_ack_never_replaces_one_a_newer_publisher_wrote(tmp_path: Path, clock: list[int]) -> None:
+    # Publishers in other processes share the ACK. One holds the file lock
+    # while it writes generation 5; the older publisher restoring its removed
+    # ACK must wait for it and then leave the newer ACK alone.
+    import fcntl
+    import threading
+
+    stale = _Publisher(tmp_path, 3)
+    path = stale._direct_lane_ack_path()
+    path.unlink()
+    lock = os.open(path.with_name(f".{path.name}.lock"), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        clock[0] += 100
+        restore = threading.Thread(target=stale._renew_direct_lane_ack)
+        restore.start()
+        restore.join(0.2)
+        assert restore.is_alive()
+        newer = {
+            "schema": direct_lane.DIRECT_LANE_ACK_SCHEMA,
+            "generation": 5,
+            "policy_digest": "5" * 64,
+            "lease_expires_at_ms": clock[0] + DIRECT_LANE_ACK_LEASE_MS,
+        }
+        path.write_text(json.dumps(newer))
+    finally:
+        os.close(lock)
+    restore.join(5)
+    assert not restore.is_alive()
+    assert _ack(stale)["generation"] == 5

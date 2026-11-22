@@ -214,3 +214,84 @@ fn a_rebind_that_is_never_acknowledged_is_not_awaited() {
     assert_eq!(awaited, None);
     assert!(elapsed < Duration::from_secs(1));
 }
+
+#[test]
+fn a_republish_refused_for_a_changed_input_keeps_the_hook_waiting() {
+    let view = json!({"managed_policy_status": "absent"});
+    let fixture = bound_fixture("reopen-changed-input", &view);
+    let generation = fixture.snapshot.generation;
+    let digest = fixture.snapshot.policy_digest.clone();
+    ack(&fixture, generation, &digest);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    assert!(fixture
+        .store
+        .structured_output_binding(generation, &digest, Some(deadline))
+        .is_some());
+    fs::remove_file(ack_path(&fixture)).unwrap();
+
+    // The next generation is bound and acknowledged, but an input it names
+    // has moved since, so it admits nothing. The lane that last admitted a
+    // hook is still the old one, and the routed hook keeps waiting for a
+    // valid republish rather than giving up at once.
+    let key = install_test_key(&fixture.root, 9);
+    let next = signed_snapshot(generation + 1, &key, &fixture.root);
+    let next_digest = next.policy_digest.clone();
+    let mut lane = binding(&fixture, "/work/repo");
+    lane["structured_output_config"] = view;
+    fixture
+        .store
+        .push(&json!({
+            "schema": POLICY_SNAPSHOT_PUSH_SCHEMA,
+            "snapshot": next,
+            "direct_lane": lane,
+        }))
+        .unwrap();
+    ack(&fixture, generation + 1, &next_digest);
+    fs::write(&fixture.input, b"moved since the binding").unwrap();
+
+    let (awaited, elapsed) = await_view(&fixture, generation, &digest, Duration::from_millis(200));
+    assert_eq!(awaited, None);
+    assert!(elapsed >= Duration::from_millis(200));
+    assert!(fixture
+        .store
+        .direct_lane_was_admitted_at(generation, &digest));
+}
+
+#[test]
+fn an_older_binding_never_replaces_a_newer_admission() {
+    let view = json!({"managed_policy_status": "absent"});
+    let fixture = bound_fixture("reopen-stale-admission", &view);
+    let generation = fixture.snapshot.generation;
+    let digest = fixture.snapshot.policy_digest.clone();
+    let older = fixture.store.direct_lane.lock().unwrap().clone().unwrap();
+
+    let key = install_test_key(&fixture.root, 9);
+    let next = signed_snapshot(generation + 1, &key, &fixture.root);
+    let next_digest = next.policy_digest.clone();
+    let mut lane = binding(&fixture, "/work/repo");
+    lane["structured_output_config"] = view;
+    fixture
+        .store
+        .push(&json!({
+            "schema": POLICY_SNAPSHOT_PUSH_SCHEMA,
+            "snapshot": next,
+            "direct_lane": lane,
+        }))
+        .unwrap();
+    ack(&fixture, generation + 1, &next_digest);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    assert!(fixture
+        .store
+        .structured_output_binding(generation + 1, &next_digest, Some(deadline))
+        .is_some());
+
+    // A hook that passed its checks against the older binding records late,
+    // after the republish: the newer admission stands.
+    fixture.store.note_direct_lane_admitted(&older);
+    assert!(fixture
+        .store
+        .direct_lane_was_admitted_at(generation + 1, &next_digest));
+    assert!(!fixture
+        .store
+        .direct_lane_was_admitted_at(generation, &digest));
+}

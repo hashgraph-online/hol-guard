@@ -18,7 +18,7 @@ import os
 import stat
 import threading
 import time
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 
 from .native_command_control_authority import AUTHORITY_FILE_NAME
@@ -360,8 +360,8 @@ class NativePolicySnapshotDirectLaneAck:
                 self._direct_lane_evidence_bound = False
                 self._unlink_direct_lane_ack()
                 return
-            if self._acked_value and renewable(self._direct_lane_ack_path(), self._direct_lane_ack_target):
-                self._write_direct_lane_ack_locked()
+            if self._acked_value:
+                self._write_direct_lane_ack_locked(unless_superseded=True)
 
     def _recheck_direct_lane_local_cli(self, revision: int | None) -> None:
         """Close the lane once custom command-line rules move past the binding.
@@ -447,7 +447,16 @@ class NativePolicySnapshotDirectLaneAck:
             # The lease still bounds how long the resident can trust it.
             self._direct_lane_lease_expires_at_ms = 0
 
-    def _write_direct_lane_ack_locked(self) -> None:
+    def _write_direct_lane_ack_locked(self, *, unless_superseded: bool = False) -> None:
+        """Write the ACK for the current target.
+
+        With `unless_superseded`, a renewal leaves an ACK that names a newer
+        generation alone. Publishers in other processes share the file, so on
+        POSIX the check and the replace run under one exclusive file lock that
+        every writer takes; otherwise a newer ACK written between them could
+        be replaced with this publisher's older one.
+        """
+
         target = self._direct_lane_ack_target
         if target is None:
             return
@@ -465,29 +474,52 @@ class NativePolicySnapshotDirectLaneAck:
         path = self._direct_lane_ack_path()
         try:
             if os.name == "nt":
+                if unless_superseded and not renewable(path, target):
+                    return
                 write_windows_ack(self.guard_home, path, body)
                 self._direct_lane_lease_expires_at_ms = lease_expires_at_ms
                 return
             _ensure_private_directory(path.parent)
-            temporary = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-            descriptor = os.open(
-                temporary,
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
-                0o600,
-            )
-            try:
-                with os.fdopen(descriptor, "wb") as handle:
-                    handle.write(body)
-                os.replace(temporary, path)
-            except BaseException:
-                with contextlib.suppress(OSError):
-                    temporary.unlink()
-                raise
+            with _ack_file_lock(path):
+                if unless_superseded and not renewable(path, target):
+                    return
+                temporary = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+                descriptor = os.open(
+                    temporary,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
+                    0o600,
+                )
+                try:
+                    with os.fdopen(descriptor, "wb") as handle:
+                        handle.write(body)
+                    os.replace(temporary, path)
+                except BaseException:
+                    with contextlib.suppress(OSError):
+                        temporary.unlink()
+                    raise
         except (OSError, RuntimeError):
             # Without a fresh ACK file the resident defers every direct hook.
             self._direct_lane_lease_expires_at_ms = 0
             return
         self._direct_lane_lease_expires_at_ms = lease_expires_at_ms
+
+
+@contextlib.contextmanager
+def _ack_file_lock(path: Path) -> Iterator[None]:
+    """Hold an exclusive lock shared by every process writing `path`."""
+
+    import fcntl
+
+    descriptor = os.open(
+        path.with_name(f".{path.name}.lock"),
+        os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
+        0o600,
+    )
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)
 
 
 def _ensure_private_directory(directory: Path) -> None:

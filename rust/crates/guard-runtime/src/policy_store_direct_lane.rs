@@ -318,6 +318,7 @@ impl PolicySnapshotStore {
         {
             return Err(DirectLaneDefer::InputChanged);
         }
+        self.note_direct_lane_admitted(&binding);
         Ok((snapshot, binding))
     }
 
@@ -331,6 +332,7 @@ impl PolicySnapshotStore {
             .and_then(|binding| binding.clone())
             .ok_or(DirectLaneDefer::Unbound)?;
         self.admit_binding_lease(&binding, None)?;
+        self.note_direct_lane_admitted(&binding);
         Ok(binding)
     }
 
@@ -358,6 +360,7 @@ impl PolicySnapshotStore {
         {
             return None;
         }
+        self.note_direct_lane_admitted(&binding);
         Some(binding.structured_output_config.clone())
     }
 
@@ -399,10 +402,8 @@ impl PolicySnapshotStore {
             {
                 return Err(DirectLaneDefer::Unbound);
             }
-            self.note_direct_lane_admitted(binding);
             return Ok(current);
         }
-        self.note_direct_lane_admitted(binding);
         Ok(snapshot)
     }
 

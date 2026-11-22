@@ -69,14 +69,29 @@ impl PolicySnapshotStore {
         }
     }
 
+    /// Record that `binding` admitted a hook. Callers record only after
+    /// every check that admission needs has passed, so a binding refused for
+    /// a changed input never counts as the lane a routed hook waits on.
+    ///
+    /// The record is replaced under its lock and only while `binding` is
+    /// still the bound lane: a publish that lands between a hook's checks and
+    /// this write must not let the older binding overwrite the newer one's
+    /// admission, which would end a routed hook's wait early.
     pub(super) fn note_direct_lane_admitted(&self, binding: &DirectLaneBinding) {
         let Ok(mut admitted) = self.direct_lane_admitted.lock() else {
             return;
         };
-        let current = admitted.as_ref().is_some_and(|(generation, digest)| {
-            *generation == binding.generation && *digest == binding.policy_digest
+        let recorded = admitted.as_ref().is_some_and(|(generation, digest)| {
+            *generation > binding.generation
+                || (*generation == binding.generation && *digest == binding.policy_digest)
         });
-        if !current {
+        if recorded {
+            return;
+        }
+        let bound = self.bound_lane().is_some_and(|(generation, digest)| {
+            generation == binding.generation && digest == binding.policy_digest
+        });
+        if bound {
             *admitted = Some((binding.generation, binding.policy_digest.clone()));
         }
     }
