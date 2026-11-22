@@ -19,6 +19,7 @@ from typing import Final, cast
 
 from .native_extension_control import NativeExtensionControlError, compose_control_layers
 from .native_extension_control_authority import anchor_from_wire
+from .native_extension_control_schema import extension_control_schema_compatible
 from .runtime.extension_control_authority import (
     AuthorityAnchor,
     AuthorityHealth,
@@ -93,8 +94,7 @@ class _ExtensionControlAuthoritySupportMixin:
         begin_native_command_control_mutation(cast(GuardStore, self), explicit_recovery=explicit_recovery)
 
     def _require_compatible_extension_control_schema(self) -> None:
-        with self._connect() as connection:
-            require_compatible_extension_control_schema(connection)
+        extension_control_schema_compatible(self)
 
     def read_persisted_extension_control_authority(self) -> ExtensionControlAuthorityView:
         """Read the authenticated authority using its persisted catalog identity."""
