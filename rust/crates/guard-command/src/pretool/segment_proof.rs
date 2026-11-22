@@ -506,6 +506,7 @@ pub(super) fn exact_safe_segment_with_context(
             &segment.arguments,
             context,
         )
+        || super::preference_reads::safe_preference_read(basename, &segment.arguments)
         || super::manager_usage::safe_manager_segment(basename, model, segment, context)
     {
         return true;

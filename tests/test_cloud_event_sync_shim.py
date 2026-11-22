@@ -120,6 +120,8 @@ def test_runtime_session_posts_through_the_native_command(tmp_path: Path, monkey
     # The summary row is written through the native store too.
     written: dict[str, object] = {}
     monkeypatch.setattr(store, "set_sync_payload", lambda key, payload, _now: written.__setitem__(key, payload))
+    # So is the connected workspace id; this store has never connected.
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: None)
 
     summary = runner.sync_runtime_session(store, session=dict(_SESSION), auth_context=dict(_AUTH))
 

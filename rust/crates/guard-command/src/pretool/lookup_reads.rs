@@ -43,21 +43,21 @@ pub(super) fn safe_lookup_arguments(executable: &str, arguments: &[String]) -> b
     names > 0 && bounded_output
 }
 
-/// A lookup that only prints where a name resolves: `which`, zsh's `whence`,
-/// plus the `type` and `command -v`/`-V` forms above. None of them runs the
-/// program it names or binds a shell variable.
-///
-/// zsh's `where` is `whence -ca`, and `whence -f` prints a function in full.
-/// Neither is modelled here, so every caller gets the same answer for them,
-/// whatever its own question is.
+/// A path-only lookup. zsh's `which` is a shell builtin that can print
+/// a function body or alias expansion, even with `-a` or `-s`. A lexical
+/// proof cannot know the caller's active shell definitions, so `which` is
+/// never an unconditional Allow. `whence -p` restricts resolution to PATH
+/// executables; `whence` without `-p` can expose definitions. The other
+/// handled lookups use their own narrowly scoped proofs above.
 pub(super) fn safe_path_lookup(executable: &str, arguments: &[String]) -> bool {
     let letters = match executable {
-        "which" => "as",
-        "whence" => "apv",
+        "which" => return false,
+        "whence" => "ap",
         _ => return safe_lookup_arguments(executable, arguments),
     };
     let mut names = 0;
     let mut options = true;
+    let mut path_only = false;
     for argument in arguments {
         if options && argument == "--" {
             options = false;
@@ -65,6 +65,7 @@ pub(super) fn safe_path_lookup(executable: &str, arguments: &[String]) -> bool {
             if !argument[1..].chars().all(|letter| letters.contains(letter)) {
                 return false;
             }
+            path_only |= argument.contains('p');
         } else if plain_name(argument) {
             options = false;
             names += 1;
@@ -72,7 +73,7 @@ pub(super) fn safe_path_lookup(executable: &str, arguments: &[String]) -> bool {
             return false;
         }
     }
-    names > 0
+    names > 0 && path_only
 }
 
 fn plain_name(argument: &str) -> bool {

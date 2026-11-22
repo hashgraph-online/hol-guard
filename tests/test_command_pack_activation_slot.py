@@ -78,3 +78,38 @@ def test_a_malformed_answer_is_refused(answer):
     store, _ = _store(answer)
     with pytest.raises(NativePolicySnapshotError, match="returned no answer"):
         activation_store.read_slot(store)
+
+
+PENDING = {"record_json": "{}", "record_digest": "a" * 64, "record_mac": "b" * 64}
+
+
+def test_pending_records_come_back_from_the_native_store_in_order():
+    second = {**PENDING, "record_json": '{"r": 2}'}
+    store, calls = _store({"items": [PENDING, second]})
+    assert activation_store.pending_records(store) == [PENDING, second]
+    assert calls == [("list_command_pack_pending_records", {})]
+
+
+def test_no_pending_records_is_an_empty_list():
+    store, _ = _store({"items": []})
+    assert activation_store.pending_records(store) == []
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        [],
+        {},
+        {"items": None},
+        {"items": [], "extra": 1},
+        {"items": [None]},
+        {"items": [{**PENDING, "record_json": None}]},
+        {"items": [{**PENDING, "link_json": "{}"}]},
+        {"items": [{"record_json": "{}", "record_digest": "a" * 64}]},
+    ],
+)
+def test_a_malformed_pending_answer_is_refused(answer):
+    store, _ = _store(answer)
+    with pytest.raises(NativePolicySnapshotError, match="list_command_pack_pending_records"):
+        activation_store.pending_records(store)
