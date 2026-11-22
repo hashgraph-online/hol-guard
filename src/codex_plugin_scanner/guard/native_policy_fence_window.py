@@ -21,6 +21,7 @@ LEASE_WAIT_SECONDS = 0.25
 
 _WRITE_FEATURE = "hook-policy-fence-window-write-v1"
 _WAIT_FEATURE = "hook-policy-fence-window-wait-v1"
+_REVIEW_FEATURE = "hook-review-fence-v1"
 _REQUEST_SCHEMA = "guard-hook-policy-fence-window-request.v1"
 _RESULT_SCHEMA = "guard-hook-policy-fence-window-result.v1"
 _TIMEOUT_SECONDS = 0.1
@@ -60,12 +61,17 @@ def _fence_request(
             timeout_seconds = min(timeout_seconds, deadline - time.monotonic())
         if timeout_seconds <= 0:
             return None
+        required_feature = _WRITE_FEATURE
+        if action == "wait":
+            required_feature = _WAIT_FEATURE
+        elif action.startswith("review_"):
+            required_feature = _REVIEW_FEATURE
         reply = _resident_request(
             operation="hook_policy_fence_window",
             request=request,
             guard_home=canonical_home,
             timeout_seconds=timeout_seconds,
-            required_feature=_WAIT_FEATURE if action == "wait" else _WRITE_FEATURE,
+            required_feature=required_feature,
             response_schema=_RESULT_SCHEMA,
             record_resilience=False,
         )

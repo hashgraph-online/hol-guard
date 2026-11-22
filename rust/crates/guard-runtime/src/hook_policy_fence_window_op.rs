@@ -14,6 +14,7 @@ use crate::policy_bundle_time::micros_to_utc_isoformat;
 use crate::resident_protocol::encode_response;
 
 pub(crate) const HOOK_POLICY_FENCE_WINDOW_FEATURE: &str = "hook-policy-fence-window-v1";
+pub(crate) const HOOK_REVIEW_FENCE_FEATURE: &str = "hook-review-fence-v1";
 pub(crate) const HOOK_POLICY_FENCE_WINDOW_WRITE_FEATURE: &str = "hook-policy-fence-window-write-v1";
 pub(crate) const HOOK_POLICY_FENCE_WINDOW_WAIT_FEATURE: &str = "hook-policy-fence-window-wait-v1";
 const REQUEST_SCHEMA: &str = "guard-hook-policy-fence-window-request.v1";
