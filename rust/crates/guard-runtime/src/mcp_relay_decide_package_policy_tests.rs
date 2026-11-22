@@ -118,12 +118,28 @@ fn process_cwd(home: &Path) -> String {
 
 /// What the relay resolves for the package call, on the read-only snapshot.
 fn resolve(home: &Path, evaluation: &Map<String, Value>) -> Result<PackagePolicy, &'static str> {
+    resolve_audited(home, evaluation)?.0
+}
+
+/// `resolve`, with the audit events its lookups collected, which the relay
+/// writes whether or not the resolution succeeds.
+#[allow(clippy::type_complexity)]
+fn resolve_audited(
+    home: &Path,
+    evaluation: &Map<String, Value>,
+) -> Result<
+    (
+        Result<PackagePolicy, &'static str>,
+        Vec<crate::policy_decision_lookup_op::AuditEvent>,
+    ),
+    &'static str,
+> {
     let connection = store::open(home)?.expect("store");
     let saved = store::saved(&connection, &binding(), home.to_str().unwrap(), HARNESS)?
         .expect("saved rows");
     let environment = environment();
     let cwd = process_cwd(home);
-    package_policy(
+    let resolved = package_policy(
         &saved,
         &view(),
         &artifact(),
@@ -135,7 +151,8 @@ fn resolve(home: &Path, evaluation: &Map<String, Value>) -> Result<PackagePolicy
             cwd: &cwd,
             home: "/home/dev",
         },
-    )
+    );
+    Ok((resolved, saved.into_audit()))
 }
 
 #[cfg(unix)]
@@ -195,12 +212,18 @@ fn a_row_the_lookup_ignores_for_local_integrity_defers() {
             ..Row::default()
         },
     );
-    // The proxy records the integrity violation as it reads the row, which the
-    // read-only snapshot cannot write, so the lookup itself defers before the
-    // resolution could answer in the daemon authority's place.
-    assert_eq!(
-        resolve(&home, &evaluation()).err(),
-        Some("mcp_relay_saved_lookup_failed")
+    // The lookup now reads the row and collects the violation it records, so
+    // the resolution reaches the ignored row and defers to the daemon's policy
+    // authority rather than answering in its place.
+    let (resolved, audit) = resolve_audited(&home, &evaluation()).expect("the store is readable");
+    assert_eq!(resolved.err(), Some(DAEMON_AUTHORITY));
+    // The refusal the lookup recorded survives the deferral, for the relay to
+    // write once the snapshot is released.
+    assert!(
+        audit
+            .iter()
+            .any(|(name, _, _)| name == "policy_integrity_violation"),
+        "{audit:?}"
     );
 }
 

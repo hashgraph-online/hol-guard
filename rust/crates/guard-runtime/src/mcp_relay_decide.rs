@@ -44,8 +44,7 @@ use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use crate::policy_store::PolicySnapshotStore;
 use guard_command::package_intent_common::PackageIntent;
 use guard_contracts::{
-    McpToolArgumentsV1, McpToolCallBuildV1, McpToolCallHashInputV1, McpToolCallIdentityPayloadV1,
-    McpToolPolicyProxyInputV1,
+    McpToolArgumentsV1, McpToolCallBuildV1, McpToolCallIdentityPayloadV1, McpToolPolicyProxyInputV1,
 };
 use rusqlite::Connection;
 use serde::Deserialize;
@@ -433,14 +432,21 @@ fn decide(
         .map(Connection::unchecked_transaction)
         .transpose()
         .map_err(|_| store::STORE_UNREADABLE)?;
-    let (mut resolved, legged) = resolve(
+    let mut audit = Vec::new();
+    let resolved = resolve(
         request,
         &admitted,
         connection.as_deref(),
         intent.as_ref().map(PackageLeg::Decide),
         policy_store,
-    )?;
+        &mut audit,
+    );
     drop(snapshot);
+    // The proxy's lookups write these before the call is answered, and keep
+    // them when a later step fails, so a deferred call records them too.
+    let written = store::write_audit(&request.guard_home, &audit);
+    let (mut resolved, legged) = resolved?;
+    written?;
     let asks = admitted.binding.review.blocked_request_mode.as_deref() == Some(ASK_MODE);
     // A package call is answered by its own lane, under the package policy and
     // the tool authority together, so none of the tool-only route below runs
@@ -610,95 +616,6 @@ fn admit(
         snapshot,
         binding,
     })
-}
-
-/// Build the identity and run the tool policy, reading saved lookups on
-/// `connection`, held in one transaction. A call the gate found a package
-/// intent in also resolves its package leg, on that same snapshot: the lane's
-/// second resolution reads the store again, so it belongs inside it. What
-/// that leg is depends on who asked — a route for the decide path, the policy
-/// alone for a claim that routes it by the post-claim revalidation instead.
-fn resolve(
-    request: &McpRelayDecideRequestV1,
-    admitted: &Admitted,
-    connection: Option<&Connection>,
-    leg: Option<PackageLeg<'_>>,
-    policy_store: &PolicySnapshotStore,
-) -> Result<(Resolved, Option<Legged>), &'static str> {
-    policy_store
-        .require_guard_home(&request.guard_home)
-        .map_err(|_| BINDING_INCOMPLETE)?;
-    let _command_lease = policy_store
-        .command_authority_lease(&admitted.snapshot)
-        .map_err(|_| BINDING_INCOMPLETE)?;
-    let binding = &admitted.binding;
-    let control_digest = binding
-        .exact_action_control_digest
-        .clone()
-        .ok_or(BINDING_INCOMPLETE)?;
-    let view = view::bound_harness_view(binding, &request.build.harness)?;
-    let saved = match connection {
-        Some(connection) => store::saved(
-            connection,
-            binding,
-            &request.guard_home,
-            &request.build.harness,
-        )?,
-        None => None,
-    };
-    let identity = identity(request, &view, control_digest.clone(), connection)?;
-    let subject = subject::subject(request, &identity, &view)?;
-    let catalog = crate::contributed_mcp_decision_op::Catalog {
-        guard_home: &request.guard_home,
-        controls: admitted.snapshot.command_extensions.as_ref(),
-    };
-    let decision = run_policy(&subject, saved.as_ref(), connection, &catalog)?;
-    let packaged = match leg {
-        Some(PackageLeg::Decide(intent)) => {
-            let inputs = package_leg::package_inputs(
-                request,
-                &view,
-                saved.as_ref(),
-                &control_digest,
-                &identity,
-                intent,
-                request.package_evaluation.as_ref(),
-            )?;
-            Some(Legged::Decided(Box::new(package_leg::decide_package_leg(
-                request,
-                inputs,
-                &subject,
-                &catalog,
-                // The queue route of the package lane is answered by the same
-                // bound mode and redaction level the tool lane's queue route is.
-                package_lane::QueueBinding {
-                    blocked_request_mode: binding.review.blocked_request_mode.as_deref(),
-                    redaction_level: view.receipt_redaction_level.as_deref(),
-                },
-            )?)))
-        }
-        Some(PackageLeg::Claimed(intent, evaluation)) => Some(Legged::Reresolved(Box::new(
-            package_leg::reresolve_package_leg(
-                request,
-                &view,
-                saved.as_ref(),
-                &control_digest,
-                &identity,
-                intent,
-                evaluation,
-            )?,
-        ))),
-        None => None,
-    };
-    Ok((
-        Resolved {
-            identity,
-            decision,
-            mode: view.mode,
-            redaction_level: view.receipt_redaction_level,
-        },
-        packaged,
-    ))
 }
 
 /// Answer a forward or block route and queue or hold its evidence; a claimed
@@ -963,52 +880,6 @@ fn settled_directory(candidate: &str) -> Result<String, &'static str> {
         .map_err(|_| WORKSPACE_INVALID)
 }
 
-/// The artifact and approval-context token `build_tool_call_identity` makes.
-fn identity(
-    request: &McpRelayDecideRequestV1,
-    view: &view::HarnessView,
-    control_digest: String,
-    connection: Option<&Connection>,
-) -> Result<McpToolCallIdentityPayloadV1, &'static str> {
-    let mut build = request.build.clone();
-    build.provider_catalog_hash = provider_catalog_hash(request, connection)?;
-    let (artifact, private) =
-        crate::mcp_tool_call_identity_build::build_artifact(&build).map_err(|_| IDENTITY_FAILED)?;
-    let input = McpToolCallHashInputV1 {
-        arguments: guard_command::mcp_tool_signals::risk_arguments(&request.arguments),
-        config: Some(view.hash_config.clone()),
-        workspace: Some(request.hash_workspace.clone()),
-        extension_control_digest: Some(control_digest),
-    };
-    let hashed = crate::context_digest::build_mcp_tool_approval(
-        &crate::mcp_tool_call_identity_op::hash_request(&artifact, &input),
-    )
-    .map_err(|_| IDENTITY_FAILED)?;
-    Ok(McpToolCallIdentityPayloadV1 {
-        artifact,
-        runtime_private_metadata: private,
-        artifact_hash: Some(hashed.token_or_digest),
-        risk_categories: hashed.risk_categories,
-    })
-}
-
-/// The provider catalog hash a Composio wrapper's identity binds, which the
-/// proxy reads from the store (`read_mcp_provider_authority_hash`) and no
-/// other tool carries. A Composio call from a relay that did not leave the
-/// hash to this resident is refused rather than hashed without it.
-fn provider_catalog_hash(
-    request: &McpRelayDecideRequestV1,
-    connection: Option<&Connection>,
-) -> Result<Option<String>, &'static str> {
-    if !crate::mcp_relay_servers::composio_tool(&request.build.tool_name) {
-        return Ok(None);
-    }
-    if !request.resident_provider_catalog {
-        return Err(IDENTITY_FAILED);
-    }
-    provider::authority_hash(connection)
-}
-
 #[path = "mcp_relay_decide_ask.rs"]
 mod ask;
 #[path = "mcp_relay_decide_ask_row.rs"]
@@ -1065,6 +936,9 @@ mod provider;
 #[path = "mcp_relay_decide_queue.rs"]
 mod queue;
 use queue::route;
+#[path = "mcp_relay_decide_resolve.rs"]
+mod resolve;
+use resolve::resolve;
 #[path = "mcp_relay_decide_saved.rs"]
 mod saved;
 #[path = "mcp_relay_decide_session.rs"]

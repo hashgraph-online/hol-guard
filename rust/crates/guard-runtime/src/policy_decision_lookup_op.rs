@@ -40,6 +40,11 @@ use crate::cloud_exception_lift::{cloud_exception_covers, stored_exception_bundl
 use crate::guard_store_json::dumps_sorted;
 use crate::policy_bundle_store_identities::lookup_bundle_authority;
 
+#[path = "policy_decision_lookup_deferred.rs"]
+mod deferred;
+use deferred::emit_events;
+pub(crate) use deferred::{evaluate_non_consuming_deferred, write_audit_events, AuditEvent};
+
 pub(crate) const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
 /// The ceiling a non-consuming lookup stops fetching at. The document path
 /// reports the same ceiling, so both read it from the one contract constant.
@@ -1403,13 +1408,13 @@ pub(crate) fn evaluate(request: &PolicyDecisionLookupRequestV1) -> Result<Value,
         let transaction = conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| "native_policy_decision_lookup_write_failed".to_owned())?;
-        let payload = evaluate_in_connection(request, &transaction, &current_time)?;
+        let payload = evaluate_in_connection(request, &transaction, &current_time, &mut None)?;
         transaction
             .commit()
             .map_err(|_| "native_policy_decision_lookup_write_failed".to_owned())?;
         Ok(payload)
     } else {
-        evaluate_in_connection(request, &conn, &current_time)
+        evaluate_in_connection(request, &conn, &current_time, &mut None)
     }
 }
 
@@ -1440,13 +1445,16 @@ pub(crate) fn evaluate_non_consuming(
     }
     let current_time = canonical_utc_timestamp(&request.now)
         .ok_or_else(|| "native_policy_decision_lookup_invalid_now".to_owned())?;
-    evaluate_in_connection(request, conn, &current_time)
+    evaluate_in_connection(request, conn, &current_time, &mut None)
 }
 
+/// `deferred` collects the audit events a lookup raises instead of writing
+/// them, for a caller reading on a snapshot it cannot write to.
 fn evaluate_in_connection(
     request: &PolicyDecisionLookupRequestV1,
     conn: &Connection,
     current_time: &str,
+    deferred: &mut Option<&mut Vec<AuditEvent>>,
 ) -> Result<Value, String> {
     let harness = request.harness.as_str();
     let artifact_id = request.artifact_id.as_deref();
@@ -1584,7 +1592,7 @@ fn evaluate_in_connection(
     }
     if request.local_once_only {
         // The exact local-once peek never reads policy rows or consumes.
-        flush_events(conn, &events, current_time)
+        emit_events(conn, &events, current_time, deferred)
             .map_err(|_| "native_policy_decision_lookup_write_failed".to_owned())?;
         let trust_status = trust_status_from_state(&integrity_state);
         if let Some(ref mut ignored) = ignored_local_integrity {
@@ -1673,7 +1681,7 @@ fn evaluate_in_connection(
 
     // No rows and no local-once selection → empty result.
     if rows.is_empty() && selected_payload.is_none() {
-        flush_events(conn, &events, current_time)
+        emit_events(conn, &events, current_time, deferred)
             .map_err(|_| "native_policy_decision_lookup_write_failed".to_owned())?;
         if let Some(ref mut ili) = ignored_local_integrity {
             ili["trust_status"] = cached_trust_status.clone();
@@ -1833,7 +1841,7 @@ fn evaluate_in_connection(
         }
         selected_payload = claim_local_once(&selected_payload, &local_once_decision, &mut events)
             .map_err(|_| "native_policy_decision_lookup_write_failed".to_owned())?;
-        flush_events(conn, &events, current_time)
+        emit_events(conn, &events, current_time, deferred)
             .map_err(|_| "native_policy_decision_lookup_write_failed".to_owned())?;
         if let Some(ref mut ili) = ignored_local_integrity {
             ili["trust_status"] = cached_trust_status.clone();
@@ -1958,7 +1966,7 @@ fn evaluate_in_connection(
     }
     selected_payload = claim_local_once(&selected_payload, &local_once_decision, &mut events)
         .map_err(|_| "native_policy_decision_lookup_write_failed".to_owned())?;
-    flush_events(conn, &events, current_time)
+    emit_events(conn, &events, current_time, deferred)
         .map_err(|_| "native_policy_decision_lookup_write_failed".to_owned())?;
     if let Some(ref mut ili) = ignored_local_integrity {
         ili["trust_status"] = trust_status.clone();
@@ -1999,22 +2007,6 @@ fn lookup_result(
         "trust_status": trust_status,
         "authority_revision": stable_revision,
     })
-}
-
-/// `_flush_events` — append each audit event row; a failed insert propagates
-/// and aborts the lookup rather than silently dropping the event.
-fn flush_events(
-    conn: &Connection,
-    events: &[(String, Value)],
-    current_time: &str,
-) -> rusqlite::Result<()> {
-    for (name, payload) in events {
-        conn.execute(
-            "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-            params![name, canonical_json(payload), current_time],
-        )?;
-    }
-    Ok(())
 }
 
 /// Consuming multi-scope `policy_decisions` select — preserves scope

@@ -22,7 +22,7 @@ use super::POLICY_NEED;
 use crate::context_digest::python_strip;
 use crate::mcp_tool_policy_lookup::{most_restrictive, without_permission_elevation};
 use crate::memory_pattern::{verdict, MemoryRequest};
-use crate::policy_decision_lookup_op::evaluate_non_consuming;
+use crate::policy_decision_lookup_op::evaluate_non_consuming_deferred;
 use crate::project_identity::{portable_workspace, resolve_relative, PortableIdentity};
 use guard_contracts::{ApprovalReuseDiagnosticRequestV1, APPROVAL_REUSE_DIAGNOSTIC_REQUEST_SCHEMA};
 use serde_json::{json, Value};
@@ -176,10 +176,14 @@ impl Saved<'_> {
     }
 
     pub(super) fn probe(&self, probe: &Probe<'_>) -> Result<Value, &'static str> {
-        // A read the proxy would follow with an audit write fails here, on the
-        // read-only snapshot, and defers the call.
-        evaluate_non_consuming(&self.lookup_request(probe), self.connection)
-            .map_err(|_| SAVED_LOOKUP)
+        // The audit events the proxy's lookup would write are collected, as
+        // the snapshot takes no write, and written after it.
+        evaluate_non_consuming_deferred(
+            &self.lookup_request(probe),
+            self.connection,
+            &mut self.audit.borrow_mut(),
+        )
+        .map_err(|_| SAVED_LOOKUP)
     }
 
     /// `approval_reuse_diagnostic`'s reason for the selectors `need` names.
@@ -249,3 +253,7 @@ impl Saved<'_> {
 #[cfg(test)]
 #[path = "mcp_relay_decide_saved_tests.rs"]
 pub(super) mod tests;
+
+#[cfg(test)]
+#[path = "mcp_relay_decide_saved_audit_tests.rs"]
+mod audit_tests;

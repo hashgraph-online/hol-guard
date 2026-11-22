@@ -107,14 +107,17 @@ pub(crate) fn kickable(code: &str) -> bool {
 /// not ported yet. Every other reason the lane, the probe or the gate names,
 /// and any code added later, keeps the session native, so a binding, store
 /// or daemon the resident cannot use refuses each call instead of letting
-/// the proxy decide it.
+/// the proxy decide it. That includes saved policy the resident cannot
+/// verify (`mcp_relay_saved_policy_unverifiable`) or whose bundle authority
+/// it cannot read (`mcp_relay_saved_remote_policy`): the daemon now owns the
+/// policy-integrity key, so the proxy has no key or authority the resident
+/// lacks, and each call repeats the check, so a state the daemon republishes
+/// is read on the next call.
 pub(crate) fn hands_off(code: &str) -> bool {
     matches!(
         code,
         "mcp_relay_runtime_superseded"
             | "mcp_relay_store_newer"
-            | "mcp_relay_saved_remote_policy"
-            | "mcp_relay_saved_policy_unverifiable"
             | "mcp_relay_session_server_proxy_tools"
     )
 }

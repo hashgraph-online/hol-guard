@@ -230,16 +230,29 @@ pub(crate) fn lenient(path: &Path, cwd: &Path) -> PathBuf {
     joined
 }
 
+/// Drop the `\\?\` prefix Windows canonical paths carry and Python's
+/// `resolve()` does not. Only a drive-letter or UNC path loses it: a path with
+/// no such spelling, such as a volume-GUID path, keeps the prefix, as Python
+/// keeps it, rather than becoming a relative path.
 #[cfg(windows)]
 pub(crate) fn strip_verbatim(path: PathBuf) -> PathBuf {
     let text = path.to_string_lossy();
     if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
-        PathBuf::from(format!(r"\\{unc}"))
-    } else if let Some(local) = text.strip_prefix(r"\\?\") {
-        PathBuf::from(local)
-    } else {
-        path
+        return PathBuf::from(format!(r"\\{unc}"));
     }
+    match text.strip_prefix(r"\\?\") {
+        Some(local) if is_drive_absolute(local) => PathBuf::from(local),
+        _ => path,
+    }
+}
+
+/// `C:\` and the like: a drive letter, a colon and a separator.
+#[cfg(windows)]
+fn is_drive_absolute(text: &str) -> bool {
+    matches!(
+        text.as_bytes(),
+        [letter, b':', b'\\' | b'/', ..] if letter.is_ascii_alphabetic()
+    )
 }
 
 #[cfg(not(windows))]

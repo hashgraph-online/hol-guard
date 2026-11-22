@@ -357,11 +357,11 @@ fn an_unpublished_mismatched_or_moved_integrity_state_defers() {
 }
 
 /// The proxy's lookup evidence carries a degraded state as it is, and the
-/// lookup judges it. A store of remote rows reads natively under it, as long
-/// as the store still holds the state the daemon published; a local row,
-/// whose refusal the lookup would audit through a write, stays with the proxy.
+/// lookup judges it. The store reads natively under it, as long as it still
+/// holds the state the daemon published. A local row is refused, and the
+/// audit event recording that is collected for the relay to write later.
 #[test]
-fn a_degraded_integrity_state_reads_remote_rows_and_hands_off_local_ones() {
+fn a_degraded_integrity_state_reads_natively_and_collects_the_refusal() {
     let (home, connection) = guard_home("degraded");
     decide(
         &connection,
@@ -394,10 +394,16 @@ fn a_degraded_integrity_state_reads_remote_rows_and_hands_off_local_ones() {
     .unwrap();
     assert_eq!(policy["decision"]["action"], "block");
     decide(&connection, "artifact", "block", None, "approval-gate");
-    assert_eq!(
-        read(&home, &degraded, |_| ()).err(),
-        Some("mcp_relay_saved_policy_unverifiable")
-    );
+    let audit = read(&home, &degraded, |saved| {
+        let saved = saved.expect("saved rows");
+        assert!(saved.has_local_policy);
+        saved.answer(&policy_need(ARTIFACT, None)).unwrap();
+        saved.audit.borrow().clone()
+    })
+    .unwrap();
+    assert!(audit
+        .iter()
+        .any(|(name, _, _)| name == "rule.ignored.local_integrity"));
 }
 
 #[test]
