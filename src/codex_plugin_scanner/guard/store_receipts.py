@@ -22,6 +22,8 @@ from .store_base import *
 from .store_base import _canonical_utc_timestamp
 from .store_inventory import inventory_artifact_wire
 
+_RUNTIME_STATE_KEYS = frozenset({"session_id", "daemon_host", "daemon_port", "started_at", "last_heartbeat_at"})
+
 
 def _receipt_wire(receipt: GuardReceipt) -> dict[str, object]:
     return {
@@ -319,31 +321,32 @@ class StoreReceiptsRuntimeMixin:
         return True
 
     def get_runtime_state(self) -> dict[str, object] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                select session_id, daemon_host, daemon_port, started_at, last_heartbeat_at
-                from guard_runtime_state
-                where state_key = 'runtime'
-                """
-            ).fetchone()
-        if row is None:
+        answer = self._native_store_call("get_runtime_state", {})
+        if answer is None:
             return None
+        if not isinstance(answer, dict) or set(answer) != _RUNTIME_STATE_KEYS:
+            raise RuntimeError("native get_runtime_state returned no answer")
+        session_id = answer["session_id"]
+        daemon_host = answer["daemon_host"]
+        daemon_port = answer["daemon_port"]
+        started_at = answer["started_at"]
+        last_heartbeat_at = answer["last_heartbeat_at"]
+        if (
+            not isinstance(session_id, str)
+            or not isinstance(daemon_host, str)
+            or isinstance(daemon_port, bool)
+            or not isinstance(daemon_port, int)
+            or not isinstance(started_at, str)
+            or not isinstance(last_heartbeat_at, str)
+        ):
+            raise RuntimeError("native get_runtime_state returned no answer")
         return GuardRuntimeState(
-            session_id=str(row["session_id"]),
-            daemon_host=str(row["daemon_host"]),
-            daemon_port=int(row["daemon_port"]),
-            started_at=str(row["started_at"]),
-            last_heartbeat_at=str(row["last_heartbeat_at"]),
+            session_id=session_id,
+            daemon_host=daemon_host,
+            daemon_port=daemon_port,
+            started_at=started_at,
+            last_heartbeat_at=last_heartbeat_at,
         ).to_dict()
 
     def clear_runtime_state(self, *, session_id: str) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                delete from guard_runtime_state
-                where state_key = 'runtime'
-                  and session_id = ?
-                """,
-                (session_id,),
-            )
+        self._native_store_call("clear_runtime_state", {"session_id": session_id})
