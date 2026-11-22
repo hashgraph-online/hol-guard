@@ -15,6 +15,8 @@ use crate::guard_store_db::{
 mod assessment_admissions;
 #[path = "guard_store_workspace_assessment_queue.rs"]
 mod assessment_queue;
+#[path = "guard_store_workspace_fix_proposals.rs"]
+mod workspace_fix_proposals;
 
 #[path = "guard_store_workspace_assessment_reads.rs"]
 mod workspace_assessment;
@@ -38,6 +40,7 @@ pub(crate) fn handles(method: &str) -> bool {
             | "hook_approval_center_origin"
     ) || assessment_queue::handles(method)
         || assessment_admissions::handles(method)
+        || workspace_fix_proposals::handles(method)
         || workspace_assessment::handles(method)
 }
 
@@ -55,6 +58,9 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
         }
         _ if assessment_admissions::handles(method) => {
             assessment_admissions::dispatch(connection, method, args)
+        }
+        _ if workspace_fix_proposals::handles(method) => {
+            workspace_fix_proposals::dispatch(connection, method, args)
         }
         _ if workspace_assessment::handles(method) => {
             workspace_assessment::dispatch(connection, method, args)
