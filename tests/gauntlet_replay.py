@@ -216,20 +216,35 @@ def cursor_hook_fields(tool: str, payload: dict[str, object]) -> dict[str, objec
     Cursor reports shell calls as beforeShellExecution and reads as beforeReadFile.
     The script forwards both as PreToolUse, keeping the raw command or path beside tool_input.
     A beforeReadFile event also carries the file's full text as ``content``.
-    A Write or Grep call reaches preToolUse unchanged, so it gains no fields.
+    A Write or Grep call reaches preToolUse unchanged, so it gains no event fields.
+
+    Every Cursor event also carries the client's own identity: the conversation
+    and generation it belongs to, the client version, the chosen model, the
+    signed-in account and the roots the window opened.
     """
     tool_input = payload["tool_input"]
     assert isinstance(tool_input, dict)
+    identity: dict[str, object] = {
+        "conversation_id": "c0ffee00-0000-4000-8000-000000000000",
+        "generation_id": "9e11a700-0000-4000-8000-000000000000",
+        "cursor_version": "2026.11.22-0000000",
+        "model": "auto",
+        "user_email": "person@example.test",
+        "workspace_roots": [str(payload["cwd"])],
+    }
     if tool in {"write", "grep"}:
-        return {}
+        return identity
     if tool == "read":
         file_path = str(tool_input["file_path"])
-        fields: dict[str, object] = {"file_path": file_path}
+        fields: dict[str, object] = {**identity, "file_path": file_path}
         target = Path(str(payload["cwd"]), file_path)
         if target.is_file():
             fields["content"] = target.read_text(encoding="utf-8", errors="replace")
         return fields
+    if "command" not in tool_input:
+        return identity
     return {
+        **identity,
         "command": tool_input["command"],
         "tool_input": {**tool_input, "working_directory": payload["cwd"]},
         "cursor_source_hook_event": "beforeShellExecution",

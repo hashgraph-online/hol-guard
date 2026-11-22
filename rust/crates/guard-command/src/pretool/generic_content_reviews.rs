@@ -22,7 +22,10 @@ pub(super) fn admitted_subagent_brief(
     signals: &GenericSignals,
 ) -> bool {
     event == "PreToolUse"
-        && harness == "claude-code"
+        // Claude Code's `Agent` and Cursor's `Task` both hand a subagent a
+        // written brief. Another harness can give the same name to a tool
+        // that runs something, so each one is admitted by name.
+        && matches!(harness, "claude-code" | "cursor")
         && agent_metadata::subagent_brief(payload, signals.tool_name.as_deref())
         && signals.command.is_none()
         && !signals.package_present
