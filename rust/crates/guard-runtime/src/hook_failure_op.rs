@@ -108,9 +108,13 @@ fn failure(
     let kind = event_kind(&contract, event_name);
     let prompt = kind == "prompt";
     let effective_reason = if prompt {
-        contract["defaults"]["prompt_reason"]
-            .as_str()
-            .unwrap_or(reason)
+        if reason.is_empty() {
+            contract["defaults"]["prompt_reason"]
+                .as_str()
+                .unwrap_or(reason)
+        } else {
+            reason
+        }
     } else {
         reason
     };
