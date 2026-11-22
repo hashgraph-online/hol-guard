@@ -26,14 +26,22 @@ _HEAD_FIELDS: Final = frozenset({"revision", "snapshot_digest", "catalog_digest"
 _INVALID_ROW: Final = "invalid extension control authority row"
 _COMMITTED_PHASE: Final = "committed"
 _HEAD_FIELDS_ORDER: Final = ("revision", "snapshot_digest", "catalog_digest")
+_SNAPSHOT_TABLE: Final = "extension_control_authority_snapshot"
+_TRANSITION_TABLE: Final = "extension_control_authority_transition"
+# The same reads the native store runs: a cell of the wrong type reads as
+# null, and a missing table has no head and no transitions.
+_TABLE_SQL: Final = "select 1 from sqlite_master where type = 'table' and name = ?"
 _HEAD_SQL: Final = (
-    "select revision, snapshot_digest, catalog_digest from extension_control_authority_snapshot where singleton = 1"
+    "select case when typeof(revision) = 'integer' then revision end, "
+    "case when typeof(snapshot_digest) = 'text' then snapshot_digest end, "
+    "case when typeof(catalog_digest) = 'text' then catalog_digest end "
+    f"from {_SNAPSHOT_TABLE} where singleton = 1"
 )
 _RECOVERY_SQL: Final = (
-    "select revision from extension_control_authority_transition "
+    f"select revision from {_TRANSITION_TABLE} "
     "where (revision = ? and phase != ?) or revision = ? order by revision limit 1"
 )
-_COMMITTED_SQL: Final = "select 1 from extension_control_authority_transition where revision = ? and phase = ?"
+_COMMITTED_SQL: Final = f"select 1 from {_TRANSITION_TABLE} where revision = ? and phase = ?"
 
 
 @dataclass(frozen=True)
@@ -51,17 +59,29 @@ def _is_int(value: object) -> bool:
     return type(value) is int
 
 
+def _has_table(connection: sqlite3.Connection, table: str) -> bool:
+    return connection.execute(_TABLE_SQL, (table,)).fetchone() is not None
+
+
 def _scoped_answer(connection: sqlite3.Connection, method: str, args: dict[str, object]) -> dict[str, object]:
     """The native answer for ``method``, read on the shared connection."""
 
     if method == _HEAD:
+        if not _has_table(connection, _SNAPSHOT_TABLE):
+            return {"snapshot": None}
         row = connection.execute(_HEAD_SQL).fetchone()
         snapshot = None if row is None else dict(zip(_HEAD_FIELDS_ORDER, row, strict=True))
         return {"snapshot": snapshot}
     revision = cast(int, args["revision"])
+    has_transitions = _has_table(connection, _TRANSITION_TABLE)
     if method == _RECOVERY:
+        if not has_transitions:
+            return {"revision": None}
         row = connection.execute(_RECOVERY_SQL, (revision, _COMMITTED_PHASE, revision + 1)).fetchone()
-        return {"revision": None if row is None else row[0]}
+        found = None if row is None else row[0]
+        return {"revision": found if _is_int(found) else None}
+    if not has_transitions:
+        return {"committed": False}
     row = connection.execute(_COMMITTED_SQL, (revision, _COMMITTED_PHASE)).fetchone()
     return {"committed": row is not None}
 

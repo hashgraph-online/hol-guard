@@ -128,3 +128,34 @@ def test_an_open_connection_scope_reads_on_the_shared_connection(monkeypatch):
     connection.execute("update extension_control_authority_snapshot set revision = '4'")
     with pytest.raises(ExtensionControlAuthorityError):
         extension_control_snapshot_head(store)
+
+
+def test_an_open_connection_scope_answers_like_the_native_store(monkeypatch):
+    from codex_plugin_scanner.guard import native_extension_control_head
+
+    connection = sqlite3.connect(":memory:")
+
+    def refuse(method, args):
+        raise AssertionError("an owned scope must not call the resident")
+
+    store = SimpleNamespace(_native_store_call=refuse, _connect=lambda: connection)
+    monkeypatch.setattr(native_extension_control_head, "owns_scope", lambda _store: True)
+
+    # No tables: no head and no transitions, as the native store answers.
+    assert extension_control_snapshot_head(store) is None
+    assert extension_control_recovery_transition(store, 4) is None
+    assert extension_control_transition_committed(store, 4) is False
+
+    # A digest of the wrong type reads as null, so the row is invalid.
+    connection.executescript(
+        "create table extension_control_authority_snapshot ("
+        "  singleton integer primary key, revision, catalog_digest, snapshot_digest);"
+        "create table extension_control_authority_transition (revision, phase text not null);"
+    )
+    connection.execute("insert into extension_control_authority_snapshot values (1, 4, ?, 's')", (b"c",))
+    with pytest.raises(ExtensionControlAuthorityError):
+        extension_control_snapshot_head(store)
+
+    # A transition revision stored as text is not a revision to resume.
+    connection.execute("insert into extension_control_authority_transition values ('5', 'prepared')")
+    assert extension_control_recovery_transition(store, 4) is None
