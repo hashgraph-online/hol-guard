@@ -205,7 +205,7 @@ fn a_call_sent_to_the_package_policy_hands_its_server_to_the_proxy() {
         "bash",
         mapping(json!([["command", "npm install left-pad"]])),
     );
-    super::super::mark_package_server(&call, &fixture.store);
+    super::super::package_server::mark_package_server(&call, &fixture.store);
     // A call without a server identity names no server.
     assert_eq!(servers.relayable(&server), Err(SERVER_UNKNOWN));
     call.build.server_identity = Some(
@@ -224,13 +224,21 @@ fn a_call_sent_to_the_package_policy_hands_its_server_to_the_proxy() {
         .unwrap(),
     );
     servers.record(&server, false);
-    super::super::mark_package_server(&call, &fixture.store);
+    let relayable = servers.relayable(&server);
+    assert!(relayable.is_ok());
+    // A decide outside the package lane leaves the server relayable.
+    let other = Err("mcp_relay_policy_need");
+    super::super::package_server::after_decide(&other, &call, &fixture.store);
+    assert_eq!(servers.relayable(&server), relayable);
+    // A package-lane defer hands the server to the proxy.
+    let prompt = Err(super::super::ask::PACKAGE_PROMPT);
+    super::super::package_server::after_decide(&prompt, &call, &fixture.store);
     assert_eq!(servers.relayable(&server), Err(SERVER_PROXY_TOOLS));
 }
 
 #[test]
 fn a_package_call_the_relay_could_not_evaluate_is_refused_once_for_the_server() {
-    use super::super::PACKAGE_DEFER_PREFIX;
+    use super::super::package_server::hands_server_off;
     use super::super::{evaluation_leg, package_leg::EVALUATION_ABSENT, Answer};
 
     let mut call = request(
@@ -254,5 +262,5 @@ fn a_package_call_the_relay_could_not_evaluate_is_refused_once_for_the_server() 
     ));
     // And the refusal is a package-lane defer, so it hands the server to the
     // proxy for its later sessions rather than refusing the call again.
-    assert!(EVALUATION_ABSENT.starts_with(PACKAGE_DEFER_PREFIX));
+    assert!(hands_server_off(EVALUATION_ABSENT));
 }

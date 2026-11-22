@@ -195,7 +195,7 @@ fn a_saved_allow_for_the_bound_identity_is_reported_as_reused() {
 
 #[cfg(unix)]
 #[test]
-fn a_row_the_lookup_ignores_for_local_integrity_defers() {
+fn a_row_the_lookup_ignores_for_local_integrity_asks_for_reapproval() {
     let (home, connection) = home("pkg-policy-ignored");
     let hash = resolve(&home, &evaluation())
         .expect("the store is readable")
@@ -212,13 +212,15 @@ fn a_row_the_lookup_ignores_for_local_integrity_defers() {
             ..Row::default()
         },
     );
-    // The lookup now reads the row and collects the violation it records, so
-    // the resolution reaches the ignored row and defers to the daemon's policy
-    // authority rather than answering in its place.
+    // The daemon's authority would ignore the same row, so the relay answers
+    // the miss as Python does after it: the row is not reused and the call
+    // asks again, so a replacement approval can settle it.
     let (resolved, audit) = resolve_audited(&home, &evaluation()).expect("the store is readable");
-    assert_eq!(resolved.err(), Some(DAEMON_AUTHORITY));
-    // The refusal the lookup recorded survives the deferral, for the relay to
-    // write once the snapshot is released.
+    let resolved = resolved.expect("an ignored row is answered in place");
+    assert!(resolved.reused_decision.is_none());
+    assert_ne!(resolved.evaluation["policy_action"], "allow");
+    // The refusal the lookup recorded is kept, for the relay to write once
+    // the snapshot is released.
     assert!(
         audit
             .iter()
