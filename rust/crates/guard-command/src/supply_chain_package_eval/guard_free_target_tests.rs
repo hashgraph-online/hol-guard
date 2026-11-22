@@ -99,6 +99,33 @@ fn an_environment_that_already_holds_guard_keeps_its_review() {
 }
 
 #[test]
+fn a_target_inside_a_guard_environment_keeps_its_review() {
+    let dir = tempfile::tempdir().unwrap();
+    let guard = dir.path().join("guard-venv");
+    venv(&guard);
+    let site = guard.join("lib/python3.12/site-packages");
+    std::fs::create_dir_all(site.join("hol_guard-3.60.0.dist-info")).unwrap();
+    std::fs::create_dir_all(site.join("codex_plugin_scanner")).unwrap();
+    for target in [
+        site.join("codex_plugin_scanner"),
+        site.join("not-yet/created"),
+        guard.join("lib"),
+    ] {
+        let command = format!(
+            "uv pip install --target {} ./hol_guard.whl",
+            target.display()
+        );
+        assert!(!guard_free(&command, None), "{command}");
+    }
+    // A fresh directory beside the Guard environment is still Guard-free.
+    let command = format!(
+        "uv pip install --prefix {} ./hol_guard.whl",
+        dir.path().join("beside").display()
+    );
+    assert!(guard_free(&command, None));
+}
+
+#[test]
 fn the_environment_running_guard_keeps_its_review() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("guard-venv");

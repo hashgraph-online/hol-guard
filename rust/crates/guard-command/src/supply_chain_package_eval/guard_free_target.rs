@@ -87,14 +87,20 @@ pub(super) fn installs_into_guard_free_environment(
         return false;
     };
     !roots.is_empty()
-        && roots
-            .iter()
-            .all(|root| environment_is_guard_free(root, running_executable))
+        && roots.iter().all(|(root, is_directory)| {
+            environment_is_guard_free(root, running_executable)
+                && (!is_directory || !inside_a_guard_environment(root))
+        })
 }
 
-/// The directories a single `uv pip install|sync` writes into, or `None`
-/// when the command does not name them unambiguously.
-fn target_environment_roots(tokens: &[String], base_dir: Option<&Path>) -> Option<Vec<PathBuf>> {
+/// The directories a single `uv pip install|sync` writes into, each marked
+/// `true` when it is a `--target` or `--prefix` directory rather than a
+/// virtual environment, or `None` when the command does not name them
+/// unambiguously.
+fn target_environment_roots(
+    tokens: &[String],
+    base_dir: Option<&Path>,
+) -> Option<Vec<(PathBuf, bool)>> {
     if tokens
         .iter()
         .any(|t| t.contains(SHELL_METACHARACTERS) || t.contains("$("))
@@ -137,9 +143,9 @@ fn target_environment_roots(tokens: &[String], base_dir: Option<&Path>) -> Optio
         };
         let path = resolve_path(value, base_dir)?;
         roots.push(if is_interpreter {
-            interpreter_environment(&path)?
+            (interpreter_environment(&path)?, false)
         } else {
-            path
+            (path, true)
         });
     }
     Some(roots)
@@ -257,14 +263,40 @@ fn environment_is_guard_free(root: &Path, running_executable: Option<&Path>) -> 
             return false;
         }
     }
+    !holds_guard_installation(&root, true)
+}
+
+/// Whether a `--target` or `--prefix` directory sits inside an environment
+/// that holds Guard, such as a folder under Guard's own `site-packages`.
+/// For a directory that does not exist yet, its nearest existing parent and
+/// that parent's parents are checked.
+fn inside_a_guard_environment(directory: &Path) -> bool {
+    let Some(existing) = directory.ancestors().find(|a| a.symlink_metadata().is_ok()) else {
+        return true;
+    };
+    let Ok(existing) = std::fs::canonicalize(existing) else {
+        return true;
+    };
+    // Parents such as `/var` can hold unrelated folders the user cannot read
+    // (`/var/lib/postfix`); only Guard's own markers count there.
+    existing
+        .ancestors()
+        .any(|ancestor| holds_guard_installation(ancestor, false))
+}
+
+/// Whether `root` holds a Guard console script or Guard's package metadata
+/// in itself or in one of its `site-packages` directories. With
+/// `unreadable_holds_guard`, a directory that exists but cannot be read
+/// counts as holding Guard.
+fn holds_guard_installation(root: &Path, unreadable_holds_guard: bool) -> bool {
     for bin in ["bin", "Scripts"] {
         for executable in GUARD_EXECUTABLES {
             if root.join(bin).join(executable).symlink_metadata().is_ok() {
-                return false;
+                return true;
             }
         }
     }
-    let mut package_dirs = vec![root.clone(), root.join("Lib").join("site-packages")];
+    let mut package_dirs = vec![root.to_path_buf(), root.join("Lib").join("site-packages")];
     for lib in ["lib", "lib64"] {
         if let Ok(entries) = std::fs::read_dir(root.join(lib)) {
             for entry in entries.flatten() {
@@ -272,15 +304,18 @@ fn environment_is_guard_free(root: &Path, running_executable: Option<&Path>) -> 
             }
         }
     }
-    !package_dirs.iter().any(|dir| holds_guard_distribution(dir))
+    package_dirs
+        .iter()
+        .any(|dir| holds_guard_distribution(dir, unreadable_holds_guard))
 }
 
 /// Whether a site-packages or `--target` directory holds Guard's metadata.
-/// An unreadable directory that exists counts as holding it.
-fn holds_guard_distribution(dir: &Path) -> bool {
+fn holds_guard_distribution(dir: &Path, unreadable_holds_guard: bool) -> bool {
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
-        Err(error) => return error.kind() != std::io::ErrorKind::NotFound,
+        Err(error) => {
+            return unreadable_holds_guard && error.kind() != std::io::ErrorKind::NotFound;
+        }
     };
     entries.flatten().any(|entry| {
         let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
