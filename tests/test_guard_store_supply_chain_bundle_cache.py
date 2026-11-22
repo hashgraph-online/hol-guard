@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -74,10 +76,13 @@ def test_a_missing_bundle_field_is_refused(tmp_path: Path) -> None:
     [
         [],
         {},
-        {"response_json": "{}"},
-        {"response_json": "{}", "cached_at": "t", "extra": 1},
-        {"response_json": 7, "cached_at": "t"},
-        {"response_json": "{}", "cached_at": None},
+        {"page": "{}"},
+        {"page": "{}", "length": 2, "cached_at": "t", "extra": 1},
+        {"page": 7, "length": 2, "cached_at": "t"},
+        {"page": "{}", "length": 2, "cached_at": None},
+        {"page": "{}", "length": True, "cached_at": "t"},
+        {"page": "{}", "length": -1, "cached_at": "t"},
+        {"response_json": "{}", "cached_at": "t"},
     ],
 )
 def test_a_malformed_answer_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
@@ -96,8 +101,69 @@ def test_a_stored_response_that_is_not_an_object_reads_as_none(tmp_path: Path, m
     store = GuardStore(tmp_path)
 
     def native(_method: str, _args: object, **_kwargs: Any) -> object:
-        return {"response_json": "[1]", "cached_at": "t"}
+        return {"page": "[1]", "length": 3, "cached_at": "t"}
 
     monkeypatch.setattr(store, "_native_store_call", native)
 
     assert store.get_cached_supply_chain_bundle(_WORKSPACE) is None
+
+
+def test_a_response_larger_than_one_reply_is_read_in_pages(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    store.cache_supply_chain_bundle(_WORKSPACE, _response(), "t1")
+    large = _response()
+    bundle = large["bundle"]
+    assert isinstance(bundle, dict)
+    bundle["rules"] = [{"id": f"r{index}", "note": "\u00e9" * 64} for index in range(40_000)]
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "update guard_supply_chain_bundle_cache set response_json = ? where workspace_id = ?",
+            (json.dumps(large, ensure_ascii=False), _WORKSPACE),
+        )
+
+    cached = store.get_cached_supply_chain_bundle(_WORKSPACE)
+
+    assert cached == {**large, "cached_at": "t1"}
+
+
+def test_a_response_replaced_between_pages_is_read_again(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path)
+    answers = iter(
+        [
+            {"page": '{"bun', "length": 13, "cached_at": "t1"},
+            {"page": "{}", "length": 2, "cached_at": "t2"},
+            {"page": '{"a":', "length": 8, "cached_at": "t3"},
+            {"page": "1}", "length": 8, "cached_at": "t3"},
+            {"page": "", "length": 8, "cached_at": "t3"},
+            {"page": "x", "length": 9, "cached_at": "t4"},
+            {"page": "y", "length": 9, "cached_at": "t5"},
+        ]
+    )
+    offsets: list[object] = []
+
+    def native(_method: str, args: dict[str, object], **_kwargs: Any) -> object:
+        offsets.append(args["offset"])
+        return next(answers)
+
+    monkeypatch.setattr(store, "_native_store_call", native)
+
+    with pytest.raises(RuntimeError, match="kept changing"):
+        store.get_cached_supply_chain_bundle(_WORKSPACE)
+    assert offsets == [0, 5, 0, 5, 7, 0, 1]
+
+
+def test_a_steady_paged_response_is_joined(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path)
+    answers = iter(
+        [
+            {"page": '{"a":', "length": 7, "cached_at": "t1"},
+            {"page": "1}", "length": 7, "cached_at": "t1"},
+        ]
+    )
+
+    def native(_method: str, _args: object, **_kwargs: Any) -> object:
+        return next(answers)
+
+    monkeypatch.setattr(store, "_native_store_call", native)
+
+    assert store.get_cached_supply_chain_bundle(_WORKSPACE) == {"a": 1, "cached_at": "t1"}

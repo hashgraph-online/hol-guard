@@ -42,7 +42,9 @@ pub(crate) fn dispatch(
 ) -> StoreResult<Value> {
     match method {
         "cached_supply_chain_bundle" => cached_bundle(connection),
-        "get_cached_supply_chain_bundle" => workspace_bundle(connection, args.str("workspace_id")?),
+        "get_cached_supply_chain_bundle" => {
+            workspace_bundle_page(connection, args.str("workspace_id")?, args.int("offset")?)
+        }
         "cache_supply_chain_bundle" => cache_bundle(
             connection,
             args.str("workspace_id")?,
@@ -53,21 +55,36 @@ pub(crate) fn dispatch(
     }
 }
 
-/// `get_supply_chain_bundle`: the stored response text and when it was
-/// cached, or `null` when the workspace has no row. The text is handed back
-/// unchanged so the caller parses it with its own key order.
-fn workspace_bundle(connection: &Connection, workspace_id: &str) -> StoreResult<Value> {
-    let row: Option<(String, String)> = connection
+/// Characters of stored response text returned per call. A reply is capped
+/// at 2 MiB, and even four-byte characters escaped into JSON stay well under
+/// that at this size, while cloud sync may store a much larger response.
+pub(crate) const RESPONSE_PAGE_CHARS: i64 = 256 * 1024;
+
+/// `get_supply_chain_bundle`, one page at a time: the stored response text
+/// from character `offset`, its full length and when it was cached, or
+/// `null` when the workspace has no row. The caller joins the pages and
+/// parses the text with its own key order, and restarts when `cached_at` or
+/// the length changes between pages.
+fn workspace_bundle_page(
+    connection: &Connection,
+    workspace_id: &str,
+    offset: i64,
+) -> StoreResult<Value> {
+    if offset < 0 {
+        return value_error("offset must not be negative");
+    }
+    let row: Option<(String, i64, String)> = connection
         .query_row(
-            "select response_json, cached_at from guard_supply_chain_bundle_cache \
-             where workspace_id = ?1",
-            params![workspace_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            "select substr(response_json, ?2 + 1, ?3), length(response_json), cached_at \
+             from guard_supply_chain_bundle_cache where workspace_id = ?1",
+            params![workspace_id, offset, RESPONSE_PAGE_CHARS],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()?;
-    Ok(row.map_or(Value::Null, |(response_json, cached_at)| {
-        json!({"response_json": response_json, "cached_at": cached_at})
-    }))
+    Ok(row.map_or(
+        Value::Null,
+        |(page, length, cached_at)| json!({"page": page, "length": length, "cached_at": cached_at}),
+    ))
 }
 
 /// `upsert_supply_chain_bundle`: replace the workspace's cached response.

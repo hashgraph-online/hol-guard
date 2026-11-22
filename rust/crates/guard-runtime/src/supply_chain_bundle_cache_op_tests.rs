@@ -123,11 +123,13 @@ fn a_cached_response_is_written_with_its_columns_and_read_back() {
     let read = call(
         &connection,
         "get_cached_supply_chain_bundle",
-        serde_json::json!({"workspace_id": "ws-1"}),
+        serde_json::json!({"workspace_id": "ws-1", "offset": 0}),
     )
     .unwrap();
     assert_eq!(read["cached_at"], "t1");
-    let stored: Value = serde_json::from_str(read["response_json"].as_str().unwrap()).unwrap();
+    let page = read["page"].as_str().unwrap();
+    assert_eq!(read["length"], page.chars().count());
+    let stored: Value = serde_json::from_str(page).unwrap();
     assert_eq!(stored, response());
 }
 
@@ -154,7 +156,7 @@ fn a_workspace_without_a_row_reads_null() {
     let read = call(
         &connection,
         "get_cached_supply_chain_bundle",
-        serde_json::json!({"workspace_id": "ws-9"}),
+        serde_json::json!({"workspace_id": "ws-9", "offset": 0}),
     )
     .unwrap();
     assert_eq!(read, Value::Null);
@@ -214,4 +216,60 @@ fn the_methods_are_routed_here() {
         assert!(handles(method), "{method}");
     }
     assert!(!handles("add_guard_event_v1"));
+}
+
+#[test]
+fn a_response_longer_than_one_page_is_read_in_pages() {
+    let connection = full_cache();
+    let page_chars = usize::try_from(RESPONSE_PAGE_CHARS).unwrap();
+    let text: String = "\u{e9}".repeat(page_chars) + "abc";
+    connection
+        .execute(
+            "insert into guard_supply_chain_bundle_cache values \
+             ('ws-1', 'v', 'k', 't', 'p', 'f', 's', 'h', ?1, 't1')",
+            params![text],
+        )
+        .unwrap();
+    let first = call(
+        &connection,
+        "get_cached_supply_chain_bundle",
+        serde_json::json!({"workspace_id": "ws-1", "offset": 0}),
+    )
+    .unwrap();
+    assert_eq!(first["length"], page_chars + 3);
+    assert_eq!(first["page"].as_str().unwrap().chars().count(), page_chars);
+    let second = call(
+        &connection,
+        "get_cached_supply_chain_bundle",
+        serde_json::json!({"workspace_id": "ws-1", "offset": RESPONSE_PAGE_CHARS}),
+    )
+    .unwrap();
+    assert_eq!(second["page"], "abc");
+    assert_eq!(second["cached_at"], "t1");
+    let past_end = call(
+        &connection,
+        "get_cached_supply_chain_bundle",
+        serde_json::json!({"workspace_id": "ws-1", "offset": RESPONSE_PAGE_CHARS + 3}),
+    )
+    .unwrap();
+    assert_eq!(past_end["page"], "");
+}
+
+#[test]
+fn a_negative_offset_or_a_missing_offset_is_refused() {
+    let connection = full_cache();
+    assert!(matches!(
+        call(
+            &connection,
+            "get_cached_supply_chain_bundle",
+            serde_json::json!({"workspace_id": "ws-1", "offset": -1}),
+        ),
+        Err(StoreError::Value(_))
+    ));
+    assert!(call(
+        &connection,
+        "get_cached_supply_chain_bundle",
+        serde_json::json!({"workspace_id": "ws-1"}),
+    )
+    .is_err());
 }
