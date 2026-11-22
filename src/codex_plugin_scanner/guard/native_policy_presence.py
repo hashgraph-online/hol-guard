@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
-_PRESENCE_FIELDS: Final = frozenset({"local_policy", "remote_policy", "local_once", "policy_bundle"})
+_PRESENCE_FIELDS: Final = frozenset({"any_saved", "local_policy", "remote_policy", "local_once", "policy_bundle"})
 
 
 class NativePolicyPresenceError(RuntimeError):
@@ -23,10 +23,7 @@ class PolicyRowPresence:
     remote_policy: bool
     local_once: bool
     policy_bundle: bool
-
-    @property
-    def any_saved(self) -> bool:
-        return self.local_policy or self.remote_policy or self.local_once
+    any_saved: bool
 
 
 def policy_row_presence(store: Any) -> PolicyRowPresence:
@@ -43,6 +40,7 @@ def policy_row_presence(store: Any) -> PolicyRowPresence:
         remote_policy=answer["remote_policy"],
         local_once=answer["local_once"],
         policy_bundle=answer["policy_bundle"],
+        any_saved=answer["any_saved"],
     )
 
 

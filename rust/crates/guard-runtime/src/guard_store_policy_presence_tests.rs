@@ -34,8 +34,8 @@ fn both_reads_are_routed_as_snapshots() {
 fn an_empty_store_has_no_saved_rows() {
     assert_eq!(
         presence(&store()),
-        json!({"local_policy": false, "remote_policy": false, "local_once": false,
-               "policy_bundle": false})
+        json!({"any_saved": false, "local_policy": false, "remote_policy": false,
+               "local_once": false, "policy_bundle": false})
     );
 }
 
@@ -47,8 +47,8 @@ fn each_kind_of_saved_row_is_reported_on_its_own() {
         .expect("local");
     assert_eq!(
         presence(&connection),
-        json!({"local_policy": true, "remote_policy": false, "local_once": false,
-               "policy_bundle": false})
+        json!({"any_saved": true, "local_policy": true, "remote_policy": false,
+               "local_once": false, "policy_bundle": false})
     );
     connection
         .execute("delete from policy_decisions", [])
@@ -61,8 +61,8 @@ fn each_kind_of_saved_row_is_reported_on_its_own() {
         .expect("once");
     assert_eq!(
         presence(&connection),
-        json!({"local_policy": false, "remote_policy": true, "local_once": true,
-               "policy_bundle": true})
+        json!({"any_saved": true, "local_policy": false, "remote_policy": true,
+               "local_once": true, "policy_bundle": true})
     );
 }
 

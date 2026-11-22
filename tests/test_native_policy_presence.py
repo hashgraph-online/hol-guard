@@ -31,6 +31,7 @@ def _presence(**overrides: object) -> dict[str, object]:
         "policy_bundle": False,
     }
     answer.update(overrides)
+    answer.setdefault("any_saved", any(answer[name] for name in ("local_policy", "remote_policy", "local_once")))
     return answer
 
 
@@ -40,7 +41,9 @@ def test_presence_reads_each_kind_from_the_native_store() -> None:
     presence = policy_row_presence(store)
 
     assert store.calls == [("policy_row_presence", {})]
-    assert presence == PolicyRowPresence(local_policy=False, remote_policy=True, local_once=False, policy_bundle=True)
+    assert presence == PolicyRowPresence(
+        local_policy=False, remote_policy=True, local_once=False, policy_bundle=True, any_saved=True
+    )
     assert presence.any_saved
 
 
@@ -57,6 +60,7 @@ def test_an_empty_store_has_no_saved_rows() -> None:
         {},
         _presence(local_policy=1),
         _presence(local_policy="true"),
+        _presence(any_saved=None),
         {**_presence(), "extra": False},
         {key: value for key, value in _presence().items() if key != "policy_bundle"},
     ],

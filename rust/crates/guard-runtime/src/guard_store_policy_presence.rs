@@ -31,7 +31,8 @@ fn exists(connection: &Connection, sql: &str, params: &[Value]) -> StoreResult<b
 }
 
 /// Which saved rows exist: local and remote policy decisions, local-once
-/// approvals, and policy-bundle decisions.
+/// approvals, and policy-bundle decisions. `any_saved` is whether a saved
+/// allow can exist at all, so a lookup with none skips its evidence work.
 fn presence(connection: &Connection) -> StoreResult<Value> {
     let placeholders = vec!["?"; REMOTE_POLICY_SOURCES.len()].join(",");
     let remote: Vec<Value> = REMOTE_POLICY_SOURCES
@@ -59,6 +60,7 @@ fn presence(connection: &Connection) -> StoreResult<Value> {
         &[],
     )?;
     Ok(json!({
+        "any_saved": local_policy || remote_policy || local_once,
         "local_policy": local_policy,
         "remote_policy": remote_policy,
         "local_once": local_once,
