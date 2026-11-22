@@ -180,7 +180,7 @@ fn the_macos_sandbox_accepts_only_an_immutable_system_executable() {
 
     let system = "/bin/sh".to_owned();
     let system_request = Request::new(
-        &[system.clone()],
+        std::slice::from_ref(&system),
         &fixture.workspace.text(),
         &[],
         Policy::new(&fixture.workspace.text()).expect("policy"),

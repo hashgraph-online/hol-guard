@@ -100,7 +100,6 @@ fn a_lookup_of_the_interpreter_may_precede_the_filter() {
         format!("which python3 2>&1; {version}"),
         format!("which python3 2>/dev/null; {version}"),
         format!("which -a python3 jq; {version}"),
-        format!("command -v python3 && {FILTER}"),
         format!("type -p python3; {version}"),
         format!("python3 --version && {version}"),
         format!("python3 --version >/dev/null; {version}"),
@@ -111,7 +110,10 @@ fn a_lookup_of_the_interpreter_may_precede_the_filter() {
     ] {
         assert_eq!(action(&root, &command), "allow", "{command}");
     }
+    // A plain command -v lookup can disclose a shell alias definition to the
+    // agent even when the following JSON filter itself is bounded.
     for command in [
+        format!("command -v python3 && {FILTER}"),
         format!("export PYTHONPATH=.; {version}"),
         format!("declare -x PYTHONPATH=.; {version}"),
         format!("read PYTHONPATH; {version}"),

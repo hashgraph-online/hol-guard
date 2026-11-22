@@ -135,6 +135,39 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
             "response": crate::hook_payload_facts_op::availability_response(payload)
         }));
     }
+    if request.kind == "availability_response" {
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let event = params
+            .get("event_name")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let reason = params
+            .get("reason")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let reason_code = params
+            .get("reason_code")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let prompt_reason = params.get("prompt_reason").and_then(Value::as_str);
+        let response = guard_command::hook_responses::fail_closed::response(
+            harness,
+            event,
+            reason,
+            reason_code,
+            prompt_reason,
+        )
+        .map_err(|_| "native_hook_render_invalid")?;
+        return Ok(cli_payload(CliOutcome::Document(response)));
+    }
+    if request.kind == "fail_closed_verdict" {
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let verdict = object_of(params.get("verdict")).ok_or("native_hook_render_invalid")?;
+        let response =
+            guard_command::hook_responses::fail_closed::verdict_response(harness, verdict)
+                .map_err(|_| "native_hook_render_invalid")?;
+        return Ok(cli_payload(CliOutcome::Document(response)));
+    }
     if request.kind == "claude_approval_copy" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
         let which = params
@@ -385,6 +418,13 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
 fn render_edge(request: &HookRenderRequestV1) -> Result<Object, &'static str> {
     let harness = request.harness.as_str();
     match request.kind.as_str() {
+        "accepted_allow" => {
+            let verdict =
+                object_of(request.verdict.as_ref()).ok_or("native_hook_render_invalid")?;
+            let mut response = pre_tool(harness, verdict);
+            response.insert("approval_reuse_status".into(), json!("accepted"));
+            Ok(response)
+        }
         "pre_tool" => {
             let verdict =
                 object_of(request.verdict.as_ref()).ok_or("native_hook_render_invalid")?;
