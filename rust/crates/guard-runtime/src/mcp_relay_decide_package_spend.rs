@@ -109,7 +109,7 @@ pub(super) fn spend_package(
     if rows.is_empty() {
         return Err(PACKAGE_CLAIM_EMPTY);
     }
-    let (state, key) = store::published_integrity(&admitted.binding)?;
+    let (state, key) = store::lookup_integrity(&admitted.binding)?;
     let evidence = integrity_evidence(&rows, &state, key)?;
     // `claim_evidence_binding(connection, bundle=False)`.
     let binding = ClaimEvidenceBindingV1::default();

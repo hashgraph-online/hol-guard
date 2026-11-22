@@ -109,7 +109,7 @@ pub(crate) fn saved_at<'c>(
     if !has_local_policy && !has_remote_policy && !has_local_once {
         return Ok(None);
     }
-    let (integrity_state, key) = published_integrity(binding)?;
+    let (integrity_state, key) = lookup_integrity(binding)?;
     if shape.stored_integrity_state()?.as_ref() != Some(&integrity_state) {
         return Err(SAVED_UNVERIFIABLE);
     }
@@ -142,8 +142,41 @@ pub(crate) fn saved_at<'c>(
     }))
 }
 
+/// The integrity state and key a saved lookup reads with, as the proxy's
+/// lookup evidence carries them (`policy_lookup_evidence`): the state the
+/// daemon refreshed, protected or degraded, and the key that state names.
+/// The lookup itself judges a degraded state, exactly as it does for the
+/// proxy, so a degraded store no longer leaves the session to the proxy. A
+/// claim procures the same evidence (`_claim_integrity_evidence`), so the
+/// claim and the package spend read with it too.
+/// Without a key, or with a state that names another key, the proxy would
+/// read a different key or mint one, so the session still defers.
+pub(crate) fn lookup_integrity(
+    binding: &DirectLaneBinding,
+) -> Result<
+    (
+        Value,
+        &crate::policy_store::policy_store_direct_lane::DirectLaneIntegrityKey,
+    ),
+    &'static str,
+> {
+    let (Some(state), Some(key)) = (
+        binding.policy_integrity_state.as_ref(),
+        binding.integrity_key.as_ref(),
+    ) else {
+        return Err(SAVED_UNVERIFIABLE);
+    };
+    if state.enforcement != "enforce" || state.key_id.as_deref() != Some(key.key_id.as_str()) {
+        return Err(SAVED_UNVERIFIABLE);
+    }
+    let state = serde_json::to_value(state).map_err(|_| SAVED_UNVERIFIABLE)?;
+    Ok((state, key))
+}
+
 /// The integrity state and key the daemon published, when they are the
-/// protected, enforced, cut-over state its key signs.
+/// protected, enforced, cut-over state its key signs. The relay's lookups and
+/// claims read with `lookup_integrity`; the Codex live-authority evidence
+/// still asks for the protected state.
 pub(crate) fn published_integrity(
     binding: &DirectLaneBinding,
 ) -> Result<

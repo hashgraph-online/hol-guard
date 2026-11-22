@@ -127,7 +127,7 @@ fn spend(
     ) {
         return Err(CLAIM_AUTHORITY_CHANGED);
     }
-    let (state, key) = store::published_integrity(&admitted.binding)?;
+    let (state, key) = store::lookup_integrity(&admitted.binding)?;
     let pending = &context.claimed.pending;
     let evidence = integrity_evidence(&[pending], &state, key)?;
     // `claim_evidence_binding(connection, bundle=False)`.

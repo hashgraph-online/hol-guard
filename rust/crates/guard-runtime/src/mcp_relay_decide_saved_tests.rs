@@ -322,16 +322,22 @@ fn the_cached_bundle_is_judged_at_the_callers_time() {
 }
 
 #[test]
-fn an_unpublished_or_moved_integrity_state_defers() {
+fn an_unpublished_mismatched_or_moved_integrity_state_defers() {
     let (home, connection) = guard_home("unverifiable");
     decide(&connection, "artifact", "block", None, "approval-gate");
     let mut unbound = binding();
     unbound.integrity_key = None;
-    let mut degraded = binding();
-    if let Some(state) = degraded.policy_integrity_state.as_mut() {
-        state.degraded_reasons.push("keyring".to_owned());
+    let mut unpublished = binding();
+    unpublished.policy_integrity_state = None;
+    let mut other_key = binding();
+    if let Some(state) = other_key.policy_integrity_state.as_mut() {
+        state.key_id = Some("another-key".to_owned());
     }
-    for binding in [unbound, degraded] {
+    let mut observed = binding();
+    if let Some(state) = observed.policy_integrity_state.as_mut() {
+        state.enforcement = "observe".to_owned();
+    }
+    for binding in [unbound, unpublished, other_key, observed] {
         assert_eq!(
             read(&home, &binding, |_| ()).err(),
             Some("mcp_relay_saved_policy_unverifiable")
@@ -348,6 +354,39 @@ fn an_unpublished_or_moved_integrity_state_defers() {
         read(&home, &binding(), |_| ()).err(),
         Some("mcp_relay_saved_policy_unverifiable")
     );
+}
+
+/// The proxy's lookup evidence carries a degraded state as it is, and the
+/// lookup judges it: the resident reads the saved rows under it as well,
+/// as long as the store still holds the state the daemon published.
+#[test]
+fn a_degraded_integrity_state_the_store_holds_answers_the_lookups() {
+    let (home, connection) = guard_home("degraded");
+    decide(&connection, "artifact", "block", None, "approval-gate");
+    let mut state = integrity_state();
+    state.degraded_reasons.push("keyring".to_owned());
+    state.mode = "degraded".to_owned();
+    let mut degraded = binding();
+    degraded.policy_integrity_state = Some(state.clone());
+    assert_eq!(
+        read(&home, &degraded, |_| ()).err(),
+        Some("mcp_relay_saved_policy_unverifiable"),
+        "the store still holds the protected state"
+    );
+    sync_state(
+        &connection,
+        "policy_integrity",
+        &serde_json::to_string(&state).unwrap(),
+    );
+    let policy = read(&home, &degraded, |saved| {
+        saved
+            .expect("saved rows")
+            .answer(&policy_need(ARTIFACT, None))
+            .unwrap()
+    })
+    .unwrap();
+    assert_eq!(policy["decision"]["action"], "block");
+    assert!(store::published_integrity(&degraded).is_err());
 }
 
 #[test]
