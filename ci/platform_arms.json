@@ -2382,7 +2382,7 @@
    "verdict": "windows-unsupported",
    "note": "Windows answers `unavailable` and mints nothing: Python's mint lock there is an `msvcrt` byte-range lock this process does not share, so a native mint could race it. The caller keeps its own Python mint on that answer, so Windows behaviour is unchanged.",
    "file": "rust/crates/guard-runtime/src/policy_integrity_key_mint.rs",
-   "item": "fn mint_once -- cfg! expression",
+   "item": "fn with_mint_lock -- cfg! expression",
    "cfg": "unix",
    "body": "49820e87b6c0"
   },

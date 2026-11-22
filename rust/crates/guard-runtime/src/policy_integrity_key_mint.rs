@@ -22,11 +22,24 @@
 //! Only Unix answers: Python's mint lock on Windows is a byte-range lock this
 //! process does not share, so Windows answers `unavailable` and the caller
 //! keeps its own mint.
+//!
+//! On Linux the request may add `"keyring": {"service_name"}` when Python's
+//! store mirrors the desktop keyring (Secret Service) into the vault. The mint
+//! then keeps that store's rules (`mirrored`), and talks to the keyring the way
+//! Python's `keyring` library does (`keyring_linux`). Any other platform
+//! answers such a request `unavailable`.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+
+#[cfg(target_os = "linux")]
+#[path = "policy_integrity_keyring_linux.rs"]
+mod keyring_linux;
+#[cfg(any(target_os = "linux", all(test, unix)))]
+#[path = "policy_integrity_key_mint_mirrored.rs"]
+mod mirrored;
 
 use serde::Deserialize;
 use serde_json::json;
@@ -35,12 +48,21 @@ use crate::encrypted_secret_store::{b64url_encode, EncryptedFileSecretStore};
 use crate::policy_integrity_resolver::{build_scoped_secret_ref, POLICY_INTEGRITY_KEY_REF};
 
 pub(crate) const FEATURE: &str = "native-policy-integrity-key-mint-v1";
+/// The same mint for the store that mirrors the Linux desktop keyring.
+pub(crate) const KEYRING_FEATURE: &str = "native-policy-integrity-key-mint-secret-service-v1";
+/// `_POLICY_INTEGRITY_SERVICE_NAME` (`store_base.py`), the only keyring
+/// service this mint writes to.
+const KEYRING_SERVICE_NAME: &str = "hol-guard.policy-integrity";
 const COMMAND: &str = "policy-integrity-key-mint";
 const MINT_LOCK_FILE_NAME: &str = ".policy-integrity-key-mint.lock";
 /// One budget for both lock waits (the mint lock and the store's init lock),
 /// kept well inside the caller's 15 s deadline for the whole request.
 const MINT_LOCK_BUDGET: Duration = Duration::from_secs(4);
 const MINT_LOCK_RETRY: Duration = Duration::from_millis(10);
+/// The keyring's whole share of that deadline (up to three D-Bus exchanges),
+/// after the lock budget.
+#[cfg(target_os = "linux")]
+const KEYRING_BUDGET: Duration = Duration::from_secs(6);
 /// The lock `EncryptedFileSecretStore._ensure_ready` (`store_base.py`) holds
 /// while it creates `secrets/key.bin`.
 const SECRETS_DIRECTORY: &str = "secrets";
@@ -59,6 +81,14 @@ const ARMED_FILES: [&str; 2] = ["command-control-authority.v1.json", "policy-ver
 #[serde(deny_unknown_fields)]
 struct Request {
     guard_home: String,
+    #[serde(default)]
+    keyring: Option<KeyringRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KeyringRequest {
+    service_name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,10 +125,18 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     }
     let request: Request = serde_json::from_slice(&bytes)
         .map_err(|_| "policy_integrity_key_mint_request_invalid".to_owned())?;
-    if request.guard_home.is_empty() {
+    if request.guard_home.is_empty()
+        || request
+            .keyring
+            .as_ref()
+            .is_some_and(|keyring| keyring.service_name != KEYRING_SERVICE_NAME)
+    {
         return Err("policy_integrity_key_mint_request_invalid".to_owned());
     }
-    let state = mint_once(Path::new(&request.guard_home));
+    let state = match request.keyring {
+        Some(_) => mint_once_mirrored(Path::new(&request.guard_home)),
+        None => mint_once(Path::new(&request.guard_home)),
+    };
     serde_json::to_vec(&json!({"state": state.label()}))
         .map_err(|_| "policy_integrity_key_mint_response_encode_failed".to_owned())
 }
@@ -131,12 +169,17 @@ fn lock_options() -> OpenOptions {
     options
 }
 
-/// An exclusive `flock` on a lock file, released when dropped.
-struct Held(File);
+/// An exclusive `flock` on a lock file. The lock belongs to the open file, so
+/// it is released when its last descriptor closes: dropping this one releases
+/// it unless a descriptor from `Held::keep` is still open.
+struct Held(#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))] File);
 
-impl Drop for Held {
-    fn drop(&mut self) {
-        let _ = fs2::FileExt::unlock(&self.0);
+impl Held {
+    /// A second descriptor of the held lock, which keeps it held after this
+    /// one is dropped and until the second one is too.
+    #[cfg(any(target_os = "linux", test))]
+    fn keep(&self) -> Option<File> {
+        self.0.try_clone().ok()
     }
 }
 
@@ -156,6 +199,28 @@ fn hold(path: &Path, deadline: Instant) -> Result<Held, Minted> {
 /// Read the key under the mint lock, minting one only when none is stored and
 /// native controls are not armed.
 pub(crate) fn mint_once(guard_home: &Path) -> Minted {
+    with_mint_lock(guard_home, |home, deadline, _| locked_mint(home, deadline))
+}
+
+/// The mint for the Linux store that mirrors the desktop keyring.
+#[cfg(target_os = "linux")]
+fn mint_once_mirrored(guard_home: &Path) -> Minted {
+    with_mint_lock(guard_home, |home, deadline, held| {
+        let primary = keyring_linux::SecretServiceKeyring {
+            service_name: KEYRING_SERVICE_NAME.to_owned(),
+            deadline: Instant::now() + KEYRING_BUDGET,
+            mint_lock: held.keep(),
+        };
+        locked_mint_mirrored(home, deadline, &primary)
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn mint_once_mirrored(_guard_home: &Path) -> Minted {
+    Minted::Unavailable
+}
+
+fn with_mint_lock(guard_home: &Path, mint: impl FnOnce(&Path, Instant, &Held) -> Minted) -> Minted {
     if !cfg!(unix) {
         return Minted::Unavailable;
     }
@@ -164,9 +229,20 @@ pub(crate) fn mint_once(guard_home: &Path) -> Minted {
     };
     let deadline = Instant::now() + MINT_LOCK_BUDGET;
     match hold(&home.join(MINT_LOCK_FILE_NAME), deadline) {
-        Ok(_mint) => locked_mint(&home, deadline),
+        Ok(held) => mint(&home, deadline, &held),
         Err(state) => state,
     }
+}
+
+/// The keyring mint under the mint lock, after the vault is ready.
+#[cfg(any(target_os = "linux", all(test, unix)))]
+fn locked_mint_mirrored(home: &Path, deadline: Instant, primary: &dyn mirrored::Primary) -> Minted {
+    let key_ref = build_scoped_secret_ref(POLICY_INTEGRITY_KEY_REF, home);
+    let mut store = EncryptedFileSecretStore::new(home);
+    if let Err(state) = store_ready(home, &mut store, deadline) {
+        return state;
+    }
+    mirrored::mint(home, &key_ref, &mut store, primary)
 }
 
 /// Load or create the store's encryption key under the lock Python's store

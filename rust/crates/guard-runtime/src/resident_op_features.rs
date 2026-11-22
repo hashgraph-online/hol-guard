@@ -325,6 +325,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-codex-hook-trust-v1",
     "native-trust-attestation-key-v1",
     crate::policy_integrity_resolver::key_mint::FEATURE,
+    crate::policy_integrity_resolver::key_mint::KEYRING_FEATURE,
     "native-local-authority-integrity-v1",
     "native-codex-hook-authority-record-v1",
     "native-runtime-transition-record-v1",

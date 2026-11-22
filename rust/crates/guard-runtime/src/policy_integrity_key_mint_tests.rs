@@ -85,6 +85,19 @@ fn a_held_mint_lock_answers_busy() {
 
 #[cfg(unix)]
 #[test]
+fn a_kept_lock_descriptor_holds_the_mint_lock_after_the_mint() {
+    let home = home("kept");
+    let path = home.0.join(MINT_LOCK_FILE_NAME);
+    let held = hold(&path, Instant::now() + MINT_LOCK_BUDGET).expect("first hold");
+    let kept = held.keep().expect("kept descriptor");
+    drop(held);
+    assert!(matches!(hold(&path, Instant::now()), Err(Minted::Busy)));
+    drop(kept);
+    assert!(hold(&path, Instant::now() + MINT_LOCK_BUDGET).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
 fn both_lock_waits_share_one_budget() {
     let home = home("budget");
     let resolved = fs::canonicalize(&home.0).expect("resolved");
@@ -209,4 +222,31 @@ fn malformed_requests_are_refused() {
 fn only_its_own_command_is_claimed() {
     assert!(is_command("policy-integrity-key-mint"));
     assert!(!is_command("trust-attestation-key"));
+}
+
+#[test]
+fn a_keyring_request_names_only_the_policy_integrity_service() {
+    for request in [
+        r#"{"guard_home":"/x","keyring":{"service_name":"other"}}"#,
+        r#"{"guard_home":"/x","keyring":{"service_name":"hol-guard.policy-integrity","collection":"login"}}"#,
+        r#"{"guard_home":"/x","keyring":{}}"#,
+    ] {
+        assert_eq!(
+            answer(request),
+            Err("policy_integrity_key_mint_request_invalid".to_owned())
+        );
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn a_keyring_request_off_linux_is_unavailable() {
+    let home = home("keyring-off-linux");
+    let request = serde_json::json!({
+        "guard_home": home.0,
+        "keyring": {"service_name": KEYRING_SERVICE_NAME},
+    });
+    let state = answer(&request.to_string()).expect("answer");
+    assert_eq!(state, serde_json::json!({"state": "unavailable"}));
+    assert_eq!(stored(&home.0), None);
 }
