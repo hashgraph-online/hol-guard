@@ -99,6 +99,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "count_receipts"
         | "artifact_latest_diff"
         | "catalog_recorded_writer_version"
+        | "cloud_workspace_id"
         | "oauth_sources_list"
         | "hook_approval_center_origin"
         | "workspace_assessment_watched_roots"

@@ -612,12 +612,6 @@
         "reason": "Reviewed: codex hook registration, runtime trust and self-binding modules: runtime_trust is used by frozen_codex_runtime.trusted_hook_launch. codex_hook_self_binding asks the native runtime whether an existing Codex handler belongs to this installation, which registration consults before it will replace or refuse one (the native runtime also writes the refusal that decision produces); both are reached from the same adapter and stay in scope with it."
       },
       {
-        "path": [
-          "src/codex_plugin_scanner/guard/hook_review/policy_authority_client.py"
-        ],
-        "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; policy_authority_client is called from local_supply_chain."
-      },
-      {
         "path": "src/codex_plugin_scanner/guard/store_policy_decision.py",
         "reason": "Reviewed: reads a saved policy record by id and adds its integrity and source metadata for Guard's policy presentation."
       },

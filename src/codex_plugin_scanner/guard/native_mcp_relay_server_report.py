@@ -1,12 +1,12 @@
 """Report an MCP server's catalog for the native MCP relay.
 
 The native relay runs a session's MCP server only when the resident has a
-report of that server's catalog and the catalog offers no tool whose calls
-the proxy decides itself: a shell-named tool, a tool declaring a command
-argument (including one declared behind a schema reference or combinator), or
-a Composio tool. Any other session runs under this proxy, which
-reports the whole catalog once it has it, so the server's later sessions can
-run under the relay.
+report of that server's catalog. No tool definition in the catalog holds the
+server back: the relay refuses a call to a tool with no usable name and keeps
+relaying the named tools. A server moves to this proxy only after the
+resident defers one of its package calls. Any session started before a
+report runs under this proxy, which reports the whole catalog once it has it,
+so the server's later sessions can run under the relay.
 
 The report only steers which launcher later sessions run. It carries no
 verdict, and the resident still decides or refuses every relayed call, so a

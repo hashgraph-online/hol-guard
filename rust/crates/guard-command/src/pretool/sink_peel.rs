@@ -196,6 +196,7 @@ pub(super) fn peel(
                     directory: python_resolved(&spelled, directory),
                     output: report.map(|(_, report)| ContainedOutput {
                         status_label: report.status,
+                        status_from_core: report.status_from_core,
                         success_label: report.success,
                         failure_label: report.failure,
                         ..passthrough()
@@ -257,6 +258,7 @@ pub(super) fn peel(
     if let Some((_, report)) = report {
         output = Some(ContainedOutput {
             status_label: report.status,
+            status_from_core: report.status_from_core,
             success_label: report.success,
             failure_label: report.failure,
             ..output.unwrap_or_else(passthrough)
@@ -314,6 +316,7 @@ fn passthrough() -> ContainedOutput {
         count: 0,
         merge_stderr: false,
         status_label: None,
+        status_from_core: false,
         success_label: None,
         failure_label: None,
         stages: Vec::new(),

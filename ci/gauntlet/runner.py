@@ -367,6 +367,9 @@ def run_case(
                 position = command.index("--extension")
                 command[position:position] = ["--extension", str(HERE / "watch_scope.ts")]
                 case["watch_binding_before"] = ready_watch_binding(worker)
+            if "goal" in scenario.required_tools:
+                position = command.index("--extension")
+                command[position:position] = ["--extension", str(HERE / "goal_tool.ts")]
             approver = review.approver(worker) if review is not None else None
             with approver or contextlib.nullcontext():
                 case["returncode"], case["timed_out"] = run_process(

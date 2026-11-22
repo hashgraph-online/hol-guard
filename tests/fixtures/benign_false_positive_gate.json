@@ -3326,6 +3326,278 @@
       "expect": "not_allow"
     },
     {
+      "id": "host-fact-nproc",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "nproc"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-sw-vers-product-version",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sw_vers -productVersion"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-arch",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "arch"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-hostname-short",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hostname -s"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-id-user-name",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "id -un"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-groups",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "groups"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-locale-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "locale -a"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-tput-columns",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "tput cols"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-stty-size",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "stty size"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-seq-range",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "seq 1 10"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-expr-sum",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "expr 1 + 2"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-cal-month",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cal 11 2026"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-tty-name",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "tty"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-ulimit-open-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ulimit -n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-sysctl-core-count",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sysctl -n hw.ncpu"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "host-fact-getconf-processors",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "getconf _NPROCESSORS_ONLN"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-pip-config-edit-usage-text",
       "fix_area": "shell",
       "harnesses": [
@@ -3768,6 +4040,40 @@
       "expect": "allow"
     },
     {
+      "id": "mysqladmin-liveness-ping",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mysqladmin -h 127.0.0.1 ping"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "mysqladmin-loopback-silent-ping",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mysqladmin -h 127.0.0.1 -P 3306 -u root --silent ping"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-redis-cli-flushall",
       "fix_area": "negative",
       "harnesses": [
@@ -4018,6 +4324,363 @@
       "tool": "shell",
       "tool_input": {
         "command": "cp --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "ffmpeg-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ffmpeg -version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sqlite-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sqlite3 --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "awk-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shellcheck-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "shellcheck --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pandoc-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pandoc --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "yq-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yq --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "unzip-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "unzip -v"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "zstd-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "zstd --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "xz-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xz --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tar-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "tar --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "ninja-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ninja --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cmake-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cmake --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "make-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "make --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-top-one-sample",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "top -l 1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-iostat-samples",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "iostat -c 2"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-vmstat-summary",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "vmstat -s"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-vm-stat-counters",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "vm_stat"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-last-five-logins",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "last -5"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-who-logins",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "who"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-w-sessions",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "w"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -5321,6 +5984,24 @@
       "tool": "shell",
       "tool_input": {
         "command": "which python3; python3 -c 'import sys; print(sys.version)'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "python-version-filter-after-interpreter-lookup-across-lines",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "which python3;\n python3 -c 'import sys; print(sys.version)'"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -10844,6 +11525,108 @@
       "requires_sandbox": true
     },
     {
+      "id": "session-vitest-line-count-wc",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest run --reporter=dot --silent 2>&1 | wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-vitest-repeated-lines-sort-uniq",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest run --reporter=dot --silent 2>&1 | sort | uniq -c"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-vitest-first-lines-sed-range",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest run --reporter=dot --silent 2>&1 | sed -n '1,20p'"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-vitest-strip-carriage-returns-tr",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest run --reporter=dot --silent 2>&1 | tr -d '\\r' | tail -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-vitest-escapes-visible-cat",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest run --reporter=dot --silent 2>&1 | cat -v | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-vitest-columns-then-word-count",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest run --reporter=dot --silent 2>&1 | cut -c 1-80 | wc -w"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
       "id": "session-vitest-last-lines-countless-tail",
       "fix_area": "shell",
       "harnesses": [
@@ -15124,6 +15907,40 @@
       "expect": "allow"
     },
     {
+      "id": "git-cd-fork-status-then-log-across-lines",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && git status --short;\n git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-cd-fork-log-piped-across-lines",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && git log --oneline -3 |\n  head -2"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "git-cd-fork-piped-log-then-status",
       "fix_area": "shell",
       "harnesses": [
@@ -19301,7 +20118,8 @@
         "command": "which git 2>/dev/null; type -p git 2>/dev/null; echo DONE"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "shell-zsh-path-lookup",
@@ -19317,7 +20135,8 @@
         "command": "whence git 2>/dev/null; whence -p node 2>/dev/null; echo DONE"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "shell-hol-guard-help",
@@ -19580,6 +20399,23 @@
       "tool": "shell",
       "tool_input": {
         "command": "git log --oneline -1; git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-git-compound-log-status-across-lines",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -1;\n git status --short"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -20202,6 +21038,108 @@
       "tool": "shell",
       "tool_input": {
         "command": "jq -r '{name,version}' ${HOME}/other-project/package.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "defaults-read-domain",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults read com.apple.dock"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "defaults-read-domain-key",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults read com.apple.dock orientation"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "defaults-read-global-key",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults read -g AppleInterfaceStyle"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "defaults-read-type",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults read-type com.apple.finder ShowPathbar"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "defaults-domain-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults domains"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "defaults-current-host-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults -currentHost read com.apple.screensaver"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -21879,7 +22817,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "rg -n route --glob 'src/*' src"
+        "command": "rg -n settings --glob 'src/*' src"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -33217,6 +34155,142 @@
       "expect": "not_allow"
     },
     {
+      "id": "reach-ping-count-loopback",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ping -c 1 localhost"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-ping-count-wait-named-host",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ping -c 2 -W 2 example.com"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-ping-numeric-quiet-piped-to-tail",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ping -n -q -c 2 127.0.0.1 2>&1 | tail -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-traceroute-hop-limit",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "traceroute -n -m 5 example.com"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-traceroute-query-and-wait-limits",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "traceroute -q 1 -w 2 example.com"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-whois-fixed-name",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "whois example.com"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-getent-hosts-fixed-name",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "getent hosts example.com"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "reach-getent-services-port",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "getent services 5432"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-user-tmp-sibling-manifest-sed-expanded-variable",
       "fix_area": "git-sibling-worktree",
       "harnesses": [
@@ -36625,6 +37699,54 @@
       "tool": "shell",
       "tool_input": {
         "command": "npx tsc --project tsconfig.json --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npx-tsc-bounded-with-first-stage-status-report",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsc -p tsconfig.json 2>&1 | head -5; echo \"tsc-exit=${PIPESTATUS[0]}\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npx-tsc-filtered-with-first-stage-status-report",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsc -p tsconfig.json 2>&1 | grep \"error TS\" | head -5; echo \"tsc-exit=${PIPESTATUS[0]}\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npx-tsc-with-first-stage-status-report",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsc --noEmit; echo \"typecheck=${PIPESTATUS[0]}\""
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -41473,7 +42595,8 @@
         "command": "cd ${HOME}/other-project && grep -E '\"(name|version)\"' package.json | head -10; node --version; which bun 2>&1"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "cd-compound-egrep-beside-a-read",

@@ -92,6 +92,10 @@ WORKSPACE_TSC_CASE = "omp-native-workspace-npx-tsc"
 # the no-emit mode in the file, so the command line carries no option at all and
 # the run is proven read-only from the project it names.
 WORKSPACE_TSC_GENERATED_PROJECT_CASE = "omp-native-workspace-tsc-generated-project"
+# The same checker closed the way an agent closes a filtered run: the output is
+# bounded and the line after it prints the checker's own status, which `$?`
+# cannot reach past the filter and `${PIPESTATUS[0]}` can.
+WORKSPACE_TSC_STATUS_REPORT_CASE = "omp-native-workspace-typecheck-status-report"
 # The same type checker in a workspace pnpm installed. pnpm writes its lockfile
 # in YAML rather than JSON, so the pin the verdict reads is the same fact
 # written in another dialect.
@@ -150,6 +154,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_QUIET_PACKAGE_TEST_CASE,
         WORKSPACE_TSC_CASE,
         WORKSPACE_TSC_GENERATED_PROJECT_CASE,
+        WORKSPACE_TSC_STATUS_REPORT_CASE,
         WORKSPACE_PNPM_TSC_CASE,
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
@@ -778,6 +783,13 @@ _INSTALLS = {
     WORKSPACE_TSC_GENERATED_PROJECT_CASE: _Install(
         "tsc",
         _GENERATED_PROJECT_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
+    WORKSPACE_TSC_STATUS_REPORT_CASE: _Install(
+        "tsc",
+        _TYPESCRIPT_FILES,
         TSC_MARKER,
         package="typescript",
         entry="bin/tsc",

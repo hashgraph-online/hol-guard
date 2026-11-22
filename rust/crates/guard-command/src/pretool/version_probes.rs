@@ -24,6 +24,15 @@
 //! - `go version`: a `go.mod` `toolchain` line makes `go` fetch and run a
 //!   different toolchain.
 //! - `-v` for tools where it means "verbose" rather than "version".
+//! - `terraform version`: it asks HashiCorp's release endpoint whether a newer
+//!   version exists, so the probe reaches the network.
+//! - `bazel`, `gradle` and `mvn`: each reads workspace launcher configuration
+//!   and starts a long-lived server or JVM before it answers.
+//! - `aws --version`: the CLI builds its driver before it parses argv, and
+//!   that step imports the Python modules named in the `[plugins]` section of
+//!   `~/.aws/config`, so a startup file can run code first.
+//! - `openssl version`: libcrypto initialises from a configuration file that
+//!   can activate providers, and activating one loads a shared library.
 //! - `mysql` and `mysqldump`: their banner is printed by the same startup
 //!   that reads the option files, and the long form prints what those files
 //!   set, so the text can carry a configured credential. `help_probes`
@@ -73,6 +82,19 @@ fn single_flag_probe(basename: &str, flag: &str) -> bool {
         "curl" | "wget" | "ssh" => long || flag == "-V",
         "scp" | "sftp" | "rsync" | "psql" | "redis-cli" | "cp" | "chown" => long,
         "git" => long || flag == "version",
+        // Build drivers and archivers: the banner is printed from the option
+        // loop, before a makefile, build description or archive is opened.
+        "make" | "cmake" | "ninja" | "meson" | "tar" | "gzip" | "bzip2" | "xz" | "zstd"
+        | "shellcheck" | "shfmt" | "yq" | "pandoc" | "awk" | "sed" | "grep" => long,
+        // The shell answers the version question in its first pass over argv,
+        // before it opens a database or runs a startup file.
+        "sqlite3" => long || flag == "-version",
+        // The FFmpeg tools spell the question with a single dash; `--version`
+        // is an unknown option to them.
+        "ffmpeg" | "ffprobe" => flag == "-version",
+        // `-v` alone prints the banner; behind an archive operand it is the
+        // verbose flag, and a second argument never reaches this arm.
+        "unzip" | "zip" => flag == "-v",
         "perl" | "ruby" => long || flag == "-v",
         "helm" => flag == "version",
         _ => false,
@@ -122,6 +144,28 @@ mod tests {
             ("perl", "--version"),
             ("ruby", "-v"),
             ("ruby", "--version"),
+            ("make", "--version"),
+            ("cmake", "--version"),
+            ("ninja", "--version"),
+            ("meson", "--version"),
+            ("tar", "--version"),
+            ("gzip", "--version"),
+            ("bzip2", "--version"),
+            ("xz", "--version"),
+            ("zstd", "--version"),
+            ("shellcheck", "--version"),
+            ("shfmt", "--version"),
+            ("yq", "--version"),
+            ("pandoc", "--version"),
+            ("awk", "--version"),
+            ("sed", "--version"),
+            ("grep", "--version"),
+            ("sqlite3", "--version"),
+            ("sqlite3", "-version"),
+            ("ffmpeg", "-version"),
+            ("ffprobe", "-version"),
+            ("unzip", "-v"),
+            ("zip", "-v"),
         ] {
             assert!(safe_version_probe(tool, &args(&[flag])), "{tool} {flag}");
         }
@@ -152,7 +196,6 @@ mod tests {
             ("gh", vec!["version"]),
             ("go", vec!["--version"]),
             ("rg", vec!["-V"]),
-            ("make", vec!["--version"]),
             ("npm", vec![]),
             // The banner is printed by the startup that reads the option
             // files, so it can carry what those files set.
@@ -171,6 +214,24 @@ mod tests {
             // A version flag with an operand behind it is a transfer.
             ("curl", vec!["--version", "https://example.test"]),
             ("scp", vec!["source", "--version"]),
+            // The version command reaches the network or starts a server.
+            ("terraform", vec!["version"]),
+            ("terraform", vec!["--version"]),
+            ("bazel", vec!["--version"]),
+            ("gradle", vec!["--version"]),
+            ("mvn", vec!["--version"]),
+            ("openssl", vec!["version"]),
+            ("aws", vec!["--version"]),
+            // `-v` is the verbose flag on the archivers, and the FFmpeg tools
+            // do not know the long spelling.
+            ("tar", vec!["-v"]),
+            ("ffmpeg", vec!["--version"]),
+            ("zip", vec!["-v", "notes.zip"]),
+            ("unzip", vec!["-v", "notes.zip"]),
+            // A program operand behind the banner still runs.
+            ("awk", vec!["--version", "report.awk"]),
+            ("make", vec!["--version", "release"]),
+            ("sqlite3", vec!["--version", "catalog.db"]),
         ] {
             assert!(
                 !safe_version_probe(tool, &args(&arguments)),
