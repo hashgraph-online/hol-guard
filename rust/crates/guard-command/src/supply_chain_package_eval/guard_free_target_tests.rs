@@ -159,6 +159,16 @@ fn a_linked_environment_or_interpreter_keeps_its_review() {
         wrapper_python.display()
     );
     assert!(!guard_free(&command, None));
+    // Naming the directory starts the same script.
+    let command = format!("uv pip install -p {} ./hol_guard.whl", wrapper.display());
+    assert!(!guard_free(&command, None));
+
+    // A directory with `pyvenv.cfg` but no interpreter proves nothing.
+    let empty = dir.path().join("empty");
+    std::fs::create_dir_all(&empty).unwrap();
+    std::fs::write(empty.join("pyvenv.cfg"), b"home = /usr/bin\n").unwrap();
+    let command = format!("uv pip install -p {} ./hol_guard.whl", empty.display());
+    assert!(!guard_free(&command, None));
 }
 
 #[test]

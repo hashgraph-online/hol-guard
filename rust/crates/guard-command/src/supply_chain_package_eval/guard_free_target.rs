@@ -57,6 +57,14 @@ const NEUTRAL_OPTIONS: &[&str] = &[
     "--exact",
 ];
 
+/// Interpreters uv may start inside a virtual environment directory.
+const VENV_INTERPRETERS: &[&str] = &[
+    "bin/python",
+    "bin/python3",
+    "Scripts/python.exe",
+    "Scripts/python3.exe",
+];
+
 /// Executables a Python environment holds when Guard is installed in it.
 const GUARD_EXECUTABLES: &[&str] = &[
     "hol-guard",
@@ -157,9 +165,20 @@ fn is_python_name(name: &str) -> bool {
 /// into. It must hold `pyvenv.cfg`: Python takes its prefix from that file
 /// beside the interpreter it was started as, not from wherever a linked
 /// interpreter points. A script standing in for the interpreter could start
-/// another environment's Python, so a `#!` file keeps the review.
+/// another environment's Python, so a `#!` file keeps the review. For a
+/// directory, uv starts the interpreter inside it, so every interpreter it
+/// could pick gets the same check, and a directory without one keeps the
+/// review.
 fn interpreter_environment(path: &Path) -> Option<PathBuf> {
     let environment = if path.is_dir() {
+        let interpreters: Vec<PathBuf> = VENV_INTERPRETERS
+            .iter()
+            .map(|relative| path.join(relative))
+            .filter(|candidate| candidate.symlink_metadata().is_ok())
+            .collect();
+        if interpreters.is_empty() || interpreters.iter().any(|i| starts_with_shebang(i)) {
+            return None;
+        }
         path.to_path_buf()
     } else {
         if starts_with_shebang(path) {
