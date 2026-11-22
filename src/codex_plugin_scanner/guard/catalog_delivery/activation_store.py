@@ -58,14 +58,31 @@ def pending_records(store):
     """The pending activation records, read by the native store, in revision order.
 
     Each record is returned unauthenticated for the lifecycle op to verify.
+    The native store pages the read; every page is read before this returns.
     Any other answer shape, or a record field that is not text, is refused
     rather than dropped, because a dropped record would let cleanup evict a
     pack a pending activation still needs.
     """
     method = "list_command_pack_pending_records"
-    answer = store._native_store_call(method, {})
-    items = answer.get("items") if isinstance(answer, dict) and set(answer) == {"items"} else None
-    if not isinstance(items, list):
+    records = []
+    args = {}
+    while True:
+        items, after = _pending_page(store._native_store_call(method, args), method)
+        records.extend(items)
+        if after is None:
+            return records
+        # Every page names a later revision, so the walk always ends.
+        if not items or ("after_revision" in args and after <= args["after_revision"]):
+            raise NativePolicySnapshotError(f"native {method} returned no answer")
+        args = {"after_revision": after}
+
+
+def _pending_page(answer, method):
+    """One page of pending records and the revision the next page starts after."""
+    fields = set(answer) if isinstance(answer, dict) else None
+    items = answer.get("items") if fields == {"items", "next"} else None
+    after = answer.get("next") if fields == {"items", "next"} else None
+    if not isinstance(items, list) or not (after is None or _is_revision(after)):
         raise NativePolicySnapshotError(f"native {method} returned no answer")
     for item in items:
         if (
@@ -74,7 +91,11 @@ def pending_records(store):
             or not all(isinstance(item[name], str) for name in _PENDING_FIELDS)
         ):
             raise NativePolicySnapshotError(f"native {method} returned no answer")
-    return items
+    return items, after
+
+
+def _is_revision(value):
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
 def _slot_types(row):

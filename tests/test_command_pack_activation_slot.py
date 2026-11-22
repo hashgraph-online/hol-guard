@@ -85,14 +85,49 @@ PENDING = {"record_json": "{}", "record_digest": "a" * 64, "record_mac": "b" * 6
 
 def test_pending_records_come_back_from_the_native_store_in_order():
     second = {**PENDING, "record_json": '{"r": 2}'}
-    store, calls = _store({"items": [PENDING, second]})
+    store, calls = _store({"items": [PENDING, second], "next": None})
     assert activation_store.pending_records(store) == [PENDING, second]
     assert calls == [("list_command_pack_pending_records", {})]
 
 
 def test_no_pending_records_is_an_empty_list():
-    store, _ = _store({"items": []})
+    store, _ = _store({"items": [], "next": None})
     assert activation_store.pending_records(store) == []
+
+
+def _paged(*pages):
+    calls = []
+    answers = list(pages)
+
+    def call(method, args):
+        calls.append((method, args))
+        return answers.pop(0)
+
+    return SimpleNamespace(_native_store_call=call), calls
+
+
+def test_every_pending_page_is_read_before_cleanup_sees_the_records():
+    second = {**PENDING, "record_json": '{"r": 2}'}
+    store, calls = _paged({"items": [PENDING], "next": 4}, {"items": [second], "next": None})
+    assert activation_store.pending_records(store) == [PENDING, second]
+    assert calls == [
+        ("list_command_pack_pending_records", {}),
+        ("list_command_pack_pending_records", {"after_revision": 4}),
+    ]
+
+
+@pytest.mark.parametrize(
+    "pages",
+    [
+        ({"items": [], "next": 4},),
+        ({"items": [PENDING], "next": 4}, {"items": [PENDING], "next": 4}),
+        ({"items": [PENDING], "next": 4}, {"items": [PENDING], "next": 2}),
+    ],
+)
+def test_a_pending_cursor_that_does_not_advance_is_refused(pages):
+    store, _ = _paged(*pages)
+    with pytest.raises(NativePolicySnapshotError, match="list_command_pack_pending_records"):
+        activation_store.pending_records(store)
 
 
 @pytest.mark.parametrize(
@@ -101,12 +136,16 @@ def test_no_pending_records_is_an_empty_list():
         None,
         [],
         {},
-        {"items": None},
-        {"items": [], "extra": 1},
-        {"items": [None]},
-        {"items": [{**PENDING, "record_json": None}]},
-        {"items": [{**PENDING, "link_json": "{}"}]},
-        {"items": [{"record_json": "{}", "record_digest": "a" * 64}]},
+        {"items": []},
+        {"items": None, "next": None},
+        {"items": [], "next": None, "extra": 1},
+        {"items": [], "next": True},
+        {"items": [], "next": 0},
+        {"items": [], "next": "4"},
+        {"items": [None], "next": None},
+        {"items": [{**PENDING, "record_json": None}], "next": None},
+        {"items": [{**PENDING, "link_json": "{}"}], "next": None},
+        {"items": [{"record_json": "{}", "record_digest": "a" * 64}], "next": None},
     ],
 )
 def test_a_malformed_pending_answer_is_refused(answer):

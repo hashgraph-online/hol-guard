@@ -79,7 +79,9 @@ pub(crate) fn dispatch(
         _ if extension_control_snapshot::handles(method) => {
             extension_control_snapshot::dispatch(connection)
         }
-        _ if command_pack_pending::handles(method) => command_pack_pending::dispatch(connection),
+        _ if command_pack_pending::handles(method) => {
+            command_pack_pending::dispatch(connection, args)
+        }
         "extension_control_schema_state" => schema_state(connection),
         _ => read(connection),
     }

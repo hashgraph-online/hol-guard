@@ -162,7 +162,7 @@ def activation_slot_call(connect):
 
     def call(method, args):
         if method == "list_command_pack_pending_records" and args == {}:
-            return {"items": _pending_items(connect)}
+            return {"items": _pending_items(connect), "next": None}
         assert method == "read_command_pack_activation" and args == {}
         with connect() as connection:
             if not connection.execute(
