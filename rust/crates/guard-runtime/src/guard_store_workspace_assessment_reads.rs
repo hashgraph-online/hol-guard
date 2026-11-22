@@ -29,17 +29,22 @@ const RUN_COLUMNS: &str = "r.run_id, r.codebase_key, r.worktree_key, r.snapshot_
                            r.coverage_json, r.error_code, r.created_at_ms, \
                            r.started_at_ms, r.finished_at_ms";
 
+#[path = "guard_store_workspace_assessment_latest.rs"]
+mod latest;
+
 pub(crate) fn handles(method: &str) -> bool {
-    matches!(
-        method,
-        "list_workspace_assessment_worktrees"
-            | "list_workspace_assessment_runs"
-            | "latest_workspace_assessment_run"
-    )
+    latest::handles(method)
+        || matches!(
+            method,
+            "list_workspace_assessment_worktrees"
+                | "list_workspace_assessment_runs"
+                | "latest_workspace_assessment_run"
+        )
 }
 
 pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> StoreResult<Value> {
     match method {
+        _ if latest::handles(method) => latest::dispatch(connection, method, args),
         "list_workspace_assessment_worktrees" => worktrees(connection, args),
         "list_workspace_assessment_runs" => runs(connection, args),
         _ => latest_assessed(connection, args),
