@@ -19020,7 +19020,7 @@ def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failu
     monkeypatch.setattr(
         guard_runner_module,
         "_validate_cached_policy_bundle",
-        lambda _store, policy_bundle: (
+        lambda _store, policy_bundle, rows=None: (
             policy_bundle if isinstance(policy_bundle, dict) else None,
             None,
         ),
@@ -19128,7 +19128,7 @@ def test_sync_receipts_enforces_an_exact_command_rule_from_a_v2_bundle(tmp_path,
     monkeypatch.setattr(
         guard_runner_module,
         "_validate_cached_policy_bundle",
-        lambda _store, policy_bundle: (
+        lambda _store, policy_bundle, rows=None: (
             policy_bundle if isinstance(policy_bundle, dict) else None,
             None,
         ),
@@ -19250,7 +19250,7 @@ def _prepare_shadow_candidate_sync(
     monkeypatch.setattr(
         guard_runner_module,
         "_validate_cached_policy_bundle",
-        lambda _store, policy_bundle: (
+        lambda _store, policy_bundle, rows=None: (
             policy_bundle if isinstance(policy_bundle, dict) else None,
             None,
         ),

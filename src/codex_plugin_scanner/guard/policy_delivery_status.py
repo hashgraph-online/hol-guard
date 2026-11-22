@@ -64,13 +64,14 @@ def _local_policy(store: GuardStore) -> dict[str, object] | None:
 def local_policy_status(store: GuardStore) -> dict[str, object]:
     """The Live version, mode, last sync, last acknowledgement and rejection reason known on this device."""
 
-    cached = store.get_sync_payload("policy_bundle")
+    rows = store.policy_bundle_trust_rows()
+    cached = rows.policy_bundle
     bundle = cached if isinstance(cached, dict) else {}
-    validated, rejection = synced_policy_bundle_validation(store)
-    acknowledgement = store.get_sync_payload("policy_bundle_ack")
+    validated, rejection = synced_policy_bundle_validation(store, rows=rows)
+    acknowledgement = rows.policy_bundle_ack
     ack = acknowledgement if isinstance(acknowledgement, dict) else {}
-    summary = store.get_sync_payload("sync_summary")
-    last_error = store.get_sync_payload("policy_bundle_last_error")
+    summary = rows.sync_summary
+    last_error = rows.policy_bundle_last_error
     defaults = validated.get("policyDefaults") if validated is not None else None
     mode = _text(defaults.get("mode")) if isinstance(defaults, dict) else None
     stored_error = last_error if isinstance(last_error, dict) else {}

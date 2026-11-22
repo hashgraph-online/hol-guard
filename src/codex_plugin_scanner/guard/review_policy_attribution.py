@@ -26,7 +26,7 @@ from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Protocol, cast
 
-from .synced_policy import SyncPayloadReader, validated_synced_policy_bundle
+from .synced_policy import PolicyTrustRowsReader, validated_synced_policy_bundle
 
 ATTRIBUTION_STATE_PREFIX = "review_policy_attribution:"
 _LOGGER = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ _REVIEW_ACTIONS = frozenset({"review", "require-reapproval"})
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
-class _AttributionStore(SyncPayloadReader, Protocol):
+class _AttributionStore(PolicyTrustRowsReader, Protocol):
     def insert_sync_payload_if_absent(self, state_key: str, payload: Mapping[str, object], now: str) -> None: ...
 
     def resolve_policy_decision_lookup(

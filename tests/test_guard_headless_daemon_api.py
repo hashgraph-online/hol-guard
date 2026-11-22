@@ -2795,7 +2795,9 @@ def test_headless_policy_sync_explains_rejected_downgrade(tmp_path: Path, monkey
         "2026-05-19T00:00:00Z",
     )
     bundle = sign_policy_bundle(build_cloud_exception_policy_bundle(workspace_id="workspace-1"))
-    monkeypatch.setattr(runner_module, "_policy_bundle_admission_rejection", lambda *_args: "bundle_version_downgrade")
+    monkeypatch.setattr(
+        runner_module, "_policy_bundle_admission_rejection", lambda *_args, **_kwargs: "bundle_version_downgrade"
+    )
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -2942,6 +2944,31 @@ def test_headless_policy_sync_does_not_ack_failed_policy_replacement(
             },
         )
 
+    assert store.get_sync_payload("policy_bundle") is None
+    assert store.get_sync_payload("policy_bundle_ack") is None
+
+
+def test_headless_policy_sync_reports_a_store_outage_as_retryable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
+    from codex_plugin_scanner.guard.routes.policy_sync_call import policy_sync
+
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
+
+    def _unavailable(**_kwargs: object) -> None:
+        raise NativeGuardStoreUnavailable("resident unavailable")
+
+    monkeypatch.setattr(store, "policy_bundle_trust_rows", _unavailable)
+    reply = policy_sync(
+        store,
+        {"payload": {"harness": "codex", "operation": "policy_sync", "policy_bundle": json.dumps(bundle)}},
+    )
+
+    assert reply["status"] == 503
     assert store.get_sync_payload("policy_bundle") is None
     assert store.get_sync_payload("policy_bundle_ack") is None
 

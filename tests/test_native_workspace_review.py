@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import native_workspace_review as native
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.policy_trust_rows import trust_rows_from_payloads
 
 
 def _request(request_id: str = "request-1") -> dict[str, object]:
@@ -60,6 +61,10 @@ class _Store:
 
     def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
         return cast(dict[str, object] | list[object] | None, self.sync_payloads.get(state_key))
+
+    def policy_bundle_trust_rows(self, *, keys_only: bool = False):
+        del keys_only
+        return trust_rows_from_payloads(self.get_sync_payload, None)
 
     def exact_cloud_review_state(self) -> dict[str, object]:
         return {
