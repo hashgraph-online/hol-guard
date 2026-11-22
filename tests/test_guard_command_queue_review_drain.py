@@ -453,7 +453,7 @@ def test_unreadable_drain_lane_does_not_hide_another_lanes_pending_result(tmp_pa
 
     with caplog.at_level("WARNING"):
         assert command_queue_drain.review_drain_has_pending_result(store) is True
-    assert "drain state unreadable: slot=0 error=ValueError" in caplog.text
+    assert "drain state unreadable: slot=0 error=unparseable_row" in caplog.text
 
 
 def test_pool_start_survives_a_thread_that_cannot_start(tmp_path: Path, monkeypatch, caplog) -> None:

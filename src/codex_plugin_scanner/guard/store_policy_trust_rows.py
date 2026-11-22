@@ -37,7 +37,9 @@ class PolicyBundleTrustRows:
     """The cached bundle, the keyrings and checkpoint that judge it, its workspace and delivery rows.
 
     Every field holds the stored object or list, or ``None`` when the row is
-    absent or malformed, exactly as ``get_sync_payload`` reported it.
+    absent or not an object or list. A keyring, checkpoint or provenance row
+    that is not JSON raises ``PolicyTrustRowUnreadableError``, as
+    ``get_sync_payload`` raised for it.
     """
 
     policy_bundle: dict[str, object] | list[object] | None = None
@@ -57,6 +59,11 @@ class PolicyBundleTrustRows:
 
         if not isinstance(answer, dict):
             raise RuntimeError("native policy_bundle_trust_rows returned no answer")
+        unreadable = answer.get("unreadable_rows")
+        if unreadable:
+            # A keyring, checkpoint or provenance row that is not JSON would
+            # otherwise read as absent and drop a stored key restriction.
+            raise PolicyTrustRowUnreadableError(f"policy trust rows are not JSON: {unreadable}")
         bundle = policy_bundle if answer.get("policy_bundle_deferred") is True else answer.get("policy_bundle")
         return cls(
             policy_bundle=_row(bundle),
@@ -70,6 +77,10 @@ class PolicyBundleTrustRows:
             policy_bundle_last_error=_row(answer.get("policy_bundle_last_error")),
             workspace_id=_workspace_id(answer.get("workspace_id")),
         )
+
+
+class PolicyTrustRowUnreadableError(ValueError):
+    """A stored keyring, checkpoint or provenance row is not JSON; nothing is judged against it."""
 
 
 class PolicyTrustRowsUnstableError(RuntimeError):
@@ -119,4 +130,9 @@ class StorePolicyTrustRowsMixin:
         )
 
 
-__all__ = ["PolicyBundleTrustRows", "PolicyTrustRowsUnstableError", "StorePolicyTrustRowsMixin"]
+__all__ = [
+    "PolicyBundleTrustRows",
+    "PolicyTrustRowUnreadableError",
+    "PolicyTrustRowsUnstableError",
+    "StorePolicyTrustRowsMixin",
+]

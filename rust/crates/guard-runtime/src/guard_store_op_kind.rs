@@ -81,6 +81,10 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "read_local_cli_command_catalog"
         | "read_local_cli_command_states"
         | "list_local_cli_items"
+        | "read_local_cli_revision"
+        | "read_local_cli_surface"
+        | "has_local_cli_block_rules"
+        | "read_local_cli_capabilities"
         | "list_cached_advisories"
         | "policy_source_contexts"
         | "matching_native_review_block"
@@ -134,6 +138,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "cloud_status_rows"
         // Several named rows a caller combines, read as one view.
         | "sync_payload_snapshot"
+        // Every named command queue lane, read as one view.
+        | "command_queue_lane_rows"
         // Two rows read as one consent pair.
         | "exact_cloud_review_state" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
@@ -267,6 +273,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "upsert_local_cli_grant"
         | "merge_local_cli_commands"
         | "forget_local_cli_observation"
+        | "note_local_cli_capability_cause"
         | "record_connector_setup_context"
         | "local_cli_replay_allowed"
         | "prune_inactive_local_cli_observations"

@@ -44,6 +44,7 @@ from typing import Any, Final
 
 from ..harness_context import HarnessContext
 from ..store import GuardStore
+from ..store_command_queue_lanes import CommandQueueLaneRow
 from .command_queue_http import format_redacted_error
 from .command_queue_state import (
     COMMAND_QUEUE_STATE_KEY,
@@ -268,20 +269,35 @@ def _drain_lane(
 def review_drain_has_pending_result(store: GuardStore) -> bool:
     """Whether any drain lane holds a result it has not sent yet.
 
-    A lane whose state cannot be read is skipped, so it never stops the main
-    worker's poll or hides another lane's unsent result.
+    Every lane is read in one native snapshot. A lane whose state cannot be
+    read is skipped, so it never stops the main worker's poll or hides another
+    lane's unsent result.
     """
 
-    return any(_lane_has_pending_result(store, slot) for slot in range(REVIEW_DRAIN_WORKERS))
+    lanes = _read_lanes(store, tuple(range(REVIEW_DRAIN_WORKERS)))
+    return any(lane is not None and lane.pending_result for lane in lanes)
 
 
 def _lane_has_pending_result(store: GuardStore, slot: int, *, unreadable: bool = False) -> bool:
+    (lane,) = _read_lanes(store, (slot,))
+    return unreadable if lane is None else lane.pending_result
+
+
+def _read_lanes(store: GuardStore, slots: tuple[int, ...]) -> tuple[CommandQueueLaneRow | None, ...]:
+    """Each drain lane's state row, or ``None`` for a lane whose state cannot be read."""
+
     try:
-        payload = store.get_sync_payload(review_drain_lane(slot).state_key)
+        lanes = store.command_queue_lane_rows([review_drain_lane(slot).state_key for slot in slots])
     except Exception as error:
-        _LOGGER.warning("Guard Review drain state unreadable: slot=%s error=%s", slot, type(error).__name__)
-        return unreadable
-    return isinstance(payload, dict) and isinstance(payload.get("pending_result"), dict)
+        for slot in slots:
+            _LOGGER.warning("Guard Review drain state unreadable: slot=%s error=%s", slot, type(error).__name__)
+        return tuple(None for _slot in slots)
+    readable: list[CommandQueueLaneRow | None] = []
+    for slot, lane in zip(slots, lanes, strict=True):
+        if not lane.readable:
+            _LOGGER.warning("Guard Review drain state unreadable: slot=%s error=unparseable_row", slot)
+        readable.append(lane if lane.readable else None)
+    return tuple(readable)
 
 
 class ReviewDrainPool:
