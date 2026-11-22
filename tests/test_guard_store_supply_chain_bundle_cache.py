@@ -167,3 +167,35 @@ def test_a_steady_paged_response_is_joined(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setattr(store, "_native_store_call", native)
 
     assert store.get_cached_supply_chain_bundle(_WORKSPACE) == {"a": 1, "cached_at": "t1"}
+
+
+def test_recovered_sign_in_metadata_falls_back_to_the_newest_cached_workspace(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    store.cache_supply_chain_bundle(" workspace-old ", _response(), "2026-11-01T00:00:00+00:00")
+    store.cache_supply_chain_bundle(" workspace-new ", _response(), "2026-11-02T00:00:00+00:00")
+
+    metadata = store._recover_oauth_workspace_metadata()  # pyright: ignore[reportPrivateUsage]
+
+    assert metadata["workspace_id"] == "workspace-new"
+
+
+def test_an_empty_cache_recovers_no_workspace(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+
+    assert "workspace_id" not in store._recover_oauth_workspace_metadata()  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.parametrize("answer", [7, [], {"workspace_id": "w"}])
+def test_a_malformed_newest_workspace_answer_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: object
+) -> None:
+    store = GuardStore(tmp_path)
+
+    def native(method: str, _args: object, **_kwargs: Any) -> object:
+        assert method == "newest_supply_chain_bundle_workspace"
+        return answer
+
+    monkeypatch.setattr(store, "_native_store_call", native)
+
+    with pytest.raises(RuntimeError, match="returned no answer"):
+        store._recover_oauth_workspace_metadata()  # pyright: ignore[reportPrivateUsage]

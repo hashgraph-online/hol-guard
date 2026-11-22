@@ -14,6 +14,9 @@ use crate::guard_store_db::{
 #[path = "guard_store_workspace_fix_proposals.rs"]
 mod workspace_fix_proposals;
 
+#[path = "guard_store_workspace_assessment_reads.rs"]
+mod workspace_assessment;
+
 const OAUTH_STATE_KEY: &str = "oauth_local_credentials";
 const MIRROR_STATE_KEYS: [&str; 3] = [
     "managed_policy_bundle_keyring_provenance",
@@ -32,6 +35,7 @@ pub(crate) fn handles(method: &str) -> bool {
             | "clear_runtime_state"
             | "hook_approval_center_origin"
     ) || workspace_fix_proposals::handles(method)
+        || workspace_assessment::handles(method)
 }
 
 pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> StoreResult<Value> {
@@ -45,6 +49,9 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
         "hook_approval_center_origin" => hook_approval_center_origin(connection),
         _ if workspace_fix_proposals::handles(method) => {
             workspace_fix_proposals::dispatch(connection, method, args)
+        }
+        _ if workspace_assessment::handles(method) => {
+            workspace_assessment::dispatch(connection, method, args)
         }
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
