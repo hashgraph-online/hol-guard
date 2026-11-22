@@ -229,17 +229,37 @@ fn a_task_list_is_allowed_under_every_harness_envelope() {
 
 #[test]
 fn a_truncated_tool_input_is_not_proven_from_the_envelope() {
-    let result = evaluate_envelope(
-        "grok",
-        serde_json::json!({
+    // Each harness is one whose payload the widened allowlist now admits,
+    // and each tool is one that harness is admitted for, so the only thing
+    // left to refuse the proof is the truncation flag itself.
+    for (harness, tool, input) in [
+        ("cursor", "Task", brief_input()),
+        (
+            "grok",
+            "TodoWrite",
+            serde_json::json!({"todos": [{"content": "Write the release note", "status": "pending"}]}),
+        ),
+    ] {
+        let mut payload = serde_json::json!({
             "hook_event_name": "PreToolUse",
-            "tool_name": "Task",
-            "tool_input": brief_input(),
-            "toolInputTruncated": true,
+            "tool_name": tool,
+            "tool_input": input,
             "sessionId": "s1",
-        }),
-    );
-    assert_ne!(result.reason_code, "native_agent_subagent_brief");
+        });
+        let proven = evaluate_envelope(harness, payload.clone());
+        assert_eq!(
+            proven.decision, "allow",
+            "{harness}/{tool}: {}",
+            proven.reason
+        );
+
+        payload
+            .as_object_mut()
+            .expect("object payload")
+            .insert("toolInputTruncated".into(), serde_json::json!(true));
+        let truncated = evaluate_envelope(harness, payload);
+        assert_ne!(truncated.decision, "allow", "{harness}/{tool}");
+    }
 }
 
 #[test]
