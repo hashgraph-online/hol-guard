@@ -98,7 +98,7 @@ class StoreExtensionControlAuthorityMixin(
                 ).fetchone()
                 if pending is not None:
                     try:
-                        resumed = self._resume_transition(connection, _row_int(pending, "revision"), key=key)
+                        resumed = self._resume_transition(_row_int(pending, "revision"), key=key)
                     except UnverifiablePackTransitionError:
                         # Only damaged pending authentication permits the existing
                         # explicit recovery reset; environmental failures propagate.

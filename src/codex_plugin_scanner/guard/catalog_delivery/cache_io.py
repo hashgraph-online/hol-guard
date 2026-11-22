@@ -137,7 +137,7 @@ def cleanup(store, *, maximum_bytes=512 * 1024 * 1024):
         read_native_control_floor,
     )
     from . import activation_baseline
-    from .activation_store import _row, directory_for_store
+    from .activation_store import directory_for_store, pending_records, read_slot
 
     directory = directory_for_store(store)
     if not directory.exists():
@@ -149,18 +149,9 @@ def cleanup(store, *, maximum_bytes=512 * 1024 * 1024):
         key = _key(store)
         marker = read_command_control_authority(store, key)
         floor = read_native_control_floor(store, key)
-        with store._connect() as connection:
-            if not connection.execute(
-                "select 1 from sqlite_master where name='extension_control_schema_migration'"
-            ).fetchone():
-                rows = []
-            else:
-                active = _row(connection)
-                rows = [] if active is None or activation_baseline.is_baseline(active["record_json"]) else [active]
-                if connection.execute(
-                    "select 1 from sqlite_master where name='extension_command_pack_pending'"
-                ).fetchone():
-                    rows.extend(connection.execute("select * from extension_command_pack_pending").fetchall())
+        active = read_slot(store)
+        rows = [] if active is None or activation_baseline.is_baseline(active["record_json"]) else [active]
+        rows.extend(pending_records(store))
         # No caller supplies identities or pin sets. Rust authenticates every row.
         return lifecycle.invoke(
             "offline",

@@ -418,8 +418,7 @@ class ExtensionControlAuthorityReadsMixin:
         from .native_policy_snapshot_constants import NativePolicySnapshotError
 
         try:
-            with self._connect() as connection:
-                return self._resume_transition(connection, int(cast(int, action["revision"])), key=key)
+            return self._resume_transition(int(cast(int, action["revision"])), key=key)
         except NativeCommandControlMutationRequiredError:
             raise
         except NativePolicySnapshotError as error:

@@ -167,6 +167,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "read_command_pack_activation"
         | "extension_control_schema_state"
         | "extension_control_snapshot_layers"
+        | "list_command_pack_pending_records"
         | "connector_setup_advice"
         | "approval_desktop_notified_at"
         | "oldest_approval_request_created_at"
