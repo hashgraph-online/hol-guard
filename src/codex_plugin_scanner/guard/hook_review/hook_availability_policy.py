@@ -202,6 +202,8 @@ def availability_harness_response(
         reason=reason,
         reason_code=reason_code,
         prompt_reason=prompt_reason,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 

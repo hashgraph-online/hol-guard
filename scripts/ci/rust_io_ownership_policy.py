@@ -150,6 +150,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Resident-op dispatch bridge: decodes the bounded native response and
         # returns a DTO; it does not interpret response content into a decision.
         "src/codex_plugin_scanner/guard/native_execution.py",
+        # Decodes the Rust-owned fail-closed hook document; envelope semantics
+        # and reason selection remain in the native hook_failure operation.
+        "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
         # Bounded response decoding for native package-authority results.
         "src/codex_plugin_scanner/guard/native_package_authority.py",
         # Bounded decoding of the resident artifact-risk reply (gzip-packed when

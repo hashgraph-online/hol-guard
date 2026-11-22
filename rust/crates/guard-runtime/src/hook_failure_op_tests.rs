@@ -120,6 +120,21 @@ fn the_document_is_ascii_only() {
 }
 
 #[test]
+fn a_reason_code_request_uses_the_shared_fail_closed_contract() {
+    let result = dispatch(&json!({
+        "harness": "PI",
+        "event_name": "PreToolUse",
+        "reason": REASON,
+        "reason_code": "native_hook_worker_unavailable"
+    }))
+    .expect("a well-formed request");
+    let document: Value = serde_json::from_str(result["document"].as_str().unwrap()).unwrap();
+    assert_eq!(document["decision"], "deny");
+    assert_eq!(document["policy_action"], "block");
+    assert_eq!(document["reason_code"], "native_hook_worker_unavailable");
+}
+
+#[test]
 fn a_malformed_request_is_refused() {
     assert!(dispatch(&json!({"harness": "kimi", "event_name": "Stop"})).is_err());
     assert!(dispatch(&json!({"harness": 1, "event_name": "Stop", "reason": "x"})).is_err());

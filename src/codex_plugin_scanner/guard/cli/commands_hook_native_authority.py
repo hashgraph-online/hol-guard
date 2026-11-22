@@ -60,10 +60,12 @@ def _delivery_deadline(deadline: float | None) -> float | None:
     return max(deadline, time.monotonic() + _DELIVERY_BUDGET_SECONDS)
 
 
-def _failure_output(harness: str, event_name: str, reason: str) -> tuple[str, str, int]:
+def _failure_output(
+    harness: str, event_name: str, reason: str, *, deadline: float | None = None
+) -> tuple[str, str, int]:
     """The runtime's fixed fail-closed answer, or a block that names the repair."""
 
-    failure = native_hook_failure(harness, event_name, reason)
+    failure = native_hook_failure(harness, event_name, reason, deadline=deadline)
     if failure is None:
         return "", RUNTIME_MISSING, 2
     return failure[0], "", failure[1]
@@ -97,10 +99,10 @@ def _bridge_hook_output(
         ):
             return stdout, stderr, exit_code
     if canonical == "muse":
-        return native_stderr_hook_failure(canonical, event_name, _BRIDGE_BLOCK_REASON)
+        return native_stderr_hook_failure(canonical, event_name, _BRIDGE_BLOCK_REASON, deadline=deadline)
     if canonical == "hermes":
-        return _failure_output(canonical, event_name, _BRIDGE_BLOCK_REASON)
-    return _failure_output(canonical, event_name, _RENDER_FAILURE_REASON)
+        return _failure_output(canonical, event_name, _BRIDGE_BLOCK_REASON, deadline=deadline)
+    return _failure_output(canonical, event_name, _RENDER_FAILURE_REASON, deadline=deadline)
 
 
 def _record_native_hook_exception(guard_home: Path, *, harness: str, event_name: str) -> None:
