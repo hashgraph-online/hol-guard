@@ -80,8 +80,13 @@ struct WindowState {
     dropped_events: usize,
 }
 
+struct ReviewLease {
+    _file: File,
+    expires_at: Instant,
+}
+
 static WINDOWS: OnceLock<Mutex<HashMap<String, WindowState>>> = OnceLock::new();
-static REVIEW_LEASES: OnceLock<Mutex<HashMap<String, File>>> = OnceLock::new();
+static REVIEW_LEASES: OnceLock<Mutex<HashMap<String, ReviewLease>>> = OnceLock::new();
 
 fn review_lease(guard_home: &str, timeout_ms: u64) -> Result<Option<File>, String> {
     let state_base = Path::new(guard_home).join("native-runtime");
@@ -255,14 +260,39 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
                 let mut leases = leases
                     .lock()
                     .map_err(|_| "hook_policy_fence_review_state_poisoned".to_owned())?;
-                leases.insert(request.request_id.clone(), file);
+                let request_id = request.request_id.clone();
+                let expires_at = Instant::now() + Duration::from_millis(timeout_ms);
+                leases.insert(
+                    request_id.clone(),
+                    ReviewLease {
+                        _file: file,
+                        expires_at,
+                    },
+                );
+                thread::spawn(move || {
+                    let remaining = expires_at.saturating_duration_since(Instant::now());
+                    thread::sleep(remaining);
+                    if let Some(leases) = REVIEW_LEASES.get() {
+                        if let Ok(mut leases) = leases.lock() {
+                            if leases
+                                .get(&request_id)
+                                .is_some_and(|lease| lease.expires_at <= Instant::now())
+                            {
+                                leases.remove(&request_id);
+                            }
+                        }
+                    }
+                });
                 true
             }
             Ok(None) | Err(_) => false,
         };
         return encode_response(&json!({
             "schema": RESULT_SCHEMA,
-            "result": {"request_id": request.request_id, "fenced": fenced},
+            "result": {
+                "request_id": request.request_id,
+                "fenced": if fenced { Value::Bool(true) } else { Value::Null },
+            },
         }));
     }
     if request.action == "review_leave" {
