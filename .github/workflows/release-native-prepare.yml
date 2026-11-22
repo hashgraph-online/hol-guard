@@ -40,12 +40,13 @@ on:
 permissions:
   contents: read
   actions: read
-# Main pushes prepare exact-source binaries as well as compiler objects.
-# A newer main push replaces a superseded warm run, while publish calls keep
-# their own workflow group and validate the requested source and version.
+# Main pushes prepare exact-source binaries as well as compiler objects. Warm
+# runs queue instead of being canceled by the next push, because a canceled
+# compile cannot seed the compiler cache and forces the next publish to rebuild
+# every native target from zero.
 concurrency:
   group: ${{ github.event_name == 'push' && format('release-native-prepare-{0}', github.ref) || format('release-native-prepare-call-{0}-{1}', github.run_id, inputs.target || 'all') }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  cancel-in-progress: false
 jobs:
   compile:
     name: Compile release (${{ matrix.target }})

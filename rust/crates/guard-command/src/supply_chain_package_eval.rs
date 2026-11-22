@@ -323,6 +323,8 @@ use orchestration::evaluate_package_request_artifact_uncached;
 #[path = "supply_chain_package_eval/source_review.rs"]
 mod source_review;
 use source_review::evaluate_non_registry_sources;
+#[path = "supply_chain_package_eval/guard_free_target.rs"]
+mod guard_free_target;
 #[path = "supply_chain_package_eval/review_triggers.rs"]
 mod review_triggers;
 use review_triggers::{apply_review_triggers, ReviewTriggers};
