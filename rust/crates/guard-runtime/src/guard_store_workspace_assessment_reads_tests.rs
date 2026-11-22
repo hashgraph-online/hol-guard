@@ -252,6 +252,30 @@ fn latest_runs_are_not_cut_at_the_history_limit() {
 }
 
 #[test]
+fn a_run_queued_between_latest_pages_keeps_the_newest_run_already_seen() {
+    let connection = store();
+    run(&connection, "r1", "w1", "completed", 30, Some(31));
+    run(&connection, "r2", "w2", "completed", 20, Some(21));
+    let saw: i64 = connection
+        .query_row(
+            "select max(rowid) from workspace_assessment_runs",
+            [],
+            |row| row.get(0),
+        )
+        .expect("rowid");
+    // Queued after the first page ended on r1.
+    run(&connection, "r3", "w2", "queued", 40, None);
+
+    let rest = call(
+        &connection,
+        "list_workspace_assessment_runs",
+        json!({"mode": "latest", "before": [30, "r1", saw]}),
+    )
+    .expect("rest");
+    assert_eq!(ids(&rest, "run_id"), ["r2"]);
+}
+
+#[test]
 fn the_latest_assessed_run_skips_runs_without_results() {
     let connection = store();
     run(&connection, "r1", "w1", "completed", 10, Some(30));
@@ -300,6 +324,14 @@ fn malformed_arguments_are_refused() {
         (
             "list_workspace_assessment_runs",
             json!({"mode": "recent", "before": [1]}),
+        ),
+        (
+            "list_workspace_assessment_runs",
+            json!({"mode": "latest", "before": [1, "r1"]}),
+        ),
+        (
+            "list_workspace_assessment_runs",
+            json!({"mode": "latest", "before": [1, "r1", "2"]}),
         ),
     ];
     for (method, args) in cases {

@@ -88,36 +88,52 @@ fn worktrees(connection: &Connection, args: &Args) -> StoreResult<Value> {
 /// `recent_runs` (`mode: "recent"`, optionally for one worktree, at most
 /// `limit` runs) and `latest_runs` (`mode: "latest"`, the newest run of every
 /// worktree), newest first. `before` is the `[created_at_ms, run_id]` of the
-/// last run read.
+/// last run read; a latest listing adds the highest run rowid its first page
+/// saw, so a run queued between pages cannot replace a worktree's newest run
+/// after that run has already fallen behind the cursor.
 fn runs(connection: &Connection, args: &Args) -> StoreResult<Value> {
     let mut clauses = Vec::new();
     let mut params = Vec::new();
     let mode = args.str("mode")?;
-    match mode {
-        "recent" => {
-            if let Some(codebase) = args.opt_str("codebase_key")? {
-                clauses.push("r.codebase_key = ? and r.worktree_key = ?");
-                params.push(Value::from(codebase));
-                params.push(Value::from(args.str("worktree_key")?));
-            }
-        }
-        "latest" => clauses.push(
-            "r.run_id = (select newest.run_id from workspace_assessment_runs newest \
-             where newest.codebase_key = r.codebase_key \
-               and newest.worktree_key = r.worktree_key \
-             order by newest.created_at_ms desc, newest.run_id desc limit 1)",
-        ),
+    let latest = match mode {
+        "recent" => false,
+        "latest" => true,
         _ => return value_error("mode must be recent or latest"),
-    }
-    if let Some(before) = args.raw("before") {
-        let [Some(created), Some(run_id)] = cursor_parts::<2>(before) else {
-            return value_error("before must name the last run read");
-        };
-        if !created.is_i64() || !run_id.is_string() {
-            return value_error("before must name the last run read");
+    };
+    if !latest {
+        if let Some(codebase) = args.opt_str("codebase_key")? {
+            clauses.push("r.codebase_key = ? and r.worktree_key = ?");
+            params.push(Value::from(codebase));
+            params.push(Value::from(args.str("worktree_key")?));
         }
+    }
+    let before = match args.raw("before") {
+        None => None,
+        Some(before) => Some(run_cursor(before, latest)?),
+    };
+    let as_of = if latest {
+        let saw = match &before {
+            Some((_, _, Some(saw))) => *saw,
+            _ => connection.query_row(
+                "select coalesce(max(rowid), 0) from workspace_assessment_runs",
+                [],
+                |row| row.get::<_, i64>(0),
+            )?,
+        };
+        clauses.push(
+            "r.rowid <= ? and r.run_id = (select newest.run_id from workspace_assessment_runs newest \
+             where newest.codebase_key = r.codebase_key \
+               and newest.worktree_key = r.worktree_key and newest.rowid <= ? \
+             order by newest.created_at_ms desc, newest.run_id desc limit 1)",
+        );
+        params.extend([Value::from(saw), Value::from(saw)]);
+        Some(saw)
+    } else {
+        None
+    };
+    if let Some((created, run_id, _)) = before {
         clauses.push("(r.created_at_ms, r.run_id) < (?, ?)");
-        params.extend([created.clone(), run_id.clone()]);
+        params.extend([created, run_id]);
     }
     // The newest run of every worktree is never cut short; SQLite reads a
     // negative limit as no limit.
@@ -141,9 +157,34 @@ fn runs(connection: &Connection, args: &Args) -> StoreResult<Value> {
          from workspace_assessment_runs r {filter} \
          order by r.created_at_ms desc, r.run_id desc limit ?"
     );
-    page(connection, &sql, &params, |row| {
-        json!([row["created_at_ms"], row["run_id"]])
+    page(connection, &sql, &params, |row| match as_of {
+        Some(saw) => json!([row["created_at_ms"], row["run_id"], saw]),
+        None => json!([row["created_at_ms"], row["run_id"]]),
     })
+}
+
+/// A `before` cursor: `[created_at_ms, run_id]`, plus the rowid bound for a
+/// latest listing.
+fn run_cursor(before: &Value, latest: bool) -> StoreResult<(Value, Value, Option<i64>)> {
+    let invalid = || value_error("before must name the last run read");
+    let (created, run_id, saw) = if latest {
+        let [Some(created), Some(run_id), Some(saw)] = cursor_parts::<3>(before) else {
+            return invalid();
+        };
+        let Some(saw) = saw.as_i64() else {
+            return invalid();
+        };
+        (created, run_id, Some(saw))
+    } else {
+        let [Some(created), Some(run_id)] = cursor_parts::<2>(before) else {
+            return invalid();
+        };
+        (created, run_id, None)
+    };
+    if !created.is_i64() || !run_id.is_string() {
+        return invalid();
+    }
+    Ok((created.clone(), run_id.clone(), saw))
 }
 
 /// `latest_assessed_run(keys)`: the newest completed or partial run of one
