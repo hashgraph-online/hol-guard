@@ -180,8 +180,10 @@ fn zsh_definition_lookup_can_emit_synthetic_markers() {
     if Command::new("zsh").arg("--version").output().is_err() {
         return; // zsh is not installed on every CI host.
     }
-    let setup = "function hol_probe_func() { print SYNTHETIC_GUARD_CANARY_91; }\n\\
-                 alias hol_probe_alias='print SYNTHETIC_GUARD_CANARY_91'\n";
+    let setup = concat!(
+        "function hol_probe_func() { print SYNTHETIC_GUARD_CANARY_91; }\\n",
+        "alias hol_probe_alias='print SYNTHETIC_GUARD_CANARY_91'\\n",
+    );
     for command in [
         "which hol_probe_func",
         "which -a hol_probe_func",
@@ -202,9 +204,9 @@ fn zsh_definition_lookup_can_emit_synthetic_markers() {
     }
     let script = format!("{setup}whence -p ls\n");
     let output = Command::new("zsh")
-            .args(["-f", "-c", &script])
-            .output()
-            .unwrap();
+        .args(["-f", "-c", &script])
+        .output()
+        .unwrap();
     assert!(output.status.success());
     assert!(!String::from_utf8_lossy(&output.stdout).contains("SYNTHETIC_GUARD_CANARY_91"));
 }
