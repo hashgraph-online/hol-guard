@@ -12,8 +12,9 @@ use std::time::Instant;
 /// first decide of a package call asks for it, and the relay decides the same
 /// call again with the evaluation attached. A relay whose rounds did not
 /// settle says so instead, and that decide is the refusal: asking again for an
-/// evaluation that is not coming would refuse the call in every later session
-/// too, where the refusal hands the server to the proxy.
+/// evaluation that is not coming would only ask the relay for the rounds it
+/// already failed. The call is refused in place, and the server stays with the
+/// relay.
 pub(super) fn evaluation_leg(
     request: &McpRelayDecideRequestV1,
     is_package: bool,

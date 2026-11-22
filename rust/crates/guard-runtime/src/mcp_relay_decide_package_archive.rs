@@ -33,8 +33,7 @@ const OVERRIDE_KIND: &str = "external_archive_override";
 const UNBOUND_VARIANT: &str = "mcp_unbound";
 
 /// The defer this lane raises when the override itself cannot be composed. Like
-/// every package-lane defer it names the package prefix, so the server is handed
-/// to the proxy rather than answered here.
+/// every package-lane defer it refuses the call in place.
 const PACKAGE_ARCHIVE_OVERRIDE: &str = "mcp_relay_package_archive_override";
 
 /// Whether this evaluation only permits a request bound to the external

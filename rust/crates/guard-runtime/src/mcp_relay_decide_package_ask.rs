@@ -37,8 +37,8 @@
 //! snapshot, the store write under the shared storage gate, the read-back
 //! through `get_approval_request`, and the link `first_approval_url` resolves.
 //!
-//! What the resident cannot reproduce defers, and a package-lane defer hands
-//! the server to the proxy. The bindings this needs are the same ones the tool
+//! What the resident cannot reproduce defers, and a package-lane defer refuses
+//! the call in place. The bindings this needs are the same ones the tool
 //! call's queue needs — an approval-center origin, a review OAuth source and a
 //! bound receipt redaction level, which the daemon publishes together — plus
 //! the approval-context token the request hashed to.
@@ -76,8 +76,8 @@ const QUEUE_METADATA_KEYS: [&str; 4] = [
     "extension_allow_hint",
 ];
 
-/// A binding or an identity this leg cannot reproduce, which hands the server
-/// to the proxy rather than guessing the row.
+/// A binding or an identity this leg cannot reproduce, which refuses the call
+/// rather than guessing the row.
 const PACKAGE_ASK_UNSUPPORTED: &str = "mcp_relay_package_ask_unsupported";
 /// The row could not be written, read back or shaped.
 const PACKAGE_ASK_FAILED: &str = "mcp_relay_package_ask_failed";
