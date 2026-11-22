@@ -81,6 +81,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "list_workspace_assessment_worktrees"
         | "list_workspace_assessment_runs"
         | "latest_workspace_assessment_run"
+        | "list_latest_assessed_workspace_runs"
+        | "workspace_assessment_feed_digest"
         | "get_runtime_state"
         | "read_local_cli_grant"
         | "read_local_cli_command_catalog"
