@@ -301,7 +301,7 @@ def emit_hook_review(
     # fixed fail-closed document, and the exit status follows the outage
     # policy the bridges' fixed payload uses: block an event that may pause
     # the turn, and let any other continue.
-    fallback = fail_closed_response(canonical, event_name)
+    fallback = fail_closed_response(canonical, event_name, guard_home=guard_home, deadline=deadline)
     _ = stream.write(json.dumps(fallback, ensure_ascii=True, separators=(",", ":")) + "\n")
     if canonical == "claude-code":
         # Claude reads a hook's JSON only on exit 0; any other status discards

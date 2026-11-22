@@ -197,7 +197,13 @@ def availability_harness_response(
     from .hook_fail_closed import fail_closed_response
 
     return fail_closed_response(
-        harness, event_name, reason=reason, reason_code=reason_code, prompt_reason=prompt_reason
+        harness,
+        event_name,
+        reason=reason,
+        reason_code=reason_code,
+        prompt_reason=prompt_reason,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 

@@ -205,6 +205,18 @@ def test_every_event_kind_answers_from_the_shared_contract() -> None:
     }
 
 
+def test_fail_closed_response_uses_the_native_contract_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        hook_fail_closed,
+        "native_render_fail_closed_response",
+        lambda *args, **kwargs: {"from": "rust", "policy_action": "block"},
+    )
+    assert hook_fail_closed.fail_closed_response("pi", "PreToolUse", guard_home=_HOME) == {
+        "from": "rust",
+        "policy_action": "block",
+    }
+
+
 def test_review_render_failure_drops_a_raw_approval_url(monkeypatch: pytest.MonkeyPatch) -> None:
     """A fixed deny carries no signed link, so it carries no raw link either."""
 

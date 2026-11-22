@@ -438,6 +438,35 @@ def native_render_fail_closed_verdict(
     return rendered[1]
 
 
+def native_render_fail_closed_response(
+    harness: str,
+    event_name: str,
+    *,
+    reason: str,
+    reason_code: str,
+    prompt_reason: str | None = None,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    """Render a fixed outage response from the shared Rust contract."""
+
+    rendered = native_render_cli(
+        "availability_response",
+        harness,
+        {
+            "event_name": event_name,
+            "reason": reason,
+            "reason_code": reason_code,
+            "prompt_reason": prompt_reason,
+        },
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    if rendered is None or rendered[0] != "document":
+        return None
+    return rendered[1]
+
+
 __all__ = [
     "HOOK_RENDER_FEATURE",
     "native_cli_hook_emit",
@@ -446,6 +475,7 @@ __all__ = [
     "native_recording_only_for_binding",
     "native_render_accepted_allow",
     "native_render_cli",
+    "native_render_fail_closed_response",
     "native_render_fail_closed_verdict",
     "native_render_pre_tool",
     "native_render_recording_only_pre_tool",
