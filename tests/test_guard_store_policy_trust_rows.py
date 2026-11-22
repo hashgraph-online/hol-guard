@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -73,6 +74,37 @@ def test_a_bundle_larger_than_one_reply_is_still_read(tmp_path: Path) -> None:
     rows = store.policy_bundle_trust_rows()
     assert rows.policy_bundle == bundle
     assert rows.policy_bundle_keyring == {"keys": []}
+
+
+def test_an_unreadable_bundle_too_large_for_one_reply_reads_as_absent(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    store.set_sync_payload("policy_bundle", {"bundleVersion": "8"}, _NOW)
+    store.set_sync_payload("policy_bundle_keyring", {"keys": []}, _NOW)
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "update sync_state set payload_json = ? where state_key = ?",
+            ("{" + "x" * (1536 * 1024), "policy_bundle"),
+        )
+    rows = store.policy_bundle_trust_rows()
+    assert rows.policy_bundle is None
+    assert rows.policy_bundle_keyring == {"keys": []}
+
+
+def test_review_key_read_reports_a_store_outage_as_native_unavailable() -> None:
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
+    from codex_plugin_scanner.guard.native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION
+    from codex_plugin_scanner.guard.review_oauth_binding import GuardReviewContractError
+    from codex_plugin_scanner.guard.review_signature_verification import _anchored_review_verification_keys
+
+    def unavailable(*, keys_only: bool = False) -> PolicyBundleTrustRows:
+        raise NativeGuardStoreUnavailable("resident unavailable")
+
+    with pytest.raises(GuardReviewContractError) as raised:
+        _anchored_review_verification_keys(SimpleNamespace(policy_bundle_trust_rows=unavailable))
+    assert str(raised.value) == NATIVE_UNAVAILABLE_REJECTION
+    assert isinstance(raised.value.__cause__, NativeGuardStoreUnavailable)
 
 
 def test_review_keyring_readiness_is_false_when_the_store_cannot_answer() -> None:

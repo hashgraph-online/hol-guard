@@ -72,6 +72,15 @@ class PolicyBundleTrustRows:
         )
 
 
+def _deferred_bundle(store: _NativeStore) -> object:
+    """The bundle row read on its own; an unreadable row is absent, as the native reader treats it."""
+
+    try:
+        return store.get_sync_payload("policy_bundle")
+    except ValueError:
+        return None
+
+
 class StorePolicyTrustRowsMixin:
     """One consistent read of the policy bundle trust rows, and the Review keyring write."""
 
@@ -92,7 +101,7 @@ class StorePolicyTrustRowsMixin:
             answer = self._native_store_call("policy_bundle_trust_rows", {})
             if not isinstance(answer, dict) or answer.get("policy_bundle_deferred") is not True:
                 return PolicyBundleTrustRows.from_native(answer)
-            bundle = self.get_sync_payload("policy_bundle")
+            bundle = _deferred_bundle(self)
             if self._native_store_call("policy_bundle_trust_rows", {}) == answer:
                 return PolicyBundleTrustRows.from_native(answer, policy_bundle=bundle)
         raise RuntimeError("policy bundle trust rows kept changing while the bundle was read")

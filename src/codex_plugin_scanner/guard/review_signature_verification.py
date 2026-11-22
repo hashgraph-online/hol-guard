@@ -13,6 +13,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from .native_guard_store import NativeGuardStoreUnavailable
 from .native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
     PolicyBundleNativeError,
@@ -58,7 +59,7 @@ def _native_outage_is_not_a_key_verdict() -> Iterator[None]:
 
     try:
         yield
-    except PolicyBundleNativeUnavailableError as error:
+    except (PolicyBundleNativeUnavailableError, NativeGuardStoreUnavailable) as error:
         raise GuardReviewContractError(NATIVE_UNAVAILABLE_REJECTION) from error
     except PolicyBundleNativeError as error:
         if error.code not in _REVIEW_CONTRACT_CODES:
@@ -67,8 +68,8 @@ def _native_outage_is_not_a_key_verdict() -> Iterator[None]:
 
 
 def _anchored_review_verification_keys(store) -> tuple[PolicyBundleVerificationKey, ...]:
-    rows = store.policy_bundle_trust_rows(keys_only=True)
     with _native_outage_is_not_a_key_verdict():
+        rows = store.policy_bundle_trust_rows(keys_only=True)
         return merge_policy_bundle_trusted_keys(
             policy_bundle_keys_from_supply_chain_keyring(rows.supply_chain_keyring),
             safe_load_policy_bundle_verification_keys(rows.policy_bundle_keyring),
