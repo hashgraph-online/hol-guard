@@ -51,6 +51,23 @@ def cached_policy_bundle_validation(
     return policy_bundle, None
 
 
+class LastGoodTrustRowsReader(Protocol):
+    """Persistence interface that can also read the last good bundle's trust rows."""
+
+    def policy_bundle_trust_rows(
+        self, *, keys_only: bool = False, last_good: bool = False
+    ) -> PolicyBundleTrustRows: ...
+
+
+def last_good_policy_bundle_validation(
+    store: LastGoodTrustRowsReader,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Judge the last good bundle against the keyrings, checkpoint and workspace read with it."""
+
+    rows = store.policy_bundle_trust_rows(last_good=True)
+    return cached_policy_bundle_validation(store, rows.policy_bundle, rows=rows)
+
+
 def synced_policy_bundle_validation(
     store: PolicyTrustRowsReader,
     *,
@@ -102,8 +119,10 @@ def synced_policy_payload(store: PolicyTrustRowsReader) -> dict[str, object] | N
 
 
 __all__ = [
+    "LastGoodTrustRowsReader",
     "PolicyTrustRowsReader",
     "cached_policy_bundle_validation",
+    "last_good_policy_bundle_validation",
     "synced_policy_bundle_validation",
     "synced_policy_payload",
     "validated_synced_policy_bundle",

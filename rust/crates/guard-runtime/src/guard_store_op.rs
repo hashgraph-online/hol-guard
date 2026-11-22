@@ -41,7 +41,7 @@ const MMAP_SIZE_BYTES: i64 = 1024 * 1024 * 1024;
 /// the policy-integrity rows request does.
 const UNDIGESTED_ARGS: [&str; 1] = ["integrity_key_b64"];
 
-fn request_digest(request: &GuardStoreRequestV1) -> Result<String, &'static str> {
+pub(crate) fn request_digest(request: &GuardStoreRequestV1) -> Result<String, &'static str> {
     let mut material = serde_json::to_value(request).map_err(|_| "native_guard_store_invalid")?;
     if let Some(args) = material.get_mut("args").and_then(Value::as_object_mut) {
         for field in UNDIGESTED_ARGS {

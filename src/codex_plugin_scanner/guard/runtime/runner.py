@@ -77,10 +77,13 @@ from ..policy_bundle_v2 import (
 from ..policy_document_io import PolicyCompilationError, compile_policy_bundle_document
 from ..redaction import redact_sensitive_text
 from ..review_signature_verification import sync_review_verification_keys
-from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..store_policy_trust_rows import PolicyBundleTrustRows
-from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
+from ..synced_policy import (
+    cached_policy_bundle_validation,
+    last_good_policy_bundle_validation,
+    validated_synced_policy_bundle,
+)
 from . import runner_native_authority as _authority
 from . import runner_native_sync as _sync
 from . import runner_policy_shadow as _shadow
@@ -124,6 +127,7 @@ from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
 from .policy_bundle_failure_ack import cached_bundle_failure_acknowledgement, failed_acknowledgement
+from .runner_package_coverage import cloud_package_manager_coverage as _cloud_package_manager_coverage
 from .sync_retry_delay import parse_retry_after_value
 from .workspace_assessment_sync import (
     build_workspace_assessment_sync_safely,
@@ -657,11 +661,7 @@ def sync_receipts(
             # same policy through unsigned sibling fields after verification
             # fails. Keep only a still-valid signed current/LKG bundle.
             remote_decisions.clear()
-            last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
-            last_good_bundle, _last_good_error = _validate_cached_policy_bundle(
-                store,
-                last_good_bundle_payload,
-            )
+            last_good_bundle, _last_good_error = last_good_policy_bundle_validation(store)
             # A valid current bundle may be newer than last-good when a prior
             # sync stopped after persisting current but before advancing the
             # checkpoint. Prefer current so a rejected refresh cannot roll
@@ -677,11 +677,7 @@ def sync_receipts(
     else:
         effective_policy_bundle = existing_policy_bundle
         if effective_policy_bundle is None:
-            last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
-            effective_policy_bundle, last_good_error = _validate_cached_policy_bundle(
-                store,
-                last_good_bundle_payload,
-            )
+            effective_policy_bundle, last_good_error = last_good_policy_bundle_validation(store)
             if (
                 effective_policy_bundle is None
                 and isinstance(existing_policy_bundle_payload, dict)
@@ -2785,32 +2781,6 @@ def _cloud_local_identity(*, observed_at: str) -> tuple[dict[str, object], dict[
             "daemonStatus": "local-guard",
             "relayState": "local-guard",
         }
-
-
-def _cloud_package_manager_coverage(
-    store: GuardStore,
-    *,
-    workspace: str,
-    generated_at: str,
-) -> dict[str, object]:
-    coverage = package_shim_cloud_coverage(
-        HarnessContext(
-            home_dir=Path.home(),
-            workspace_dir=Path(workspace),
-            guard_home=store.guard_home,
-        ),
-        generated_at=generated_at,
-    )
-    coverage["staleIntel"] = _sync.stale_intel(
-        (
-            store.get_sync_payload("sync_summary"),
-            store.get_sync_payload("runtime_session_summary"),
-            store.get_sync_payload("supply_chain_bundle_summary"),
-        ),
-        generated_at=generated_at,
-        now=_now(),
-    )
-    return coverage
 
 
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:

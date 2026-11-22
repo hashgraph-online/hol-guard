@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import synced_policy
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import PolicyBundleVerificationKey
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.store import GuardStore
@@ -108,3 +109,75 @@ def test_the_synced_bundle_is_validated_with_the_snapshot_rows(
     assert activation["supply_chain_keyring"] is _ACTIVATION_SUPPLY_CHAIN
     assert activation["managed_keyring_provenance"] is _ACTIVATION_PROVENANCE
     assert activation["expected_workspace_id"] == _ACTIVATION_WORKSPACE
+
+
+def test_a_rejected_sync_judges_the_last_good_bundle_with_its_own_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+    last_good = {"bundleVersion": "last-good"}
+    store.set_sync_payload("policy_bundle_last_good", last_good, "2026-08-26T11:00:00+00:00")
+    read_trust_rows = store.policy_bundle_trust_rows
+    last_good_snapshots: list[PolicyBundleTrustRows] = []
+
+    def snapshot(**kwargs: bool) -> PolicyBundleTrustRows:
+        rows = read_trust_rows(**kwargs)
+        if kwargs.get("last_good"):
+            rows = replace(rows, policy_bundle_keyring=_SNAPSHOT_KEYRING, workspace_id=_SNAPSHOT_WORKSPACE)
+            last_good_snapshots.append(rows)
+        return rows
+
+    judged: list[tuple[object, PolicyBundleTrustRows | None]] = []
+
+    def validate_cached(
+        _store: GuardStore,
+        policy_bundle: object,
+        *,
+        now: float | None = None,
+        rows: PolicyBundleTrustRows | None = None,
+    ) -> tuple[None, str]:
+        del now
+        judged.append((policy_bundle, rows))
+        return None, "invalid_policy_bundle"
+
+    def reject_policy_bundle(
+        _policy_bundle: dict[str, object],
+        **_kwargs: object,
+    ) -> tuple[None, str, tuple[PolicyBundleVerificationKey, ...]]:
+        return None, "policy_bundle_signature_invalid", ()
+
+    def open_sync(_request: urllib.request.Request, timeout: float) -> _Response:
+        del _request, timeout
+        return _Response(
+            {
+                "syncedAt": "2026-08-26T12:00:00+00:00",
+                "receiptsStored": 0,
+                "policyBundle": _policy_bundle(),
+            }
+        )
+
+    def no_auxiliary_sync(_store: GuardStore, auth_context: dict[str, object] | None = None) -> int:
+        del _store, auth_context
+        return 0
+
+    monkeypatch.setattr(store, "policy_bundle_trust_rows", snapshot)
+    monkeypatch.setattr(runner, "validate_synced_policy_bundle", reject_policy_bundle)
+    monkeypatch.setattr(synced_policy, "cached_policy_bundle_validation", validate_cached)
+    stub_authenticated_urlopen(monkeypatch, open_sync)
+    monkeypatch.setattr(runner, "sync_pain_signals", no_auxiliary_sync)
+    monkeypatch.setattr(runner, "sync_guard_events", no_auxiliary_sync)
+
+    _ = runner.sync_receipts(
+        store,
+        auth_context={
+            "access_token": "test-access-token",
+            "dpop_key_material": None,
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+    )
+
+    assert len(last_good_snapshots) == 1
+    rows = last_good_snapshots[0]
+    assert (last_good, rows) in judged
+    assert rows.policy_bundle_keyring is _SNAPSHOT_KEYRING

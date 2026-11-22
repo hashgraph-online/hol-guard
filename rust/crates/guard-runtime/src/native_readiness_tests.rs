@@ -115,8 +115,13 @@ fn is_test_gate(line: &str) -> bool {
             .is_match(trimmed)
 }
 
-/// Literals in those modules that name an operation, not a reason.
-const NOT_REASONS: [&str; 1] = ["native_bash_execute"];
+/// Literals in those modules that name an operation or a store result the
+/// client reads, not a reason.
+const NOT_REASONS: [&str; 3] = [
+    "native_bash_execute",
+    "native_guard_store_invalid",
+    "native_guard_store_method_unknown",
+];
 
 fn emitted_reason_codes() -> BTreeSet<String> {
     let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");

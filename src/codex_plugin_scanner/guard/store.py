@@ -34,6 +34,7 @@ from .store_command_queue_lanes import StoreCommandQueueLanesMixin
 from .store_worker_host import StoreWorkerHostMixin
 from .store_aibom_state import StoreAibomStateMixin
 from .store_policy_trust_rows import StorePolicyTrustRowsMixin
+from .store_sync_payload_snapshot import StoreSyncPayloadSnapshotMixin
 from .store_fleet_posture_state import StoreFleetPostureStateMixin
 from .store_managed_controls_status import StoreManagedControlsStatusMixin
 from .store_local_cli import StoreLocalCliMixin
@@ -103,6 +104,7 @@ class GuardStore(
     StoreAibomStateMixin,
     StorePolicyTrustRowsMixin,
     StoreCustomExtensionContinuityRowsMixin,
+    StoreSyncPayloadSnapshotMixin,
     StoreSyncDeliveryRowsMixin,
     StoreAdvisoryCacheMixin,
     StoreReceiptsRuntimeMixin,
