@@ -153,6 +153,8 @@ struct Resolution {
     claim_disposition: Option<String>,
     claim: Option<&'static str>,
     reused: bool,
+    decision: Option<Value>,
+    authority: Option<Value>,
 }
 
 fn subset(map: &Map<String, Value>) -> Value {
@@ -218,14 +220,45 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
         ));
         merged
     };
+    let mut ignored_integrity = request.ignored_integrity;
+    let mut daemon_authority = request.daemon_authority;
+    let mut resolved_authority = None;
+    let resolved_decision = if request.decision.is_none() && request.ignored_integrity {
+        let authority = crate::daemon_policy_authority::ResidentPolicyAuthority::new(
+            std::path::PathBuf::from(&request.guard_home),
+        );
+        let workspaces = if request.policy_workspaces.is_empty() {
+            vec![request.workspace_dir.clone()]
+        } else {
+            request.policy_workspaces.clone()
+        };
+        if let Some((decision, authority_value)) = authority.resolve_package_policy(
+            &request.harness,
+            Some(&request.artifact_id),
+            &request.artifact_hash,
+            &workspaces,
+            request.publisher.as_deref(),
+        ) {
+            ignored_integrity = false;
+            daemon_authority = true;
+            resolved_authority = Some(authority_value);
+            Some(decision)
+        } else {
+            None
+        }
+    } else {
+        request.decision.clone()
+    };
     let unchanged = |output: Map<String, Value>| Resolution {
         output,
         claim_disposition: None,
         claim: None,
         reused: false,
+        decision: resolved_decision.clone(),
+        authority: resolved_authority.clone(),
     };
-    let decision = request.decision.as_ref().and_then(Value::as_object);
-    if decision.is_none() && !request.ignored_integrity && request.diagnosed_reason.is_none() {
+    let decision = resolved_decision.as_ref().and_then(Value::as_object);
+    if decision.is_none() && !ignored_integrity && request.diagnosed_reason.is_none() {
         return Ok(unchanged(current));
     }
     if decision
@@ -235,11 +268,11 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
     }
     let action = match decision {
         Some(row) => field_or_null(row, "action").clone(),
-        None if request.ignored_integrity => json!("require-reapproval"),
+        None if ignored_integrity => json!("require-reapproval"),
         None => json!("allow"),
     };
     let artifact_hash = Value::String(request.artifact_hash.clone());
-    let validation_reason: Option<String> = if request.ignored_integrity {
+    let validation_reason: Option<String> = if ignored_integrity {
         Some("approval_reuse_integrity_failure".to_owned())
     } else if let Some(row) = decision {
         if text_is(row, "action", "allow") {
@@ -288,7 +321,7 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
     let claim_needed = request.claim_saved_approval && reuse.should_claim;
     let claim = match (claim_needed, decision) {
         (true, Some(_)) if waited_exact_cloud_approval => Some("exact_cloud"),
-        (true, Some(_)) if request.daemon_authority => Some("daemon"),
+        (true, Some(_)) if daemon_authority => Some("daemon"),
         (true, Some(_)) if legacy_local_approval => Some("legacy_local"),
         (true, Some(_)) => Some("store"),
         _ => None,
@@ -311,6 +344,8 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
         claim_disposition: disposition,
         claim,
         reused,
+        decision: resolved_decision.clone(),
+        authority: resolved_authority.clone(),
     };
     if reuse.accepted() && reuse.saved_action == Some(GuardAction::Allow) {
         if !decision.is_some_and(|row| text_is(row, "action", "allow")) {
@@ -449,6 +484,14 @@ pub(crate) fn evaluate_package_policy_resolve(
         json!(resolution.claim_disposition),
     );
     payload.insert("reused".to_owned(), json!(resolution.reused));
+    payload.insert(
+        "decision".to_owned(),
+        resolution.decision.unwrap_or(Value::Null),
+    );
+    payload.insert(
+        "authority".to_owned(),
+        resolution.authority.unwrap_or(Value::Null),
+    );
     crate::encode_response(&SupplyChainEvalResultV1 {
         schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
         request_id: request.request_id.clone(),

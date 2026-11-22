@@ -29,6 +29,11 @@ class _Store:
         return False
 
 
+class _DaemonResolutionStore(_Store):
+    def resolve_policy_decision_lookup(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+        return {"decision": None, "ignored_local_integrity": "tampered"}
+
+
 def _call(store: _Store, **overrides: object) -> tuple[object, ...]:
     evaluation = SimpleNamespace(policy_action="review", reasons=(), packages=())
     artifact = SimpleNamespace(harness="codex", artifact_id="command:npm", publisher=None)
@@ -59,9 +64,30 @@ def test_no_saved_facts_skips_the_resident(monkeypatch: pytest.MonkeyPatch) -> N
 @pytest.mark.parametrize(
     "payload",
     [
-        {"patch": {}, "claim": "bogus", "claim_disposition": None, "reused": False},
-        {"patch": {}, "claim": None, "claim_disposition": "maybe", "reused": False},
-        {"patch": [], "claim": None, "claim_disposition": None, "reused": False},
+        {
+            "patch": {},
+            "claim": "bogus",
+            "claim_disposition": None,
+            "reused": False,
+            "decision": None,
+            "authority": None,
+        },
+        {
+            "patch": {},
+            "claim": None,
+            "claim_disposition": "maybe",
+            "reused": False,
+            "decision": None,
+            "authority": None,
+        },
+        {
+            "patch": [],
+            "claim": None,
+            "claim_disposition": None,
+            "reused": False,
+            "decision": None,
+            "authority": None,
+        },
         {"patch": {}, "claim": None, "claim_disposition": None},
     ],
 )
@@ -97,12 +123,16 @@ def test_failed_claim_repeats_the_request_with_the_failure(monkeypatch: pytest.M
                 "claim": "store",
                 "claim_disposition": "retained",
                 "reused": True,
+                "decision": None,
+                "authority": None,
             },
             {
                 "patch": _verdict_patch("review"),
                 "claim": None,
                 "claim_disposition": None,
                 "reused": False,
+                "decision": None,
+                "authority": None,
             },
         ]
     )
@@ -119,6 +149,52 @@ def test_failed_claim_repeats_the_request_with_the_failure(monkeypatch: pytest.M
     assert "claim_succeeded" not in requests[0]
     assert requests[1]["claim_succeeded"] is False
     assert (disposition, reused) == (None, None)
+
+
+def test_daemon_resolution_rehydrates_store_facts_before_reuse(monkeypatch: pytest.MonkeyPatch) -> None:
+    requests: list[dict[str, object]] = []
+    decision = {"action": "allow", "decision_id": 9, "request_id": "req-9"}
+    daemon = {"base_url": "http://127.0.0.1:1", "auth_token": "token"}
+    replies = iter(
+        [
+            {
+                "patch": _verdict_patch("allow"),
+                "claim": None,
+                "claim_disposition": None,
+                "reused": True,
+                "decision": decision,
+                "authority": daemon,
+            },
+            {
+                "patch": _verdict_patch("allow"),
+                "claim": None,
+                "claim_disposition": None,
+                "reused": True,
+                "decision": decision,
+                "authority": None,
+            },
+        ]
+    )
+
+    def transport(request: dict[str, object], *_args: object, **_kwargs: object) -> dict[str, object]:
+        requests.append(dict(request))
+        return next(replies)
+
+    monkeypatch.setattr(bridge, "_transport", transport)
+    monkeypatch.setattr(bridge, "apply_package_evaluation_patch", lambda evaluation, _patch: evaluation)
+    monkeypatch.setattr(bridge, "_approval_request", lambda *_args: {"request_id": "req-9"})
+    monkeypatch.setattr(bridge, "_bundle_rules", lambda *_args: [{"ruleId": "rule-9"}])
+
+    _evaluation, disposition, reused = _call(_DaemonResolutionStore(None), claim_saved_approval=False)
+
+    assert len(requests) == 2
+    assert requests[1]["decision"] == decision
+    assert requests[1]["approval_request"] == {"request_id": "req-9"}
+    assert requests[1]["bundle_rules"] == [{"ruleId": "rule-9"}]
+    assert requests[1]["ignored_integrity"] is False
+    assert requests[1]["daemon_authority"] is True
+    assert disposition is None
+    assert reused == decision
 
 
 class _MovingStore(_Store):
@@ -145,6 +221,8 @@ def _reuse_store_reply() -> dict[str, object]:
         "claim": "store",
         "claim_disposition": "retained",
         "reused": True,
+        "decision": None,
+        "authority": None,
     }
     return reply
 
@@ -236,6 +314,8 @@ def _reply(**overrides: object) -> dict[str, object]:
         "claim": None,
         "claim_disposition": None,
         "reused": False,
+        "decision": None,
+        "authority": None,
     }
     payload.update(overrides)
     return payload
