@@ -11,9 +11,10 @@
 //!
 //! - the revision is `local_cli_authority.revision`, zero when nothing is
 //!   recorded yet, and a stored value that is not a whole number is refused;
-//! - a row that is an object or an array comes back as stored, a missing row
-//!   or one holding another JSON value comes back as `null`, as
-//!   `get_sync_payload` answered;
+//! - a row that is an object or an array comes back as its stored JSON text
+//!   (`state_json`, `removals_json`), so the caller parses it with its key
+//!   order intact; a missing row or one holding another JSON value comes back
+//!   as `null`, as `get_sync_payload` answered;
 //! - a row whose bytes are not UTF-8 JSON is named in `unreadable`, since
 //!   `get_sync_payload` raised for it, and the caller refuses the snapshot.
 
@@ -50,21 +51,20 @@ fn continuity_rows(connection: &Connection) -> StoreResult<Value> {
     let mut unreadable = Vec::new();
     let mut read = |role: &'static str, key: &str| -> StoreResult<Value> {
         Ok(match stored_row(connection, key)? {
-            Row::Missing => Value::Null,
+            Row::Missing | Row::Other => Value::Null,
             Row::Unreadable => {
                 unreadable.push(role);
                 Value::Null
             }
-            Row::Parsed(payload @ (Value::Object(_) | Value::Array(_))) => payload,
-            Row::Parsed(_) => Value::Null,
+            Row::Container(text) => Value::String(text),
         })
     };
     let state = read("state", STATE_KEY)?;
     let removals = read("removals", REMOVALS_KEY)?;
     Ok(json!({
         "revision": revision,
-        "state": state,
-        "removals": removals,
+        "state_json": state,
+        "removals_json": removals,
         "unreadable": unreadable,
     }))
 }
@@ -73,7 +73,11 @@ fn continuity_rows(connection: &Connection) -> StoreResult<Value> {
 enum Row {
     Missing,
     Unreadable,
-    Parsed(Value),
+    /// JSON that is neither an object nor an array.
+    Other,
+    /// An object or array, kept as the stored text. Re-encoding a parsed
+    /// value would sort its keys whenever serde_json lacks `preserve_order`.
+    Container(String),
 }
 
 /// Read `key` as bytes so a BLOB or invalid UTF-8 cell is judged here, as
@@ -86,11 +90,16 @@ fn stored_row(connection: &Connection, key: &str) -> StoreResult<Row> {
             |row| row.get(0),
         )
         .optional()?;
-    Ok(match row {
-        None => Row::Missing,
-        Some(bytes) => bytes
-            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-            .map_or(Row::Unreadable, Row::Parsed),
+    let Some(bytes) = row else {
+        return Ok(Row::Missing);
+    };
+    let Some(text) = bytes.and_then(|bytes| String::from_utf8(bytes).ok()) else {
+        return Ok(Row::Unreadable);
+    };
+    Ok(match serde_json::from_str::<Value>(&text) {
+        Ok(Value::Object(_) | Value::Array(_)) => Row::Container(text),
+        Ok(_) => Row::Other,
+        Err(_) => Row::Unreadable,
     })
 }
 

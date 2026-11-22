@@ -73,4 +73,28 @@ def test_public_state_survives_a_damaged_removals_row(tmp_path: Path, monkeypatc
 
 def test_an_answer_without_a_whole_revision_is_refused() -> None:
     with pytest.raises(RuntimeError, match="no answer"):
-        CustomExtensionContinuityRows.from_native({"revision": True, "state": None, "removals": None, "unreadable": []})
+        CustomExtensionContinuityRows.from_native(
+            {"revision": True, "state_json": None, "removals_json": None, "unreadable": []}
+        )
+
+
+@pytest.mark.parametrize("text", ["7", "not json", 7])
+def test_a_row_text_that_is_not_an_object_or_array_is_refused(text: object) -> None:
+    with pytest.raises(RuntimeError, match="no answer"):
+        CustomExtensionContinuityRows.from_native(
+            {"revision": 0, "state_json": text, "removals_json": None, "unreadable": []}
+        )
+
+
+def test_stored_item_order_comes_back_unchanged(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    store.set_sync_payload(
+        CUSTOM_EXTENSION_CONTINUITY_STATE_KEY, {"items": {"cli-b": {}, "cli-a": {}, "cli-c": {}}}, _NOW
+    )
+
+    state = store.custom_extension_continuity_rows().state
+
+    assert isinstance(state, dict)
+    items = state["items"]
+    assert isinstance(items, dict)
+    assert list(items) == ["cli-b", "cli-a", "cli-c"]

@@ -47,7 +47,7 @@ fn an_empty_store_holds_revision_zero_and_no_rows() {
     let connection = store();
     assert_eq!(
         read(&connection).unwrap(),
-        json!({"revision": 0, "state": null, "removals": null, "unreadable": []})
+        json!({"revision": 0, "state_json": null, "removals_json": null, "unreadable": []})
     );
 }
 
@@ -65,8 +65,8 @@ fn stored_rows_and_the_revision_come_back_together() {
         read(&connection).unwrap(),
         json!({
             "revision": 4,
-            "state": {"items": {"cli-a": {"status": "applied"}}},
-            "removals": ["cli-b"],
+            "state_json": r#"{"items":{"cli-a":{"status":"applied"}}}"#,
+            "removals_json": r#"["cli-b"]"#,
             "unreadable": [],
         })
     );
@@ -79,7 +79,7 @@ fn a_row_holding_another_json_value_reads_as_absent() {
     put(&connection, REMOVALS_KEY, r#""text""#);
     assert_eq!(
         read(&connection).unwrap(),
-        json!({"revision": 0, "state": null, "removals": null, "unreadable": []})
+        json!({"revision": 0, "state_json": null, "removals_json": null, "unreadable": []})
     );
 }
 
@@ -90,7 +90,7 @@ fn a_row_that_is_not_json_is_named_unreadable() {
     put(&connection, REMOVALS_KEY, vec![0xff_u8, 0xfe, 0x7b]);
     assert_eq!(
         read(&connection).unwrap(),
-        json!({"revision": 0, "state": null, "removals": null, "unreadable": ["state", "removals"]})
+        json!({"revision": 0, "state_json": null, "removals_json": null, "unreadable": ["state", "removals"]})
     );
 }
 
@@ -98,7 +98,10 @@ fn a_row_that_is_not_json_is_named_unreadable() {
 fn a_utf8_blob_row_reads_like_text() {
     let connection = store();
     put(&connection, REMOVALS_KEY, br#"{"cli-b":{}}"#.to_vec());
-    assert_eq!(read(&connection).unwrap()["removals"], json!({"cli-b": {}}));
+    assert_eq!(
+        read(&connection).unwrap()["removals_json"],
+        json!(r#"{"cli-b":{}}"#)
+    );
 }
 
 #[test]
@@ -128,19 +131,15 @@ fn the_method_routes_here_and_reads_in_one_snapshot() {
 #[test]
 fn stored_item_order_comes_back_unchanged() {
     // A local mutation writes the item order it read back to the store, so
-    // the snapshot must not sort object keys.
+    // the snapshot hands back the stored text, never a re-encoded value.
     let connection = store();
     put(
         &connection,
         STATE_KEY,
         r#"{"items":{"cli-b":{},"cli-a":{},"cli-c":{}}}"#,
     );
-    let state = read(&connection).unwrap()["state"]["items"].clone();
-    let order: Vec<&str> = state
-        .as_object()
-        .unwrap()
-        .keys()
-        .map(String::as_str)
-        .collect();
-    assert_eq!(order, ["cli-b", "cli-a", "cli-c"]);
+    assert_eq!(
+        read(&connection).unwrap()["state_json"],
+        json!(r#"{"items":{"cli-b":{},"cli-a":{},"cli-c":{}}}"#)
+    );
 }

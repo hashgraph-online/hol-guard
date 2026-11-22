@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -40,15 +41,29 @@ class CustomExtensionContinuityRows:
             roles = ",".join(str(role) for role in unreadable) if isinstance(unreadable, list) else "rows"
             raise CustomExtensionContinuityRowUnreadableError(f"custom_extension_continuity_unreadable:{roles}")
         revision = answer.get("revision")
-        state = answer.get("state")
-        removals = answer.get("removals")
-        if type(revision) is not int or not _payload(state) or not _payload(removals):
+        if type(revision) is not int or set(answer) != {"revision", "state_json", "removals_json", "unreadable"}:
             raise RuntimeError("native custom_extension_continuity_rows returned no answer")
-        return cls(revision=revision, state=state, removals=removals)
+        return cls(
+            revision=revision,
+            state=_payload(answer["state_json"]),
+            removals=_payload(answer["removals_json"]),
+        )
 
 
-def _payload(value: object) -> bool:
-    return value is None or isinstance(value, (dict, list))
+def _payload(text: object) -> ContinuityPayload:
+    """Parse the stored text the native store handed back, keeping its key order."""
+
+    if text is None:
+        return None
+    if not isinstance(text, str):
+        raise RuntimeError("native custom_extension_continuity_rows returned no answer")
+    try:
+        value = json.loads(text)
+    except ValueError as error:
+        raise RuntimeError("native custom_extension_continuity_rows returned no answer") from error
+    if not isinstance(value, (dict, list)):
+        raise RuntimeError("native custom_extension_continuity_rows returned no answer")
+    return value
 
 
 class StoreCustomExtensionContinuityRowsMixin:
