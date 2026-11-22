@@ -22,7 +22,7 @@ use super::POLICY_NEED;
 use crate::context_digest::python_strip;
 use crate::mcp_tool_policy_lookup::{most_restrictive, without_permission_elevation};
 use crate::memory_pattern::{verdict, MemoryRequest};
-use crate::policy_decision_lookup_op::evaluate_non_consuming;
+use crate::policy_decision_lookup_op::{evaluate, evaluate_non_consuming};
 use crate::project_identity::{portable_workspace, resolve_relative, PortableIdentity};
 use guard_contracts::{ApprovalReuseDiagnosticRequestV1, APPROVAL_REUSE_DIAGNOSTIC_REQUEST_SCHEMA};
 use serde_json::{json, Value};
@@ -176,10 +176,16 @@ impl Saved<'_> {
     }
 
     pub(super) fn probe(&self, probe: &Probe<'_>) -> Result<Value, &'static str> {
+        let request = self.lookup_request(probe);
+        // Under a state that is not protected the lookup audits each local row
+        // it refuses, so it runs on its own store connection, as the proxy's
+        // resident lookup does; the snapshot cannot write.
+        if self.audits_refusals {
+            return evaluate(&request).map_err(|_| SAVED_LOOKUP);
+        }
         // A read the proxy would follow with an audit write fails here, on the
         // read-only snapshot, and defers the call.
-        evaluate_non_consuming(&self.lookup_request(probe), self.connection)
-            .map_err(|_| SAVED_LOOKUP)
+        evaluate_non_consuming(&request, self.connection).map_err(|_| SAVED_LOOKUP)
     }
 
     /// `approval_reuse_diagnostic`'s reason for the selectors `need` names.
