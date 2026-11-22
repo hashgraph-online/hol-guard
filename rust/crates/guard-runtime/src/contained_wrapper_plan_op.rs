@@ -90,6 +90,7 @@ fn encode_output(output: &ContainedOutput) -> Value {
         "count": output.count,
         "merge_stderr": output.merge_stderr,
         "status_label": output.status_label,
+        "status_from_core": output.status_from_core,
         "success_label": output.success_label,
         "failure_label": output.failure_label,
         "stages": output.stages,

@@ -246,7 +246,7 @@ fn plain_word(value: &str) -> bool {
 
 /// A literal address, or a host name of letters, digits, `-` and `_` in
 /// labels short enough not to carry encoded data.
-fn host_name(value: &str) -> bool {
+pub(super) fn host_name(value: &str) -> bool {
     if value.parse::<IpAddr>().is_ok() {
         return true;
     }

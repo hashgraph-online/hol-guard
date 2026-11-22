@@ -501,6 +501,9 @@ fn one_command_below_a_sibling_root_runs_contained_from_that_root() {
             "cd {0}/web 2>/dev/null; {0}/web/node_modules/.bin/vite build",
             tree.display()
         ),
+        // A stage the sink peels is applied to the command's own output in
+        // the root, so counting its lines is the same work as bounding them.
+        format!("cd {}/scripts && ./report.sh | wc -l", tree.display()),
     ] {
         assert_eq!(
             contained(&reason("omp", &home, &main, &command)),
@@ -536,7 +539,9 @@ fn a_command_below_a_sibling_root_reaching_outside_it_keeps_its_review() {
         // Unproved, or not the list the sink rejoins.
         "cd ../app-report/scripts && ./report.sh".to_owned(),
         format!("cd {}/scripts; ./report.sh; ls", tree.display()),
-        format!("cd {}/scripts && ./report.sh | wc -l", tree.display()),
+        // The peel reads `cd <dir> 2>/dev/null; <core>` without a filter
+        // chain, so this spelling still reaches neither the peel nor the
+        // list the sink rejoins.
         format!(
             "cd {}/scripts 2>/dev/null; ./report.sh | wc -l",
             tree.display()
@@ -767,47 +772,26 @@ fn a_temporary_or_enclosing_repository_is_no_sibling_root() {
     let _ = std::fs::remove_dir_all(root);
 }
 
-/// A stage whose words carry an operator inside quotes keeps its review.
+/// A quoted operator in a peeled stage stays contained.
 ///
-/// The classifier reads the stage the way a shell does, where `'|'` is an
-/// ordinary character. The sink rejoins a `tr` stage from its lexed words, where
-/// that character is an operator again, and refuses it. Admitting the shape
-/// here promised a containment the sink would not build, so the command
-/// failed instead of running in the sibling root.
+/// The classifier reads a stage the way a shell does, where `'|'` is an
+/// ordinary character inside quotes. A peeled stage keeps that reading: the
+/// sink hands the runtime the stage's lexed words and the runtime execs the
+/// program with them, so `-d|` and `tr '|' x` arrive as arguments and no
+/// shell reads the character again. The words a stage may carry when the
+/// sink has to write it back as text instead are screened by `rejoined_words`
+/// in `contained_output_filters`, which refuses the same spelling there.
 #[test]
-fn a_quoted_operator_in_a_rejoined_stage_keeps_its_review() {
+fn a_quoted_operator_in_a_peeled_stage_stays_contained() {
     let (home, main, _tree) = fixture();
     let projects = main.parent().unwrap();
-    let command = format!(
-        "cd {}/other && npm run build | tr '|' x",
-        projects.display()
-    );
-    assert!(
-        !contained(&reason("omp", &home, &main, &command)),
-        "{command}"
-    );
-    let _ = std::fs::remove_dir_all(home.parent().unwrap());
-}
-
-/// The same quoted operator is safe once the stage is peeled instead of rejoined.
-///
-/// A `cut` stage is one the peel runs itself: the sink hands the runtime the
-/// stage's lexed words and the runtime execs `cut` with them, so `-d|` arrives
-/// as one argument and no shell ever reads that character again. `tr` has no
-/// peel of its own and still reaches the sink as rejoined text, which is why
-/// the two spellings part company here.
-#[test]
-fn a_quoted_delimiter_in_a_peeled_stage_stays_contained() {
-    let (home, main, _tree) = fixture();
-    let projects = main.parent().unwrap();
-    let command = format!(
-        "cd {}/other && npm run build | cut -d'|' -f2",
-        projects.display()
-    );
-    assert!(
-        contained(&reason("omp", &home, &main, &command)),
-        "{command}"
-    );
+    for stage in ["cut -d'|' -f2", "tr '|' x"] {
+        let command = format!("cd {}/other && npm run build | {stage}", projects.display());
+        assert!(
+            contained(&reason("omp", &home, &main, &command)),
+            "{command}"
+        );
+    }
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
 

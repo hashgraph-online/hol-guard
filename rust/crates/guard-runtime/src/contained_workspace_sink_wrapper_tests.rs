@@ -58,6 +58,8 @@ fn the_edge_sends_a_core_the_sink_runs_from_the_root() {
         ("pytest -q | tail -5", "pytest -q"),
         ("pytest -q 2>&1 | head -c 400", "pytest -q"),
         ("pytest -q 2>&1 | grep -c passed", "pytest -q"),
+        ("pytest -q | sort", "pytest -q"),
+        ("pytest -q 2>&1 | sort -u | wc -l", "pytest -q"),
         ("pytest -q; echo \"exit=$?\"", "pytest -q"),
         (
             &format!("cd {canonical} && pytest -q | tail -3"),
@@ -69,7 +71,6 @@ fn the_edge_sends_a_core_the_sink_runs_from_the_root() {
     for command in [
         format!("cd {canonical}/sub && pytest -q"),
         "cd sub && pytest -q".to_owned(),
-        "pytest -q | sort".to_owned(),
         "pytest -q | tail -5 | head -2 | grep a | rg b".to_owned(),
     ] {
         assert_eq!(core(&command), None, "{command}");
