@@ -5,10 +5,17 @@ from __future__ import annotations
 import math
 import time
 import uuid
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import cast, final
 
+from .native_command_control_authority_io import (
+    NativeCommandControlAuthorityUnavailableError,
+    hold_command_control_authority_lock,
+)
 from .native_execution import _resident_request
+from .native_hook_review_binding import native_hook_review_binding
 
 _WRITE_FEATURE = "hook-policy-fence-window-write-v1"
 _WAIT_FEATURE = "hook-policy-fence-window-wait-v1"
@@ -133,3 +140,73 @@ class PolicySourceFenceWait:
         if self._started is not None:
             self._started = None
             _ = self._call("leave", admitted=not self._exhausted)
+
+
+COMMITTED_PHASE = "committed"
+LEASE_WAIT_SECONDS = 0.25
+
+
+def _reader(publisher: object, name: str) -> Callable[[], object] | None:
+    reader = getattr(publisher, name, None)
+    return reader if callable(reader) else None
+
+
+def published_binding_token(publisher: object, *, deadline: float | None = None) -> tuple[object, ...] | None:
+    """Read the committed policy binding used to compare an unleased review."""
+
+    authority = _reader(publisher, "_committed_control_authority")
+    business = _reader(publisher, "_compiled_business_source")
+    revision = _reader(publisher, "_current_local_cli_revision")
+    if authority is None or business is None or revision is None:
+        return None
+    try:
+        marker = authority() or {}
+        source = business()
+        cli_revision = revision()
+        identity = b"" if source is None else getattr(source, "retained_identity_bytes", None)
+        if not isinstance(marker, Mapping) or not isinstance(identity, bytes):
+            return None
+        if marker and marker.get("phase") != COMMITTED_PHASE:
+            return None
+        guard_home = getattr(publisher, "guard_home", None)
+        if not isinstance(guard_home, Path):
+            return None
+        return native_hook_review_binding(marker, identity, cli_revision, guard_home, deadline=deadline)
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError, IndexError):
+        return None
+
+
+@contextmanager
+def native_review_fence(
+    *,
+    policy_snapshot: Mapping[str, object] | None,
+    event_name: str,
+    recording_only: bool,
+    guard_home: Path,
+    deadline: float | None,
+) -> Iterator[bool | None]:
+    """Hold the native command-control lease while a review is evaluated."""
+
+    bound = policy_snapshot is not None and (
+        policy_snapshot.get("command_extensions_bound") is True
+        or isinstance(policy_snapshot.get("command_extensions"), Mapping)
+    )
+    if not bound or event_name not in {"PreToolUse", "UserPromptSubmit"} or recording_only:
+        yield False
+        return
+    remaining = 0.0 if deadline is None else max(0.0, deadline - time.monotonic())
+    with ExitStack() as resources:
+        try:
+            resources.enter_context(
+                hold_command_control_authority_lock(
+                    guard_home, timeout_seconds=min(LEASE_WAIT_SECONDS, remaining), shared=True
+                )
+            )
+        except NativeCommandControlAuthorityUnavailableError:
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError("native_review_fence_deadline") from None
+            yield None
+            return
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("native_review_fence_deadline")
+        yield True

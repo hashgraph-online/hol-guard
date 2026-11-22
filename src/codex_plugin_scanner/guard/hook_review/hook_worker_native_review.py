@@ -17,12 +17,13 @@ from ..native_policy_fence_window import (
     POLICY_UPDATE_PENDING_REASON_CODE,
     PolicySourceFenceBusyError,
     PolicySourceFenceWait,
+    native_review_fence,
+    published_binding_token,
 )
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_resident_client import native_resident_client_failure_code
 from ..resident_evidence_dispatch import run_resident_evidence
 from .hook_native_review_approval import _native_review_artifact_id
-from .hook_native_review_fence import native_review_fence, published_binding_token
 
 if TYPE_CHECKING:
     from .hook_worker_native import _HookWorkerNativeHost

@@ -132,7 +132,7 @@ def test_an_unleased_allow_on_an_unchanged_binding_is_delivered(tmp_path, monkey
 
 
 def test_durable_control_token_changes_without_a_publisher_generation_change(monkeypatch) -> None:
-    import codex_plugin_scanner.guard.hook_review.hook_native_review_fence as fence
+    import codex_plugin_scanner.guard.native_policy_fence_window as fence
 
     def published(marker, identity, revision, _home, **_kwargs):
         return (
@@ -180,7 +180,7 @@ def test_durable_control_token_changes_without_a_publisher_generation_change(mon
 
 
 def test_a_durable_control_read_that_fails_leaves_no_token() -> None:
-    from codex_plugin_scanner.guard.hook_review.hook_native_review_fence import published_binding_token
+    from codex_plugin_scanner.guard.native_policy_fence_window import published_binding_token
 
     class Publisher:
         def _committed_control_authority(self) -> dict[str, object]:
@@ -196,7 +196,7 @@ def test_a_durable_control_read_that_fails_leaves_no_token() -> None:
 
 
 def test_a_marker_frozen_mid_mutation_leaves_no_token(monkeypatch) -> None:
-    import codex_plugin_scanner.guard.hook_review.hook_native_review_fence as fence
+    import codex_plugin_scanner.guard.native_policy_fence_window as fence
 
     monkeypatch.setattr(
         fence,
@@ -230,7 +230,7 @@ def test_a_marker_frozen_mid_mutation_leaves_no_token(monkeypatch) -> None:
 
 
 def test_a_home_without_control_authority_still_has_a_token(monkeypatch) -> None:
-    import codex_plugin_scanner.guard.hook_review.hook_native_review_fence as fence
+    import codex_plugin_scanner.guard.native_policy_fence_window as fence
 
     monkeypatch.setattr(
         fence,
