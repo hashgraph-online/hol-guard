@@ -131,6 +131,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "approval_desktop_notified_at"
         | "oldest_approval_request_created_at"
         | "cached_supply_chain_bundle"
+        | "get_cached_supply_chain_bundle"
         | "hook_managed_install_admission"
         // Only a digest, or the shape, of the stored sign-in record leaves
         // the store.
@@ -273,6 +274,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "set_managed_install"
         | "bump_managed_install_revision"
         | "add_guard_event_v1"
+        | "cache_supply_chain_bundle"
         | "list_guard_events_v1"
         | "mark_guard_events_v1_uploaded"
         | "maintain_storage"

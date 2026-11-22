@@ -481,8 +481,8 @@ pub(crate) fn dispatch(
         }
         "list_events_after" => cloud_events::list_after(connection, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
-        "cached_supply_chain_bundle" => {
-            crate::supply_chain_bundle_cache_op::cached_bundle(connection)
+        _ if crate::supply_chain_bundle_cache_op::handles(method) => {
+            crate::supply_chain_bundle_cache_op::dispatch(connection, method, args)
         }
         "add_guard_event_v1" => cloud_events::add(connection, args),
         "list_guard_events_v1" => cloud_events::list(connection, args),
