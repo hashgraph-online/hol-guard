@@ -185,60 +185,8 @@ fn a_package_intent_after_the_claim_rolls_it_back() {
     }
 }
 
-#[cfg(unix)]
 #[test]
-fn a_call_sent_to_the_package_policy_hands_its_server_to_the_proxy() {
-    use crate::mcp_relay_servers::{RelayServerV1, SERVER_PROXY_TOOLS, SERVER_UNKNOWN};
-    use crate::policy_store::policy_store_direct_lane::tests::fixture;
-
-    let fixture = fixture("relay-package-server");
-    let servers = fixture.store.mcp_relay_servers();
-    let server = RelayServerV1 {
-        harness: "codex".to_owned(),
-        server_name: "files".to_owned(),
-        source_scope: "project".to_owned(),
-        config_path: "/work/.codex/config.toml".to_owned(),
-        server_id: None,
-        identity_hash: "d".repeat(64),
-    };
-    let mut call = request(
-        "bash",
-        mapping(json!([["command", "npm install left-pad"]])),
-    );
-    super::super::package_server::mark_package_server(&call, &fixture.store);
-    // A call without a server identity names no server.
-    assert_eq!(servers.relayable(&server), Err(SERVER_UNKNOWN));
-    call.build.server_identity = Some(
-        serde_json::from_value(json!({
-            "config_path": "/work/.codex/config.toml",
-            "command": "files-mcp",
-            "args_hash": "e".repeat(64),
-            "package_name": null,
-            "package_version": null,
-            "package_source": "unknown",
-            "transport": "stdio",
-            "env_keys": [],
-            "env_values_hash": "f".repeat(64),
-            "identity_hash": "d".repeat(64),
-        }))
-        .unwrap(),
-    );
-    servers.record(&server, false);
-    let relayable = servers.relayable(&server);
-    assert!(relayable.is_ok());
-    // A decide outside the package lane leaves the server relayable.
-    let other = Err("mcp_relay_policy_need");
-    super::super::package_server::after_decide(&other, &call, &fixture.store);
-    assert_eq!(servers.relayable(&server), relayable);
-    // A package-lane defer hands the server to the proxy.
-    let deferred = Err(super::super::package_leg::EVALUATION_ABSENT);
-    super::super::package_server::after_decide(&deferred, &call, &fixture.store);
-    assert_eq!(servers.relayable(&server), Err(SERVER_PROXY_TOOLS));
-}
-
-#[test]
-fn a_package_call_the_relay_could_not_evaluate_is_refused_once_for_the_server() {
-    use super::super::package_server::hands_server_off;
+fn a_package_call_the_relay_could_not_evaluate_is_refused_once() {
     use super::super::{evaluation_leg, package_leg::EVALUATION_ABSENT, Answer};
 
     let mut call = request(
@@ -260,7 +208,4 @@ fn a_package_call_the_relay_could_not_evaluate_is_refused_once_for_the_server() 
         evaluation_leg(&call, true),
         Some(Err(EVALUATION_ABSENT))
     ));
-    // And the refusal is a package-lane defer, so it hands the server to the
-    // proxy for its later sessions rather than refusing the call again.
-    assert!(hands_server_off(EVALUATION_ABSENT));
 }

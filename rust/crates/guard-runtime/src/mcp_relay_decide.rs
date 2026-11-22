@@ -314,9 +314,7 @@ pub(crate) fn evaluate(
     request: McpRelayDecideRequestV1,
     policy_store: &PolicySnapshotStore,
 ) -> Result<Vec<u8>, String> {
-    let answer = decide(&request, policy_store);
-    package_server::after_decide(&answer, &request, policy_store);
-    encode(answer)
+    encode(decide(&request, policy_store))
 }
 
 /// The package request one decide request carries, as this gate reads it.
@@ -429,9 +427,6 @@ mod package_postclaim;
 mod package_receipt;
 #[path = "mcp_relay_decide_package_route.rs"]
 mod package_route;
-// Which package-lane defers send the call's server to the proxy.
-#[path = "mcp_relay_decide_package_server.rs"]
-mod package_server;
 #[path = "mcp_relay_decide_package_snapshot.rs"]
 mod package_snapshot;
 // What a claimed package call spends, and the answer it commits with.

@@ -347,10 +347,9 @@ impl ResidentRelayAuthority {
     /// Tell the resident this call has no evaluation to decide from.
     ///
     /// The relay has already failed this call closed; the resident answers
-    /// with the refusal the lane names, and that defer hands this server's
-    /// later sessions to the proxy, which decides such calls without the
-    /// relay (`mcp_relay_servers.rs`). Without it a server whose package
-    /// calls the lane cannot settle would refuse them in every session.
+    /// with the refusal the lane names. That answer no longer changes later
+    /// sessions: the server stays with the relay, and its later package calls
+    /// are decided as usual.
     fn mark_unsettled(&mut self, guard_home: &Path, request: &Value) {
         let Some(payload) = request::unsettled_payload(request) else {
             return;

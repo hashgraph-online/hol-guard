@@ -1,5 +1,5 @@
-//! What the relay answers for a decided package call, and what it hands back
-//! to the proxy because answering it would write.
+//! What the relay answers for a decided package call, and what it refuses
+//! because answering it would write.
 
 use guard_command::effect_decision::GuardAction;
 use guard_command::package_execution_context::PackageExecutionContext;

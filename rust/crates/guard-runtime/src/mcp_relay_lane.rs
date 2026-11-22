@@ -103,8 +103,7 @@ pub(crate) fn kickable(code: &str) -> bool {
 
 /// The reasons the session runs as the Python proxy: a runtime the daemon has
 /// superseded or a store schema newer than this runtime reads, which the
-/// proxy of the same release still serves, and the features the relay has
-/// not ported yet. Every other reason the lane, the probe or the gate names,
+/// proxy of the same release still serves. Every other reason the lane, the probe or the gate names,
 /// and any code added later, keeps the session native, so a binding, store
 /// or daemon the resident cannot use refuses each call instead of letting
 /// the proxy decide it. That includes saved policy the resident cannot
@@ -116,9 +115,7 @@ pub(crate) fn kickable(code: &str) -> bool {
 pub(crate) fn hands_off(code: &str) -> bool {
     matches!(
         code,
-        "mcp_relay_runtime_superseded"
-            | "mcp_relay_store_newer"
-            | "mcp_relay_session_server_proxy_tools"
+        "mcp_relay_runtime_superseded" | "mcp_relay_store_newer"
     )
 }
 
