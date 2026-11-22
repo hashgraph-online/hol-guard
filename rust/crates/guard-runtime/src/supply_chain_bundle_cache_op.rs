@@ -32,6 +32,7 @@ pub(crate) fn handles(method: &str) -> bool {
         "cached_supply_chain_bundle"
             | "get_cached_supply_chain_bundle"
             | "cache_supply_chain_bundle"
+            | "newest_supply_chain_bundle_workspace"
     )
 }
 
@@ -51,8 +52,25 @@ pub(crate) fn dispatch(
             args.object("response")?,
             args.str("cached_at")?,
         ),
+        "newest_supply_chain_bundle_workspace" => newest_workspace(connection),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
+}
+
+/// The workspace of the most recently cached response, as stored, or `null`
+/// when the cache is empty or that row's workspace id is not text. The
+/// sign-in record falls back to it when it names no workspace.
+fn newest_workspace(connection: &Connection) -> StoreResult<Value> {
+    let workspace = connection
+        .query_row(
+            "select case when typeof(workspace_id) = 'text' then workspace_id end \
+             from guard_supply_chain_bundle_cache order by cached_at desc limit 1",
+            [],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()?
+        .flatten();
+    Ok(workspace.map_or(Value::Null, Value::String))
 }
 
 /// Characters of stored response text returned per call. A reply is capped
