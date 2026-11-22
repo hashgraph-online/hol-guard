@@ -12,6 +12,7 @@
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, int, query_all, query_one, text, value_error, StoreResult};
@@ -298,7 +299,12 @@ fn expire_leases(connection: &Connection, now_ms: i64) -> StoreResult<()> {
         // means the worker died or one stage hung. Retry once; a retry that
         // also expires would repeat forever, so the worktree stays stale
         // until its next change or request instead.
-        let retry = is_lease_retry(connection, &keys, int(&row, "created_at_ms"))?;
+        let retry = is_lease_retry(
+            connection,
+            &keys,
+            text(&row, "run_id"),
+            int(&row, "created_at_ms"),
+        )?;
         let error_code = if retry {
             "assessment_timed_out"
         } else {
@@ -325,25 +331,43 @@ fn expire_leases(connection: &Connection, now_ms: i64) -> StoreResult<()> {
             kind: text(&row, "kind"),
             now_ms,
         };
-        enqueue_locked(connection, &keys, &request, None)?;
+        let retry_id = retry_run_id(text(&row, "run_id"));
+        enqueue_locked(connection, &keys, &request, Some(&retry_id))?;
     }
     Ok(())
 }
 
+/// The id of the one retry an expired run may queue, derived from that run's
+/// id, so a run that merely shares the expiry's timestamp is never taken for
+/// the retry.
+fn retry_run_id(expired_run_id: &str) -> String {
+    let digest = Sha256::digest(format!(
+        "guard.workspace-assessment-retry.v1\0{expired_run_id}"
+    ));
+    hex::encode(&digest[..16])
+}
+
 /// A retry is inserted in the same transaction that expires the run before
-/// it, so it was created at that run's finish time. A run queued later (for
-/// example after a paused worktree resumes) gets its own retry.
-fn is_lease_retry(connection: &Connection, keys: &Keys, created_at_ms: i64) -> StoreResult<bool> {
+/// it, so it was created at that run's finish time and carries the id derived
+/// from it. A run queued later (for example after a paused worktree resumes),
+/// or another run queued in the same millisecond, gets its own retry.
+fn is_lease_retry(
+    connection: &Connection,
+    keys: &Keys,
+    run_id: &str,
+    created_at_ms: i64,
+) -> StoreResult<bool> {
     let [codebase, worktree] = keys.params();
-    Ok(query_one(
+    let expired = query_all(
         connection,
-        "select 1 as found from workspace_assessment_runs \
+        "select run_id from workspace_assessment_runs \
          where codebase_key = ? and worktree_key = ? and error_code = 'lease_expired' \
-           and finished_at_ms = ? \
-         limit 1",
+           and finished_at_ms = ?",
         &[codebase, worktree, Value::from(created_at_ms)],
-    )?
-    .is_some())
+    )?;
+    Ok(expired
+        .iter()
+        .any(|row| retry_run_id(text(row, "run_id")) == run_id))
 }
 
 /// Record an outcome only if the run still holds the current lease.

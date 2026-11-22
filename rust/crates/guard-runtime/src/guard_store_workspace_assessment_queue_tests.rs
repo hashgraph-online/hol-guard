@@ -361,6 +361,40 @@ fn an_expired_lease_is_retried_once() {
 }
 
 #[test]
+fn a_run_created_as_a_lease_expired_is_not_taken_for_its_retry() {
+    let connection = store();
+    admit(&connection, "a", 0);
+    enqueue(&connection, "a", "manual", "r1", 0);
+    claim(&connection, 0);
+    let expiry = LEASE_MS + 1;
+    let retry = claim(&connection, expiry);
+    let retry_id = retry["run_id"].as_str().expect("retry id").to_owned();
+    connection
+        .execute(
+            "update workspace_assessment_runs set state = 'canceled', finished_at_ms = ?2, \
+             lease_owner = null, lease_until_ms = null where run_id = ?1",
+            rusqlite::params![retry_id, expiry],
+        )
+        .expect("cancel retry");
+    // Another run queued in the very millisecond r1 expired.
+    connection
+        .execute(
+            "insert into workspace_assessment_runs (run_id, codebase_key, worktree_key, \
+               detector_set_digest, kind, trigger_kind, state, dirty_generation, \
+               lease_generation, lease_owner, lease_until_ms, created_at_ms, triggered_at_ms) \
+             values ('r2', ?1, ?2, ?3, 'deterministic', 'manual', 'running', 0, 1, 'w1', ?4, ?4, ?4)",
+            rusqlite::params![key("c"), key("a"), key("d"), expiry],
+        )
+        .expect("same millisecond run");
+    let second = claim(&connection, expiry + 1);
+    assert_eq!(
+        column(&connection, "r2", "error_code"),
+        json!("lease_expired")
+    );
+    assert_eq!(second["trigger_kind"], json!("manual"));
+}
+
+#[test]
 fn only_the_current_lease_can_finish_renew_or_be_canceled() {
     let connection = store();
     admit(&connection, "a", 0);
