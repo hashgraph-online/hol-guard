@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -88,13 +89,12 @@ def test_a_malformed_health_answer_is_refused(tmp_path: Path, monkeypatch: pytes
         store.get_command_activity_persistence_health()
 
 
-def test_missing_health_rows_read_as_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("table", ["command_activity_health", "command_activity_health_active"])
+def test_missing_health_rows_read_as_unavailable(tmp_path: Path, table: str) -> None:
     store = GuardStore(tmp_path)
-
-    def native(_method: str, _args: object, **_kwargs: Any) -> object:
-        raise _unavailable("command_activity_persistence_health_unavailable")
-
-    monkeypatch.setattr(store, "_native_store_call", native)
+    store.get_command_activity_persistence_health()
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(f"delete from {table}")
 
     with pytest.raises(RuntimeError, match="command activity persistence health is unavailable"):
         store.get_command_activity_persistence_health()

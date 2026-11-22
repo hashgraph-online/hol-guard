@@ -62,9 +62,8 @@ fn missing_health_rows_are_reported_unavailable() {
     let connection = store();
     assert!(matches!(
         call(&connection, "get_command_activity_persistence_health"),
-        Err(StoreError::Invalid(
-            "command_activity_persistence_health_unavailable"
-        ))
+        Err(StoreError::Runtime(message))
+            if message == "command activity persistence health is unavailable"
     ));
 }
 
@@ -81,14 +80,14 @@ fn table_names_read_sorted() {
 }
 
 #[test]
-fn the_store_reads_are_routed_read_methods() {
+fn the_store_reads_are_routed_snapshot_methods() {
     for method in [
         "get_command_activity_persistence_health",
         "count_command_activities",
         "list_table_names",
     ] {
         assert!(handles(method));
-        assert!(matches!(method_kind(method), Some(Kind::Read)));
+        assert!(matches!(method_kind(method), Some(Kind::Snapshot)));
     }
     assert!(!handles("list_command_activity_page"));
 }

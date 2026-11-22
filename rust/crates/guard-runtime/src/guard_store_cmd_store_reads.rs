@@ -48,8 +48,8 @@ fn persistence_health(connection: &Connection, _args: &Args) -> StoreResult<Valu
         &[],
     )?;
     let (Some(row), Some(active)) = (row, active) else {
-        return Err(StoreError::Invalid(
-            "command_activity_persistence_health_unavailable",
+        return Err(StoreError::Runtime(
+            "command activity persistence health is unavailable".to_owned(),
         ));
     };
     let active_error_count: i64 = [

@@ -93,16 +93,12 @@ class StoreCommandActivityLifecycleMixin:
     def get_command_activity_persistence_health(
         self: _ConnectionOwner,
     ) -> CommandActivityPersistenceHealth:
-        try:
-            answer = self._native_store_call("get_command_activity_persistence_health", {})
-        except NativeGuardStoreUnavailable as error:
-            if error.reason == _HEALTH_UNAVAILABLE:
-                raise RuntimeError("command activity persistence health is unavailable") from None
-            raise
+        # Missing health rows come back from the native store as a
+        # RuntimeError, which the protection-health report already handles.
+        answer = self._native_store_call("get_command_activity_persistence_health", {})
         return _health_from_answer(answer)
 
 
-_HEALTH_UNAVAILABLE: Final = "command_activity_persistence_health_unavailable"
 _HEALTH_KEYS: Final = frozenset(
     {
         "dropped_event_count",
