@@ -211,7 +211,7 @@ def test_prepare_default_is_five_targets_and_each_selector_is_exactly_one() -> N
     assert "arbitrary-target" not in table
     assert "all" not in table
     assert "inputs.target || 'all'" in workflow["concurrency"]["group"]
-    assert workflow["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'push' }}"
+    assert workflow["concurrency"]["cancel-in-progress"] is False
     assert workflow["jobs"]["compile"]["concurrency"]["queue"] == "max"
 
 

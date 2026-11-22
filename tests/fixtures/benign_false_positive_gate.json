@@ -4261,6 +4261,125 @@
       "expect": "allow"
     },
     {
+      "id": "status-fact-top-one-sample",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "top -l 1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-iostat-samples",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "iostat -c 2"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-vmstat-summary",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "vmstat -s"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-vm-stat-counters",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "vm_stat"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-last-five-logins",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "last -5"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-who-logins",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "who"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-fact-w-sessions",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "w"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "network-fact-netstat-sockets",
       "fix_area": "shell",
       "harnesses": [

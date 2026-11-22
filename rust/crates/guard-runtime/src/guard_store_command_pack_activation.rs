@@ -39,15 +39,22 @@ const MARKER_SQL: &str =
      case when typeof(checksum) = 'text' then checksum end as checksum \
      from extension_control_schema_migration where singleton = 1";
 
+#[path = "guard_store_extension_control_snapshot.rs"]
+mod extension_control_snapshot;
+
 pub(crate) fn handles(method: &str) -> bool {
-    matches!(
-        method,
-        "read_command_pack_activation" | "extension_control_schema_state"
-    )
+    extension_control_snapshot::handles(method)
+        || matches!(
+            method,
+            "read_command_pack_activation" | "extension_control_schema_state"
+        )
 }
 
 pub(crate) fn dispatch(connection: &Connection, method: &str) -> StoreResult<Value> {
     match method {
+        _ if extension_control_snapshot::handles(method) => {
+            extension_control_snapshot::dispatch(connection)
+        }
         "extension_control_schema_state" => schema_state(connection),
         _ => read(connection),
     }
