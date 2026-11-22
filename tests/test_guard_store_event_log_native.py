@@ -132,23 +132,49 @@ def test_the_next_page_starts_after_the_last_event_read(tmp_path: Path, monkeypa
     ]
 
 
-@pytest.mark.parametrize(
-    "answer",
-    [
-        {},
-        [{"event_id": 1}],
-        [{"event_id": 1, "event_name": "a", "occurred_at": "t", "payload": []}],
-        [{"event_id": "1", "event_name": "a", "occurred_at": "t", "payload": {}}],
-    ],
-)
-def test_a_malformed_after_answer_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
+def test_events_after_an_id_are_read_oldest_first_across_pages(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path)
+    pages = iter(
+        [
+            {
+                "items": [{"event_id": 3, "event_name": "a", "occurred_at": "t3", "payload_json": '{"k": 3}'}],
+                "more": True,
+            },
+            {
+                "items": [{"event_id": 8, "event_name": "a", "occurred_at": "t8", "payload_json": "[]"}],
+                "more": False,
+            },
+        ]
+    )
+    calls: list[object] = []
 
-    def native(method: str, _args: object, **_kwargs: Any) -> object:
-        assert method == "list_events_after"
-        return answer
+    def native(method: str, args: dict[str, object], **_kwargs: Any) -> object:
+        assert method == "list_events"
+        calls.append(dict(args))
+        return next(pages)
 
     monkeypatch.setattr(store, "_native_store_call", native)
 
-    with pytest.raises(RuntimeError, match="native list_events_after returned no answer"):
-        store.list_events_after(0)
+    events = store.list_events_after(2, limit=5, event_names=("a",))
+
+    assert [event["payload"] for event in events] == [{"k": 3}, {}]
+    assert calls == [
+        {"after_event_id": 2, "event_names": ["a"], "limit": 5},
+        {"after_event_id": 3, "event_names": ["a"], "limit": 4},
+    ]
+
+
+def test_a_payload_too_large_for_one_reply_reads_as_empty(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    oversized = json.dumps({"note": '"' * 700_000})
+    _log(
+        store,
+        [
+            ("alpha", '{"k": 1}', "t1"),
+            ("alpha", oversized, "t2"),
+            ("alpha", '{"k": 3}', "t3"),
+        ],
+    )
+
+    assert [event["payload"] for event in store.list_events()] == [{"k": 3}, {}, {"k": 1}]
+    assert [event["payload"] for event in store.list_events_after(0)] == [{"k": 1}, {}, {"k": 3}]

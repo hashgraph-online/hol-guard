@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 # ruff: noqa: F403,F405
 from .native_store_policy import encode_key
 from .store_base import *
@@ -50,6 +52,14 @@ def _event_page(answer: object) -> tuple[list[dict[str, object]], bool]:
             }
         )
     return items, more
+
+
+def _newest_first_cursor(last: dict[str, object]) -> dict[str, object]:
+    return {"before": {"occurred_at": last["occurred_at"], "event_id": last["event_id"]}}
+
+
+def _oldest_first_cursor(last: dict[str, object]) -> dict[str, object]:
+    return {"after_event_id": last["event_id"]}
 
 
 class StoreEventReceiptsMixin:
@@ -102,25 +112,10 @@ class StoreEventReceiptsMixin:
     def list_events(self, limit: int = 100, event_name: str | None = None) -> list[dict[str, object]]:
         """The local event log, newest first, read from bounded native pages."""
 
-        items: list[dict[str, object]] = []
-        before: dict[str, object] | None = None
-        while True:
-            wanted = -1 if limit < 0 else limit - len(items)
-            if wanted == 0:
-                return items
-            args: dict[str, object] = {"limit": wanted}
-            if event_name is not None:
-                args["event_name"] = event_name
-            if before is not None:
-                args["before"] = before
-            page, more = _event_page(self._native_store_call("list_events", args))
-            items.extend(page)
-            if not more:
-                return items
-            if not page:
-                raise RuntimeError("native list_events returned no answer")
-            last = page[-1]
-            before = {"occurred_at": last["occurred_at"], "event_id": last["event_id"]}
+        args: dict[str, object] = {}
+        if event_name is not None:
+            args["event_name"] = event_name
+        return self._read_event_pages(args, limit, _newest_first_cursor)
 
     def list_events_after(
         self,
@@ -129,23 +124,31 @@ class StoreEventReceiptsMixin:
         limit: int = 100,
         event_names: tuple[str, ...] | None = None,
     ) -> list[dict[str, object]]:
-        args: dict[str, object] = {"event_id": event_id, "limit": limit}
+        """The local event log past ``event_id``, oldest first, read from bounded native pages."""
+
+        args: dict[str, object] = {"after_event_id": event_id}
         if event_names:
             args["event_names"] = list(event_names)
-        answer = self._native_store_call("list_events_after", args)
-        if not isinstance(answer, list):
-            raise RuntimeError("native list_events_after returned no answer")
+        return self._read_event_pages(args, limit, _oldest_first_cursor)
+
+    def _read_event_pages(
+        self,
+        args: dict[str, object],
+        limit: int,
+        cursor: Callable[[dict[str, object]], dict[str, object]],
+    ) -> list[dict[str, object]]:
+        """Join native ``list_events`` pages until ``limit`` rows (all when negative) are read."""
+
         items: list[dict[str, object]] = []
-        for item in answer:
-            if not isinstance(item, dict) or set(item) != {"event_id", "event_name", "occurred_at", "payload"}:
-                raise RuntimeError("native list_events_after returned no answer")
-            if (
-                isinstance(item["event_id"], bool)
-                or not isinstance(item["event_id"], int)
-                or not isinstance(item["event_name"], str)
-                or not isinstance(item["occurred_at"], str)
-                or not isinstance(item["payload"], dict)
-            ):
-                raise RuntimeError("native list_events_after returned no answer")
-            items.append(item)
-        return items
+        page_args = dict(args)
+        while True:
+            wanted = -1 if limit < 0 else limit - len(items)
+            if wanted == 0:
+                return items
+            page, more = _event_page(self._native_store_call("list_events", {**page_args, "limit": wanted}))
+            items.extend(page)
+            if not more:
+                return items
+            if not page:
+                raise RuntimeError("native list_events returned no answer")
+            page_args = {**args, **cursor(page[-1])}

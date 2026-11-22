@@ -114,6 +114,69 @@ fn one_event_larger_than_the_budget_is_still_read() {
 }
 
 #[test]
+fn a_payload_too_large_for_one_reply_reads_as_an_empty_object() {
+    let connection = store();
+    log(&connection, "a", "{\"k\": 1}", "t1");
+    log(&connection, "a", &"q".repeat(ROW_PAYLOAD_BYTES), "t2");
+    let page = call(&connection, "list_events", json!({"limit": 10})).unwrap();
+    assert_eq!(ids(&page), vec![2, 1]);
+    assert_eq!(page["items"][0]["payload_json"], "{}");
+    assert_eq!(page["items"][1]["payload_json"], "{\"k\": 1}");
+}
+
+#[test]
+fn the_page_budget_counts_the_escaped_payload_text() {
+    let connection = store();
+    // Each quote doubles once escaped, so two of these fill a page.
+    let quoted = "\"".repeat(PAGE_PAYLOAD_BYTES / 3);
+    log(&connection, "a", &quoted, "t1");
+    log(&connection, "a", &quoted, "t2");
+    let page = call(&connection, "list_events", json!({"limit": 10})).unwrap();
+    assert_eq!(ids(&page), vec![2]);
+    assert_eq!(page["more"], true);
+}
+
+#[test]
+fn a_page_after_an_id_reads_oldest_first_and_continues_from_the_last_id() {
+    let connection = store();
+    let big = format!("\"{}\"", "x".repeat(PAGE_PAYLOAD_BYTES / 2));
+    for (name, at) in [("a", "t1"), ("b", "t2"), ("a", "t3"), ("a", "t4")] {
+        log(&connection, name, &big, at);
+    }
+    let first = call(
+        &connection,
+        "list_events",
+        json!({"limit": 10, "after_event_id": 0, "event_names": ["a"]}),
+    )
+    .unwrap();
+    assert_eq!(ids(&first), vec![1]);
+    assert_eq!(first["more"], true);
+    let second = call(
+        &connection,
+        "list_events",
+        json!({"limit": 1, "after_event_id": 1, "event_names": ["a"]}),
+    )
+    .unwrap();
+    assert_eq!(ids(&second), vec![3]);
+    assert_eq!(second["more"], false);
+}
+
+#[test]
+fn a_page_names_one_cursor_and_a_whole_number_id() {
+    let connection = store();
+    for args in [
+        json!({"limit": 1, "after_event_id": 0, "before": {"occurred_at": "t", "event_id": 1}}),
+        json!({"limit": 1, "after_event_id": "0"}),
+        json!({"limit": 1, "after_event_id": true}),
+    ] {
+        assert!(matches!(
+            call(&connection, "list_events", args),
+            Err(StoreError::Value(_))
+        ));
+    }
+}
+
+#[test]
 fn a_cursor_without_both_parts_is_refused() {
     let connection = store();
     assert!(matches!(
