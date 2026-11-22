@@ -657,10 +657,11 @@ def sync_receipts(
             # same policy through unsigned sibling fields after verification
             # fails. Keep only a still-valid signed current/LKG bundle.
             remote_decisions.clear()
-            last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
+            last_good_rows = store.policy_bundle_trust_rows(last_good=True)
             last_good_bundle, _last_good_error = _validate_cached_policy_bundle(
                 store,
-                last_good_bundle_payload,
+                last_good_rows.policy_bundle,
+                rows=last_good_rows,
             )
             # A valid current bundle may be newer than last-good when a prior
             # sync stopped after persisting current but before advancing the
@@ -677,10 +678,13 @@ def sync_receipts(
     else:
         effective_policy_bundle = existing_policy_bundle
         if effective_policy_bundle is None:
-            last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
+            # The last good bundle is judged against the keyrings, checkpoint
+            # and workspace read in the same snapshot as it.
+            last_good_rows = store.policy_bundle_trust_rows(last_good=True)
             effective_policy_bundle, last_good_error = _validate_cached_policy_bundle(
                 store,
-                last_good_bundle_payload,
+                last_good_rows.policy_bundle,
+                rows=last_good_rows,
             )
             if (
                 effective_policy_bundle is None
