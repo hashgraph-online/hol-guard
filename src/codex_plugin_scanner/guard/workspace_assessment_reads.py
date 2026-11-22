@@ -16,36 +16,34 @@ if TYPE_CHECKING:
     from .workspace_assessment_store import WorktreeKeys
 
 
-_WORKTREE_FIELDS: Final = frozenset(
-    {
-        "codebase_key",
-        "worktree_key",
-        "root",
-        "dirty_generation",
-        "last_completed_generation",
-        "last_scan_at_ms",
-        "paused",
-        "admitted_at_ms",
-        "ended",
-    }
-)
-_RUN_FIELDS: Final = frozenset(
-    {
-        "run_id",
-        "codebase_key",
-        "worktree_key",
-        "snapshot_digest",
-        "kind",
-        "trigger_kind",
-        "state",
-        "dirty_generation",
-        "coverage_json",
-        "error_code",
-        "created_at_ms",
-        "started_at_ms",
-        "finished_at_ms",
-    }
-)
+# Each field a native row must carry, with the type its value must have.
+_TEXT, _INT, _FLAG, _OPTIONAL_INT, _OPTIONAL_TEXT = "text", "int", "flag", "optional_int", "optional_text"
+_WORKTREE_FIELDS: Final[dict[str, str]] = {
+    "codebase_key": _TEXT,
+    "worktree_key": _TEXT,
+    "root": _TEXT,
+    "dirty_generation": _INT,
+    "last_completed_generation": _INT,
+    "last_scan_at_ms": _OPTIONAL_INT,
+    "paused": _FLAG,
+    "admitted_at_ms": _INT,
+    "ended": _FLAG,
+}
+_RUN_FIELDS: Final[dict[str, str]] = {
+    "run_id": _TEXT,
+    "codebase_key": _TEXT,
+    "worktree_key": _TEXT,
+    "snapshot_digest": _OPTIONAL_TEXT,
+    "kind": _TEXT,
+    "trigger_kind": _TEXT,
+    "state": _TEXT,
+    "dirty_generation": _INT,
+    "coverage_json": _TEXT,
+    "error_code": _OPTIONAL_TEXT,
+    "created_at_ms": _INT,
+    "started_at_ms": _OPTIONAL_INT,
+    "finished_at_ms": _OPTIONAL_INT,
+}
 # A runaway store cannot keep a listing loop going forever.
 _MAX_PAGES: Final = 4096
 
@@ -136,7 +134,7 @@ def latest_assessed_run(store: Any, keys: WorktreeKeys) -> dict[str, object] | N
     answer = store._native_store_call(method, {"codebase_key": codebase_key, "worktree_key": worktree_key})
     if answer is None:
         return None
-    row = _row(answer, _RUN_FIELDS | {"findings_json"}, method)
+    row = _row(answer, {**_RUN_FIELDS, "findings_json": _TEXT}, method)
     run = _run_fields(row, method)
     run["findings"] = json.loads(_text(row["findings_json"], method))
     return run
@@ -146,7 +144,7 @@ def _run_history(store: Any, args: dict[str, object]) -> list[dict[str, object]]
     method = "list_workspace_assessment_runs"
     limit = args.get("limit")
     runs: list[dict[str, object]] = []
-    for row in _pages(store, method, args, "before", _RUN_FIELDS | {"finding_count"}):
+    for row in _pages(store, method, args, "before", {**_RUN_FIELDS, "finding_count": _INT}):
         run = _run_fields(row, method)
         run["finding_count"] = _int(row["finding_count"], method)
         runs.append(run)
@@ -156,7 +154,7 @@ def _run_history(store: Any, args: dict[str, object]) -> list[dict[str, object]]
 
 
 def _pages(
-    store: Any, method: str, args: dict[str, object], cursor_name: str, fields: frozenset[str]
+    store: Any, method: str, args: dict[str, object], cursor_name: str, fields: dict[str, str]
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     cursor: object = None
@@ -168,10 +166,12 @@ def _pages(
         if not isinstance(answer, dict) or set(answer) != {"items", "next"}:
             raise RuntimeError(f"native {method} returned no answer")
         items = answer["items"]
-        cursor = answer["next"]
+        previous, cursor = cursor, answer["next"]
         if not isinstance(items, list) or not (cursor is None or isinstance(cursor, list)):
             raise RuntimeError(f"native {method} returned no answer")
-        if cursor is not None and not items:
+        # A page must move on: an empty page or a repeated cursor would hand
+        # back the same rows again.
+        if cursor is not None and (not items or cursor == previous):
             raise RuntimeError(f"native {method} returned no answer")
         rows.extend(_row(item, fields, method) for item in items)
         if cursor is None:
@@ -182,10 +182,22 @@ def _pages(
     raise RuntimeError(f"native {method} kept paging")
 
 
-def _row(value: object, fields: frozenset[str], method: str) -> dict[str, object]:
-    if not isinstance(value, dict) or set(value) != fields:
+def _row(value: object, fields: dict[str, str], method: str) -> dict[str, object]:
+    if not isinstance(value, dict) or set(value) != set(fields):
+        raise RuntimeError(f"native {method} returned no answer")
+    if not all(_has_type(value[name], kind) for name, kind in fields.items()):
         raise RuntimeError(f"native {method} returned no answer")
     return {str(key): item for key, item in value.items()}
+
+
+def _has_type(value: object, kind: str) -> bool:
+    if value is None:
+        return kind in (_OPTIONAL_INT, _OPTIONAL_TEXT)
+    if kind in (_TEXT, _OPTIONAL_TEXT):
+        return isinstance(value, str)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return False
+    return value in (0, 1) if kind == _FLAG else True
 
 
 def _int(value: object, method: str) -> int:

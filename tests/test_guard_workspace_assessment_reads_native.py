@@ -137,6 +137,10 @@ def test_the_newest_assessed_run_carries_its_findings(tmp_path: Path, monkeypatc
         {"items": [_run_row(finding_count="2")], "next": None},
         {"items": [_run_row(finding_count=True)], "next": None},
         {"items": [_run_row(coverage_json=None)], "next": None},
+        {"items": [_run_row(created_at_ms="invalid")], "next": None},
+        {"items": [_run_row(started_at_ms="1")], "next": None},
+        {"items": [_run_row(run_id=1)], "next": None},
+        {"items": [_run_row(error_code=3)], "next": None},
     ],
 )
 def test_a_malformed_run_page_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
@@ -156,18 +160,32 @@ def test_a_malformed_assessed_run_is_refused(tmp_path: Path, monkeypatch: pytest
         reads.latest_assessed_run(store, KEYS)
 
 
-def test_a_malformed_worktree_row_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"dirty_generation": "1"},
+        {"paused": "0"},
+        {"paused": 2},
+        {"ended": True},
+        {"root": None},
+        {"last_scan_at_ms": "5"},
+    ],
+)
+def test_a_malformed_worktree_row_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, override: dict[str, object]
+) -> None:
     store = GuardStore(tmp_path / "home")
-    row = {
+    row: dict[str, object] = {
         "codebase_key": KEYS.codebase_key,
         "worktree_key": KEYS.worktree_key,
         "root": "/work/0",
-        "dirty_generation": "1",
+        "dirty_generation": 1,
         "last_completed_generation": 0,
         "last_scan_at_ms": None,
         "paused": 0,
         "admitted_at_ms": T0,
         "ended": 0,
+        **override,
     }
     _answers(monkeypatch, store, [{"items": [row], "next": None}])
 
@@ -175,10 +193,19 @@ def test_a_malformed_worktree_row_is_refused(tmp_path: Path, monkeypatch: pytest
         reads.list_worktrees(store)
 
 
+def test_a_repeated_cursor_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "home")
+    page = {"items": [_run_row()], "next": [T0, "r1"]}
+    _answers(monkeypatch, store, [page, page])
+
+    with pytest.raises(RuntimeError, match="returned no answer"):
+        reads.recent_runs(store, limit=2)
+
+
 def test_a_store_that_never_stops_paging_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "home")
     monkeypatch.setattr(reads, "_MAX_PAGES", 3)
-    _answers(monkeypatch, store, [{"items": [_run_row()], "next": [T0, "r1"]}] * 3)
+    _answers(monkeypatch, store, [{"items": [_run_row()], "next": [T0 - page, "r1"]} for page in range(3)])
 
     with pytest.raises(RuntimeError, match="kept paging"):
         reads.latest_runs(store)
