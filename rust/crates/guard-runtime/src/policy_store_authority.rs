@@ -150,45 +150,51 @@ pub(super) fn now_ms() -> Result<u64, String> {
 }
 
 pub(super) fn authorities_unchanged(store: &PolicySnapshotStore) -> bool {
-    let policy_current = authority_fingerprint(&store.authority_path);
-    let approval_current = store
-        .approval_authority
-        .as_ref()
-        .map(|authority| authority_fingerprint(&authority.path))
-        .unwrap_or_else(|| {
-            authority_fingerprint(
-                &store
-                    .authority_path
-                    .with_file_name(approval_authority::APPROVAL_AUTHORITY_FILE_NAME),
-            )
-        });
-    let policy_matches = store
-        .authority_observed
-        .lock()
-        .map(|observed| *observed == policy_current)
-        .unwrap_or(false);
-    let approval_matches = store
-        .approval_authority_observed
-        .lock()
-        .map(|observed| *observed == approval_current)
-        .unwrap_or(false);
-    let approval_v4_current = store
-        .approval_v4_authority
-        .as_ref()
-        .and_then(|authority| authority_fingerprint(&authority.path));
-    let approval_v4_current = approval_v4_current.or_else(|| {
-        authority_fingerprint(
-            &store
-                .authority_path
-                .with_file_name(approval_v4_authority::AUTHORITY_FILE_NAME),
-        )
+    let policy_matches = sampled_under_lock(&store.authority_observed, || {
+        authority_fingerprint(&store.authority_path)
     });
-    let approval_v4_matches = store
-        .approval_v4_authority_observed
-        .lock()
-        .map(|observed| *observed == approval_v4_current)
-        .unwrap_or(false);
+    let approval_matches = sampled_under_lock(&store.approval_authority_observed, || {
+        store
+            .approval_authority
+            .as_ref()
+            .map(|authority| authority_fingerprint(&authority.path))
+            .unwrap_or_else(|| {
+                authority_fingerprint(
+                    &store
+                        .authority_path
+                        .with_file_name(approval_authority::APPROVAL_AUTHORITY_FILE_NAME),
+                )
+            })
+    });
+    let approval_v4_matches = sampled_under_lock(&store.approval_v4_authority_observed, || {
+        store
+            .approval_v4_authority
+            .as_ref()
+            .and_then(|authority| authority_fingerprint(&authority.path))
+            .or_else(|| {
+                authority_fingerprint(
+                    &store
+                        .authority_path
+                        .with_file_name(approval_v4_authority::AUTHORITY_FILE_NAME),
+                )
+            })
+    });
     policy_matches && approval_matches && approval_v4_matches
+}
+
+/// Whether the authority file still has the fingerprint last recorded for
+/// it, sampled while holding the record's lock as the watcher does. A push
+/// replaces the file and its recorded fingerprint under that lock, so a
+/// sample taken before it could pair the old file with the new record and
+/// mark the store changed until the next push.
+fn sampled_under_lock(
+    observed: &Mutex<Option<String>>,
+    sample: impl FnOnce() -> Option<String>,
+) -> bool {
+    observed
+        .lock()
+        .map(|observed| *observed == sample())
+        .unwrap_or(false)
 }
 
 pub(super) fn authority_unchanged_fenced(store: &PolicySnapshotStore) -> bool {

@@ -77,7 +77,7 @@ pub(crate) fn push(fixture: &Fixture, direct_lane: Option<Value>) -> Result<Vec<
     fixture.store.push(&request)
 }
 
-fn write_ack(
+pub(crate) fn write_ack(
     root: &Path,
     generation: u64,
     policy_digest: &str,
