@@ -266,12 +266,7 @@ fn after_claim(
                 // the proxy raises no native prompt or inline elicitation for
                 // a claimed call.
                 ToolLeg::Queue { policy_action } => {
-                    let mode = context
-                        .admitted
-                        .binding
-                        .review
-                        .blocked_request_mode
-                        .as_deref();
+                    let mode = context.admitted.blocked_request_mode();
                     if mode == Some(ASK_MODE) {
                         let prepared = ask::prepare(
                             &context.request,
