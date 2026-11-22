@@ -15,6 +15,8 @@ use crate::guard_store_db::{
 mod assessment_admissions;
 #[path = "guard_store_workspace_assessment_queue.rs"]
 mod assessment_queue;
+#[path = "guard_store_policy_presence.rs"]
+mod policy_presence;
 #[path = "guard_store_workspace_fix_proposals.rs"]
 mod workspace_fix_proposals;
 
@@ -32,16 +34,18 @@ const MIRROR_STATE_KEYS: [&str; 3] = [
 ];
 
 pub(crate) fn handles(method: &str) -> bool {
-    matches!(
-        method,
-        "artifact_latest_diff"
-            | "oauth_sources_list"
-            | "managed_keyring_reconcile"
-            | "upsert_runtime_state"
-            | "get_runtime_state"
-            | "clear_runtime_state"
-            | "hook_approval_center_origin"
-    ) || assessment_queue::handles(method)
+    policy_presence::handles(method)
+        || matches!(
+            method,
+            "artifact_latest_diff"
+                | "oauth_sources_list"
+                | "managed_keyring_reconcile"
+                | "upsert_runtime_state"
+                | "get_runtime_state"
+                | "clear_runtime_state"
+                | "hook_approval_center_origin"
+        )
+        || assessment_queue::handles(method)
         || assessment_admissions::handles(method)
         || workspace_fix_proposals::handles(method)
         || workspace_assessment::handles(method)
@@ -50,6 +54,7 @@ pub(crate) fn handles(method: &str) -> bool {
 
 pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> StoreResult<Value> {
     match method {
+        _ if policy_presence::handles(method) => policy_presence::dispatch(connection, method),
         "artifact_latest_diff" => latest_diff(connection, args),
         "oauth_sources_list" => oauth_sources(connection),
         "managed_keyring_reconcile" => reconcile_keyring(connection, args),

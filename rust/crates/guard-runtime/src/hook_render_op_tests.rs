@@ -59,6 +59,23 @@ fn recording_only_response_continues() {
 }
 
 #[test]
+fn accepted_allow_response_marks_reuse_in_the_native_renderer() {
+    let mut req = request("accepted_allow");
+    req.harness = "pi".to_owned();
+    req.verdict = Some(json!({
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason_code": "saved_approval",
+    }));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "ok");
+    let response = &result.payload.expect("payload")["response"];
+    assert_eq!(response["decision"], "allow");
+    assert_eq!(response["approval_reuse_status"], "accepted");
+}
+
+#[test]
 fn missing_verdict_and_unknown_kind_are_invalid() {
     for kind in ["pre_tool", "pre_tool_review", "other"] {
         let result = decode(evaluate_hook_render_request(&request(kind)).expect("encoded"));

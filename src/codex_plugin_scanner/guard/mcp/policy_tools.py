@@ -9,6 +9,7 @@ transaction.  No CLI subprocess, no second schema, no remote transport.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Any
@@ -31,6 +32,7 @@ from ..policy_document_yaml import (
     format_policy_document_yaml,
     parse_policy_document_yaml,
 )
+from ..store_base import _POLICY_INTEGRITY_STATE_KEY
 from ..store_policy_document import PolicyImportMode
 from .policy_errors import PolicyToolError
 from .policy_store import (
@@ -45,6 +47,7 @@ _now_iso = utc_now_iso
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.store import GuardStore
 
+_LOGGER = logging.getLogger(__name__)
 _POLICY_IMPORT_FLAG = "HOL_GUARD_POLICY_YAML_IMPORT"
 _MCP_POLICY_WRITE_FLAG = "HOL_GUARD_MCP_POLICY_WRITE"
 
@@ -151,17 +154,15 @@ def _write_plan_summary(
 
 
 def _read_policy_integrity_generation(store: GuardStore) -> int | None:
-    """Read the authoritative policy integrity generation via a real connection.
+    """Read the authoritative policy integrity generation through the native store.
 
-    Uses ``_load_policy_integrity_state`` on an actual SQLite connection
-    instead of passing ``None`` to ``_refresh_policy_integrity_state``.
+    The native ``get_sync_payload`` read answers the stored integrity state.
     Returns ``None`` when integrity state is unavailable (e.g. fresh DB
     with no key yet); staging proceeds without a generation binding in
     that degraded case.
     """
     try:
-        with store._connect() as connection:
-            state = store._load_policy_integrity_state(connection)
+        state = store._native_store_call("get_sync_payload", {"state_key": _POLICY_INTEGRITY_STATE_KEY})
         if not isinstance(state, dict):
             return None
         gen = state.get("generation")
@@ -173,6 +174,7 @@ def _read_policy_integrity_generation(store: GuardStore) -> int | None:
             return int(gen)
         return None
     except Exception:
+        _LOGGER.warning("policy integrity generation read failed; staging without a generation binding", exc_info=True)
         return None
 
 

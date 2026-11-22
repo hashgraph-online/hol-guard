@@ -18,6 +18,7 @@ from .native_extension_control_authority import (
     raise_fault,
     view_to_wire,
 )
+from .native_extension_control_schema import extension_control_schema_compatible
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
     AuthorityHealth,
@@ -25,7 +26,6 @@ from .runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
 )
 from .runtime.extension_control_contract import ExtensionControlLayer
-from .store_extension_control_authority_schema import require_compatible_extension_control_schema
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -309,9 +309,8 @@ class ExtensionControlAuthorityReadsMixin:
         when it did; otherwise the caller runs the separate ops on the view.
         """
 
-        with self._connect() as connection:
-            if not require_compatible_extension_control_schema(connection, require_compatible=False):
-                return self._degraded_view(catalog_digest), None
+        if not extension_control_schema_compatible(self, require_compatible=False):
+            return self._degraded_view(catalog_digest), None
         try:
             return self._read_through_resident(
                 catalog_digest,
