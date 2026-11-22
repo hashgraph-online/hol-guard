@@ -66,8 +66,8 @@ const HASH_FAILED: &str = "mcp_relay_package_hash_failed";
 /// The resident refused the stored-policy resolution.
 pub(super) const RESOLVE_FAILED: &str = "mcp_relay_package_policy_failed";
 /// A saved row was ignored for a local integrity failure and no decision was
-/// found, which only a daemon policy authority can resolve.
-const DAEMON_AUTHORITY: &str = "mcp_relay_package_policy_daemon_authority";
+/// found. The call is refused in place; its server stays native.
+pub(super) const DAEMON_AUTHORITY: &str = "mcp_relay_package_policy_daemon_authority";
 
 /// The request id the in-process resolution carries. The byte path's id
 /// correlates a response with its request; nothing correlates here, but the op
@@ -255,9 +255,10 @@ fn hydrate(
     }
     if decision.is_none() && ignored_integrity {
         // Python asks the daemon's policy authority to resolve the row it
-        // ignored. The relay has no such authority, and answering
-        // `require-reapproval` in its place would decide a call the authority
-        // may hold an allow for.
+        // ignored. Answering `require-reapproval` here would decide a call the
+        // authority may hold an allow for, so the call is refused, and the
+        // next call reads the integrity state the daemon republishes
+        // (`mcp_relay_decide_package_server.rs`).
         return Err(DAEMON_AUTHORITY);
     }
     let mut facts = Facts {
