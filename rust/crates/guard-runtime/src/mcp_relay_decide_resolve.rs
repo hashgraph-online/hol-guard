@@ -132,7 +132,7 @@ fn resolve_saved(
 }
 
 /// The artifact and approval-context token `build_tool_call_identity` makes.
-fn identity(
+pub(super) fn identity(
     request: &McpRelayDecideRequestV1,
     view: &view::HarnessView,
     control_digest: String,
@@ -164,7 +164,7 @@ fn identity(
 /// proxy reads from the store (`read_mcp_provider_authority_hash`) and no
 /// other tool carries. A Composio call from a relay that did not leave the
 /// hash to this resident is refused rather than hashed without it.
-fn provider_catalog_hash(
+pub(super) fn provider_catalog_hash(
     request: &McpRelayDecideRequestV1,
     connection: Option<&Connection>,
 ) -> Result<Option<String>, &'static str> {
