@@ -24,7 +24,7 @@ from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
-from codex_plugin_scanner.guard.runtime import runner_native_sync
+from codex_plugin_scanner.guard.runtime import runner_native_sync, runner_package_coverage
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.sqlite_connection_cache import close_idle_store_connections
 from codex_plugin_scanner.guard.store import GuardStore
@@ -1389,7 +1389,7 @@ def test_sync_runtime_session_keeps_local_identity_when_package_coverage_missing
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
     monkeypatch.setattr(
-        guard_runner_module,
+        runner_package_coverage,
         "package_shim_cloud_coverage",
         lambda *_args, **_kwargs: {
             "generatedAt": "2026-04-24T00:01:00+00:00",
