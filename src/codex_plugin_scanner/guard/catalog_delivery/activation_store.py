@@ -42,6 +42,8 @@ def read_slot(store):
     method = "read_command_pack_activation"
     answer = store._native_store_call(method, {})
     state = answer.get("state") if isinstance(answer, dict) else None
+    if not isinstance(state, str):
+        raise NativePolicySnapshotError(f"native {method} returned no answer")
     if state == "absent" and set(answer) == {"state"}:
         return None
     if state in _SLOT_ERRORS and set(answer) == {"state"}:
