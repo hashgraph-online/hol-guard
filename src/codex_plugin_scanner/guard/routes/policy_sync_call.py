@@ -98,24 +98,22 @@ def policy_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
 
 def _validated_bundle(store: GuardStore, payload: dict[str, object], policy_bundle: dict[str, object]) -> Any:
     from ..native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION
-    from ..policy_bundle_trusted_keys import (
-        MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
-        validate_synced_policy_bundle,
-    )
+    from ..policy_bundle_trusted_keys import validate_synced_policy_bundle
     from ..runtime.runner import (
         _policy_bundle_admission_rejection,
         _validate_cached_policy_bundle,
     )
 
+    rows = store.policy_bundle_trust_rows()
     validated, rejection_reason, trusted_keys = validate_synced_policy_bundle(
         policy_bundle,
-        stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
+        stored_keyring=rows.policy_bundle_keyring,
         sync_payload=payload,
-        supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
-        managed_keyring_provenance=store.get_sync_payload(MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY),
-        expected_workspace_id=store.get_cloud_workspace_id(),
+        supply_chain_keyring=rows.supply_chain_keyring,
+        managed_keyring_provenance=rows.managed_keyring_provenance,
+        expected_workspace_id=rows.workspace_id,
     )
-    existing, existing_error = _validate_cached_policy_bundle(store, store.get_sync_payload("policy_bundle"))
+    existing, existing_error = _validate_cached_policy_bundle(store, rows.policy_bundle)
     if NATIVE_UNAVAILABLE_REJECTION in (rejection_reason, existing_error):
         raise _RejectedError(_unavailable())
     if validated is None:
@@ -215,7 +213,7 @@ def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, obj
         return _unavailable()
     if candidate_rejection is not None:
         return _rejection(candidate_rejection)
-    stored_ack = store.get_sync_payload("policy_bundle_ack")
+    stored_ack = store.policy_bundle_trust_rows().policy_bundle_ack
     ack = policy_bundle_acknowledgement_payload(
         device_id=device_id,
         device_name=device_name,

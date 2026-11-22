@@ -13,6 +13,7 @@ from typing import Any, cast
 
 from codex_plugin_scanner.guard.runtime import native_workspace_review_replay as replay
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.policy_trust_rows import trust_rows_from_payloads
 
 _NOW = "2026-09-27T12:00:00+00:00"
 
@@ -54,6 +55,12 @@ class ReplayStore:
 
     def get_sync_payload(self, key: str) -> object | None:
         return self.payloads.get(key)
+
+    def policy_bundle_trust_rows(self):
+        return trust_rows_from_payloads(self.get_sync_payload, None)
+
+    def record_review_verification_keyring(self, keys, now: str) -> None:
+        self.set_sync_payload("guard_review_verification_keyring", [dict(key) for key in keys], now)
 
     def set_sync_payload(self, key: str, payload: object, now: str) -> None:
         del now

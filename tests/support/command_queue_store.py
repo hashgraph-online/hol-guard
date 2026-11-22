@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from tests.guard_review_signing_helpers import review_trusted_keyring_payload
+from tests.support.policy_trust_rows import trust_rows_from_payloads
 
 
 class FakeStore:
@@ -28,6 +29,12 @@ class FakeStore:
 
     def get_sync_payload(self, key: str) -> dict[str, object] | list[object] | None:
         return self.payloads.get(key)
+
+    def policy_bundle_trust_rows(self):
+        return trust_rows_from_payloads(self.get_sync_payload, None)
+
+    def record_review_verification_keyring(self, keys, now: str) -> None:
+        self.set_sync_payload("guard_review_verification_keyring", [dict(key) for key in keys], now)
 
     def set_sync_payload(self, key: str, payload: dict[str, object] | list[object], now: str) -> None:
         self.payloads[key] = payload

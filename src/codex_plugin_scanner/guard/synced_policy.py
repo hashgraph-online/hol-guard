@@ -4,18 +4,14 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from .policy_bundle_trusted_keys import (
-    MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
-    validate_cached_policy_bundle,
-)
+from .policy_bundle_trusted_keys import validate_cached_policy_bundle
+from .store_policy_trust_rows import PolicyBundleTrustRows
 
 
-class SyncPayloadReader(Protocol):
+class PolicyTrustRowsReader(Protocol):
     """Minimal persistence interface needed to read synced policy state."""
 
-    def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None: ...
-
-    def get_cloud_workspace_id(self) -> str | None: ...
+    def policy_bundle_trust_rows(self) -> PolicyBundleTrustRows: ...
 
 
 def _optional_string(value: object | None) -> str | None:
@@ -25,21 +21,29 @@ def _optional_string(value: object | None) -> str | None:
 
 
 def cached_policy_bundle_validation(
-    store: SyncPayloadReader,
+    store: PolicyTrustRowsReader,
     cached_policy_bundle: object,
     *,
     now: float | None = None,
+    rows: PolicyBundleTrustRows | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
+    """Judge ``cached_policy_bundle`` against the stored keyrings, checkpoint and workspace.
+
+    ``rows`` is a trust-row view the caller already read; without it the rows
+    are read once here, so every input comes from the same snapshot.
+    """
+
     if cached_policy_bundle is None or cached_policy_bundle == {}:
         return None, None
     if not isinstance(cached_policy_bundle, dict):
         return None, "invalid_policy_bundle"
+    trust = rows if rows is not None else store.policy_bundle_trust_rows()
     policy_bundle, rejection_reason = validate_cached_policy_bundle(
         cached_policy_bundle,
-        stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
-        acceptance_checkpoint=store.get_sync_payload("policy_bundle_acceptance_checkpoint"),
-        managed_keyring_provenance=store.get_sync_payload(MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY),
-        expected_workspace_id=store.get_cloud_workspace_id(),
+        stored_keyring=trust.policy_bundle_keyring,
+        acceptance_checkpoint=trust.acceptance_checkpoint,
+        managed_keyring_provenance=trust.managed_keyring_provenance,
+        expected_workspace_id=trust.workspace_id,
         now=now,
     )
     if policy_bundle is None:
@@ -48,21 +52,19 @@ def cached_policy_bundle_validation(
 
 
 def synced_policy_bundle_validation(
-    store: SyncPayloadReader,
+    store: PolicyTrustRowsReader,
     *,
     now: float | None = None,
+    rows: PolicyBundleTrustRows | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
     """Return the authenticated cached bundle and its stable rejection reason."""
 
-    return cached_policy_bundle_validation(
-        store,
-        store.get_sync_payload("policy_bundle"),
-        now=now,
-    )
+    trust = rows if rows is not None else store.policy_bundle_trust_rows()
+    return cached_policy_bundle_validation(store, trust.policy_bundle, now=now, rows=trust)
 
 
 def validated_synced_policy_bundle(
-    store: SyncPayloadReader,
+    store: PolicyTrustRowsReader,
     *,
     now: float | None = None,
 ) -> dict[str, object] | None:
@@ -72,11 +74,10 @@ def validated_synced_policy_bundle(
     return policy_bundle
 
 
-def synced_policy_payload(store: SyncPayloadReader) -> dict[str, object] | None:
+def synced_policy_payload(store: PolicyTrustRowsReader) -> dict[str, object] | None:
     """Return policy defaults only from an authenticated cached bundle."""
 
-    cached_policy_bundle = store.get_sync_payload("policy_bundle")
-    policy_bundle, _rejection_reason = cached_policy_bundle_validation(store, cached_policy_bundle)
+    policy_bundle, _rejection_reason = synced_policy_bundle_validation(store)
     if policy_bundle is not None:
         policy_defaults = policy_bundle.get("policyDefaults")
         if isinstance(policy_defaults, dict):
@@ -101,7 +102,7 @@ def synced_policy_payload(store: SyncPayloadReader) -> dict[str, object] | None:
 
 
 __all__ = [
-    "SyncPayloadReader",
+    "PolicyTrustRowsReader",
     "cached_policy_bundle_validation",
     "synced_policy_bundle_validation",
     "synced_policy_payload",

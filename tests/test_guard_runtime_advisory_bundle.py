@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.runtime_posture import (
     BUNDLE_ASSESSMENT_FAILED,
     build_runtime_posture,
 )
+from tests.support.policy_trust_rows import trust_rows_from_payloads
 
 NOW = "2026-01-01T00:00:00+00:00"
 WORKSPACE = "11111111-1111-4111-8111-111111111111"
@@ -47,6 +48,9 @@ class FakeStore:
 
     def get_sync_payload(self, key: str) -> object:
         return self.payloads.get(key)
+
+    def policy_bundle_trust_rows(self):
+        return trust_rows_from_payloads(self.get_sync_payload, self.get_cloud_workspace_id())
 
     def get_cached_supply_chain_bundle(self, workspace_id: str) -> object:
         assert workspace_id == self.workspace
