@@ -112,9 +112,7 @@ def test_manager_home_uses_the_custom_uv_layout_and_keeps_pipx_strict(
     assert error.value.reason_code == "update_installer_untrusted"
 
 
-def test_uv_is_never_looked_up_in_a_custom_launcher_directory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_uv_is_never_looked_up_in_a_custom_launcher_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     prefix = _tool_environment(tmp_path)
     bin_dir = _launcher_dir(tmp_path, prefix / "bin" / "hol-guard", monkeypatch)
     planted = bin_dir / "uv"
