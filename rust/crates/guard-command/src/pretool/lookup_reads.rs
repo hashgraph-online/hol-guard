@@ -5,28 +5,34 @@
 
 /// Whether a `type` or `command` segment is a lookup of plain names.
 ///
-/// Bash's `type NAME`, `type -a NAME` and `command -V NAME` print the body of a
-/// matching shell function. That body is a definition the agent's own shell
-/// already holds, and zsh's `which NAME` (`whence -c`) prints the same text, so
-/// these forms answer the same question as `which` and are proven the same way.
-/// `command` without `-v` or `-V` runs the named program and is not a lookup.
+/// Unqualified `type NAME`, `type -a NAME`, and `command -V NAME` can
+/// print a Bash function body. `type -f NAME` and `command -v NAME` can
+/// print alias definitions. Neither syntax executes the named command, but
+/// neither is a bounded metadata read: a synthetic marker in a function or
+/// alias is copied into the output. This classifier does not know the caller's
+/// live shell definitions, so those forms must retain review.
+///
+/// `type -t`, `type -p`, and `type -P` produce only type labels or
+/// executable paths. Keep these limited lookup forms proven read-only.
+/// `command` with no lookup flags still executes its operand.
 pub(super) fn safe_lookup_arguments(executable: &str, arguments: &[String]) -> bool {
-    let letters = match executable {
-        "type" => "afpPt",
-        "command" => "pvV",
-        _ => return false,
-    };
+    if executable != "type" {
+        return false;
+    }
     let mut names = 0;
     let mut options = true;
-    let mut describes = false;
+    let mut bounded_output = false;
     for argument in arguments {
         if options && argument == "--" {
             options = false;
         } else if options && argument.len() > 1 && argument.starts_with('-') {
-            if !argument[1..].chars().all(|letter| letters.contains(letter)) {
+            if !argument[1..]
+                .chars()
+                .all(|letter| matches!(letter, 't' | 'p' | 'P'))
+            {
                 return false;
             }
-            describes |= argument.contains(['v', 'V']);
+            bounded_output = true;
         } else if plain_name(argument) {
             options = false;
             names += 1;
@@ -34,7 +40,7 @@ pub(super) fn safe_lookup_arguments(executable: &str, arguments: &[String]) -> b
             return false;
         }
     }
-    names > 0 && (executable == "type" || describes)
+    names > 0 && bounded_output
 }
 
 /// A lookup that only prints where a name resolves: `which`, zsh's `whence`,
