@@ -4,8 +4,8 @@
 /// Whether the text runs an arithmetic expansion (`$((...))` or `$[...]`),
 /// which can assign a variable. Text inside single quotes or behind a
 /// backslash is printed as written and runs nothing; double quotes still
-/// expand. ANSI-C quoting (`$'...'`) escapes its own quotes, so text with
-/// it is read whole.
+/// expand. ANSI-C quoting (`$'...'`) expands nothing either and ends at its
+/// first quote that no backslash escapes.
 #[cfg(test)]
 fn runs_arithmetic(text: &str) -> bool {
     any_arithmetic_body(text, |_| true)
@@ -24,13 +24,15 @@ pub(super) fn arithmetic_assigns(text: &str) -> bool {
 /// the step that owns it.
 fn any_arithmetic_body(text: &str, reads: impl Fn(&str) -> bool) -> bool {
     let bytes = text.as_bytes();
-    let quoted = !text.contains("$'");
     let (mut single, mut double, mut index) = (false, false, 0);
     while index < bytes.len() {
         match bytes[index] {
-            b'\'' if quoted && !double => single = !single,
-            b'"' if quoted && !single => double = !double,
-            b'\\' if quoted && !single => index += 1,
+            b'$' if !single && !double && bytes.get(index + 1) == Some(&b'\'') => {
+                index = ansi_c_close(bytes, index + 2);
+            }
+            b'\'' if !double => single = !single,
+            b'"' if !single => double = !double,
+            b'\\' if !single => index += 1,
             b'$' if !single => {
                 if let Some((open, body)) = arithmetic_body(&text[index..]) {
                     if reads(body) {
@@ -44,6 +46,19 @@ fn any_arithmetic_body(text: &str, reads: impl Fn(&str) -> bool) -> bool {
         index += 1;
     }
     false
+}
+
+/// The index of the quote that closes an ANSI-C string whose text starts at
+/// `index`. A backslash escapes the byte after it, so `$'\''` holds a quote.
+/// An unclosed string reaches the end of the text, which the shell rejects.
+fn ansi_c_close(bytes: &[u8], mut index: usize) -> usize {
+    while index < bytes.len() && bytes[index] != b'\'' {
+        if bytes[index] == b'\\' {
+            index += 1;
+        }
+        index += 1;
+    }
+    index
 }
 
 /// The arithmetic expansion opening `rest`: the width of its opener and the
@@ -112,10 +127,18 @@ mod tests {
             "echo $[PATH=10]",
             "echo \"it's\" $((PATH=10))",
             "echo $'\\'' $((PATH=10))",
+            "echo \"$'\" $((PATH=10))",
         ] {
             assert!(super::runs_arithmetic(text), "{text}");
         }
-        for text in ["echo '$((PATH=10))'", "echo \\$((PATH=10))", "echo $PATH"] {
+        for text in [
+            "echo '$((PATH=10))'",
+            "echo \\$((PATH=10))",
+            "echo $PATH",
+            "echo '$((PATH=1))' $'x'",
+            "echo $'$((PATH=1))'",
+            "echo $'\\'$((PATH=1))'",
+        ] {
             assert!(!super::runs_arithmetic(text), "{text}");
         }
     }
@@ -145,6 +168,7 @@ mod tests {
             "echo '$((PATH=10))'",
             "timeout $((60 * 2)) git fetch --all",
             "git log -n $((5)) --format=%H",
+            "echo '$((PATH=1))' $'x'",
         ] {
             assert!(!super::arithmetic_assigns(text), "{text}");
         }

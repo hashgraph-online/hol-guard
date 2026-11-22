@@ -22,7 +22,7 @@ fn action(command: &str) -> String {
 
 #[test]
 fn a_probe_without_an_assignment_stays_allowed() {
-    for command in ["last -n 1", "who am i"] {
+    for command in ["last -n 1", "who am i", "echo '$((PATH=1))'"] {
         assert_eq!(action(command), "allow", "{command:?}");
     }
 }
