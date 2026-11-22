@@ -135,6 +135,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "oldest_approval_request_created_at"
         | "cached_supply_chain_bundle"
         | "get_cached_supply_chain_bundle"
+        | "newest_supply_chain_bundle_workspace"
         | "hook_managed_install_admission"
         // Only a digest, or the shape, of the stored sign-in record leaves
         // the store.
