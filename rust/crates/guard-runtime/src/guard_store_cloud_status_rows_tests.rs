@@ -167,3 +167,12 @@ fn only_the_snapshot_method_is_handled() {
     let args = Map::new();
     assert!(dispatch(&store(), "cloud_status_row", &Args(&args)).is_err());
 }
+
+#[test]
+fn the_snapshot_runs_in_one_read_transaction() {
+    use crate::guard_store_op_kind::{method_kind, Kind};
+    assert!(matches!(
+        method_kind("cloud_status_rows"),
+        Some(Kind::Snapshot)
+    ));
+}

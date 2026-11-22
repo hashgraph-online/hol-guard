@@ -45,12 +45,11 @@ pub(crate) fn dispatch(
     }
 }
 
-/// A stored row as an object; a missing row or one that is not an object
-/// reads as empty.
-fn object_row(connection: &Connection, key: &str) -> StoreResult<Map<String, Value>> {
+/// A stored row as an object, or `None` when it is missing or not an object.
+fn object_row(connection: &Connection, key: &str) -> StoreResult<Option<Map<String, Value>>> {
     match read_payload(connection, key)? {
-        Some(Value::Object(row)) => Ok(row),
-        _ => Ok(Map::new()),
+        Some(Value::Object(row)) => Ok(Some(row)),
+        _ => Ok(None),
     }
 }
 
@@ -81,30 +80,37 @@ fn last_sync_at(rows: &Map<String, Value>) -> Value {
         .map_or(Value::Null, |text| json!(text))
 }
 
-/// The latest Guard Cloud sync: the headless app sync summary when it is
-/// recorded, else the receipt sync summary.
-fn latest_cloud_sync(connection: &Connection) -> StoreResult<Value> {
-    match read_payload(connection, "headless_app_sync_summary")? {
-        Some(Value::Object(row)) => Ok(Value::Object(row)),
-        _ => Ok(Value::Object(object_row(connection, "sync_summary")?)),
-    }
-}
-
 /// `cloud_status_rows`: every status row (empty when missing or not an
 /// object), whether a sign-in row records an expired sign-in, the last sync
 /// time and the latest Guard Cloud sync.
+///
+/// Each row is read once, inside the snapshot transaction the store opens for
+/// this method, so every derived field describes the same rows. The latest
+/// Guard Cloud sync is the headless app sync summary when one is recorded (an
+/// empty object counts), else the receipt sync summary.
 pub(crate) fn rows_method(connection: &Connection) -> StoreResult<Value> {
     let mut rows = Map::new();
+    let mut headless_recorded = false;
     for key in ROWS {
-        rows.insert(key.to_owned(), Value::Object(object_row(connection, key)?));
+        let row = object_row(connection, key)?;
+        if key == "headless_app_sync_summary" {
+            headless_recorded = row.is_some();
+        }
+        rows.insert(key.to_owned(), Value::Object(row.unwrap_or_default()));
     }
+    let latest_key = if headless_recorded {
+        "headless_app_sync_summary"
+    } else {
+        "sync_summary"
+    };
+    let latest = rows.get(latest_key).cloned().unwrap_or_else(|| json!({}));
     let auth_expired = cloud_auth_expired(&rows);
     let synced_at = last_sync_at(&rows);
     Ok(json!({
         "rows": rows,
         "cloud_auth_expired": auth_expired,
         "last_sync_at": synced_at,
-        "latest_cloud_sync": latest_cloud_sync(connection)?,
+        "latest_cloud_sync": latest,
     }))
 }
 
