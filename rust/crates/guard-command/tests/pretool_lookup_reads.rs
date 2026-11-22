@@ -181,8 +181,8 @@ fn zsh_definition_lookup_can_emit_synthetic_markers() {
         return; // zsh is not installed on every CI host.
     }
     let setup = concat!(
-        "function hol_probe_func() { print SYNTHETIC_GUARD_CANARY_91; }\\n",
-        "alias hol_probe_alias='print SYNTHETIC_GUARD_CANARY_91'\\n",
+        "function hol_probe_func() { print SYNTHETIC_GUARD_CANARY_91; }\n",
+        "alias hol_probe_alias='print SYNTHETIC_GUARD_CANARY_91'\n",
     );
     for command in [
         "which hol_probe_func",
