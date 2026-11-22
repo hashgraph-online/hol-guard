@@ -88,9 +88,14 @@ def test_a_row_text_that_is_not_an_object_or_array_is_refused(text: object) -> N
 
 def test_stored_item_order_comes_back_unchanged(tmp_path: Path) -> None:
     store = GuardStore(tmp_path)
-    store.set_sync_payload(
-        CUSTOM_EXTENSION_CONTINUITY_STATE_KEY, {"items": {"cli-b": {}, "cli-a": {}, "cli-c": {}}}, _NOW
-    )
+    store.set_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY, {"items": {}}, _NOW)
+    # Written as raw text: the native set_sync_payload stores keys sorted, so
+    # only a row written out of order shows that the read keeps the order.
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "update sync_state set payload_json = ? where state_key = ?",
+            ('{"items":{"cli-b":{},"cli-a":{},"cli-c":{}}}', CUSTOM_EXTENSION_CONTINUITY_STATE_KEY),
+        )
 
     state = store.custom_extension_continuity_rows().state
 
