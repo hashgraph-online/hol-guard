@@ -40,6 +40,11 @@ pub(crate) struct Remembered {
     pub(crate) signals: Vec<String>,
     /// The tool decision's risk categories the receipt keeps.
     pub(crate) risk_categories: Vec<String>,
+    /// The integrity generation the saved allow was finalized at. The daemon
+    /// republishes its integrity state only after it sees the write, so the
+    /// second pass reads the saved rows at this generation instead of the
+    /// published one, which would read every re-signed row as a rollback.
+    pub(crate) generation: Option<u64>,
 }
 
 /// An Allow answer to the package call's prompt.
@@ -56,6 +61,7 @@ pub(super) fn approved(
     again: &mut Option<McpRelayDecideRequestV1>,
 ) -> Result<Answer, &'static str> {
     let remember = !composio_requires_action_review(&request.build.tool_name);
+    let mut generation = None;
     if remember {
         let artifact = &resolved.identity.artifact;
         if ask::remembered_write_refused(&request.guard_home, artifact)? {
@@ -80,15 +86,14 @@ pub(super) fn approved(
             command: artifact.command.as_deref(),
             workspace: None,
         };
-        if !save_now(&request.guard_home, &allow) {
-            return Err(REMEMBER_FAILED);
-        }
+        generation = Some(save_now(&request.guard_home, &allow).ok_or(REMEMBER_FAILED)?);
     }
     let mut marked = request.clone();
     marked.inline.remembered = Some(Remembered {
         remember,
         signals: resolved.decision.signals.clone(),
         risk_categories: resolved.decision.risk_categories.clone(),
+        generation,
     });
     *again = Some(marked);
     Err(AGAIN)

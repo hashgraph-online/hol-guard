@@ -457,6 +457,33 @@ fn a_need_the_proxy_would_reject_fails() {
     assert_eq!(answer.unwrap(), Err(POLICY_NEED));
 }
 
+/// An approved package call saves its allow and is decided again before the
+/// daemon republishes: the rows were re-signed at the new generation, which
+/// the second pass reads instead of the published one.
+#[test]
+fn a_second_pass_reads_rows_at_its_own_write_generation() {
+    let (home, connection) = guard_home("own-write");
+    decide(&connection, "artifact", "block", None, "approval-gate");
+    let mut state = integrity_state();
+    state.generation = Some(0);
+    let published = serde_json::to_string(&state).unwrap();
+    sync_state(&connection, "policy_integrity", &published);
+    let mut stale = binding();
+    stale.policy_integrity_state = Some(state);
+    let reader = store::open(&home).unwrap().expect("store");
+    let mut saved = store::saved(&reader, &stale, home.to_str().unwrap(), HARNESS)
+        .unwrap()
+        .expect("saved rows");
+    let before = saved.answer(&policy_need(ARTIFACT, None));
+    assert!(!matches!(&before, Ok(answer) if !answer["decision"].is_null()));
+    saved.read_after_own_write(1);
+    let after = saved.answer(&policy_need(ARTIFACT, None)).unwrap();
+    assert_eq!(after["decision"]["action"], "block");
+    // A published generation already past the write is kept.
+    saved.read_after_own_write(0);
+    assert_eq!(saved.integrity_state["generation"], 1);
+}
+
 #[cfg(unix)]
 #[path = "mcp_relay_decide_saved_portable_tests.rs"]
 mod portable;

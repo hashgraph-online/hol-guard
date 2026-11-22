@@ -133,24 +133,18 @@ pub(super) fn save(
 /// Save one remembered allow now, as the package lane does before it decides
 /// the call again (`allow_tool_call(remember=True)` ahead of
 /// `_handle_package_request`). The writer lock, the generation lock and the
-/// storage gate are taken in the drain's order. Whether the signed allow was
-/// finalized.
-pub(crate) fn save_now(guard_home: &str, allow: &Allow<'_>) -> bool {
+/// storage gate are taken in the drain's order. The generation the signed
+/// allow was finalized at, or `None` when it was not saved.
+pub(crate) fn save_now(guard_home: &str, allow: &Allow<'_>) -> Option<u64> {
     let home = Path::new(guard_home);
     if !home.join(STORE_FILE_NAME).is_file() {
-        return false;
+        return None;
     }
-    let Some(stamp) = super::Stamp::fresh() else {
-        return false;
-    };
+    let stamp = super::Stamp::fresh()?;
     let timeout_ms = sqlite_timeout_ms();
     let _writer = super::WRITER.lock().unwrap_or_else(PoisonError::into_inner);
-    let Some(held) = lock(guard_home) else {
-        return false;
-    };
-    let Ok(_gate) = hold_storage_gate(home, Duration::from_millis(timeout_ms.into())) else {
-        return false;
-    };
+    let held = lock(guard_home)?;
+    let _gate = hold_storage_gate(home, Duration::from_millis(timeout_ms.into())).ok()?;
     let busy_timeout_ms = u64::from(timeout_ms).clamp(1, MAX_BUSY_TIMEOUT_MS);
     let saved = save_allow(guard_home, allow, &stamp.store_now, &held, |args| {
         super::evaluate(guard_home, busy_timeout_ms, METHOD, args)
@@ -161,20 +155,18 @@ pub(crate) fn save_now(guard_home: &str, allow: &Allow<'_>) -> bool {
 
 /// The approval gate and the provider-action check `allow_tool_call` and
 /// `upsert_policy` apply, then the signed write while `_held` holds the
-/// generation lock. Whether it was finalized.
+/// generation lock. The generation it was finalized at.
 fn save_allow(
     guard_home: &str,
     allow: &Allow<'_>,
     now: &str,
     _held: &File,
     store: impl FnOnce(Map<String, Value>) -> (Option<Value>, bool),
-) -> bool {
+) -> Option<u64> {
     if composio_requires_action_review(allow.command.unwrap_or("")) {
-        return false;
+        return None;
     }
-    let Ok(home) = Path::new(guard_home).canonicalize() else {
-        return false;
-    };
+    let home = Path::new(guard_home).canonicalize().ok()?;
     if crate::approval_gate_consumers::require_policy_write(
         &home,
         crate::approval_gate_op::grants(),
@@ -185,7 +177,7 @@ fn save_allow(
     )
     .is_err()
     {
-        return false;
+        return None;
     }
     let mut args = Map::new();
     for (key, value) in [
@@ -214,33 +206,25 @@ fn save_allow(
 /// lock held by the caller: the pending generation
 /// lands before the row is signed and is finalized from the reply. The prior
 /// control state is put back only when the write did not commit. Without key material the allow is not
-/// saved, since an unsigned local row is ignored under either state.
+/// saved, since an unsigned local row is ignored under either state. The
+/// generation the write was finalized at.
 fn signed(
     home: &Path,
     mut args: Map<String, Value>,
     store: impl FnOnce(Map<String, Value>) -> (Option<Value>, bool),
-) -> bool {
+) -> Option<u64> {
     let mut secrets = EncryptedFileSecretStore::new(home);
-    let Some(material) = policy_integrity_secret_material(&mut secrets, home) else {
-        return false;
-    };
+    let material = policy_integrity_secret_material(&mut secrets, home)?;
     let control_ref = build_scoped_secret_ref(POLICY_INTEGRITY_CONTROL_REF, home);
-    let Some(current) = control_state(&mut secrets, home, &control_ref) else {
-        return false;
-    };
-    let Some(generation) = current
+    let current = control_state(&mut secrets, home, &control_ref)?;
+    let generation = current
         .get("generation")
         .and_then(Value::as_i64)
-        .filter(|generation| *generation >= 0)
-    else {
-        return false;
-    };
+        .filter(|generation| *generation >= 0)?;
     if !current.get("pending_generation").is_none_or(Value::is_null) {
-        return false;
+        return None;
     }
-    let Some(next) = generation.checked_add(1) else {
-        return false;
-    };
+    let next = generation.checked_add(1)?;
     let pending = json!({
         "cutover_complete": current["cutover_complete"].as_bool().unwrap_or(true),
         "generation": generation,
@@ -248,7 +232,7 @@ fn signed(
         "version": 1,
     });
     if !put(&mut secrets, &control_ref, &pending) {
-        return false;
+        return None;
     }
     args.insert(
         "integrity_key_b64".to_owned(),
@@ -260,8 +244,10 @@ fn signed(
     let finalized = reply
         .and_then(|reply| reply.get("next_control_state").cloned())
         .and_then(|proposed| finalization_state(Some(&pending), &proposed));
-    if finalized.is_some_and(|finalized| put(&mut secrets, &control_ref, &finalized)) {
-        return true;
+    if let Some(finalized) =
+        finalized.filter(|finalized| put(&mut secrets, &control_ref, finalized))
+    {
+        return finalized.get("generation").and_then(Value::as_u64);
     }
     if !committed {
         put(&mut secrets, &control_ref, &current);
@@ -269,7 +255,7 @@ fn signed(
     // A committed write re-signed every local row at the next generation, so
     // the earlier state would reject them all as a rollback. The pending
     // state stays for the integrity reconcile, which decides the generation.
-    false
+    None
 }
 
 /// The trusted control state, written at generation 0 when the home has
