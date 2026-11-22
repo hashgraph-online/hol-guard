@@ -129,3 +129,23 @@ def test_uv_is_never_looked_up_in_a_custom_launcher_directory(
 
     assert str(bin_dir.resolve()) not in entries
     assert str(user_bin.resolve()) in entries
+
+
+def test_an_account_without_a_password_entry_still_searches_the_system_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pwd
+
+    prefix = _tool_environment(tmp_path)
+    bin_dir = _launcher_dir(tmp_path, prefix / "bin" / "hol-guard", monkeypatch)
+    monkeypatch.setattr(update_subprocess.sys, "prefix", str(prefix))
+
+    def missing(_uid: int) -> object:
+        raise KeyError("no entry")
+
+    monkeypatch.setattr(pwd, "getpwuid", missing)
+
+    entries = update_subprocess._trusted_runtime_search_path(installer_kind="uv").split(os.pathsep)
+
+    assert entries
+    assert str(bin_dir.resolve()) not in entries

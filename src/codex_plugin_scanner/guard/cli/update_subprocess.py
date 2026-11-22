@@ -1191,7 +1191,9 @@ def _trusted_runtime_search_path(*, installer_kind: str) -> str:
 
     allowed: list[Path] = []
     if installer_kind in {"pipx", "uv"}:
-        allowed.append(_manager_executable_dir(installer_kind))
+        manager_bin = _manager_executable_dir(installer_kind)
+        if manager_bin is not None:
+            allowed.append(manager_bin)
     if os.name != "nt":
         for raw_entry in os.defpath.split(os.pathsep):
             if raw_entry:
@@ -1412,7 +1414,7 @@ def _manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:
         raise
 
 
-def _manager_executable_dir(installer_kind: str) -> Path:
+def _manager_executable_dir(installer_kind: str) -> Path | None:
     try:
         return _standard_manager_home_from_prefix(installer_kind)[1]
     except UpdateSubprocessError:

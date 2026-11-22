@@ -63,9 +63,16 @@ def _bin_dir_candidates() -> list[Path]:
     return candidates
 
 
-def uv_user_bin_dir() -> Path:
-    """``~/.local/bin`` of the account running the updater, read from the password database."""
+def uv_user_bin_dir() -> Path | None:
+    """``~/.local/bin`` of the account running the updater, read from the password database.
 
-    import pwd
+    An account without a password entry, common in containers run under an arbitrary UID,
+    has no such directory to offer, and only the fixed system directories are searched.
+    """
 
-    return Path(pwd.getpwuid(os.geteuid()).pw_dir) / ".local" / "bin"
+    try:
+        import pwd
+
+        return Path(pwd.getpwuid(os.geteuid()).pw_dir) / ".local" / "bin"
+    except (ImportError, KeyError, OSError):
+        return None
