@@ -68,6 +68,9 @@ def _now(now: str | None = None) -> datetime:
     return parsed
 
 
+_OAUTH_STATE_KEY = "oauth_local_credentials"
+
+
 def _text(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
@@ -133,8 +136,7 @@ def _capability_digest(capability: dict[str, object], store: GuardStore | None =
 
 
 def _oauth_metadata(store: GuardStore) -> GuardReviewOAuthMetadata:
-    oauth_state = store.get_sync_payload("oauth_local_credentials")
-    if not isinstance(oauth_state, dict) or _text(oauth_state.get("device_id")) is None:
+    if not store.oauth_sign_in_presence(_OAUTH_STATE_KEY).device_bound:
         raise ExactCloudReviewError("cloud_review_device_binding_missing")
     try:
         oauth = guard_review_oauth_metadata(store, require_device_dpop_binding=True)
@@ -158,11 +160,11 @@ def _oauth_binding(store: GuardStore) -> dict[str, object]:
     }
 
 
-def _oauth_state(store: GuardStore) -> dict[str, object]:
-    payload = store.get_sync_payload("oauth_local_credentials")
-    if not isinstance(payload, dict):
+def _oauth_state(store: GuardStore) -> None:
+    """Refuse when no sign-in record is stored; the record itself stays in the store."""
+
+    if not store.oauth_sign_in_presence(_OAUTH_STATE_KEY).present:
         raise ExactCloudReviewError("cloud_review_oauth_state_missing")
-    return payload
 
 
 def _consent_row(store: GuardStore, name: str) -> object:
