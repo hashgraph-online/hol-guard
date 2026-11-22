@@ -65,11 +65,37 @@ pub(crate) fn evaluate_guard_store_request_with_owner(
     request: &GuardStoreRequestV1,
     owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
+    // The size check runs first so a request this op rejects never writes.
     let request_sha256 = request_digest(request).map_err(str::to_owned)?;
     let outcome = match owner {
         Some(owner) => evaluate_with_owner(request, Some(owner)),
         None => evaluate(request),
     };
+    encode_outcome(request, request_sha256, outcome)
+}
+
+/// Answer a read inside a transaction that is always rolled back.
+///
+/// For a read another install's resident does not know (see
+/// `managed_resident_store_fallback`). Anything the read would write on the
+/// store connection, such as a pending rollup rebuild or an expired pairing,
+/// is discarded, and the outbox is never finalized, so the call leaves the
+/// store as it found it. Methods outside `answerable_in_isolation` are refused.
+pub(crate) fn evaluate_isolated_read(request: &GuardStoreRequestV1) -> Result<Vec<u8>, String> {
+    let request_sha256 = request_digest(request).map_err(str::to_owned)?;
+    let outcome = if crate::guard_store_op_kind::answerable_in_isolation(&request.method) {
+        evaluate_mode(request, None, &mut false, true)
+    } else {
+        Err(StoreError::Invalid("native_guard_store_method_unknown"))
+    };
+    encode_outcome(request, request_sha256, outcome)
+}
+
+fn encode_outcome(
+    request: &GuardStoreRequestV1,
+    request_sha256: String,
+    outcome: StoreResult<(Value, Option<i64>)>,
+) -> Result<Vec<u8>, String> {
     let (status, code, payload, generation) = match outcome {
         Ok((payload, generation)) => ("ok".to_owned(), "ok".to_owned(), Some(payload), generation),
         Err(error) => {
@@ -114,6 +140,15 @@ fn evaluate_tracked(
     request: &GuardStoreRequestV1,
     owner: Option<&crate::policy_store::PolicySnapshotStore>,
     committed_write: &mut bool,
+) -> StoreResult<(Value, Option<i64>)> {
+    evaluate_mode(request, owner, committed_write, false)
+}
+
+fn evaluate_mode(
+    request: &GuardStoreRequestV1,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
+    committed_write: &mut bool,
+    isolated: bool,
 ) -> StoreResult<(Value, Option<i64>)> {
     let invalid = |code| Err(StoreError::Invalid(code));
     if request.schema != GUARD_STORE_REQUEST_SCHEMA {
@@ -194,6 +229,9 @@ fn evaluate_tracked(
     } else {
         kind
     };
+    // An isolated read runs whatever it would have written inside a
+    // transaction that is rolled back below.
+    let kind = if isolated { Kind::Snapshot } else { kind };
     let writes = kind == Kind::Write;
     let initial_changes = connection.total_changes();
     match kind {
@@ -239,7 +277,7 @@ fn evaluate_tracked(
         committed?;
         *committed_write = writes;
     }
-    let generation = (connection.total_changes() > initial_changes)
+    let generation = (!isolated && connection.total_changes() > initial_changes)
         .then(|| outbox_generation(&connection))
         .transpose()?;
     // A paused review's hook response is rendered once its row is stored.
