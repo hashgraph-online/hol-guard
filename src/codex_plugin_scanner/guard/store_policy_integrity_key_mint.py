@@ -12,6 +12,36 @@ from .advisory_lock_handoff import hold_advisory_file_lock
 MINT_LOCK_FILE_NAME = ".policy-integrity-key-mint.lock"
 _MINT_LOCK_TIMEOUT_SECONDS = 10.0
 _MINT_LOCK_RETRY_SECONDS = 0.01
+NATIVE_MINT_FEATURE = "native-policy-integrity-key-mint-v1"
+_NATIVE_MINT_COMMAND = "policy-integrity-key-mint"
+_NATIVE_MINT_STATES = frozenset({"present", "armed", "busy", "unavailable"})
+# The native mint waits up to ten seconds for the lock, like this one.
+_NATIVE_MINT_TIMEOUT_SECONDS = 15.0
+_NATIVE_MINT_OUTPUT_LIMIT = 4096
+
+
+def native_policy_integrity_key_mint(guard_home: Path) -> str | None:
+    """Ask the native runtime to mint the key in the encrypted-file store.
+
+    The answer names a state and never carries the key: ``present`` (read it
+    back from the store), ``armed`` or ``busy`` (mint nothing), or
+    ``unavailable``. ``None`` means no runtime offers the mint, and the caller
+    keeps its own.
+    """
+
+    from .mdm.runtime_request import runtime_answer
+
+    answer = runtime_answer(
+        NATIVE_MINT_FEATURE,
+        _NATIVE_MINT_COMMAND,
+        {"guard_home": str(guard_home)},
+        output_limit=_NATIVE_MINT_OUTPUT_LIMIT,
+        timeout_seconds=_NATIVE_MINT_TIMEOUT_SECONDS,
+    )
+    if answer is None or set(answer) != {"state"}:
+        return None
+    state = answer["state"]
+    return state if isinstance(state, str) and state in _NATIVE_MINT_STATES else None
 
 
 def mint_policy_integrity_key_once(

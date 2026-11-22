@@ -26,7 +26,7 @@ from .policy_integrity import POLICY_INTEGRITY_VERSION
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
-from .store_policy_integrity_key_mint import mint_policy_integrity_key_once
+from .store_policy_integrity_key_mint import mint_policy_integrity_key_once, native_policy_integrity_key_mint
 from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
 
@@ -567,8 +567,14 @@ class StoreSecretPolicyIntegrityMixin:
                     for name in (AUTHORITY_FILE_NAME, NATIVE_POLICY_VERIFIER_KEY_NAME)
                 )
 
+            if type(secret_store) is EncryptedFileSecretStore:
+                minted = native_policy_integrity_key_mint(self.guard_home)
+                if minted in {"armed", "busy"}:
+                    return None, None
+                if minted == "present":
+                    encoded_key = self._get_policy_integrity_secret_from_store(key_ref)
             try:
-                encoded_key = mint_policy_integrity_key_once(
+                encoded_key = encoded_key or mint_policy_integrity_key_once(
                     self.guard_home,
                     read_key=lambda: self._get_policy_integrity_secret_from_store(key_ref),
                     write_key=lambda value: secret_store.set_secret(key_ref, value),
