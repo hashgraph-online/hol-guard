@@ -1,8 +1,11 @@
 //! Resident-owned accounting for policy-source fence windows.
 
 use std::collections::{HashMap, VecDeque};
+use std::fs::File;
+use std::path::Path;
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -24,6 +27,8 @@ const ATTEMPT_MARGIN_MS: u64 = 250;
 const MAX_WINDOW_AGE_MICROS: i64 = 9_000_000;
 const MAX_BATCH_EVENTS: usize = 16;
 const MAX_PENDING_EVENTS: usize = 2 * MAX_BATCH_EVENTS;
+const REVIEW_FENCE_MAX_WAIT_MS: u64 = 250;
+const REVIEW_FENCE_POLL_MS: u64 = 2;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -44,6 +49,12 @@ pub(crate) struct HookPolicyFenceWindowRequestV1 {
     pub(crate) remaining_ms: Option<u64>,
     #[serde(default)]
     pub(crate) persist_events: bool,
+    #[serde(default)]
+    pub(crate) bound: bool,
+    #[serde(default)]
+    pub(crate) event_name: Option<String>,
+    #[serde(default)]
+    pub(crate) recording_only: bool,
 }
 
 #[derive(Serialize)]
@@ -69,6 +80,41 @@ struct WindowState {
 }
 
 static WINDOWS: OnceLock<Mutex<HashMap<String, WindowState>>> = OnceLock::new();
+static REVIEW_LEASES: OnceLock<Mutex<HashMap<String, File>>> = OnceLock::new();
+
+fn review_lease(guard_home: &str, timeout_ms: u64) -> Result<Option<File>, String> {
+    let state_base = Path::new(guard_home).join("native-runtime");
+    let private_root = crate::resident_state::private_root_for_state_base(&state_base)?;
+    let gate = crate::policy_store::open_mutation_lock(
+        &private_root.join("extension-control-authority.gate"),
+        &private_root,
+    )?;
+    let lock = crate::policy_store::open_mutation_lock(
+        &private_root.join("extension-control-authority.lock"),
+        &private_root,
+    )?;
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms.min(REVIEW_FENCE_MAX_WAIT_MS));
+    loop {
+        if fs2::FileExt::try_lock_exclusive(&gate).is_ok() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            return Ok(None);
+        }
+        thread::sleep(Duration::from_millis(REVIEW_FENCE_POLL_MS));
+    }
+    loop {
+        if fs2::FileExt::try_lock_shared(&lock).is_ok() {
+            let _ = fs2::FileExt::unlock(&gate);
+            return Ok(Some(lock));
+        }
+        if Instant::now() >= deadline {
+            let _ = fs2::FileExt::unlock(&gate);
+            return Ok(None);
+        }
+        thread::sleep(Duration::from_millis(REVIEW_FENCE_POLL_MS));
+    }
+}
 
 fn now_micros() -> Result<i64, String> {
     let duration = SystemTime::now()
@@ -159,7 +205,13 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         || request.guard_home.len() > 4096
         || !matches!(
             request.action.as_str(),
-            "enter" | "leave" | "attempt" | "absorb_direct" | "wait"
+            "enter"
+                | "leave"
+                | "attempt"
+                | "absorb_direct"
+                | "wait"
+                | "review_enter"
+                | "review_leave"
         )
     {
         return Err("hook_policy_fence_window_payload_invalid".to_owned());
@@ -180,6 +232,47 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
                 "request_id": request.request_id,
                 "poll": poll,
             },
+        }));
+    }
+    if request.action == "review_enter" {
+        let eligible = request.bound
+            && !request.recording_only
+            && matches!(
+                request.event_name.as_deref(),
+                Some("PreToolUse" | "UserPromptSubmit")
+            );
+        if !eligible {
+            return encode_response(&json!({
+                "schema": RESULT_SCHEMA,
+                "result": {"request_id": request.request_id, "fenced": false},
+            }));
+        }
+        let timeout_ms = request.remaining_ms.unwrap_or(REVIEW_FENCE_MAX_WAIT_MS);
+        let fenced = match review_lease(&request.guard_home, timeout_ms) {
+            Ok(Some(file)) => {
+                let leases = REVIEW_LEASES.get_or_init(|| Mutex::new(HashMap::new()));
+                let mut leases = leases
+                    .lock()
+                    .map_err(|_| "hook_policy_fence_review_state_poisoned".to_owned())?;
+                leases.insert(request.request_id.clone(), file);
+                true
+            }
+            Ok(None) | Err(_) => false,
+        };
+        return encode_response(&json!({
+            "schema": RESULT_SCHEMA,
+            "result": {"request_id": request.request_id, "fenced": fenced},
+        }));
+    }
+    if request.action == "review_leave" {
+        let leases = REVIEW_LEASES.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut leases = leases
+            .lock()
+            .map_err(|_| "hook_policy_fence_review_state_poisoned".to_owned())?;
+        leases.remove(&request.request_id);
+        return encode_response(&json!({
+            "schema": RESULT_SCHEMA,
+            "result": {"request_id": request.request_id, "released": true},
         }));
     }
     let now = now_micros()?;

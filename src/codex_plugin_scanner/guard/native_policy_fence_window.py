@@ -6,14 +6,10 @@ import math
 import time
 import uuid
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from pathlib import Path
 from typing import cast, final
 
-from .native_command_control_authority_io import (
-    NativeCommandControlAuthorityUnavailableError,
-    hold_command_control_authority_lock,
-)
 from .native_execution import _resident_request
 from .native_hook_review_binding import native_hook_review_binding
 
@@ -142,10 +138,6 @@ class PolicySourceFenceWait:
             _ = self._call("leave", admitted=not self._exhausted)
 
 
-COMMITTED_PHASE = "committed"
-LEASE_WAIT_SECONDS = 0.25
-
-
 def _reader(publisher: object, name: str) -> Callable[[], object] | None:
     reader = getattr(publisher, name, None)
     return reader if callable(reader) else None
@@ -166,8 +158,6 @@ def published_binding_token(publisher: object, *, deadline: float | None = None)
         identity = b"" if source is None else getattr(source, "retained_identity_bytes", None)
         if not isinstance(marker, Mapping) or not isinstance(identity, bytes):
             return None
-        if marker and marker.get("phase") != COMMITTED_PHASE:
-            return None
         guard_home = getattr(publisher, "guard_home", None)
         if not isinstance(guard_home, Path):
             return None
@@ -185,7 +175,7 @@ def native_review_fence(
     guard_home: Path,
     deadline: float | None,
 ) -> Iterator[bool | None]:
-    """Hold the native command-control lease while a review is evaluated."""
+    """Ask the resident to hold the command-control lease during review."""
 
     bound = policy_snapshot is not None and (
         policy_snapshot.get("command_extensions_bound") is True
@@ -194,19 +184,30 @@ def native_review_fence(
     if not bound or event_name not in {"PreToolUse", "UserPromptSubmit"} or recording_only:
         yield False
         return
-    remaining = 0.0 if deadline is None else max(0.0, deadline - time.monotonic())
-    with ExitStack() as resources:
-        try:
-            resources.enter_context(
-                hold_command_control_authority_lock(
-                    guard_home, timeout_seconds=min(LEASE_WAIT_SECONDS, remaining), shared=True
-                )
-            )
-        except NativeCommandControlAuthorityUnavailableError:
-            if deadline is not None and time.monotonic() >= deadline:
-                raise TimeoutError("native_review_fence_deadline") from None
-            yield None
-            return
+    remaining_ms = 0 if deadline is None else max(0, int((deadline - time.monotonic()) * 1000))
+    request_id = f"review-fence-{uuid.uuid4().hex}"
+    result = _fence_request(
+        guard_home,
+        action="review_enter",
+        request_id=request_id,
+        deadline=deadline,
+        bound=bound,
+        event_name=event_name,
+        recording_only=recording_only,
+        remaining_ms=remaining_ms,
+    )
+    fenced = result.get("fenced") if result is not None else None
+    if fenced is not True:
         if deadline is not None and time.monotonic() >= deadline:
             raise TimeoutError("native_review_fence_deadline")
+        yield None if fenced is None else False
+        return
+    try:
         yield True
+    finally:
+        _ = _fence_request(
+            guard_home,
+            action="review_leave",
+            request_id=request_id,
+            deadline=None,
+        )
