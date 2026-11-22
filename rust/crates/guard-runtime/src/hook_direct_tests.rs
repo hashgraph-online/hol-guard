@@ -76,6 +76,25 @@ fn run(lane: &Lane, payload: Value) -> Value {
 }
 
 fn run_as(lane: &Lane, harness: &str, home_dir: Option<&str>, payload: Value) -> Value {
+    run_as_with_mode(lane, harness, home_dir, payload, false)
+}
+
+fn run_lifecycle_only_as(
+    lane: &Lane,
+    harness: &str,
+    home_dir: Option<&str>,
+    payload: Value,
+) -> Value {
+    run_as_with_mode(lane, harness, home_dir, payload, true)
+}
+
+fn run_as_with_mode(
+    lane: &Lane,
+    harness: &str,
+    home_dir: Option<&str>,
+    payload: Value,
+    lifecycle_only: bool,
+) -> Value {
     let request = HookDirectRequestV1 {
         harness: harness.to_owned(),
         guard_home: lane.fixture.root.to_str().unwrap().to_owned(),
@@ -83,7 +102,7 @@ fn run_as(lane: &Lane, harness: &str, home_dir: Option<&str>, payload: Value) ->
         workspace: None,
         deadline_budget_ms: None,
         emergency_safe_only: false,
-        lifecycle_only: false,
+        lifecycle_only,
         payload,
     };
     serde_json::from_slice(&evaluate(request, &lane.fixture.store).unwrap()).unwrap()

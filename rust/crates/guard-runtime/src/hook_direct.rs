@@ -243,6 +243,18 @@ fn answer(
                 return Ok(json!({"harness_response": answer}));
             }
         }
+        // Lifecycle-only probes also carry the permission hooks whose answer
+        // belongs to the harness. Keep those out of the daemon edge path so
+        // the Rust lifecycle authority decides the passthrough when resident
+        // state is available.
+        if event != PRE_TOOL_USE && event != POST_TOOL_USE && event != USER_PROMPT_SUBMIT {
+            return lifecycle::answer(
+                &request.harness,
+                &request.guard_home,
+                &payload,
+                policy_store,
+            );
+        }
         return Err(HookDirectDefer::LifecycleUnsettled);
     }
     if !request.emergency_safe_only && request.harness == CLAUDE_CODE && event == POST_TOOL_USE {

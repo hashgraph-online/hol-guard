@@ -1,4 +1,4 @@
-use super::{deferred, drain, lane, run, run_as, HOME};
+use super::{deferred, drain, lane, run, run_as, run_lifecycle_only_as, HOME};
 use serde_json::{json, Value};
 
 fn lifecycle(name: &str) -> Value {
@@ -187,6 +187,29 @@ fn a_passthrough_permission_request_is_left_to_the_harness() {
     }
     // The answer carries no decision and records nothing.
     assert_eq!(drain(&lane, None)["records"], json!([]));
+}
+
+#[test]
+fn lifecycle_only_permission_probe_is_answered_by_rust() {
+    let lane = lane("permission-lifecycle-only", json!({}));
+    let result = run_lifecycle_only_as(
+        &lane,
+        "codex",
+        Some(HOME),
+        permission_request(json!("synthetic")),
+    );
+    assert_eq!(
+        result,
+        json!({
+            "schema": "guard-hook-direct-result.v1",
+            "outcome": "answer",
+            "edge": {
+                "harness_response": {
+                    "hookSpecificOutput": { "hookEventName": "PermissionRequest" }
+                }
+            }
+        })
+    );
 }
 
 #[test]
