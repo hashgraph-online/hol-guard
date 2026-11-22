@@ -174,3 +174,22 @@ fn a_mysql_verb_that_changes_the_server_or_reads_a_file_keeps_its_review() {
         );
     }
 }
+
+#[test]
+fn a_user_name_is_read_with_the_screen_the_other_probes_use() {
+    for text in [
+        "-h 127.0.0.1 -u -oops ping",
+        "-h 127.0.0.1 -u ../elsewhere ping",
+        "-h 127.0.0.1 -u app@host ping",
+        "-h 127.0.0.1 --user -h ping",
+    ] {
+        assert!(
+            !safe_liveness_probe("mysqladmin", &arguments(text)),
+            "{text}"
+        );
+    }
+    assert!(safe_liveness_probe(
+        "mysqladmin",
+        &arguments("-h 127.0.0.1 -u app_owner.1 ping")
+    ));
+}

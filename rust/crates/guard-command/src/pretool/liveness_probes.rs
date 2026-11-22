@@ -67,16 +67,6 @@ fn plain_number(value: &str) -> bool {
     (1..=5).contains(&value.len()) && value.bytes().all(|byte| byte.is_ascii_digit())
 }
 
-/// A user name: a plain word, never a connection string and never a path, so
-/// a word carrying any of the characters that spell one refuses the proof.
-fn plain_name(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
-}
-
 /// `mysqladmin ping` asks the server whether it is alive. Its other verbs --
 /// `shutdown`, `drop`, `flush-logs`, `password` -- stop the server or change
 /// what it holds, so only `ping` reaches here. `--defaults-file` reads a file
@@ -108,7 +98,7 @@ fn mysql_options(words: &[String]) -> bool {
                 loopback
             }
             "-P" | "--port" | "--connect-timeout" => plain_number(value),
-            _ => plain_name(value),
+            _ => crate::pretool::safe_scalar::postgres_name(value),
         };
         if !accepted {
             return false;
