@@ -275,7 +275,7 @@ fn deserialize_authority(value: &Value) -> Option<DaemonAuthority> {
 /// `_live_guard_daemon_identity`.
 fn load_running_guard_daemon_identity(guard_home: &Path) -> Option<DaemonIdentity> {
     let (payload, auth_token) = load_authenticated_daemon_identity(guard_home)?;
-    if !daemon_state_matches_current_runtime(&payload) {
+    if !daemon_state_matches_compatible_runtime(&payload) {
         return None;
     }
     let compatibility_version = payload.get("compatibility_version")?.as_i64()?;
@@ -570,8 +570,23 @@ fn daemon_healthz_details_match(
     let Some(details) = payload.as_object() else {
         return false;
     };
-    daemon_state_matches_current_runtime(details)
+    daemon_state_matches_compatible_runtime(details)
         && healthz_details_match_state_identity(details, state)
+}
+
+/// The policy authority accepts a newer Desktop-owned daemon when it is
+/// compatible with this runtime, matching the daemon lifecycle's reuse check.
+/// A standalone daemon still has to match this package exactly because it has
+/// no Desktop source root that can establish the compatibility relationship.
+fn daemon_state_matches_compatible_runtime(payload: &Map<String, Value>) -> bool {
+    if payload.get("source_root").is_none() {
+        return daemon_state_matches_current_runtime(payload);
+    }
+    let current = Map::from_iter([(
+        "package_version".to_owned(),
+        Value::String(crate::PACKAGE_VERSION.to_owned()),
+    )]);
+    crate::daemon_manage::ensure::state_matches(&current, payload)
 }
 
 /// Cross-check the details payload against the signed state — same
@@ -1302,6 +1317,24 @@ mod tests {
         payload["compatibility_version"] = Value::from(GUARD_DAEMON_COMPATIBILITY_VERSION + 1);
         assert!(!daemon_state_matches_current_runtime(
             payload.as_object().unwrap()
+        ));
+    }
+
+    #[test]
+    fn compatible_newer_desktop_daemon_is_accepted() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let source_root = root
+            .path()
+            .join("org.hol.guard.desktop/core/versions/99.0.0");
+        std::fs::create_dir_all(&source_root).expect("source root");
+        let payload = serde_json::json!({
+            "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "runtime_fingerprint": "runtime-fingerprint",
+            "package_version": "99.0.0",
+            "source_root": source_root.to_string_lossy(),
+        });
+        assert!(daemon_state_matches_compatible_runtime(
+            payload.as_object().expect("object")
         ));
     }
 
