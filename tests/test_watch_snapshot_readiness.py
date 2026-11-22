@@ -99,9 +99,11 @@ def test_publish_command_control_race_follows_posture(
     # This test supplies a synthetic ACK. Keep the origin read on the same
     # fixture boundary so it cannot start a live resident with its own generation.
     monkeypatch.setattr(publisher.store, "get_hook_approval_center_origin", lambda: None)
-    # The local CLI revision is a native store read; answering it here keeps
-    # that call from creating native state files the resident check counts.
+    # The local CLI revision and the block-rule probe are native store reads;
+    # answering them here keeps those calls from creating native state files
+    # the resident check counts.
     monkeypatch.setattr(publisher.store, "read_local_cli_revision", lambda: 0)
+    monkeypatch.setattr(publisher.store, "has_local_cli_block_rules", lambda: False)
     monkeypatch.setattr(
         publisher,
         "_publication_context",
