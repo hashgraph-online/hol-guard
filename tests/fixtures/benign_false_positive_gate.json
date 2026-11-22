@@ -29025,10 +29025,42 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "tail -n 50 -F ${SCRATCH}-report-main.ts"
+        "command": "tail -n 50 -f ${SCRATCH}-report-main.ts"
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "neg-tail-follow-name-tmp-copy",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "tail -F ${SCRATCH}-report-main.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-tail-follow-retry-tmp-copy",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "tail -f --retry ${SCRATCH}-report-main.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "neg-tail-follow-sleep-interval-tmp-copy",

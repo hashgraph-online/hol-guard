@@ -2,8 +2,8 @@
 //! `cat` gives its operands.
 use super::*;
 
-fn context(root: &str) -> super::super::PathContext<'_> {
-    super::super::PathContext {
+fn context(root: &str) -> crate::pretool::PathContext<'_> {
+    crate::pretool::PathContext {
         home_dir: Some(root),
         cwd: Some(root),
         ..Default::default()
@@ -97,11 +97,8 @@ fn tail_follows_a_file_it_may_read() {
     let root = env!("CARGO_MANIFEST_DIR");
     for line in [
         "-f Cargo.toml",
-        "-F Cargo.toml",
         "--follow Cargo.toml",
-        "--follow=name Cargo.toml",
         "--follow=descriptor Cargo.toml",
-        "--retry -f Cargo.toml",
         "-n 50 -f Cargo.toml",
         "-f -- Cargo.toml",
     ] {
@@ -119,6 +116,13 @@ fn following_proves_no_file_the_single_file_proof_refuses() {
         // The follow flag does not widen which files may be read.
         "-f .env",
         "-f ~/.ssh/id_rsa",
+        // Following a name rather than the descriptor this proof checked
+        // reopens whatever the path resolves to later, which is a file this
+        // proof never read.
+        "-F Cargo.toml",
+        "--follow=name Cargo.toml",
+        "--retry -f Cargo.toml",
+        "-f --retry Cargo.toml",
         // Options that take a value are not admitted, so their value is
         // never read here as a flag and the operand count stays exact.
         "-f --pid 4120 Cargo.toml",
