@@ -109,6 +109,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "command_activity_analytics"
         | "get_command_activity_persistence_health"
         | "list_table_names"
+        | "count_command_activities"
         | "list_command_activity_invalidations"
         | "command_activity_diagnostics"
         | "list_evidence"

@@ -194,8 +194,7 @@ pub(crate) fn dispatch(
         }
         "list_command_activity_page" => api::list_page(connection, args),
         "command_activity_analytics" => api::analytics(connection, args),
-        "get_command_activity_persistence_health" => api::persistence_health(connection, args),
-        "list_table_names" => api::table_names(connection, args),
+        _ if api::reads::handles(method) => api::reads::dispatch(connection, method, args),
         "record_command_activity_feedback" => feedback::record_feedback(connection, args),
         "list_command_activity_invalidations" => feedback::list_invalidations(connection, args),
         "clear_command_activity_evidence" => privacy::clear_evidence(connection),
