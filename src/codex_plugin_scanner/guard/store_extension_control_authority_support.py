@@ -19,7 +19,9 @@ from typing import Final, cast
 
 from .native_extension_control import NativeExtensionControlError, compose_control_layers
 from .native_extension_control_authority import anchor_from_wire
+from .native_extension_control_head import extension_control_snapshot_head
 from .native_extension_control_schema import extension_control_schema_compatible
+from .native_extension_control_snapshot import extension_control_snapshot_layers
 from .runtime.extension_control_authority import (
     AuthorityAnchor,
     AuthorityHealth,
@@ -36,7 +38,6 @@ from .store_base import (
     SecretStore,
     SystemKeyringSecretStore,
 )
-from .store_extension_control_authority_schema import require_compatible_extension_control_schema
 
 _LOGGER = logging.getLogger(__name__)
 _KEY_REF_SUFFIX = ":authentication-key"
@@ -105,12 +106,9 @@ class _ExtensionControlAuthoritySupportMixin:
         try:
             with self._extension_control_authority_lock():
                 self._require_compatible_extension_control_schema()
-                with self._connect() as connection:
-                    row = connection.execute(
-                        "select catalog_digest from extension_control_authority_snapshot where singleton = 1"
-                    ).fetchone()
-                if row is not None:
-                    catalog_digest = _row_str(row, "catalog_digest")
+                head = extension_control_snapshot_head(self)
+                if head is not None:
+                    catalog_digest = head.catalog_digest
                 return self._read_extension_control_authority_locked(catalog_digest)
         except NativeCommandControlAuthorityUnavailableError:
             # A busy lease is an outage, not a verdict on this authority.
@@ -190,13 +188,8 @@ class _ExtensionControlAuthoritySupportMixin:
 
         if sys.platform != "darwin":
             return False
-        with self._connect() as connection:
-            require_compatible_extension_control_schema(connection)
-            snapshot_exists = (
-                connection.execute("select 1 from extension_control_authority_snapshot where singleton = 1").fetchone()
-                is not None
-            )
-        if not snapshot_exists:
+        # The snapshot read runs the schema check first.
+        if not extension_control_snapshot_layers(self).present:
             return False
         store = EncryptedFileSecretStore(cast(Path, self.guard_home))
         return any(store.get_secret(secret_ref) is None for secret_ref in (self._key_ref(), self._anchor_ref()))

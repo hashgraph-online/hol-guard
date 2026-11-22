@@ -37,6 +37,8 @@ const SLOT_FIELDS: [&str; 5] = [
 mod command_pack_legacy_evidence;
 #[path = "guard_store_command_pack_pending.rs"]
 mod command_pack_pending;
+#[path = "guard_store_extension_control_head.rs"]
+mod extension_control_head;
 #[path = "guard_store_extension_control_snapshot.rs"]
 mod extension_control_snapshot;
 
@@ -44,6 +46,7 @@ pub(crate) fn handles(method: &str) -> bool {
     extension_control_snapshot::handles(method)
         || command_pack_pending::handles(method)
         || command_pack_legacy_evidence::handles(method)
+        || extension_control_head::handles(method)
         || matches!(
             method,
             "read_command_pack_activation" | "extension_control_schema_state"
@@ -56,6 +59,9 @@ pub(crate) fn dispatch(
     args: &Args<'_>,
 ) -> StoreResult<Value> {
     match method {
+        _ if extension_control_head::handles(method) => {
+            extension_control_head::dispatch(connection, method, args)
+        }
         _ if command_pack_legacy_evidence::handles(method) => {
             command_pack_legacy_evidence::dispatch(connection, method, args)
         }
