@@ -145,12 +145,25 @@ mod coverage {
         root: std::path::PathBuf,
     }
 
+    /// The directory a test built is its own, so it goes when the test ends
+    /// and a later run never reads what an earlier one left behind.
+    impl Drop for Session {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
     impl Session {
-        fn new() -> Self {
+        /// A session directory of this name, below the workspace build
+        /// directory rather than the crate, which the checkout does not
+        /// track. Each test names its own, so two running together never
+        /// share one.
+        fn new(name: &str) -> Self {
             let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("target")
+                .join("../../target")
                 .join("property-list-reads")
-                .join(format!("session-{}", std::process::id()));
+                .join(format!("session-{}-{name}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&root);
             std::fs::create_dir_all(root.join("project")).unwrap();
             std::fs::write(root.join("project").join("Info.plist"), "<plist/>").unwrap();
             Self {
@@ -185,7 +198,7 @@ mod coverage {
 
     #[test]
     fn a_named_document_is_covered_against_a_real_session() {
-        let session = Session::new();
+        let session = Session::new("named-document");
         let command = format!("plutil -p {}/Info.plist", session.project());
         assert!(
             covered(&command, Some(&session.home()), Some(&session.project())).contains(&0),
@@ -195,7 +208,7 @@ mod coverage {
 
     #[test]
     fn a_document_read_is_not_covered_without_a_verified_directory() {
-        let session = Session::new();
+        let session = Session::new("no-verified-directory");
         let command = format!("plutil -p {}/Info.plist", session.project());
         assert!(!covered(&command, None, None).contains(&0), "{command}");
     }
