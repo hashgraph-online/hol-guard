@@ -1,8 +1,9 @@
 //! Resolving a relayed call: its identity, its tool policy over the saved
 //! rows the store holds, and its package leg, all on one read snapshot.
 
+use super::policy::run_policy;
 use super::{
-    package_lane, package_leg, provider, run_policy, store, subject, view, Admitted, Legged,
+    package_lane, package_leg, provider, store, subject, view, Admitted, Legged,
     McpRelayDecideRequestV1, PackageLeg, Resolved, BINDING_INCOMPLETE, IDENTITY_FAILED,
 };
 use crate::policy_decision_lookup_op::AuditEvent;
