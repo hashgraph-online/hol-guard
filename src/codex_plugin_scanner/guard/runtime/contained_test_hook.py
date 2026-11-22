@@ -203,7 +203,10 @@ def run_authorized_contained_test(
             )
         status_line = output.status_line(exit_code) if output is not None else None
         if status_line is None:
-            return exit_code
+            # The shell reached no echo, so the command ends on the status the
+            # run itself reached, which after a bounded filter is the filter's
+            # and after a chain its last stage's.
+            return exit_code if output is None else output.ended(exit_code)
         # The shell's status is the echo's own.
         sys.stdout.write(status_line)
         sys.stdout.flush()

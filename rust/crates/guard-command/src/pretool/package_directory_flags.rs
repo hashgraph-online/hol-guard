@@ -114,7 +114,8 @@ fn resolve(value: &str, cwd: &str) -> Option<String> {
 }
 
 /// Rewrite `<manager> [run] <flag> <dir> <rest>` (with only a bounded output
-/// filter or status echo after it) into `cd <resolved dir> && <manager> [run] <rest>`.
+/// filter and a trailing report after it) into
+/// `cd <resolved dir> && <manager> [run] <rest>`.
 /// `pnpm [run] -w <rest>` is rewritten the same way, with the workspace root
 /// standing in for the directory the flag does not spell.
 pub(in crate::pretool) fn as_cd_list(
@@ -132,13 +133,18 @@ pub(in crate::pretool) fn as_cd_list(
     let executable = first.executable.as_deref()?;
     let flags = directory_flags(executable);
     let root_flags = workspace_root_flags(executable);
+    // A trailing report rides along as itself: the projection keeps the text
+    // after the first segment verbatim, so the report reaches the same reading
+    // in the `cd` form that `cd <dir> && <manager> <rest>; echo done` gets
+    // when the user types it. Only the steps in front of it have to be the
+    // bounded output filters this projection already allows.
+    let reported = super::trailing_report_steps(model, &model.segments, 0);
+    let filtered = later.len().checked_sub(reported)?;
     if (flags.is_empty() && root_flags.is_empty())
         || first.pipeline_index != 0
         || !first.wrapper_chain.is_empty()
         || first.path_overridden
-        || !later
-            .iter()
-            .all(|segment| super::output_filter(segment) || super::status_echo(model, segment))
+        || !later[..filtered].iter().all(super::output_filter)
     {
         return None;
     }
