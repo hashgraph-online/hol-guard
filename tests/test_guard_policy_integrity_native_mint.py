@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +13,7 @@ from codex_plugin_scanner.guard import store_policy_integrity_key_mint as key_mi
 from codex_plugin_scanner.guard import store_secret_policy_integrity as secret_policy_module
 from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.store import EncryptedFileSecretStore, GuardStore, SystemKeyringSecretStore
+from codex_plugin_scanner.guard.store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
 
 _KEY = base64.urlsafe_b64encode(bytes(range(32))).decode("ascii")
 
@@ -37,8 +39,9 @@ def test_a_native_mint_is_read_back_from_the_store(tmp_path: Path, monkeypatch: 
     assert secret_store is not None
     key_ref = store._policy_integrity_key_ref
 
-    def native_mint(guard_home: Path) -> str:
+    def native_mint(guard_home: Path, *, keyring_service: str | None = None) -> str:
         assert guard_home == store.guard_home
+        assert keyring_service is None
         secret_store.set_secret(key_ref, _KEY)
         return "present"
 
@@ -54,7 +57,7 @@ def test_a_native_mint_is_read_back_from_the_store(tmp_path: Path, monkeypatch: 
 @pytest.mark.parametrize("state", ["armed", "busy"])
 def test_a_native_refusal_mints_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str) -> None:
     store = _store(tmp_path, monkeypatch)
-    monkeypatch.setattr(secret_policy_module, "native_policy_integrity_key_mint", lambda _home: state)
+    monkeypatch.setattr(secret_policy_module, "native_policy_integrity_key_mint", lambda _home, **_kwargs: state)
     _no_python_mint(monkeypatch)
 
     assert store._policy_integrity_secret_material(create=True) == (None, None)
@@ -64,7 +67,7 @@ def test_a_native_refusal_mints_nothing(tmp_path: Path, monkeypatch: pytest.Monk
 @pytest.mark.parametrize("state", [None, "unavailable"])
 def test_without_a_native_mint_python_mints(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str | None) -> None:
     store = _store(tmp_path, monkeypatch)
-    monkeypatch.setattr(secret_policy_module, "native_policy_integrity_key_mint", lambda _home: state)
+    monkeypatch.setattr(secret_policy_module, "native_policy_integrity_key_mint", lambda _home, **_kwargs: state)
 
     raw_key, key_id = store._policy_integrity_secret_material(create=True)
 
@@ -78,7 +81,7 @@ def test_a_stored_key_asks_no_mint(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert secret_store is not None
     secret_store.set_secret(store._policy_integrity_key_ref, _KEY)
 
-    def no_native(_home: Path) -> str | None:
+    def no_native(_home: Path, **_kwargs: object) -> str | None:
         raise AssertionError("no mint is needed")
 
     monkeypatch.setattr(secret_policy_module, "native_policy_integrity_key_mint", no_native)
@@ -125,3 +128,101 @@ def test_only_a_known_state_is_taken_from_the_runtime(
             {"guard_home": str(tmp_path)},
         )
     ]
+
+
+_SERVICE = "hol-guard.policy-integrity"
+
+
+def _backend(module: str = "keyring.backends.SecretService", name: str = "Keyring", **attributes: object) -> object:
+    return type(name, (), {"__module__": module, "preferred_collection": None, **attributes})()
+
+
+def _keyring(monkeypatch: pytest.MonkeyPatch, backend: object) -> None:
+    monkeypatch.setattr(key_mint_module.sys, "platform", "linux", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_test_keyring_module", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_load_keyring_module_or_none",
+        classmethod(lambda cls: SimpleNamespace(get_keyring=lambda: backend)),
+    )
+
+
+def _mirrored(home: Path, service: str = _SERVICE) -> MirroredPolicyIntegritySecretStore:
+    return MirroredPolicyIntegritySecretStore(
+        SystemKeyringSecretStore(service_name=service), EncryptedFileSecretStore(home), guard_home=home
+    )
+
+
+def test_the_secret_service_mirror_asks_the_keyring_mint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _keyring(monkeypatch, _backend())
+
+    assert key_mint_module.native_mint_keyring_service(tmp_path, _mirrored(tmp_path)) == _SERVICE
+
+
+@pytest.mark.parametrize(
+    "backend",
+    [
+        _backend(module="keyring.backends.chainer", name="ChainerBackend"),
+        _backend(module="keyring.backends.kwallet", name="DBusKeyring"),
+        _backend(preferred_collection="/org/freedesktop/secrets/collection/login"),
+    ],
+)
+def test_other_keyring_backends_keep_the_python_mint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: object
+) -> None:
+    _keyring(monkeypatch, backend)
+
+    assert key_mint_module.native_mint_keyring_service(tmp_path, _mirrored(tmp_path)) is None
+
+
+def test_only_the_mirrored_policy_store_qualifies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _keyring(monkeypatch, _backend())
+
+    assert key_mint_module.native_mint_keyring_service(tmp_path, EncryptedFileSecretStore(tmp_path)) is None
+    assert key_mint_module.native_mint_keyring_service(tmp_path, _mirrored(tmp_path, "other-service")) is None
+    assert key_mint_module.native_mint_keyring_service(tmp_path / "elsewhere", _mirrored(tmp_path)) is None
+    monkeypatch.setattr(key_mint_module.sys, "platform", "darwin", raising=False)
+    assert key_mint_module.native_mint_keyring_service(tmp_path, _mirrored(tmp_path)) is None
+
+
+def test_a_test_keyring_keeps_the_python_mint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _keyring(monkeypatch, _backend())
+    monkeypatch.setattr(SystemKeyringSecretStore, "_test_keyring_module", staticmethod(lambda: object()))
+
+    assert key_mint_module.native_mint_keyring_service(tmp_path, _mirrored(tmp_path)) is None
+
+
+def test_the_keyring_mint_names_its_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[str, object]] = []
+
+    def fake_answer(feature: str, _command: str, request: object, **_kwargs: object) -> dict[str, object]:
+        seen.append((feature, request))
+        return {"state": "busy"}
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", fake_answer)
+
+    assert key_mint_module.native_policy_integrity_key_mint(tmp_path, keyring_service=_SERVICE) == "busy"
+    assert seen == [
+        (
+            "native-policy-integrity-key-mint-secret-service-v1",
+            {"guard_home": str(tmp_path), "keyring": {"service_name": _SERVICE}},
+        )
+    ]
+
+
+def test_the_store_hands_its_keyring_service_to_the_native_mint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path, monkeypatch)
+    seen: list[str | None] = []
+
+    def native_mint(_home: Path, *, keyring_service: str | None = None) -> str:
+        seen.append(keyring_service)
+        return "armed"
+
+    monkeypatch.setattr(secret_policy_module, "native_mint_keyring_service", lambda _home, _store: _SERVICE)
+    monkeypatch.setattr(secret_policy_module, "native_policy_integrity_key_mint", native_mint)
+    _no_python_mint(monkeypatch)
+
+    assert store._policy_integrity_secret_material(create=True) == (None, None)
+    assert seen == [_SERVICE]

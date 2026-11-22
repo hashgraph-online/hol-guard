@@ -26,7 +26,11 @@ from .policy_integrity import POLICY_INTEGRITY_VERSION
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
-from .store_policy_integrity_key_mint import mint_policy_integrity_key_once, native_policy_integrity_key_mint
+from .store_policy_integrity_key_mint import (
+    mint_policy_integrity_key_once,
+    native_mint_keyring_service,
+    native_policy_integrity_key_mint,
+)
 from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
 
@@ -567,8 +571,9 @@ class StoreSecretPolicyIntegrityMixin:
                     for name in (AUTHORITY_FILE_NAME, NATIVE_POLICY_VERIFIER_KEY_NAME)
                 )
 
-            if type(secret_store) is EncryptedFileSecretStore:
-                minted = native_policy_integrity_key_mint(self.guard_home)
+            keyring_service = native_mint_keyring_service(self.guard_home, secret_store)
+            if keyring_service is not None or type(secret_store) is EncryptedFileSecretStore:
+                minted = native_policy_integrity_key_mint(self.guard_home, keyring_service=keyring_service)
                 if minted in {"armed", "busy"}:
                     return None, None
                 if minted == "present":

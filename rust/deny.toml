@@ -80,9 +80,13 @@ deny = [
 # these lines is the way to record that the duplicate is gone; adding a line
 # needs a reason the two versions cannot be unified yet.
 skip = [
+    { crate = "aes@0.8.4", reason = "Guard is on the RustCrypto 0.10 line; the Linux keyring client's encrypted Secret Service session uses the 0.11 line" },
     { crate = "base64@0.22.1", reason = "transitive, pending the dependents that still pin 0.22" },
     { crate = "bitflags@1.3.2", reason = "transitive, dependents still on the 1.x API" },
     { crate = "block-buffer@0.10.4", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
+    { crate = "block-padding@0.3.3", reason = "Guard is on the RustCrypto 0.10 line; the Linux keyring client's encrypted Secret Service session uses the 0.11 line" },
+    { crate = "cbc@0.1.2", reason = "Guard is on the RustCrypto 0.10 line; the Linux keyring client's encrypted Secret Service session uses the 0.11 line" },
+    { crate = "cipher@0.4.4", reason = "Guard is on the RustCrypto 0.10 line; the Linux keyring client's encrypted Secret Service session uses the 0.11 line" },
     { crate = "const-oid@0.9.6", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
     { crate = "cpufeatures@0.2.17", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
     { crate = "crypto-common@0.1.7", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
@@ -91,6 +95,7 @@ skip = [
     { crate = "getrandom@0.2.17", reason = "transitive, dependents still on the 0.2 API" },
     { crate = "getrandom@0.3.4", reason = "transitive, dependents still on the 0.3 API" },
     { crate = "hmac@0.12.1", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
+    { crate = "inout@0.1.4", reason = "Guard is on the RustCrypto 0.10 line; the Linux keyring client's encrypted Secret Service session uses the 0.11 line" },
     { crate = "roxmltree@0.20.0", reason = "transitive, pending a dependent upgrade" },
     { crate = "serde_spanned@0.6.9", reason = "transitive through the toml 0.8 line" },
     { crate = "sha2@0.10.9", reason = "Guard is on the RustCrypto 0.10 line; cigar-context uses the 0.11 line" },
@@ -100,6 +105,8 @@ skip = [
     { crate = "thiserror-impl@1.0.69", reason = "paired with thiserror 1.x" },
     { crate = "toml@0.8.23", reason = "transitive, pending a dependent upgrade" },
     { crate = "toml_datetime@0.6.11", reason = "transitive through the toml 0.8 line" },
+    { crate = "toml_datetime@0.7.5+spec-1.1.0", reason = "the toml 0.9 line guard-command-build reads its manifests with; proc-macro-crate, a build dependency of the Linux keyring client's zbus macros, uses the 1.x line" },
+    { crate = "toml_edit@0.22.27", reason = "the line guard-runtime edits harness configs with; proc-macro-crate, a build dependency of the Linux keyring client's zbus macros, uses 0.25" },
     { crate = "windows-link@0.1.3", reason = "transitive through the older windows-sys line" },
     { crate = "windows-sys@0.52.0", reason = "transitive, dependents still on the 0.52 API" },
     { crate = "winnow@0.7.15", reason = "transitive through the toml 0.8 line" },
