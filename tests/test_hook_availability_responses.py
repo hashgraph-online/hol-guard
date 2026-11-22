@@ -159,7 +159,9 @@ def test_complete_native_outage_preserves_wire_event_and_safe_fallback(monkeypat
 
     monkeypatch.setattr(policy, "_runtime_availability", lambda *_args, **_kwargs: None)
     assert canonical_hook_event_name({"hook_event_name": "PostToolUse"}) == "PostToolUse"
-    assert hook_event_pauses_when_unavailable("PostToolUse") is False
-    assert hook_event_pauses_when_unavailable("Stop") is False
+    # With no Rust projection, the transport cannot safely classify an event.
+    # The bridge therefore pauses fail-closed rather than interpreting aliases.
+    assert hook_event_pauses_when_unavailable("PostToolUse") is True
+    assert hook_event_pauses_when_unavailable("Stop") is True
     assert hook_event_pauses_when_unavailable("PreToolUse") is True
-    assert canonical_hook_event_name({"hook_event_name": "post_toolcall"}) == "PostToolUse"
+    assert canonical_hook_event_name({"hook_event_name": "post_toolcall"}) == "post_toolcall"
