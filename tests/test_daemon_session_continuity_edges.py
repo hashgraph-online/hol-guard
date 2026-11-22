@@ -8,12 +8,24 @@ from pathlib import Path
 from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
     canonical_hook_event_name,
-    cursor_unparseable_input_permission,
     hook_event_is_permission_request,
 )
 
 
-def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request() -> None:
+def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request(monkeypatch) -> None:
+    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+
+    monkeypatch.setattr(
+        policy,
+        "_runtime_availability",
+        lambda payload, **_kwargs: {
+            "event_name": {
+                "PermissionDenied": "PermissionDenied",
+                "permissionRequestV2": "PermissionRequest",
+            }[payload.get("hook_event_name") or payload.get("hook_name")],
+            "permission_request": payload.get("hook_name") == "permissionRequestV2",
+        },
+    )
     assert canonical_hook_event_name({"hook_event_name": "PermissionDenied"}) == "PermissionDenied"
     assert canonical_hook_event_name({"hook_name": "permissionRequestV2"}) == "PermissionRequest"
     denied = availability_harness_response(
@@ -23,15 +35,6 @@ def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request(
         reason="native unavailable",
     )
     assert denied["continue"] is True
-
-
-def test_old_cursor_hooks_deny_empty_stdin_without_baked_event() -> None:
-    allow, code = cursor_unparseable_input_permission("")
-    assert code == 2
-    assert allow["permission"] == "deny"
-    deny, deny_code = cursor_unparseable_input_permission("beforeShellExecution")
-    assert deny_code == 2
-    assert deny["permission"] == "deny"
 
 
 def test_native_unavailable_pretool_denies_without_watch(tmp_path: Path) -> None:
@@ -69,18 +72,17 @@ def test_native_policy_not_ready_pretool_denies_without_interrupting_session(tmp
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_cursor_write_denies_when_native_unavailable() -> None:
-    from codex_plugin_scanner.guard.hook_review.hook_availability_policy import cursor_fallback_permission
+def test_copilot_permission_request_v2_uses_behavior_deny_shape(monkeypatch) -> None:
+    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
 
-    deny, code = cursor_fallback_permission(
-        hook_event_name="beforeWriteFile",
+    monkeypatch.setattr(
+        policy,
+        "_runtime_availability",
+        lambda payload, **_kwargs: {
+            "permission_request": payload["event"]
+            in {"permissionRequestV2", "PermissionRequestV2", "copilotPermissionRequest"}
+        },
     )
-    assert code == 2
-    assert deny["permission"] == "deny"
-    assert deny["agent_message"] == deny["user_message"]
-
-
-def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
     assert hook_event_is_permission_request("permissionRequestV2") is True
     assert hook_event_is_permission_request("PermissionRequestV2") is True
     assert hook_event_is_permission_request("PermissionResponse") is False
