@@ -6,6 +6,8 @@ use std::time::{Duration, Instant};
 
 #[path = "managed_resident_start_wait.rs"]
 mod start_wait;
+#[path = "managed_resident_store_fallback.rs"]
+mod store_fallback;
 
 use super::handoff_record::Retirement;
 use super::{containment, handoff, handoff_record, lease, restart_budget, CLIENT_RETRY_DELAY};
@@ -168,7 +170,9 @@ fn try_home_states(
                     Retirement::Rejected,
                 );
             }
-            Ok(response) => return Ok(Some(response)),
+            Ok(response) => {
+                return Ok(Some(store_fallback::reply(payload, response, same_runtime)))
+            }
             Err(error)
                 if containment::skip_failed_home_state_request(&error, same_runtime, &state) =>
             {
