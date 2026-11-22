@@ -118,6 +118,9 @@ pub(crate) mod exact_cloud_state;
 #[path = "guard_store_worker_host.rs"]
 pub(crate) mod worker_host;
 
+#[path = "guard_store_oauth_sign_in_stamp.rs"]
+pub(crate) mod oauth_sign_in_stamp;
+
 #[path = "guard_store_aibom_state.rs"]
 pub(crate) mod aibom_state;
 
@@ -131,6 +134,8 @@ pub(crate) mod sync_payload_rows;
 
 #[path = "guard_store_queue_lane_rows.rs"]
 pub(crate) mod queue_lane_rows;
+#[path = "guard_store_review_memory_rows.rs"]
+pub(crate) mod review_memory_rows;
 
 /// Whether one of the named `sync_state` row modules owns `method`.
 pub(crate) fn handles_row_method(method: &str) -> bool {
@@ -140,9 +145,11 @@ pub(crate) fn handles_row_method(method: &str) -> bool {
         || sync_delivery_rows::handles(method)
         || exact_cloud_state::handles(method)
         || worker_host::handles(method)
+        || oauth_sign_in_stamp::handles(method)
         || aibom_state::handles(method)
         || policy_trust_rows::handles(method)
         || continuity_rows::handles(method)
+        || review_memory_rows::handles(method)
         || sync_payload_rows::handles(method)
         || queue_lane_rows::handles(method)
 }
@@ -170,11 +177,17 @@ pub(crate) fn dispatch_row_method(
             exact_cloud_state::dispatch(connection, method, args)
         }
         _ if worker_host::handles(method) => worker_host::dispatch(connection, method, args),
+        _ if oauth_sign_in_stamp::handles(method) => {
+            oauth_sign_in_stamp::dispatch(connection, method, args)
+        }
         _ if policy_trust_rows::handles(method) => {
             policy_trust_rows::dispatch(connection, method, args)
         }
         _ if continuity_rows::handles(method) => {
             continuity_rows::dispatch(connection, method, args)
+        }
+        _ if review_memory_rows::handles(method) => {
+            review_memory_rows::dispatch(connection, method, args)
         }
         _ if sync_payload_rows::handles(method) => {
             sync_payload_rows::dispatch(connection, method, args)

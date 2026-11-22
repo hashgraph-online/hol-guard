@@ -132,6 +132,10 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "oldest_approval_request_created_at"
         | "cached_supply_chain_bundle"
         | "hook_managed_install_admission"
+        // Only a digest, or the shape, of the stored sign-in record leaves
+        // the store.
+        | "oauth_sign_in_stamp"
+        | "oauth_sign_in_presence"
         // The bundle and every row it is judged against, as one view.
         | "policy_bundle_trust_rows"
         // The Guard Cloud status rows, read as one view.
@@ -143,6 +147,9 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         // The authority revision and the two continuity rows a commit is
         // checked against, as one view.
         "custom_extension_continuity_rows" => Kind::Snapshot,
+        // The memory policy version and rule registry a signed memory
+        // bundle is checked and planned against, as one view.
+        "review_policy_memory_rows" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,

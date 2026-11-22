@@ -29,6 +29,7 @@ from .store_exact_cloud_local_once import StoreExactCloudLocalOnceMixin
 from .store_extension_control_authority import StoreExtensionControlAuthorityMixin
 from .store_cloud_review_settings import StoreCloudReviewSettingsMixin
 from .store_cloud_status_rows import StoreCloudStatusRowsMixin
+from .store_oauth_sign_in_stamp import StoreOAuthSignInStampMixin
 from .store_command_queue_lanes import StoreCommandQueueLanesMixin
 from .store_worker_host import StoreWorkerHostMixin
 from .store_aibom_state import StoreAibomStateMixin
@@ -45,6 +46,7 @@ from .store_policy_document import StorePolicyDocumentMixin
 from .store_review_event_outbox import StoreReviewEventOutboxMixin
 from .store_review_event_sequence_recovery import StoreReviewEventSequenceRecoveryMixin
 from .store_review_policy_memory import StoreReviewPolicyMemoryMixin
+from .store_review_policy_memory_rows import StoreReviewPolicyMemoryRowsMixin
 from .store_native_decision_receipts import StoreNativeDecisionReceiptsMixin
 from .store_native_workspace_review import StoreNativeWorkspaceReviewMixin
 from .store_oauth import StoreOAuthConnectMixin
@@ -89,11 +91,13 @@ class GuardStore(
     StorePortableProjectMemoryMixin,
     StorePolicyMixin,
     StoreReviewPolicyMemoryMixin,
+    StoreReviewPolicyMemoryRowsMixin,
     StorePolicyIntegrityAdminMixin,
     StoreCloudEventsMixin,
     StoreFleetPostureStateMixin,
     StoreCloudReviewSettingsMixin,
     StoreCloudStatusRowsMixin,
+    StoreOAuthSignInStampMixin,
     StoreCommandQueueLanesMixin,
     StoreWorkerHostMixin,
     StoreAibomStateMixin,
