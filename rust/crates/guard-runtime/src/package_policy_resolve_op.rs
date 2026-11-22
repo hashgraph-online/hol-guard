@@ -30,6 +30,8 @@ use crate::package_evaluation_compose_op::{compose, parse_action, parse_evaluati
 
 #[path = "package_policy_resolve_approvals.rs"]
 mod approvals;
+#[path = "package_policy_resolve_daemon.rs"]
+mod daemon;
 use approvals::{
     is_durable_exact_artifact_approval, is_fresh_artifact_approval,
     is_legacy_package_local_approval, is_waited_exact_cloud_package_approval,
@@ -224,21 +226,7 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
     let mut daemon_authority = request.daemon_authority;
     let mut resolved_authority = None;
     let resolved_decision = if request.decision.is_none() && request.ignored_integrity {
-        let authority = crate::daemon_policy_authority::ResidentPolicyAuthority::new(
-            std::path::PathBuf::from(&request.guard_home),
-        );
-        let workspaces = if request.policy_workspaces.is_empty() {
-            vec![request.workspace_dir.clone()]
-        } else {
-            request.policy_workspaces.clone()
-        };
-        if let Some((decision, authority_value)) = authority.resolve_package_policy(
-            &request.harness,
-            Some(&request.artifact_id),
-            &request.artifact_hash,
-            &workspaces,
-            request.publisher.as_deref(),
-        ) {
+        if let Some((decision, authority_value)) = daemon::resolve(request) {
             ignored_integrity = false;
             daemon_authority = true;
             resolved_authority = Some(authority_value);
