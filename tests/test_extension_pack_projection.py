@@ -22,8 +22,8 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import Exten
 from codex_plugin_scanner.guard.store_extension_control_authority_schema import (
     ensure_extension_control_authority_schema,
 )
+from tests.native_activation_support import activation_slot_call, seed
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
-from tests.native_activation_support import seed
 from tests.pack_activation_writer_support import write_in_transaction
 from tests.test_extension_pack_preparation import delivery as delivery
 
@@ -38,6 +38,7 @@ def active(delivery):
         guard_home=home,
         path=home / "guard.db",
         _connect=lambda: connection,
+        _native_store_call=activation_slot_call(lambda: connection),
         _authority_key=lambda *, required: b"a" * 32,
         _policy_integrity_secret_material=lambda *, create: (b"k" * 32, "test"),
     )

@@ -27,6 +27,38 @@ def prepare_directory_for_store(store):
     return _runtime_state_directory(resolved_guard_home(store.guard_home)) / "command-packs"
 
 
+_SLOT_FIELDS = ("revision", "record_json", "record_digest", "record_mac", "recorded_at")
+_SLOT_ERRORS = {
+    "schema_invalid": "native_command_pack_schema_invalid",
+    "missing": "native_command_pack_activation_missing",
+}
+
+
+def read_slot(store):
+    """The stored activation slot, read by the native store, or None before the pack schema.
+
+    The row is returned unauthenticated; callers verify it with their key.
+    """
+    method = "read_command_pack_activation"
+    answer = store._native_store_call(method, {})
+    state = answer.get("state") if isinstance(answer, dict) else None
+    if state == "absent" and set(answer) == {"state"}:
+        return None
+    if state in _SLOT_ERRORS and set(answer) == {"state"}:
+        raise NativePolicySnapshotError(_SLOT_ERRORS[state])
+    row = answer.get("row") if state == "present" and set(answer) == {"state", "row"} else None
+    if not isinstance(row, dict) or set(row) != set(_SLOT_FIELDS) or not _slot_types(row):
+        raise NativePolicySnapshotError(f"native {method} returned no answer")
+    return row
+
+
+def _slot_types(row):
+    revision = row["revision"]
+    if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
+        return False
+    return all(isinstance(row[name], str) for name in _SLOT_FIELDS[1:])
+
+
 def _row(connection):
     marker = connection.execute(
         "select version, checksum from extension_control_schema_migration where singleton=1"
@@ -46,12 +78,7 @@ def _row(connection):
 @lifecycle.one_runtime
 def read(store):
     """Authenticate outside mutation locks; this may read cached metadata pages."""
-    with store._connect() as connection:
-        if not connection.execute(
-            "select 1 from sqlite_master where type='table' and name='extension_control_schema_migration'"
-        ).fetchone():
-            return None
-        row = _row(connection)
+    row = read_slot(store)
     if row is None:
         return None
     from ..native_command_control_authority_store import _key
@@ -74,12 +101,7 @@ def read(store):
 @lifecycle.one_runtime
 def header_for_store(store, verifier_key):
     """Small authenticated recheck; never materialize a catalog under a lease."""
-    with store._connect() as connection:
-        if not connection.execute(
-            "select 1 from sqlite_master where type='table' and name='extension_control_schema_migration'"
-        ).fetchone():
-            return None
-        row = _row(connection)
+    row = read_slot(store)
     if row is None:
         return None
     if activation_baseline.is_baseline(row["record_json"]):
