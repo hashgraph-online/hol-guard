@@ -11,6 +11,11 @@
 //! - `missing`: the pack schema is in place but the slot is empty or holds a
 //!   row whose sizes cannot be a record;
 //! - `present`: the slot row, under `row`.
+//!
+//! `extension_control_schema_state` answers the marker check the authority
+//! reader runs before it reads: `missing` when the schema tables or the
+//! marker row are absent (the caller creates them), `compatible` when the
+//! marker names a known schema with its checksum, `incompatible` otherwise.
 
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
@@ -28,10 +33,43 @@ const SLOT_FIELDS: [&str; 5] = [
 ];
 
 pub(crate) fn handles(method: &str) -> bool {
-    method == "read_command_pack_activation"
+    matches!(
+        method,
+        "read_command_pack_activation" | "extension_control_schema_state"
+    )
 }
 
-pub(crate) fn read(connection: &Connection) -> StoreResult<Value> {
+pub(crate) fn dispatch(connection: &Connection, method: &str) -> StoreResult<Value> {
+    match method {
+        "extension_control_schema_state" => schema_state(connection),
+        _ => read(connection),
+    }
+}
+
+/// `require_compatible_extension_control_schema(require_compatible=False)`
+/// without the write: whether the authority schema is there to read.
+fn schema_state(connection: &Connection) -> StoreResult<Value> {
+    for table in [
+        "extension_control_schema_migration",
+        "extension_control_authority_snapshot",
+    ] {
+        if !table_exists(connection, table)? {
+            return Ok(state("missing"));
+        }
+    }
+    let marker = query_one(
+        connection,
+        "select version, checksum from extension_control_schema_migration where singleton = 1",
+        &[],
+    )?;
+    Ok(match marker {
+        None => state("missing"),
+        Some(marker) if compatible_version(&marker).is_some() => state("compatible"),
+        Some(_) => state("incompatible"),
+    })
+}
+
+fn read(connection: &Connection) -> StoreResult<Value> {
     if !table_exists(connection, "extension_control_schema_migration")? {
         return Ok(state("absent"));
     }

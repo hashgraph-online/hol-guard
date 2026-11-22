@@ -3,7 +3,7 @@ use serde_json::json;
 
 use sha2::{Digest, Sha256};
 
-use super::{handles, read};
+use super::{dispatch, handles, read};
 use crate::guard_store_op_kind::{method_kind, Kind};
 
 fn store() -> Connection {
@@ -47,6 +47,41 @@ fn the_read_is_routed_as_a_snapshot() {
         method_kind("read_command_pack_activation"),
         Some(Kind::Snapshot)
     ));
+}
+
+fn schema_state(connection: &Connection) -> serde_json::Value {
+    dispatch(connection, "extension_control_schema_state").expect("schema state")
+}
+
+#[test]
+fn the_schema_state_names_missing_compatible_and_incompatible_markers() {
+    assert!(handles("extension_control_schema_state"));
+    assert!(matches!(
+        method_kind("extension_control_schema_state"),
+        Some(Kind::Snapshot)
+    ));
+    let connection = store();
+    assert_eq!(schema_state(&connection), json!({"state": "missing"}));
+    mark(&connection, 6, &schema_checksum(6));
+    // The marker alone is not the schema: the snapshot table must be there too.
+    assert_eq!(schema_state(&connection), json!({"state": "missing"}));
+    connection
+        .execute_batch("create table extension_control_authority_snapshot (singleton integer)")
+        .expect("snapshot table");
+    assert_eq!(schema_state(&connection), json!({"state": "compatible"}));
+    for (version, checksum) in [(5, schema_checksum(4)), (7, schema_checksum(7))] {
+        connection
+            .execute(
+                "update extension_control_schema_migration set version = ?1, checksum = ?2",
+                params![version, checksum],
+            )
+            .expect("marker");
+        assert_eq!(schema_state(&connection), json!({"state": "incompatible"}));
+    }
+    connection
+        .execute("delete from extension_control_schema_migration", [])
+        .expect("clear marker");
+    assert_eq!(schema_state(&connection), json!({"state": "missing"}));
 }
 
 #[test]
