@@ -218,12 +218,18 @@ pub(super) fn safe_cat_stdin_arguments(arguments: &[String]) -> bool {
 /// `head -n 3 a b` prints what `head -n 3 a; head -n 3 b` prints, with a
 /// `==> a <==` line before each, so every operand gets the single-file proof
 /// that `cat a b` gives its operands, up to the same bound.
+///
+/// `follow` is set for `tail`, the only one of the two that takes `-f`. The
+/// flag changes when the program stops reading, not what it reads: it keeps
+/// the same descriptor open and prints what is appended to it. `head` has no
+/// such option, so the spelling stays unproven there.
 pub(super) fn safe_head_tail_arguments(
     arguments: &[String],
     piped_input: bool,
     context: super::PathContext<'_>,
+    follow: bool,
 ) -> bool {
-    safe_head_tail_with_targets(arguments, piped_input, context, true)
+    safe_head_tail_with_targets(arguments, piped_input, context, true, follow)
 }
 
 pub(super) fn safe_head_tail_stdin_arguments(arguments: &[String]) -> bool {
@@ -231,6 +237,7 @@ pub(super) fn safe_head_tail_stdin_arguments(arguments: &[String]) -> bool {
         arguments,
         true,
         crate::pretool::PathContext::default(),
+        false,
         false,
     )
 }
@@ -440,6 +447,19 @@ fn safe_word_count_with_targets(
     saw_target || piped_input
 }
 
+/// A `tail` option that only keeps the file open: `-f` and `-F`, their long
+/// spellings, and `--retry`. `-F` is `--follow=name --retry`, so a file that
+/// is replaced is reopened by its name; both print what is appended and
+/// neither writes, moves or truncates anything. The options that take a value
+/// -- `--pid` and `--sleep-interval` -- are left out, so a value is never read
+/// here as one of these.
+fn follow_option(argument: &str) -> bool {
+    matches!(
+        argument,
+        "-f" | "-F" | "--follow" | "--follow=name" | "--follow=descriptor" | "--retry"
+    )
+}
+
 /// A head/tail count: `20`, or `+31` for "from line 31" (`tail -n +31`).
 fn head_tail_count(value: &str) -> bool {
     let digits = value.strip_prefix('+').unwrap_or(value);
@@ -451,6 +471,7 @@ fn safe_head_tail_with_targets(
     piped_input: bool,
     context: super::PathContext<'_>,
     allow_target: bool,
+    follow: bool,
 ) -> bool {
     let mut targets = 0usize;
     let mut expect_count = false;
@@ -476,6 +497,9 @@ fn safe_head_tail_with_targets(
         }
         if matches!(argument.as_str(), "-n" | "--lines" | "-c" | "--bytes") {
             expect_count = true;
+            continue;
+        }
+        if follow && follow_option(argument) {
             continue;
         }
         if let Some(value) = argument
