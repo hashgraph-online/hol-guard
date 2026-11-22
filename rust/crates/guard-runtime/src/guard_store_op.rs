@@ -65,11 +65,13 @@ pub(crate) fn evaluate_guard_store_request_with_owner(
     request: &GuardStoreRequestV1,
     owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
+    // The size check runs first so a request this op rejects never writes.
+    let request_sha256 = request_digest(request).map_err(str::to_owned)?;
     let outcome = match owner {
         Some(owner) => evaluate_with_owner(request, Some(owner)),
         None => evaluate(request),
     };
-    encode_outcome(request, outcome)
+    encode_outcome(request, request_sha256, outcome)
 }
 
 /// Answer a read inside a transaction that is always rolled back.
@@ -80,19 +82,20 @@ pub(crate) fn evaluate_guard_store_request_with_owner(
 /// is discarded, and the outbox is never finalized, so the call leaves the
 /// store as it found it. Methods outside `answerable_in_isolation` are refused.
 pub(crate) fn evaluate_isolated_read(request: &GuardStoreRequestV1) -> Result<Vec<u8>, String> {
+    let request_sha256 = request_digest(request).map_err(str::to_owned)?;
     let outcome = if crate::guard_store_op_kind::answerable_in_isolation(&request.method) {
         evaluate_mode(request, None, &mut false, true)
     } else {
         Err(StoreError::Invalid("native_guard_store_method_unknown"))
     };
-    encode_outcome(request, outcome)
+    encode_outcome(request, request_sha256, outcome)
 }
 
 fn encode_outcome(
     request: &GuardStoreRequestV1,
+    request_sha256: String,
     outcome: StoreResult<(Value, Option<i64>)>,
 ) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest(request).map_err(str::to_owned)?;
     let (status, code, payload, generation) = match outcome {
         Ok((payload, generation)) => ("ok".to_owned(), "ok".to_owned(), Some(payload), generation),
         Err(error) => {
