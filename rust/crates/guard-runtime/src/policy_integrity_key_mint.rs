@@ -19,9 +19,11 @@
 //! - `busy`: the mint lock was not taken in time;
 //! - `unavailable`: the store could not be read or written.
 //!
-//! Only Unix answers: Python's mint lock on Windows is a byte-range lock this
-//! process does not share, so Windows answers `unavailable` and the caller
-//! keeps its own mint.
+//! Windows answers too. Python locks the first byte of each lock file there
+//! (`msvcrt.locking`), and the exclusive `LockFileEx` range `fs2` takes covers
+//! that byte, so each side waits for the other. The key ref is built from the
+//! home as Python's `Path.resolve` spells it, without the `\\?\` prefix a
+//! Windows canonical path carries.
 //!
 //! On Linux the request may add `"keyring": {"service_name"}` when Python's
 //! store mirrors the desktop keyring (Secret Service) into the vault. The mint
@@ -144,7 +146,24 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
 /// The scoped key ref Python builds from `guard_home.expanduser().resolve()`.
 fn resolved_home(guard_home: &Path) -> Option<PathBuf> {
     fs::create_dir_all(guard_home).ok()?;
-    fs::canonicalize(guard_home).ok()
+    let canonical = fs::canonicalize(guard_home).ok()?;
+    if cfg!(windows) {
+        Some(without_verbatim_prefix(canonical))
+    } else {
+        Some(canonical)
+    }
+}
+
+/// Drop the `\\?\` prefix Windows canonical paths carry and Python's do not.
+fn without_verbatim_prefix(path: PathBuf) -> PathBuf {
+    let text = path.to_string_lossy().into_owned();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) => PathBuf::from(rest),
+        None => path,
+    }
 }
 
 fn armed(home: &Path) -> bool {
@@ -215,9 +234,6 @@ fn mint_once_mirrored(_guard_home: &Path) -> Minted {
 }
 
 fn with_mint_lock(guard_home: &Path, mint: impl FnOnce(&Path, Instant) -> Minted) -> Minted {
-    if !cfg!(unix) {
-        return Minted::Unavailable;
-    }
     let Some(home) = resolved_home(guard_home) else {
         return Minted::Unavailable;
     };

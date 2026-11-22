@@ -265,3 +265,39 @@ def test_named_bus_variables_reach_the_native_child(monkeypatch: pytest.MonkeyPa
     assert "DBUS_SESSION_BUS_ADDRESS" not in plain and "XDG_RUNTIME_DIR" not in plain
     assert extended["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/example/bus"
     assert extended["XDG_RUNTIME_DIR"] == "/run/example"
+
+
+def _asked_vault_mint(monkeypatch: pytest.MonkeyPatch) -> list[str | None]:
+    seen: list[str | None] = []
+
+    def native_mint(_home: Path, *, keyring_service: str | None = None) -> str:
+        seen.append(keyring_service)
+        return "present"
+
+    monkeypatch.setattr(key_mint_module, "native_policy_integrity_key_mint", native_mint)
+    return seen
+
+
+def test_the_windows_vault_store_asks_the_vault_mint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
+
+    seen = _asked_vault_mint(monkeypatch)
+    store = WindowsPolicyIntegritySecretStore(
+        SystemKeyringSecretStore(service_name=_SERVICE), EncryptedFileSecretStore(tmp_path)
+    )
+
+    assert key_mint_module.native_mint_for_store(tmp_path, store) == "present"
+    assert key_mint_module.native_mint_for_store(tmp_path, EncryptedFileSecretStore(tmp_path)) == "present"
+    assert seen == [None, None]
+
+
+def test_a_vault_outside_the_guard_home_keeps_the_python_mint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
+
+    seen = _asked_vault_mint(monkeypatch)
+    elsewhere = EncryptedFileSecretStore(tmp_path / "elsewhere")
+    store = WindowsPolicyIntegritySecretStore(SystemKeyringSecretStore(service_name=_SERVICE), elsewhere)
+
+    assert key_mint_module.native_mint_for_store(tmp_path, store) is None
+    assert key_mint_module.native_mint_for_store(tmp_path, elsewhere) is None
+    assert seen == []

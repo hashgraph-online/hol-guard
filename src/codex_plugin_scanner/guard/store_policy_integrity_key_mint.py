@@ -64,17 +64,32 @@ def native_mint_keyring_service(guard_home: Path, secret_store: object) -> str |
 def native_mint_for_store(guard_home: Path, secret_store: object) -> str | None:
     """Ask the native runtime to mint the key into ``secret_store`` when it can.
 
-    The plain encrypted-file store and the Linux store that mirrors Python
-    keyring's Secret Service backend qualify. Any other store answers ``None``
-    without a request, and the caller keeps its own mint.
+    The plain encrypted-file store, the Windows store whose vault is its only
+    current copy, and the Linux store that mirrors Python keyring's Secret
+    Service backend qualify. Any other store answers ``None`` without a
+    request, and the caller keeps its own mint.
+    """
+
+    keyring_service = native_mint_keyring_service(guard_home, secret_store)
+    if keyring_service is None and not _vault_backed(guard_home, secret_store):
+        return None
+    return native_policy_integrity_key_mint(guard_home, keyring_service=keyring_service)
+
+
+def _vault_backed(guard_home: Path, secret_store: object) -> bool:
+    """Whether the key lives only in the Guard home's encrypted vault.
+
+    The Windows store writes the vault alone and reads Credential Manager only
+    to import a key an earlier release left there. The caller reads the store,
+    import included, before it asks for a mint, so a native mint that reads
+    and writes the vault keeps that store's rules.
     """
 
     from .store_base import EncryptedFileSecretStore
+    from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
-    keyring_service = native_mint_keyring_service(guard_home, secret_store)
-    if keyring_service is None and type(secret_store) is not EncryptedFileSecretStore:
-        return None
-    return native_policy_integrity_key_mint(guard_home, keyring_service=keyring_service)
+    vault = secret_store.fallback if type(secret_store) is WindowsPolicyIntegritySecretStore else secret_store
+    return type(vault) is EncryptedFileSecretStore and vault.base_dir == guard_home / "secrets"
 
 
 def native_policy_integrity_key_mint(guard_home: Path, *, keyring_service: str | None = None) -> str | None:
