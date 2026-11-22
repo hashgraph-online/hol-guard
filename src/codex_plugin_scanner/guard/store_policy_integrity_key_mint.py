@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import os
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -36,7 +37,8 @@ def native_policy_integrity_key_mint(guard_home: Path) -> str | None:
         _NATIVE_MINT_COMMAND,
         {"guard_home": str(guard_home)},
         output_limit=_NATIVE_MINT_OUTPUT_LIMIT,
-        timeout_seconds=_NATIVE_MINT_TIMEOUT_SECONDS,
+        # One budget for the status check and the command together.
+        deadline=time.monotonic() + _NATIVE_MINT_TIMEOUT_SECONDS,
     )
     if answer is None or set(answer) != {"state"}:
         return None

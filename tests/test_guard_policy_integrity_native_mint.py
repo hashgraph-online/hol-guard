@@ -109,8 +109,10 @@ def test_only_a_known_state_is_taken_from_the_runtime(
 ) -> None:
     seen: list[tuple[str, str, object]] = []
 
-    def fake_answer(feature: str, command: str, request: object, **_kwargs: object) -> dict[str, object] | None:
+    def fake_answer(feature: str, command: str, request: object, **kwargs: object) -> dict[str, object] | None:
         seen.append((feature, command, request))
+        assert "timeout_seconds" not in kwargs
+        assert isinstance(kwargs["deadline"], float)
         return answer
 
     monkeypatch.setattr(runtime_request, "runtime_answer", fake_answer)

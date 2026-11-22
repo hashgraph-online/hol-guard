@@ -23,7 +23,7 @@
 //! process does not share, so Windows answers `unavailable` and the caller
 //! keeps its own mint.
 
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -39,6 +39,11 @@ const COMMAND: &str = "policy-integrity-key-mint";
 const MINT_LOCK_FILE_NAME: &str = ".policy-integrity-key-mint.lock";
 const MINT_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
 const MINT_LOCK_RETRY: Duration = Duration::from_millis(10);
+/// The lock `EncryptedFileSecretStore._ensure_ready` (`store_base.py`) holds
+/// while it creates `secrets/key.bin`, and its 30 s budget.
+const SECRETS_DIRECTORY: &str = "secrets";
+const KEY_INIT_LOCK_FILE_NAME: &str = ".key-init.lock";
+const KEY_INIT_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_REQUEST_BYTES: u64 = 8 * 1024;
 const KEY_BYTES: usize = 32;
 /// `NATIVE_RUNTIME_STATE_DIRECTORY` (`native_policy_snapshot_constants.py`).
@@ -124,6 +129,29 @@ fn lock_options() -> OpenOptions {
     options
 }
 
+/// An exclusive `flock` on a lock file, released when dropped.
+struct Held(File);
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        let _ = fs2::FileExt::unlock(&self.0);
+    }
+}
+
+/// Take `path` within `timeout`: `Busy` when another holder keeps it,
+/// `Unavailable` when the lock file cannot be opened.
+fn hold(path: &Path, timeout: Duration) -> Result<Held, Minted> {
+    let lock = lock_options().open(path).map_err(|_| Minted::Unavailable)?;
+    let deadline = Instant::now() + timeout;
+    while fs2::FileExt::try_lock_exclusive(&lock).is_err() {
+        if Instant::now() >= deadline {
+            return Err(Minted::Busy);
+        }
+        std::thread::sleep(MINT_LOCK_RETRY);
+    }
+    Ok(Held(lock))
+}
+
 /// Read the key under the mint lock, minting one only when none is stored and
 /// native controls are not armed.
 pub(crate) fn mint_once(guard_home: &Path) -> Minted {
@@ -133,24 +161,37 @@ pub(crate) fn mint_once(guard_home: &Path) -> Minted {
     let Some(home) = resolved_home(guard_home) else {
         return Minted::Unavailable;
     };
-    let Ok(lock) = lock_options().open(home.join(MINT_LOCK_FILE_NAME)) else {
-        return Minted::Unavailable;
-    };
-    let deadline = Instant::now() + MINT_LOCK_TIMEOUT;
-    while fs2::FileExt::try_lock_exclusive(&lock).is_err() {
-        if Instant::now() >= deadline {
-            return Minted::Busy;
-        }
-        std::thread::sleep(MINT_LOCK_RETRY);
+    match hold(&home.join(MINT_LOCK_FILE_NAME), MINT_LOCK_TIMEOUT) {
+        Ok(_mint) => locked_mint(&home),
+        Err(state) => state,
     }
-    let state = locked_mint(&home);
-    let _ = fs2::FileExt::unlock(&lock);
-    state
+}
+
+/// Load or create the store's encryption key under the lock Python's store
+/// holds for it, so a fresh home never gets two `key.bin` files, one of which
+/// would leave the other's secrets unreadable.
+fn store_ready(home: &Path, store: &mut EncryptedFileSecretStore) -> Result<(), Minted> {
+    let secrets = home.join(SECRETS_DIRECTORY);
+    fs::create_dir_all(&secrets).map_err(|_| Minted::Unavailable)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&secrets, fs::Permissions::from_mode(0o700))
+            .map_err(|_| Minted::Unavailable)?;
+    }
+    let _init = hold(
+        &secrets.join(KEY_INIT_LOCK_FILE_NAME),
+        KEY_INIT_LOCK_TIMEOUT,
+    )?;
+    store.ensure_ready().map_err(|_| Minted::Unavailable)
 }
 
 fn locked_mint(home: &Path) -> Minted {
     let key_ref = build_scoped_secret_ref(POLICY_INTEGRITY_KEY_REF, home);
     let mut store = EncryptedFileSecretStore::new(home);
+    if let Err(state) = store_ready(home, &mut store) {
+        return state;
+    }
     if store.get_secret(&key_ref).is_some() {
         return Minted::Present;
     }

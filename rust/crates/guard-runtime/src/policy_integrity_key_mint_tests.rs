@@ -85,6 +85,31 @@ fn a_held_mint_lock_answers_busy() {
 
 #[cfg(unix)]
 #[test]
+fn the_store_key_is_created_under_the_python_init_lock() {
+    let home = home("init");
+    let resolved = fs::canonicalize(&home.0).expect("resolved");
+    let secrets = resolved.join(SECRETS_DIRECTORY);
+    fs::create_dir_all(&secrets).expect("secrets");
+    let init = lock_options()
+        .open(secrets.join(KEY_INIT_LOCK_FILE_NAME))
+        .expect("init lock");
+    fs2::FileExt::lock_exclusive(&init).expect("held");
+    let path = home.0.clone();
+    let mint = std::thread::spawn(move || mint_once(&path));
+    std::thread::sleep(Duration::from_millis(200));
+    let key_path = secrets.join("key.bin");
+    assert!(!key_path.exists(), "no store key while Python initializes");
+    // Python's initializer writes its own key, then releases the lock.
+    let python_key = crate::encrypted_secret_store::b64url_encode(&[3u8; 32]);
+    fs::write(&key_path, &python_key).expect("python key");
+    fs2::FileExt::unlock(&init).expect("released");
+    assert_eq!(mint.join().expect("mint thread"), Minted::Present);
+    assert_eq!(fs::read_to_string(&key_path).expect("key"), python_key);
+    assert!(stored(&home.0).is_some());
+}
+
+#[cfg(unix)]
+#[test]
 fn the_mint_lock_is_owner_only() {
     use std::os::unix::fs::PermissionsExt;
     let home = home("mode");
