@@ -34,7 +34,8 @@ class OutputFilter:
     chain in `stages` (see `contained_output_filters`), else "all".
 
     The report is `; echo "<label>$?"` in `status_label`, which prints the
-    label and the status itself, or the arms of `; echo <label>`,
+    label and the status itself -- the core's own when `status_from_core` says
+    the label was written `${PIPESTATUS[0]}` --, or the arms of `; echo <label>`,
     `&& echo <label>`, `|| echo <label>` and `&& echo <label> || echo <label>`
     in `success_label` and `failure_label`, of which the shell reaches the one
     that matches how the run ended.
@@ -44,6 +45,7 @@ class OutputFilter:
     count: int
     merge_stderr: bool
     status_label: str | None = None
+    status_from_core: bool = False
     success_label: str | None = None
     failure_label: str | None = None
     stages: tuple[Stage, ...] = ()
@@ -69,7 +71,9 @@ class OutputFilter:
         """
         ended = self.ended(exit_code)
         if self.status_label is not None:
-            return f"{self.status_label}{ended}\n"
+            # `${PIPESTATUS[0]}` names the first stage of the pipeline, which
+            # is the core, not the status the filters behind it left.
+            return f"{self.status_label}{exit_code if self.status_from_core else ended}\n"
         label = self.success_label if ended == 0 else self.failure_label
         return None if label is None else f"{label}\n"
 
@@ -116,6 +120,7 @@ def _output_filter(encoded: object) -> OutputFilter | None:
         count,
         bool(fields["merge_stderr"]),
         status_label=None if label is None else str(label),
+        status_from_core=bool(fields.get("status_from_core")),
         success_label=None if success is None else str(success),
         failure_label=None if failure is None else str(failure),
         stages=tuple(tuple(str(word) for word in _words(stage)) for stage in stages),
