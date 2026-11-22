@@ -67,6 +67,7 @@ fn an_approved_forward_is_recorded_as_the_proxy_records_it() {
         remember: true,
         signals: vec!["Installs a package.".to_owned()],
         risk_categories: vec!["package_install".to_owned()],
+        generation: Some(1),
     };
     let mut record = json!({
         "decision_source": "policy-allow",
@@ -86,6 +87,7 @@ fn an_approved_forward_is_recorded_as_the_proxy_records_it() {
         remember: false,
         signals: Vec::new(),
         risk_categories: Vec::new(),
+        generation: None,
     };
     let mut record = json!({
         "decision_source": "policy-allow",

@@ -108,8 +108,12 @@ static WRITER: Mutex<()> = Mutex::new(());
 /// Whether the resident writes this queued record's receipt itself.
 pub(crate) fn is_plain(record: &Value) -> bool {
     if record.get(remember::KEY).is_some() {
-        return remember::stripped(record).is_some_and(|forward| plain(&forward).is_some());
+        return remember::stripped(record).is_some_and(|forward| plain_either(&forward));
     }
+    plain_either(record)
+}
+
+fn plain_either(record: &Value) -> bool {
     plain(record).is_some() || package::plain(record).is_some()
 }
 
@@ -183,6 +187,14 @@ fn write_with_notices(
     let mut notices = Vec::new();
     let unwritten = {
         let _writer = WRITER.lock().unwrap_or_else(PoisonError::into_inner);
+        // Before the gate, in the daemon policy writer's order. A lock that
+        // stays taken costs the memory of each remembered record, never its
+        // receipt.
+        let generation = composed
+            .iter()
+            .any(|(_, _, _, remembered)| remembered.is_some())
+            .then(|| remember::lock(guard_home))
+            .flatten();
         let Ok(_gate) = hold_storage_gate(home, Duration::from_millis(timeout_ms.into())) else {
             return records_of(composed);
         };
@@ -193,8 +205,8 @@ fn write_with_notices(
                 // Before the receipt, as `_allow_and_forward` saves it. A
                 // record handed back after this point no longer remembers, so
                 // a retry never saves the allow twice.
-                if let Some(now) = remembered {
-                    remember::save(guard_home, &record, &now, |args| {
+                if let (Some(now), Some(held)) = (remembered, generation.as_ref()) {
+                    remember::save(guard_home, &record, &now, held, |args| {
                         evaluate(guard_home, busy_timeout_ms, remember::METHOD, args)
                     });
                 }

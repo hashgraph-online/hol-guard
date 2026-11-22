@@ -90,6 +90,20 @@ impl Saved<'_> {
     pub(super) fn into_audit(self) -> Vec<AuditEvent> {
         self.audit.into_inner()
     }
+    /// Read the rows at the generation the relay's own remembered allow was
+    /// just finalized at, when the daemon has not republished it yet. That
+    /// write re-signed every local row at its generation, so the published
+    /// one would read them all as a rollback. A published generation already
+    /// past it is kept: a later write re-signed the rows again.
+    pub(super) fn read_after_own_write(&mut self, generation: u64) {
+        let published = self
+            .integrity_state
+            .get("generation")
+            .and_then(Value::as_u64);
+        if published.is_none_or(|published| published < generation) {
+            self.integrity_state["generation"] = Value::from(generation);
+        }
+    }
 }
 
 /// `None` when the store holds no saved row, so every lookup misses; the

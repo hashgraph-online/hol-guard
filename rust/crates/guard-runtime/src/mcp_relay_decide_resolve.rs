@@ -41,7 +41,7 @@ pub(super) fn resolve(
         .clone()
         .ok_or(BINDING_INCOMPLETE)?;
     let view = view::bound_harness_view(binding, &request.build.harness)?;
-    let saved = match connection {
+    let mut saved = match connection {
         Some(connection) => store::saved(
             connection,
             binding,
@@ -50,6 +50,14 @@ pub(super) fn resolve(
         )?,
         None => None,
     };
+    let own_write = request
+        .inline
+        .remembered
+        .as_ref()
+        .and_then(|remembered| remembered.generation);
+    if let (Some(saved), Some(generation)) = (saved.as_mut(), own_write) {
+        saved.read_after_own_write(generation);
+    }
     let resolved = resolve_saved(
         request,
         admitted,
