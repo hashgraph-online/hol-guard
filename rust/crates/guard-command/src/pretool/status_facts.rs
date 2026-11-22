@@ -221,10 +221,15 @@ fn number(word: &str) -> bool {
 }
 
 /// An option value: a plain word, never a path and never another option.
+///
+/// A leading `-` or `+` is refused. Several of these programs read a `+`
+/// word as an option of their own, so a word spelled that way cannot be
+/// treated as the interval or the keyword the screen expects.
 fn keyword(word: &str) -> bool {
     !word.is_empty()
         && word.len() <= 64
         && !word.starts_with('-')
+        && !word.starts_with('+')
         && word.chars().all(|character| {
             character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.' | ',' | '+')
         })

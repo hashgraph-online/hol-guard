@@ -57,6 +57,8 @@ fn a_spelling_that_opens_a_file_takes_the_terminal_or_asks_about_a_unit_stays_re
         "w --output report.txt",
         "vm_stat -o counters.txt",
         "iostat -o /var/log/io.out",
+        "iostat +f samples -p ALL",
+        "mpstat +d 2",
         "vmstat -f ../operator/.ssh/config",
         "mpstat --outfile=report.txt",
         "systemctl status web-api.service",
