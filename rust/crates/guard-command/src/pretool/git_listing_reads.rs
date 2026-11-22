@@ -36,7 +36,19 @@ const SHORTLOG_FLAGS: [&str; 10] = [
 /// one does. `--group` reaches the same expansion through
 /// `--group=format:<format>`, so [`shortlog_value`] admits only the groupings
 /// that name a field of the commit itself.
-const SHORTLOG_VALUES: [&str; 2] = ["--group", "--max-count"];
+///
+/// The four date bounds narrow the same history the command already counts.
+/// Git reads their value with its own date parser, which resolves a date or
+/// a relative phrase and never opens a file, so the value cannot name one.
+/// `--after` is git's spelling of `--since` and `--before` of `--until`.
+const SHORTLOG_VALUES: [&str; 6] = [
+    "--group",
+    "--max-count",
+    "--since",
+    "--after",
+    "--until",
+    "--before",
+];
 
 /// Whether the value one of those options carries is a proven read.
 fn shortlog_value(name: &str, value: &str) -> bool {
@@ -46,8 +58,23 @@ fn shortlog_value(name: &str, value: &str) -> bool {
                 || value.strip_prefix("trailer:").is_some_and(trailer_token)
         }
         "--max-count" => !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
+        "--since" | "--after" | "--until" | "--before" => date_bound(value),
         _ => false,
     }
+}
+
+/// Whether a date bound is written the way git's date parser reads one: a
+/// calendar date, a clock time, a zone offset or a relative phrase such as
+/// `2.weeks` or `3 days ago`. The punctuation a date uses is admitted and
+/// nothing else, so a value carrying a format expansion, a shell operator or
+/// an option of its own is not a date and keeps its review.
+fn date_bound(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with('-')
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(byte, b' ' | b'-' | b'/' | b':' | b'.' | b',' | b'+')
+        })
 }
 
 /// Whether a `trailer:` grouping names a trailer the way a commit message
@@ -417,6 +444,10 @@ fn shortlog_read_form(rest: &[String]) -> bool {
     }
     true
 }
+
+#[cfg(test)]
+#[path = "git_listing_reads_tests.rs"]
+mod tests;
 
 fn check_ignore_read_form(rest: &[String]) -> bool {
     let mut names = 0_usize;

@@ -45645,6 +45645,23 @@
       "expect": "allow"
     },
     {
+      "id": "git-shortlog-author-counts-since",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git shortlog -sn --since=2.weeks"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "git-shortlog-commit-limit-with-revision",
       "fix_area": "git",
       "harnesses": [
