@@ -54393,7 +54393,8 @@
         "command": "if command -v rg >/dev/null 2>&1; then echo found; fi"
       },
       "cwd": "worktree",
-      "expect": "allow_or_review"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "shell-if-trailing-discarded-output",

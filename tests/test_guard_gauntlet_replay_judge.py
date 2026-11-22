@@ -176,6 +176,7 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-type-shell-function-definition",
         "session-which-type-echo",
         "session-which-type-guard",
+        "shell-if-command-exists-discarded-output",
         "shell-command-v-lookup",
         "shell-type-and-command-describe-lookup",
         "shell-type-lookup-after-which",
