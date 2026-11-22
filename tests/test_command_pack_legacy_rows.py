@@ -51,6 +51,13 @@ def test_evidence_rows_hand_on_every_envelope():
     assert rows.next_snapshot == env("next")
 
 
+@pytest.mark.parametrize("revision", ["5", 5.0, True, -1, 2**63, [5]])
+def test_an_unusable_anchor_revision_selects_no_pending_row(revision):
+    store, calls = answered(present())
+    legacy_rows.evidence_rows(store, revision)
+    assert calls == [(EVIDENCE, {"observed_revision": None})]
+
+
 def test_an_empty_store_has_no_evidence():
     store, _ = answered(present())
     rows = legacy_rows.evidence_rows(store, None)
