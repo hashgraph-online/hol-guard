@@ -108,8 +108,12 @@ static WRITER: Mutex<()> = Mutex::new(());
 /// Whether the resident writes this queued record's receipt itself.
 pub(crate) fn is_plain(record: &Value) -> bool {
     if record.get(remember::KEY).is_some() {
-        return remember::stripped(record).is_some_and(|forward| plain(&forward).is_some());
+        return remember::stripped(record).is_some_and(|forward| plain_either(&forward));
     }
+    plain_either(record)
+}
+
+fn plain_either(record: &Value) -> bool {
     plain(record).is_some() || package::plain(record).is_some()
 }
 
