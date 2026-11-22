@@ -6,23 +6,12 @@ remain authoritative; the existing SQL transaction records only non-replay state
 
 import json
 
-from ..store_sync_payload_snapshot import SyncPayloadRowUnreadableError
 from .policy_errors import PolicyToolError
 
 
 def request_recovery_recorded(store, request_id):
-    """Whether recovery already recorded ``request_id``, read by the native store.
-
-    A row that is not JSON still counts as recorded, so a damaged marker keeps
-    refusing a second recovery. The check inside the apply transaction stays on
-    that transaction's connection and remains the authoritative one.
-    """
-    key = _key(request_id)
-    try:
-        rows = store.sync_payload_snapshot(key)
-    except SyncPayloadRowUnreadableError:
-        return True
-    return rows[key] is not None
+    with store._connect() as connection:
+        return request_recovery_recorded_on_connection(connection, request_id)
 
 
 def request_recovery_recorded_on_connection(connection, request_id):
