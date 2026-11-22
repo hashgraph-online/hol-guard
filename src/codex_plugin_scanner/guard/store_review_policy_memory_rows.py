@@ -40,7 +40,11 @@ class ReviewPolicyMemoryRows:
         if not isinstance(answer, dict) or set(answer) != _ANSWER_FIELDS:
             raise RuntimeError("native review_policy_memory_rows returned no answer")
         unreadable = answer["unreadable"]
-        if not isinstance(unreadable, list) or not set(unreadable) <= _ROLES:
+        if (
+            not isinstance(unreadable, list)
+            or not all(isinstance(role, str) for role in unreadable)
+            or not set(unreadable) <= _ROLES
+        ):
             raise RuntimeError("native review_policy_memory_rows returned no answer")
         if unreadable:
             raise ReviewPolicyMemoryRowUnreadableError(f"review_policy_memory_unreadable:{','.join(unreadable)}")
