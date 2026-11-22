@@ -79,8 +79,44 @@ fn a_held_mint_lock_answers_busy() {
         .join()
         .expect("mint thread");
     assert_eq!(state, Minted::Busy);
-    assert!(started.elapsed() >= MINT_LOCK_TIMEOUT);
+    assert!(started.elapsed() >= MINT_LOCK_BUDGET);
     assert_eq!(stored(&home.0), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn both_lock_waits_share_one_budget() {
+    let home = home("budget");
+    let resolved = fs::canonicalize(&home.0).expect("resolved");
+    let secrets = resolved.join(SECRETS_DIRECTORY);
+    fs::create_dir_all(&secrets).expect("secrets");
+    let init = lock_options()
+        .open(secrets.join(KEY_INIT_LOCK_FILE_NAME))
+        .expect("init lock");
+    fs2::FileExt::lock_exclusive(&init).expect("held");
+    let path = home.0.clone();
+    let started = Instant::now();
+    let state = std::thread::spawn(move || mint_once(&path))
+        .join()
+        .expect("mint thread");
+    assert_eq!(state, Minted::Busy);
+    assert!(started.elapsed() < MINT_LOCK_BUDGET + Duration::from_secs(2));
+    assert!(!secrets.join(STORE_KEY_FILE_NAME).exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn an_empty_store_key_is_never_replaced() {
+    for contents in [&b""[..], &b"  \n"[..]] {
+        let home = home("empty");
+        let resolved = fs::canonicalize(&home.0).expect("resolved");
+        let secrets = resolved.join(SECRETS_DIRECTORY);
+        fs::create_dir_all(&secrets).expect("secrets");
+        let key_path = secrets.join(STORE_KEY_FILE_NAME);
+        fs::write(&key_path, contents).expect("empty key");
+        assert_eq!(mint_once(&home.0), Minted::Unavailable);
+        assert_eq!(fs::read(&key_path).expect("key"), contents);
+    }
 }
 
 #[cfg(unix)]
@@ -97,7 +133,7 @@ fn the_store_key_is_created_under_the_python_init_lock() {
     let path = home.0.clone();
     let mint = std::thread::spawn(move || mint_once(&path));
     std::thread::sleep(Duration::from_millis(200));
-    let key_path = secrets.join("key.bin");
+    let key_path = secrets.join(STORE_KEY_FILE_NAME);
     assert!(!key_path.exists(), "no store key while Python initializes");
     // Python's initializer writes its own key, then releases the lock.
     let python_key = crate::encrypted_secret_store::b64url_encode(&[3u8; 32]);

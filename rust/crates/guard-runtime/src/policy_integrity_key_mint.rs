@@ -37,13 +37,15 @@ use crate::policy_integrity_resolver::{build_scoped_secret_ref, POLICY_INTEGRITY
 pub(crate) const FEATURE: &str = "native-policy-integrity-key-mint-v1";
 const COMMAND: &str = "policy-integrity-key-mint";
 const MINT_LOCK_FILE_NAME: &str = ".policy-integrity-key-mint.lock";
-const MINT_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
+/// One budget for both lock waits (the mint lock and the store's init lock),
+/// kept well inside the caller's 15 s deadline for the whole request.
+const MINT_LOCK_BUDGET: Duration = Duration::from_secs(4);
 const MINT_LOCK_RETRY: Duration = Duration::from_millis(10);
 /// The lock `EncryptedFileSecretStore._ensure_ready` (`store_base.py`) holds
-/// while it creates `secrets/key.bin`, and its 30 s budget.
+/// while it creates `secrets/key.bin`.
 const SECRETS_DIRECTORY: &str = "secrets";
 const KEY_INIT_LOCK_FILE_NAME: &str = ".key-init.lock";
-const KEY_INIT_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
+const STORE_KEY_FILE_NAME: &str = "key.bin";
 const MAX_REQUEST_BYTES: u64 = 8 * 1024;
 const KEY_BYTES: usize = 32;
 /// `NATIVE_RUNTIME_STATE_DIRECTORY` (`native_policy_snapshot_constants.py`).
@@ -138,11 +140,10 @@ impl Drop for Held {
     }
 }
 
-/// Take `path` within `timeout`: `Busy` when another holder keeps it,
+/// Take `path` before `deadline`: `Busy` when another holder keeps it,
 /// `Unavailable` when the lock file cannot be opened.
-fn hold(path: &Path, timeout: Duration) -> Result<Held, Minted> {
+fn hold(path: &Path, deadline: Instant) -> Result<Held, Minted> {
     let lock = lock_options().open(path).map_err(|_| Minted::Unavailable)?;
-    let deadline = Instant::now() + timeout;
     while fs2::FileExt::try_lock_exclusive(&lock).is_err() {
         if Instant::now() >= deadline {
             return Err(Minted::Busy);
@@ -161,8 +162,9 @@ pub(crate) fn mint_once(guard_home: &Path) -> Minted {
     let Some(home) = resolved_home(guard_home) else {
         return Minted::Unavailable;
     };
-    match hold(&home.join(MINT_LOCK_FILE_NAME), MINT_LOCK_TIMEOUT) {
-        Ok(_mint) => locked_mint(&home),
+    let deadline = Instant::now() + MINT_LOCK_BUDGET;
+    match hold(&home.join(MINT_LOCK_FILE_NAME), deadline) {
+        Ok(_mint) => locked_mint(&home, deadline),
         Err(state) => state,
     }
 }
@@ -170,7 +172,15 @@ pub(crate) fn mint_once(guard_home: &Path) -> Minted {
 /// Load or create the store's encryption key under the lock Python's store
 /// holds for it, so a fresh home never gets two `key.bin` files, one of which
 /// would leave the other's secrets unreadable.
-fn store_ready(home: &Path, store: &mut EncryptedFileSecretStore) -> Result<(), Minted> {
+///
+/// A `key.bin` that exists but holds no key is a damaged vault Python refuses
+/// to read. It is left as it is and the mint answers `unavailable`, since
+/// replacing it would orphan every secret encrypted under the lost key.
+fn store_ready(
+    home: &Path,
+    store: &mut EncryptedFileSecretStore,
+    deadline: Instant,
+) -> Result<(), Minted> {
     let secrets = home.join(SECRETS_DIRECTORY);
     fs::create_dir_all(&secrets).map_err(|_| Minted::Unavailable)?;
     #[cfg(unix)]
@@ -179,17 +189,20 @@ fn store_ready(home: &Path, store: &mut EncryptedFileSecretStore) -> Result<(), 
         fs::set_permissions(&secrets, fs::Permissions::from_mode(0o700))
             .map_err(|_| Minted::Unavailable)?;
     }
-    let _init = hold(
-        &secrets.join(KEY_INIT_LOCK_FILE_NAME),
-        KEY_INIT_LOCK_TIMEOUT,
-    )?;
+    let _init = hold(&secrets.join(KEY_INIT_LOCK_FILE_NAME), deadline)?;
+    match fs::read(secrets.join(STORE_KEY_FILE_NAME)) {
+        Ok(bytes) if bytes.trim_ascii().is_empty() => return Err(Minted::Unavailable),
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(Minted::Unavailable),
+    }
     store.ensure_ready().map_err(|_| Minted::Unavailable)
 }
 
-fn locked_mint(home: &Path) -> Minted {
+fn locked_mint(home: &Path, deadline: Instant) -> Minted {
     let key_ref = build_scoped_secret_ref(POLICY_INTEGRITY_KEY_REF, home);
     let mut store = EncryptedFileSecretStore::new(home);
-    if let Err(state) = store_ready(home, &mut store) {
+    if let Err(state) = store_ready(home, &mut store, deadline) {
         return state;
     }
     if store.get_secret(&key_ref).is_some() {

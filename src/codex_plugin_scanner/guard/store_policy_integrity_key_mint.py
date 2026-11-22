@@ -16,7 +16,7 @@ _MINT_LOCK_RETRY_SECONDS = 0.01
 NATIVE_MINT_FEATURE = "native-policy-integrity-key-mint-v1"
 _NATIVE_MINT_COMMAND = "policy-integrity-key-mint"
 _NATIVE_MINT_STATES = frozenset({"present", "armed", "busy", "unavailable"})
-# The native mint waits up to ten seconds for the lock, like this one.
+# The native mint gives its two lock waits one four-second budget, inside this deadline.
 _NATIVE_MINT_TIMEOUT_SECONDS = 15.0
 _NATIVE_MINT_OUTPUT_LIMIT = 4096
 
