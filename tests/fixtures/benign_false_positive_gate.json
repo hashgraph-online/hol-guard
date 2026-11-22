@@ -5990,6 +5990,23 @@
       "contained_ok": true
     },
     {
+      "id": "python-version-filter-after-interpreter-lookup-across-lines",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "which python3;\n python3 -c 'import sys; print(sys.version)'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "python-version-filter-after-stderr-merge",
       "fix_area": "shell",
       "harnesses": [
@@ -15890,6 +15907,40 @@
       "expect": "allow"
     },
     {
+      "id": "git-cd-fork-status-then-log-across-lines",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && git status --short;\n git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-cd-fork-log-piped-across-lines",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && git log --oneline -3 |\n  head -2"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "git-cd-fork-piped-log-then-status",
       "fix_area": "shell",
       "harnesses": [
@@ -20348,6 +20399,23 @@
       "tool": "shell",
       "tool_input": {
         "command": "git log --oneline -1; git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-git-compound-log-status-across-lines",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -1;\n git status --short"
       },
       "cwd": "worktree",
       "expect": "allow"
