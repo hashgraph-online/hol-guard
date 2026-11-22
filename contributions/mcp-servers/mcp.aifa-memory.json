@@ -29,7 +29,10 @@
   "riskClasses": [
     "external-network-read",
     "external-account-read",
-    "external-shared-state-write"
+    "external-shared-state-write",
+    "external-payment-request",
+    "external-payouts-and-refunds",
+    "external-webhook-registration"
   ],
   "tools": [
     {
