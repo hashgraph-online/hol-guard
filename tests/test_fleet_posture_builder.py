@@ -608,15 +608,15 @@ def test_hash_key_is_read_once_per_build(
     _set_inventory(store, monkeypatch, [_row(f"item-{index}") for index in range(50)])
     _set_receipts(monkeypatch, store, {})
     reads: list[str] = []
-    original = store.get_sync_payload
+    original = store.fleet_posture_hash_key
 
-    def counting(key: str) -> object:
-        reads.append(key)
-        return original(key)
+    def counting(*, now: str) -> str:
+        reads.append(now)
+        return original(now=now)
 
-    monkeypatch.setattr(store, "get_sync_payload", counting)
+    monkeypatch.setattr(store, "fleet_posture_hash_key", counting)
     _build(store, context, [])
-    assert reads.count(fp.HASH_KEY_STATE_KEY) == 1
+    assert len(reads) == 1
 
 
 def test_muse_inventory_row_is_reported_and_schema_valid(
