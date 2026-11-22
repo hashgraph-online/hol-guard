@@ -144,6 +144,9 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "command_queue_lane_rows"
         // Two rows read as one consent pair.
         | "exact_cloud_review_state" => Kind::Snapshot,
+        // The memory policy version and rule registry a signed memory
+        // bundle is checked and planned against, as one view.
+        "review_policy_memory_rows" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
