@@ -30,23 +30,28 @@ fn home(name: &str) -> Home {
 struct FakeKeyring {
     items: RefCell<HashMap<String, String>>,
     unreadable: bool,
+    unreadable_after_write: bool,
     unwritable: bool,
+    stalled: bool,
     calls: RefCell<usize>,
 }
 
 impl Primary for FakeKeyring {
     fn get(&self, secret_id: &str) -> Result<Option<String>, ()> {
         *self.calls.borrow_mut() += 1;
-        if self.unreadable {
+        if self.unreadable || (self.unreadable_after_write && !self.items.borrow().is_empty()) {
             return Err(());
         }
         Ok(self.items.borrow().get(secret_id).cloned())
     }
 
-    fn set(&self, secret_id: &str, value: &str) -> Result<(), ()> {
+    fn set(&self, secret_id: &str, value: &str) -> Result<(), WriteFailure> {
         *self.calls.borrow_mut() += 1;
         if self.unwritable {
-            return Err(());
+            return Err(WriteFailure::Refused);
+        }
+        if self.stalled {
+            return Err(WriteFailure::Unsettled);
         }
         self.items
             .borrow_mut()
@@ -109,6 +114,55 @@ fn an_unreadable_keyring_mints_nothing() {
     };
     assert_eq!(mint_with(&home.0, &keyring), Minted::Unavailable);
     assert_eq!(vault(&home.0).get_secret(&key_ref(&home.0)), None);
+}
+
+/// A vault whose `secrets` path is a regular file: every write fails, even
+/// for root, and every read finds nothing.
+fn broken_vault(home: &Path) -> EncryptedFileSecretStore {
+    fs::write(home.join("secrets"), b"").expect("secrets file");
+    EncryptedFileSecretStore::new(home)
+}
+
+#[cfg(unix)]
+#[test]
+fn a_written_key_the_keyring_cannot_read_back_is_busy() {
+    let home = home("unconfirmed");
+    let keyring = FakeKeyring {
+        unreadable_after_write: true,
+        ..FakeKeyring::default()
+    };
+    let mut vault = broken_vault(&home.0);
+    let minted = mint(&home.0, &key_ref(&home.0), &mut vault, &keyring);
+    assert_eq!(minted, Minted::Busy);
+    let written = keyring.items.borrow().get(&key_ref(&home.0)).cloned();
+    assert!(written.is_some());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_timed_out_keyring_write_with_no_vault_copy_is_busy() {
+    let home = home("pending");
+    let keyring = FakeKeyring {
+        stalled: true,
+        ..FakeKeyring::default()
+    };
+    let mut vault = broken_vault(&home.0);
+    let minted = mint(&home.0, &key_ref(&home.0), &mut vault, &keyring);
+    assert_eq!(minted, Minted::Busy);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_refused_keyring_write_with_no_vault_copy_leaves_python_to_mint() {
+    let home = home("refused");
+    let keyring = FakeKeyring {
+        unwritable: true,
+        ..FakeKeyring::default()
+    };
+    let mut vault = broken_vault(&home.0);
+    let minted = mint(&home.0, &key_ref(&home.0), &mut vault, &keyring);
+    assert_eq!(minted, Minted::Unavailable);
+    assert!(keyring.items.borrow().is_empty());
 }
 
 #[cfg(unix)]

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -142,7 +143,7 @@ def test_windows_native_environment_uses_the_interpreter_crt_without_user_path(
     runtime_dir = tmp_path / "native"
     runtime_dir.mkdir()
     monkeypatch.setattr(native_runtime_module.os, "name", "nt")
-    monkeypatch.setattr(native_runtime_module.sys, "base_prefix", str(prefix))
+    monkeypatch.setattr(sys, "base_prefix", str(prefix))
     monkeypatch.setattr(
         native_runtime_module,
         "_bundled_runtime_candidate",
