@@ -28,6 +28,9 @@
 //!   version exists, so the probe reaches the network.
 //! - `bazel`, `gradle` and `mvn`: each reads workspace launcher configuration
 //!   and starts a long-lived server or JVM before it answers.
+//! - `aws --version`: the CLI builds its driver before it parses argv, and
+//!   that step imports the Python modules named in the `[plugins]` section of
+//!   `~/.aws/config`, so a startup file can run code first.
 //! - `openssl version`: libcrypto initialises from a configuration file that
 //!   can activate providers, and activating one loads a shared library.
 //! - `mysql` and `mysqldump`: their banner is printed by the same startup
@@ -82,7 +85,7 @@ fn single_flag_probe(basename: &str, flag: &str) -> bool {
         // Build drivers and archivers: the banner is printed from the option
         // loop, before a makefile, build description or archive is opened.
         "make" | "cmake" | "ninja" | "meson" | "tar" | "gzip" | "bzip2" | "xz" | "zstd"
-        | "shellcheck" | "shfmt" | "yq" | "pandoc" | "awk" | "sed" | "grep" | "aws" => long,
+        | "shellcheck" | "shfmt" | "yq" | "pandoc" | "awk" | "sed" | "grep" => long,
         // The shell answers the version question in its first pass over argv,
         // before it opens a database or runs a startup file.
         "sqlite3" => long || flag == "-version",
@@ -157,7 +160,6 @@ mod tests {
             ("awk", "--version"),
             ("sed", "--version"),
             ("grep", "--version"),
-            ("aws", "--version"),
             ("sqlite3", "--version"),
             ("sqlite3", "-version"),
             ("ffmpeg", "-version"),
@@ -219,6 +221,7 @@ mod tests {
             ("gradle", vec!["--version"]),
             ("mvn", vec!["--version"]),
             ("openssl", vec!["version"]),
+            ("aws", vec!["--version"]),
             // `-v` is the verbose flag on the archivers, and the FFmpeg tools
             // do not know the long spelling.
             ("tar", vec!["-v"]),

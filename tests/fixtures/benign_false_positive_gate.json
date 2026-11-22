@@ -4261,23 +4261,6 @@
       "expect": "allow"
     },
     {
-      "id": "aws-version-banner",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "aws --version"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
       "id": "neg-psql-host-flag",
       "fix_area": "shell",
       "harnesses": [
