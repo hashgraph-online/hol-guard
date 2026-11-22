@@ -378,6 +378,12 @@ fn an_mcp_save_acknowledges_the_reviewed_changes_and_keeps_tombstones() {
         .unwrap();
     // A tool name that is not a command path is reviewed by its slug.
     let read_file = crate::local_mcp_probe::slug("Read File");
+    connection
+        .execute(
+            "insert into local_cli_command values (?, ?, 'Read File', '', '', null, 3)",
+            (CLI, &read_file),
+        )
+        .unwrap();
     let revision = call(
         &connection,
         upsert_grant,
