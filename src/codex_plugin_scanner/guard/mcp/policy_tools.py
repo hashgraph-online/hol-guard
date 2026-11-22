@@ -9,6 +9,7 @@ transaction.  No CLI subprocess, no second schema, no remote transport.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Any
@@ -46,6 +47,7 @@ _now_iso = utc_now_iso
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.store import GuardStore
 
+_LOGGER = logging.getLogger(__name__)
 _POLICY_IMPORT_FLAG = "HOL_GUARD_POLICY_YAML_IMPORT"
 _MCP_POLICY_WRITE_FLAG = "HOL_GUARD_MCP_POLICY_WRITE"
 
@@ -172,6 +174,7 @@ def _read_policy_integrity_generation(store: GuardStore) -> int | None:
             return int(gen)
         return None
     except Exception:
+        _LOGGER.warning("policy integrity generation read failed; staging without a generation binding", exc_info=True)
         return None
 
 

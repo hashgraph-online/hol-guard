@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from codex_plugin_scanner.guard.mcp.policy_tools import _read_policy_integrity_generation
@@ -47,5 +49,8 @@ def test_the_stored_generation_is_decoded_as_before(answer: object, expected: in
     assert _read_policy_integrity_generation(_Store(answer)) == expected  # pyright: ignore[reportArgumentType]
 
 
-def test_a_failed_native_read_has_no_generation() -> None:
-    assert _read_policy_integrity_generation(_Store(error=RuntimeError("down"))) is None  # pyright: ignore[reportArgumentType]
+def test_a_failed_native_read_has_no_generation(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger="codex_plugin_scanner.guard.mcp.policy_tools"):
+        assert _read_policy_integrity_generation(_Store(error=RuntimeError("down"))) is None  # pyright: ignore[reportArgumentType]
+    assert "policy integrity generation read failed" in caplog.text
+    assert caplog.records[-1].exc_info is not None
