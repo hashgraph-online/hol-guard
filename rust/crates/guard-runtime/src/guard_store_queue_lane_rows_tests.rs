@@ -132,6 +132,44 @@ fn a_row_that_is_not_json_is_named_unreadable() {
 }
 
 #[test]
+fn a_damaged_cell_is_unreadable_without_hiding_another_lane() {
+    let connection = store();
+    connection
+        .execute(
+            "insert into sync_state values (?1, ?2, '2026-11-22T00:00:00Z')",
+            rusqlite::params![DRAIN, vec![0xff_u8, 0xfe, 0x7b]],
+        )
+        .unwrap();
+    put(
+        &connection,
+        OTHER,
+        r#"{"pending_result":{"job":{},"payload":{}}}"#,
+    );
+    assert_eq!(
+        read(&connection, json!([DRAIN, OTHER])).unwrap(),
+        json!({"lanes": [
+            lane_answer(DRAIN, false, false, false, 1),
+            lane_answer(OTHER, true, true, false, 1),
+        ]})
+    );
+}
+
+#[test]
+fn a_utf8_blob_cell_reads_like_text() {
+    let connection = store();
+    connection
+        .execute(
+            "insert into sync_state values (?1, ?2, '2026-11-22T00:00:00Z')",
+            rusqlite::params![MAIN, br#"{"exact_lease_batch_limit":4}"#.to_vec()],
+        )
+        .unwrap();
+    assert_eq!(
+        read(&connection, json!([MAIN])).unwrap(),
+        json!({"lanes": [lane_answer(MAIN, true, false, true, 4)]})
+    );
+}
+
+#[test]
 fn keys_outside_the_queue_lanes_and_bad_lists_are_refused() {
     let connection = store();
     for key in [

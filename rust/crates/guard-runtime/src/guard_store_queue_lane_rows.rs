@@ -7,19 +7,20 @@
 //! through `get_sync_payload` and judged it there. Here every named lane is
 //! read inside one deferred transaction and judged by the same rules:
 //!
-//! - a row whose text is not JSON is unreadable, as `get_sync_payload`
-//!   raised for it, and the caller decides what an unreadable lane means;
+//! - a row whose bytes are not UTF-8 JSON is unreadable, as `get_sync_payload`
+//!   raised for it, and the caller decides what an unreadable lane means; a
+//!   damaged cell is judged on its own lane and never fails the other lanes;
 //! - a row that is not an object holds no pending result and no limit;
 //! - a pending result is any object under `pending_result`;
 //! - the lease batch limit is a whole number of at least one under
 //!   `exact_lease_batch_limit`, else one.
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
 
 use crate::command_queue_repair::lane_state_key;
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{query_one, text, value_error, StoreError, StoreResult};
+use crate::guard_store_db::{value_error, StoreError, StoreResult};
 
 /// The most lanes one call may name: the main lane and its drain workers fit
 /// many times over.
@@ -64,17 +65,22 @@ fn lane_rows(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
 
 /// One lane's answer.
 fn lane(connection: &Connection, key: &str) -> StoreResult<Value> {
-    let row = query_one(
-        connection,
-        "select payload_json from sync_state where state_key = ?",
-        &[Value::from(key)],
-    )?;
-    let parsed = row.map(|row| serde_json::from_str::<Value>(text(&row, "payload_json")));
-    let (readable, state) = match parsed {
+    // The cell is read as bytes so a BLOB or invalid UTF-8 payload is judged
+    // here, as unreadable, rather than failing every lane in the snapshot.
+    let row: Option<Option<Vec<u8>>> = connection
+        .query_row(
+            "select cast(payload_json as blob) from sync_state where state_key = ?1",
+            [key],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let (readable, state) = match row {
         None => (true, Map::new()),
-        Some(Err(_)) => (false, Map::new()),
-        Some(Ok(Value::Object(state))) => (true, state),
-        Some(Ok(_)) => (true, Map::new()),
+        Some(bytes) => match bytes.and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok()) {
+            None => (false, Map::new()),
+            Some(Value::Object(state)) => (true, state),
+            Some(_) => (true, Map::new()),
+        },
     };
     Ok(json!({
         "state_key": key,

@@ -33,9 +33,11 @@ class CommandQueueLaneRow:
     def from_native(cls, answer: object, state_key: str) -> CommandQueueLaneRow:
         if not isinstance(answer, dict) or answer.get("state_key") != state_key:
             raise RuntimeError("native command_queue_lane_rows returned no answer")
+        # The native store already settles the limit; an answer without a
+        # whole number is a broken runtime, not a stored value to repair.
         limit = answer.get("exact_lease_batch_limit")
-        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-            limit = 1
+        if type(limit) is not int:
+            raise RuntimeError("native command_queue_lane_rows returned no lease limit")
         return cls(
             state_key=state_key,
             readable=answer.get("readable") is True,

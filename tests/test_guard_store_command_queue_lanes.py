@@ -69,3 +69,25 @@ def test_an_unparseable_drain_lane_does_not_hide_another_lanes_result(tmp_path: 
         assert command_queue_drain._lane_has_pending_result(store, 0, unreadable=True) is True
         assert command_queue_drain._lane_has_pending_result(store, 0) is False
     assert "drain state unreadable: slot=0 error=unparseable_row" in caplog.text
+
+
+def test_a_damaged_blob_lane_does_not_hide_another_lanes_result(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    broken = command_queue_drain.review_drain_lane(0).state_key
+    store.set_sync_payload(broken, {"state": "idle"}, _NOW)
+    store.set_sync_payload(
+        command_queue_drain.review_drain_lane(2).state_key,
+        {"state": "result_pending", "pending_result": {"job": {"id": "job-2"}, "payload": {}}},
+        _NOW,
+    )
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("update sync_state set payload_json = ? where state_key = ?", (b"\xff\xfe{", broken))
+
+    assert store.command_queue_lane_rows([broken]) == (CommandQueueLaneRow(broken, False, False, False, 1),)
+    assert command_queue_drain.review_drain_has_pending_result(store) is True
+
+
+def test_an_answer_without_a_whole_lease_limit_is_refused() -> None:
+    answer = {"state_key": _DRAIN, "readable": True, "exact_lease_batch_limit": True}
+    with pytest.raises(RuntimeError, match="no lease limit"):
+        CommandQueueLaneRow.from_native(answer, _DRAIN)
