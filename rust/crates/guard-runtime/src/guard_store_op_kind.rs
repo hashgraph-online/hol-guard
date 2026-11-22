@@ -245,6 +245,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "commit_fleet_posture_sent"
         | "record_fleet_posture_diagnostics"
         | "record_fleet_posture_runtimes"
+        | "fleet_posture_hash_key"
         | "rotate_installation_id"
         | "add_event"
         | "set_managed_install"
