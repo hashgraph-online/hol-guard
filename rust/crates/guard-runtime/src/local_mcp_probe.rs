@@ -172,7 +172,7 @@ fn tools(map: &Map<String, Value>) -> KindResult {
 /// `slug_local_cli_command_id`: a tool name that is already a command path is
 /// its own id; any other becomes a lower-case slug with a digest suffix, so a
 /// tool name never turns into an option id.
-fn slug(name: &str) -> String {
+pub(crate) fn slug(name: &str) -> String {
     let stripped = py_strip(name);
     if stripped != ROOT_COMMAND_ID && stripped != OTHER_COMMAND_ID && is_command_path(stripped) {
         return stripped.to_owned();
