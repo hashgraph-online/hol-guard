@@ -33,14 +33,21 @@ const SLOT_FIELDS: [&str; 5] = [
     "recorded_at",
 ];
 
+/// The schema marker, with a cell of the wrong storage type (a BLOB, say) read
+/// as null so the marker is classified as invalid instead of failing the read.
+const MARKER_SQL: &str =
+    "select case when typeof(version) = 'integer' then version end as version, \
+     case when typeof(checksum) = 'text' then checksum end as checksum \
+     from extension_control_schema_migration where singleton = 1";
+
+#[path = "guard_store_command_pack_baseline.rs"]
+mod command_pack_baseline;
 #[path = "guard_store_command_pack_legacy_evidence.rs"]
 mod command_pack_legacy_evidence;
 #[path = "guard_store_command_pack_pending.rs"]
 mod command_pack_pending;
 #[path = "guard_store_extension_control_head.rs"]
 mod extension_control_head;
-#[path = "guard_store_extension_control_migration_reads.rs"]
-mod extension_control_migration_reads;
 #[path = "guard_store_extension_control_snapshot.rs"]
 mod extension_control_snapshot;
 
@@ -49,7 +56,7 @@ pub(crate) fn handles(method: &str) -> bool {
         || command_pack_pending::handles(method)
         || command_pack_legacy_evidence::handles(method)
         || extension_control_head::handles(method)
-        || extension_control_migration_reads::handles(method)
+        || command_pack_baseline::handles(method)
         || matches!(
             method,
             "read_command_pack_activation" | "extension_control_schema_state"
@@ -65,9 +72,7 @@ pub(crate) fn dispatch(
         _ if extension_control_head::handles(method) => {
             extension_control_head::dispatch(connection, method, args)
         }
-        _ if extension_control_migration_reads::handles(method) => {
-            extension_control_migration_reads::dispatch(connection, method, args)
-        }
+        _ if command_pack_baseline::handles(method) => command_pack_baseline::dispatch(connection),
         _ if command_pack_legacy_evidence::handles(method) => {
             command_pack_legacy_evidence::dispatch(connection, method, args)
         }
@@ -91,11 +96,7 @@ fn schema_state(connection: &Connection) -> StoreResult<Value> {
             return Ok(state("missing"));
         }
     }
-    let marker = query_one(
-        connection,
-        "select version, checksum from extension_control_schema_migration where singleton = 1",
-        &[],
-    )?;
+    let marker = query_one(connection, MARKER_SQL, &[])?;
     Ok(match marker {
         None => state("missing"),
         Some(marker) if compatible_version(&marker).is_some() => state("compatible"),
@@ -107,11 +108,7 @@ fn read(connection: &Connection) -> StoreResult<Value> {
     if !table_exists(connection, "extension_control_schema_migration")? {
         return Ok(state("absent"));
     }
-    let marker = query_one(
-        connection,
-        "select version, checksum from extension_control_schema_migration where singleton = 1",
-        &[],
-    )?;
+    let marker = query_one(connection, MARKER_SQL, &[])?;
     let Some(version) = marker.as_ref().and_then(compatible_version) else {
         return Ok(refused("native_command_pack_schema_invalid"));
     };

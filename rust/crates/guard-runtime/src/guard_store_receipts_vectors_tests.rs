@@ -236,3 +236,64 @@ fn pending_rebuild_runs_before_deltas_and_total_reads() {
     assert_eq!(totals, (8, 6, 2));
     let _ = std::fs::remove_dir_all(&home);
 }
+
+/// A read answered in isolation for an older resident runs a pending rebuild
+/// inside a transaction that is rolled back: it answers from the rebuilt
+/// totals, leaves the marker and stored totals as they were, and reports no
+/// outbox generation.
+#[test]
+fn isolated_read_discards_the_pending_rebuild() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let scenario = &vectors["scenarios"][0];
+    let home = temp_home("receipt-isolated-rebuild");
+    build_database(&home.join("guard.db"), &vectors, scenario);
+    let connection = Connection::open(home.join("guard.db")).unwrap();
+    connection
+        .execute_batch(
+            "update guard_storage_maintenance set archived_receipts = 7 where singleton = 1; \
+             update receipt_aggregate_totals set total = 3, allowed = 2, blocked = 1 \
+               where totals_key = 'global'; \
+             insert or replace into sync_state (state_key, payload_json, updated_at) \
+               values ('receipt_rollups_rebuild_pending', '{}', '2026-04-02T00:00:00Z');",
+        )
+        .unwrap();
+    let state = |connection: &Connection| -> (i64, (i64, i64, i64)) {
+        let marker = connection
+            .query_row(
+                "select count(*) from sync_state where state_key = 'receipt_rollups_rebuild_pending'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let totals = connection
+            .query_row(
+                "select total, allowed, blocked from receipt_aggregate_totals where totals_key = 'global'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        (marker, totals)
+    };
+    let before = state(&connection);
+    drop(connection);
+    let request = GuardStoreRequestV1 {
+        schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
+        request_id: "vector".to_owned(),
+        store_path: home.join("guard.db").to_string_lossy().into_owned(),
+        guard_home: home.to_string_lossy().into_owned(),
+        method: "count_receipts".to_owned(),
+        source: vectors["source"].as_str().unwrap().to_owned(),
+        busy_timeout_ms: 5000,
+        args: Map::new(),
+    };
+    let bytes = crate::guard_store_op::evaluate_isolated_read(&request).unwrap();
+    let reply: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(reply["payload"], 7);
+    assert_eq!(reply["outbox_generation"], Value::Null);
+    let connection = Connection::open(home.join("guard.db")).unwrap();
+    assert_eq!(state(&connection), before);
+    assert_eq!(before.0, 1);
+    drop(connection);
+    let _ = std::fs::remove_dir_all(&home);
+}

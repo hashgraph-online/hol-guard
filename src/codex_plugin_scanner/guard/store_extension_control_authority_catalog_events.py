@@ -25,11 +25,6 @@ from .runtime.generated_command_catalog_provenance import catalog_provenance, is
 MIGRATED_EVENT: Final = "extension_control_authority_catalog_migrated"
 REGRESSED_EVENT: Final = "extension_control_authority_catalog_regressed"
 
-# The native store reads the migration events: it skips a payload that is not
-# a JSON object and bounds the writer scan to the newest events.
-_RECORDED: Final = "extension_control_migration_recorded"
-_WRITER: Final = "extension_control_catalog_writer_version"
-
 
 def recorded_writer_version(store: Any, catalog_digest: str) -> str | None:
     """The Guard version that produced the catalog ``catalog_digest`` names.
@@ -48,15 +43,18 @@ def recorded_writer_version(store: Any, catalog_digest: str) -> str | None:
     Only an event written by the install performing that migration carries a
     writer version. An event backfilled by a later reader describes a revision
     it found rather than one it wrote, and reading the reader's version as the
-    writer's would invent a downgrade on the next migration, or hide one.
+    writer's would invent a downgrade on the next migration, or hide one. The
+    native store scans the newest migration events and answers the version.
     """
 
-    answer = store._native_store_call(_WRITER, {"catalog_digest": catalog_digest})
-    version = answer.get("writer_version") if isinstance(answer, dict) and set(answer) == {"writer_version"} else ""
+    answer = store._native_store_call("catalog_recorded_writer_version", {"catalog_digest": catalog_digest})
+    if not isinstance(answer, dict) or set(answer) != {"writer_version"}:
+        raise sqlite3.DatabaseError("native catalog_recorded_writer_version returned no answer")
+    version = answer["writer_version"]
     if version is None:
         return None
     if not isinstance(version, str) or not version:
-        raise sqlite3.DatabaseError(f"native {_WRITER} returned no answer")
+        raise sqlite3.DatabaseError("native catalog_recorded_writer_version returned no answer")
     return version
 
 
@@ -85,18 +83,8 @@ def migration_provenance(
     return provenance, previous_writer_version if downgrade else None
 
 
-def already_recorded(store: Any, revision: int) -> bool:
-    """Whether this revision's migration event is already in the store."""
-
-    answer = store._native_store_call(_RECORDED, {"revision": revision})
-    recorded = answer.get("recorded") if isinstance(answer, dict) and set(answer) == {"recorded"} else None
-    if not isinstance(recorded, bool):
-        raise sqlite3.DatabaseError(f"native {_RECORDED} returned no answer")
-    return recorded
-
-
 __all__ = [
     "MIGRATED_EVENT",
     "REGRESSED_EVENT",
-    "already_recorded",
+    "recorded_writer_version",
 ]

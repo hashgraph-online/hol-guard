@@ -60,6 +60,8 @@ def test_a_present_slot_comes_back_as_stored():
         {"state": "missing"},
         {"state": "refused"},
         {"state": "refused", "code": "native_other"},
+        {"state": "refused", "code": []},
+        {"state": "refused", "code": {"native_command_pack_activation_missing": 1}},
         {"state": "refused", "code": "native_command_pack_activation_missing", "extra": 1},
         {"state": "present"},
         {"state": "present", "row": None},

@@ -1,4 +1,4 @@
-"""The catalog migration's event and baseline reads, answered by the native store."""
+"""The first pack activation's baseline check, answered by the native store."""
 
 from __future__ import annotations
 
@@ -9,13 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.catalog_delivery import activation_baseline
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
-from codex_plugin_scanner.guard.store_extension_control_authority_catalog_events import (
-    already_recorded,
-    recorded_writer_version,
-)
 
-RECORDED = "extension_control_migration_recorded"
-WRITER = "extension_control_catalog_writer_version"
 RETAINED = "command_pack_baseline_retained"
 METADATA = SimpleNamespace(program_digest="1" * 64, catalog_digest="2" * 64, trust_digest="3" * 64)
 
@@ -28,36 +22,6 @@ def answering(answer):
         return answer
 
     return SimpleNamespace(_native_store_call=call), calls
-
-
-@pytest.mark.parametrize("recorded", [True, False])
-def test_already_recorded_asks_for_the_revision(recorded):
-    store, calls = answering({"recorded": recorded})
-    assert already_recorded(store, 7) is recorded
-    assert calls == [(RECORDED, {"revision": 7})]
-
-
-@pytest.mark.parametrize("answer", [None, {}, {"recorded": 1}, {"recorded": True, "extra": 1}])
-def test_a_malformed_recorded_answer_is_refused(answer):
-    store, _ = answering(answer)
-    with pytest.raises(sqlite3.DatabaseError, match=RECORDED):
-        already_recorded(store, 7)
-
-
-@pytest.mark.parametrize("version", ["3.47.0", None])
-def test_the_writer_version_is_handed_on(version):
-    store, calls = answering({"writer_version": version})
-    assert recorded_writer_version(store, "catalog-x") == version
-    assert calls == [(WRITER, {"catalog_digest": "catalog-x"})]
-
-
-@pytest.mark.parametrize(
-    "answer", [None, {}, {"writer_version": ""}, {"writer_version": 3}, {"writer_version": "1", "x": 1}]
-)
-def test_a_malformed_writer_answer_is_refused(answer):
-    store, _ = answering(answer)
-    with pytest.raises(sqlite3.DatabaseError, match=WRITER):
-        recorded_writer_version(store, "catalog-x")
 
 
 def test_a_retained_baseline_is_not_sent_again():

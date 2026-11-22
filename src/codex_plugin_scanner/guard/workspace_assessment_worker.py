@@ -183,17 +183,14 @@ def observe(store: Any, *, clock: Callable[[], int] = now_ms) -> int:
             # Never probed: observing it now would record an unknown runtime and
             # queue a run, so it waits for a later poll's probe.
             continue
-        triggers = assessments.record_observation(
+        queued += assessments.observe(
             store,
             keys,
+            detector_set_digest=DETECTOR_SET_DIGEST,
+            now_ms=clock(),
             stat_digest=snapshot.snapshot_digest if snapshot is not None and available else UNAVAILABLE_STAT_DIGEST,
             feed_digest=assessment_context_digest(feed_digest, runtime_digest),
         )
-        for trigger in triggers:
-            if assessments.enqueue(
-                store, keys, trigger_kind=trigger, detector_set_digest=DETECTOR_SET_DIGEST, now_ms=clock()
-            ):
-                queued += 1
     return queued
 
 
