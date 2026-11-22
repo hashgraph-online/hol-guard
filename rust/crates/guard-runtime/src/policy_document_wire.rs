@@ -197,9 +197,8 @@ pub(super) fn operation(
             }
             let input: Value = serde_json::from_slice(&bytes).map_err(|_| INVALID)?;
             budget.check()?;
-            let result =
-                guard_command::policy_document::evaluate(&query, &input, budget.deadline())
-                    .map_err(|_| "native_request_context_policy_document_unavailable")?;
+            let result = super::query(&query, &input, budget.deadline())
+                .map_err(|_| "native_request_context_policy_document_unavailable")?;
             result_wire(result, home, budget)
         }
         "wire_read" => {

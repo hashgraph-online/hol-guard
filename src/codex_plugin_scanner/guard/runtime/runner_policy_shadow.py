@@ -1,85 +1,87 @@
-"""Which stored policy bundle shadows a v2 candidate, and what their comparison decides.
+"""The decisions a verified policy bundle activates, answered by the resident.
 
-Both answers come from the runner-authority resident; this module only shapes
-the requests and checks the replies.
+Rust compiles the candidate, picks the stored bundle that shadows it,
+materializes that shadow and compares the two in one ``bundle_candidate``
+policy-document query. This module only shapes the request and checks the
+reply.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
+from dataclasses import dataclass
 
 from ..models import PolicyDecision
-from ..native_runner_authority import native_runner_authority
-from .runner_native_authority import _malformed, _typed
+from ..native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION
+from ..native_policy_document import policy_query
 
-_SHADOW_KEYS = ("harness", "scope", "artifact_id", "artifact_hash", "workspace", "publisher", "action", "expires_at")
+_ANSWER_KEYS = frozenset({"decisions", "rejection", "rule_id", "mismatch"})
+_MISMATCH_KEYS = frozenset({"canonicalRows", "legacyRows", "reasonCodes", "status"})
 
 
-def policy_shadow_source(
-    candidate: Mapping[str, object],
+@dataclass(frozen=True, slots=True)
+class CandidateAnswer:
+    """What the resident decided about one policy-bundle candidate."""
+
+    decisions: list[PolicyDecision]
+    rejection: str | None
+    rule_id: str | None
+    mismatch: dict[str, object] | None
+
+
+_UNAVAILABLE = CandidateAnswer([], NATIVE_UNAVAILABLE_REJECTION, None, None)
+
+
+def policy_bundle_candidate(
+    policy_bundle: Mapping[str, object],
     *,
+    is_v2: bool,
+    device_id: str,
+    device_name: str,
+    canonical_enforcement: bool,
     stored_legacy: object,
     existing: object,
-) -> tuple[str | None, bool]:
-    """Which stored bundle shadows a v2 candidate, and whether it only evaluates.
+) -> CandidateAnswer:
+    """Ask the resident for a candidate's decisions; an outage refuses it.
 
-    Answers ``"stored"``, ``"existing"`` or ``None`` for the shadow. Only the
-    fields the choice reads travel: each bundle's version and issue time, and
-    the candidate's default mode. Whole bundles, escaped for transport, could
-    outgrow one request even when each passed bundle validation.
+    A refusal keeps the policy the device already has, so an unreachable or
+    malformed answer never activates the candidate.
     """
 
-    def header(bundle: object) -> dict[str, object] | None:
-        if not isinstance(bundle, dict):
-            return None
-        return {key: bundle[key] for key in ("contractVersion", "issuedAt") if key in bundle}
+    try:
+        answer = policy_query(
+            "bundle_candidate",
+            {
+                "bundle": dict(policy_bundle),
+                "is_v2": is_v2,
+                "device_id": device_id,
+                "device_name": device_name,
+                "canonical_enforcement": canonical_enforcement,
+                "stored_legacy": stored_legacy,
+                "existing": existing,
+            },
+        )
+    except (TypeError, ValueError):
+        # NativePolicyDocumentError is a ValueError: the query is unavailable,
+        # unbound, or answered by a runtime that predates it.
+        return _UNAVAILABLE
+    return _read(answer)
 
-    candidate_fields: dict[str, object] = header(dict(candidate)) or {}
-    payload_field = candidate.get("payload")
-    spec = payload_field.get("spec") if isinstance(payload_field, dict) else None
-    defaults = spec.get("defaults") if isinstance(spec, dict) else None
-    if isinstance(defaults, dict) and "mode" in defaults:
-        candidate_fields["payload"] = {"spec": {"defaults": {"mode": defaults["mode"]}}}
-    payload = native_runner_authority(
-        "policy_shadow_source",
-        {"candidate": candidate_fields, "stored_legacy": header(stored_legacy), "existing": header(existing)},
-    )
-    source = _typed(payload, "legacy", str, nullable=True)
-    if source not in (None, "stored", "existing"):
-        raise _malformed()
-    return source, _typed(payload, "evaluating", bool)
 
-
-def policy_shadow_verdict(
-    legacy: Sequence[PolicyDecision],
-    canonical: Sequence[PolicyDecision],
-    *,
-    evaluating: bool,
-    canonical_enforcement: bool,
-) -> tuple[tuple[str, ...], str | None]:
-    """Where the legacy and canonical rows disagree, and the refusal that follows.
-
-    Rust answers both: the reason codes to record, and
-    ``"canonical_shadow_mismatch"`` when a rollout device must keep the policy
-    it already has, else ``None``.
-    """
-
-    def rows(decisions: Sequence[PolicyDecision]) -> list[dict[str, object]]:
-        return [{key: getattr(decision, key) for key in _SHADOW_KEYS} for decision in decisions]
-
-    payload = native_runner_authority(
-        "policy_shadow_verdict",
-        {
-            "legacy": rows(legacy),
-            "canonical": rows(canonical),
-            "evaluating": evaluating,
-            "canonical_enforcement": canonical_enforcement,
-        },
-    )
-    reasons = _typed(payload, "reason_codes", list)
-    if not all(isinstance(reason, str) for reason in reasons):
-        raise _malformed()
-    rejection = _typed(payload, "rejection", str, nullable=True)
-    if rejection not in (None, "canonical_shadow_mismatch"):
-        raise _malformed()
-    return tuple(reasons), rejection
+def _read(answer: object) -> CandidateAnswer:
+    if not isinstance(answer, dict) or set(answer) != _ANSWER_KEYS:
+        return _UNAVAILABLE
+    rows, rejection, rule_id, mismatch = (answer[key] for key in ("decisions", "rejection", "rule_id", "mismatch"))
+    if (
+        not isinstance(rows, list)
+        or not all(isinstance(row, dict) for row in rows)
+        or not isinstance(rejection, (str, type(None)))
+        or not isinstance(rule_id, (str, type(None)))
+        or not (mismatch is None or (isinstance(mismatch, dict) and set(mismatch) == _MISMATCH_KEYS))
+    ):
+        return _UNAVAILABLE
+    try:
+        decisions = [PolicyDecision(**row) for row in rows]
+    except TypeError:
+        return _UNAVAILABLE
+    return CandidateAnswer(decisions, rejection, rule_id, mismatch)
