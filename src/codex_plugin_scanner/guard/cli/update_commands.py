@@ -69,6 +69,7 @@ from .update_desktop_apply import (
     run_desktop_managed_update,
 )
 from .update_desktop_core import is_desktop_managed_runtime
+from .update_fresh_alpha import fetch_published_release_files, with_confirmed_release
 from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
 from .update_native_marker import (
@@ -1815,6 +1816,9 @@ def _version_check_payload_scoped(
             "update_available": None,
         }
     latest_version = _latest_alpha_version_from_pypi(current_version) if include_alpha else _latest_version_from_pypi()
+    reserved_alpha: str | None = None
+    if include_alpha and latest_version is not None:
+        latest_version, reserved_alpha = _confirm_reserved_alpha(latest_version)
     if latest_version is None:
         return {
             "source": "pypi",
@@ -1863,8 +1867,6 @@ def _version_check_payload_scoped(
             "required_python": _format_python_requirements(required_python_requirements),
             "runtime_python": runtime_python,
         }
-    published_alpha = newest_pypi_version(_last_pypi_payload, include_stable=False, include_alpha=True)
-    reserved_alpha = _newest_reserved_alpha_version(latest_pypi=published_alpha) if include_alpha else None
     return {
         "source": "pypi",
         **({"release_channel": "alpha"} if include_alpha else {}),
@@ -1948,6 +1950,32 @@ def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
     _ = current_version
     _ = _latest_version_from_pypi()
     return newest_live_pypi_version(_last_pypi_payload, alpha_is_live=_alpha_liveness_checker())
+
+
+def _confirm_reserved_alpha(latest_version: str) -> tuple[str, str | None]:
+    """Pick up a GitHub-reserved alpha that PyPI published but its cached index omits.
+
+    Returns the version to offer and the reserved alpha that is still unpublished.
+    """
+
+    global _last_pypi_payload
+    published_alpha = newest_pypi_version(_last_pypi_payload, include_stable=False, include_alpha=True)
+    reserved_alpha = _newest_reserved_alpha_version(latest_pypi=published_alpha)
+    if reserved_alpha is None or _is_newer_version(reserved_alpha, latest_version) is not True:
+        return latest_version, reserved_alpha
+    policy = _version_network_policy.get()
+    files = fetch_published_release_files(
+        reserved_alpha,
+        opener=lambda request: managed_urlopen(request, timeout=_PYPI_TIMEOUT_SECONDS, policy=policy),
+        read_bounded=_read_bounded_pypi_response,
+        timeout=_PYPI_TIMEOUT_SECONDS,
+        network_errors=(ManagedNetworkError,),
+    )
+    merged = with_confirmed_release(_last_pypi_payload, reserved_alpha, files) if files else None
+    if merged is None:
+        return latest_version, reserved_alpha
+    _last_pypi_payload = merged
+    return reserved_alpha, None
 
 
 def _alpha_liveness_checker(network_policy: ManagedNetworkPolicy | None = None) -> Callable[[str], bool]:
