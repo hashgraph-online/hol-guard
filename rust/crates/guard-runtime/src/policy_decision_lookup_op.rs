@@ -2009,22 +2009,6 @@ fn lookup_result(
     })
 }
 
-/// `_flush_events` — append each audit event row; a failed insert propagates
-/// and aborts the lookup rather than silently dropping the event.
-fn flush_events(
-    conn: &Connection,
-    events: &[(String, Value)],
-    current_time: &str,
-) -> rusqlite::Result<()> {
-    for (name, payload) in events {
-        conn.execute(
-            "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-            params![name, canonical_json(payload), current_time],
-        )?;
-    }
-    Ok(())
-}
-
 /// Consuming multi-scope `policy_decisions` select — preserves scope
 /// precedence ordering for one-shot (`consume_one_shot`) lookups.
 #[allow(clippy::too_many_arguments)]

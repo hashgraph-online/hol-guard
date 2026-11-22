@@ -316,12 +316,14 @@ fn resolve_claimed(
     evaluation: &Map<String, Value>,
     policy_store: &PolicySnapshotStore,
 ) -> Result<(Resolved, package_leg::Reresolved, Vec<AuditEvent>), &'static str> {
-    let (fresh, legged, audit) = super::resolve(
+    let mut audit = Vec::new();
+    let (fresh, legged) = super::resolve(
         &context.request,
         &context.admitted,
         Some(connection),
         Some(PackageLeg::Claimed(intent, evaluation)),
         policy_store,
+        &mut audit,
     )?;
     let reresolved = legged
         .and_then(Legged::reresolved)

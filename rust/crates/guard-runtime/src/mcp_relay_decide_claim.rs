@@ -270,17 +270,19 @@ fn after_claim(
     connection
         .execute_batch("PRAGMA query_only = ON")
         .map_err(|_| STORE_UNREADABLE)?;
+    let mut audit = Vec::new();
     let fresh = resolve(
         &context.request,
         &context.admitted,
         Some(connection),
         None,
         policy_store,
+        &mut audit,
     );
     connection
         .execute_batch("PRAGMA query_only = OFF")
         .map_err(|_| STORE_UNREADABLE)?;
-    let (fresh, _, audit) = fresh?;
+    let (fresh, _) = fresh?;
     // Written in the claim's transaction, as the proxy's re-read writes them
     // in its own; a claim that rolls back takes them with it.
     write_audit_events(connection, &audit).map_err(|_| store::AUDIT_UNWRITTEN)?;
