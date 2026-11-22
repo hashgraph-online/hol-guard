@@ -162,9 +162,7 @@ pub(crate) fn matched_within(
         "grep" => trusted_grep().map(|binary| (binary, None)),
         "egrep" => trusted_grep().map(|binary| (binary, Some("-E"))),
         "fgrep" => trusted_grep().map(|binary| (binary, Some("-F"))),
-        name if SYSTEM_FILTERS.contains(&name) => {
-            trusted_system(name).map(|binary| (binary, None))
-        }
+        name if SYSTEM_FILTERS.contains(&name) => trusted_system(name).map(|binary| (binary, None)),
         _ => return Err(unsupported()),
     };
     let Some((binary, switch)) = located else {

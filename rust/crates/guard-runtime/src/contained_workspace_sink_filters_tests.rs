@@ -62,7 +62,7 @@ fn a_chain_cuts_lines_and_bytes_in_turn() {
 #[test]
 fn a_stage_the_chain_does_not_name_is_refused() {
     for refused in [
-        stage(&["sort"]),
+        stage(&["awk"]),
         stage(&["head"]),
         stage(&["head", "-n", "3"]),
         stage(&["tail", "x"]),
@@ -73,6 +73,18 @@ fn a_stage_the_chain_does_not_name_is_refused() {
             "{refused:?}"
         );
     }
+}
+
+#[test]
+fn a_system_sort_stage_reshapes_the_captured_text() {
+    if trusted_system("sort").is_none() {
+        return;
+    }
+    let (kept, diagnostics, status) = apply(b"b\na\n", &[stage(&["sort"])])
+        .expect("sort is a supported stdin-only system filter");
+    assert_eq!(kept, b"a\nb\n");
+    assert!(diagnostics.is_empty());
+    assert_eq!(status, 0);
 }
 
 #[test]

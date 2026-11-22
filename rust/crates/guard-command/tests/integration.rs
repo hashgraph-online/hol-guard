@@ -77,6 +77,7 @@ pub mod pretool_clone_links;
 pub mod pretool_command_groups;
 pub mod pretool_comment_lines;
 pub mod pretool_contained_exec_roots;
+pub mod pretool_contained_filter_wrappers;
 pub mod pretool_contained_loopback;
 pub mod pretool_contained_safety_guide;
 pub mod pretool_contained_script_tests;
