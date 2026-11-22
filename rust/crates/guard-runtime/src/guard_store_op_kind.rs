@@ -198,6 +198,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         // The authority revision and the two continuity rows a commit is
         // checked against, as one view.
         "custom_extension_continuity_rows" => Kind::Snapshot,
+        // Every stored catalog of the CLIs a grant reviews, as one view.
+        "local_mcp_catalog_change_names" => Kind::Snapshot,
         // The memory policy version and rule registry a signed memory
         // bundle is checked and planned against, as one view.
         "review_policy_memory_rows" => Kind::Snapshot,

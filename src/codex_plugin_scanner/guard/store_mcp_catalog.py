@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from hashlib import sha256
+from typing import Any
 
 from .runtime.local_cli_commands import slug_local_cli_command_ids
 
@@ -32,66 +33,21 @@ def _authority_shape(tool: dict[str, object]) -> str:
     )
 
 
-def acknowledge_catalog_changes(
-    connection: sqlite3.Connection,
-    cli_id: str,
-    identity_hash: str,
-    reviewed: set[str],
-    *,
-    catalog_revision: int,
-    change_ids: Mapping[str, str],
-) -> None:
-    """A saved choice for a new or changed tool reviews that change.
+def catalog_change_ids(store: Any, cli_ids: Iterable[str]) -> dict[str, str]:
+    """Command ids for the flagged tool names, resolved by the resident before the write lock.
 
-    Without this, ``changes`` keeps flagging every tool from the first listing
-    until the next one, so a reviewed extension stays under Needs review. The
-    catalog revision and tool authority are untouched; the next listing still
-    diffs against the known tools and flags anything new again.
-
-    Only the catalog revision the choices were made against is reviewed, so a
-    save from an older view cannot clear a change a later listing recorded.
-    A tool is matched by its command id, so a saved Other-tools choice reviews
-    the tools folded into it, while a real tool named ``other`` has its own id.
-    ``change_ids`` comes from ``catalog_change_ids``; a name it lacks stays
-    flagged.
+    The native store reads the names listed as added or changed in every
+    stored catalog of ``cli_ids``. The caller runs the schema check first.
     """
 
-    row = connection.execute(
-        "select catalog_json, revision from local_mcp_catalog where cli_id = ? and identity_hash = ?",
-        (cli_id, identity_hash),
-    ).fetchone()
-    if row is None or int(row[1]) != catalog_revision:
-        return
-    payload = _decode_snapshot(row[0])
-    changes = payload.get("changes") if payload is not None else None
-    if payload is None or not isinstance(changes, dict):
-        return
-    listed = {key: names for key in ("added", "changed") if isinstance(names := changes.get(key), list)}
-    updated = dict(changes)
-    for key, names in listed.items():
-        updated[key] = [name for name in names if not (isinstance(name, str) and change_ids.get(name) in reviewed)]
-    if updated == changes:
-        return
-    payload["changes"] = updated
-    raw = json.dumps(payload, ensure_ascii=True, allow_nan=False, separators=(",", ":"))
-    connection.execute(
-        "update local_mcp_catalog set catalog_json = ? where cli_id = ? and identity_hash = ?",
-        (raw, cli_id, identity_hash),
-    )
-
-
-def catalog_change_ids(connection: sqlite3.Connection, cli_ids: Iterable[str]) -> dict[str, str]:
-    """Command ids for the flagged tool names, resolved by the resident before the write lock."""
-
-    texts: set[str] = set()
-    for cli_id in cli_ids:
-        rows = connection.execute("select catalog_json from local_mcp_catalog where cli_id = ?", (cli_id,))
-        for (raw,) in rows.fetchall():
-            changes = (_decode_snapshot(raw) or {}).get("changes")
-            for names in (changes.get("added"), changes.get("changed")) if isinstance(changes, dict) else ():
-                if isinstance(names, list):
-                    texts.update(name for name in names if isinstance(name, str))
-    ordered = sorted(texts)
+    ids = list(cli_ids)
+    if not ids:
+        return {}
+    answer = store._native_store_call("local_mcp_catalog_change_names", {"cli_ids": ids})
+    names = answer.get("names") if isinstance(answer, dict) else None
+    if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+        raise sqlite3.DatabaseError("native local_mcp_catalog_change_names returned no answer")
+    ordered = sorted(set(names))
     try:
         return dict(zip(ordered, slug_local_cli_command_ids(ordered), strict=True)) if ordered else {}
     except ValueError:

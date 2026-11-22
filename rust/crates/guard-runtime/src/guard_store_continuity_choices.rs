@@ -12,7 +12,7 @@ use crate::guard_store_local_cli_mcp_snapshot::decode_snapshot;
 use crate::guard_store_observed_mcp::marker_source;
 
 impl Writer<'_> {
-    /// `store_mcp_catalog.acknowledge_catalog_changes`: a saved choice for a
+    /// Formerly `store_mcp_catalog.acknowledge_catalog_changes`: a saved choice for a
     /// new or changed tool reviews that change, but only on the catalog
     /// revision the choices were made against.
     pub(super) fn acknowledge_catalog_changes(

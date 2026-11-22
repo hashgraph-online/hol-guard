@@ -83,7 +83,7 @@ class StoreCustomExtensionContinuityMixin:
 
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
-            change_ids = catalog_change_ids(connection, catalog_reviews or {})
+        change_ids = catalog_change_ids(self, catalog_reviews or {})
         args = continuity_wire(
             expected_revision=expected_revision,
             authority_updates=authority_updates,

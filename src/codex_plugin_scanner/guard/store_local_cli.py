@@ -219,8 +219,8 @@ class StoreLocalCliMixin:
             raise ValueError("invalid local CLI id")
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
-            reviewing = (identity.cli_id,) if reviewed_catalog_revision is not None else ()
-            change_ids = catalog_change_ids(connection, reviewing)
+        reviewing = (identity.cli_id,) if reviewed_catalog_revision is not None else ()
+        change_ids = catalog_change_ids(self, reviewing)
         args: dict[str, object] = {
             "cli_id": identity.cli_id,
             "identity_hash": identity.identity_hash,

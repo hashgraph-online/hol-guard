@@ -19,10 +19,13 @@ use crate::guard_store_local_cli_inventory_capabilities::{
 
 #[path = "guard_store_command_pack_activation.rs"]
 mod command_pack_activation;
+#[path = "guard_store_local_mcp_catalog_changes.rs"]
+mod local_mcp_catalog_changes;
 
 /// Whether `method` is one of these reads or the cause note.
 pub(crate) fn handles(method: &str) -> bool {
     command_pack_activation::handles(method)
+        || local_mcp_catalog_changes::handles(method)
         || matches!(
             method,
             "read_local_cli_revision"
@@ -41,6 +44,9 @@ pub(crate) fn dispatch(
     match method {
         _ if command_pack_activation::handles(method) => {
             command_pack_activation::dispatch(connection, method, args)
+        }
+        _ if local_mcp_catalog_changes::handles(method) => {
+            local_mcp_catalog_changes::dispatch(connection, args)
         }
         "read_local_cli_revision" => Ok(Value::from(authority_revision(connection)?)),
         "read_local_cli_surface" => read_surface(connection, args.str("cli_id")?),
