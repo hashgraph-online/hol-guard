@@ -352,17 +352,21 @@ def native_resolve_stored_package_policy(
             request["daemon_authority"] = True
         if isinstance(payload.get("decision"), dict):
             daemon_lookup = request.get("decision") is None and request.get("ignored_integrity") is True
-            decision = dict(payload["decision"])
-            request["decision"] = decision
+            daemon_decision: dict[str, object] | None = None
+            if daemon_lookup or decision is None:
+                daemon_decision = dict(payload["decision"])
+                decision = daemon_decision
+                request["decision"] = daemon_decision
             if daemon_lookup:
                 # The first resident call only discovers the daemon row. Rebuild
                 # the store-bound facts before asking Rust to classify reuse so
                 # daemon decisions follow the same freshness and bundle rules.
                 request["ignored_integrity"] = False
-                approval_request = _approval_request(store, decision)
+                assert daemon_decision is not None
+                approval_request = _approval_request(store, daemon_decision)
                 if approval_request is not None:
                     request["approval_request"] = approval_request
-                rules = _bundle_rules(store, decision)
+                rules = _bundle_rules(store, daemon_decision)
                 if rules is not None:
                     request["bundle_rules"] = rules
                 payload = _call(
