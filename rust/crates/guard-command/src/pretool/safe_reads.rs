@@ -1,5 +1,7 @@
 #[path = "command_sequences.rs"]
 mod command_sequences;
+#[path = "safe_reads_head_tail.rs"]
+mod head_tail;
 #[path = "safe_reads_jq.rs"]
 mod jq_arguments;
 #[path = "jq_filter.rs"]
@@ -24,6 +26,7 @@ pub(super) use super::safe_writes::{
 };
 pub(crate) use command_sequences::proven_created_file_removal;
 pub(super) use command_sequences::{exact_safe_sequence, leading_and_cd, leading_semicolon_cd};
+pub(super) use head_tail::{safe_head_tail_arguments, safe_head_tail_stdin_arguments};
 pub(super) use jq_arguments::{
     jq_filter_position, safe_jq_file_arguments, safe_jq_piped_arguments, safe_jq_stdin_arguments,
 };
@@ -213,26 +216,6 @@ pub(super) fn safe_cat_stdin_arguments(arguments: &[String]) -> bool {
                 })
         })
     })
-}
-
-/// `head -n 3 a b` prints what `head -n 3 a; head -n 3 b` prints, with a
-/// `==> a <==` line before each, so every operand gets the single-file proof
-/// that `cat a b` gives its operands, up to the same bound.
-pub(super) fn safe_head_tail_arguments(
-    arguments: &[String],
-    piped_input: bool,
-    context: super::PathContext<'_>,
-) -> bool {
-    safe_head_tail_with_targets(arguments, piped_input, context, true)
-}
-
-pub(super) fn safe_head_tail_stdin_arguments(arguments: &[String]) -> bool {
-    safe_head_tail_with_targets(
-        arguments,
-        true,
-        crate::pretool::PathContext::default(),
-        false,
-    )
 }
 
 pub(super) fn safe_word_count_arguments(
@@ -440,76 +423,6 @@ fn safe_word_count_with_targets(
     saw_target || piped_input
 }
 
-/// A head/tail count: `20`, or `+31` for "from line 31" (`tail -n +31`).
-fn head_tail_count(value: &str) -> bool {
-    let digits = value.strip_prefix('+').unwrap_or(value);
-    !digits.is_empty() && digits.len() <= 6 && digits.bytes().all(|byte| byte.is_ascii_digit())
-}
-
-fn safe_head_tail_with_targets(
-    arguments: &[String],
-    piped_input: bool,
-    context: super::PathContext<'_>,
-    allow_target: bool,
-) -> bool {
-    let mut targets = 0usize;
-    let mut expect_count = false;
-    let mut after_options = false;
-    for argument in arguments {
-        if expect_count {
-            if !head_tail_count(argument) {
-                return false;
-            }
-            expect_count = false;
-            continue;
-        }
-        if after_options {
-            if !allow_target || argument == "-" || !command_read_target(argument, context, false) {
-                return false;
-            }
-            targets += 1;
-            continue;
-        }
-        if argument == "--" {
-            after_options = true;
-            continue;
-        }
-        if matches!(argument.as_str(), "-n" | "--lines" | "-c" | "--bytes") {
-            expect_count = true;
-            continue;
-        }
-        if let Some(value) = argument
-            .strip_prefix("--lines=")
-            .or_else(|| argument.strip_prefix("--bytes="))
-        {
-            if !head_tail_count(value) {
-                return false;
-            }
-            continue;
-        }
-        // `-20`, and the attached `-n+31` and `-c10` spellings.
-        if let Some(value) = argument.strip_prefix('-') {
-            if value.strip_prefix(['n', 'c']).is_some_and(head_tail_count)
-                || (!value.starts_with('+') && head_tail_count(value))
-            {
-                continue;
-            }
-        }
-        // A bare `+N` before `--` is a file name to `head` but, with one
-        // file beside it, GNU `tail`'s old spelling of `-n +N`, which also
-        // takes a trailing `f` to follow. Neither reading is proven here;
-        // `-n +N` remains an option/value pair above.
-        if argument.starts_with(['-', '+']) {
-            return false;
-        }
-        if !allow_target || !command_read_target(argument, context, false) {
-            return false;
-        }
-        targets += 1;
-    }
-    targets <= MAX_PLAIN_FILE_TARGETS && (targets > 0 || piped_input) && !expect_count
-}
-
 #[cfg(test)]
 #[path = "safe_reads_jq_tests.rs"]
 mod jq_stdin_boundary_tests;
@@ -517,7 +430,3 @@ mod jq_stdin_boundary_tests;
 #[cfg(test)]
 #[path = "safe_reads_sed_tests.rs"]
 mod sed_context_address_read_tests;
-
-#[cfg(test)]
-#[path = "safe_reads_head_tail_tests.rs"]
-mod head_tail_tests;

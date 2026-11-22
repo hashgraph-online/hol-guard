@@ -646,6 +646,7 @@ pub(super) fn exact_safe_segment_with_context(
             &segment.arguments,
             segment.pipeline_index > 0,
             context,
+            basename == "tail",
         ),
         "git" => {
             safe_git_arguments(&segment.arguments, allow_git_helper_context, context)
