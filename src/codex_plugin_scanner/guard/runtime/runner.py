@@ -78,7 +78,6 @@ from ..policy_bundle_v2 import (
 from ..policy_document_io import PolicyCompilationError, compile_policy_bundle_document
 from ..redaction import redact_sensitive_text
 from ..review_signature_verification import sync_review_verification_keys
-from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..store_policy_trust_rows import PolicyBundleTrustRows
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
@@ -125,6 +124,7 @@ from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
 from .policy_bundle_failure_ack import cached_bundle_failure_acknowledgement, failed_acknowledgement
+from .runner_package_coverage import cloud_package_manager_coverage as _cloud_package_manager_coverage
 from .sync_retry_delay import parse_retry_after_value
 from .workspace_assessment_sync import (
     build_workspace_assessment_sync_safely,
@@ -2775,35 +2775,6 @@ def _cloud_local_identity(*, observed_at: str) -> tuple[dict[str, object], dict[
             "daemonStatus": "local-guard",
             "relayState": "local-guard",
         }
-
-
-def _cloud_package_manager_coverage(
-    store: GuardStore,
-    *,
-    workspace: str,
-    generated_at: str,
-) -> dict[str, object]:
-    coverage = package_shim_cloud_coverage(
-        HarnessContext(
-            home_dir=Path.home(),
-            workspace_dir=Path(workspace),
-            guard_home=store.guard_home,
-        ),
-        generated_at=generated_at,
-    )
-    # The three summaries come from one snapshot so a sync committing in
-    # between cannot pair an old summary with a new one.
-    summaries = store.sync_payload_snapshot(
-        "sync_summary",
-        "runtime_session_summary",
-        "supply_chain_bundle_summary",
-    )
-    coverage["staleIntel"] = _sync.stale_intel(
-        tuple(summaries.values()),
-        generated_at=generated_at,
-        now=_now(),
-    )
-    return coverage
 
 
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:
