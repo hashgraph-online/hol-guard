@@ -50,6 +50,31 @@ def test_connect_status_reports_unavailable_outbox_instead_of_falling_back(
     assert isinstance(outbox, dict)
     assert outbox["outbox_available"] is False
     assert outbox["unavailable_reason"] == "native_guard_store_prerequisite_unavailable"
+    assert payload["sync_summary"] == {
+        "available": False,
+        "unavailable_reason": "native_guard_store_prerequisite_unavailable",
+    }
+
+
+def test_connect_status_does_not_guess_a_first_sync_it_cannot_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _unavailable_native(monkeypatch)
+    monkeypatch.setattr(store, "get_effective_guard_connect_state", lambda *, now: None)
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(store, "get_oauth_local_credential_health", lambda: {"configured": True, "state": "healthy"})
+    payload = build_connect_status_payload(
+        store=store,
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        connect_url="https://hol.org/guard/connect",
+    )
+    assert payload["milestone"] == "sync_not_available"
+    assert payload["sync_summary"]["available"] is False  # type: ignore[index]
 
 
 def test_cloud_review_settings_status_flags_unavailable_outbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
