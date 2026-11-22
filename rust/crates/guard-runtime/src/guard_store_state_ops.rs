@@ -11,6 +11,10 @@ use crate::guard_store_db::{
     exec, query_all, query_one, text, value_error, StoreError, StoreResult,
 };
 
+#[path = "guard_store_workspace_assessment_admissions.rs"]
+mod assessment_admissions;
+#[path = "guard_store_workspace_assessment_queue.rs"]
+mod assessment_queue;
 #[path = "guard_store_workspace_fix_proposals.rs"]
 mod workspace_fix_proposals;
 
@@ -34,7 +38,9 @@ pub(crate) fn handles(method: &str) -> bool {
             | "get_runtime_state"
             | "clear_runtime_state"
             | "hook_approval_center_origin"
-    ) || workspace_fix_proposals::handles(method)
+    ) || assessment_queue::handles(method)
+        || assessment_admissions::handles(method)
+        || workspace_fix_proposals::handles(method)
         || workspace_assessment::handles(method)
 }
 
@@ -47,6 +53,12 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
         "get_runtime_state" => runtime_state(connection),
         "clear_runtime_state" => clear_runtime_state(connection, args),
         "hook_approval_center_origin" => hook_approval_center_origin(connection),
+        _ if assessment_queue::handles(method) => {
+            assessment_queue::dispatch(connection, method, args)
+        }
+        _ if assessment_admissions::handles(method) => {
+            assessment_admissions::dispatch(connection, method, args)
+        }
         _ if workspace_fix_proposals::handles(method) => {
             workspace_fix_proposals::dispatch(connection, method, args)
         }
