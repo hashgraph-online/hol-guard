@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import threading
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import replace
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -21,11 +19,18 @@ from ..native_prompt import analyze as _prompt_analyze_native
 from ..native_prompt import artifact_from_dict as _guard_artifact_from_dict
 from ..native_prompt import extract_prompt_requests as extract_prompt_requests
 from ..native_prompt import should_force_reapproval as should_force_reapproval
+from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from ..store import GuardStore
 from ..types import PromptRequest
 from . import runner_native_authority as _authority
 from .actions import GuardActionEnvelope, redacted_workspace_label
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
+
+_REDACTED = "[redacted]"
+_NO_TRACE_ANSWER = {
+    "error_type": "NativeRunnerAuthorityError",
+    "message": "native detector_debug_trace returned no answer",
+}
 
 
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
@@ -195,41 +200,37 @@ def _write_detector_debug_trace(
     action_envelope: GuardActionEnvelope,
     result: DetectorRunResult,
 ) -> dict[str, object] | None:
-    created_at = datetime.now(timezone.utc)
-    action_payload = action_envelope.to_dict()
-    trace_payload = {
-        "schema_version": 1,
-        "created_at": created_at.isoformat(),
-        "action": _redact_detector_debug_payload(action_payload),
-        "signals": [signal.to_dict() for signal in result.signals],
-        "telemetry": [item.to_dict() for item in result.telemetry],
+    """Have the native runtime write the redacted trace; a failure is reported, never raised."""
+
+    # Prompt fields never reach the trace, so they are not sent either; the
+    # native writer still redacts the nested ones.
+    action = {
+        key: (_REDACTED if "prompt" in str(key).lower() else value) for key, value in action_envelope.to_dict().items()
     }
-    trace_dir = config.guard_home / "debug" / "detectors"
-    action_digest = hashlib.sha256(
-        json.dumps(action_payload, sort_keys=True, default=str).encode("utf-8"),
-    ).hexdigest()[:12]
-    trace_path = trace_dir / f"{created_at.strftime('%Y%m%dT%H%M%S%fZ')}-{action_digest}.json"
     try:
-        trace_dir.mkdir(parents=True, exist_ok=True)
-        trace_path.write_text(json.dumps(trace_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    except OSError as error:
+        payload = native_runner_authority(
+            "detector_debug_trace",
+            {
+                "action": action,
+                "signals": [signal.to_dict() for signal in result.signals],
+                "telemetry": [item.to_dict() for item in result.telemetry],
+            },
+            guard_home=config.guard_home,
+        )
+    except NativeRunnerAuthorityError as error:
         return {"error_type": type(error).__name__, "message": str(error)}
-    return None
-
-
-def _redact_detector_debug_payload(value: object) -> object:
-    if isinstance(value, dict):
-        redacted: dict[str, object] = {}
-        for key, item in value.items():
-            key_text = str(key)
-            if "prompt" in key_text.lower():
-                redacted[key_text] = "[redacted]"
-            else:
-                redacted[key_text] = _redact_detector_debug_payload(item)
-        return redacted
-    if isinstance(value, (tuple, list)):
-        return [_redact_detector_debug_payload(item) for item in value]
-    return value
+    if set(payload) != {"trace_error"}:
+        return dict(_NO_TRACE_ANSWER)
+    trace_error = payload["trace_error"]
+    if trace_error is None:
+        return None
+    if (
+        isinstance(trace_error, dict)
+        and set(trace_error) == {"error_type", "message"}
+        and all(isinstance(value, str) for value in trace_error.values())
+    ):
+        return {"error_type": trace_error["error_type"], "message": trace_error["message"]}
+    return dict(_NO_TRACE_ANSWER)
 
 
 def _guard_run_config_paths(
