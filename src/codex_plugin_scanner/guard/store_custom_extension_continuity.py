@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Mapping, Sequence
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -17,8 +16,6 @@ from .runtime.local_cli_identity import UnlistedCliIdentity
 from .store_local_cli_capabilities import (
     LocalCliCapabilityError,
 )
-from .store_local_cli_schema import ensure_local_cli_schema
-from .store_mcp_catalog import catalog_change_ids
 from .store_mcp_provider_permissions import ProviderUpdate
 
 
@@ -41,8 +38,6 @@ class CustomExtensionContinuityMutation:
     capability_updates: Mapping[str, Mapping[str, str]] | None = None
     # The MCP catalog revision each saved choice set was made against.
     catalog_reviews: Mapping[str, int] | None = None
-    # Command ids for the flagged tool names, resolved before the write lock.
-    catalog_change_ids: Mapping[str, str] | None = None
 
 
 _CAPABILITY_ERRORS = frozenset(
@@ -52,8 +47,6 @@ _CAPABILITY_ERRORS = frozenset(
 
 class StoreCustomExtensionContinuityMixin:
     if TYPE_CHECKING:
-
-        def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
         def _native_store_call(
             self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
@@ -81,9 +74,6 @@ class StoreCustomExtensionContinuityMixin:
         writes.
         """
 
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            change_ids = catalog_change_ids(connection, catalog_reviews or {})
         args = continuity_wire(
             expected_revision=expected_revision,
             authority_updates=authority_updates,
@@ -96,7 +86,6 @@ class StoreCustomExtensionContinuityMixin:
             catalog_seeds=catalog_seeds,
             capability_updates=capability_updates,
             catalog_reviews=catalog_reviews,
-            catalog_change_ids=change_ids,
         )
         return _native_grant_write(self, "apply_custom_extension_continuity", args)
 
@@ -114,7 +103,6 @@ def continuity_wire(
     catalog_seeds: Mapping[str, Sequence[LocalCliCommand]] | None,
     capability_updates: Mapping[str, Mapping[str, str]] | None,
     catalog_reviews: Mapping[str, int] | None,
-    catalog_change_ids: Mapping[str, str] | None,
 ) -> dict[str, object]:
     """The native ``apply_custom_extension_continuity`` arguments.
 
@@ -139,7 +127,6 @@ def continuity_wire(
         },
         "capability_updates": {cli_id: dict(choices) for cli_id, choices in (capability_updates or {}).items()},
         "catalog_reviews": dict(catalog_reviews or {}),
-        "catalog_change_ids": dict(catalog_change_ids or {}),
         "catalog_seeds": {
             cli_id: [_command_wire(command) for command in commands]
             for cli_id, commands in (catalog_seeds or {}).items()
@@ -166,7 +153,6 @@ def mutation_wire(mutation: CustomExtensionContinuityMutation) -> dict[str, obje
         catalog_seeds=mutation.catalog_seeds,
         capability_updates=mutation.capability_updates,
         catalog_reviews=mutation.catalog_reviews,
-        catalog_change_ids=mutation.catalog_change_ids,
     )
 
 

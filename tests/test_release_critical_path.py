@@ -336,7 +336,7 @@ def test_compilation_and_signing_run_beside_packaging_and_registry_verification(
     assert "pull_request" not in warm[True]
     assert "github.event_name == 'push'" in warm["concurrency"]["group"]
     assert "github.run_id" in warm["concurrency"]["group"]
-    assert warm["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'push' }}"
+    assert warm["concurrency"]["cancel-in-progress"] is False
     cache = next(step for step in warm["jobs"]["compile"]["steps"] if "rust-cache@" in step.get("uses", ""))
     assert "github.event_name == 'push'" in cache["with"]["save-if"]
     assert "refs/heads/main" in cache["with"]["save-if"]

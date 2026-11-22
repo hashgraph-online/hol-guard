@@ -8,9 +8,10 @@
 //! it back, so a crash can never leave authority without the continuity state
 //! that explains it.
 //!
-//! The caller resolves the command ids of flagged catalog changes before the
-//! write lock and encodes the payload and event JSON itself, so the stored
-//! text is byte for byte what Python's `json.dumps` writes.
+//! The writer slugs the command ids of flagged catalog changes itself, inside
+//! the transaction, so the review is matched against the catalog row it
+//! updates. The caller encodes the payload and event JSON, so the stored text
+//! is byte for byte what Python's `json.dumps` writes.
 
 use std::collections::HashSet;
 
@@ -68,7 +69,6 @@ fn command_state(value: &Value) -> StoreResult<&str> {
 struct Writer<'a> {
     connection: &'a Connection,
     updated_at: &'a str,
-    change_ids: Option<&'a Map<String, Value>>,
 }
 
 /// `apply_custom_extension_continuity_transaction`.
@@ -120,7 +120,6 @@ pub(crate) fn apply_continuity(connection: &Connection, args: &Args<'_>) -> Stor
     let writer = Writer {
         connection,
         updated_at: args.str("updated_at")?,
-        change_ids: args.opt_object("catalog_change_ids")?,
     };
     for update in &updates {
         let reviewed = match catalog_reviews.and_then(|reviews| reviews.get(update.cli_id)) {
@@ -213,7 +212,6 @@ pub(crate) fn upsert_grant(connection: &Connection, args: &Args<'_>) -> StoreRes
     let writer = Writer {
         connection,
         updated_at: args.str("updated_at")?,
-        change_ids: args.opt_object("catalog_change_ids")?,
     };
     Ok(json!(writer.write_grant(&update, revision, reviewed)?))
 }
