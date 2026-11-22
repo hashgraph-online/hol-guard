@@ -191,6 +191,7 @@ mod helm_usage;
 pub(crate) mod help_probes;
 mod home_program_metadata;
 mod hook_neutering;
+mod host_facts;
 mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;

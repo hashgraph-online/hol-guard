@@ -551,6 +551,7 @@
       "src/pretool/liveness_probes.rs",
       "src/pretool/lockfile_install.rs",
       "src/pretool/lockfile_install_scan.rs",
+      "src/pretool/host_facts.rs",
       "src/pretool/lookup_reads.rs",
       "src/pretool/manager_usage.rs",
       "src/pretool/loopback_ports.rs",
