@@ -126,6 +126,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "oldest_approval_request_created_at"
         | "cached_supply_chain_bundle"
         | "hook_managed_install_admission"
+        // The bundle and every row it is judged against, as one view.
+        | "policy_bundle_trust_rows"
         // Two rows read as one consent pair.
         | "exact_cloud_review_state" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
@@ -227,6 +229,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "record_aibom_guard_events_unavailable"
         | "record_aibom_user_inventory"
         | "record_aibom_inventory_context"
+        | "record_review_verification_keyring"
         | "record_aibom_inventory_daemon"
         | "record_repair_self_check"
         | "commit_workspace_assessment_sent"

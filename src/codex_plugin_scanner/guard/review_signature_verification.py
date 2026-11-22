@@ -13,6 +13,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from .native_guard_store import NativeGuardStoreUnavailable
 from .native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
     PolicyBundleNativeError,
@@ -28,7 +29,6 @@ from .policy_bundle_trusted_keys import (
     safe_load_policy_bundle_verification_keys,
 )
 from .review_oauth_binding import GuardReviewContractError
-from .review_verification_keyring import REVIEW_VERIFICATION_KEYRING_SYNC_KEY
 
 # The rejections the Review signature kinds speak. Anything else the resident
 # reports is a keyring or transport failure, and keeps its own type.
@@ -59,7 +59,7 @@ def _native_outage_is_not_a_key_verdict() -> Iterator[None]:
 
     try:
         yield
-    except PolicyBundleNativeUnavailableError as error:
+    except (PolicyBundleNativeUnavailableError, NativeGuardStoreUnavailable) as error:
         raise GuardReviewContractError(NATIVE_UNAVAILABLE_REJECTION) from error
     except PolicyBundleNativeError as error:
         if error.code not in _REVIEW_CONTRACT_CODES:
@@ -69,10 +69,11 @@ def _native_outage_is_not_a_key_verdict() -> Iterator[None]:
 
 def _anchored_review_verification_keys(store) -> tuple[PolicyBundleVerificationKey, ...]:
     with _native_outage_is_not_a_key_verdict():
+        rows = store.policy_bundle_trust_rows(keys_only=True)
         return merge_policy_bundle_trusted_keys(
-            policy_bundle_keys_from_supply_chain_keyring(store.get_sync_payload("supply_chain_bundle_keyring")),
-            safe_load_policy_bundle_verification_keys(store.get_sync_payload("policy_bundle_keyring")),
-            safe_load_policy_bundle_verification_keys(store.get_sync_payload(REVIEW_VERIFICATION_KEYRING_SYNC_KEY)),
+            policy_bundle_keys_from_supply_chain_keyring(rows.supply_chain_keyring),
+            safe_load_policy_bundle_verification_keys(rows.policy_bundle_keyring),
+            safe_load_policy_bundle_verification_keys(rows.review_verification_keyring),
         )
 
 
@@ -118,7 +119,7 @@ def sync_review_verification_keys(
         keys = validated_review_verification_keys_from_sync(value, store=store, workspace_id=workspace_id)
     except GuardReviewContractError as error:
         return str(error)
-    store.set_sync_payload(REVIEW_VERIFICATION_KEYRING_SYNC_KEY, [key.to_dict() for key in keys], now)
+    store.record_review_verification_keyring([key.to_dict() for key in keys], now)
     return None
 
 

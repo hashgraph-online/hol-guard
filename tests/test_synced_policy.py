@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.synced_policy import (
 )
 from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.support.policy_trust_rows import trust_rows_from_payloads
 
 _WORKSPACE_ID = "workspace-1"
 _SYNCED_AT = "2026-07-01T00:00:00Z"
@@ -28,6 +29,10 @@ class _MemorySyncStore:
 
     def get_cloud_workspace_id(self) -> str | None:
         return self.workspace_id
+
+    def policy_bundle_trust_rows(self, *, keys_only: bool = False):
+        del keys_only
+        return trust_rows_from_payloads(self.get_sync_payload, self.get_cloud_workspace_id())
 
 
 def _signed_policy_bundle() -> dict[str, object]:

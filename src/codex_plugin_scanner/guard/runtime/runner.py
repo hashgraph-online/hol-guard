@@ -80,6 +80,7 @@ from ..redaction import redact_sensitive_text
 from ..review_signature_verification import sync_review_verification_keys
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
+from ..store_policy_trust_rows import PolicyBundleTrustRows
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
 from . import runner_native_authority as _authority
 from . import runner_native_sync as _sync
@@ -234,10 +235,17 @@ def _policy_bundle_admission_rejection(
     store: GuardStore,
     existing_bundle: dict[str, object] | None,
     candidate: dict[str, object],
+    *,
+    rows: PolicyBundleTrustRows | None = None,
 ) -> str | None:
-    """The first gate a validated synced candidate fails, or ``None``."""
+    """The first gate a validated synced candidate fails, or ``None``.
 
-    return policy_bundle_admission_rejection(candidate, _policy_bundle_downgrade_reference(store, existing_bundle))
+    ``rows`` is the snapshot that validated ``candidate``; its checkpoint and
+    workspace then pick the downgrade reference.
+    """
+
+    reference = _policy_bundle_downgrade_reference(store, existing_bundle, rows=rows)
+    return policy_bundle_admission_rejection(candidate, reference)
 
 
 def _policy_bundle_acceptance_checkpoint(policy_bundle: Mapping[str, object]) -> dict[str, object]:
@@ -247,24 +255,34 @@ def _policy_bundle_acceptance_checkpoint(policy_bundle: Mapping[str, object]) ->
 def _policy_bundle_downgrade_reference(
     store: GuardStore,
     existing_bundle: dict[str, object] | None,
+    *,
+    rows: PolicyBundleTrustRows | None = None,
 ) -> dict[str, object] | None:
+    if rows is None:
+        checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
+        workspace_id = store.get_cloud_workspace_id()
+    else:
+        checkpoint = rows.acceptance_checkpoint
+        workspace_id = rows.workspace_id
     return _sync.policy_bundle_downgrade_reference(
-        (
-            store.get_sync_payload("policy_bundle_acceptance_checkpoint"),
-            existing_bundle,
-            store.get_sync_payload("policy_bundle_last_good"),
-        ),
-        store.get_cloud_workspace_id(),
+        (checkpoint, existing_bundle, store.get_sync_payload("policy_bundle_last_good")),
+        workspace_id,
     )
 
 
 def _validate_cached_policy_bundle(
     store: GuardStore,
     policy_bundle: object,
+    *,
+    rows: PolicyBundleTrustRows | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
-    """Revalidate cached policy authority before any rule is made effective."""
+    """Revalidate cached policy authority before any rule is made effective.
 
-    return cached_policy_bundle_validation(store, policy_bundle)
+    ``rows`` is the trust-row snapshot ``policy_bundle`` came from, so the
+    bundle is judged with the keyrings and workspace of the same sync.
+    """
+
+    return cached_policy_bundle_validation(store, policy_bundle, rows=rows)
 
 
 def _build_canonical_policy_bundle_decisions(

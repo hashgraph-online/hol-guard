@@ -306,9 +306,9 @@ class StoreCloudEventsMixin:
     def list_cloud_exceptions(self, harness: str | None = None) -> list[dict[str, object]]:
         from .native_runner_authority import NativeRunnerAuthorityError
         from .runtime.runner_native_sync import cloud_exceptions
-        from .synced_policy import SyncPayloadReader, validated_synced_policy_bundle
+        from .synced_policy import PolicyTrustRowsReader, validated_synced_policy_bundle
 
-        policy_bundle = validated_synced_policy_bundle(cast(SyncPayloadReader, cast(object, self)))
+        policy_bundle = validated_synced_policy_bundle(cast(PolicyTrustRowsReader, cast(object, self)))
         if policy_bundle is None:
             return []
         try:

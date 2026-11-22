@@ -97,35 +97,39 @@ def policy_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
 
 
 def _validated_bundle(store: GuardStore, payload: dict[str, object], policy_bundle: dict[str, object]) -> Any:
+    from ..native_guard_store import NativeGuardStoreUnavailable
     from ..native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION
-    from ..policy_bundle_trusted_keys import (
-        MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
-        validate_synced_policy_bundle,
-    )
+    from ..policy_bundle_trusted_keys import validate_synced_policy_bundle
     from ..runtime.runner import (
         _policy_bundle_admission_rejection,
         _validate_cached_policy_bundle,
     )
+    from ..store_policy_trust_rows import PolicyTrustRowsUnstableError
 
+    try:
+        rows = store.policy_bundle_trust_rows()
+    except (NativeGuardStoreUnavailable, PolicyTrustRowsUnstableError) as error:
+        # No stable snapshot was read, so nothing was accepted or activated.
+        raise _RejectedError(_unavailable()) from error
     validated, rejection_reason, trusted_keys = validate_synced_policy_bundle(
         policy_bundle,
-        stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
+        stored_keyring=rows.policy_bundle_keyring,
         sync_payload=payload,
-        supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
-        managed_keyring_provenance=store.get_sync_payload(MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY),
-        expected_workspace_id=store.get_cloud_workspace_id(),
+        supply_chain_keyring=rows.supply_chain_keyring,
+        managed_keyring_provenance=rows.managed_keyring_provenance,
+        expected_workspace_id=rows.workspace_id,
     )
-    existing, existing_error = _validate_cached_policy_bundle(store, store.get_sync_payload("policy_bundle"))
+    existing, existing_error = _validate_cached_policy_bundle(store, rows.policy_bundle, rows=rows)
     if NATIVE_UNAVAILABLE_REJECTION in (rejection_reason, existing_error):
         raise _RejectedError(_unavailable())
     if validated is None:
         raise _RejectedError(_rejection(rejection_reason or "invalid_policy_bundle"))
-    admission_rejection = _policy_bundle_admission_rejection(store, existing, validated)
+    admission_rejection = _policy_bundle_admission_rejection(store, existing, validated, rows=rows)
     if admission_rejection == "unsupported_daemon_version":
         raise _RejectedError(_reply({"error": admission_rejection}, 400))
     if admission_rejection is not None:
         raise _RejectedError(_rejection(admission_rejection))
-    return validated, trusted_keys, existing
+    return validated, trusted_keys, existing, rows
 
 
 def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, object]:
@@ -176,7 +180,7 @@ def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, obj
         return _reply({"error": "missing_policy_memory"}, 400)
     if policy_memory:
         return _reply({"error": "unsupported_policy_memory_contract"}, 400)
-    validated, trusted_keys, existing = _validated_bundle(store, payload, policy_bundle)
+    validated, trusted_keys, existing, trust_rows = _validated_bundle(store, payload, policy_bundle)
     device_id, device_name = _guard_device_metadata(store)
     is_v2 = validated.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
     managed_policy = None
@@ -197,7 +201,7 @@ def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, obj
     try:
         canonical_enforcement = is_v2 and _sync.canonical_policy_enforcement_enabled(
             device_id=device_id,
-            workspace_id=store.get_cloud_workspace_id(),
+            workspace_id=trust_rows.workspace_id,
         )
     except NativeRunnerAuthorityError:
         return _unavailable()
@@ -215,7 +219,8 @@ def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, obj
         return _unavailable()
     if candidate_rejection is not None:
         return _rejection(candidate_rejection)
-    stored_ack = store.get_sync_payload("policy_bundle_ack")
+    # The acknowledgement this sync replaces, from the snapshot the bundle was judged with.
+    stored_ack = trust_rows.policy_bundle_ack
     ack = policy_bundle_acknowledgement_payload(
         device_id=device_id,
         device_name=device_name,
@@ -242,7 +247,8 @@ def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, obj
             policy_bundle=validated,
             policy_bundle_keyring=policy_bundle_keyring_payload(
                 trusted_keys,
-                workspace_id=store.get_cloud_workspace_id(),
+                # The workspace that validated this bundle, from the same snapshot.
+                workspace_id=trust_rows.workspace_id,
             ),
             cloud_exceptions=cloud_exceptions,
             policy_bundle_ack=ack,
