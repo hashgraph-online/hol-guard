@@ -337,12 +337,13 @@ def native_resolve_stored_package_policy(
             "harness": artifact.harness,
             "artifact_id": artifact.artifact_id,
             "artifact_hash": artifact_hash,
-            "publisher": artifact.publisher,
             "workspace_dir": str(workspace_dir),
             "policy_workspaces": list(policy_workspaces),
             "claim_saved_approval": claim_saved_approval,
             **facts,
         }
+        if artifact.publisher is not None:
+            request["publisher"] = artifact.publisher
         if current_action is not None:
             request["current_action"] = current_action
         payload = _call(request, guard_home, evaluation=evaluation, claim_saved_approval=claim_saved_approval)
